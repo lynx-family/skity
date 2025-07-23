@@ -1,0 +1,84 @@
+name: CI Test
+
+on:
+    pull_request:
+        branches:
+            - main
+        paths:
+            - '.github/workflows/ci.yml'
+            - 'include/**'
+            - 'src/**'
+            - 'module/**'
+            - 'test/**'
+
+jobs:
+    unittest_test:
+        runs-on: lynx-ubuntu-22.04-medium
+        timeout-minutes: 30
+        steps:
+          - name: Python Setup
+            uses: actions/setup-python@v5
+            with:
+                python-version: '3.13'
+          - name: Download Source
+            uses: actions/checkout@v4.2.2
+          - name: Sync Dependencies
+            uses: ./.github/actions/sync-deps
+          - name: Compile Code
+            run: |
+                export PATH=$PWD/buildtools/llvm/bin:$PATH
+                cmake -B out/cmake_host_build -DSKITY_TEST=ON  -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fPIC"
+                cmake --build out/cmake_host_build --target skity_unit_test
+                ./out/cmake_host_build/test/ut/skity_unit_test
+    android_build_check:
+        runs-on: lynx-ubuntu-22.04-medium
+        timeout-minutes: 30
+        steps:
+          - name: Python Setup
+            uses: actions/setup-python@v5
+            with:
+                python-version: '3.13'
+          - name: Download Source
+            uses: actions/checkout@v4.2.2
+          - name: Sync Dependencies
+            run: |
+                ./tools/hab sync -f
+          - name: Android Build Check
+            run: |
+                cmake -B out/android_arm64_debug -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_21/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-23 -DANDROID_STL=c++_shared -DSKITY_EXAMPLE=OFF -DSKITY_TEST=OFF -DSKITY_LOG=OFF -DSKITY_CODEC_MODULE=OFF
+                cmake --build out/android_arm64_debug
+    ios_build_check:
+        runs-on: lynx-darwin-14-medium
+        timeout-minutes: 30
+        steps:
+          - name: Download Source
+            uses: actions/checkout@v4.2.2
+          - name: Sync Dependencies
+            run: |
+                ./tools/hab sync -f
+          - name: Setup cmake
+            run: |
+                brew install cmake
+          - name: Run iOS build
+            run: |
+                cmake -B out/cmake_ios_release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DCMAKE_SYSTEM_NAME=iOS -DSKITY_MTL_BACKEND=ON -DSKITY_CT_FONT=ON -DSKITY_CODEC_MODULE=OFF
+                cmake --build out/cmake_ios_release
+
+    osx_metal_golden_test:
+        runs-on: lynx-darwin-14-medium
+        timeout-minutes: 30
+        steps:
+          - name: Download Source
+            uses: actions/checkout@v4.2.2
+          - name: Sync Dependencies
+            run: |
+                ./tools/hab sync -f --target dev
+          - name: Setup cmake
+            run: |
+                brew install cmake
+          - name: Build And Test
+            run: |
+                cmake -B out/cmake_golden_test -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSKITY_MTL_BACKEND=ON -DSKITY_TEST=ON -DSKITY_GOLDEN_GUI=OFF
+                cmake --build out/cmake_golden_test --target skity_golden_test
+                ./out/cmake_golden_test/test/golden/skity_golden_test
+

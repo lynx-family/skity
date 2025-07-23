@@ -1,0 +1,16 @@
+import platform
+
+system = platform.system().lower()
+
+machine = platform.machine().lower()
+machine = "x86_64" if machine == "amd64" else machine
+
+deps = {
+   'buildtools/llvm': {
+        "type": "http",
+        'url': f"https://github.com/lynx-family/buildtools/releases/download/llvm-020d2fb7/buildtools-llvm-{system}-{machine}.tar.gz",
+        "ignore_in_git": True,
+        "decompress": True,
+        "condition": system in ['linux', 'darwin'],
+    }, 
+}

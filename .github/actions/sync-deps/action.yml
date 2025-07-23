@@ -1,0 +1,11 @@
+name: install common dependencies
+
+description: sync source and binary dependencies via habitat
+
+runs:
+  using: composite
+  steps:
+    - name: run habitat sync
+      shell: bash
+      run: |
+        tools/hab sync . --target dev,ci
