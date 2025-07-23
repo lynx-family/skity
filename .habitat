@@ -3,6 +3,7 @@ solutions = [{
     'deps_file': 'hab/DEPS',
     'target_deps_files': {
         'dev': 'hab/DEPS.dev',
+        'ci': 'hab/DEPS.ci',
     },
     'url': 'git@github.com:lynx-family/Skity.git'
 }]
