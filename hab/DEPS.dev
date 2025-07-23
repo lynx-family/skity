@@ -1,0 +1,32 @@
+deps = {
+    "third_party/google_benchmark": {
+        "type": "git",
+        "url": "https://github.com/google/benchmark.git",
+        "ignore_in_git": True,
+        "commit": "b177433f3ee2513b1075140c723d73ab8901790f",
+    },
+    "third_party/gtest": {
+        "type": "git",
+        "url": "https://github.com/google/googletest.git",
+        "ignore_in_git": True,
+        "commit": "52204f78f94d7512df1f0f3bea1d47437a2c3a58",
+    },
+    "third_party/glfw": {
+        "type": "git",
+        "url": "https://github.com/glfw/glfw.git",
+        "ignore_in_git": True,
+        "commit": "7b6aead9fb88b3623e3b3725ebb42670cbe4c579",
+    },
+    "third_party/libpng": {
+        "type": "git",
+        "url": "https://github.com/pnggroup/libpng.git",
+        "ignore_in_git": True,
+        "commit": "f5e92d76973a7a53f517579bc95d61483bf108c0",
+    },
+    "third_party/libjpeg-turbo": {
+        "type": "git",
+        "url": "https://github.com/libjpeg-turbo/libjpeg-turbo.git",
+        "ignore_in_git": True,
+        "commit": "f29eda648547b36aa594c4116c7764a6c8a079b9",
+    },
+}

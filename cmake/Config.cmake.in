@@ -1,0 +1,6 @@
+@PACKAGE_INIT@
+
+find_package(glm REQUIRED)
+include("${CMAKE_CURRENT_LIST_DIR}/skityTargets.cmake")
+
+check_required_components(skity)

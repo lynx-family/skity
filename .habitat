@@ -1,0 +1,8 @@
+solutions = [{
+    'name': '.',
+    'deps_file': 'hab/DEPS',
+    'target_deps_files': {
+        'dev': 'hab/DEPS.dev',
+    },
+    'url': 'git@github.com:lynx-family/Skity.git'
+}]

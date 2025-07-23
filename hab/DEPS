@@ -1,0 +1,60 @@
+import os
+
+deps = {
+    "third_party/freetype2": {
+        "type": "git",
+        "url": "https://github.com/freetype/freetype.git",
+        "commit": "42608f77f20749dd6ddc9e0536788eaad70ea4b5",
+        "patches": os.path.join(root_dir, 'patches', 'freetype', '0001-Adapt-freetype-to-the-Skity-project.patch'),
+        "ignore_in_git": True,
+    },
+    "third_party/nanopng": {
+        "type": "git",
+        "url": "https://gitlab.com/TSnake41/nanopng.git",
+        "commit": "fa1bf5cf7ec3ad98e0be665acbb4b36c696ae059",
+        "patches": os.path.join(root_dir, 'patches', 'nanopng', '0001-Adapt-nanopng-to-the-Skity-project.patch'),
+        "ignore_in_git": True,
+    },
+    "third_party/zlib": {
+        "type": "git",
+        "url": "https://chromium.googlesource.com/chromium/src/third_party/zlib",
+        "ignore_in_git": True,
+        "commit": "f5fd0ad2663e239a31184ad4c9919991dda16f46",
+    },
+    "third_party/jsoncpp": {
+        "type": "git",
+        "url": "https://github.com/open-source-parsers/jsoncpp.git",
+        "ignore_in_git": True,
+        "commit": "89e2973c754a9c02a49974d839779b151e95afd6",
+    },
+    "third_party/fmt": {
+        "type": "git",
+        "url": "https://github.com/fmtlib/fmt.git",
+        "ignore_in_git": True,
+        "commit": "0c9fce2ffefecfdce794e1859584e25877b7b592",
+    },
+    "third_party/Vulkan-Headers": {
+        "type": "git",
+        "url": "https://github.com/KhronosGroup/Vulkan-Headers.git",
+        "ignore_in_git": True,
+        "commit": "cacef3039d277c448c89336290ec3937270b0996",
+    },
+    "third_party/volk": {
+        "type": "git",
+        "url": "https://github.com/zeux/volk.git",
+        "ignore_in_git": True,
+        "commit": "0b17a763ba5643e32da1b2152f8140461b3b7345",
+    },
+    "third_party/glm": {
+        "type": "git",
+        "url": "https://github.com/g-truc/glm.git",
+        "ignore_in_git": True,
+        "commit": "0af55ccecd98d4e5a8d1fad7de25ba429d60e863",
+    },
+    "third_party/pugixml": {
+        "type": "git",
+        "url": "https://github.com/zeux/pugixml.git",
+        "ignore_in_git": True,
+        "commit": "7a9da11d8b2b2f06c0904d397864f216bd7c1e14",
+    },
+}
