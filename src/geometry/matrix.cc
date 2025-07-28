@@ -427,8 +427,12 @@ void Matrix::MapPoints(Vec2 dst[], const Vec2 src[], int count) const {
   for (int i = 0; i < count; ++i) {
     auto v = Vec4(src[i].x, src[i].y, 0.f, 1.f);
     auto r = (*this) * v;
-    dst[i].x = r.x;
-    dst[i].y = r.y;
+    float w = r.w;
+    if (w != 0) {
+      w = 1.f / w;
+    }
+    dst[i].x = r.x * w;
+    dst[i].y = r.y * w;
   }
 }
 

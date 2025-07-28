@@ -302,3 +302,85 @@ TEST(Matrix, MapRectWithPerspective) {
   EXPECT_FLOAT_EQ(dst.Right(), 150.808273);
   EXPECT_FLOAT_EQ(dst.Bottom(), 150.254211);
 }
+
+TEST(Matrix, MapPoints) {
+  skity::Matrix m = skity::Matrix::Translate(100, 200);
+  skity::Vec2 src[2] = {{10, 20}, {30, 40}};
+  skity::Vec2 dst[2];
+  skity::Point src_point[2] = {{10, 20, 0, 1}, {30, 40, 0, 1}};
+  skity::Point dst_point[2];
+  m.MapPoints(dst, src, 2);
+  EXPECT_EQ(dst[0].x, 110);
+  EXPECT_EQ(dst[0].y, 220);
+  EXPECT_EQ(dst[1].x, 130);
+  EXPECT_EQ(dst[1].y, 240);
+  m.MapPoints(dst_point, src_point, 2);
+  EXPECT_EQ(dst_point[0].x, 110);
+  EXPECT_EQ(dst_point[0].y, 220);
+  EXPECT_EQ(dst_point[1].x, 130);
+  EXPECT_EQ(dst_point[1].y, 240);
+
+  skity::Matrix m2 = skity::Matrix::Scale(2, 3);
+  m2.MapPoints(dst, src, 2);
+  EXPECT_EQ(dst[0].x, 20);
+  EXPECT_EQ(dst[0].y, 60);
+  EXPECT_EQ(dst[1].x, 60);
+  EXPECT_EQ(dst[1].y, 120);
+  m2.MapPoints(dst_point, src_point, 2);
+  EXPECT_EQ(dst_point[0].x, 20);
+  EXPECT_EQ(dst_point[0].y, 60);
+  EXPECT_EQ(dst_point[1].x, 60);
+  EXPECT_EQ(dst_point[1].y, 120);
+
+  skity::Matrix m3 = skity::Matrix::RotateDeg(30);
+  skity::Vec4 expected_dst3[2] = {
+      m3 * skity::Vec4{src[0].x, src[0].y, 0.f, 1.f},
+      m3 * skity::Vec4{src[1].x, src[1].y, 0.f, 1.f}};
+  m3.MapPoints(dst, src, 2);
+  EXPECT_EQ(dst[0].x, expected_dst3[0].x);
+  EXPECT_EQ(dst[0].y, expected_dst3[0].y);
+  EXPECT_EQ(dst[1].x, expected_dst3[1].x);
+  EXPECT_EQ(dst[1].y, expected_dst3[1].y);
+  m3.MapPoints(dst_point, src_point, 2);
+  EXPECT_EQ(dst_point[0], expected_dst3[0]);
+  EXPECT_EQ(dst_point[1], expected_dst3[1]);
+
+  skity::Matrix m4 = skity::Matrix::Skew(3, 2);
+  skity::Vec4 expected_dst4[2] = {
+      m4 * skity::Vec4{src[0].x, src[0].y, 0.f, 1.f},
+      m4 * skity::Vec4{src[1].x, src[1].y, 0.f, 1.f}};
+  m4.MapPoints(dst, src, 2);
+  EXPECT_EQ(dst[0].x, expected_dst4[0].x);
+  EXPECT_EQ(dst[0].y, expected_dst4[0].y);
+  EXPECT_EQ(dst[1].x, expected_dst4[1].x);
+  EXPECT_EQ(dst[1].y, expected_dst4[1].y);
+  m4.MapPoints(dst_point, src_point, 2);
+  EXPECT_EQ(dst_point[0], expected_dst4[0]);
+  EXPECT_EQ(dst_point[1], expected_dst4[1]);
+}
+
+TEST(Matrix, MapPointsWithPerspective) {
+  auto m = skity::Matrix(                                 //
+      0.997564077, 0.00365077169, 0.0, -0.0000696608768,  //
+      0.0, 0.99862951, 0.0, 0.0000523359631,              //
+      0.0, 0.0, 1.0, 0.0,                                 //
+      0.243591309, -0.228030354, 0.0, 1.00173247          //
+  );
+
+  skity::Vec2 src[2] = {{49.9900017, 49.9900017}, {150.009995, 150.009995}};
+  skity::Vec2 dst[2];
+  skity::Point src_point[2] = {{49.9900017, 49.9900017, 0, 1},
+                               {150.009995, 150.009995, 0, 1}};
+  skity::Point dst_point[2];
+  m.MapPoints(dst, src, 2);
+  m.MapPoints(dst_point, src_point, 2);
+  skity::Vec4 expected_dst[2] = {m * src_point[0], m * src_point[1]};
+  ASSERT_TRUE(expected_dst[0].w != 1);
+  ASSERT_TRUE(expected_dst[1].w != 1);
+  EXPECT_FLOAT_EQ(dst[0].x, expected_dst[0].x * (1.f / expected_dst[0].w));
+  EXPECT_FLOAT_EQ(dst[0].y, expected_dst[0].y * (1.f / expected_dst[0].w));
+  EXPECT_FLOAT_EQ(dst[1].x, expected_dst[1].x * (1.f / expected_dst[1].w));
+  EXPECT_FLOAT_EQ(dst[1].y, expected_dst[1].y * (1.f / expected_dst[1].w));
+  EXPECT_EQ(dst_point[0], expected_dst[0]);
+  EXPECT_EQ(dst_point[1], expected_dst[1]);
+}
