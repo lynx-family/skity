@@ -15,38 +15,39 @@
 namespace wgx {
 
 static const std::unordered_map<std::string_view, TokenType>& GetKeywords() {
-  static std::unordered_map<std::string_view, TokenType> keywords{
-      {"alias", TokenType::kAlias},
-      {"break", TokenType::kBreak},
-      {"case", TokenType::kCase},
-      {"const", TokenType::kConst},
-      {"const_assert", TokenType::kConstAssert},
-      {"continue", TokenType::kContinue},
-      {"continuing", TokenType::kContinuing},
-      {"diagnostic", TokenType::kDiagnostic},
-      {"discard", TokenType::kDiscard},
-      {"default", TokenType::kDefault},
-      {"else", TokenType::kElse},
-      {"enable", TokenType::kEnable},
-      {"fallthrough", TokenType::kFallthrough},
-      {"false", TokenType::kFalse},
-      {"fn", TokenType::kFn},
-      {"for", TokenType::kFor},
-      {"if", TokenType::kIf},
-      {"let", TokenType::kLet},
-      {"loop", TokenType::kLoop},
-      {"override", TokenType::kOverride},
-      {"return", TokenType::kReturn},
-      {"requires", TokenType::kRequires},
-      {"struct", TokenType::kStruct},
-      {"switch", TokenType::kSwitch},
-      {"true", TokenType::kTrue},
-      {"var", TokenType::kVar},
-      {"while", TokenType::kWhile},
-      {"_", TokenType::kUnderscore},
-  };
+  static std::unordered_map<std::string_view, TokenType>* keywords =
+      new std::unordered_map<std::string_view, TokenType>{
+          {"alias", TokenType::kAlias},
+          {"break", TokenType::kBreak},
+          {"case", TokenType::kCase},
+          {"const", TokenType::kConst},
+          {"const_assert", TokenType::kConstAssert},
+          {"continue", TokenType::kContinue},
+          {"continuing", TokenType::kContinuing},
+          {"diagnostic", TokenType::kDiagnostic},
+          {"discard", TokenType::kDiscard},
+          {"default", TokenType::kDefault},
+          {"else", TokenType::kElse},
+          {"enable", TokenType::kEnable},
+          {"fallthrough", TokenType::kFallthrough},
+          {"false", TokenType::kFalse},
+          {"fn", TokenType::kFn},
+          {"for", TokenType::kFor},
+          {"if", TokenType::kIf},
+          {"let", TokenType::kLet},
+          {"loop", TokenType::kLoop},
+          {"override", TokenType::kOverride},
+          {"return", TokenType::kReturn},
+          {"requires", TokenType::kRequires},
+          {"struct", TokenType::kStruct},
+          {"switch", TokenType::kSwitch},
+          {"true", TokenType::kTrue},
+          {"var", TokenType::kVar},
+          {"while", TokenType::kWhile},
+          {"_", TokenType::kUnderscore},
+      };
 
-  return keywords;
+  return *keywords;
 }
 
 struct StackEntry {
