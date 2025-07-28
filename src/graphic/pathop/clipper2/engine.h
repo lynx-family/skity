@@ -23,7 +23,7 @@
 
 #include "src/graphic/pathop/clipper2/core.h"
 
-namespace Clipper2Lib {
+namespace skity::Clipper2Lib {
 
 struct Scanline;
 struct IntersectNode;
@@ -538,4 +538,4 @@ class ClipperD : public ClipperBase {
   }
 };
 
-}  // namespace Clipper2Lib
+}  // namespace skity::Clipper2Lib

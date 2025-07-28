@@ -19,7 +19,7 @@
 
 #include <algorithm>
 
-namespace Clipper2Lib {
+namespace skity::Clipper2Lib {
 
 static const Rect64 invalid_rect = Rect64(false);
 
@@ -2581,4 +2581,4 @@ void ClipperD::BuildTreeD(PolyPathD& polytree, PathsD& open_paths) {
   }
 }
 
-}  // namespace Clipper2Lib
+}  // namespace skity::Clipper2Lib

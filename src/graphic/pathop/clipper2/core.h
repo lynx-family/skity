@@ -23,7 +23,7 @@
 #include <iterator>
 #include <vector>
 
-namespace Clipper2Lib {
+namespace skity::Clipper2Lib {
 
 // error codes (2^n)
 constexpr int precision_error_i = 1;   // non-fatal
@@ -933,4 +933,4 @@ inline bool Path2ContainsPath1(const Path<T>& path1, const Path<T>& path2) {
   return PointInPolygon(mp1, path2) == PointInPolygonResult::IsInside;
 }
 
-}  // namespace Clipper2Lib
+}  // namespace skity::Clipper2Lib
