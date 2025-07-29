@@ -34,8 +34,10 @@ HWFilterOutput HWColorFilter::DoFilter(const HWFilterContext &context,
   render_pass->AddCommand(command);
   render_pass->EncodeCommands();
 
-  return HWFilterOutput{.texture = output_texture,
-                        .layer_bounds = child_output.layer_bounds};
+  return HWFilterOutput{
+      output_texture,
+      child_output.layer_bounds,
+  };
 }
 
 void HWColorFilter::PrepareCMD(
@@ -59,20 +61,19 @@ void HWColorFilter::InternalPrepareCMDWGX(
   };
 
   HWDrawStepContext step_context{
-      .context = context,
-      .state = {},
-      .transform = {},
-      .clip_depth = 0.1f,  // just a little bit bigger than 0
-      .scissor =
-          {
-              0,
-              0,
-              static_cast<float>(input_texture->GetDescriptor().width),
-              static_cast<float>(input_texture->GetDescriptor().height),
-          },
-      .color_format = input_texture->GetDescriptor().format,
-      .sample_count = 1,
-      .blend_mode = BlendMode::kDefault,
+      context,
+      {},
+      {},
+      0.1f,  // just a little bit bigger than 0
+      {
+          0,
+          0,
+          static_cast<float>(input_texture->GetDescriptor().width),
+          static_cast<float>(input_texture->GetDescriptor().height),
+      },
+      input_texture->GetDescriptor().format,
+      1,
+      BlendMode::kDefault,
   };
 
   step.GenerateCommand(step_context, cmd, nullptr);

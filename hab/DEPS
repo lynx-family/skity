@@ -17,9 +17,9 @@ deps = {
     },
     "third_party/zlib": {
         "type": "git",
-        "url": "https://chromium.googlesource.com/chromium/src/third_party/zlib",
+        "url": "https://github.com/madler/zlib.git",
         "ignore_in_git": True,
-        "commit": "f5fd0ad2663e239a31184ad4c9919991dda16f46",
+        "commit": "51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf",
     },
     "third_party/jsoncpp": {
         "type": "git",

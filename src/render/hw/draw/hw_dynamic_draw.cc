@@ -33,14 +33,9 @@ void HWDynamicDraw::OnGenerateCommand(HWDrawContext* context,
   SKITY_TRACE_EVENT(HWDynamicDraw_OnGenerateCommand);
 
   HWDrawStepContext ctx{
-      .context = context,
-      .state = state,
-      .transform = GetTransform(),
-      .clip_depth = GetClipValue(),
-      .scissor = GetScissorBox(),
-      .color_format = GetColorFormat(),
-      .sample_count = GetSampleCount(),
-      .blend_mode = blend_mode_,
+      context,          state,           GetTransform(),
+      GetClipValue(),   GetScissorBox(), GetColorFormat(),
+      GetSampleCount(), blend_mode_,
   };
 
   for (auto& step : steps_) {

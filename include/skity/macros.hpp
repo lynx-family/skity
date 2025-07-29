@@ -41,7 +41,7 @@
 #ifdef SKITY_DLL
 
 #if defined(SKITY_WIN)
-#define SKITY_API
+#define SKITY_API __declspec(dllexport)
 #elif defined(_MSC_VER)
 #define SKITY_API __declspec(dllexport)
 #else

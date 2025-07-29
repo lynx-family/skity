@@ -86,8 +86,8 @@ index 000000000..fb9554d56
 +
 +    PRIVATE
 +
-+    -Wno-unused-variable
-+    -Wno-unused-function
++    # -Wno-unused-variable
++    # -Wno-unused-function
 +)
 diff --git a/include/freetype/config/public-macros.h b/include/freetype/config/public-macros.h
 index f56581a6e..5bb86b8b0 100644

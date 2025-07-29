@@ -6,14 +6,11 @@ if(EMSCRIPTEN)
   # Build Skity with emsdk
   add_definitions(-DSKITY_WASM)
 elseif(WIN32)
-  add_definitions(-DSKITY_WIN)
-
   # Fixme to solve NIM MAX macro defined in windows.h
   add_definitions(-DNOMINMAX)
-  set(BUILD_SHARED_LIBS TRUE)
-
   # specify dll outpu directory
   set(SKITY_DLL_DIR ${CMAKE_CURRENT_BINARY_DIR})
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${SKITY_DLL_DIR})
   target_compile_options(
     skity
     PUBLIC

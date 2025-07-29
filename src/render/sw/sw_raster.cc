@@ -33,10 +33,10 @@ void RealSpanBuilder::BuildSpan(int x, int y, int width, const uint8_t alpha) {
   }
 
   Span span{
-      .x = x,
-      .y = y,
-      .len = width,
-      .cover = alpha,
+      x,
+      y,
+      width,
+      alpha,
   };
   spans_.push_back(span);
 }

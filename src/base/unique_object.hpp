@@ -8,6 +8,8 @@
 #ifndef SRC_BASE_UNIQUE_OBJECT_HPP
 #define SRC_BASE_UNIQUE_OBJECT_HPP
 
+#include <cassert>
+#include <skity/macros.hpp>
 #include <utility>
 
 #include "src/base/base_macros.hpp"

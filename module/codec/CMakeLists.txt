@@ -40,9 +40,10 @@ ExternalProject_Add(libpng
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DPNG_EXECUTABLES=OFF
   -DPNG_SHARED=ON
-  -DPNG_STATIC=OFF
+  -DPNG_STATIC=ON
   -DPNG_FRAMEWORK=OFF
   -DPNG_TESTS=OFF
+  -DZLIB_ROOT=${CMAKE_BINARY_DIR}/third_party/zlib
   -DCMAKE_INSTALL_MESSAGE=NEVER
   -DCMAKE_MESSAGE_LOG_LEVEL=ERROR
 )
@@ -69,12 +70,19 @@ target_sources(
 
 target_compile_definitions(skity-codec PUBLIC -DSKITY_HAS_PNG=1)
 
+add_dependencies(libpng skity)
 add_dependencies(skity-codec libpng)
 
 target_include_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libpng/include)
 target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/libpng/lib)
-target_link_libraries(skity-codec PRIVATE png)
 
+if (WIN32)
+  target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/zlib/lib)
+  # FIXME: msvc generate different library name
+  target_link_libraries(skity-codec PRIVATE libpng16_staticd zlibstaticd)
+else()
+  target_link_libraries(skity-codec PRIVATE png)
+endif()
 
 target_sources(
   skity-codec
@@ -87,7 +95,12 @@ add_dependencies(skity-codec libjpeg-turbo)
 
 target_include_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libjpeg-turbo/include)
 target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/libjpeg-turbo/lib)
-target_link_libraries(skity-codec PRIVATE turbojpeg)
+
+if (WIN32)
+  target_link_libraries(skity-codec PRIVATE turbojpeg-static)
+else()
+  target_link_libraries(skity-codec PRIVATE turbojpeg)
+endif()
 
 target_compile_definitions(skity-codec PUBLIC -DSKITY_HAS_JPEG=1)
 

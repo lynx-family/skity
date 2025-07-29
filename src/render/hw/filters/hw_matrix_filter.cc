@@ -25,8 +25,10 @@ HWFilterOutput HWMatrixFilter::DoFilter(const HWFilterContext& context,
                       color_format, layer_bounds, std::vector{child_output});
 
   render_pass->EncodeCommands();
-  return HWFilterOutput{.texture = output_texture,
-                        .layer_bounds = layer_bounds};
+  return HWFilterOutput{
+      output_texture,
+      layer_bounds,
+  };
 }
 
 }  // namespace skity

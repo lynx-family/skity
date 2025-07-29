@@ -40,7 +40,7 @@ static bool IsExecutable(
   return false;
 }
 
-FileMapping::FileMapping(const fml::UniqueFD& fd,
+FileMapping::FileMapping(const UniqueFD& fd,
                          std::initializer_list<Protection> protections)
     : size_(0), mapping_(nullptr) {
   if (!fd.is_valid()) {

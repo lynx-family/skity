@@ -1,4 +1,4 @@
-From 2a06558fda75f1e5c4d9f8341569cc708954a473 Mon Sep 17 00:00:00 2001
+From 5ceb5dfeff1978f2fe3d78956556b0779a1ce9bb Mon Sep 17 00:00:00 2001
 From: ColdPaleLight <coldpalelight@users.noreply.github.com>
 Date: Mon, 30 Jun 2025 15:26:32 +0800
 Subject: [PATCH] Adapt nanopng to the Skity project
@@ -12,7 +12,7 @@ Subject: [PATCH] Adapt nanopng to the Skity project
  makefile              |   45 -
  src/nanopng.c         |   79 -
  src/nanopng.h         |   44 -
- src/nanopng16.cc      |  668 +++++++++
+ src/nanopng16.cc      |  689 +++++++++
  src/nanopng_chunk.c   |   86 --
  src/nanopng_chunk.h   |   28 -
  src/nanopng_decoder.c |   19 -
@@ -20,7 +20,7 @@ Subject: [PATCH] Adapt nanopng to the Skity project
  src/nanopng_source.c  |  102 --
  src/nanopng_source.h  |   39 -
  src/nanopng_structs.h |   78 -
- 16 files changed, 4785 insertions(+), 568 deletions(-)
+ 16 files changed, 4806 insertions(+), 568 deletions(-)
  create mode 100644 BUILD.gn
  delete mode 100644 include/nanopng.h
  create mode 100644 include/png.h
@@ -4397,17 +4397,23 @@ index 8a5fbdd..0000000
 -#endif /* H_NANOPNG */
 diff --git a/src/nanopng16.cc b/src/nanopng16.cc
 new file mode 100644
-index 0000000..9b9bfe3
+index 0000000..5bdfea4
 --- /dev/null
 +++ b/src/nanopng16.cc
-@@ -0,0 +1,668 @@
+@@ -0,0 +1,689 @@
 +#include "png.h"
 +#include <cstdint>
 +#include <zlib.h>
 +#include <stdlib.h>
 +#include <new>
 +#include <string.h>
++
++#if defined(_WIN32) || defined(_WIN64)
++#include <Winsock2.h>
++#pragma comment(lib, "ws2_32.lib")
++#else
 +#include <arpa/inet.h>
++#endif
 +
 +#define RGBA(r, g, b, a) uint32_t(r) | uint32_t(g) << 8 | uint32_t(b) << 16 | uint32_t(a) << 24
 +#define RGB(r, g, b) RGBA(r, g, b, 0xff)
@@ -4507,6 +4513,20 @@ index 0000000..9b9bfe3
 +    }
 +
 +    inline void read_header() {
++#if defined(_WIN32) || defined(_WIN64)
++#pragma pack(push, 1)
++
++struct Head {
++    uint32_t magic, magic2; // \x89PNG 0d0a1a0a
++    ChunkHead IHDR;
++    uint32_t width, height;
++    uint8_t bit_depth, color_type, compression_method, filter_method, interlace_method;
++    uint32_t IHDR_crc32;
++
++};
++
++#pragma pack(pop)
++#else
 +        struct __attribute__((__packed__)) Head {
 +            uint32_t magic, magic2; // \x89PNG 0d0a1a0a
 +            ChunkHead IHDR;
@@ -4515,6 +4535,7 @@ index 0000000..9b9bfe3
 +            uint32_t IHDR_crc32;
 +
 +        };
++#endif
 +        Head head = reader.read<Head>();
 +        if (error) return;
 +        // FDEBUG("read png: magic %x %x", head.magic, head.magic2);

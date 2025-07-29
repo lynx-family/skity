@@ -11,7 +11,7 @@
 
 namespace skity {
 
-class HWDrawContext;
+struct HWDrawContext;
 
 /**
  * This class represents a geometry which can generate the WGSL source code for

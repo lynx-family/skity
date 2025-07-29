@@ -32,8 +32,10 @@ HWFilterOutput HWMergeFilter::DoFilter(const HWFilterContext& context,
   DrawChildrenOutputs(context, render_pass.get(), output_texture_size,
                       color_format, layer_bounds, children_outputs);
   render_pass->EncodeCommands();
-  return HWFilterOutput{.texture = output_texture,
-                        .layer_bounds = layer_bounds};
+  return HWFilterOutput{
+      output_texture,
+      layer_bounds,
+  };
 }
 
 }  // namespace skity

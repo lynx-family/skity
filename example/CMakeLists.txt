@@ -13,7 +13,11 @@ add_definitions(-DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
 add_subdirectory(common)
 
 # align output directory
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/example/case)
+if (MSVC)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+else()
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/example/case)
+endif()
 
 add_subdirectory(case/basic)
 add_subdirectory(case/blend)

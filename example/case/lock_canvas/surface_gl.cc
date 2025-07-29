@@ -3,31 +3,59 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <functional>
+#include <mutex>
 #include <skity/gpu/gpu_context_gl.hpp>
 
 #include "common/window.hpp"
+
+PFNGLGENTEXTURESPROC f_glGenTextures = nullptr;
+PFNGLBINDTEXTUREPROC f_glBindTexture = nullptr;
+PFNGLTEXPARAMETERIPROC f_glTexParameteri = nullptr;
+PFNGLTEXIMAGE2DPROC f_glTexImage2D = nullptr;
+PFNGLGENFRAMEBUFFERSPROC f_glGenFramebuffers = nullptr;
+PFNGLBINDFRAMEBUFFERPROC f_glBindFramebuffer = nullptr;
+PFNGLFRAMEBUFFERTEXTURE2DPROC f_glFramebufferTexture2D = nullptr;
+PFNGLFINISHPROC f_glFinish = nullptr;
 
 namespace skity::example::lock_canvas {
 
 std::shared_ptr<skity::Image> DrawOffscreenGL(
     skity::GPUContext *context, int width, int height,
     std::function<void(skity::GPUSurface *surface)> &&func) {
+  static std::once_flag _init_flag;
+
+  std::call_once(_init_flag, []() {
+    f_glGenTextures = (PFNGLGENTEXTURESPROC)glfwGetProcAddress("glGenTextures");
+    f_glBindTexture = (PFNGLBINDTEXTUREPROC)glfwGetProcAddress("glBindTexture");
+    f_glTexParameteri =
+        (PFNGLTEXPARAMETERIPROC)glfwGetProcAddress("glTexParameteri");
+    f_glTexImage2D = (PFNGLTEXIMAGE2DPROC)glfwGetProcAddress("glTexImage2D");
+    f_glGenFramebuffers =
+        (PFNGLGENFRAMEBUFFERSPROC)glfwGetProcAddress("glGenFramebuffers");
+    f_glBindFramebuffer =
+        (PFNGLBINDFRAMEBUFFERPROC)glfwGetProcAddress("glBindFramebuffer");
+    f_glFramebufferTexture2D =
+        (PFNGLFRAMEBUFFERTEXTURE2DPROC)glfwGetProcAddress(
+            "glFramebufferTexture2D");
+    f_glFinish = (PFNGLFINISHPROC)glfwGetProcAddress("glFinish");
+  });
+
   GLuint tex = 0;
 
-  glGenTextures(1, &tex);
-  glBindTexture(GL_TEXTURE_2D, tex);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
-               GL_UNSIGNED_BYTE, nullptr);
+  f_glGenTextures(1, &tex);
+  f_glBindTexture(GL_TEXTURE_2D, tex);
+  f_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, nullptr);
 
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  f_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  f_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
   GLuint fbo = 0;
-  glGenFramebuffers(1, &fbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                         tex, 0);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  f_glGenFramebuffers(1, &fbo);
+  f_glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+  f_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           tex, 0);
+  f_glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   skity::GPUSurfaceDescriptorGL desc{};
   desc.backend = skity::GPUBackendType::kOpenGL;
@@ -48,9 +76,9 @@ std::shared_ptr<skity::Image> DrawOffscreenGL(
 
   func(surface.get());
 
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  f_glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-  glFinish();
+  f_glFinish();
 
   skity::GPUBackendTextureInfoGL tex_info{};
   tex_info.backend = skity::GPUBackendType::kOpenGL;

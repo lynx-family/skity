@@ -9,6 +9,7 @@
 #include <skity/macros.hpp>
 #include <skity/text/font_style.hpp>
 #include <skity/text/typeface.hpp>
+#include <string>
 #include <vector>
 
 namespace skity {

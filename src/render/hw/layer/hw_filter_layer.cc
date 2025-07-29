@@ -24,17 +24,13 @@ HWDrawState HWFilterLayer::OnPrepare(HWDrawContext* context) {
       std::make_shared<GPUCommandBufferProxy>(device->CreateCommandBuffer());
 
   HWFilterOutput filter_result{
-      .texture = input_texture,
-      .layer_bounds = GetBounds(),
+      input_texture,
+      GetBounds(),
   };
 
   HWFilterContext filter_context{
-      .device = device,
-      .gpu_context = context->gpuContext,
-      .draw_context = context,
-      .source = filter_result,
-      .command_buffer = command_buffer,
-      .scale = scale_,
+      device,        context->gpuContext, context,
+      filter_result, command_buffer,      scale_,
   };
 
   filter_result = filter_->Filter(filter_context);

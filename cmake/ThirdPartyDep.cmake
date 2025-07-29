@@ -5,7 +5,11 @@
 # glm
 set(GLM_BUILD_INSTALL ON CACHE BOOL "enable GLM_BUILD_INSTALL" FORCE)
 add_subdirectory(third_party/glm)
-target_link_libraries(skity PUBLIC glm::glm)
+if (WIN32)
+  target_link_libraries(skity PUBLIC glm::glm-header-only)
+else()
+  target_link_libraries(skity PUBLIC glm::glm)
+endif()
 
 # pugixml
 set(PUGIXML_NO_EXCEPTIONS ON CACHE BOOL "enable PUGIXML_NO_EXCEPTIONS")
@@ -58,13 +62,27 @@ endif()
 
 # zlib
 # not iOS or not macOS and not Android and not OHOS
-if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" AND NOT SKITY_USE_SELF_LIBCXX)
-  # FIXME: some linker under linux may fail to link zlib
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--undefined-version")
-  include_directories(third_party/zlib)
-  include_directories(${CMAKE_BINARY_DIR}/third_party/zlib)
-  add_subdirectory(third_party/zlib)
-  target_link_libraries(skity PRIVATE zlibstatic)
+if (NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" AND NOT SKITY_USE_SELF_LIBCXX)
+  include(ExternalProject)
+
+  ExternalProject_Add(zlib
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/third_party/zlib
+    PREFIX ${CMAKE_BINARY_DIR}/third_party/zlib_build
+    CMAKE_ARGS
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/zlib
+    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+  )
+
+  target_include_directories(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/include)
+  target_link_directories(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/lib)
+  if (WIN32)
+    # FIXME: zlib in msvc output a different name
+    target_link_libraries(skity PRIVATE zlibstaticd)
+  else()
+    target_link_libraries(skity PRIVATE z)
+  endif()
+
+  add_dependencies(skity zlib)
 
   set(USE_THIRD_PARTY_ZLIB ON)
 endif()

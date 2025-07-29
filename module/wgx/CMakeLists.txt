@@ -64,7 +64,8 @@ endif()
 
 target_include_directories(wgsl-cross PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
 target_include_directories(wgsl-cross PRIVATE ${CMAKE_CURRENT_LIST_DIR})
-target_compile_options(wgsl-cross PRIVATE -fno-rtti -std=c++17)
+target_compile_options(wgsl-cross PRIVATE -fno-rtti)
+set_property(TARGET wgsl-cross PROPERTY CXX_STANDARD 17)
 
 # no-exceptions
 if (MSVC)

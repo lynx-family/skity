@@ -5,10 +5,11 @@
 #ifndef SKITY_EXAMPLE_COMMON_WINDOW_HPP
 #define SKITY_EXAMPLE_COMMON_WINDOW_HPP
 
-#ifndef GLFW_INCLUDE_GLEXT
-#define GLFW_INCLUDE_GLEXT
+#ifndef GLFW_INCLUDE_NONE
+#define GLFW_INCLUDE_NONE
 #endif
 #include <GLFW/glfw3.h>
+#include <glad/gl.h>
 
 #include <memory>
 #include <skity/gpu/gpu_context.hpp>

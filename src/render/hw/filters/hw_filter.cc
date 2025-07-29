@@ -98,20 +98,19 @@ void HWFilter::InternalDrawChildrenOutpusWGX(
     };
 
     HWDrawStepContext step_context{
-        .context = context.draw_context,
-        .state = {},
-        .transform = {},
-        .clip_depth = 0.1f,  // just a little bit bigger than 0
-        .scissor =
-            {
-                0,
-                0,
-                output_texture_size.x,
-                output_texture_size.y,
-            },
-        .color_format = color_format,
-        .sample_count = 1,
-        .blend_mode = BlendMode::kDefault,
+        context.draw_context,
+        {},
+        {},
+        0.1f,  // just a little bit bigger than 0
+        {
+            0,
+            0,
+            output_texture_size.x,
+            output_texture_size.y,
+        },
+        color_format,
+        1,
+        BlendMode::kDefault,
     };
 
     auto cmd = context.draw_context->arena_allocator->Make<Command>();
