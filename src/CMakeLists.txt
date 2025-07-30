@@ -31,6 +31,7 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/geometry/cubic.hpp
   ${CMAKE_CURRENT_LIST_DIR}/geometry/geometry.cc
   ${CMAKE_CURRENT_LIST_DIR}/geometry/geometry.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/geometry/glm_helper.hpp
   ${CMAKE_CURRENT_LIST_DIR}/geometry/math.hpp
   ${CMAKE_CURRENT_LIST_DIR}/geometry/matrix.cc
   ${CMAKE_CURRENT_LIST_DIR}/geometry/quaternion.cc

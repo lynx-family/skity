@@ -21,20 +21,20 @@ bool Rect::SetBoundsCheck(const Point* pts, int count) {
     pts += 1;
     count -= 1;
   } else {
-    min = glm::min(pts[0], pts[1]);
-    max = glm::max(pts[0], pts[1]);
+    min = Vec2{Vec4::Min(pts[0], pts[1])};
+    max = Vec2{Vec4::Max(pts[0], pts[1])};
     pts += 2;
     count -= 2;
   }
 
   Vec2 accum = min * 0.f;
   while (count) {
-    Vec2 x = pts[0];
-    Vec2 y = pts[1];
+    Vec2 x = Vec2{pts[0]};
+    Vec2 y = Vec2{pts[1]};
     accum *= x;
     accum *= y;
-    min = glm::min(min, glm::min(x, y));
-    max = glm::max(max, glm::max(x, y));
+    min = Vec2::Min(min, Vec2::Min(x, y));
+    max = Vec2::Max(max, Vec2::Max(x, y));
     pts += 2;
     count -= 2;
   }

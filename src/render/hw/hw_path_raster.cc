@@ -145,17 +145,17 @@ void HWPathStrokeRaster::OnConicTo(const Vec2& p1, const Vec2& p2,
   float u = 0.f;
 
   Conic coeff;
-  coeff.Set(Point{p1, 0.f, 1.f}, Point{p2, 0.f, 1.f}, Point{p3, 0.f, 1.f},
-            weight);
+  coeff.Set(Point{p1.x, p1.y, 0.f, 1.f}, Point{p2.x, p2.y, 0.f, 1.f},
+            Point{p3.x, p3.y, 0.f, 1.f}, weight);
 
   std::array<size_t, GEOMETRY_CURVE_RASTER_LIMIT> indexes1{};
   std::array<size_t, GEOMETRY_CURVE_RASTER_LIMIT> indexes2{};
 
   for (int i = 0; i < num_step; i++) {
-    Vec2 p = coeff.EvalAt(u);
+    Vec2 p = Vec2{coeff.EvalAt(u)};
 
-    Vec2 t = coeff.evalTangentAt(u);
-    t = glm::normalize(t);
+    Vec2 t = Vec2{coeff.evalTangentAt(u)};
+    t = t.Normalize();
     auto n = Vec2(t.y, -t.x);
 
     auto up = p + n * stroke_radius_;
@@ -208,16 +208,16 @@ void HWPathStrokeRaster::OnCubicTo(const Vec2& p1, const Vec2& p2,
   std::array<size_t, GEOMETRY_CURVE_RASTER_LIMIT> indexes2{};
 
   for (int i = 0; i < num_step; i++) {
-    Vec2 p = coeff.EvalAt(u);
+    Vec2 p = Vec2{coeff.EvalAt(u)};
 
     Vec2 t = coeff.EvalTangentAt(u);
-    t = glm::normalize(t);
+    t = t.Normalize();
 
     if (glm::isnan(t.x) || glm::isnan(t.y)) {
-      if (FloatNearlyZero(glm::length(p2 - p1))) {
-        t = glm::normalize(p3 - p1);
+      if (FloatNearlyZero((p2 - p1).Length())) {
+        t = (p3 - p1).Normalize();
       } else {
-        t = glm::normalize(p2 - p1);
+        t = (p2 - p1).Normalize();
       }
     }
 
@@ -295,7 +295,7 @@ void HWPathStrokeRaster::HandleLineCap() {
     p1_out.x = 1.f;
     p1_out.y = 0.f;
   } else {
-    p1_out = glm::normalize(p1.xy - stroke_pts_[1].xy);
+    p1_out = (p1.xy - stroke_pts_[1].xy).Normalize();
   }
 
   auto p2 = stroke_pts_.back();
@@ -306,7 +306,7 @@ void HWPathStrokeRaster::HandleLineCap() {
     p2_out.x = -1.f;
     p2_out.y = 0.f;
   } else {
-    p2_out = glm::normalize(p2.xy - stroke_pts_[stroke_pts_.size() - 2].xy);
+    p2_out = (p2.xy - stroke_pts_[stroke_pts_.size() - 2].xy).Normalize();
   }
 
   if (cap_ == Paint::kRound_Cap) {
@@ -349,8 +349,8 @@ void HWPathStrokeRaster::HandleLineJoin() {
       continue;
     }
 
-    auto prev_dir = glm::normalize(curr - prev);
-    auto curr_dir = glm::normalize(next - curr);
+    auto prev_dir = (curr - prev).Normalize();
+    auto curr_dir = (next - curr).Normalize();
 
     auto prev_normal = Vec2{-prev_dir.y, prev_dir.x};
     auto current_normal = Vec2{-curr_dir.y, curr_dir.x};
@@ -376,13 +376,13 @@ void HWPathStrokeRaster::HandleLineJoin() {
     if (join_ == Paint::kMiter_Join) {
       GenMiterJoin(curr, prev_join, curr_join);
     } else if (join_ == Paint::kRound_Join) {
-      float delta = glm::length(prev_join - curr_join);
+      float delta = (prev_join - curr_join).Length();
 
       if (delta < 1.f) {
         GenBevelJoin(curr, prev_join, curr_join);
       } else {
         if (orientation == Orientation::kLinear) {
-          auto out_dir = glm::normalize(curr - prev);
+          auto out_dir = (curr - prev).Normalize();
 
           auto c = curr + out_dir * stroke_radius_;
 
@@ -400,7 +400,7 @@ std::array<Vec2, 4> HWPathStrokeRaster::ExpandLine(Vec2 const& p0,
                                                    Vec2 const& p1) const {
   std::array<Vec2, 4> ret = {};
 
-  Vec2 dir = glm::normalize(p1 - p0);
+  Vec2 dir = (p1 - p0).Normalize();
   Vec2 normal = {-dir.y, dir.x};
 
   ret[0] = p0 + normal * stroke_radius_;
@@ -449,7 +449,7 @@ void HWPathStrokeRaster::GenMiterJoin(const Vec2& center, const Vec2& p1,
 
   auto pe = k * out_dir;
 
-  if (glm::length(pe) >= stroke_miter_ * stroke_radius_) {
+  if (pe.Length() >= stroke_miter_ * stroke_radius_) {
     // fallback to bevel_join
     GenBevelJoin(center, p1, p2);
     return;
@@ -487,8 +487,8 @@ void HWPathStrokeRaster::GenerateCircleMesh(Vec2 const& center, Vec2 const& p1,
   auto c_i = AppendLineVertex(center);
   num = std::max(num, 1);
   auto prev_i = AppendLineVertex(p1);
-  auto start_unit_vec = glm::normalize(p1 - center);
-  auto end_unit_vec = glm::normalize(p2 - center);
+  auto start_unit_vec = (p1 - center).Normalize();
+  auto end_unit_vec = (p2 - center).Normalize();
 
   std::vector<Vec2> result =
       CircleInterpolation(start_unit_vec, end_unit_vec, num);

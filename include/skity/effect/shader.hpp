@@ -6,7 +6,6 @@
 #define INCLUDE_SKITY_EFFECT_SHADER_HPP
 
 #include <array>
-#include <glm/gtc/matrix_transform.hpp>
 #include <memory>
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/point.hpp>

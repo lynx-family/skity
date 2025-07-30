@@ -73,7 +73,7 @@ void HWPathAAOutline::AssembleEdgeAAPrimitive() {
     auto from = outline_pts_[i];
     auto to = outline_pts_[(i + 1) % outline_pts_.size()];
 
-    auto curr_dir = glm::normalize(to - from);
+    auto curr_dir = (to - from).Normalize();
     auto vertical_line = Vec2(curr_dir.y, -curr_dir.x) * aa_normal_dir_;
 
     auto from_1 = from + vertical_line * fringe_;
@@ -99,19 +99,19 @@ void HWPathAAOutline::AssembleEdgeAAPrimitive() {
     }
 
     auto prev = outline_pts_[prev_pt_i];
-    auto prev_dir = glm::normalize(from - prev);
+    auto prev_dir = (from - prev).Normalize();
     auto prev_vertical_dir = Vec2(prev_dir.y, -prev_dir.x);
     auto out_dir = (prev_dir - curr_dir) * 0.5f;
 
     Vec2 aa_p1;
-    if (glm::dot(out_dir, prev_vertical_dir) < 0.f) {
+    if (Vec2::Dot(out_dir, prev_vertical_dir) < 0.f) {
       aa_p1 = from - prev_vertical_dir * fringe_;
     } else {
       aa_p1 = from + prev_vertical_dir * fringe_;
     }
 
     Vec2 aa_p2 = from_1;
-    if (glm::dot(out_dir, vertical_line) < 0) {
+    if (Vec2::Dot(out_dir, vertical_line) < 0) {
       aa_p2 = from_2;
     }
 

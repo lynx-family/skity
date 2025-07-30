@@ -8,6 +8,8 @@
 #include <skity/geometry/point.hpp>
 #include <skity/geometry/quaternion.hpp>
 
+#include "src/geometry/glm_helper.hpp"
+
 namespace skity {
 
 constexpr float DEFALUT_CAMERA_DIST = 879.13f;
@@ -29,7 +31,7 @@ Matrix CameraMatrix(float viewport_width, float viewport_height,
   neg_z.Set(2, 2, -1);
   Matrix total = Matrix::Translate(viewport_width / 2, viewport_height / 2) *
                  Matrix::Scale(viewport_width / 2, viewport_height / 2) *
-                 Matrix(projection) * rotate * Matrix(view) * neg_z;
+                 FromGLM(projection) * rotate * FromGLM(view) * neg_z;
   return total;
 }
 }  // namespace

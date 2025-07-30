@@ -72,7 +72,7 @@ void HWCanvas::OnClipRect(const Rect& rect, ClipOp op) {
     return;
   }
 
-  if (op == ClipOp::kDifference || CurrentMatrix().HasRotation()) {
+  if (op == ClipOp::kDifference || !CurrentMatrix().OnlyScaleAndTranslate()) {
     Canvas::OnClipRect(rect, op);
     return;
   }
@@ -502,9 +502,9 @@ void HWCanvas::OnFlush() {
     draw_context.pipelineLib = pipeline_lib_;
     draw_context.gpuContext = surface_->GetGPUContext();
     draw_context.pool = &pool;
-    draw_context.mvp = glm::ortho(
+    draw_context.mvp = FromGLM(glm::ortho(
         root_layer_->GetBounds().Left(), root_layer_->GetBounds().Right(),
-        root_layer_->GetBounds().Bottom(), root_layer_->GetBounds().Top());
+        root_layer_->GetBounds().Bottom(), root_layer_->GetBounds().Top()));
     draw_context.vertex_vector_cache = vertex_vector_cache_.get();
     draw_context.index_vector_cache = index_vector_cache_.get();
     draw_context.total_clip_depth = root_layer_->GetState()->GetDrawDepth() + 1;
@@ -573,10 +573,8 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
     }
   }
 
-  float sx = glm::length(Vec2{world_matrix.Get(Matrix::kMScaleX),
-                              world_matrix.Get(Matrix::kMSkewY)});
-  float sy = glm::length(Vec2{world_matrix.Get(Matrix::kMSkewX),
-                              world_matrix.Get(Matrix::kMScaleY)});
+  float sx = Vec2{world_matrix.GetScaleX(), world_matrix.GetSkewY()}.Length();
+  float sy = Vec2{world_matrix.GetSkewX(), world_matrix.GetScaleY()}.Length();
   Vec2 scale{sx * ctx_scale_, sy * ctx_scale_};
 
   float width_f = layer_bounds.Width() * scale.x;

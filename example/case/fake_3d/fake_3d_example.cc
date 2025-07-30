@@ -5,7 +5,6 @@
 #include "case/fake_3d/fake_3d_example.hpp"
 
 #include <chrono>
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <skity/geometry/quaternion.hpp>
 #include <skity/skity.hpp>
@@ -51,8 +50,8 @@ void draw_even_odd_fill(skity::Canvas* canvas) {
 
   canvas->Save();
 
-  canvas->Concat(skity::Matrix(posM * invOrth * proj * view * midM_X * midM_Y *
-                               orth * preM));
+  auto result = posM * invOrth * proj * view * midM_X * midM_Y * orth * preM;
+  canvas->Concat(reinterpret_cast<skity::Matrix&>(result));
 
   canvas->DrawPath(path, paint);
 
@@ -69,10 +68,10 @@ void draw_even_odd_fill(skity::Canvas* canvas) {
   //     Quaternion::FromAxisAngle(Vec3(0, 1, 0), 2.0f * glm::pi<float>());
   const Quaternion progress = start_q.Slerp(end_q, t);
 
-  glm::mat4 rmidM = progress.ToMatrix();
-
-  canvas->Concat(
-      skity::Matrix(posM * invOrth * proj * view * rmidM * orth * preM));
+  Matrix rmidM = progress.ToMatrix();
+  result = posM * invOrth * proj * view * reinterpret_cast<glm::mat4&>(rmidM) *
+           orth * preM;
+  canvas->Concat(reinterpret_cast<skity::Matrix&>(result));
 
   path.SetFillType(skity::Path::PathFillType::kEvenOdd);
   canvas->DrawPath(path, paint);

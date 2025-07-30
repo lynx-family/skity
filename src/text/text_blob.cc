@@ -58,9 +58,9 @@ Rect TextBlob::ComputeBounds(uint32_t count, const GlyphID *glyphs,
 
   float stroke_width =
       paint.GetStyle() != Paint::kFill_Style ? paint.GetStrokeWidth() : 0;
-  return Rect(glm::floor(left - stroke_width), glm::floor(top - stroke_width),
-              glm::floor(right + stroke_width),
-              glm::floor(bottom + stroke_width));
+  return Rect(std::floor(left - stroke_width), std::floor(top - stroke_width),
+              std::floor(right + stroke_width),
+              std::floor(bottom + stroke_width));
 }
 
 class SimpleDelegate : public TypefaceDelegate {

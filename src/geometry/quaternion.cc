@@ -43,7 +43,7 @@ Quaternion Quaternion::FromEuler(float alpha, float beta, float gamma) {
 }
 
 Quaternion Quaternion::FromAxisAngle(Vec3 axis, float angle) {
-  axis = glm::normalize(axis);
+  axis = axis.Normalize();
   const auto cos_angle = std::cos(angle / 2);
   const auto sin_angle = std::sin(angle / 2);
   return Quaternion(sin_angle * axis.x, sin_angle * axis.y, sin_angle * axis.z,
@@ -57,7 +57,7 @@ Quaternion Quaternion::FromXYZW(float x, float y, float z, float w) {
       z,
       w,
   };
-  const auto length = glm::length(xyzw);
+  const auto length = xyzw.Length();
   return Quaternion(xyzw.x / length, xyzw.y / length, xyzw.z / length,
                     xyzw.w / length);
 }
@@ -101,7 +101,7 @@ Quaternion Quaternion::Slerp(const Quaternion& end, float t) const {
         z_ * complement_t + end.z_ * t,
         w_ * complement_t + end.w_ * t,
     };
-    const auto length = glm::length(xyzw);
+    const auto length = xyzw.Length();
     return Quaternion(xyzw.x / length, xyzw.y / length, xyzw.z / length,
                       xyzw.w / length);
   }

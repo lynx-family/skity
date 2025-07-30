@@ -4,18 +4,20 @@
 
 #include "src/graphic/bitmap_sampler.hpp"
 
+#include "src/geometry/math.hpp"
+
 namespace skity {
 
 namespace {
 float RemapFloatTile(float t, TileMode tile_mode) {
   if (tile_mode == TileMode::kClamp) {
-    t = glm::clamp(t, 0.0f, 1.0f);
+    t = std::clamp(t, 0.0f, 1.0f);
   } else if (tile_mode == TileMode::kRepeat) {
-    t = glm::fract(t);
+    t = FloatFract(t);
   } else if (tile_mode == TileMode::kMirror) {
     float t1 = t - 1;
-    float t2 = t1 - 2 * glm::floor(t1 * 0.5) - 1;
-    t = glm::abs(t2);
+    float t2 = t1 - 2 * std::floor(t1 * 0.5) - 1;
+    t = std::abs(t2);
   }
   return t;
 }

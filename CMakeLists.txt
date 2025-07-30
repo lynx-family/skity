@@ -89,7 +89,6 @@ target_include_directories(
   PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/glm>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>
 )
 
@@ -120,7 +119,11 @@ if(${SKITY_LOG})
   target_compile_definitions(skity PRIVATE -DSPDLOG_NO_EXCEPTIONS)
   target_compile_definitions(skity PRIVATE -DSKITY_LOG)
   # FIXME: disable -Wdeprecated-declarations warnings
-  target_compile_options(skity PRIVATE -Wno-deprecated-declarations)
+  if (MSVC)
+    target_compile_options(skity PRIVATE /wd4996)
+  else()
+    target_compile_options(skity PRIVATE -Wno-deprecated-declarations)
+  endif()
 
   if(ANDROID)
     target_link_libraries(skity PRIVATE log)

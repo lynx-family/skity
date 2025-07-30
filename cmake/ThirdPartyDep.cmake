@@ -6,9 +6,9 @@
 set(GLM_BUILD_INSTALL ON CACHE BOOL "enable GLM_BUILD_INSTALL" FORCE)
 add_subdirectory(third_party/glm)
 if (WIN32)
-  target_link_libraries(skity PUBLIC glm::glm-header-only)
+  target_link_libraries(skity PRIVATE glm::glm-header-only)
 else()
-  target_link_libraries(skity PUBLIC glm::glm)
+  target_link_libraries(skity PRIVATE glm::glm)
 endif()
 
 # pugixml

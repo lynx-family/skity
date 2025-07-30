@@ -94,8 +94,7 @@ static int build_arc_conics(const Rect& oval, const Vec2& start,
   auto matrix = Matrix::Translate(oval.CenterX(), oval.CenterY()) *
                 Matrix::Scale(oval.Width() * 0.5f, oval.Height() * 0.5f);
 
-  int count = Conic::BuildUnitArc(Vec4{start, 0, 1}, Vec4{stop, 0, 1}, dir,
-                                  &matrix, conics);
+  int count = Conic::BuildUnitArc(start, stop, dir, &matrix, conics);
   if (0 == count) {
     *singlePt = matrix * Vec4{stop.x, stop.y, 0.f, 1.f};
   }
@@ -572,8 +571,11 @@ Path& Path::ArcTo(float x1, float y1, float x2, float y2, float radius) {
     return LineTo(x1, y1);
   }
 
-  Vec4 before = befored;
-  Vec4 after = afterd;
+  Vec4 before =
+      Vec4{static_cast<float>(befored.x), static_cast<float>(befored.y),
+           static_cast<float>(befored.z), static_cast<float>(befored.w)};
+  Vec4 after = Vec4{static_cast<float>(afterd.x), static_cast<float>(afterd.y),
+                    static_cast<float>(afterd.z), static_cast<float>(afterd.w)};
 
   float dist = glm::abs(static_cast<float>(radius * (1 - cosh) / sinh));
   float xx = x1 - dist * before.x;
@@ -1367,7 +1369,7 @@ bool Path::IsRect(Rect* rect, bool* is_closed, Direction* direction) const {
           last_pt = pts;
         }
         Point line_end = verb == Verb::kClose ? *first_pt : *pts++;
-        Vec2 line_delta = line_end - line_start;
+        Vec2 line_delta = Vec2{line_end - line_start};
         if (!FloatNearlyZero(line_delta.x) && !FloatNearlyZero(line_delta.y)) {
           return false;  // not a straight line
         }
@@ -1662,13 +1664,13 @@ struct Convexicator {
 
  private:
   DirChange DirectionChange(const Vec2& cur_vec) {
-    float cross = VectorCrossProduct(last_vec_, cur_vec);
+    float cross = Vec2::Cross(last_vec_, cur_vec);
     if (glm::isinf(cross)) {
       return DirChange::kUnknown;
     }
     if (cross == 0) {
-      return VectorDotProduct(last_vec_, cur_vec) < 0 ? DirChange::kBackwards
-                                                      : DirChange::kStraight;
+      return Vec2::Dot(last_vec_, cur_vec) < 0 ? DirChange::kBackwards
+                                               : DirChange::kStraight;
     }
     return 1 == FloatSignAsInt(cross) ? DirChange::kRight : DirChange::kLeft;
   }

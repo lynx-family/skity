@@ -5,6 +5,7 @@
 #include "src/render/text/sdf_gen.hpp"
 
 #include <cmath>
+#include <glm/glm.hpp>
 #include <skity/geometry/point.hpp>
 
 namespace skity {
@@ -92,7 +93,7 @@ const Image<Vec2> ComputeGradients(const Image<float>& image,
         gradient.y = image.Get(x - 1, y + 1) - image.Get(x - 1, y - 1) +
                      SQRT2 * image.Get(x, y + 1) - SQRT2 * image.Get(x, y - 1) +
                      image.Get(x + 1, y + 1) - image.Get(x + 1, y - 1);
-        gradients.Set(x, y, glm::normalize(gradient));
+        gradients.Set(x, y, gradient.Normalize());
       }
     }
   }
@@ -153,7 +154,7 @@ void Compare(DFData* data, glm::ivec2 cur_point, const glm::ivec2& offset) {
   Vec2 dist_vec;
   dist_vec.x = offset_dist_vec.x + offset.x;
   dist_vec.y = offset_dist_vec.y + offset.y;
-  float new_dist = glm::length(dist_vec);
+  float new_dist = dist_vec.Length();
   if (new_dist < old_dist) {
     data->distances.Set(cur_point.x, cur_point.y, new_dist);
     data->distance_vectors.Set(cur_point.x, cur_point.y, dist_vec);

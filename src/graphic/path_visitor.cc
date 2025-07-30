@@ -127,7 +127,7 @@ void PathVisitor::HandleConicTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,
     return;
   }
 
-  Point start = {p1, 0.f, 1.f};
+  Point start = {p1.x, p1.y, 0.f, 1.f};
   Point control = {p2.x, p2.y, 0.f, 1.f};
   Point end = {p3.x, p3.y, 0.f, 1.f};
 
@@ -136,8 +136,8 @@ void PathVisitor::HandleConicTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,
   conic.ChopIntoQuadsPOW2(quads.data(), 1);
   quads[0] = start;
 
-  HandleQuadTo(quads[0], quads[1], quads[2]);
-  HandleQuadTo(quads[2], quads[3], quads[4]);
+  HandleQuadTo(Vec2{quads[0]}, Vec2{quads[1]}, Vec2{quads[2]});
+  HandleQuadTo(Vec2{quads[2]}, Vec2{quads[3]}, Vec2{quads[4]});
 }
 
 void PathVisitor::HandleCubicTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,

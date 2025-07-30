@@ -5,8 +5,6 @@
 #include "case/basic/example.hpp"
 
 #include <cmath>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <skity/skity.hpp>
 
 namespace skity::example::basic {

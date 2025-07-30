@@ -8,6 +8,7 @@
 #include <skity/effect/shader.hpp>
 #include <skity/graphic/blend_mode.hpp>
 
+#include "src/geometry/glm_helper.hpp"
 #include "src/gpu/gl/gpu_buffer_gl.hpp"
 #include "src/gpu/gl/gpu_render_pass_gl.hpp"
 #include "src/gpu/gl/gpu_texture_gl.hpp"
@@ -332,8 +333,8 @@ HWDrawState GLPartialDrawTextureLayer::OnPrepare(
     layer_back_draw_->SetScissorBox(GetScissorBox());
     layer_back_draw_->SetClipDepth(context->total_clip_depth);
 
-    context->mvp = Matrix(glm::ortho(0.f, static_cast<float>(target_width_),
-                                     static_cast<float>(target_height_), 0.f));
+    context->mvp = FromGLM(glm::ortho(0.f, static_cast<float>(target_width_),
+                                      static_cast<float>(target_height_), 0.f));
 
     layer_back_draw_->Prepare(context);
   }

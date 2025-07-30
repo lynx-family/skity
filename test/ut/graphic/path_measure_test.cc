@@ -3,8 +3,6 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <array>
-#include <glm/glm.hpp>
-#include <glm/gtc/constants.hpp>
 #include <skity/graphic/path.hpp>
 #include <skity/graphic/path_measure.hpp>
 

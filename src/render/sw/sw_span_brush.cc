@@ -20,13 +20,13 @@ namespace skity {
 namespace {
 float RemapFloatTile(float t, TileMode tile_mode) {
   if (tile_mode == TileMode::kClamp) {
-    t = glm::clamp(t, 0.0f, 1.0f);
+    t = std::clamp(t, 0.0f, 1.0f);
   } else if (tile_mode == TileMode::kRepeat) {
     t = glm::fract(t);
   } else if (tile_mode == TileMode::kMirror) {
     float t1 = t - 1;
-    float t2 = t1 - 2 * glm::floor(t1 * 0.5) - 1;
-    t = glm::abs(t2);
+    float t2 = t1 - 2 * std::floor(t1 * 0.5) - 1;
+    t = std::abs(t2);
   }
   return t;
 }
@@ -164,20 +164,20 @@ namespace {
 Matrix PointsToUnit(const Shader::GradientInfo& info,
                     Shader::GradientType type) {
   if (type == Shader::GradientType::kLinear) {
-    Vec2 start = FromPoint(info.point[0]);
-    Vec2 stop = info.point[1];
+    Vec2 start = Vec2{(info.point[0])};
+    Vec2 stop = Vec2{info.point[1]};
     Vec2 ss = stop - start;
-    float length = glm::length(ss);
+    float length = ss.Length();
     float scale = length > 0 ? 1.0f / length : 0;
     Vec2 unit_ss = ss * scale;
     float sine = -unit_ss.y;
     float cosine = unit_ss.x;
 
     Matrix rotate;
-    rotate.Set(Matrix::kMScaleX, cosine);
-    rotate.Set(Matrix::kMSkewX, -sine);
-    rotate.Set(Matrix::kMSkewY, sine);
-    rotate.Set(Matrix::kMScaleY, cosine);
+    rotate.SetScaleX(cosine);
+    rotate.SetSkewX(-sine);
+    rotate.SetSkewY(sine);
+    rotate.SetScaleY(cosine);
 
     return rotate *                       //
            Matrix::Scale(scale, scale) *  //
@@ -201,17 +201,17 @@ Matrix PointsToUnit(const Point& p0, const Point& p1) {
   Vec2 start = FromPoint(p0);
   Vec2 stop = FromPoint(p1);
   Vec2 ss = stop - start;
-  float length = glm::length(ss);
+  float length = ss.Length();
   float scale = length > 0 ? 1.0f / length : 0;
   Vec2 unit_ss = ss * scale;
   float sine = -unit_ss.y;
   float cosine = unit_ss.x;
 
   Matrix rotate;
-  rotate.Set(Matrix::kMScaleX, cosine);
-  rotate.Set(Matrix::kMSkewX, -sine);
-  rotate.Set(Matrix::kMSkewY, sine);
-  rotate.Set(Matrix::kMScaleY, cosine);
+  rotate.SetScaleX(cosine);
+  rotate.SetSkewX(-sine);
+  rotate.SetSkewY(sine);
+  rotate.SetScaleY(cosine);
 
   return rotate *                       //
          Matrix::Scale(scale, scale) *  //
@@ -230,10 +230,8 @@ GradientColorBrush::GradientColorBrush(
 namespace {
 
 Vec2 inline MapPoint(const Vec2& src, const Matrix& m) {
-  return {src.x * m.Get(Matrix::kMScaleX) + src.y * m.Get(Matrix::kMSkewX) +
-              m.Get(Matrix::kMTransX),
-          src.x * m.Get(Matrix::kMSkewY) + src.y * m.Get(Matrix::kMScaleY) +
-              m.Get(Matrix::kMTransY)};
+  return {src.x * m.GetScaleX() + src.y * m.GetSkewX() + m.GetTranslateX(),
+          src.x * m.GetSkewY() + src.y * m.GetScaleY() + m.GetTranslateY()};
 }
 
 }  // namespace
@@ -292,8 +290,8 @@ Color4f GradientColorBrush::LerpColor(float current) {
     mix_value = value / total;
   }
 
-  return glm::mix(info_.colors[start_index], info_.colors[end_index],
-                  mix_value);
+  return info_.colors[start_index] * (1 - mix_value) +
+         info_.colors[end_index] * mix_value;
 }
 
 class LinearGradientColorBrush : public GradientColorBrush {
@@ -370,7 +368,7 @@ class RadialGradientColorBrush : public GradientColorBrush {
     SKITY_TRACE_EVENT(RadialGradientColorBrush_CalculateColor);
 
     Vec2 src{x + 0.5f, y + 0.5f};
-    Color4f c = LerpColor(glm::length(MapPoint(src, points_to_unit_)));
+    Color4f c = LerpColor(MapPoint(src, points_to_unit_).Length());
     Color color = Color4fToColor(c);
     color = ColorToPMColor(color);
     return color;
@@ -409,15 +407,15 @@ class ConicalGradientColorBrush : public GradientColorBrush {
     c1_ = info_.point[1];
     r0_ = info_.radius[0];
     r1_ = info_.radius[1];
-    delta_center_ = glm::distance(c1_, c0_);
+    delta_center_ = (c1_ - c0_).Length();
     delta_radius_ = std::abs(r1_ - r0_);
 
     if (r0_ < 0 || r1_ < 0) {
       return;
     }
 
-    radial_ = delta_center_ < NearlyZero;
-    strip_ = delta_radius_ < NearlyZero;
+    radial_ = delta_center_ < kNearlyZero;
+    strip_ = delta_radius_ < kNearlyZero;
 
     if (radial_) {
       if (!strip_) {
@@ -428,14 +426,14 @@ class ConicalGradientColorBrush : public GradientColorBrush {
     } else if (strip_) {
       c0c1_transform_ = PointsToUnit(c0_, c1_);
     } else {
-      swap_01_ = r1_ < NearlyZero;
+      swap_01_ = r1_ < kNearlyZero;
       if (swap_01_) {
         std::swap(c0_, c1_);
         std::swap(r0_, r1_);
       }
       f_ = r0_ / (r0_ - r1_);
       cf_ = c0_ * (1.f - f_) + c1_ * f_;
-      r1_ = r1_ / glm::length(c1_ - cf_);
+      r1_ = r1_ / (c1_ - cf_).Length();
       r1_square_ = r1_ * r1_;
 
       cfc1_tranform_ = PointsToUnit(cf_, c1_);
@@ -458,7 +456,7 @@ class ConicalGradientColorBrush : public GradientColorBrush {
         return Colors::kTransparent;
       }
       Vec2 pt = (p - FromPoint(c0_)) * scale_;
-      t = length(pt) * scale_sign_ - bias_;
+      t = pt.Length() * scale_sign_ - bias_;
     } else if (strip_) {
       // degenerate case 2: codes from shader
       float r = r0_ / delta_center_;
@@ -475,7 +473,7 @@ class ConicalGradientColorBrush : public GradientColorBrush {
       p = MapPoint(p, cfc1_tranform_);
 
       float xt = -1.f;
-      if (std::abs(r1_ - 1.f) < NearlyZero) {
+      if (std::abs(r1_ - 1.f) < kNearlyZero) {
         xt = (p.x * p.x + p.y * p.y) / 2;
       } else if (r1_ > 1.f) {
         float m = r1_square_ - 1.f;
@@ -568,7 +566,7 @@ PixmapBrush::PixmapBrush(std::vector<Span> const& spans, Bitmap* bitmap,
 Color PixmapBrush::CalculateColor(int32_t x, int32_t y) {
   SKITY_TRACE_EVENT(PixmapBrush_CalculateColor);
 
-  auto uv = MapPoint(Vec2{x + 0.5, y + 0.5}, points_to_unit_);
+  auto uv = MapPoint(Vec2{x + 0.5f, y + 0.5f}, points_to_unit_);
   Color color = bitmap_sampler_.GetColor(uv);
   if (texture_->GetAlphaType() == kUnpremul_AlphaType) {
     color = ColorToPMColor(color);
@@ -589,22 +587,18 @@ void CalculateImageColorsNeon(int32_t p_x, int32_t p_y, int32_t p_alpha,
   float32x4_t x = vaddq_f32(vdupq_n_f32(p_x), offset);
   float32x4_t y = vdupq_n_f32(p_y + 0.5f);
   // u = scaleX * x + skewX * y + transX
-  float32x4_t u =
-      vmulq_n_f32(x, p_points_to_unit.Get(Matrix::kMScaleX));    // scaleX * x
-  u = vmlaq_n_f32(u, y, p_points_to_unit.Get(Matrix::kMSkewX));  // + skewX * y
-  u = vaddq_f32(
-      u,
-      vdupq_n_f32(p_points_to_unit.Get(Matrix::kMTransX)));  // + transX
+  float32x4_t u = vmulq_n_f32(x, p_points_to_unit.GetScaleX());  // scaleX * x
+  u = vmlaq_n_f32(u, y, p_points_to_unit.GetSkewX());            // + skewX * y
+  u = vaddq_f32(u,
+                vdupq_n_f32(p_points_to_unit.GetTranslateX()));  // + transX
   u = RemapFloatTileNeon(u, x_tile_mode);
 
   // v = skewY * x + scaleY * y + transY
-  float32x4_t v =
-      vmulq_n_f32(x, p_points_to_unit.Get(Matrix::kMSkewY));  // skewY * x
+  float32x4_t v = vmulq_n_f32(x, p_points_to_unit.GetSkewY());  // skewY * x
   v = vmlaq_n_f32(v, y,
-                  p_points_to_unit.Get(Matrix::kMScaleY));  // + scaleY * y
-  v = vaddq_f32(
-      v,
-      vdupq_n_f32(p_points_to_unit.Get(Matrix::kMTransY)));  // + transY
+                  p_points_to_unit.GetScaleY());  // + scaleY * y
+  v = vaddq_f32(v,
+                vdupq_n_f32(p_points_to_unit.GetTranslateY()));  // + transY
   v = RemapFloatTileNeon(v, y_tile_mode);
 
   float32x4_t width = vdupq_n_f32(p_width);

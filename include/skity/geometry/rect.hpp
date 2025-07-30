@@ -101,10 +101,10 @@ class SKITY_API Rect {
   bool SetBoundsCheck(const Point pts[], int count);
 
   void Set(const Point& p0, const Point& p1) {
-    left_ = glm::min(p0.x, p1.x);
-    right_ = glm::max(p0.x, p1.x);
-    top_ = glm::min(p0.y, p1.y);
-    bottom_ = glm::max(p0.y, p1.y);
+    left_ = std::min(p0.x, p1.x);
+    right_ = std::max(p0.x, p1.x);
+    top_ = std::min(p0.y, p1.y);
+    bottom_ = std::max(p0.y, p1.y);
   }
 
   /**

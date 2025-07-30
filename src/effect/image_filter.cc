@@ -185,7 +185,7 @@ void ImageFilterBase::BlurBitmapToCanvas(Canvas* canvas, Bitmap& bitmap,
                                          float radius_y) {
   Bitmap filtered_bitmap(bitmap.Width(), bitmap.Height(), kPremul_AlphaType);
   SWStackBlur(&bitmap, &filtered_bitmap,
-              glm::round(std::max(radius_x, radius_y)))
+              std::round(std::max(radius_x, radius_y)))
       .Blur();
   canvas->DrawImage(Image::MakeImage(filtered_bitmap.GetPixmap()),
                     filter_bounds, &paint);
@@ -203,7 +203,7 @@ void DropShadowImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
                                      const Paint& paint) const {
   Bitmap filtered_bitmap(bitmap.Width(), bitmap.Height());
   SWStackBlur(&bitmap, &filtered_bitmap,
-              glm::round(std::max(radius_x_, radius_y_)))
+              std::round(std::max(radius_x_, radius_y_)))
       .Blur();
 
   for (size_t y = 0; y < bitmap.Height(); ++y) {

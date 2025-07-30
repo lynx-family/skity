@@ -79,25 +79,29 @@ static void compute_pos_tan(const Point pts[], unsigned segType, float t,
                  FloatInterp(pts[0].y, pts[1].y, t));
       }
       if (tangent) {
-        *tangent = Vector{glm::normalize(Vec2{pts[1] - pts[0]}), 0.f, 0.f};
+        auto n = Vec2{pts[1] - pts[0]}.Normalize();
+        *tangent = Vector{n.x, n.y, 0.f, 0.f};
       }
       break;
     case ContourMeasure::kQuad_SegType:
       QuadCoeff::EvalQuadAt({pts[0], pts[1], pts[2]}, t, pos, tangent);
       if (tangent) {
-        *tangent = Vector{glm::normalize(Vec2(tangent->x, tangent->y)), 0, 0};
+        auto n = Vec2(tangent->x, tangent->y).Normalize();
+        *tangent = Vector{n.x, n.y, 0, 0};
       }
       break;
     case ContourMeasure::kConic_SegType:
       Conic{pts[0], pts[2], pts[3], pts[1].x}.EvalAt(t, pos, tangent);
       if (tangent) {
-        *tangent = Vector{glm::normalize(Vec2(tangent->x, tangent->y)), 0, 0};
+        auto n = Vec2(tangent->x, tangent->y).Normalize();
+        *tangent = Vector{n.x, n.y, 0, 0};
       }
       break;
     case ContourMeasure::kCubic_SegType:
       CubicCoeff::EvalCubicAt(pts, t, pos, tangent, nullptr);
       if (tangent) {
-        *tangent = Vector{glm::normalize(Vec2(tangent->x, tangent->y)), 0, 0};
+        auto n = Vec2(tangent->x, tangent->y).Normalize();
+        *tangent = Vector{n.x, n.y, 0, 0};
       }
       break;
     default:

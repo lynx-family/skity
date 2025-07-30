@@ -4,8 +4,6 @@
 
 #include "case/contour_aa/contour_aa_example.hpp"
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <skity/skity.hpp>
 
 namespace skity::example::contour::aa {

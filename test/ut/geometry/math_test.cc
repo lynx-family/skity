@@ -10,7 +10,7 @@
 #include <skity/geometry/point.hpp>
 
 TEST(MATH, test_infinit) {
-  float nan = glm::asin(2);
+  float nan = std::asin(2);
   float inf = std::numeric_limits<float>::infinity();
   float big = 3.40282e+038f;
 

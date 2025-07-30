@@ -90,15 +90,16 @@ class VectorXform {
   explicit VectorXform(const Matrix& m) { *this = m; }
 
   VectorXform& operator=(const Matrix& m) {
-    fC0 = {m.Get(0), m.Get(1)};
-    fC1 = {m.Get(3), m.Get(4)};
+    fC0 = {m.GetScaleX(), m.GetSkewX()};
+    fC1 = {m.GetSkewY(), m.GetScaleY()};
     return *this;
   }
 
   Vec2 operator()(Vec2 vector) const { return fC0 * vector.x + fC1 * vector.y; }
   Vec4 operator()(Vec4 vectors) const {
-    return Vec4(fC0 * vectors.x + fC1 * vectors.y,
-                fC0 * vectors.z + fC1 * vectors.w);
+    auto xy = fC0 * vectors.x + fC1 * vectors.y;
+    auto zw = fC0 * vectors.z + fC1 * vectors.w;
+    return Vec4(xy.x, xy.y, zw.x, zw.y);
   }
 
  private:
@@ -139,9 +140,9 @@ inline int QuadraticLog2(float precision, const Vec2 pts[],
 // curve.
 inline float CubicP4(float precision, Vec2 p0, Vec2 p1, Vec2 p2, Vec2 p3,
                      const VectorXform& vectorXform = VectorXform()) {
-  Vec4 p01{p0, p1};
-  Vec4 p12{p1, p2};
-  Vec4 p23{p2, p3};
+  Vec4 p01{p0.x, p0.y, p1.x, p1.y};
+  Vec4 p12{p1.x, p1.y, p2.x, p2.y};
+  Vec4 p23{p2.x, p2.y, p3.x, p3.y};
   Vec4 v = -2.0f * p12 + p01 + p23;
   v = vectorXform(v);
   Vec4 vv = v * v;
@@ -205,7 +206,8 @@ inline float ConicP2(float precision, Vec2 p0, Vec2 p1, Vec2 p2, float w,
   p2 = vectorXform(p2);
 
   // Compute center of bounding box in projected space
-  const Vec2 C = 0.5f * (min(min(p0, p1), p2) + max(max(p0, p1), p2));
+  const Vec2 C = 0.5f * (Vec2::Min(Vec2::Min(p0, p1), p2) +
+                         Vec2::Max(Vec2::Max(p0, p1), p2));
 
   // Translate by -C. This improves translation-invariance of the formula,
   // see Sec. 3.3 of cited paper
@@ -214,8 +216,8 @@ inline float ConicP2(float precision, Vec2 p0, Vec2 p1, Vec2 p2, float w,
   p2 -= C;
 
   // Compute max length
-  const float max_len =
-      sqrtf(std::max(dot(p0, p0), std::max(dot(p1, p1), dot(p2, p2))));
+  const float max_len = sqrtf(std::max(
+      Vec2::Dot(p0, p0), std::max(Vec2::Dot(p1, p1), Vec2::Dot(p2, p2))));
 
   // Compute forward differences
   const Vec2 dp = -2 * w * p1 + p0 + p2;
@@ -225,7 +227,8 @@ inline float ConicP2(float precision, Vec2 p0, Vec2 p1, Vec2 p2, float w,
   // linearization. Here, the epsilon referenced from the cited paper is
   // 1/precision.
   const float rp_minus_1 = std::max(0.f, max_len * precision - 1);
-  const float numer = sqrtf(dot(dp, dp)) * precision + rp_minus_1 * dw;
+  const float numer =
+      std::sqrt(Vec2::Dot(dp, dp)) * precision + rp_minus_1 * dw;
   const float denom = 4 * std::min(w, 1.f);
 
   // Number of segments = sqrt(numer / denom).

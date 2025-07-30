@@ -48,7 +48,7 @@ TEST(ImageFilterGolden, BlurFilter_10_10) {
 
   canvas->Save();
   canvas->Translate(50.f, 50.f);
-  canvas->Concat(skity::Matrix::RotateDeg(45.f, {50.f, 50.f}));
+  canvas->Concat(skity::Matrix::RotateDeg(45.f, skity::Vec2{50.f, 50.f}));
 
   canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
   canvas->Restore();

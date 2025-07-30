@@ -5,7 +5,6 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
-#include <glm/glm.hpp>
 #include <skity/gpu/gpu_context.hpp>
 #include <skity/skity.hpp>
 #if !defined(SKITY_ANDROID) && !defined(SKITY_HARMONY)
@@ -400,8 +399,8 @@ void draw_color_wheel(skity::Canvas* canvas, float x, float y, float w, float h,
   aeps = 0.5f / r1;  // half a pixel arc length in radians (2pi cancels out).
 
   for (int32_t i = 0; i < 6; i++) {
-    float a0 = (float)i / 6.f * glm::pi<float>() * 2.f - aeps;
-    float a1 = (float)(i + 1.f) / 6.f * glm::pi<float>() * 2.f + aeps;
+    float a0 = (float)i / 6.f * M_PI * 2.f - aeps;
+    float a1 = (float)(i + 1.f) / 6.f * M_PI * 2.f + aeps;
 
     float p1_x = cx + std::cos(a0) * r0;
     float p1_y = cy + std::sin(a0) * r0;
@@ -409,13 +408,11 @@ void draw_color_wheel(skity::Canvas* canvas, float x, float y, float w, float h,
     float p3_x = cx + std::cos(a1) * r0;
     float p3_y = cy + std::sin(a1) * r0;
 
-    skity::Vec2 p1r = glm::normalize(skity::Vec2{p1_x - cx, p1_y - cy});
-    skity::Vec2 p3r = glm::normalize(skity::Vec2{p3_x - cx, p3_y - cy});
-    skity::Vec2 p2r = glm::normalize((p1r + p3r) * 0.5f);
+    skity::Vec2 p1r = (skity::Vec2{p1_x - cx, p1_y - cy}).Normalize();
+    skity::Vec2 p3r = (skity::Vec2{p3_x - cx, p3_y - cy}).Normalize();
+    skity::Vec2 p2r = ((p1r + p3r) * 0.5f).Normalize();
     p2r = skity::Vec2{cx, cy} +
-          (r0 + r0 * glm::pi<float>() * 0.1f *
-                    std::powf((a1 - a0) * 2.f / glm::pi<float>(), 2)) *
-              p2r;
+          (r0 + r0 * M_PI * 0.1f * std::powf((a1 - a0) * 2.f / M_PI, 2)) * p2r;
 
     float p4_x = cx + std::cos(a0) * r1;
     float p4_y = cy + std::sin(a0) * r1;
@@ -423,13 +420,11 @@ void draw_color_wheel(skity::Canvas* canvas, float x, float y, float w, float h,
     float p6_x = cx + std::cos(a1) * r1;
     float p6_y = cy + std::sin(a1) * r1;
 
-    skity::Vec2 p4r = glm::normalize(skity::Vec2{p4_x - cx, p4_y - cy});
-    skity::Vec2 p6r = glm::normalize(skity::Vec2{p6_x - cx, p6_y - cy});
-    skity::Vec2 p5r = glm::normalize((p6r + p4r) * 0.5f);
+    skity::Vec2 p4r = (skity::Vec2{p4_x - cx, p4_y - cy}).Normalize();
+    skity::Vec2 p6r = (skity::Vec2{p6_x - cx, p6_y - cy}).Normalize();
+    skity::Vec2 p5r = ((p6r + p4r) * 0.5f).Normalize();
     p5r = skity::Vec2{cx, cy} +
-          (r1 + r1 * glm::pi<float>() * 0.1f *
-                    std::powf((a1 - a0) * 2.f / glm::pi<float>(), 2)) *
-              p5r;
+          (r1 + r1 * M_PI * 0.1f * std::powf((a1 - a0) * 2.f / M_PI, 2)) * p5r;
 
     skity::Vec2 p1c = skity::Vec2{p1_x - cx, p1_y - cy};
 
@@ -450,10 +445,10 @@ void draw_color_wheel(skity::Canvas* canvas, float x, float y, float w, float h,
     paint.SetStyle(skity::Paint::kFill_Style);
     paint.SetColor(skity::Color_BLUE);
     std::array<skity::Color4f, 2> colors{
-        skity::Color4fFromColor(skity::ColorMakeFromHSLA(
-            a0 / (glm::pi<float>() * 2.f), 1.f, 0.55f, 255)),
-        skity::Color4fFromColor(skity::ColorMakeFromHSLA(
-            a1 / (glm::pi<float>() * 2.f), 1.f, 0.55f, 255)),
+        skity::Color4fFromColor(
+            skity::ColorMakeFromHSLA(a0 / (M_PI * 2.f), 1.f, 0.55f, 255)),
+        skity::Color4fFromColor(
+            skity::ColorMakeFromHSLA(a1 / (M_PI * 2.f), 1.f, 0.55f, 255)),
     };
     std::array<skity::Point, 2> pts{
         skity::Point{ax, ay, 0.f, 1.f},
@@ -483,7 +478,7 @@ void draw_color_wheel(skity::Canvas* canvas, float x, float y, float w, float h,
   // selector
   canvas->Save();
   canvas->Translate(cx, cy);
-  canvas->Rotate(glm::degrees(hue * glm::pi<float>() * 2.f));
+  canvas->Rotate(skity::FloatRadiansToDegrees(hue * M_PI * 2.f));
 
   // Marker on
   {
@@ -507,10 +502,10 @@ void draw_color_wheel(skity::Canvas* canvas, float x, float y, float w, float h,
   // Center triangle
   {
     r = r0 - 6.f;
-    ax = std::cosf(120.0f / 180.0f * glm::pi<float>()) * r;
-    ay = std::sinf(120.0f / 180.0f * glm::pi<float>()) * r;
-    bx = std::cosf(-120.0f / 180.0f * glm::pi<float>()) * r;
-    by = std::sinf(-120.0f / 180.0f * glm::pi<float>()) * r;
+    ax = std::cosf(120.0f / 180.0f * M_PI) * r;
+    ay = std::sinf(120.0f / 180.0f * M_PI) * r;
+    bx = std::cosf(-120.0f / 180.0f * M_PI) * r;
+    by = std::sinf(-120.0f / 180.0f * M_PI) * r;
     skity::Path triangle;
     triangle.MoveTo(r, 0.f);
     triangle.LineTo(ax, ay);
@@ -549,8 +544,8 @@ void draw_color_wheel(skity::Canvas* canvas, float x, float y, float w, float h,
     canvas->DrawPath(triangle, paint);
 
     // Select circle on triangle
-    ax = std::cosf(120.0f / 180.0f * glm::pi<float>()) * r * 0.3f;
-    ay = std::sinf(120.0f / 180.0f * glm::pi<float>()) * r * 0.4f;
+    ax = std::cosf(120.0f / 180.0f * M_PI) * r * 0.3f;
+    ay = std::sinf(120.0f / 180.0f * M_PI) * r * 0.4f;
     paint.SetStyle(skity::Paint::kStroke_Style);
     paint.SetStrokeWidth(2.f);
     skity::Path circle;
@@ -683,13 +678,13 @@ void draw_scissor(skity::Canvas* canvas, float x, float y, float t) {
 
   // draw second rectangle with offset and rotation.
   canvas->Translate(40, 0);
-  canvas->Rotate(glm::degrees(t));
+  canvas->Rotate(skity::FloatRadiansToDegrees(t));
 
   paint.SetColor(skity::ColorSetARGB(64, 255, 128, 0));
   canvas->DrawRect(skity::Rect::MakeXYWH(-20, -10, 60, 30), paint);
 
   canvas->ClipRect(skity::Rect::MakeXYWH(-20, -10, 60, 30));
-  canvas->Rotate(glm::degrees(t));
+  canvas->Rotate(skity::FloatRadiansToDegrees(t));
   paint.SetColor(skity::ColorSetARGB(255, 255, 128, 0));
   canvas->DrawRect(skity::Rect::MakeXYWH(-20, -10, 60, 30), paint);
 
@@ -1110,7 +1105,7 @@ void draw_thumbnails(skity::Canvas* canvas, skity::GPUContext* gpu_context,
     }
 
     v = i * dv;
-    a = glm::clamp((u2 - v) / dv, 0.f, 1.f);
+    a = std::clamp((u2 - v) / dv, 0.f, 1.f);
     if (a < 1.0f) {
       // render is not correct
       draw_spinner(canvas, tx + thumb / 2.f, ty + thumb / 2.f, thumb * 0.25f,
@@ -1195,7 +1190,7 @@ void draw_thumbnails(skity::Canvas* canvas, skity::GPUContext* gpu_context,
 
 void draw_spinner(skity::Canvas* canvas, float cx, float cy, float r, float t) {
   float a0 = 0.f + t * 6;
-  float a1 = glm::pi<float>() + t * 6;
+  float a1 = M_PI + t * 6;
   float r0 = r;
   float r1 = r * 0.75f;
   float ax, ay, bx, by;

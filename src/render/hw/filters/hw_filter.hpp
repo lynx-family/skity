@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "src/geometry/glm_helper.hpp"
 #include "src/gpu/gpu_command_buffer.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_device.hpp"
@@ -38,8 +39,9 @@ class AutoSetMVP {
  public:
   AutoSetMVP(HWDrawContext* draw_context, const Rect& layer_bounds)
       : draw_context_(draw_context), prev_mvp_(draw_context->mvp) {
-    draw_context_->mvp = glm::ortho(layer_bounds.Left(), layer_bounds.Right(),
-                                    layer_bounds.Bottom(), layer_bounds.Top());
+    draw_context_->mvp =
+        FromGLM(glm::ortho(layer_bounds.Left(), layer_bounds.Right(),
+                           layer_bounds.Bottom(), layer_bounds.Top()));
   }
 
   ~AutoSetMVP() { draw_context_->mvp = prev_mvp_; }

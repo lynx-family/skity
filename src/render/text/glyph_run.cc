@@ -547,10 +547,8 @@ GlyphRunList GlyphRun::Make(const uint32_t count, const GlyphID* glyphs,
   GlyphRunList run_list;
   run_list.SetArenaAllocator(arena_allocator);
 
-  float sx = glm::length(
-      Vec2{transform.Get(Matrix::kMScaleX), transform.Get(Matrix::kMSkewY)});
-  float sy = glm::length(
-      Vec2{transform.Get(Matrix::kMSkewX), transform.Get(Matrix::kMScaleY)});
+  float sx = Vec2{transform.GetScaleX(), transform.GetSkewY()}.Length();
+  float sy = Vec2{transform.GetSkewX(), transform.GetScaleY()}.Length();
   float maximun_text_scale =
       std::abs(glm::max(sx * context_scale, sy * context_scale));
   if (control.CanUseDirect(font.GetSize() * maximun_text_scale, transform,

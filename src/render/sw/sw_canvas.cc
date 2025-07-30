@@ -297,7 +297,8 @@ void SWCanvas::OnClipRect(const Rect& rect, ClipOp op) {
     return;
   }
 
-  if (op == ClipOp::kDifference || CurrentTransform().HasRotation()) {
+  if (op == ClipOp::kDifference ||
+      !CurrentTransform().OnlyScaleAndTranslate()) {
     Canvas::OnClipRect(rect, op);
     return;
   }

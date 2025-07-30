@@ -131,9 +131,8 @@ void Font::LoadGlyphBitmap(const GlyphID* glyphs, uint32_t count,
                            const GlyphData* glyph_data[], const Paint& paint,
                            float context_scale, const Matrix& transform) const {
   SKITY_TRACE_EVENT(Font_LoadGlyphBitmap);
-  Matrix22 transform22{
-      transform.Get(Matrix::kMScaleX), transform.Get(Matrix::kMSkewX),
-      transform.Get(Matrix::kMSkewY), transform.Get(Matrix::kMScaleY)};
+  Matrix22 transform22{transform.GetScaleX(), transform.GetSkewX(),
+                       transform.GetSkewY(), transform.GetScaleY()};
   ScalerContextDesc desc = ScalerContextDesc::MakeTransformed(
       *this, paint, context_scale, transform22);
   auto scaler_context_container =
@@ -146,8 +145,8 @@ void Font::LoadGlyphBitmapInfo(const GlyphID* glyphs, uint32_t count,
                                const GlyphData* glyph_data[],
                                const Paint& paint, float context_scale,
                                const Matrix& transform) const {
-  Matrix22 transform22{transform.GetScaleX(), transform.Get(Matrix::kMSkewX),
-                       transform.Get(Matrix::kMSkewY), transform.GetScaleY()};
+  Matrix22 transform22{transform.GetScaleX(), transform.GetSkewX(),
+                       transform.GetSkewY(), transform.GetScaleY()};
   ScalerContextDesc desc = ScalerContextDesc::MakeTransformed(
       *this, paint, context_scale, transform22);
   auto scaler_context_container =

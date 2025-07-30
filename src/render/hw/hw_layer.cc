@@ -6,6 +6,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "src/geometry/glm_helper.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/tracing.hpp"
 
@@ -18,7 +19,7 @@ HWLayer::HWLayer(Matrix matrix, int32_t depth, Rect bounds, uint32_t width,
       bounds_(bounds),
       width_(width),
       height_(height),
-      world_matrix_(glm::mat4(1.f)),
+      world_matrix_(Matrix{}),
       bounds_to_physical_matrix_(
           Matrix::Scale(width_ / bounds_.Width(), height_ / bounds_.Height()) *
           Matrix::Translate(-bounds_.Left(), -bounds_.Top())) {
@@ -142,8 +143,8 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
   sub_context.stageBuffer = context->stageBuffer;
   sub_context.pipelineLib = context->pipelineLib;
   sub_context.gpuContext = context->gpuContext;
-  sub_context.mvp = glm::ortho(bounds_.Left(), bounds_.Right(),
-                               bounds_.Bottom(), bounds_.Top());
+  sub_context.mvp = FromGLM(glm::ortho(bounds_.Left(), bounds_.Right(),
+                                       bounds_.Bottom(), bounds_.Top()));
   sub_context.pool = &pool;
   sub_context.vertex_vector_cache = context->vertex_vector_cache;
   sub_context.index_vector_cache = context->index_vector_cache;
@@ -167,8 +168,8 @@ void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
   sub_context.stageBuffer = context->stageBuffer;
   sub_context.pipelineLib = context->pipelineLib;
   sub_context.gpuContext = context->gpuContext;
-  sub_context.mvp = glm::ortho(bounds_.Left(), bounds_.Right(),
-                               bounds_.Bottom(), bounds_.Top());
+  sub_context.mvp = FromGLM(glm::ortho(bounds_.Left(), bounds_.Right(),
+                                       bounds_.Bottom(), bounds_.Top()));
   sub_context.pool = &pool;
   sub_context.vertex_vector_cache = context->vertex_vector_cache;
   sub_context.index_vector_cache = context->index_vector_cache;

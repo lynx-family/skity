@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstring>
+#include <glm/glm.hpp>
 #include <skity/graphic/bitmap.hpp>
 #include <vector>
 

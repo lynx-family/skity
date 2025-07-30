@@ -8,7 +8,7 @@ namespace skity {
 
 HWRootLayer::HWRootLayer(uint32_t width, uint32_t height, const Rect &bounds,
                          GPUTextureFormat format)
-    : HWLayer(Matrix(glm::mat4(1.f)), 1, bounds, width, height) {
+    : HWLayer(Matrix{}, 1, bounds, width, height) {
   SetColorFormat(format);
 }
 

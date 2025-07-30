@@ -144,7 +144,7 @@ bool sharp_angle(const Point quad[3]) {
   if (!PointSetLength<false>(smaller, smaller.x, smaller.y, largerLen)) {
     return false;
   }
-  float dot = VectorDotProduct(smaller, larger);
+  float dot = Vec2{smaller}.Dot(Vec2{larger});
   return dot > 0;
 }
 
@@ -238,7 +238,7 @@ AngleType Dot2AngleType(float dot) {
 void RoundJoiner(Path* outer, Path* inner, const Vector& beforeUnitNormal,
                  const Point& pivot, const Vector& afterUnitNormal,
                  float radius, float miter_limit) {
-  float dotProd = VectorDotProduct(beforeUnitNormal, afterUnitNormal);
+  float dotProd = Vec2{beforeUnitNormal}.Dot(Vec2{afterUnitNormal});
   AngleType angleType = Dot2AngleType(dotProd);
 
   if (angleType == kNearlyLine_AngleType) return;
@@ -260,7 +260,8 @@ void RoundJoiner(Path* outer, Path* inner, const Vector& beforeUnitNormal,
   Matrix matrix =
       Matrix::Translate(pivot.x, pivot.y) * Matrix::Scale(radius, radius);
   Conic conics[Conic::kMaxConicsForArc];
-  int count = Conic::BuildUnitArc(before, after, dir, &matrix, conics);
+  int count =
+      Conic::BuildUnitArc(Vec2{before}, Vec2{after}, dir, &matrix, conics);
   if (count > 0) {
     for (int i = 0; i < count; ++i) {
       outer->ConicTo(conics[i].pts[1], conics[i].pts[2], conics[i].w);
@@ -273,7 +274,7 @@ void RoundJoiner(Path* outer, Path* inner, const Vector& beforeUnitNormal,
 void MiterJoiner(Path* outer, Path* inner, const Vector& beforeUnitNormal,
                  const Point& pivot, const Vector& afterUnitNormal,
                  float radius, float miter_limit) {
-  float dotProd = VectorDotProduct(beforeUnitNormal, afterUnitNormal);
+  float dotProd = Vec2{beforeUnitNormal}.Dot(Vec2{afterUnitNormal});
   AngleType angleType = Dot2AngleType(dotProd);
   Vector before = beforeUnitNormal;
   Vector after = afterUnitNormal;
@@ -306,7 +307,7 @@ void MiterJoiner(Path* outer, Path* inner, const Vector& beforeUnitNormal,
     float k = 2.f / (out_dir.x * out_dir.x + out_dir.y * out_dir.y);
     mid = k * out_dir * radius;
 
-    if (glm::length(Vec2{mid.x, mid.y}) >= miter_limit * radius) {
+    if (Vec2{mid.x, mid.y}.Length() >= miter_limit * radius) {
       PointScale(after, radius, &after);
       outer->LineTo(pivot.x + after.x, pivot.y + after.y);
       handle_inner_join(inner, pivot, after);
@@ -470,7 +471,7 @@ void PathStroker::Init(StrokeType strokeType, QuadConstruct* quadPts,
 
 void PathStroker::LineTo(const Point& currPt, const Path::Iter* iter) {
   bool teenyLine =
-      PointEqualsWithinTolerance(fPrevPt, currPt, NearlyZero * fInvResScale);
+      PointEqualsWithinTolerance(fPrevPt, currPt, kNearlyZero * fInvResScale);
   if (teenyLine && cap_proc_ == ButtCapper) {
     return;
   }
@@ -634,14 +635,14 @@ PathStroker::ResultType PathStroker::IntersectRay(QuadConstruct* quadPts,
            byLen  * axLen         -   ayLen          * bxLen         ( == denom
   )
    */
-  float denom = VectorCrossProduct(aLen, bLen);
+  float denom = Vec2{aLen}.Cross(Vec2{bLen});
 
   if (denom == 0 || denom == std::numeric_limits<float>::infinity()) {
     return kDegenerate_ResultType;
   }
   Vector ab0 = start - end;
-  float numerA = VectorCrossProduct(bLen, ab0);
-  float numerB = VectorCrossProduct(aLen, ab0);
+  float numerA = Vec2{bLen}.Cross(Vec2{ab0});
+  float numerB = Vec2{aLen}.Cross(Vec2{ab0});
   if ((numerA >= 0) ==
       (numerB >= 0)) {  // if the control point is outside the quad ends
     // if the perpendicular distances from the quad points to the opposite

@@ -6,6 +6,7 @@
 #define SRC_GRAPHIC_COLOR_PRIV_HPP
 
 #include <algorithm>
+#include <cassert>
 #include <skity/graphic/color.hpp>
 
 namespace skity {

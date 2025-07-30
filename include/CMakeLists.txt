@@ -15,6 +15,7 @@ set(SKITY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_LIST_DIR}/skity/geometry/point.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/geometry/rect.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/geometry/rrect.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/skity/geometry/scalar.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/geometry/stroke.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/geometry/vector.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/gpu/gpu_backend_type.hpp

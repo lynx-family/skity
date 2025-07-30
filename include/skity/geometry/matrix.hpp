@@ -5,20 +5,34 @@
 #ifndef INCLUDE_SKITY_GEOMETRY_MATRIX_HPP
 #define INCLUDE_SKITY_GEOMETRY_MATRIX_HPP
 
-#include <glm/glm.hpp>
 #include <skity/geometry/point.hpp>
 #include <skity/macros.hpp>
 
 namespace skity {
 class Rect;
 
-struct SKITY_API Matrix : public glm::mat4 {
+struct SKITY_API Matrix {
  public:
-  static Matrix Translate(float dx, float dy);
+  constexpr static Matrix Translate(float dx, float dy) {
+    return Matrix(1.0f, 0.0f, 0.0f, 0.0f,  //
+                  0.0f, 1.0f, 0.0f, 0.0f,  //
+                  0.0f, 0.0f, 1.0f, 0.0f,  //
+                  dx, dy, 0.0f, 1.0f);
+  }
 
-  static Matrix Scale(float sx, float sy);
+  constexpr static Matrix Scale(float sx, float sy) {
+    return Matrix(sx, 0.0f, 0.0f, 0.0f,    //
+                  0.0f, sy, 0.0f, 0.0f,    //
+                  0.0f, 0.0f, 1.0f, 0.0f,  //
+                  0.0f, 0.0f, 0.0f, 1.0f);
+  }
 
-  static Matrix Skew(float sx, float sy);
+  constexpr static Matrix Skew(float sx, float sy) {
+    return Matrix(1.0f, sy, 0.0f, 0.0f,    //
+                  sx, 1.0f, 0.0f, 0.0f,    //
+                  0.0f, 0.0f, 1.0f, 0.0f,  //
+                  0.0f, 0.0f, 0.0f, 1.0f);
+  }
 
   static Matrix RotateDeg(float deg);
 
@@ -32,31 +46,48 @@ struct SKITY_API Matrix : public glm::mat4 {
 
   ~Matrix() = default;
 
-  Matrix() : glm::mat4(1.f) {}
+  constexpr Matrix()
+      : Matrix(1.0f, 0.0f, 0.0f, 0.0f,  //
+               0.0f, 1.0f, 0.0f, 0.0f,  //
+               0.0f, 0.0f, 1.0f, 0.0f,  //
+               0.0f, 0.0f, 0.0f, 1.0f) {}
 
-  Matrix(float mxx, float myx, float mzx, float mwx, float mxy, float myy,
-         float mzy, float mwy, float mxz, float myz, float mzz, float mwz,
-         float mxt, float myt, float mzt, float mwt)
-      : glm::mat4(mxx, myx, mzx, mwx, mxy, myy, mzy, mwy, mxz, myz, mzz, mwz,
-                  mxt, myt, mzt, mwt) {}
+  constexpr explicit Matrix(float s)
+      : Matrix(s, 0.0f, 0.0f, 0.0f,  //
+               0.0f, s, 0.0f, 0.0f,  //
+               0.0f, 0.0f, s, 0.0f,  //
+               0.0f, 0.0f, 0.0f, s) {}
+
+  constexpr Matrix(float mxx, float myx, float mzx, float mwx, float mxy,
+                   float myy, float mzy, float mwy, float mxz, float myz,
+                   float mzz, float mwz, float mxt, float myt, float mzt,
+                   float mwt)
+      : m{mxx, myx, mzx, mwx,  //
+          mxy, myy, mzy, mwy,  //
+          mxz, myz, mzz, mwz,  //
+          mxt, myt, mzt, mwt} {}
 
   Matrix(float scale_x, float skew_x, float trans_x, float skew_y,
-         float scale_y, float trans_y, float pers_0, float pers_1,
-         float pers_2);
-
-  explicit Matrix(float s);
-
-  explicit Matrix(const glm::mat4&& m);
-  explicit Matrix(const glm::mat4& m);
+         float scale_y, float trans_y, float pers_0, float pers_1, float pers_2)
+      : Matrix{scale_x, skew_y,  0, pers_0,  //
+               skew_x,  scale_y, 0, pers_1,  //
+               0,       0,       1, 0,       //
+               trans_x, trans_y, 0, pers_2} {}
 
   Matrix(const Matrix&) = default;
 
   Matrix& operator=(const Matrix&) = default;
 
-  Matrix& operator=(const glm::mat4&);
+  constexpr bool operator==(const Matrix& other) const {
+    return vec[0] == other.vec[0] && vec[1] == other.vec[1] &&
+           vec[2] == other.vec[2] && vec[3] == other.vec[3];
+  }
+  constexpr bool operator!=(const Matrix& other) const {
+    return !(*this == other);
+  }
 
   Matrix& Reset() {
-    *this = Matrix(1.0);
+    *this = Matrix();
     return *this;
   }
 
@@ -67,43 +98,49 @@ struct SKITY_API Matrix : public glm::mat4 {
   static constexpr float kNearZeroFloat = 1.0f / (1 << 12);
   bool IsSimilarity(float tol = kNearZeroFloat) const;
 
-  bool HasRotation() const;
-
-  bool HasPerspective() const;
-
-  static constexpr int kMScaleX = 0;  //!< horizontal scale factor
-  static constexpr int kMSkewX = 1;   //!< horizontal skew factor
-  static constexpr int kMTransX = 2;  //!< horizontal translation
-  static constexpr int kMSkewY = 3;   //!< vertical skew factor
-  static constexpr int kMScaleY = 4;  //!< vertical scale factor
-  static constexpr int kMTransY = 5;  //!< vertical translation
-  static constexpr int kMPersp0 = 6;  //!< input x perspective factor
-  static constexpr int kMPersp1 = 7;  //!< input y perspective factor
-  static constexpr int kMPersp2 = 8;  //!< perspective bias
-
-  Matrix& Set(int index, float value);
-
-  Matrix& Set(int row, int column, float value);
-
   Matrix& Set9(const float buffer[9]);
-
-  float Get(int index) const;
-
-  float Get(int row, int column) const;
 
   void Get9(float buffer[9]) const;
 
-  float GetScaleX() const { return (*this)[0][0]; }
+  Matrix& Set(int row, int column, float value);
 
-  float GetScaleY() const { return (*this)[1][1]; }
+  float Get(int row, int column) const;
 
-  float GetSkewX() const { return Get(kMSkewX); }
+  constexpr float GetScaleX() const { return e[0][0]; }
 
-  float GetSkewY() const { return Get(kMSkewY); }
+  constexpr float GetScaleY() const { return e[1][1]; }
 
-  float GetTranslateX() const { return Get(kMTransX); }
+  constexpr float GetSkewX() const { return e[1][0]; }
 
-  float GetTranslateY() const { return Get(kMTransY); }
+  constexpr float GetSkewY() const { return e[0][1]; }
+
+  constexpr float GetTranslateX() const { return e[3][0]; }
+
+  constexpr float GetTranslateY() const { return e[3][1]; }
+
+  constexpr float GetPersp0() const { return e[0][3]; }
+
+  constexpr float GetPersp1() const { return e[1][3]; }
+
+  constexpr float GetPersp2() const { return e[3][3]; }
+
+  constexpr void SetScaleX(float s) { e[0][0] = s; }
+
+  constexpr void SetScaleY(float s) { e[1][1] = s; }
+
+  constexpr void SetSkewX(float s) { e[1][0] = s; }
+
+  constexpr void SetSkewY(float s) { e[0][1] = s; }
+
+  constexpr void SetTranslateX(float t) { e[3][0] = t; }
+
+  constexpr void SetTranslateY(float t) { e[3][1] = t; }
+
+  constexpr void SetPersp0(float p) { e[0][3] = p; }
+
+  constexpr void SetPersp1(float p) { e[1][3] = p; }
+
+  constexpr void SetPersp2(float p) { e[3][3] = p; }
 
   bool Invert(Matrix* inverse) const;
 
@@ -118,8 +155,6 @@ struct SKITY_API Matrix : public glm::mat4 {
   bool MapRect(Rect* dst, const Rect& src) const;
 
   Rect MapRect(const Rect& src) const;
-
-  void MapFloats(Vec4* dst, const Vec4& src) const;
 
   bool RectStaysRect() const;
 
@@ -147,10 +182,22 @@ struct SKITY_API Matrix : public glm::mat4 {
 
   friend SKITY_API Matrix operator*(const Matrix& a, const Matrix& b);
 
+  friend SKITY_API Vec4 operator*(const Matrix& m, const Vec4& v);
+
+  constexpr const Vec4& operator[](int i) const { return vec[i]; }
+
+  constexpr Vec4& operator[](int i) { return vec[i]; }
+
  private:
   bool InvertNonIdentity(Matrix* inverse) const;
 
   Matrix& SetConcat(const Matrix& left, const Matrix& right);
+
+  union {
+    float m[16];
+    float e[4][4];
+    Vec4 vec[4];
+  };
 };
 
 }  // namespace skity

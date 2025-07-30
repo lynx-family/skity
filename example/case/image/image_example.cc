@@ -2,6 +2,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <cassert>
 #include <skity/codec/codec.hpp>
 #include <skity/gpu/gpu_context.hpp>
 #include <skity/recorder/picture_recorder.hpp>

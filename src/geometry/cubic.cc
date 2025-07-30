@@ -34,7 +34,7 @@ std::vector<std::array<Point, 3>> Cubic::ToQuads() {
   auto p1x2 = c1_ * 3.f - p1_;
   auto p2x2 = c2_ * 3.f - p2_;
   auto p = p2x2 - p1x2;
-  auto err = VectorDotProduct(p, p);
+  auto err = Vec2{p}.Dot(Vec2{p});
   auto quad_count = std::max(1., ceil(pow(err / max_hypot2, 1. / 6.0)));
 
   std::vector<std::array<Point, 3>> quads;

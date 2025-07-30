@@ -43,7 +43,7 @@ void MaskFilterOnFilter(Canvas* canvas, Bitmap& bitmap,
   }
 
   Bitmap filtered_bitmap(bitmap.Width(), bitmap.Height(), kPremul_AlphaType);
-  SWStackBlur(&bitmap, &filtered_bitmap, glm::round(radius)).Blur();
+  SWStackBlur(&bitmap, &filtered_bitmap, std::round(radius)).Blur();
 
   if (mask_filter->GetBlurStyle() == BlurStyle::kSolid) {
     for (size_t y = 0; y < bitmap.Height(); ++y) {

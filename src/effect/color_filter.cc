@@ -3,7 +3,6 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <cstring>
-#include <glm/glm.hpp>
 #include <skity/io/pixmap.hpp>
 
 #include "src/effect/color_filter_base.hpp"
@@ -79,7 +78,7 @@ PMColor MatrixColorFilter::OnFilterColor(PMColor src_pm) const {
     int32_t mul_u32 =
         src_u32[0] * matrix_i16_[i][0] + src_u32[1] * matrix_i16_[i][1] +
         src_u32[2] * matrix_i16_[i][2] + src_u32[3] * matrix_i16_[i][3];
-    dst_u8[i] = glm::clamp(mul_u32 / 255 + matrix_i16_[i][4], 0, 255);
+    dst_u8[i] = std::clamp(mul_u32 / 255 + matrix_i16_[i][4], 0, 255);
   }
   return ColorToPMColor(
       ColorSetARGB(dst_u8[3], dst_u8[0], dst_u8[1], dst_u8[2]));

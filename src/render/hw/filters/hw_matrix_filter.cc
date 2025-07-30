@@ -12,7 +12,7 @@ HWFilterOutput HWMatrixFilter::DoFilter(const HWFilterContext& context,
   Rect layer_bounds;
   matrix_.MapRect(&layer_bounds, child_output.layer_bounds);
 
-  Vec2 output_texture_size = glm::abs(glm::round(
+  Vec2 output_texture_size = Vec2::Abs(Vec2::Round(
       Vec2{layer_bounds.Width(), layer_bounds.Height()} * context.scale));
   auto color_format = child_output.texture->GetDescriptor().format;
   auto output_texture =

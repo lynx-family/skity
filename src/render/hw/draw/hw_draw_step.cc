@@ -14,10 +14,10 @@ void HWDrawStep::GenerateCommand(const HWDrawStepContext& ctx, Command* cmd,
   SKITY_TRACE_EVENT(HWDrawStep_GenerateCommand);
 
   GPUScissorRect rect{};
-  rect.x = static_cast<uint32_t>(glm::floor(ctx.scissor.Left()));
-  rect.y = static_cast<uint32_t>(glm::floor(ctx.scissor.Top()));
-  rect.width = static_cast<uint32_t>(glm::ceil(ctx.scissor.Width()));
-  rect.height = static_cast<uint32_t>(glm::ceil(ctx.scissor.Height()));
+  rect.x = static_cast<uint32_t>(std::floor(ctx.scissor.Left()));
+  rect.y = static_cast<uint32_t>(std::floor(ctx.scissor.Top()));
+  rect.width = static_cast<uint32_t>(std::ceil(ctx.scissor.Width()));
+  rect.height = static_cast<uint32_t>(std::ceil(ctx.scissor.Height()));
 
   cmd->scissor_rect = rect;
 

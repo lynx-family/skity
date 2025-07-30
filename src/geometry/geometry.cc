@@ -57,7 +57,10 @@ QuadCoeff::QuadCoeff(std::array<Vec2, 3> const& src) {
   A = P2 - Times2(P1) + C;
 }
 
-Point QuadCoeff::EvalAt(float t) { return Point{eval(t), 0, 1}; }
+Point QuadCoeff::EvalAt(float t) {
+  auto result = eval(t);
+  return Point{result.x, result.y, 0, 1};
+}
 
 Vec2 QuadCoeff::eval(float t) { return eval(Vec2{t, t}); }
 
@@ -97,8 +100,9 @@ Vector QuadCoeff::EvalQuadTangentAt(std::array<Point, 3> const& src, float t) {
   Vec2 B = P1 - P0;
   Vec2 A = P2 - P1 - B;
   Vec2 T = A * Vec2{t, t} + B;
+  Vec2 TT = T + T;
 
-  return Vector{T + T, 0, 0};
+  return Vector{TT.x, TT.y, 0, 0};
 }
 
 Vec2 QuadCoeff::EvalQuadTangentAt(Vec2 const& p1, Vec2 const& p2,
@@ -107,7 +111,7 @@ Vec2 QuadCoeff::EvalQuadTangentAt(Vec2 const& p1, Vec2 const& p2,
   Vec2 A = p3 - p2 - B;
   Vec2 T = A * Vec2{t, t} + B;
 
-  return glm::normalize(T);
+  return T.Normalize();
 }
 
 void QuadCoeff::ChopQuadAt(const Point src[3], Point dst[5], float t) {
@@ -155,7 +159,10 @@ CubicCoeff::CubicCoeff(std::array<Vec2, 4> const& src) {
   D = p0;
 }
 
-Point CubicCoeff::EvalAt(float t) { return Point{eval(t), 0, 1}; }
+Point CubicCoeff::EvalAt(float t) {
+  auto result = eval(t);
+  return Point{result.x, result.y, 0, 1};
+}
 
 Vec2 CubicCoeff::eval(float t) { return eval(Vec2{t, t}); }
 
@@ -248,8 +255,8 @@ float pt_to_line(Point const& pt, Point const& lineStart,
   Vector dxy = lineEnd - lineStart;
   Vector ab0 = pt - lineStart;
 
-  float number = VectorDotProduct(dxy, ab0);
-  float denom = VectorDotProduct(dxy, dxy);
+  float number = Vec2{dxy}.Dot(Vec2{ab0});
+  float denom = Vec2{dxy}.Dot(Vec2{dxy});
   float t = SkityIEEEFloatDivided(number, denom);
   if (t >= 0 && t <= 1) {
     Point hit;
@@ -343,7 +350,7 @@ int ChopQuadAtYExtrema(const Point src[3], Point dst[5]) {
 
 std::vector<Vec2> CircleInterpolation(Vec2 start, Vec2 end, size_t num) {
   std::vector<Vec2> result(num);
-  const auto cos_theta = glm::dot(start, end);
+  const auto cos_theta = Vec2::Dot(start, end);
   num = std::max(num, static_cast<size_t>(1));
   float step = 1.f / num;
   if (std::fabs(cos_theta) < 0.99) {
@@ -362,7 +369,7 @@ std::vector<Vec2> CircleInterpolation(Vec2 start, Vec2 end, size_t num) {
       for (size_t i = 1; i < num + 1; i++) {
         float t = step * i;
         const auto complement_t = 1.f - t;
-        result[i - 1] = glm::normalize((complement_t * start + t * end));
+        result[i - 1] = (complement_t * start + t * end).Normalize();
       }
     } else {
       // rotate

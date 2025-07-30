@@ -14,6 +14,7 @@ add_executable(skity_unit_test
     geometry/matrix_test.cc
     geometry/quaternion_test.cc
     geometry/rect_test.cc
+    geometry/vector_test.cc
     graphic/path_measure_test.cc
     graphic/path_test.cc
     render/canvas_state_test.cc
@@ -34,5 +35,11 @@ target_link_libraries(skity_unit_test
     skity::skity
     gmock_main
 )
+
+if (WIN32)
+  target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
+else()
+  target_link_libraries(skity_unit_test PRIVATE glm::glm)
+endif()
 
 gtest_add_tests(skity_unit_test "" AUTO)

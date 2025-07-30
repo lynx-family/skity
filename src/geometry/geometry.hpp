@@ -8,7 +8,6 @@
 #define SRC_GEOMETRY_GEOMETRY_HPP
 
 #include <array>
-#include <glm/ext/scalar_constants.hpp>
 #include <skity/geometry/point.hpp>
 #include <vector>
 

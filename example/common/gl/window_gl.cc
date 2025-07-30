@@ -44,7 +44,7 @@ void WindowGL::OnShow() {
 
   float density = (float)(pp_width * pp_width + pp_height * pp_height) /
                   (float)(GetWidth() * GetWidth() + GetHeight() * GetHeight());
-  auto screen_scale = glm::sqrt(density);
+  auto screen_scale = std::sqrt(density);
 
   skity::GPUSurfaceDescriptorGL desc{};
   desc.backend = skity::GPUBackendType::kOpenGL;

@@ -93,9 +93,8 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font, GlyphID glyph_id,
     Matrix22 transform22{1.f, 0.f, 0.f, 1.f};
     scaler_context_desc.transform = transform22;
   } else {
-    Matrix22 transform22{
-        transform.Get(Matrix::kMScaleX), transform.Get(Matrix::kMSkewX),
-        transform.Get(Matrix::kMSkewY), transform.Get(Matrix::kMScaleY)};
+    Matrix22 transform22{transform.GetScaleX(), transform.GetSkewX(),
+                         transform.GetSkewY(), transform.GetScaleY()};
     scaler_context_desc.transform = transform22;
   }
   scaler_context_desc.context_scale = load_sdf ? 1.f : context_scale;
@@ -316,7 +315,7 @@ Vec2 Atlas::CalculateUV(uint32_t bitmap_index, uint32_t x, uint32_t y) {
   u |= (texture_index_in_atlas & 0x3) << 14;
   uint32_t v = start_y + y;
 
-  return {u, v};
+  return {static_cast<float>(u), static_cast<float>(v)};
 }
 
 std::array<std::shared_ptr<GPUTexture>, AtlasConfig::MAX_NUM_TEXTURE_PER_ATLAS>

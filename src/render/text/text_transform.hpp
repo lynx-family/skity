@@ -70,10 +70,10 @@ class Matrix22 final {
 
   Matrix ToMatrix() const {
     Matrix matrix;
-    matrix.Set(Matrix::kMScaleX, scale_x_);
-    matrix.Set(Matrix::kMSkewX, skew_x_);
-    matrix.Set(Matrix::kMSkewY, skew_y_);
-    matrix.Set(Matrix::kMScaleY, scale_y_);
+    matrix.SetScaleX(scale_x_);
+    matrix.SetSkewX(skew_x_);
+    matrix.SetSkewY(skew_y_);
+    matrix.SetScaleY(scale_y_);
 
     return matrix;
   }

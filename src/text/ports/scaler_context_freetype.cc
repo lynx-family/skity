@@ -287,12 +287,15 @@ void ScalerContextFreetype::GenerateMetrics(GlyphData* glyph) {
       }
 
       {
-        Vec2 top_left{face_->glyph->bitmap_left, -face_->glyph->bitmap_top};
-        Vec2 top_right{face_->glyph->bitmap_left + face_->glyph->bitmap.width,
-                       -face_->glyph->bitmap_top};
-        Vec2 bottom_left{face_->glyph->bitmap_left,
-                         static_cast<int>(face_->glyph->bitmap.rows) -
-                             face_->glyph->bitmap_top};
+        Vec2 top_left{static_cast<float>(face_->glyph->bitmap_left),
+                      -static_cast<float>(face_->glyph->bitmap_top)};
+        Vec2 top_right{static_cast<float>(face_->glyph->bitmap_left +
+                                          face_->glyph->bitmap.width),
+                       -static_cast<float>(face_->glyph->bitmap_top)};
+        Vec2 bottom_left{
+            static_cast<float>(face_->glyph->bitmap_left),
+            static_cast<float>(static_cast<int>(face_->glyph->bitmap.rows) -
+                               face_->glyph->bitmap_top)};
         Vec2 bottom_right =
             Vec2(face_->glyph->bitmap_left + face_->glyph->bitmap.width,
                  static_cast<int>(face_->glyph->bitmap.rows) -

@@ -19,6 +19,11 @@ static inline bool PointIsFinite(Point const& point) {
          std::isfinite(point.z) && std::isfinite(point.w);
 }
 
+static inline bool PointIsFinite(glm::dvec4 const& point) {
+  return std::isfinite(point.x) && std::isfinite(point.y) &&
+         std::isfinite(point.z) && std::isfinite(point.w);
+}
+
 static inline bool PointAreFinite(Point points[], uint32_t count) {
   float prod = 0;
 
@@ -113,11 +118,11 @@ static inline float PointDistanceToSqd(Point const& pt, Point const& a) {
 }
 
 static inline float PointDistance(Point const& a, Point const& b) {
-  return glm::length(Vec2(a - b));
+  return Vec2(a - b).Length();
 }
 
 static inline float PointLengthSqd(Point const& pt) {
-  return glm::dot(Vec2{pt}, Vec2{pt});
+  return Vec2::Dot(Vec2{pt}, Vec2{pt});
 }
 
 static inline bool PointCanNormalize(float dx, float dy) {
@@ -128,16 +133,6 @@ template <class POINT>
 static inline bool PointEqualsWithinTolerance(POINT const& p1,
                                               POINT const& p2) {
   return !PointCanNormalize(p1.x - p2.x, p1.y - p2.y);
-}
-
-template <glm::length_t L, typename T, glm::qualifier Q>
-T VectorDotProduct(glm::vec<L, T, Q> const& a, glm::vec<L, T, Q> const& b) {
-  return a.x * b.x + a.y * b.y;
-}
-
-template <glm::length_t L, typename T, glm::qualifier Q>
-T VectorCrossProduct(glm::vec<L, T, Q> const& a, glm::vec<L, T, Q> const& b) {
-  return a.x * b.y - a.y * b.x;
 }
 
 }  // namespace skity

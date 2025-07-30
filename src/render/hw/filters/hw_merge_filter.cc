@@ -22,7 +22,7 @@ HWFilterOutput HWMergeFilter::DoFilter(const HWFilterContext& context,
     layer_bounds.Join(child_output.layer_bounds);
   }
 
-  Vec2 output_texture_size = glm::abs(glm::round(
+  Vec2 output_texture_size = Vec2::Abs(Vec2::Round(
       Vec2{layer_bounds.Width(), layer_bounds.Height()} * context.scale));
   auto color_format = children_outputs[0].texture->GetDescriptor().format;
   auto output_texture =

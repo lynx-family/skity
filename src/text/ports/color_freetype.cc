@@ -143,12 +143,12 @@ inline BlendMode ToBlendMode(FT_Composite_Mode compositeMode) {
 }
 
 inline Vec2 VectorProjection(Vec2 a, Vec2 b) {
-  float length = glm::length(b);
+  float length = b.Length();
   if (!length) {
     return Vec2(0, 0);
   }
-  Vec2 b_normalized = glm::normalize(b);
-  float scale = glm::dot(a, b) / length;
+  Vec2 b_normalized = b.Normalize();
+  float scale = Vec2::Dot(a, b) / length;
   b_normalized.x = b_normalized.x * scale;
   b_normalized.y = b_normalized.y * scale;
   return b_normalized;
@@ -397,18 +397,14 @@ void transform(const FT_COLR_Paint& colr_paint, Canvas* canvas,
 
   switch (colr_paint.format) {
     case FT_COLR_PAINTFORMAT_TRANSFORM: {
-      transform.Set(Matrix::kMScaleX,
-                    FixedDot16ToFloat(colr_paint.u.transform.affine.xx));
-      transform.Set(Matrix::kMSkewX,
-                    -FixedDot16ToFloat(colr_paint.u.transform.affine.xy));
-      transform.Set(Matrix::kMScaleY,
-                    FixedDot16ToFloat(colr_paint.u.transform.affine.yy));
-      transform.Set(Matrix::kMSkewY,
-                    -FixedDot16ToFloat(colr_paint.u.transform.affine.yx));
-      transform.Set(Matrix::kMTransX,
-                    FixedDot16ToFloat(colr_paint.u.transform.affine.dx));
-      transform.Set(Matrix::kMTransY,
-                    -FixedDot16ToFloat(colr_paint.u.transform.affine.dy));
+      transform.SetScaleX(FixedDot16ToFloat(colr_paint.u.transform.affine.xx));
+      transform.SetSkewX(-FixedDot16ToFloat(colr_paint.u.transform.affine.xy));
+      transform.SetScaleY(FixedDot16ToFloat(colr_paint.u.transform.affine.yy));
+      transform.SetSkewY(-FixedDot16ToFloat(colr_paint.u.transform.affine.yx));
+      transform.SetTranslateX(
+          FixedDot16ToFloat(colr_paint.u.transform.affine.dx));
+      transform.SetTranslateY(
+          -FixedDot16ToFloat(colr_paint.u.transform.affine.dy));
       break;
     }
     case FT_COLR_PAINTFORMAT_TRANSLATE: {
@@ -424,10 +420,10 @@ void transform(const FT_COLR_Paint& colr_paint, Canvas* canvas,
       float center_y = -FixedDot16ToFloat(colr_paint.u.scale.center_y);
       float translate_x = center_x - scale_x * center_x;
       float translate_y = center_y - scale_y * center_y;
-      transform.Set(Matrix::kMScaleX, scale_x);
-      transform.Set(Matrix::kMScaleY, scale_y);
-      transform.Set(Matrix::kMTransX, translate_x);
-      transform.Set(Matrix::kMTransY, translate_y);
+      transform.SetScaleX(scale_x);
+      transform.SetScaleY(scale_y);
+      transform.SetTranslateX(translate_x);
+      transform.SetTranslateY(translate_y);
       break;
     }
     case FT_COLR_PAINTFORMAT_ROTATE: {
@@ -454,10 +450,10 @@ void transform(const FT_COLR_Paint& colr_paint, Canvas* canvas,
       float center_y = -FixedDot16ToFloat(colr_paint.u.skew.center_y);
       float translate_x = -tan_x * center_x;
       float translate_y = -tan_y * center_y;
-      transform.Set(Matrix::kMSkewX, tan_x);
-      transform.Set(Matrix::kMSkewY, tan_y);
-      transform.Set(Matrix::kMTransX, translate_x);
-      transform.Set(Matrix::kMTransY, translate_y);
+      transform.SetSkewX(tan_x);
+      transform.SetSkewY(tan_y);
+      transform.SetTranslateX(translate_x);
+      transform.SetTranslateY(translate_y);
       break;
     }
     default: {
@@ -673,7 +669,7 @@ bool configure_paint(ColorContext context, const FT_COLR_Paint& colr_paint,
 
       float pos_range = positions.back() - positions.front();
       if (pos_range != 1.f || positions.front() != 0.f) {
-        Vec2 start_to_end = end - start;
+        Vec2 start_to_end = Vec2{end - start};
         float scale_factor = 1 / pos_range;
         float pos_start_offset = positions.front();
 

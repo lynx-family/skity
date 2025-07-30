@@ -5,6 +5,7 @@
 #ifndef SRC_RENDER_TEXT_ATLAS_ATLAS_ALLOCATOR_HPP
 #define SRC_RENDER_TEXT_ATLAS_ATLAS_ALLOCATOR_HPP
 
+#include <glm/glm.hpp>
 #include <skity/geometry/vector.hpp>
 #include <vector>
 

@@ -74,11 +74,11 @@ int Conic::BuildUnitArc(Vec2 const& start, Vec2 const& stop,
                         Conic dst[kMaxConicsForArc]) {
   // rotate by x,y so that uStart is (1.0)
   //  float x = glm::dot(start, stop);
-  float x = glm::dot(start, stop);
+  float x = Vec2::Dot(start, stop);
   float y = CrossProduct(start, stop);
 
   float absY = glm::abs(y);
-  if (absY <= NearlyZero && x > 0 &&
+  if (absY <= kNearlyZero && x > 0 &&
       ((y >= 0 && dir == RotationDirection::kCW) ||
        (y <= 0 && dir == RotationDirection::kCCW))) {
     return 0;
@@ -125,7 +125,7 @@ int Conic::BuildUnitArc(Vec2 const& start, Vec2 const& stop,
   // Now compute any remaing (sub-90-degree) arc for the last conic
   const Point finalP = {x, y, 0, 1};
   const Point& lastQ = quadrantPts[quadrant * 2];
-  const float dot = glm::dot(Vec2(lastQ), Vec2(finalP));
+  const float dot = Vec2::Dot(Vec2(lastQ), Vec2(finalP));
 
   if (dot < 1) {
     Vector offCurve = {lastQ.x + x, lastQ.y + y, 0, 1};
@@ -169,9 +169,9 @@ int Conic::BuildUnitArc(Vec2 const& start, Vec2 const& stop,
 void Conic::Chop(Conic dst[2]) const {
   Vec2 scale{FloatInvert(this->w + Float1)};
   float new_weight = subdivide_w_value(this->w);
-  Vec2 p0 = pts[0];
-  Vec2 p1 = pts[1];
-  Vec2 p2 = pts[2];
+  Vec2 p0 = Vec2{pts[0]};
+  Vec2 p1 = Vec2{pts[1]};
+  Vec2 p2 = Vec2{pts[2]};
   Vec2 ww{this->w};
 
   Vec2 wp1 = ww * p1;
@@ -293,7 +293,7 @@ void Conic::ChopAt(float t1, float t2, Conic* dst) const {
   dst->pts[1] = ToPoint(bXY / bZZ);
   dst->pts[2] = ToPoint(cXY / cZZ);
 
-  Vec2 ww = bZZ / (glm::sqrt(aZZ * cZZ));
+  Vec2 ww = bZZ / (Vec2::Sqrt(aZZ * cZZ));
   dst->w = ww[0];
 }
 
