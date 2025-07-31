@@ -52,7 +52,7 @@ TEST(ResourceCache, ObtainAndStore) {
 
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
-  skity::testing::TestResourceKey key{.hint_value = 100};
+  skity::testing::TestResourceKey key{100};
   auto resource = cache.ObtainResource(key);
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(400));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
@@ -70,7 +70,7 @@ TEST(ResourceCache, StoreWithPurge) {
 
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
-  skity::testing::TestResourceKey key{.hint_value = 100};
+  skity::testing::TestResourceKey key{100};
 
   auto resource1 = cache.ObtainResource(key);
   cache.PurgeAsNeeded();
@@ -109,7 +109,7 @@ TEST(ResourceCache, ObtainWithPurge) {
 
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
-  skity::testing::TestResourceKey key{.hint_value = 100};
+  skity::testing::TestResourceKey key{100};
 
   auto resource1 = cache.ObtainResource(key);
   cache.PurgeAsNeeded();
@@ -126,7 +126,7 @@ TEST(ResourceCache, ObtainWithPurge) {
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(800));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(400));
 
-  skity::testing::TestResourceKey key2{.hint_value = 200};
+  skity::testing::TestResourceKey key2{200};
   auto resource3 = cache.ObtainResource(key2);  // trigger purge
   cache.PurgeAsNeeded();
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(1200));
@@ -142,7 +142,7 @@ TEST(ResourceCache, Pool) {
 
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
-  skity::testing::TestResourceKey key{.hint_value = 100};
+  skity::testing::TestResourceKey key{100};
 
   auto resource1 = cache.ObtainResource(key, pool.get());
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(400));
@@ -165,7 +165,7 @@ TEST(ResourceCache, SetMaxBytes) {
 
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
-  skity::testing::TestResourceKey key{.hint_value = 100};
+  skity::testing::TestResourceKey key{100};
 
   auto resource1 = cache.ObtainResource(key, pool.get());
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(400));
@@ -196,22 +196,22 @@ TEST(ResourceCache, PurgeResourcesByOrder) {
 
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
-  skity::testing::TestResourceKey key1{.hint_value = 100};
+  skity::testing::TestResourceKey key1{100};
   auto resource1 = cache.ObtainResource(key1);
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(400));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
 
-  skity::testing::TestResourceKey key2{.hint_value = 200};
+  skity::testing::TestResourceKey key2{200};
   auto resource2 = cache.ObtainResource(key2);
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(1200));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
 
-  skity::testing::TestResourceKey key3{.hint_value = 300};
+  skity::testing::TestResourceKey key3{300};
   auto resource3 = cache.ObtainResource(key3);
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(2400));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
 
-  skity::testing::TestResourceKey key4{.hint_value = 400};
+  skity::testing::TestResourceKey key4{400};
   auto resource4 = cache.ObtainResource(key4);
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(4000));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));

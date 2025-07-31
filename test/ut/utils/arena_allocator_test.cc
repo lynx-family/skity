@@ -200,10 +200,16 @@ static_assert(std::is_trivial<Baz>::value);
 static_assert(!std::is_standard_layout<Baz>::value);
 static_assert(std::is_trivially_destructible<Baz>::value);
 
+struct C {
+  C() { x[0] = 0; }
+
+  ~C() { x[0] = 1; }
+  float x[5];
+};
 struct Qux {
   int32_t a;
   int64_t b;
-  std::string c;
+  C c;
 };
 
 static_assert(offsetof(Qux, a) == static_cast<size_t>(0));
