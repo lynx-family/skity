@@ -5,5 +5,5 @@ solutions = [{
         'dev': 'hab/DEPS.dev',
         'ci': 'hab/DEPS.ci',
     },
-    'url': 'git@github.com:lynx-family/Skity.git'
+    'url': 'git@github.com:lynx-family/skity.git'
 }]
