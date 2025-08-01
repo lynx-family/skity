@@ -126,7 +126,7 @@ std::unique_ptr<GPURenderPipeline> GPUDeviceMTL::ClonePipeline(
 }
 
 std::shared_ptr<GPUCommandBuffer> GPUDeviceMTL::CreateCommandBuffer() {
-  return std::make_shared<GPUCommandBufferMTL>([mtl_command_queue_ commandBuffer]);
+  return std::make_shared<GPUCommandBufferMTL>(mtl_device_, [mtl_command_queue_ commandBuffer]);
 }
 
 std::shared_ptr<GPUSampler> GPUDeviceMTL::CreateSampler(const GPUSamplerDescriptor& desc) {

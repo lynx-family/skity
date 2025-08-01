@@ -72,9 +72,6 @@ class GPUTexture {
  public:
   const GPUTextureDescriptor& GetDescriptor() const;
 
-  virtual void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
-                          uint32_t height, void* data) = 0;
-
   virtual size_t GetBytes() const = 0;
 
   void SetRelease(ReleaseCallback release_callback,

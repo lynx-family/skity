@@ -20,20 +20,20 @@ class GPUTextureMTL : public GPUTexture {
   static std::shared_ptr<GPUTextureMTL> Create(
       GPUDeviceMTL& device, const GPUTextureDescriptor& descriptor);
 
-  GPUTextureMTL(id<MTLTexture> texture, const GPUTextureDescriptor& descriptor);
+  GPUTextureMTL(id<MTLDevice> mtl_device, id<MTLCommandQueue> mtl_command_queue,
+                id<MTLTexture> texture, const GPUTextureDescriptor& descriptor);
 
   ~GPUTextureMTL() override;
 
   id<MTLTexture> GetMTLTexture() const { return mtl_texture_; }
-
-  void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
-                  uint32_t height, void* data) override;
 
   size_t GetBytes() const override;
 
   SKT_BACKEND_CAST(GPUTextureMTL, GPUTexture)
 
  private:
+  id<MTLDevice> mtl_device_;
+  id<MTLCommandQueue> mtl_command_queue_;
   id<MTLTexture> mtl_texture_;
 };
 
@@ -43,7 +43,7 @@ class GPUExternalTextureMTL : public GPUTextureMTL {
                                  id<MTLTexture> texture,
                                  ReleaseCallback callback,
                                  ReleaseUserData user_data)
-      : GPUTextureMTL(texture, descriptor) {
+      : GPUTextureMTL(nil, nil, texture, descriptor) {
     SetRelease(callback, user_data);
   }
 
@@ -55,9 +55,6 @@ class GPUExternalTextureMTL : public GPUTextureMTL {
     return std::make_shared<GPUExternalTextureMTL>(descriptor, texture,
                                                    callback, user_data);
   }
-
-  void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
-                  uint32_t height, void* data) override {}
 };
 
 }  // namespace skity

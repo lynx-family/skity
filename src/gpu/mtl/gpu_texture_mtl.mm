@@ -19,21 +19,18 @@ std::shared_ptr<GPUTextureMTL> GPUTextureMTL::Create(GPUDeviceMTL& device,
     return nullptr;
   }
 
-  return std::make_shared<GPUTextureMTL>(texture, descriptor);
+  return std::make_shared<GPUTextureMTL>(device.GetMTLDevice(), device.GetMTLCommandQueue(),
+                                         texture, descriptor);
 }
 
-GPUTextureMTL::GPUTextureMTL(id<MTLTexture> texture, const GPUTextureDescriptor& descriptor)
-    : GPUTexture(descriptor), mtl_texture_(texture) {}
+GPUTextureMTL::GPUTextureMTL(id<MTLDevice> mtl_device, id<MTLCommandQueue> mtl_command_queue,
+                             id<MTLTexture> texture, const GPUTextureDescriptor& descriptor)
+    : GPUTexture(descriptor),
+      mtl_device_(mtl_device),
+      mtl_command_queue_(mtl_command_queue),
+      mtl_texture_(texture) {}
 
 GPUTextureMTL::~GPUTextureMTL() = default;
-
-void GPUTextureMTL::UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
-                               uint32_t height, void* data) {
-  [mtl_texture_ replaceRegion:MTLRegionMake2D(offset_x, offset_y, width, height)
-                  mipmapLevel:0
-                    withBytes:data
-                  bytesPerRow:width * GetTextureFormatBytesPerPixel(GetDescriptor().format)];
-}
 
 size_t GPUTextureMTL::GetBytes() const {
   auto& desc = GetDescriptor();

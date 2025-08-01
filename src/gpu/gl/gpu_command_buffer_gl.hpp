@@ -19,6 +19,8 @@ class GPUCommandBufferGL : public GPUCommandBuffer {
   std::shared_ptr<GPURenderPass> BeginRenderPass(
       const GPURenderPassDescriptor& desc) override;
 
+  std::shared_ptr<GPUBlitPass> BeginBlitPass() override;
+
   bool Submit() override;
 
  private:

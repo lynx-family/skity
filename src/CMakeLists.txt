@@ -369,6 +369,8 @@ if(${SKITY_HW_RENDERER})
       PRIVATE
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gl_interface.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gl_interface.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_blit_pass_gl.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_blit_pass_gl.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_buffer_gl.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_buffer_gl.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_command_buffer_gl.cc
@@ -405,6 +407,8 @@ if(${SKITY_HW_RENDERER})
       PRIVATE
       ${CMAKE_CURRENT_LIST_DIR}/gpu/mtl/formats_mtl.h
       ${CMAKE_CURRENT_LIST_DIR}/gpu/mtl/formats_mtl.mm
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/mtl/gpu_blit_pass_mtl.h
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/mtl/gpu_blit_pass_mtl.mm
       ${CMAKE_CURRENT_LIST_DIR}/gpu/mtl/gpu_buffer_mtl.h
       ${CMAKE_CURRENT_LIST_DIR}/gpu/mtl/gpu_buffer_mtl.mm
       ${CMAKE_CURRENT_LIST_DIR}/gpu/mtl/gpu_command_buffer_mtl.h

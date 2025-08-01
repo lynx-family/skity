@@ -96,8 +96,13 @@ void TextureManager::UploadTextureImage(const TextureImpl& texture,
             static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
         descriptor.storage_mode = GPUTextureStorageMode::kHostVisible;
         auto gpu_texture = device->CreateTexture(descriptor);
-        gpu_texture->UploadData(0, 0, pixmap->Width(), pixmap->Height(),
-                                const_cast<void*>(pixmap->Addr()));
+        auto cmd_buffer = device->CreateCommandBuffer();
+        auto blit_pass = cmd_buffer->BeginBlitPass();
+        blit_pass->UploadTextureData(gpu_texture, 0, 0, pixmap->Width(),
+                                     pixmap->Height(),
+                                     const_cast<void*>(pixmap->Addr()));
+        cmd_buffer->Submit();
+
         return gpu_texture;
       });
 }

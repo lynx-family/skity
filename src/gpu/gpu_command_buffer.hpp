@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "src/gpu/gpu_blit_pass.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
 
 namespace skity {
@@ -18,6 +19,8 @@ class GPUCommandBuffer {
 
   virtual std::shared_ptr<GPURenderPass> BeginRenderPass(
       const GPURenderPassDescriptor& desc) = 0;
+
+  virtual std::shared_ptr<GPUBlitPass> BeginBlitPass() = 0;
 
   virtual bool Submit() = 0;
 };
@@ -34,6 +37,8 @@ class GPUCommandBufferProxy : public GPUCommandBuffer {
     render_passes_.push_back(render_pass);
     return render_pass;
   }
+
+  std::shared_ptr<GPUBlitPass> BeginBlitPass() override { return nullptr; }
 
   bool Submit() override {
     for (auto& render_pass_proxy : render_passes_) {

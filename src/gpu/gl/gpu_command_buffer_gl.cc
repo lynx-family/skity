@@ -5,6 +5,7 @@
 #include "src/gpu/gl/gpu_command_buffer_gl.hpp"
 
 #include "src/gpu/gl/gl_interface.hpp"
+#include "src/gpu/gl/gpu_blit_pass_gl.hpp"
 #include "src/gpu/gl/gpu_render_pass_gl.hpp"
 #include "src/gpu/gl/gpu_texture_gl.hpp"
 
@@ -27,6 +28,10 @@ std::shared_ptr<GPURenderPass> GPUCommandBufferGL::BeginRenderPass(
   } else {
     return BeginDirectRenderPass(desc);
   }
+}
+
+std::shared_ptr<GPUBlitPass> GPUCommandBufferGL::BeginBlitPass() {
+  return std::make_shared<GPUBlitPassGL>();
 }
 
 bool GPUCommandBufferGL::Submit() { return true; }

@@ -52,7 +52,7 @@ class GPUTextureGL : public GPUTexture {
       const GPUTextureDescriptor& descriptor);
 
   void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
-                  uint32_t height, void* data) override;
+                  uint32_t height, void* data);
 
   uint32_t GetGLTextureID() const { return texture_id_; }
 
@@ -88,9 +88,6 @@ class GPUTexturePlaceholderGL : public GPUTextureGL {
   explicit GPUTexturePlaceholderGL(const GPUTextureDescriptor& descriptor)
       : GPUTextureGL(descriptor) {}
 
-  void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
-                  uint32_t height, void* data) override {}
-
   void Bind() const override {}
 
   void Unbind() const override {}
@@ -113,9 +110,6 @@ class GPUExternalTextureGL : public GPUTextureGL {
       const GPUTextureDescriptor& descriptor, uint32_t id, bool owned_by_engine,
       ReleaseCallback callback = nullptr, ReleaseUserData user_data = nullptr);
 
-  void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
-                  uint32_t height, void* data) override {}
-
  private:
   bool owned_by_engine_;
 };
@@ -127,9 +121,6 @@ class GPUTextureRenderBufferGL : public GPUTexture {
       : GPUTexture(desc), buffer_id_(buffer_id) {}
 
   ~GPUTextureRenderBufferGL() override;
-
-  void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
-                  uint32_t height, void* data) override {}
 
   size_t GetBytes() const override;
 

@@ -13,8 +13,9 @@ namespace skity {
 
 class GPUCommandBufferMTL : public GPUCommandBuffer {
  public:
-  explicit GPUCommandBufferMTL(id<MTLCommandBuffer> mtl_command_buffer)
-      : mtl_command_buffer_(mtl_command_buffer) {}
+  explicit GPUCommandBufferMTL(id<MTLDevice> mtl_device,
+                               id<MTLCommandBuffer> mtl_command_buffer)
+      : mtl_device_(mtl_device), mtl_command_buffer_(mtl_command_buffer) {}
 
   id<MTLCommandBuffer> GetMTLCommandBuffer() const {
     return mtl_command_buffer_;
@@ -23,9 +24,12 @@ class GPUCommandBufferMTL : public GPUCommandBuffer {
   std::shared_ptr<GPURenderPass> BeginRenderPass(
       const GPURenderPassDescriptor& desc) override;
 
+  std::shared_ptr<GPUBlitPass> BeginBlitPass() override;
+
   bool Submit() override;
 
  private:
+  id<MTLDevice> mtl_device_;
   id<MTLCommandBuffer> mtl_command_buffer_;
 };
 
