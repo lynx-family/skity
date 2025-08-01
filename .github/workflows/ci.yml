@@ -10,6 +10,8 @@ on:
             - 'src/**'
             - 'module/**'
             - 'test/**'
+            - 'cmake/**'
+            - 'CMakeLists.txt'
 
 jobs:
     unittest_test:

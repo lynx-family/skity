@@ -9,6 +9,9 @@ on:
             - 'include/**'
             - 'src/**'
             - 'module/**'
+            - 'test/**'
+            - 'cmake/**'
+            - 'CMakeLists.txt'
 jobs:
     cpplint_check:
         runs-on: lynx-ubuntu-22.04-medium
