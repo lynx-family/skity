@@ -30,7 +30,7 @@ index 000000000..fb9554d56
 --- /dev/null
 +++ b/CMakeLists-Skity.txt
 @@ -0,0 +1,59 @@
-+cmake_minimum_required(VERSION 3.4.1)
++cmake_minimum_required(VERSION 3.15.0)
 +
 +set(FREETYPE_SOURCE_DIR ${FREETYPE_DIR})
 +

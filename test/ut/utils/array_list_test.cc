@@ -194,8 +194,8 @@ TEST(ArrayList, Reset) {
 }
 
 TEST(ArrayList, SetArenaAllocator) {
-  skity::ArrayList<int32_t, 4> array_list;
   skity::ArenaAllocator arena_allocator;
+  skity::ArrayList<int32_t, 4> array_list;
   array_list.SetArenaAllocator(&arena_allocator);
   array_list.push_back(1);
   array_list.push_back(2);

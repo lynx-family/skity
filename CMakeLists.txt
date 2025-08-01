@@ -2,9 +2,14 @@
 # Licensed under the Apache License Version 2.0 that can be found in the
 # LICENSE file in the root directory of this source tree.
 
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.15.0)
 
 project(Skity)
+
+# Compatible for MSVC runtime library
+if(POLICY CMP0091)
+  cmake_policy(SET CMP0091 NEW)
+endif()
 
 if(POLICY CMP0079)
   cmake_policy(SET CMP0079 NEW)
@@ -21,6 +26,15 @@ endif()
 set(SKITY_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 set(CMAKE_CXX_EXTENSIONS OFF) # disable -std=gnu++11 by default
+
+
+# options should set before define skity library
+include(cmake/Options.cmake)
+
+if (MSVC AND SKITY_TEST)
+  # MSVC needs to set export all symbols for test since UT case needs to access private symbols
+  set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON CACHE BOOL "Force MSVC export all symbols")
+endif()
 
 # define library
 if(EMSCRIPTEN)
@@ -98,9 +112,6 @@ add_library(skity::skity ALIAS skity)
 
 # default config
 include(GNUInstallDirs)
-
-# options
-include(cmake/Options.cmake)
 
 # platform
 include(cmake/Platform.cmake)

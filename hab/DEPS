@@ -55,6 +55,6 @@ deps = {
         "type": "git",
         "url": "https://github.com/zeux/pugixml.git",
         "ignore_in_git": True,
-        "commit": "7a9da11d8b2b2f06c0904d397864f216bd7c1e14",
+        "commit": "ee86beb30e4973f5feffe3ce63bfa4fbadf72f38",
     },
 }
