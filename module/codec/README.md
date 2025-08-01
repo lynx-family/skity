@@ -1,4 +1,4 @@
-# Skiity Codec
+# Skity Codec
 
 The Codec module is a private module used inside Skity project to handle basic image decode and encode.
 Currently it only support PNG and JPEG format. And it is not stable.
