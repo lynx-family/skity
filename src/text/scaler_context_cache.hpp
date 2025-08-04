@@ -25,11 +25,11 @@ class ScalerContextCache final {
   ~ScalerContextCache() = default;
 
   std::shared_ptr<ScalerContextContainer> FindOrCreateScalerContext(
-      const ScalerContextDesc& desc, Typeface* typeface);
+      const ScalerContextDesc& desc, const std::shared_ptr<Typeface>& typeface);
 
  private:
   std::shared_ptr<ScalerContextContainer> CreateScalerContext(
-      const ScalerContextDesc& desc, Typeface* typeface);
+      const ScalerContextDesc& desc, const std::shared_ptr<Typeface>& typeface);
 
   LRUCache<ScalerContextDesc, std::shared_ptr<ScalerContextContainer>> cache_;
   std::mutex mutex_;

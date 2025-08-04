@@ -7,23 +7,6 @@
 
 namespace skity {
 
-TextRun::TextRun(Typeface* typeface, std::vector<GlyphID> info, float font_size)
-    : font_(typeface, font_size), glyph_info_(std::move(info)) {}
-
-TextRun::TextRun(Typeface* typeface, std::vector<GlyphID> info,
-                 std::vector<float> pos_x, float font_size)
-    : font_(typeface, font_size),
-      glyph_info_(std::move(info)),
-      pos_x_(std::move(pos_x)) {}
-
-TextRun::TextRun(Typeface* typeface, std::vector<GlyphID> info,
-                 std::vector<float> pos_x, std::vector<float> pos_y,
-                 float font_size)
-    : font_(typeface, font_size),
-      glyph_info_(std::move(info)),
-      pos_x_(std::move(pos_x)),
-      pos_y_(std::move(pos_y)) {}
-
 TextRun::TextRun(const Font& font, std::vector<GlyphID> info)
     : font_(font), glyph_info_(std::move(info)) {}
 

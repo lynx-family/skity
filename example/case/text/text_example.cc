@@ -20,7 +20,7 @@ void draw_text_with_emoji(skity::Canvas* canvas) {
   const char* emoji_font_path = EXAMPLE_IMAGE_ROOT "/NotoColorEmoji.ttf";
   auto emoji_typeface = skity::Typeface::MakeFromFile(emoji_font_path);
 
-  std::vector<Typeface*> typefaces;
+  std::vector<std::shared_ptr<Typeface>> typefaces;
   if (emoji_typeface) {
     typefaces.push_back(emoji_typeface);
   }

@@ -7,12 +7,10 @@
 #include <skity/text/font_arguments.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/typeface.hpp>
-#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-#include "src/logging.hpp"
 #include "src/text/ports/harmony/harmony_fonts_parser.hpp"
 #include "src/text/ports/typeface_freetype.hpp"
 #include "src/utils/no_destructor.hpp"
@@ -48,19 +46,19 @@ class FontStyleSetHarmony : public FontStyleSet {
     }
   }
 
-  Typeface* CreateTypeface(int index) override {
+  std::shared_ptr<Typeface> CreateTypeface(int index) override {
     if (index < 0 || typefaces_freetype_.size() <= static_cast<size_t>(index)) {
       return nullptr;
     }
-    return typefaces_freetype_[index].get();
+    return typefaces_freetype_[index];
   }
 
-  Typeface* MatchStyle(const FontStyle& pattern) override {
+  std::shared_ptr<Typeface> MatchStyle(const FontStyle& pattern) override {
     return this->MatchStyleCSS3(pattern);
   }
 
  private:
-  std::vector<std::unique_ptr<TypefaceFreeType>> typefaces_freetype_;
+  std::vector<std::shared_ptr<TypefaceFreeType>> typefaces_freetype_;
 };
 
 FontStyleSetHarmony::FontStyleSetHarmony(
@@ -69,7 +67,7 @@ FontStyleSetHarmony::FontStyleSetHarmony(
   for (size_t index = 0; index < fonts.size(); ++index) {
     if (data_cache.find(fonts[index].fname) != data_cache.end()) {
       std::shared_ptr<Data> data = data_cache.at(fonts[index].fname);
-      std::unique_ptr<TypefaceFreeType> typeface = TypefaceFreeType::Make(
+      auto typeface = TypefaceFreeType::Make(
           data, FontArguments().SetCollectionIndex(fonts[index].index));
       if (typeface) {
         typefaces_freetype_.push_back(std::move(typeface));
@@ -80,7 +78,7 @@ FontStyleSetHarmony::FontStyleSetHarmony(
 
 struct NameToFamily {
   std::string name;
-  FontStyleSetHarmony* style_set;
+  std::shared_ptr<FontStyleSetHarmony> style_set;
 };
 
 class FontManagerHarmony : public FontManager {
@@ -101,14 +99,15 @@ class FontManagerHarmony : public FontManager {
     return name_to_family_map_[index].name;
   }
 
-  FontStyleSet* OnCreateStyleSet(int index) const override {
+  std::shared_ptr<FontStyleSet> OnCreateStyleSet(int index) const override {
     if (index < 0 || name_to_family_map_.size() <= static_cast<size_t>(index)) {
       return nullptr;
     }
     return name_to_family_map_[index].style_set;
   }
 
-  FontStyleSet* OnMatchFamily(const char familyName[]) const override {
+  std::shared_ptr<FontStyleSet> OnMatchFamily(
+      const char familyName[]) const override {
     if (!familyName) {
       return nullptr;
     }
@@ -127,15 +126,15 @@ class FontManagerHarmony : public FontManager {
     return nullptr;
   }
 
-  Typeface* OnMatchFamilyStyle(const char familyName[],
-                               const FontStyle& style) const override {
-    FontStyleSet* sset(this->MatchFamily(familyName));
+  std::shared_ptr<Typeface> OnMatchFamilyStyle(
+      const char familyName[], const FontStyle& style) const override {
+    auto sset(this->MatchFamily(familyName));
     return sset->MatchStyle(style);
   }
 
-  Typeface* OnMatchFamilyStyleCharacter(const char familyName[],
-                                        const FontStyle& style, const char*[],
-                                        int, Unichar character) const override {
+  std::shared_ptr<Typeface> OnMatchFamilyStyleCharacter(
+      const char familyName[], const FontStyle& style, const char*[], int,
+      Unichar character) const override {
     std::string name_str = familyName == nullptr ? "" : familyName;
     std::vector<FallbackSetPos> fallback_pos(2);
     if (parser_->fallback_for_map_.find("") !=
@@ -150,7 +149,7 @@ class FontManagerHarmony : public FontManager {
          iter++) {
       for (size_t index = iter->index; index < iter->index + iter->count;
            index++) {
-        Typeface* typeface =
+        std::shared_ptr<Typeface> typeface =
             fallback_name_to_family_map_[index].style_set->MatchStyle(style);
         if (typeface && typeface->UnicharToGlyph(character) != 0) {
           return typeface;
@@ -160,20 +159,21 @@ class FontManagerHarmony : public FontManager {
     return nullptr;
   }
 
-  std::unique_ptr<Typeface> OnMakeFromData(std::shared_ptr<Data> const& data,
+  std::shared_ptr<Typeface> OnMakeFromData(std::shared_ptr<Data> const& data,
                                            int ttcIndex) const override {
     return TypefaceFreeType::Make(data,
                                   FontArguments().SetCollectionIndex(ttcIndex));
   }
 
-  std::unique_ptr<Typeface> OnMakeFromFile(const char path[],
+  std::shared_ptr<Typeface> OnMakeFromFile(const char path[],
                                            int ttcIndex) const override {
     auto data = Data::MakeFromFileName(path);
     return TypefaceFreeType::Make(data,
                                   FontArguments().SetCollectionIndex(ttcIndex));
   }
 
-  Typeface* OnGetDefaultTypeface(FontStyle const& font_style) const override {
+  std::shared_ptr<Typeface> OnGetDefaultTypeface(
+      FontStyle const& font_style) const override {
     return OnMatchFamilyStyle(default_family_name_.c_str(), font_style);
   }
 
@@ -185,23 +185,25 @@ class FontManagerHarmony : public FontManager {
       }
       const std::vector<FontInfo>& fonts =
           *parser_->generic_family_set_[index]->font_set.get();
-      style_sets_.push_back(
-          std::make_unique<FontStyleSetHarmony>(parser_->data_cache, fonts));
+      style_sets_.emplace_back(
+          std::make_shared<FontStyleSetHarmony>(parser_->data_cache, fonts));
+      auto style_set = style_sets_.back();
       name_to_family_map_.emplace_back(
-          NameToFamily{family_name, style_sets_.back().get()});
+          NameToFamily{family_name, std::move(style_set)});
     }
     for (auto& fallback : parser_->fallback_set_) {
       const std::vector<FontInfo>& fonts = *fallback->font_set.get();
-      style_sets_.push_back(
-          std::make_unique<FontStyleSetHarmony>(parser_->data_cache, fonts));
+      style_sets_.emplace_back(
+          std::make_shared<FontStyleSetHarmony>(parser_->data_cache, fonts));
+      auto style_set = style_sets_.back();
       fallback_name_to_family_map_.emplace_back(
-          NameToFamily{fallback->familyName, style_sets_.back().get()});
+          NameToFamily{fallback->familyName, std::move(style_set)});
     }
   }
 
   std::string default_family_name_;
 
-  std::vector<std::unique_ptr<FontStyleSetHarmony>> style_sets_;
+  std::vector<std::shared_ptr<FontStyleSetHarmony>> style_sets_;
   std::vector<NameToFamily> name_to_family_map_;
   std::vector<NameToFamily> fallback_name_to_family_map_;
   std::unique_ptr<HarmonyFontParser> parser_;

@@ -69,8 +69,8 @@ static FT_Int ChooseBitmapStrike(FT_Face face, FT_F26Dot6 scaleY) {
   return chosenStrikeIndex;
 }
 
-ScalerContextFreetype::ScalerContextFreetype(TypefaceFreeType* typeface,
-                                             const ScalerContextDesc* desc)
+ScalerContextFreetype::ScalerContextFreetype(
+    std::shared_ptr<TypefaceFreeType> typeface, const ScalerContextDesc* desc)
     : ScalerContext(typeface, desc),
       strike_index_(-1),
       path_utils_(std::make_unique<PathFreeType>()),

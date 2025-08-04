@@ -234,9 +234,11 @@ class SKITY_API Paint {
   }
   const std::shared_ptr<Shader>& GetShader() const { return shader_; }
 
-  void SetTypeface(Typeface* typeface) { typeface_ = typeface; }
+  void SetTypeface(std::shared_ptr<Typeface> typeface) {
+    typeface_ = std::move(typeface);
+  }
 
-  Typeface* GetTypeface() const { return typeface_; }
+  std::shared_ptr<Typeface> GetTypeface() const { return typeface_; }
 
   void SetColorFilter(std::shared_ptr<ColorFilter> colorFilter) {
     color_filter_ = std::move(colorFilter);
@@ -283,7 +285,7 @@ class SKITY_API Paint {
   BlendMode blend_mode_ = BlendMode::kDefault;
   std::shared_ptr<PathEffect> path_effect_;
   std::shared_ptr<Shader> shader_;
-  Typeface* typeface_ = nullptr;
+  std::shared_ptr<Typeface> typeface_ = nullptr;
   std::shared_ptr<ColorFilter> color_filter_;
   std::shared_ptr<ImageFilter> image_filter_;
   std::shared_ptr<MaskFilter> mask_filter_;

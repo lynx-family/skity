@@ -69,12 +69,13 @@ class Descriptor {
 
 class ScalerContext {
  public:
-  ScalerContext(Typeface* typeface, const ScalerContextDesc* desc);
+  ScalerContext(std::shared_ptr<Typeface> typeface,
+                const ScalerContextDesc* desc);
   virtual ~ScalerContext() = default;
 
  public:
   const ScalerContextDesc& GetDesc() const { return desc_; }
-  Typeface* GetTypeface() { return typeface_; }
+  std::shared_ptr<Typeface> GetTypeface() { return typeface_; }
   void MakeGlyph(GlyphData* glyph_data);
   void GetImage(GlyphData* glyph, const StrokeDesc& stroke_desc);
   void GetImageInfo(GlyphData* glyph, const StrokeDesc& stroke_desc);
@@ -96,7 +97,7 @@ class ScalerContext {
   virtual uint16_t OnGetFixedSize() = 0;
 
  protected:
-  Typeface* typeface_;
+  std::shared_ptr<Typeface> typeface_;
   ScalerContextDesc desc_;
 };
 }  // namespace skity

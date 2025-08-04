@@ -41,7 +41,8 @@ class OffScreenContext final {
 
 class ScalerContextDarwin : public ScalerContext {
  public:
-  ScalerContextDarwin(TypefaceDarwin *typeface, const ScalerContextDesc *desc);
+  ScalerContextDarwin(std::shared_ptr<TypefaceDarwin> typeface,
+                      const ScalerContextDesc *desc);
   ~ScalerContextDarwin() override;
 
  protected:

@@ -14,8 +14,9 @@ namespace skity {
 
 class SKITY_API TypefaceCT {
  public:
-  static CTFontRef CTFontFromTypeface(const Typeface* typeface);
-  static Typeface* TypefaceFromCTFont(CTFontRef ct_font);
+  static CTFontRef CTFontFromTypeface(
+      const std::shared_ptr<Typeface>& typeface);
+  static std::shared_ptr<Typeface> TypefaceFromCTFont(CTFontRef ct_font);
 };
 
 }  // namespace skity

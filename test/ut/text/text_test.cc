@@ -44,7 +44,8 @@ class ColorfulTypeface : public Typeface {
   VariationPosition OnGetVariationDesignPosition() const override;
   std::vector<VariationAxis> OnGetVariationDesignParameters() const override;
 
-  Typeface *OnMakeVariation(const FontArguments &args) const override;
+  std::shared_ptr<Typeface> OnMakeVariation(
+      const FontArguments &args) const override;
 
  private:
   bool colorful_ = false;
@@ -75,7 +76,8 @@ std::vector<VariationAxis> ColorfulTypeface::OnGetVariationDesignParameters()
   return {};
 }
 
-Typeface *ColorfulTypeface::OnMakeVariation(const FontArguments &args) const {
+std::shared_ptr<Typeface> ColorfulTypeface::OnMakeVariation(
+    const FontArguments &args) const {
   return nullptr;
 }
 
@@ -86,29 +88,27 @@ TEST(TextRenderControl, disallow_sdf_test) {
   skity::Paint paint;
 
   {
-    skity::ColorfulTypeface typeface(false);
-    EXPECT_TRUE(controller.CanUseDirect(14, skity::Matrix{}, paint, &typeface));
-    EXPECT_TRUE(
-        controller.CanUseDirect(163, skity::Matrix{}, paint, &typeface));
+    auto typeface = std::make_shared<skity::ColorfulTypeface>(false);
+    EXPECT_TRUE(controller.CanUseDirect(14, skity::Matrix{}, paint, typeface));
+    EXPECT_TRUE(controller.CanUseDirect(163, skity::Matrix{}, paint, typeface));
     EXPECT_FALSE(
-        controller.CanUseDirect(256, skity::Matrix{}, paint, &typeface));
+        controller.CanUseDirect(256, skity::Matrix{}, paint, typeface));
 
-    EXPECT_FALSE(controller.CanUseSDF(14, paint, &typeface));
-    EXPECT_FALSE(controller.CanUseSDF(163, paint, &typeface));
-    EXPECT_FALSE(controller.CanUseSDF(256, paint, &typeface));
+    EXPECT_FALSE(controller.CanUseSDF(14, paint, typeface));
+    EXPECT_FALSE(controller.CanUseSDF(163, paint, typeface));
+    EXPECT_FALSE(controller.CanUseSDF(256, paint, typeface));
   }
 
   {
-    skity::ColorfulTypeface typeface(true);
-    EXPECT_TRUE(controller.CanUseDirect(14, skity::Matrix{}, paint, &typeface));
-    EXPECT_TRUE(
-        controller.CanUseDirect(163, skity::Matrix{}, paint, &typeface));
+    auto typeface = std::make_shared<skity::ColorfulTypeface>(true);
+    EXPECT_TRUE(controller.CanUseDirect(14, skity::Matrix{}, paint, typeface));
+    EXPECT_TRUE(controller.CanUseDirect(163, skity::Matrix{}, paint, typeface));
     EXPECT_FALSE(
-        controller.CanUseDirect(256, skity::Matrix{}, paint, &typeface));
+        controller.CanUseDirect(256, skity::Matrix{}, paint, typeface));
 
-    EXPECT_FALSE(controller.CanUseSDF(14, paint, &typeface));
-    EXPECT_FALSE(controller.CanUseSDF(163, paint, &typeface));
-    EXPECT_FALSE(controller.CanUseSDF(256, paint, &typeface));
+    EXPECT_FALSE(controller.CanUseSDF(14, paint, typeface));
+    EXPECT_FALSE(controller.CanUseSDF(163, paint, typeface));
+    EXPECT_FALSE(controller.CanUseSDF(256, paint, typeface));
   }
 }
 
@@ -117,46 +117,44 @@ TEST(TextRenderControl, allow_sdf_test) {
   skity::Paint paint;
 
   {
-    skity::ColorfulTypeface typeface(false);
-    EXPECT_TRUE(controller.CanUseDirect(14, skity::Matrix{}, paint, &typeface));
+    auto typeface = std::make_shared<skity::ColorfulTypeface>(false);
+    EXPECT_TRUE(controller.CanUseDirect(14, skity::Matrix{}, paint, typeface));
     EXPECT_FALSE(
-        controller.CanUseDirect(163, skity::Matrix{}, paint, &typeface));
+        controller.CanUseDirect(163, skity::Matrix{}, paint, typeface));
     EXPECT_FALSE(
-        controller.CanUseDirect(256, skity::Matrix{}, paint, &typeface));
+        controller.CanUseDirect(256, skity::Matrix{}, paint, typeface));
 
-    EXPECT_FALSE(controller.CanUseSDF(14, paint, &typeface));
-    EXPECT_TRUE(controller.CanUseSDF(163, paint, &typeface));
-    EXPECT_FALSE(controller.CanUseSDF(256, paint, &typeface));
+    EXPECT_FALSE(controller.CanUseSDF(14, paint, typeface));
+    EXPECT_TRUE(controller.CanUseSDF(163, paint, typeface));
+    EXPECT_FALSE(controller.CanUseSDF(256, paint, typeface));
   }
 
   {
-    skity::ColorfulTypeface typeface(true);
-    EXPECT_TRUE(controller.CanUseDirect(14, skity::Matrix{}, paint, &typeface));
-    EXPECT_TRUE(
-        controller.CanUseDirect(163, skity::Matrix{}, paint, &typeface));
+    auto typeface = std::make_shared<skity::ColorfulTypeface>(true);
+    EXPECT_TRUE(controller.CanUseDirect(14, skity::Matrix{}, paint, typeface));
+    EXPECT_TRUE(controller.CanUseDirect(163, skity::Matrix{}, paint, typeface));
     EXPECT_FALSE(
-        controller.CanUseDirect(256, skity::Matrix{}, paint, &typeface));
+        controller.CanUseDirect(256, skity::Matrix{}, paint, typeface));
 
-    EXPECT_FALSE(controller.CanUseSDF(14, paint, &typeface));
-    EXPECT_FALSE(controller.CanUseSDF(163, paint, &typeface));
-    EXPECT_FALSE(controller.CanUseSDF(256, paint, &typeface));
+    EXPECT_FALSE(controller.CanUseSDF(14, paint, typeface));
+    EXPECT_FALSE(controller.CanUseSDF(163, paint, typeface));
+    EXPECT_FALSE(controller.CanUseSDF(256, paint, typeface));
   }
 
   paint.SetSDFForSmallText(true);
   {
-    skity::ColorfulTypeface typeface(false);
-    EXPECT_TRUE(controller.CanUseDirect(14, skity::Matrix{}, paint, &typeface));
+    auto typeface = std::make_shared<skity::ColorfulTypeface>(false);
+    EXPECT_TRUE(controller.CanUseDirect(14, skity::Matrix{}, paint, typeface));
+    EXPECT_FALSE(controller.CanUseDirect(18, skity::Matrix{}, paint, typeface));
     EXPECT_FALSE(
-        controller.CanUseDirect(18, skity::Matrix{}, paint, &typeface));
+        controller.CanUseDirect(163, skity::Matrix{}, paint, typeface));
     EXPECT_FALSE(
-        controller.CanUseDirect(163, skity::Matrix{}, paint, &typeface));
-    EXPECT_FALSE(
-        controller.CanUseDirect(256, skity::Matrix{}, paint, &typeface));
+        controller.CanUseDirect(256, skity::Matrix{}, paint, typeface));
 
-    EXPECT_FALSE(controller.CanUseSDF(14, paint, &typeface));
-    EXPECT_TRUE(controller.CanUseSDF(18, paint, &typeface));
-    EXPECT_TRUE(controller.CanUseSDF(163, paint, &typeface));
-    EXPECT_FALSE(controller.CanUseSDF(256, paint, &typeface));
+    EXPECT_FALSE(controller.CanUseSDF(14, paint, typeface));
+    EXPECT_TRUE(controller.CanUseSDF(18, paint, typeface));
+    EXPECT_TRUE(controller.CanUseSDF(163, paint, typeface));
+    EXPECT_FALSE(controller.CanUseSDF(256, paint, typeface));
   }
 }
 

@@ -23,15 +23,6 @@ class Typeface;
  */
 class SKITY_API TextRun final {
  public:
-  /*
-   * Deprecated, use font parameter instead.
-   */
-  TextRun(Typeface* typeface, std::vector<GlyphID> info, float font_size);
-  TextRun(Typeface* typeface, std::vector<GlyphID> info,
-          std::vector<float> pos_x, float font_size);
-  TextRun(Typeface* typeface, std::vector<GlyphID> info,
-          std::vector<float> pos_x, std::vector<float> pos_y, float font_size);
-
   TextRun(const Font& font, std::vector<GlyphID> info);
   TextRun(const Font& font, std::vector<GlyphID> info,
           std::vector<float> pos_x);
@@ -50,7 +41,7 @@ class SKITY_API TextRun final {
 
   std::vector<float> const& GetPosY() const;
 
-  Typeface* LockTypeface() const { return font_.GetTypeface(); }
+  std::shared_ptr<Typeface> LockTypeface() const { return font_.GetTypeface(); }
 
   float GetFontSize() const { return font_.GetSize(); }
 

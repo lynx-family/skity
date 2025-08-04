@@ -45,12 +45,13 @@ class SKITY_API TypefaceDelegate {
   TypefaceDelegate(const TypefaceDelegate&) = delete;
   TypefaceDelegate& operator=(const TypefaceDelegate&) = delete;
 
-  virtual Typeface* Fallback(Unichar code_point, Paint const& text_paint) = 0;
+  virtual std::shared_ptr<Typeface> Fallback(Unichar code_point,
+                                             Paint const& text_paint) = 0;
 
   virtual std::vector<std::vector<Unichar>> BreakTextRun(const char* text) = 0;
 
   static std::unique_ptr<TypefaceDelegate> CreateSimpleFallbackDelegate(
-      const std::vector<Typeface*>& typefaces);
+      const std::vector<std::shared_ptr<Typeface>>& typefaces);
 };
 
 class SKITY_API TextBlobBuilder final {
@@ -77,11 +78,13 @@ class SKITY_API TextBlobBuilder final {
       TypefaceDelegate* delegate);
 
   std::vector<TextRun> GenerateTextRuns(std::vector<Unichar> const& code_points,
-                                        Typeface* typeface, Paint const& paint,
+                                        std::shared_ptr<Typeface> typeface,
+                                        Paint const& paint,
                                         TypefaceDelegate* delegate);
 
   TextRun GenerateTextRun(std::vector<Unichar> const& code_points,
-                          Typeface* typeface, float font_size, bool need_path);
+                          std::shared_ptr<Typeface> typeface, float font_size,
+                          bool need_path);
 };
 }  // namespace skity
 

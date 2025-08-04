@@ -18,8 +18,8 @@ ScalerContextCache* ScalerContextCache::GlobalScalerContextCache() {
 ScalerContextCache::ScalerContextCache() : cache_(kMaxCacheSize) {}
 
 std::shared_ptr<ScalerContextContainer>
-ScalerContextCache::FindOrCreateScalerContext(const ScalerContextDesc& desc,
-                                              Typeface* typeface) {
+ScalerContextCache::FindOrCreateScalerContext(
+    const ScalerContextDesc& desc, const std::shared_ptr<Typeface>& typeface) {
   std::unique_lock<std::mutex> lock(mutex_);
   auto p_scaler_context = cache_.find(desc);
   if (p_scaler_context) {
@@ -32,7 +32,7 @@ ScalerContextCache::FindOrCreateScalerContext(const ScalerContextDesc& desc,
 }
 
 std::shared_ptr<ScalerContextContainer> ScalerContextCache::CreateScalerContext(
-    const ScalerContextDesc& desc, Typeface* typeface) {
+    const ScalerContextDesc& desc, const std::shared_ptr<Typeface>& typeface) {
   auto scaler_context = typeface->CreateScalerContext(&desc);
   return std::make_shared<ScalerContextContainer>(std::move(scaler_context));
 }

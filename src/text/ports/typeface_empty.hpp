@@ -31,7 +31,8 @@ class TypefaceEmpty : public Typeface {
   VariationPosition OnGetVariationDesignPosition() const override;
   std::vector<VariationAxis> OnGetVariationDesignParameters() const override;
 
-  Typeface *OnMakeVariation(const FontArguments &args) const override;
+  std::shared_ptr<Typeface> OnMakeVariation(
+      const FontArguments &args) const override;
 };
 
 }  // namespace skity

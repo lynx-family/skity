@@ -65,12 +65,14 @@ Rect TextBlob::ComputeBounds(uint32_t count, const GlyphID *glyphs,
 
 class SimpleDelegate : public TypefaceDelegate {
  public:
-  explicit SimpleDelegate(const std::vector<Typeface *> &typeface)
+  explicit SimpleDelegate(
+      const std::vector<std::shared_ptr<Typeface>> &typeface)
       : typefaces_(typeface) {}
 
   ~SimpleDelegate() override = default;
 
-  Typeface *Fallback(Unichar code_point, Paint const &) override {
+  std::shared_ptr<Typeface> Fallback(Unichar code_point,
+                                     Paint const &) override {
     for (auto const &typeface : typefaces_) {
       if (typeface->ContainGlyph(code_point)) {
         return typeface;
@@ -85,12 +87,12 @@ class SimpleDelegate : public TypefaceDelegate {
   }
 
  private:
-  std::vector<Typeface *> typefaces_;
+  std::vector<std::shared_ptr<Typeface>> typefaces_;
 };
 
 std::unique_ptr<TypefaceDelegate>
 TypefaceDelegate::CreateSimpleFallbackDelegate(
-    const std::vector<Typeface *> &typefaces) {
+    const std::vector<std::shared_ptr<Typeface>> &typefaces) {
   if (typefaces.empty()) {
     return {};
   }
@@ -170,7 +172,7 @@ std::shared_ptr<TextBlob> TextBlobBuilder::GenerateBlobWithMultiRun(
 }
 
 std::vector<TextRun> TextBlobBuilder::GenerateTextRuns(
-    std::vector<Unichar> const &code_points, Typeface *typeface,
+    std::vector<Unichar> const &code_points, std::shared_ptr<Typeface> typeface,
     Paint const &paint, TypefaceDelegate *delegate) {
   float font_size = paint.GetTextSize();
   std::vector<TextRun> runs = {};
@@ -183,7 +185,8 @@ std::vector<TextRun> TextBlobBuilder::GenerateTextRuns(
     if (glyph_id != 0) {
       if (prev_char_typeface != default_typeface) {
         // need to create a new TextRun
-        runs.emplace_back(TextRun(prev_char_typeface, infos, font_size));
+        Font font{prev_char_typeface, font_size};
+        runs.emplace_back(TextRun(font, infos));
         // begin new TextRun
         infos.clear();
       }
@@ -202,7 +205,8 @@ std::vector<TextRun> TextBlobBuilder::GenerateTextRuns(
     if (glyph_id != 0) {
       if (prev_char_typeface != fallback_typeface) {
         // need to create a new TextRun
-        runs.emplace_back(TextRun(prev_char_typeface, infos, font_size));
+        Font font{prev_char_typeface, font_size};
+        runs.emplace_back(TextRun(font, infos));
         // begin new TextRun
         infos.clear();
       }
@@ -212,14 +216,15 @@ std::vector<TextRun> TextBlobBuilder::GenerateTextRuns(
     }
   }
   if (!infos.empty()) {
-    runs.emplace_back(TextRun(prev_char_typeface, std::move(infos), font_size));
+    Font font{prev_char_typeface, font_size};
+    runs.emplace_back(TextRun(font, std::move(infos)));
   }
 
   return runs;
 }
 
 TextRun TextBlobBuilder::GenerateTextRun(
-    std::vector<Unichar> const &code_points, Typeface *typeface,
+    std::vector<Unichar> const &code_points, std::shared_ptr<Typeface> typeface,
     float font_size, bool) {
   std::vector<GlyphID> infos = {};
 

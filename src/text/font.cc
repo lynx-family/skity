@@ -23,12 +23,18 @@ static inline float ValidSize(float size) { return std::max<float>(0, size); }
 
 Font::Font() : Font(nullptr) {}
 
-Font::Font(Typeface* typeface, float size) : Font(typeface, size, 1, 0) {}
+Font::Font(std::shared_ptr<Typeface> typeface, float size)
+    : Font(std::move(typeface), size, 1, 0) {}
 
-Font::Font(Typeface* typeface) : Font(typeface, DEFAULT_SIZE) {}
+Font::Font(std::shared_ptr<Typeface> typeface)
+    : Font(std::move(typeface), DEFAULT_SIZE) {}
 
-Font::Font(Typeface* typeface, float size, float scaleX, float skewX)
-    : typeface_(typeface), size_(size), scale_x_(scaleX), skew_x_(skewX) {}
+Font::Font(std::shared_ptr<Typeface> typeface, float size, float scaleX,
+           float skewX)
+    : typeface_(std::move(typeface)),
+      size_(size),
+      scale_x_(scaleX),
+      skew_x_(skewX) {}
 
 void Font::SetForceAutoHinting(bool predicate) {
   flags_ = SetClearMask(flags_, predicate, kForceAutoHinting_PrivFlag);
@@ -62,7 +68,7 @@ Font Font::MakeWithSize(float size) const {
   return font;
 }
 
-Typeface* Font::GetTypefaceOrDefault() const {
+std::shared_ptr<Typeface> Font::GetTypefaceOrDefault() const {
   if (!typeface_) {
     typeface_ = Typeface::GetDefaultTypeface();
   }

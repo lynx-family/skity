@@ -20,8 +20,9 @@ namespace skity {
 
 class TypefaceDarwin : public Typeface {
  public:
-  static TypefaceDarwin *Make(const FontStyle &style, UniqueCTFontRef ct_font);
-  static std::unique_ptr<TypefaceDarwin> MakeWithoutCache(
+  static std::shared_ptr<TypefaceDarwin> Make(const FontStyle &style,
+                                              UniqueCTFontRef ct_font);
+  static std::shared_ptr<TypefaceDarwin> MakeWithoutCache(
       const FontStyle &style, UniqueCTFontRef ct_font);
 
   ~TypefaceDarwin() override;
@@ -51,7 +52,8 @@ class TypefaceDarwin : public Typeface {
   VariationPosition OnGetVariationDesignPosition() const override;
   std::vector<VariationAxis> OnGetVariationDesignParameters() const override;
 
-  Typeface *OnMakeVariation(const FontArguments &args) const override;
+  std::shared_ptr<Typeface> OnMakeVariation(
+      const FontArguments &args) const override;
 
  private:
   UniqueCTFontRef ct_font_;

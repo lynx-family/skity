@@ -90,7 +90,7 @@ class AutoFTAccess {
   FreetypeFace* face_;
 };
 
-std::unique_ptr<TypefaceFreeType> TypefaceFreeType::Make(
+std::shared_ptr<TypefaceFreeType> TypefaceFreeType::Make(
     std::shared_ptr<Data> data, const FontArguments& font_args) {
   std::unique_ptr<FreetypeFace> face =
       std::make_unique<FreetypeFace>(data, font_args);
@@ -98,7 +98,7 @@ std::unique_ptr<TypefaceFreeType> TypefaceFreeType::Make(
     return nullptr;
   }
   FontStyle font_style = face->GetFontStyle();
-  return std::make_unique<TypefaceFreeTypeData>(std::move(data), font_args,
+  return std::make_shared<TypefaceFreeTypeData>(std::move(data), font_args,
                                                 font_style);
 }
 
@@ -230,7 +230,9 @@ bool TypefaceFreeType::OnContainsColorTable() const {
 std::unique_ptr<ScalerContext> TypefaceFreeType::OnCreateScalerContext(
     const ScalerContextDesc* desc) const {
   auto c = std::make_unique<ScalerContextFreetype>(
-      const_cast<TypefaceFreeType*>(this), desc);
+      std::static_pointer_cast<TypefaceFreeType>(
+          const_cast<TypefaceFreeType*>(this)->shared_from_this()),
+      desc);
   return std::move(c);
 }
 
@@ -276,7 +278,8 @@ std::vector<VariationAxis> TypefaceFreeType::OnGetVariationDesignParameters()
       face, GetFTFace()->library());
 }
 
-Typeface* TypefaceFreeType::OnMakeVariation(const FontArguments& args) const {
+std::shared_ptr<Typeface> TypefaceFreeType::OnMakeVariation(
+    const FontArguments& args) const {
   AutoFTAccess fta(this);
   FT_Face face = fta.Face();
   if (!face) {
@@ -294,17 +297,7 @@ Typeface* TypefaceFreeType::OnMakeVariation(const FontArguments& args) const {
       args.GetCollectionIndex());
 
   FaceData face_data = GetFaceData();
-  std::unique_ptr<TypefaceFreeType> variation_typeface =
-      TypefaceFreeType::Make(face_data.data, expected_args);
-  if (variation_typeface) {
-    // TOOD(jingle) We store the typefaces casually. If we use shared ownership
-    // on typeface, we won't store typeface any more. However, if we keep owning
-    // the typefaces, we should use map to store typefaces.
-    TypefaceFreeType* raw_variation_typeface = variation_typeface.get();
-    variant_faces_.emplace_back(std::move(variation_typeface));
-    return raw_variation_typeface;
-  }
-  return nullptr;
+  return TypefaceFreeType::Make(face_data.data, expected_args);
 }
 
 FaceData TypefaceFreeType::GetFaceData() const { return OnGetFaceData(); }

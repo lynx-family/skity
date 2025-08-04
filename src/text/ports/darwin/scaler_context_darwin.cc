@@ -117,8 +117,8 @@ UniqueCTFontRef ct_font_copy_with_size(CTFontRef base, CGFloat text_size) {
       CTFontCreateCopyWithAttributes(base, text_size, nullptr, desc.get()));
 }
 
-ScalerContextDarwin::ScalerContextDarwin(TypefaceDarwin *typeface,
-                                         const ScalerContextDesc *desc)
+ScalerContextDarwin::ScalerContextDarwin(
+    std::shared_ptr<TypefaceDarwin> typeface, const ScalerContextDesc *desc)
     : ScalerContext(typeface, desc), os_context_() {
   float scaled_size;
   Matrix22 transform;

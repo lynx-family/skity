@@ -28,25 +28,25 @@ class TypefaceCache {
  public:
   // We need alter typeface with shared ownership so that we could remove
   // them from cache here.
-  void Add(std::unique_ptr<TypefaceDarwin> typeface) {
+  void Add(std::shared_ptr<TypefaceDarwin> typeface) {
     typeface_set_.emplace_back(std::move(typeface));
   }
 
-  TypefaceDarwin* Find(CTFontRef ct_font) {
+  std::shared_ptr<TypefaceDarwin> Find(CTFontRef ct_font) {
     for (auto& typeface : typeface_set_) {
       if (CFEqual(ct_font, typeface->GetCTFont())) {
-        return typeface.get();
+        return typeface;
       }
     }
     return nullptr;
   }
 
  private:
-  std::vector<std::unique_ptr<TypefaceDarwin>> typeface_set_;
+  std::vector<std::shared_ptr<TypefaceDarwin>> typeface_set_;
 };
 
-TypefaceDarwin* TypefaceDarwin::Make(const FontStyle& style,
-                                     UniqueCTFontRef ct_font) {
+std::shared_ptr<TypefaceDarwin> TypefaceDarwin::Make(const FontStyle& style,
+                                                     UniqueCTFontRef ct_font) {
   if (!ct_font) {
     return nullptr;
   }
@@ -55,24 +55,24 @@ TypefaceDarwin* TypefaceDarwin::Make(const FontStyle& style,
   static NoDestructor<std::mutex> cache_mutex;
 
   std::lock_guard<std::mutex> lock(*cache_mutex);
-  TypefaceDarwin* typeface = cache->Find(ct_font.get());
+  auto typeface = cache->Find(ct_font.get());
   if (!typeface) {
-    auto typeface_darwin = std::unique_ptr<TypefaceDarwin>(
+    auto typeface_darwin = std::shared_ptr<TypefaceDarwin>(
         new TypefaceDarwin(style, std::move(ct_font)));
     if (typeface_darwin) {
-      typeface = typeface_darwin.get();
+      typeface = typeface_darwin;
       cache->Add(std::move(typeface_darwin));
     }
   }
   return typeface;
 }
 
-std::unique_ptr<TypefaceDarwin> TypefaceDarwin::MakeWithoutCache(
+std::shared_ptr<TypefaceDarwin> TypefaceDarwin::MakeWithoutCache(
     const FontStyle& style, UniqueCTFontRef ct_font) {
   if (!ct_font) {
     return nullptr;
   }
-  return std::unique_ptr<TypefaceDarwin>(
+  return std::shared_ptr<TypefaceDarwin>(
       new TypefaceDarwin(style, std::move(ct_font)));
 }
 
@@ -199,7 +199,9 @@ bool TypefaceDarwin::OnContainsColorTable() const { return has_color_glyphs_; }
 std::unique_ptr<ScalerContext> TypefaceDarwin::OnCreateScalerContext(
     const ScalerContextDesc* desc) const {
   return std::make_unique<ScalerContextDarwin>(
-      const_cast<TypefaceDarwin*>(this), desc);
+      std::static_pointer_cast<TypefaceDarwin>(
+          const_cast<TypefaceDarwin*>(this)->shared_from_this()),
+      desc);
 }
 
 VariationPosition TypefaceDarwin::OnGetVariationDesignPosition() const {
@@ -361,7 +363,8 @@ static UniqueCFRef<CFDictionaryRef> variation_from_FontArguments(
   return std::move(new_variation);
 }
 
-Typeface* TypefaceDarwin::OnMakeVariation(const FontArguments& args) const {
+std::shared_ptr<Typeface> TypefaceDarwin::OnMakeVariation(
+    const FontArguments& args) const {
   UniqueCFRef<CFDictionaryRef> variation =
       variation_from_FontArguments(ct_font_.get(), variation_axes_.get(), args);
   UniqueCFRef<CTFontRef> variant_font;
@@ -388,12 +391,13 @@ Typeface* TypefaceDarwin::OnMakeVariation(const FontArguments& args) const {
   return TypefaceDarwin::Make(font_style, std::move(variant_font));
 }
 
-CTFontRef TypefaceCT::CTFontFromTypeface(const Typeface* typeface) {
-  auto* typeface_drawin = static_cast<const TypefaceDarwin*>(typeface);
+CTFontRef TypefaceCT::CTFontFromTypeface(
+    const std::shared_ptr<Typeface>& typeface) {
+  auto* typeface_drawin = static_cast<const TypefaceDarwin*>(typeface.get());
   return typeface_drawin->GetCTFont();
 }
 
-Typeface* TypefaceCT::TypefaceFromCTFont(CTFontRef ct_font) {
+std::shared_ptr<Typeface> TypefaceCT::TypefaceFromCTFont(CTFontRef ct_font) {
   CFRetain(ct_font);
   UniqueCFRef<CTFontDescriptorRef> desc(CTFontCopyFontDescriptor(ct_font));
 

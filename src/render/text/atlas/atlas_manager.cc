@@ -66,7 +66,7 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font, GlyphID glyph_id,
                                   const Paint& paint, bool load_sdf,
                                   float context_scale,
                                   const Matrix& transform) {
-  Typeface* typeface = font.GetTypeface();
+  auto typeface = font.GetTypeface();
   float font_size = font.GetSize();
   float sdf_scale = 1.0f;
   // TODO(jingle) consider transform for sdf text

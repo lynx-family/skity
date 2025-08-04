@@ -54,7 +54,7 @@ static const char* map_css_names(const char* name) {
   return name;
 }
 
-TypefaceDarwin* typeface_from_desc(CTFontDescriptorRef desc) {
+std::shared_ptr<TypefaceDarwin> typeface_from_desc(CTFontDescriptorRef desc) {
   CTFontRef ct_font = CTFontCreateWithFontDescriptor(desc, 0, nullptr);
 
   FontStyle style;
@@ -137,7 +137,7 @@ void FontStyleSetDarwin::GetStyle(int index, FontStyle* style,
   }
 }
 
-Typeface* FontStyleSetDarwin::CreateTypeface(int index) {
+std::shared_ptr<Typeface> FontStyleSetDarwin::CreateTypeface(int index) {
   if (index >= static_cast<int32_t>(typefaces_.size())) {
     return nullptr;
   }
@@ -150,7 +150,8 @@ Typeface* FontStyleSetDarwin::CreateTypeface(int index) {
   return typefaces_[index];
 }
 
-Typeface* FontStyleSetDarwin::MatchStyle(const FontStyle& pattern) {
+std::shared_ptr<Typeface> FontStyleSetDarwin::MatchStyle(
+    const FontStyle& pattern) {
   int best_metric = std::numeric_limits<int32_t>::max();
 
   int32_t index = -1;
@@ -222,11 +223,13 @@ std::string FontManagerDarwin::OnGetFamilyName(int index) const {
   return sys_family_names_[index];
 }
 
-FontStyleSet* FontManagerDarwin::OnCreateStyleSet(int index) const {
+std::shared_ptr<FontStyleSet> FontManagerDarwin::OnCreateStyleSet(
+    int index) const {
   return nullptr;
 }
 
-FontStyleSet* FontManagerDarwin::OnMatchFamily(const char* family_name) const {
+std::shared_ptr<FontStyleSet> FontManagerDarwin::OnMatchFamily(
+    const char* family_name) const {
   auto index = GetIndexByFamilyName(family_name);
 
   if (index < 0) {
@@ -236,8 +239,8 @@ FontStyleSet* FontManagerDarwin::OnMatchFamily(const char* family_name) const {
   return MatchFamilyByIndex(index);
 }
 
-Typeface* FontManagerDarwin::OnMatchFamilyStyle(const char* family_name,
-                                                const FontStyle& style) const {
+std::shared_ptr<Typeface> FontManagerDarwin::OnMatchFamilyStyle(
+    const char* family_name, const FontStyle& style) const {
   auto index = GetIndexByFamilyName(family_name);
 
   auto style_set = MatchFamilyByIndex(index);
@@ -249,7 +252,7 @@ Typeface* FontManagerDarwin::OnMatchFamilyStyle(const char* family_name,
   return style_set->MatchStyle(style);
 }
 
-Typeface* FontManagerDarwin::OnMatchFamilyStyleCharacter(
+std::shared_ptr<Typeface> FontManagerDarwin::OnMatchFamilyStyleCharacter(
     const char* family_name, const FontStyle& style, const char* bcp47[],
     int bcp47Count, Unichar character) const {
   auto index = GetIndexByFamilyName(family_name);
@@ -260,7 +263,8 @@ Typeface* FontManagerDarwin::OnMatchFamilyStyleCharacter(
     return nullptr;
   }
 
-  auto typeface = static_cast<TypefaceDarwin*>(style_set->MatchStyle(style));
+  auto typeface =
+      std::static_pointer_cast<TypefaceDarwin>(style_set->MatchStyle(style));
 
   UniqueCFRef<CFStringRef> cf_string(CFStringCreateWithBytes(
       kCFAllocatorDefault, reinterpret_cast<const UInt8*>(&character),
@@ -283,7 +287,7 @@ Typeface* FontManagerDarwin::OnMatchFamilyStyleCharacter(
   return SavedFallbackTypeface(std::move(cf_font), style);
 }
 
-std::unique_ptr<Typeface> FontManagerDarwin::OnMakeFromData(
+std::shared_ptr<Typeface> FontManagerDarwin::OnMakeFromData(
     std::shared_ptr<Data> const& data, int ttcIndex) const {
   if (ttcIndex != 0) {
     return nullptr;
@@ -307,12 +311,12 @@ std::unique_ptr<Typeface> FontManagerDarwin::OnMakeFromData(
       UniqueCTFontRef(CTFontCreateWithFontDescriptor(desc.get(), 0, nullptr)));
 }
 
-std::unique_ptr<Typeface> FontManagerDarwin::OnMakeFromFile(
+std::shared_ptr<Typeface> FontManagerDarwin::OnMakeFromFile(
     const char path[], int ttcIndex) const {
   return OnMakeFromData(Data::MakeFromFileName(path), ttcIndex);
 }
 
-Typeface* FontManagerDarwin::OnGetDefaultTypeface(
+std::shared_ptr<Typeface> FontManagerDarwin::OnGetDefaultTypeface(
     FontStyle const& font_style) const {
   if (default_typeface_) {
     return default_typeface_;
@@ -337,7 +341,8 @@ int32_t FontManagerDarwin::GetIndexByFamilyName(const char* family_name) const {
   return -1;
 }
 
-FontStyleSetDarwin* FontManagerDarwin::MatchFamilyByIndex(int32_t index) const {
+std::shared_ptr<FontStyleSetDarwin> FontManagerDarwin::MatchFamilyByIndex(
+    int32_t index) const {
   if (index >= static_cast<int32_t>(sys_style_sets_.size()) || index < 0) {
     return nullptr;
   }
@@ -355,13 +360,13 @@ FontStyleSetDarwin* FontManagerDarwin::MatchFamilyByIndex(int32_t index) const {
         CTFontDescriptorCreateWithAttributes(cf_attr.get()));
 
     sys_style_sets_[index] =
-        std::make_unique<FontStyleSetDarwin>(std::move(desc));
+        std::make_shared<FontStyleSetDarwin>(std::move(desc));
   }
 
-  return sys_style_sets_[index].get();
+  return sys_style_sets_[index];
 }
 
-TypefaceDarwin* FontManagerDarwin::SavedFallbackTypeface(
+std::shared_ptr<TypefaceDarwin> FontManagerDarwin::SavedFallbackTypeface(
     UniqueCFRef<CTFontRef> ct_font, FontStyle const& style) const {
   for (auto const& tf : sys_fallbacked_) {
     if (CFEqual(tf->GetCTFont(), ct_font.get())) {

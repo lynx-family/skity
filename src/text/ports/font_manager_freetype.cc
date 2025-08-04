@@ -13,7 +13,7 @@ namespace skity {
 
 class FontManagerFreetype : public FontManager {
  public:
-  void SetDefaultTypeface(Typeface* typeface) override {
+  void SetDefaultTypeface(std::shared_ptr<Typeface> typeface) override {
     default_typeface_ = typeface;
   }
 
@@ -25,43 +25,45 @@ class FontManagerFreetype : public FontManager {
     return "";
   }
 
-  FontStyleSet* OnCreateStyleSet(int) const override {
+  std::shared_ptr<FontStyleSet> OnCreateStyleSet(int) const override {
     LOGE("onCreateStyleSet called with bad index");
     return nullptr;
   }
 
-  FontStyleSet* OnMatchFamily(const char[]) const override {
+  std::shared_ptr<FontStyleSet> OnMatchFamily(const char[]) const override {
     return FontStyleSet::CreateEmpty();
   }
 
-  Typeface* OnMatchFamilyStyle(const char[], const FontStyle&) const override {
+  std::shared_ptr<Typeface> OnMatchFamilyStyle(
+      const char[], const FontStyle&) const override {
     return nullptr;
   }
 
-  Typeface* OnMatchFamilyStyleCharacter(const char[], const FontStyle&,
-                                        const char*[], int,
-                                        Unichar) const override {
+  std::shared_ptr<Typeface> OnMatchFamilyStyleCharacter(
+      const char[], const FontStyle&, const char*[], int,
+      Unichar) const override {
     return nullptr;
   }
 
-  std::unique_ptr<Typeface> OnMakeFromData(std::shared_ptr<Data> const& data,
+  std::shared_ptr<Typeface> OnMakeFromData(std::shared_ptr<Data> const& data,
                                            int ttcIndex) const override {
     return TypefaceFreeType::Make(data,
                                   FontArguments().SetCollectionIndex(ttcIndex));
   }
 
-  std::unique_ptr<Typeface> OnMakeFromFile(const char path[],
+  std::shared_ptr<Typeface> OnMakeFromFile(const char path[],
                                            int ttcIndex) const override {
     auto data = Data::MakeFromFileMapping(path);
     return this->OnMakeFromData(data, ttcIndex);
   }
 
-  Typeface* OnGetDefaultTypeface(FontStyle const&) const override {
+  std::shared_ptr<Typeface> OnGetDefaultTypeface(
+      FontStyle const&) const override {
     return default_typeface_;
   }
 
  private:
-  Typeface* default_typeface_;
+  std::shared_ptr<Typeface> default_typeface_;
 };
 
 std::shared_ptr<FontManager> FontManager::RefDefault() {

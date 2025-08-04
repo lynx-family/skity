@@ -15,8 +15,9 @@ void load_images(std::vector<std::shared_ptr<skity::Pixmap>>& images);
 void render_frame_demo(
     skity::Canvas* canvas, skity::GPUContext* gpu_context,
     std::vector<std::shared_ptr<skity::Pixmap>> const& images,
-    skity::Typeface* typeface, skity::Typeface* emoji, float mx, float my,
-    float width, float height, float t);
+    std::shared_ptr<skity::Typeface> typeface,
+    std::shared_ptr<skity::Typeface> emoji, float mx, float my, float width,
+    float height, float t);
 
 class FrameExample : public skity::example::WindowClient {
  public:
@@ -32,8 +33,8 @@ class FrameExample : public skity::example::WindowClient {
     typeface_ = skity::Typeface::MakeFromFile(
         EXAMPLE_IMAGE_ROOT "/RobotoMonoNerdFont-Regular.ttf");
 
-    emoji_typeface_ =
-        skity::Typeface::MakeFromFile(EXAMPLE_IMAGE_ROOT "/NotoColorEmoji.ttf");
+    emoji_typeface_ = skity::Typeface::MakeFromFile(EXAMPLE_IMAGE_ROOT
+                                                    "/NotoEmoji-Regular.ttf");
 
     time_ = prev_time_ = glfwGetTime();
   }
@@ -64,8 +65,8 @@ class FrameExample : public skity::example::WindowClient {
 
  private:
   std::vector<std::shared_ptr<skity::Pixmap>> images_ = {};
-  skity::Typeface* typeface_ = {};
-  skity::Typeface* emoji_typeface_ = {};
+  std::shared_ptr<skity::Typeface> typeface_ = {};
+  std::shared_ptr<skity::Typeface> emoji_typeface_ = {};
   double time_ = 0;
   double prev_time_ = 0;
   double cpu_time_ = 0;

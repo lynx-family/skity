@@ -6,8 +6,9 @@
 
 namespace skity {
 
-ScalerContext::ScalerContext(Typeface* typeface, const ScalerContextDesc* desc)
-    : typeface_(typeface), desc_(*desc) {}
+ScalerContext::ScalerContext(std::shared_ptr<Typeface> typeface,
+                             const ScalerContextDesc* desc)
+    : typeface_(std::move(typeface)), desc_(*desc) {}
 
 void ScalerContext::MakeGlyph(GlyphData* glyph_data) {
   this->GenerateMetrics(glyph_data);

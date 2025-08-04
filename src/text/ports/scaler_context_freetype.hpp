@@ -20,7 +20,7 @@
 namespace skity {
 class ScalerContextFreetype : public ScalerContext {
  public:
-  ScalerContextFreetype(TypefaceFreeType *typeface,
+  ScalerContextFreetype(std::shared_ptr<TypefaceFreeType> typeface,
                         const ScalerContextDesc *desc);
   ~ScalerContextFreetype() override;
 

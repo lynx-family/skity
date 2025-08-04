@@ -24,17 +24,22 @@ class EmptyFontStyleSet : public FontStyleSet {
     LOGE("SkFontStyleSet::getStyle called on empty set");
   }
 
-  Typeface* CreateTypeface(int) override {
+  std::shared_ptr<Typeface> CreateTypeface(int) override {
     LOGE("SkFontStyleSet::createTypeface called on empty set");
     return nullptr;
   }
 
-  Typeface* MatchStyle(const FontStyle&) override { return nullptr; }
+  std::shared_ptr<Typeface> MatchStyle(const FontStyle&) override {
+    return nullptr;
+  }
 };
 
-FontStyleSet* FontStyleSet::CreateEmpty() { return new EmptyFontStyleSet; }
+std::shared_ptr<FontStyleSet> FontStyleSet::CreateEmpty() {
+  return std::make_shared<EmptyFontStyleSet>();
+}
 
-Typeface* FontStyleSet::MatchStyleCSS3(const FontStyle& pattern) {
+std::shared_ptr<Typeface> FontStyleSet::MatchStyleCSS3(
+    const FontStyle& pattern) {
   int count = this->Count();
   if (0 == count) {
     return nullptr;
@@ -135,7 +140,8 @@ Typeface* FontStyleSet::MatchStyleCSS3(const FontStyle& pattern) {
   return this->CreateTypeface(maxScore.index);
 }
 
-static FontStyleSet* emptyOnNull(FontStyleSet* fsset) {
+static std::shared_ptr<FontStyleSet> emptyOnNull(
+    std::shared_ptr<FontStyleSet> fsset) {
   if (nullptr == fsset) {
     fsset = FontStyleSet::CreateEmpty();
   }
@@ -148,30 +154,29 @@ std::string FontManager::GetFamilyName(int index) const {
   return this->OnGetFamilyName(index);
 }
 
-FontStyleSet* FontManager::CreateStyleSet(int index) const {
+std::shared_ptr<FontStyleSet> FontManager::CreateStyleSet(int index) const {
   return emptyOnNull(this->OnCreateStyleSet(index));
 }
 
-FontStyleSet* FontManager::MatchFamily(const char familyName[]) const {
+std::shared_ptr<FontStyleSet> FontManager::MatchFamily(
+    const char familyName[]) const {
   return emptyOnNull(this->OnMatchFamily(familyName));
 }
 
-Typeface* FontManager::MatchFamilyStyle(const char familyName[],
-                                        const FontStyle& fs) {
+std::shared_ptr<Typeface> FontManager::MatchFamilyStyle(const char familyName[],
+                                                        const FontStyle& fs) {
   return this->OnMatchFamilyStyle(familyName, fs);
 }
 
-Typeface* FontManager::MatchFamilyStyleCharacter(const char familyName[],
-                                                 const FontStyle& style,
-                                                 const char* bcp47[],
-                                                 int bcp47Count,
-                                                 Unichar character) {
+std::shared_ptr<Typeface> FontManager::MatchFamilyStyleCharacter(
+    const char familyName[], const FontStyle& style, const char* bcp47[],
+    int bcp47Count, Unichar character) {
   return this->OnMatchFamilyStyleCharacter(familyName, style, bcp47, bcp47Count,
                                            character);
 }
 
-Typeface* FontManager::MakeFromData(std::shared_ptr<Data> const& data,
-                                    int ttcIndex) {
+std::shared_ptr<Typeface> FontManager::MakeFromData(
+    std::shared_ptr<Data> const& data, int ttcIndex) {
   if (nullptr == data) {
     return nullptr;
   }
@@ -180,10 +185,11 @@ Typeface* FontManager::MakeFromData(std::shared_ptr<Data> const& data,
     return nullptr;
   }
   font_lst_.push_back(std::move(typeface));
-  return font_lst_.back().get();
+  return font_lst_.back();
 }
 
-Typeface* FontManager::MakeFromFile(const char* path, int ttcIndex) {
+std::shared_ptr<Typeface> FontManager::MakeFromFile(const char* path,
+                                                    int ttcIndex) {
   if (nullptr == path) {
     return nullptr;
   }
@@ -192,10 +198,11 @@ Typeface* FontManager::MakeFromFile(const char* path, int ttcIndex) {
     return nullptr;
   }
   font_lst_.push_back(std::move(typeface));
-  return font_lst_.back().get();
+  return font_lst_.back();
 }
 
-Typeface* FontManager::GetDefaultTypeface(FontStyle font_style) const {
+std::shared_ptr<Typeface> FontManager::GetDefaultTypeface(
+    FontStyle font_style) const {
   return this->OnGetDefaultTypeface(font_style);
 }
 

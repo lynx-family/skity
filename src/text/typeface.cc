@@ -17,18 +17,20 @@
 
 namespace skity {
 
-Typeface* Typeface::GetDefaultTypeface(class FontStyle font_style) {
+std::shared_ptr<Typeface> Typeface::GetDefaultTypeface(
+    class FontStyle font_style) {
   return FontManager::RefDefault()->GetDefaultTypeface(font_style);
 }
 
-Typeface* Typeface::MakeFromData(const std::shared_ptr<Data>& data) {
+std::shared_ptr<Typeface> Typeface::MakeFromData(
+    const std::shared_ptr<Data>& data) {
   if (!data) {
     return nullptr;
   }
   return FontManager::RefDefault()->MakeFromData(data);
 }
 
-Typeface* Typeface::MakeFromFile(const char* path) {
+std::shared_ptr<Typeface> Typeface::MakeFromFile(const char* path) {
   return FontManager::RefDefault()->MakeFromFile(path);
 }
 
@@ -71,9 +73,7 @@ bool Typeface::ContainsColorTable() const {
 
 std::unique_ptr<ScalerContext> Typeface::CreateScalerContext(
     const ScalerContextDesc* desc) const {
-  std::unique_ptr<ScalerContext> scaler_context =
-      this->OnCreateScalerContext(desc);
-  return scaler_context;
+  return this->OnCreateScalerContext(desc);
 }
 
 VariationPosition Typeface::GetVariationDesignPosition() const {
@@ -83,7 +83,8 @@ std::vector<VariationAxis> Typeface::GetVariationDesignParameters() const {
   return OnGetVariationDesignParameters();
 }
 
-Typeface* Typeface::MakeVariation(const FontArguments& args) const {
+std::shared_ptr<Typeface> Typeface::MakeVariation(
+    const FontArguments& args) const {
   return OnMakeVariation(args);
 }
 

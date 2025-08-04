@@ -39,11 +39,12 @@ class SKITY_API Font {
 
   Font();
 
-  Font(Typeface* typeface, float size);
+  Font(std::shared_ptr<Typeface> typeface, float size);
 
-  explicit Font(Typeface* typeface);
+  explicit Font(std::shared_ptr<Typeface> typeface);
 
-  Font(Typeface* typeface, float size, float scaleX, float skewX);
+  Font(std::shared_ptr<Typeface> typeface, float size, float scaleX,
+       float skewX);
 
   bool IsForceAutoHinting() const {
     return ToBool(flags_ & kForceAutoHinting_PrivFlag);
@@ -90,9 +91,9 @@ class SKITY_API Font {
 
   Font MakeWithSize(float size) const;
 
-  void SetTypeface(Typeface* tf) { typeface_ = tf; }
-  Typeface* GetTypeface() const { return typeface_; }
-  Typeface* GetTypefaceOrDefault() const;
+  void SetTypeface(std::shared_ptr<Typeface> tf) { typeface_ = std::move(tf); }
+  std::shared_ptr<Typeface> GetTypeface() const { return typeface_; }
+  std::shared_ptr<Typeface> GetTypefaceOrDefault() const;
 
   void GetWidths(const GlyphID glyphs[], int count, float widths[],
                  Rect bounds[]) const {
@@ -124,7 +125,7 @@ class SKITY_API Font {
   uint16_t GetFixedSize() const;
 
  private:
-  mutable Typeface* typeface_;
+  mutable std::shared_ptr<Typeface> typeface_;
   float size_;
   float scale_x_;
   float skew_x_;

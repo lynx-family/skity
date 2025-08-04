@@ -55,7 +55,7 @@ class TypefaceFreeType : public Typeface {
   friend AutoFTAccess;
 
  public:
-  static std::unique_ptr<TypefaceFreeType> Make(std::shared_ptr<Data> stream,
+  static std::shared_ptr<TypefaceFreeType> Make(std::shared_ptr<Data> stream,
                                                 const FontArguments& font_args);
 
   explicit TypefaceFreeType(const FontStyle& style);
@@ -88,7 +88,8 @@ class TypefaceFreeType : public Typeface {
   VariationPosition OnGetVariationDesignPosition() const override;
   std::vector<VariationAxis> OnGetVariationDesignParameters() const override;
 
-  Typeface* OnMakeVariation(const FontArguments& args) const override;
+  std::shared_ptr<Typeface> OnMakeVariation(
+      const FontArguments& args) const override;
 
   virtual FaceData OnGetFaceData() const = 0;
 
@@ -97,7 +98,6 @@ class TypefaceFreeType : public Typeface {
   mutable std::unique_ptr<FreetypeFaceHolder> freetype_face_holder_;
   mutable std::mutex C2GCacheMutex_;
   mutable std::unordered_map<Unichar, GlyphID> C2GCache_;
-  mutable std::vector<std::unique_ptr<TypefaceFreeType>> variant_faces_;
 };
 
 class TypefaceFreeTypeData : public TypefaceFreeType {

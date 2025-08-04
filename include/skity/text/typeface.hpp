@@ -33,7 +33,7 @@ using TypefaceID = uint32_t;
 class ScalerContext;
 class ScalerContextDesc;
 class Descriptor;
-class SKITY_API Typeface {
+class SKITY_API Typeface : public std::enable_shared_from_this<Typeface> {
  public:
   virtual ~Typeface() = default;
 
@@ -94,11 +94,12 @@ class SKITY_API Typeface {
 
   Data* GetData() { return this->OnGetData(); }
 
-  static Typeface* MakeFromData(std::shared_ptr<Data> const& data);
-  static Typeface* MakeFromFile(const char* path);
+  static std::shared_ptr<Typeface> MakeFromData(
+      std::shared_ptr<Data> const& data);
+  static std::shared_ptr<Typeface> MakeFromFile(const char* path);
 
   /** Returns the default normal typeface, which is never nullptr. */
-  static Typeface* GetDefaultTypeface(
+  static std::shared_ptr<Typeface> GetDefaultTypeface(
       class FontStyle font_style = skity::FontStyle());
 
   bool ContainGlyph(Unichar code_point) const;
@@ -120,7 +121,7 @@ class SKITY_API Typeface {
   VariationPosition GetVariationDesignPosition() const;
   std::vector<VariationAxis> GetVariationDesignParameters() const;
 
-  Typeface* MakeVariation(const FontArguments& args) const;
+  std::shared_ptr<Typeface> MakeVariation(const FontArguments& args) const;
 
  protected:
   explicit Typeface(const FontStyle& style)
@@ -144,7 +145,8 @@ class SKITY_API Typeface {
   virtual VariationPosition OnGetVariationDesignPosition() const = 0;
   virtual std::vector<VariationAxis> OnGetVariationDesignParameters() const = 0;
 
-  virtual Typeface* OnMakeVariation(const FontArguments& args) const = 0;
+  virtual std::shared_ptr<Typeface> OnMakeVariation(
+      const FontArguments& args) const = 0;
 
   TypefaceID typeface_id_;
   class FontStyle font_style_;

@@ -17,14 +17,16 @@
 void render_frame_demo(
     skity::Canvas* canvas,
     std::vector<std::shared_ptr<skity::Pixmap>> const& images,
-    skity::Typeface* typeface, skity::Typeface* emoji, float mx, float my,
-    float width, float height, float t);
+    std::shared_ptr<skity::Typeface> typeface,
+    std::shared_ptr<skity::Typeface> emoji, float mx, float my, float width,
+    float height, float t);
 
 void render_frame_demo(
     skity::Canvas* canvas, skity::GPUContext* gpu_context,
     std::vector<std::shared_ptr<skity::Pixmap>> const& images,
-    skity::Typeface* typeface, skity::Typeface* emoji, float mx, float my,
-    float width, float height, float t);
+    std::shared_ptr<skity::Typeface> typeface,
+    std::shared_ptr<skity::Typeface> emoji, float mx, float my, float width,
+    float height, float t);
 
 void draw_eyes(skity::Canvas* canvas, float x, float y, float w, float h,
                float mx, float my, float t);
@@ -82,15 +84,17 @@ void draw_thumbnails(skity::Canvas* canvas, skity::GPUContext* gpu_context,
 
 void draw_spinner(skity::Canvas* canvas, float cx, float cy, float r, float t);
 
-void draw_paragraph(skity::Canvas* canvas, skity::Typeface* typeface,
-                    skity::Typeface* emoji, float x, float y, float width,
-                    float height);
+void draw_paragraph(skity::Canvas* canvas,
+                    std::shared_ptr<skity::Typeface> typeface,
+                    std::shared_ptr<skity::Typeface> emoji, float x, float y,
+                    float width, float height);
 
 void render_frame_demo(
     skity::Canvas* canvas, skity::GPUContext* gpu_context,
     std::vector<std::shared_ptr<skity::Pixmap>> const& images,
-    skity::Typeface* typeface, skity::Typeface* emoji, float mx, float my,
-    float width, float height, float t) {
+    std::shared_ptr<skity::Typeface> typeface,
+    std::shared_ptr<skity::Typeface> emoji, float mx, float my, float width,
+    float height, float t) {
   float x, y, popy;
 
   draw_eyes(canvas, width - 250, 50, 150, 100, mx, my, t);
@@ -150,8 +154,9 @@ void render_frame_demo(
 void render_frame_demo(
     skity::Canvas* canvas,
     std::vector<std::shared_ptr<skity::Pixmap>> const& images,
-    skity::Typeface* typeface, skity::Typeface* emoji, float mx, float my,
-    float width, float height, float t) {
+    std::shared_ptr<skity::Typeface> typeface,
+    std::shared_ptr<skity::Typeface> emoji, float mx, float my, float width,
+    float height, float t) {
   render_frame_demo(canvas, nullptr, images, typeface, emoji, mx, my, width,
                     height, t);
 }
@@ -1225,8 +1230,10 @@ void draw_spinner(skity::Canvas* canvas, float cx, float cy, float r, float t) {
   canvas->DrawPath(path, paint);
 }
 
-void draw_paragraph(skity::Canvas* canvas, skity::Typeface* typeface,
-                    skity::Typeface* emoji, float x, float y, float, float) {
+void draw_paragraph(skity::Canvas* canvas,
+                    std::shared_ptr<skity::Typeface> typeface,
+                    std::shared_ptr<skity::Typeface> emoji, float x, float y,
+                    float, float) {
   skity::Paint paint;
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetTextSize(15.f);

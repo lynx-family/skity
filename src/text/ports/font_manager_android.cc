@@ -78,14 +78,14 @@ class FontStyleSetAndroid : public FontStyleSet {
       FontStyle font_style;
       bool use_xml_style = true;
       if (font_file.axis_tags.empty()) {
-        std::unique_ptr<TypefaceFreeType> typeface =
+        std::shared_ptr<TypefaceFreeType> typeface =
             TypefaceFreeType::Make(data, font_args);
         if (!typeface) {
           continue;
         }
         font_style = typeface->GetFontStyle();
       } else {
-        std::unique_ptr<TypefaceFreeType> typeface =
+        std::shared_ptr<TypefaceFreeType> typeface =
             TypefaceFreeType::Make(data, font_args);
         if (!typeface) {
           continue;
@@ -99,12 +99,12 @@ class FontStyleSetAndroid : public FontStyleSet {
                 axis.second);
           }
           font_args.SetVariationDesignPosition(position);
-          auto* variation_face = typeface->MakeVariation(font_args);
+          auto variation_face = typeface->MakeVariation(font_args);
           if (!variation_face) {
             continue;
           }
           TypefaceFreeType* variation_ft_face =
-              static_cast<TypefaceFreeType*>(variation_face);
+              static_cast<TypefaceFreeType*>(variation_face.get());
           font_style = variation_ft_face->GetFontStyle();
           font_args = variation_ft_face->GetFaceData().font_args;
         } else {
@@ -145,19 +145,19 @@ class FontStyleSetAndroid : public FontStyleSet {
     }
   }
 
-  Typeface* CreateTypeface(int index) override {
+  std::shared_ptr<Typeface> CreateTypeface(int index) override {
     if (index < 0 || typefaces_freetype_.size() <= static_cast<size_t>(index)) {
       return nullptr;
     }
-    return typefaces_freetype_[index].get();
+    return typefaces_freetype_[index];
   }
 
-  Typeface* MatchStyle(const FontStyle& pattern) override {
+  std::shared_ptr<Typeface> MatchStyle(const FontStyle& pattern) override {
     return this->MatchStyleCSS3(pattern);
   }
 
  private:
-  std::vector<std::unique_ptr<TypefaceFreeType>> typefaces_freetype_;
+  std::vector<std::shared_ptr<TypefaceFreeType>> typefaces_freetype_;
   std::string fallback_for_;
 
   friend class FontManagerAndroid;
@@ -170,7 +170,7 @@ class FontStyleSetAndroid : public FontStyleSet {
  */
 struct NameToFamily {
   std::string name;
-  FontStyleSetAndroid* styleSet;
+  std::shared_ptr<FontStyleSetAndroid> styleSet;
 };
 
 class FontManagerAndroid : public FontManager {
@@ -194,14 +194,15 @@ class FontManagerAndroid : public FontManager {
     return name_to_family_map_[index].name;
   }
 
-  FontStyleSet* OnCreateStyleSet(int index) const override {
+  std::shared_ptr<FontStyleSet> OnCreateStyleSet(int index) const override {
     if (index < 0 || name_to_family_map_.size() <= static_cast<size_t>(index)) {
       return nullptr;
     }
     return name_to_family_map_[index].styleSet;
   }
 
-  FontStyleSet* OnMatchFamily(const char familyName[]) const override {
+  std::shared_ptr<FontStyleSet> OnMatchFamily(
+      const char familyName[]) const override {
     if (!familyName) {
       return nullptr;
     }
@@ -223,13 +224,13 @@ class FontManagerAndroid : public FontManager {
     return nullptr;
   }
 
-  Typeface* OnMatchFamilyStyle(const char familyName[],
-                               const FontStyle& style) const override {
-    FontStyleSet* sset(this->MatchFamily(familyName));
+  std::shared_ptr<Typeface> OnMatchFamilyStyle(
+      const char familyName[], const FontStyle& style) const override {
+    std::shared_ptr<FontStyleSet> sset(this->MatchFamily(familyName));
     return sset->MatchStyle(style);
   }
 
-  static Typeface* find_family_style_character(
+  static std::shared_ptr<Typeface> find_family_style_character(
       const std::string& family_name,
       const std::vector<NameToFamily>& fallback_map, const FontStyle& style,
       bool elegant, const std::vector<std::string>& lang_patterns,
@@ -256,13 +257,13 @@ class FontManagerAndroid : public FontManager {
       return match;
     };
     for (size_t i = 0; i < fallback_map.size(); ++i) {
-      FontStyleSetAndroid* style_set = fallback_map[i].styleSet;
+      std::shared_ptr<FontStyleSetAndroid> style_set = fallback_map[i].styleSet;
       if (style_set->fallback_for_ != family_name) {
         continue;
       }
-      Typeface* typeface = style_set->MatchStyle(style);
-      TypefaceFreeTypeAndroid* typeface_android =
-          static_cast<TypefaceFreeTypeAndroid*>(typeface);
+      std::shared_ptr<Typeface> typeface = style_set->MatchStyle(style);
+      std::shared_ptr<TypefaceFreeTypeAndroid> typeface_android =
+          std::static_pointer_cast<TypefaceFreeTypeAndroid>(typeface);
 
       if (!match_language(typeface_android->GetFontLanguages(),
                           lang_patterns)) {
@@ -281,10 +282,9 @@ class FontManagerAndroid : public FontManager {
     return nullptr;
   }
 
-  Typeface* OnMatchFamilyStyleCharacter(const char familyName[],
-                                        const FontStyle& style,
-                                        const char* bcp47[], int bcp47_count,
-                                        Unichar character) const override {
+  std::shared_ptr<Typeface> OnMatchFamilyStyleCharacter(
+      const char familyName[], const FontStyle& style, const char* bcp47[],
+      int bcp47_count, Unichar character) const override {
     // split language pattern
     std::vector<std::string> lang_patterns;
     for (int bcp47_index = bcp47_count; bcp47_index-- > 0;) {
@@ -311,11 +311,12 @@ class FontManagerAndroid : public FontManager {
 
     for (const auto& family_name : family_names) {
       for (int elegant = 2; elegant-- > 0;) {
-        Typeface* matching_typeface = find_family_style_character(
-            family_name, fallback_name_to_family_map_, style,
-            static_cast<bool>(elegant), lang_patterns, character);
+        std::shared_ptr<Typeface> matching_typeface =
+            find_family_style_character(
+                family_name, fallback_name_to_family_map_, style,
+                static_cast<bool>(elegant), lang_patterns, character);
         if (matching_typeface) {
-          return matching_typeface;
+          return std::move(matching_typeface);
         }
       }
     }
@@ -323,25 +324,27 @@ class FontManagerAndroid : public FontManager {
     return nullptr;
   }
 
-  std::unique_ptr<Typeface> OnMakeFromData(std::shared_ptr<Data> const& data,
+  std::shared_ptr<Typeface> OnMakeFromData(std::shared_ptr<Data> const& data,
                                            int ttcIndex) const override {
     return TypefaceFreeType::Make(data,
                                   FontArguments().SetCollectionIndex(ttcIndex));
   }
 
-  std::unique_ptr<Typeface> OnMakeFromFile(const char path[],
+  std::shared_ptr<Typeface> OnMakeFromFile(const char path[],
                                            int ttcIndex) const override {
     auto data = Data::MakeFromFileName(path);
     return TypefaceFreeType::Make(data,
                                   FontArguments().SetCollectionIndex(ttcIndex));
   }
 
-  Typeface* OnGetDefaultTypeface(FontStyle const& font_style) const override {
+  std::shared_ptr<Typeface> OnGetDefaultTypeface(
+      FontStyle const& font_style) const override {
     if (theme_typeface_) {
-      return theme_typeface_.get();
+      return theme_typeface_;
     } else if (theme_font_style_set_ && theme_font_style_set_->Count() > 0) {
       // We could do better than native if we use parameter font_style
-      Typeface* theme_typeface = theme_font_style_set_->MatchStyle(FontStyle());
+      std::shared_ptr<Typeface> theme_typeface =
+          theme_font_style_set_->MatchStyle(FontStyle());
       if (theme_typeface) {
         return theme_typeface;
       }
@@ -376,14 +379,14 @@ class FontManagerAndroid : public FontManager {
       }
     }
 
-    std::unique_ptr<FontStyleSetAndroid> newSet =
-        std::make_unique<FontStyleSetAndroid>(family);
+    std::shared_ptr<FontStyleSetAndroid> newSet =
+        std::make_shared<FontStyleSetAndroid>(family);
     if (0 == newSet->Count()) {
       return;
     }
 
     for (const std::string& name : family.names) {
-      nameToFamily->emplace_back(NameToFamily{name, newSet.get()});
+      nameToFamily->emplace_back(NameToFamily{name, newSet});
     }
     style_sets_.emplace_back(std::move(newSet));
   }
@@ -455,7 +458,7 @@ class FontManagerAndroid : public FontManager {
            (theme_font_style_set_ && theme_font_style_set_->Count() > 0);
   }
 
-  std::unique_ptr<TypefaceFreeType> Make(SystemFont font) {
+  std::shared_ptr<TypefaceFreeType> Make(SystemFont font) {
     if (!font) {
       return nullptr;
     }
@@ -474,17 +477,17 @@ class FontManagerAndroid : public FontManager {
     FontArguments font_args;
     font_args.SetCollectionIndex(font.getCollectionIndex())
         .SetVariationDesignPosition(position);
-    std::unique_ptr<TypefaceFreeType> typeface =
+    std::shared_ptr<TypefaceFreeType> typeface =
         TypefaceFreeType::Make(data, font_args);
     return typeface;
   }
 
-  std::vector<std::unique_ptr<FontStyleSetAndroid>> style_sets_;
+  std::vector<std::shared_ptr<FontStyleSetAndroid>> style_sets_;
   std::vector<NameToFamily> name_to_family_map_;
   std::vector<NameToFamily> fallback_name_to_family_map_;
 
-  std::unique_ptr<TypefaceFreeType> theme_typeface_ = nullptr;
-  std::unique_ptr<FontStyleSetAndroid> theme_font_style_set_ = nullptr;
+  std::shared_ptr<TypefaceFreeType> theme_typeface_ = nullptr;
+  std::shared_ptr<FontStyleSetAndroid> theme_font_style_set_ = nullptr;
 };
 
 }  // namespace

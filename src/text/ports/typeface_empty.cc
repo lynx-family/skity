@@ -38,7 +38,8 @@ std::vector<VariationAxis> TypefaceEmpty::OnGetVariationDesignParameters()
   return {};
 }
 
-Typeface *TypefaceEmpty::OnMakeVariation(const FontArguments &args) const {
+std::shared_ptr<Typeface> TypefaceEmpty::OnMakeVariation(
+    const FontArguments &args) const {
   return nullptr;
 }
 

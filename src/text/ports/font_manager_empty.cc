@@ -20,35 +20,37 @@ class FontManagerEmpty : public FontManager {
     return "";
   }
 
-  FontStyleSet* OnCreateStyleSet(int) const override {
+  std::shared_ptr<FontStyleSet> OnCreateStyleSet(int) const override {
     LOGE("onCreateStyleSet called with bad index");
     return nullptr;
   }
 
-  FontStyleSet* OnMatchFamily(const char[]) const override {
+  std::shared_ptr<FontStyleSet> OnMatchFamily(const char[]) const override {
     return FontStyleSet::CreateEmpty();
   }
 
-  Typeface* OnMatchFamilyStyle(const char[], const FontStyle&) const override {
+  std::shared_ptr<Typeface> OnMatchFamilyStyle(
+      const char[], const FontStyle&) const override {
     return nullptr;
   }
 
-  Typeface* OnMatchFamilyStyleCharacter(const char[], const FontStyle&,
-                                        const char*[], int,
-                                        Unichar) const override {
+  std::shared_ptr<Typeface> OnMatchFamilyStyleCharacter(
+      const char[], const FontStyle&, const char*[], int,
+      Unichar) const override {
     return nullptr;
   }
 
-  std::unique_ptr<Typeface> OnMakeFromData(std::shared_ptr<Data> const&,
+  std::shared_ptr<Typeface> OnMakeFromData(std::shared_ptr<Data> const&,
                                            int) const override {
     return std::make_unique<TypefaceEmpty>();
   }
 
-  std::unique_ptr<Typeface> OnMakeFromFile(const char[], int) const override {
+  std::shared_ptr<Typeface> OnMakeFromFile(const char[], int) const override {
     return std::make_unique<TypefaceEmpty>();
   }
 
-  Typeface* OnGetDefaultTypeface(FontStyle const&) const override {
+  std::shared_ptr<Typeface> OnGetDefaultTypeface(
+      FontStyle const&) const override {
     return nullptr;
   }
 };

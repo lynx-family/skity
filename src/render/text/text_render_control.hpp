@@ -29,9 +29,11 @@ class TextRenderControl {
                     float min_sdf_size = kLargeDFFontSize,
                     float max_sdf_size = kDefaultMaxDistanceFieldFontSize);
 
-  bool CanUseSDF(float text_size, const Paint& paint, const Typeface* typeface);
+  bool CanUseSDF(float text_size, const Paint& paint,
+                 const std::shared_ptr<Typeface>& typeface);
   bool CanUseDirect(float text_size, const Matrix& transform,
-                    const Paint& paint, const Typeface* typeface);
+                    const Paint& paint,
+                    const std::shared_ptr<Typeface>& typeface);
 
  private:
   bool disallow_sdf_;

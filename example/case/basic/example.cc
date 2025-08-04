@@ -149,9 +149,9 @@ void draw_simple_text(skity::Canvas* canvas) {
   //         skity::FontStyle(skity::FontStyle::Weight::kBlack_Weight,
   //                          skity::FontStyle::Width::kNormal_Width,
   //                          skity::FontStyle::Slant::kItalic_Slant));
-  skity::Typeface* typeface = skity::Typeface::GetDefaultTypeface();
+  auto typeface = skity::Typeface::GetDefaultTypeface();
   paint.SetTypeface(typeface);
-  skity::Typeface* typeface_cjk =
+  auto typeface_cjk =
       skity::FontManager::RefDefault()->MatchFamilyStyleCharacter(
           nullptr, skity::FontStyle(), nullptr, 0, 0X7ECF);
 
