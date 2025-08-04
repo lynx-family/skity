@@ -24,6 +24,11 @@ struct HWBufferAllocation {
 class HWStageBuffer final {
  public:
   explicit HWStageBuffer(GPUDevice* device);
+
+  HWStageBuffer(GPUDevice* device, std::unique_ptr<GPUBuffer> gpu_buffer,
+                std::unique_ptr<GPUBuffer> gpu_index_buffer,
+                size_t ubo_alignment);
+
   ~HWStageBuffer();
 
   GPUBufferView Push(void* data, uint32_t size, bool align_offset = false);

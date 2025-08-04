@@ -22,6 +22,15 @@ HWStageBuffer::HWStageBuffer(GPUDevice* device)
       gpu_index_buffer_(device->CreateBuffer(GPUBufferUsage::kIndexBuffer)),
       ubo_alignment_(device->GetBufferAlignment()) {}
 
+HWStageBuffer::HWStageBuffer(GPUDevice* device,
+                             std::unique_ptr<GPUBuffer> gpu_buffer,
+                             std::unique_ptr<GPUBuffer> gpu_index_buffer,
+                             size_t ubo_alignment)
+    : stage_buffer_(STAGE_DEFAULT_BUFFER_SIZE),
+      gpu_buffer_(std::move(gpu_buffer)),
+      gpu_index_buffer_(std::move(gpu_index_buffer)),
+      ubo_alignment_(ubo_alignment) {}
+
 HWStageBuffer::~HWStageBuffer() {
   LOGI("HWStageBuffer: [ {:p} ] destroyed", reinterpret_cast<void*>(this));
 }

@@ -2,6 +2,7 @@
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/google_benchmark third_party/google_benchmark)
 
 add_executable(skity_benchmarks
+    hw_path_raster_benchmarks.cc
     matrix_benchmarks.cc
     sw_benchmarks.cc
     ${CMAKE_SOURCE_DIR}/example/case/basic/example.cc
