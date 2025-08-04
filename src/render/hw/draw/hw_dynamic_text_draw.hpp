@@ -24,7 +24,7 @@ class HWDynamicTextDraw : public HWDynamicDraw {
   ~HWDynamicTextDraw() override = default;
 
  protected:
-  void OnGenerateDrawStep(std::vector<HWDrawStep*>& steps,
+  void OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                           HWDrawContext* context) override;
 
  private:
@@ -47,7 +47,7 @@ class HWDynamicSdfTextDraw : public HWDynamicDraw {
   ~HWDynamicSdfTextDraw() override = default;
 
  protected:
-  void OnGenerateDrawStep(std::vector<HWDrawStep*>& steps,
+  void OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                           HWDrawContext* context) override;
 
  private:

@@ -20,7 +20,7 @@ HWDynamicPathClip::HWDynamicPathClip(Matrix transform, Path path,
   bounds_.AddRect(bounds);
 }
 
-void HWDynamicPathClip::OnGenerateDrawStep(std::vector<HWDrawStep *> &steps,
+void HWDynamicPathClip::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
                                            HWDrawContext *context) {
   auto arena_allocator = context->arena_allocator;
   // clip always use stencil first

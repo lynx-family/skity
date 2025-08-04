@@ -26,7 +26,7 @@ HWDynamicPathDraw::HWDynamicPathDraw(Matrix transform, Path path, Paint paint,
       paint_(std::move(paint)),
       is_stroke_(is_stroke) {}
 
-void HWDynamicPathDraw::OnGenerateDrawStep(std::vector<HWDrawStep *> &steps,
+void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
                                            HWDrawContext *context) {
   bool single_pass = !is_stroke_ && path_.IsConvex() && !paint_.IsAntiAlias();
 

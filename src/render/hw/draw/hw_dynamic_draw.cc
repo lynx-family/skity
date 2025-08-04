@@ -11,6 +11,7 @@ namespace skity {
 HWDrawState HWDynamicDraw::OnPrepare(HWDrawContext* context) {
   SKITY_TRACE_EVENT(HWDynamicDraw_OnPrepare);
 
+  steps_.SetArenaAllocator(context->arena_allocator);
   OnGenerateDrawStep(steps_, context);
 
   HWDrawState state = HWDrawState::kDrawStateNone;

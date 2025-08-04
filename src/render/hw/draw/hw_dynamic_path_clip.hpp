@@ -20,7 +20,7 @@ class HWDynamicPathClip : public HWDynamicDraw {
   ~HWDynamicPathClip() override = default;
 
  protected:
-  void OnGenerateDrawStep(std::vector<HWDrawStep *> &steps,
+  void OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
                           HWDrawContext *context) override;
 
  private:

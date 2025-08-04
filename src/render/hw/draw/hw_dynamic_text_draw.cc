@@ -9,7 +9,7 @@
 
 namespace skity {
 
-void HWDynamicTextDraw::OnGenerateDrawStep(std::vector<HWDrawStep*>& steps,
+void HWDynamicTextDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                                            HWDrawContext* context) {
   if (geometry_ == nullptr || fragment_ == nullptr) {
     return;
@@ -40,7 +40,7 @@ Matrix HWDynamicTextDraw::CalcTransform(const Matrix& canvas_transform,
   return Matrix{};
 }
 
-void HWDynamicSdfTextDraw::OnGenerateDrawStep(std::vector<HWDrawStep*>& steps,
+void HWDynamicSdfTextDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                                               HWDrawContext* context) {
   if (geometry_ == nullptr || fragment_ == nullptr) {
     return;

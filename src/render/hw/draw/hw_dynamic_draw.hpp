@@ -16,9 +16,7 @@ namespace skity {
 class HWDynamicDraw : public HWDraw {
  public:
   HWDynamicDraw(Matrix transform, BlendMode blend_mode)
-      : HWDraw(transform), blend_mode_(blend_mode), steps_(), commands_() {
-    steps_.reserve(2);
-  }
+      : HWDraw(transform), blend_mode_(blend_mode), steps_(), commands_() {}
 
   ~HWDynamicDraw() override = default;
 
@@ -33,12 +31,12 @@ class HWDynamicDraw : public HWDraw {
 
   void OnGenerateCommand(HWDrawContext* context, HWDrawState state) override;
 
-  virtual void OnGenerateDrawStep(std::vector<HWDrawStep*>& steps,
+  virtual void OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                                   HWDrawContext* context) = 0;
 
  private:
   BlendMode blend_mode_;
-  std::vector<HWDrawStep*> steps_;
+  ArrayList<HWDrawStep*, 2> steps_;
   ArrayList<Command*, 32> commands_;
 };
 
