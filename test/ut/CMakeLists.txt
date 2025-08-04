@@ -36,10 +36,6 @@ target_link_libraries(skity_unit_test
     gmock_main
 )
 
-if (WIN32)
-  target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
-else()
-  target_link_libraries(skity_unit_test PRIVATE glm::glm)
-endif()
+target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
 
 gtest_add_tests(skity_unit_test "" AUTO)

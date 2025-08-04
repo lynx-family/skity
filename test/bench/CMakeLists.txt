@@ -22,8 +22,4 @@ target_link_libraries(skity_benchmarks
     skity::skity
     benchmark::benchmark
 )
-if (WIN32)
-  target_link_libraries(skity_benchmarks PRIVATE glm::glm-header-only)
-else()
-  target_link_libraries(skity_benchmarks PRIVATE glm::glm)
-endif()
+target_link_libraries(skity_benchmarks PRIVATE glm::glm-header-only)

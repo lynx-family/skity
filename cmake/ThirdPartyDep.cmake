@@ -3,13 +3,10 @@
 # LICENSE file in the root directory of this source tree.
 
 # glm
-set(GLM_BUILD_INSTALL ON CACHE BOOL "enable GLM_BUILD_INSTALL" FORCE)
+set(GLM_BUILD_LIBRARY OFF CACHE BOOL "enable GLM_BUILD_LIBRARY")
+set(GLM_BUILD_INSTALL OFF CACHE BOOL "enable GLM_BUILD_INSTALL")
 add_subdirectory(third_party/glm)
-if (WIN32)
-  target_link_libraries(skity PRIVATE glm::glm-header-only)
-else()
-  target_link_libraries(skity PRIVATE glm::glm)
-endif()
+target_link_libraries(skity PRIVATE glm::glm-header-only)
 
 # pugixml
 set(PUGIXML_NO_EXCEPTIONS ON CACHE BOOL "enable PUGIXML_NO_EXCEPTIONS")
