@@ -94,7 +94,7 @@ void TextureManager::UploadTextureImage(const TextureImpl& texture,
         descriptor.format = static_cast<GPUTextureFormat>(format);
         descriptor.usage =
             static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
-        descriptor.storage_mode = GPUTextureStorageMode::kHostVisible;
+        descriptor.storage_mode = GPUTextureStorageMode::kPrivate;
         auto gpu_texture = device->CreateTexture(descriptor);
         auto cmd_buffer = device->CreateCommandBuffer();
         auto blit_pass = cmd_buffer->BeginBlitPass();
