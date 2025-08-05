@@ -17,7 +17,7 @@ class GPUBufferGL : public GPUBuffer {
 
   ~GPUBufferGL() override;
 
-  void UploadData(void* data, size_t size) override;
+  void UploadData(void* data, size_t size);
 
   GLuint GetBufferId() const { return gl_buffer_; }
 

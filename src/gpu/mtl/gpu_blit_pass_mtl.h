@@ -20,6 +20,10 @@ class GPUBlitPassMTL : public GPUBlitPass {
                          uint32_t offset_y, uint32_t width, uint32_t height,
                          void* data) override;
 
+  void UploadBufferData(GPUBuffer* buffer, void* data, size_t size) override;
+
+  void End() override;
+
  private:
   id<MTLDevice> mtl_device_;
   id<MTLBlitCommandEncoder> blit_encoder_;

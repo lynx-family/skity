@@ -33,8 +33,6 @@ class GPUBuffer {
 
   virtual ~GPUBuffer() = default;
 
-  virtual void UploadData(void* data, size_t size) = 0;
-
   GPUBufferUsageMask GetUsage() const { return usage_; }
 
  private:

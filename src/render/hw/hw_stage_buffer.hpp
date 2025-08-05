@@ -50,6 +50,7 @@ class HWStageBuffer final {
   void AlignGpuOffset(uint32_t size);
 
  private:
+  GPUDevice* gpu_device_;
   std::vector<uint8_t> stage_buffer_;
   uint32_t stage_pos_ = 0;
   std::vector<uint8_t> stage_index_buffer_;

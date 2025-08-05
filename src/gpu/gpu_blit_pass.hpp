@@ -5,6 +5,7 @@
 #ifndef SRC_GPU_GPU_BLIT_PASS_HPP
 #define SRC_GPU_GPU_BLIT_PASS_HPP
 
+#include "src/gpu/gpu_buffer.hpp"
 #include "src/gpu/gpu_texture.hpp"
 
 namespace skity {
@@ -15,6 +16,10 @@ class GPUBlitPass {
                                  uint32_t offset_x, uint32_t offset_y,
                                  uint32_t width, uint32_t height,
                                  void* data) = 0;
+
+  virtual void UploadBufferData(GPUBuffer* buffer, void* data, size_t size) = 0;
+
+  virtual void End() = 0;
 };
 
 }  // namespace skity

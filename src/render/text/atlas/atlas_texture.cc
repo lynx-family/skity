@@ -22,6 +22,7 @@ void AtlasTexture::UploadAtlas(uint32_t x, uint32_t y, uint32_t width,
     auto cmd_buffer = gpu_device_->CreateCommandBuffer();
     auto blit_pass = cmd_buffer->BeginBlitPass();
     blit_pass->UploadTextureData(texture_, x, y, width, height, data);
+    blit_pass->End();
     cmd_buffer->Submit();
   }
 }

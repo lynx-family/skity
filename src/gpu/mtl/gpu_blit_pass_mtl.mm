@@ -4,6 +4,7 @@
 
 #include "src/gpu/mtl/gpu_blit_pass_mtl.h"
 
+#include "src/gpu/mtl/gpu_buffer_mtl.h"
 #include "src/gpu/mtl/gpu_texture_mtl.h"
 
 namespace skity {
@@ -33,8 +34,26 @@ void GPUBlitPassMTL::UploadTextureData(std::shared_ptr<GPUTexture> texture, uint
          destinationSlice:0
          destinationLevel:0
         destinationOrigin:MTLOriginMake(offset_x, offset_y, 0)];
-
-  [blit_encoder_ endEncoding];
 }
+
+void GPUBlitPassMTL::UploadBufferData(GPUBuffer* buffer, void* data, size_t size) {
+  if (size == 0 || data == nullptr) {
+    return;
+  }
+
+  auto gpu_buffer_metal = static_cast<GPUBufferMTL*>(buffer);
+  gpu_buffer_metal->RecreateBufferIfNeeded(size);
+
+  id<MTLBuffer> stage_buffer = [mtl_device_ newBufferWithBytes:data
+                                                        length:size
+                                                       options:MTLResourceStorageModeShared];
+  [blit_encoder_ copyFromBuffer:stage_buffer
+                   sourceOffset:0
+                       toBuffer:gpu_buffer_metal->GetMTLBuffer()
+              destinationOffset:0
+                           size:size];
+}
+
+void GPUBlitPassMTL::End() { [blit_encoder_ endEncoding]; }
 
 }  // namespace skity

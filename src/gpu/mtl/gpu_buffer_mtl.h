@@ -19,7 +19,7 @@ class GPUBufferMTL : public GPUBuffer {
 
   id<MTLBuffer> GetMTLBuffer() const { return mtl_buffer_; }
 
-  void UploadData(void* data, size_t size) override;
+  void RecreateBufferIfNeeded(size_t size);
 
  private:
   id<MTLDevice> device_;

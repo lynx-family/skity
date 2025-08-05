@@ -6,6 +6,7 @@
 
 #include "src/gpu/gl/formats_gl.h"
 #include "src/gpu/gl/gl_interface.hpp"
+#include "src/gpu/gl/gpu_buffer_gl.hpp"
 #include "src/gpu/gl/gpu_sampler_gl.hpp"
 #include "src/gpu/gl/gpu_texture_gl.hpp"
 #include "src/tracing.hpp"
@@ -18,6 +19,12 @@ void GPUBlitPassGL::UploadTextureData(std::shared_ptr<GPUTexture> texture,
                                       void* data) {
   auto gl_texture = static_cast<GPUTextureGL*>(texture.get());
   gl_texture->UploadData(offset_x, offset_y, width, height, data);
+}
+
+void GPUBlitPassGL::UploadBufferData(GPUBuffer* buffer, void* data,
+                                     size_t size) {
+  auto gl_buffer = static_cast<GPUBufferGL*>(buffer);
+  gl_buffer->UploadData(data, size);
 }
 
 }  // namespace skity
