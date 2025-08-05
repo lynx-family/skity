@@ -17,7 +17,13 @@ jobs:
     unittest_test:
         runs-on: lynx-ubuntu-22.04-medium
         timeout-minutes: 30
+        permissions:
+          issues: write
         steps:
+          - name: Install dependencies
+            run: |
+                sudo apt update
+                sudo apt install -y lcov
           - name: Python Setup
             uses: actions/setup-python@v5
             with:
@@ -29,9 +35,22 @@ jobs:
           - name: Compile Code
             run: |
                 export PATH=$PWD/buildtools/llvm/bin:$PATH
-                cmake -B out/cmake_host_build -DSKITY_TEST=ON  -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fPIC"
+                cmake -B out/cmake_host_build -DSKITY_TEST=ON  -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS="-fPIC"
                 cmake --build out/cmake_host_build --target skity_unit_test
-                ./out/cmake_host_build/test/ut/skity_unit_test
+          - name: Test and Generate Coverage Report
+            run: |
+                cd out/cmake_host_build/test/ut/
+                ctest
+                cd ../../
+                lcov --capture --directory . --output-file coverage.info
+                lcov --remove coverage.info '/usr/**/*' 'test/**/*' 'third_party/**/*' 'Library/*' '**/clipper2/*' --output-file coverage.filtered.info
+          - name: Upload coverage reports to Codecov
+            uses: codecov/codecov-action@v5
+            env:
+              CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+            with:
+              token: ${{ secrets.CODECOV_TOKEN }}
+              files: out/cmake_host_build/coverage.filtered.info
     android_build_check:
         runs-on: lynx-ubuntu-22.04-medium
         timeout-minutes: 30

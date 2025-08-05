@@ -7,6 +7,7 @@
 #define SRC_GEOMETRY_WANGS_FORMULA_HPP
 
 #include <algorithm>
+#include <cstdint>
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/point.hpp>
 

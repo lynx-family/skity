@@ -6,7 +6,7 @@
 
 #include <gtest/gtest.h>
 
-#include <iostream>
+#include <cmath>
 #include <vector>
 
 #include "src/geometry/math.hpp"
@@ -46,8 +46,7 @@ TEST(Geometry, CircleInterpolation) {
     skity::Vec2 end_unit_vec = {0, 1};
     std::vector<skity::Vec2> result =
         skity::CircleInterpolation(start_unit_vec, end_unit_vec, 2);
-    EXPECT_TRUE(
-        Vec2NearlyEqual(result[0], {std::sqrtf(2) / 2, std::sqrtf(2) / 2}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[0], {::sqrtf(2) / 2, ::sqrtf(2) / 2}));
     EXPECT_TRUE(Vec2NearlyEqual(result[1], {0, 1}));
   }
 
@@ -56,14 +55,14 @@ TEST(Geometry, CircleInterpolation) {
     skity::Vec2 end_unit_vec = {0, 1};
     std::vector<skity::Vec2> result =
         skity::CircleInterpolation(start_unit_vec, end_unit_vec, 3);
-    EXPECT_TRUE(Vec2NearlyEqual(result[0], {std::sqrtf(3) / 2, 0.5}));
-    EXPECT_TRUE(Vec2NearlyEqual(result[1], {0.5, std::sqrtf(3) / 2}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[0], {::sqrtf(3) / 2, 0.5}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[1], {0.5, ::sqrtf(3) / 2}));
     EXPECT_TRUE(Vec2NearlyEqual(result[2], {0, 1}));
 
     std::swap(start_unit_vec, end_unit_vec);
     result = skity::CircleInterpolation(start_unit_vec, end_unit_vec, 3);
-    EXPECT_TRUE(Vec2NearlyEqual(result[0], {0.5, std::sqrtf(3) / 2}));
-    EXPECT_TRUE(Vec2NearlyEqual(result[1], {std::sqrtf(3) / 2, 0.5}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[0], {0.5, ::sqrtf(3) / 2}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[1], {::sqrtf(3) / 2, 0.5}));
     EXPECT_TRUE(Vec2NearlyEqual(result[2], {1, 0}));
   }
 
@@ -72,27 +71,23 @@ TEST(Geometry, CircleInterpolation) {
     skity::Vec2 end_unit_vec = {-1, 0};
     std::vector<skity::Vec2> result =
         skity::CircleInterpolation(start_unit_vec, end_unit_vec, 4);
-    EXPECT_TRUE(
-        Vec2NearlyEqual(result[0], {std::sqrtf(2) / 2, std::sqrtf(2) / 2}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[0], {::sqrtf(2) / 2, ::sqrtf(2) / 2}));
     EXPECT_TRUE(Vec2NearlyEqual(result[1], {0, 1}));
-    EXPECT_TRUE(
-        Vec2NearlyEqual(result[2], {-std::sqrtf(2) / 2, std::sqrtf(2) / 2}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[2], {-::sqrtf(2) / 2, ::sqrtf(2) / 2}));
     EXPECT_TRUE(Vec2NearlyEqual(result[3], {-1, 0}));
 
     std::swap(start_unit_vec, end_unit_vec);
     result = skity::CircleInterpolation(start_unit_vec, end_unit_vec, 4);
-    EXPECT_TRUE(
-        Vec2NearlyEqual(result[0], {-std::sqrtf(2) / 2, -std::sqrtf(2) / 2}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[0], {-::sqrtf(2) / 2, -::sqrtf(2) / 2}));
     EXPECT_TRUE(Vec2NearlyEqual(result[1], {0, -1}));
-    EXPECT_TRUE(
-        Vec2NearlyEqual(result[2], {std::sqrtf(2) / 2, -std::sqrtf(2) / 2}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[2], {::sqrtf(2) / 2, -::sqrtf(2) / 2}));
     EXPECT_TRUE(Vec2NearlyEqual(result[3], {1, 0}));
   }
 
   {
     skity::Vec2 start_unit_vec = {1, 0};
     float x = 0.996;
-    skity::Vec2 end_unit_vec = {x, std::sqrtf(1 - x * x)};
+    skity::Vec2 end_unit_vec = {x, ::sqrtf(1 - x * x)};
     std::vector<skity::Vec2> result =
         skity::CircleInterpolation(start_unit_vec, end_unit_vec, 4);
     const auto cos01 = skity::CrossProduct(start_unit_vec, result[0]);
@@ -102,7 +97,7 @@ TEST(Geometry, CircleInterpolation) {
     EXPECT_TRUE(skity::FloatNearlyZero(cos01 - cos12));
     EXPECT_TRUE(skity::FloatNearlyZero(cos01 - cos23));
     EXPECT_TRUE(skity::FloatNearlyZero(cos01 - cos34));
-    EXPECT_TRUE(Vec2NearlyEqual(result[3], {x, std::sqrtf(1 - x * x)}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[3], {x, ::sqrtf(1 - x * x)}));
 
     std::swap(start_unit_vec, end_unit_vec);
     result = skity::CircleInterpolation(start_unit_vec, end_unit_vec, 4);
@@ -119,7 +114,7 @@ TEST(Geometry, CircleInterpolation) {
   {
     skity::Vec2 start_unit_vec = {1, 0};
     float x = -0.996;
-    skity::Vec2 end_unit_vec = {x, std::sqrtf(1 - x * x)};
+    skity::Vec2 end_unit_vec = {x, ::sqrtf(1 - x * x)};
     std::vector<skity::Vec2> result =
         skity::CircleInterpolation(start_unit_vec, end_unit_vec, 4);
     const auto cos01 = skity::CrossProduct(start_unit_vec, result[0]);
@@ -129,7 +124,7 @@ TEST(Geometry, CircleInterpolation) {
     EXPECT_TRUE(skity::FloatNearlyZero(cos01 - cos12));
     EXPECT_TRUE(skity::FloatNearlyZero(cos01 - cos23));
     EXPECT_TRUE(skity::FloatNearlyZero(cos01 - cos34));
-    EXPECT_TRUE(Vec2NearlyEqual(result[3], {x, std::sqrtf(1 - x * x)}));
+    EXPECT_TRUE(Vec2NearlyEqual(result[3], {x, ::sqrtf(1 - x * x)}));
 
     std::swap(start_unit_vec, end_unit_vec);
     result = skity::CircleInterpolation(start_unit_vec, end_unit_vec, 4);

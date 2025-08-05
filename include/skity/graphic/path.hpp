@@ -6,6 +6,7 @@
 #define INCLUDE_SKITY_GRAPHIC_PATH_HPP
 
 #include <array>
+#include <cstdint>
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/point.hpp>
 #include <skity/geometry/rect.hpp>

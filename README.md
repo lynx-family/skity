@@ -1,5 +1,7 @@
 # Skity
 
+[![codecov](https://codecov.io/github/lynx-family/skity/graph/badge.svg?token=QTK6TSRIHU)](https://codecov.io/github/lynx-family/skity)
+
 `Skity` is an open-source 2D graphics library developed in C++. 
 It focuses on GPU rendering, providing developers with efficient graphics drawing and rendering capabilities. 
 Currently, Skity supports mainstream graphics APIs such as OpenGL, OpenGL ES, and Metal. 
