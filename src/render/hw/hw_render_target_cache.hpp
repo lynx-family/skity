@@ -13,9 +13,7 @@
 
 namespace skity {
 
-namespace {
-
-struct Compare {
+struct HWTextureCompare {
   bool operator()(const GPUTextureDescriptor& lhs,
                   const GPUTextureDescriptor& rhs) const {
     if (lhs.width != rhs.width) {
@@ -48,8 +46,6 @@ struct Compare {
     return false;
   }
 };
-
-}  // namespace
 
 class HWRenderTarget
     : public HWResource<GPUTextureDescriptor, std::shared_ptr<GPUTexture>> {
@@ -85,14 +81,14 @@ class HWRenderTargetAllocator
 
 class HWRenderTargetCache
     : public HWResourceCache<GPUTextureDescriptor, std::shared_ptr<GPUTexture>,
-                             Compare> {
+                             HWTextureCompare> {
  public:
   HWRenderTargetCache(std::unique_ptr<HWResourceAllocator<
                           GPUTextureDescriptor, std::shared_ptr<GPUTexture>>>
                           allocator,
                       size_t max_bytes = kDefaultMaxBytes)
       : HWResourceCache<GPUTextureDescriptor, std::shared_ptr<GPUTexture>,
-                        Compare>(std::move(allocator), max_bytes) {}
+                        HWTextureCompare>(std::move(allocator), max_bytes) {}
 
   static std::unique_ptr<HWRenderTargetCache> Create(GPUDevice* device) {
     auto allocator = std::make_unique<HWRenderTargetAllocator>(device);
