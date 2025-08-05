@@ -98,8 +98,9 @@ void RecordingCanvas::OnSaveLayer(const Rect& bounds, const Paint& paint) {
 void RecordingCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
                                  Paint const& paint) {
   Push<DrawTextBlobOp>(blob, x, y, paint);
-  auto bounds = Rect::MakeXYWH(x, y - blob->GetBoundSize().y,
-                               blob->GetBoundSize().x, blob->GetBoundSize().y);
+  auto bounds = blob->GetBoundsRect().MakeOffset(x, y);
+  // Expand outward a little to prevent incomplete display of text content
+  bounds = bounds.MakeOutset(1, 1);
   AccumulateOpBounds(bounds, &paint);
 }
 

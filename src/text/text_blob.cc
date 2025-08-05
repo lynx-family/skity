@@ -13,9 +13,20 @@
 namespace skity {
 
 Vec2 TextBlob::GetBoundSize() const {
-  float height = 0.f;
-  float width = 0.f;
+  auto rect = GetBoundsRect();
+  return Vec2{rect.Width(), rect.Height()};
+}
 
+Rect TextBlob::GetBoundsRect() const {
+  if (text_run_.empty()) {
+    return Rect::MakeEmpty();
+  }
+
+  float top = std::numeric_limits<float>::max();
+  float bottom = std::numeric_limits<float>::min();
+  float left = std::numeric_limits<float>::max();
+  float right = std::numeric_limits<float>::min();
+  float advance_x = 0;
   for (auto const &run : text_run_) {
     auto typeface = run.LockTypeface();
     Font font(typeface, run.GetFontSize());
@@ -29,13 +40,40 @@ Vec2 TextBlob::GetBoundSize() const {
       continue;
     }
 
-    for (auto const &glyph : glyphs) {
-      height = std::max(height, glyph->GetYMax() - glyph->GetYMin());
-      width += glyph->AdvanceX();
+    std::vector<float> pos_y;
+    std::vector<float> pos_x;
+    if (run.GetPosX().empty()) {
+      pos_x.reserve(glyphs.size());
+      pos_y.reserve(glyphs.size());
+      for (auto const &glyph : glyphs) {
+        pos_x.emplace_back(advance_x);
+        pos_y.emplace_back(0);
+        advance_x += glyph->AdvanceX();
+      }
+    } else {
+      pos_y.resize(run.GetPosX().size(), 0);
+      for (size_t i = 0; i < pos_y.size(); ++i) {
+        if (i < run.GetPosY().size()) {
+          pos_y[i] += run.GetPosY()[i];
+        }
+      }
+
+      for (auto rx : run.GetPosX()) {
+        pos_x.emplace_back(rx);
+      }
+    }
+
+    for (size_t i = 0; i < glyphs.size(); ++i) {
+      auto const &glyph = glyphs[i];
+      float x = pos_x[i];
+      float y = pos_y[i];
+      top = std::min(top, y - glyph->GetYMax());
+      bottom = std::max(bottom, y - glyph->GetYMin());
+      left = std::min(left, x + glyph->GetHoriBearingX());
+      right = std::max(right, x + glyph->GetHoriBearingX() + glyph->GetWidth());
     }
   }
-
-  return Vec2{width, height};
+  return Rect::MakeLTRB(left, top, right, bottom);
 }
 
 // static

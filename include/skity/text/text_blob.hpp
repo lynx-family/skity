@@ -30,6 +30,8 @@ class SKITY_API TextBlob final {
 
   Vec2 GetBoundSize() const;
 
+  Rect GetBoundsRect() const;
+
   static Rect ComputeBounds(uint32_t count, const GlyphID* glyphs,
                             const float* position_x, const float* position_y,
                             const Font& font, const Paint& paint);
