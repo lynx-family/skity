@@ -40,7 +40,7 @@ jobs:
           - name: Test and Generate Coverage Report
             run: |
                 cd out/cmake_host_build/test/ut/
-                ctest
+                ctest --output-junit test.xml
                 cd ../../
                 lcov --capture --directory . --output-file coverage.info
                 lcov --remove coverage.info '/usr/**/*' 'test/**/*' 'third_party/**/*' 'Library/*' '**/clipper2/*' --output-file coverage.filtered.info
@@ -50,7 +50,16 @@ jobs:
               CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
             with:
               token: ${{ secrets.CODECOV_TOKEN }}
+              disable_search: true
               files: out/cmake_host_build/coverage.filtered.info
+              override_branch: ${{ github.base_ref }}
+          - name: Upload test results to Codecov
+            uses: codecov/test-results-action@v1
+            with:
+              token: ${{ secrets.CODECOV_TOKEN }}
+              directory: "out/cmake_host_build/test/ut"
+              files: out/cmake_host_build/test/ut/test.xml
+              override_branch: ${{ github.base_ref }}
     android_build_check:
         runs-on: lynx-ubuntu-22.04-medium
         timeout-minutes: 30

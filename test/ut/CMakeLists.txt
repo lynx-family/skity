@@ -8,6 +8,7 @@ enable_testing()
 
 # Test case list
 add_executable(skity_unit_test
+    effect/color_filter_test.cc
     effect/image_filter_test.cc
     geometry/geometry_test.cc
     geometry/math_test.cc

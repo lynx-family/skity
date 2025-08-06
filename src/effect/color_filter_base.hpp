@@ -76,6 +76,13 @@ class MatrixColorFilter : public ColorFilterBase {
 
   explicit MatrixColorFilter(const float row_major[20]) {
     memcpy(matrix_, row_major, 20 * sizeof(float));
+
+#ifdef SKITY_CPU
+    auto p = reinterpret_cast<int16_t*>(matrix_i16_);
+    for (int i = 0; i < 20; i++) {
+      p[i] = (int16_t)(row_major[i] * 255);
+    }
+#endif
   }
   explicit MatrixColorFilter(const int16_t row_major[20]) {}
 
