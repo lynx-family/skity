@@ -19,8 +19,16 @@ set(SKITY_VERSION 0.1.0)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
   add_definitions(-DSKITY_RELEASE)
+endif()
+
+if (${SKITY_OPTIMIZE_O3})
+  message("build with o3")
+  set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+  set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DNDEBUG")
 endif()
 
 set(SKITY_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
@@ -47,10 +55,11 @@ else()
     if (ANDROID)
       target_link_options(skity PUBLIC "-flto")
       target_link_options(skity PUBLIC "-Wl,--exclude-libs,ALL" "-Wl,--gc-sections" "-fuse-ld=lld")
-
+      if (NOT (${SKITY_OPTIMIZE_O3}))
+        target_compile_options(skity PUBLIC "-Oz")
+      endif()
       target_compile_options(skity PUBLIC
         "-flto"
-        "-Oz"
         "-fomit-frame-pointer"
         "-fno-sanitize=safe-stack"
         "-fno-strict-aliasing"
