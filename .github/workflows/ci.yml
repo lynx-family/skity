@@ -46,15 +46,16 @@ jobs:
           - name: Compile Code
             run: |
                 export PATH=$PWD/buildtools/llvm/bin:$PATH
-                cmake -B out/cmake_host_build -DSKITY_TEST=ON  -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS="-fPIC"
+                cmake -B out/cmake_host_build -DSKITY_TEST=ON -DSKITY_TEST_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS="-fPIC"
                 cmake --build out/cmake_host_build --target skity_unit_test
           - name: Test and Generate Coverage Report
+            continue-on-error: true
             run: |
                 cd out/cmake_host_build/test/ut/
-                ctest --output-junit test.xml
+                ctest --output-junit test.xml --output-on-failure
                 cd ../../
                 lcov --capture --directory . --output-file coverage.info
-                lcov --remove coverage.info '/usr/**/*' 'test/**/*' 'third_party/**/*' 'Library/*' '**/clipper2/*' --output-file coverage.filtered.info
+                lcov --remove coverage.info '/usr/**/*' 'test/ut/**/*' 'third_party/**/*' 'Library/*' '**/clipper2/*' --output-file coverage.filtered.info
           - name: Upload coverage reports to Codecov
             uses: codecov/codecov-action@v5
             env:

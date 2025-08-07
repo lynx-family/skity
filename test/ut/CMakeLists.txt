@@ -37,16 +37,13 @@ target_link_libraries(skity_unit_test
     gmock_main
 )
 
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+if (${SKITY_TEST_COVERAGE} AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     # Coverage flags
     target_compile_options(skity PRIVATE --coverage -O0 -g)
     target_link_options(skity PRIVATE --coverage)
 
     target_compile_options(wgsl-cross PRIVATE --coverage -O0 -g)
     target_link_options(wgsl-cross PRIVATE --coverage)
-
-    target_compile_options(skity_unit_test PRIVATE --coverage -O0 -g)
-    target_link_options(skity_unit_test PRIVATE --coverage)
 endif()
 
 target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)

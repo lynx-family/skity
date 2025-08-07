@@ -30,6 +30,16 @@ option(SKITY_EXAMPLE "option for building example" OFF)
 #  The golden test code can only run on APPLE platform
 option(SKITY_TEST "option for building test" OFF)
 
+# option for generate code coverage report
+# Note:
+#  We only support generate code coverage report by GNU or Clang compiler
+cmake_dependent_option(
+  SKITY_TEST_COVERAGE "option for generate test code coverage report"
+  OFF
+  [[SKITY_TEST]]
+  OFF
+)
+
 option(SKITY_LOG "option for logging" OFF)
 option(SKITY_CT_FONT "option for open CoreText font backend on Darwin" OFF)
 
