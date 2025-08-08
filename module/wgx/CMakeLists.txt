@@ -6,59 +6,59 @@ option(WGX_GLSL_BACKEND "Generate GLSL shader" ON)
 option(WGX_MSL_BACKEND "Generate MSL shader" ON)
 
 add_library(wgsl-cross STATIC
-    include/wgsl_cross.h
-    wgsl/ast/attribute.cpp
-    wgsl/ast/attribute.h
-    wgsl/ast/expression.cpp
-    wgsl/ast/expression.h
-    wgsl/ast/function.cpp
-    wgsl/ast/function.h
-    wgsl/ast/identifier.cpp
-    wgsl/ast/identifier.h
-    wgsl/ast/module.cpp
-    wgsl/ast/module.h
-    wgsl/ast/node.h
-    wgsl/ast/pipeline_stage.h
-    wgsl/ast/statement.cpp
-    wgsl/ast/statement.h
-    wgsl/ast/type.cpp
-    wgsl/ast/type.h
-    wgsl/ast/type_decl.cpp
-    wgsl/ast/type_decl.h
-    wgsl/ast/variable.cpp
-    wgsl/ast/variable.h
-    wgsl/ast/visitor.h
-    wgsl/bind_group.cpp
-    wgsl/function.cpp
-    wgsl/function.h
-    wgsl/parser.cpp
-    wgsl/parser.h
-    wgsl/program.cpp
-    wgsl/scanner.cpp
-    wgsl/scanner.h
-    wgsl/token.cpp
-    wgsl/token.h
-    wgsl/type_definition.cpp
-    wgsl/type_definition.h
+    ${CMAKE_CURRENT_LIST_DIR}/include/wgsl_cross.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/attribute.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/attribute.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/expression.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/expression.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/function.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/function.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/identifier.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/identifier.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/module.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/module.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/node.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/pipeline_stage.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/statement.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/statement.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/type.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/type.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/type_decl.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/type_decl.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/variable.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/variable.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/visitor.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/bind_group.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/function.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/function.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/parser.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/parser.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/program.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/scanner.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/scanner.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/token.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/token.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/type_definition.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/type_definition.h
 )
 
 if (WGX_GLSL_BACKEND)
     target_compile_definitions(wgsl-cross PRIVATE -DWGX_GLSL=1)
     target_sources(wgsl-cross PRIVATE
-        glsl/ast_printer.cpp
-        glsl/ast_printer.h
+        ${CMAKE_CURRENT_LIST_DIR}/glsl/ast_printer.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/glsl/ast_printer.h
     )
 endif()
 
 if (WGX_MSL_BACKEND)
     target_compile_definitions(wgsl-cross PRIVATE -DWGX_MSL=1)
     target_sources(wgsl-cross PRIVATE
-        msl/ast_printer.cpp
-        msl/ast_printer.h
-        msl/attribute.cpp
-        msl/attribute.h
-        msl/uniform_capture.cpp
-        msl/uniform_capture.h
+        ${CMAKE_CURRENT_LIST_DIR}/msl/ast_printer.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/msl/ast_printer.h
+        ${CMAKE_CURRENT_LIST_DIR}/msl/attribute.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/msl/attribute.h
+        ${CMAKE_CURRENT_LIST_DIR}/msl/uniform_capture.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/msl/uniform_capture.h
     )
 endif()
 

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>skity</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.lynxsdk.skity</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>@FM_VERSION_STRING@</string>
+    <key>CFBundleVersion</key>
+    <string>@PROJECT_VERSION_MAJOR@@PROJECT_VERSION_MINOR@@PROJECT_VERSION_PATCH@</string>
+
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+</dict>
+</plist>

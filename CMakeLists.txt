@@ -4,7 +4,7 @@
 
 cmake_minimum_required(VERSION 3.15.0)
 
-project(Skity)
+project(Skity VERSION 1.0.0)
 
 # Compatible for MSVC runtime library
 if(POLICY CMP0091)
@@ -100,12 +100,6 @@ endif()
 target_include_directories(skity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(skity PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 set_property(TARGET skity PROPERTY CXX_STANDARD 17)
-
-if (NOT SKITY_NO_PREBUILD_SHADER)
-  # shaders gen header
-  target_include_directories(skity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/gen)
-  target_include_directories(skity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/bindings)
-endif()
 
 target_include_directories(
   skity
@@ -233,3 +227,8 @@ install(
   NAMESPACE skity::
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/skity
 )
+
+# build frameowrk for iOS and macOS
+if(${SKITY_GENERATE_FRAMEWORK})
+  add_subdirectory(platform/darwin)
+endif()

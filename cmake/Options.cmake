@@ -53,3 +53,13 @@ cmake_dependent_option(
   [[CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo"]]
   OFF
 )
+
+
+# option for generate skity framework
+# This is only valid on APPLE platform
+cmake_dependent_option(
+  SKITY_GENERATE_FRAMEWORK "option for generate skity framework"
+  OFF
+  [[APPLE]]
+  OFF
+)
