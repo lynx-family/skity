@@ -1,0 +1,63 @@
+name: publish release
+
+on:
+    release:
+        types: [created]
+    workflow_dispatch:
+
+jobs:
+    build-android-aar:
+        runs-on: lynx-ubuntu-22.04-medium
+        steps:
+          - name: Python Setup
+            uses: actions/setup-python@v5
+            with:
+                python-version: '3.13'
+          - uses: actions/setup-java@v4
+            with:
+              distribution: 'jetbrains'
+              java-version: '21'
+          - name: Download Source
+            uses: actions/checkout@v4.2.2
+          - name: Sync Dependencies
+            run: |
+                ./tools/hab sync -f
+          - name: Android Build Check
+            uses: ./.github/actions/pack-android-aar
+          - name: Copy AAR
+            run: |
+                mkdir -p out/release
+                cp platform/android/build/outputs/aar/skity-native-release.aar out/release/skity-native-${{ github.event.release.tag_name }}.aar
+    build-xcframework:
+        runs-on: lynx-darwin-14-medium
+        steps:
+          - name: Download Source
+            uses: actions/checkout@v4.2.2
+          - name: Sync Dependencies
+            run: |
+                ./tools/hab sync -f
+          - name: Setup cmake
+            run: |
+                brew install cmake
+          - name: Generate XCFramework
+            run: |
+                TAG_NAME=${{ github.event.release.tag_name }}
+                VERSION_SUFFIX=${TAG_NAME#*-}
+                if [ ${VERSION_SUFFIX} == ${TAG_NAME} ] ; then
+                    SUFFIX=""
+                else
+                    VERSION_SUFFIX="-$VERSION_SUFFIX"
+                fi
+                echo "version suffix: $VERSION_SUFFIX"
+                tools/pack_skity_framework.py $VERSION_SUFFIX
+          - name: Copy XCFramework
+            run: |
+                mkdir -p out/release
+                cp -r out/skity.framework.zip out/release/skity.framework-${{ github.event.release.tag_name }}.zip
+          - name: Upload Assets
+            uses: softprops/action-gh-release@v2
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                files: |
+                    out/release/skity.framework-${{ github.event.release.tag_name }}.zip
+                    out/release/skity-native-${{ github.event.release.tag_name }}.aar
