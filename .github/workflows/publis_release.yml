@@ -28,6 +28,13 @@ jobs:
             run: |
                 mkdir -p out/release
                 cp platform/android/build/outputs/aar/skity-native-release.aar out/release/skity-native-${{ github.event.release.tag_name }}.aar
+          - name: Upload Assets
+            uses: softprops/action-gh-release@v2
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                files: |
+                    out/release/skity-native-${{ github.event.release.tag_name }}.aar
+
     build-xcframework:
         runs-on: lynx-darwin-14-medium
         steps:
@@ -60,4 +67,3 @@ jobs:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 files: |
                     out/release/skity.framework-${{ github.event.release.tag_name }}.zip
-                    out/release/skity-native-${{ github.event.release.tag_name }}.aar
