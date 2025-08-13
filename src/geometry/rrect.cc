@@ -15,6 +15,20 @@ static bool are_radius_check_predicates_valid(float rad, float min, float max) {
          (max - rad >= min) && rad >= 0;
 }
 
+static bool clamp_to_zero(Vec2 radii[4]) {
+  bool all_corners_square = true;
+
+  for (int i = 0; i < 4; i++) {
+    if (radii[i].x <= 0 || radii[i].y <= 0) {
+      radii[i] = {0, 0};
+    } else {
+      all_corners_square = false;
+    }
+  }
+
+  return all_corners_square;
+}
+
 RRect::Type RRect::GetType() const { return type_; }
 
 void RRect::SetRect(Rect const& rect) {
@@ -57,6 +71,10 @@ bool RRect::ScaleRadii() {
     radii_[3] *= scale;
   }
 
+  clamp_to_zero(radii_.data());
+
+  ComputeType();
+
   return scale < 1.0f;
 }
 
@@ -69,9 +87,17 @@ void RRect::SetRectRadii(Rect const& rect, const Vec2 radii[4]) {
   this->radii_[2] = radii[2];
   this->radii_[3] = radii[3];
 
+  if (clamp_to_zero(radii_.data())) {
+    this->SetRect(rect);
+    return;
+  }
+
   ScaleRadii();
 
-  this->type_ = Type::kComplex;
+  if (!this->IsValid()) {
+    this->SetRect(rect);
+    return;
+  }
 }
 
 void RRect::SetRectXY(Rect const& rect, float xRad, float yRad) {
@@ -265,6 +291,48 @@ bool RRect::InitializeRect(Rect const& rect) {
   return true;
 }
 
+void RRect::ComputeType() {
+  if (rect_.IsEmpty()) {
+    type_ = Type::kEmpty;
+    return;
+  }
+
+  bool all_radii_equal = true;
+  bool all_corners_square = 0 == radii_[0].x || 0 == radii_[0].y;
+
+  for (int32_t i = 1; i < 4; i++) {
+    if (0 != radii_[i].x && 0 != radii_[i].y) {
+      all_corners_square = false;
+    }
+
+    if (radii_[i].x != radii_[i - 1].x || radii_[i].y != radii_[i - 1].y) {
+      all_radii_equal = false;
+    }
+  }
+
+  if (all_corners_square) {
+    type_ = Type::kRect;
+    return;
+  }
+
+  if (all_radii_equal) {
+    if (radii_[0].x >= SkityFloatHalf(rect_.Width()) &&
+        radii_[0].y >= SkityFloatHalf(rect_.Height())) {
+      type_ = Type::kOval;
+    } else {
+      type_ = Type::kSimple;
+    }
+
+    return;
+  }
+
+  type_ = Type::kComplex;
+
+  if (!IsValid()) {
+    SetRect(rect_);
+  }
+}
+
 void RRect::Inset(float dx, float dy, RRect* dst) const {
   Rect r = rect_;
   r.Inset(dx, dy);
@@ -298,9 +366,8 @@ void RRect::Inset(float dx, float dy, RRect* dst) const {
       radii[i].y -= dy;
     }
   }
-  dst->rect_ = r;
-  dst->radii_ = radii;
-  dst->type_ = Type::kComplex;
+
+  dst->SetRectRadii(r, radii.data());
 }
 
 bool RRect::Contains(const Rect& rect) const {
@@ -362,9 +429,9 @@ bool RRect::CheckCornerContainment(float x, float y) const {
   //      a^2     b^2
   // or :
   //     b^2*x^2 + a^2*y^2 <= (ab)^2
-  float dist = std::sqrt(canonical_pt.x) * std::sqrt(radii_[index].y) +
-               std::sqrt(canonical_pt.y) * std::sqrt(radii_[index].x);
-  return dist <= std::sqrt(radii_[index].x * radii_[index].y);
+  float dist = FloatSquare(canonical_pt.x) * FloatSquare(radii_[index].y) +
+               FloatSquare(canonical_pt.y) * FloatSquare(radii_[index].x);
+  return dist <= FloatSquare(radii_[index].x * radii_[index].y);
 }
 
 }  // namespace skity

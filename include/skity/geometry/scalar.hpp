@@ -63,6 +63,8 @@ static inline float SkityFloatHalf(float v) { return v * FloatHalf; }
 
 static inline bool FloatIsNan(float x) { return x != x; }
 
+static inline float FloatSquare(float x) { return x * x; }
+
 [[clang::no_sanitize("float-divide-by-zero")]] static inline float
 SkityIEEEFloatDivided(float number, float denom) {
   return number / denom;
