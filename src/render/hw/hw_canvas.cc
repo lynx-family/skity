@@ -509,6 +509,7 @@ void HWCanvas::OnFlush() {
     draw_context.index_vector_cache = index_vector_cache_.get();
     draw_context.total_clip_depth = root_layer_->GetState()->GetDrawDepth() + 1;
     draw_context.arena_allocator = arena_allocator_;
+    draw_context.scale = Vec2{1, 1};
 
     auto state = root_layer_->Prepare(&draw_context);
 
@@ -608,7 +609,7 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
   if (hw_filter) {
     layer = arena_allocator_->Make<HWFilterLayer>(
         local_to_layer, state->GetCurrentDepth() + 1, layer_bounds, width,
-        height, hw_filter, scale);
+        height, hw_filter);
   } else {
     layer = arena_allocator_->Make<HWSubLayer>(local_to_layer,
                                                state->GetCurrentDepth() + 1,
@@ -623,6 +624,7 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
     layer->SetSampleCount(GetCanvasSampleCount());
   }
   layer->SetWorldMatrix(world_matrix);
+  layer->SetScale(scale);
   layer->SetLayerSpaceBounds(transformed_bounds);
   layer->SetEnableMergingDrawCall(
       surface_->GetGPUContext()->IsEnableMergingDrawCall());

@@ -74,6 +74,7 @@ void HWColorFilter::InternalPrepareCMDWGX(
       input_texture->GetDescriptor().format,
       1,
       BlendMode::kDefault,
+      context->scale,
   };
 
   step.GenerateCommand(step_context, cmd, nullptr);

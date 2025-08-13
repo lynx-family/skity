@@ -11,10 +11,8 @@ namespace skity {
 
 HWFilterLayer::HWFilterLayer(Matrix matrix, int32_t depth, Rect bounds,
                              uint32_t width, uint32_t height,
-                             std::shared_ptr<HWFilter> filter, Vec2 scale)
-    : HWSubLayer(matrix, depth, bounds, width, height),
-      filter_(filter),
-      scale_(scale) {}
+                             std::shared_ptr<HWFilter> filter)
+    : HWSubLayer(matrix, depth, bounds, width, height), filter_(filter) {}
 
 HWDrawState HWFilterLayer::OnPrepare(HWDrawContext* context) {
   auto desc = GetColorTextureDesc();
@@ -30,7 +28,7 @@ HWDrawState HWFilterLayer::OnPrepare(HWDrawContext* context) {
 
   HWFilterContext filter_context{
       device,        context->gpuContext, context,
-      filter_result, command_buffer,      scale_,
+      filter_result, command_buffer,      GetScale(),
   };
 
   filter_result = filter_->Filter(filter_context);

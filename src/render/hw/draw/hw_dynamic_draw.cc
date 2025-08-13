@@ -36,7 +36,7 @@ void HWDynamicDraw::OnGenerateCommand(HWDrawContext* context,
   HWDrawStepContext ctx{
       context,          state,           GetTransform(),
       GetClipValue(),   GetScissorBox(), GetColorFormat(),
-      GetSampleCount(), blend_mode_,
+      GetSampleCount(), blend_mode_,     context->scale,
   };
 
   for (auto& step : steps_) {

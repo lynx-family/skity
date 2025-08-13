@@ -24,6 +24,7 @@ struct HWDrawStepContext {
   GPUTextureFormat color_format = GPUTextureFormat::kRGBA8Unorm;
   uint32_t sample_count = 1;
   BlendMode blend_mode = BlendMode::kDefault;
+  Vec2 scale = {1.f, 1.f};
 };
 
 class HWDrawStep : public HWShaderGenerator {

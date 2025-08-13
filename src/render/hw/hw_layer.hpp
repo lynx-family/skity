@@ -61,6 +61,10 @@ class HWLayer : public HWDraw {
 
   void SetWorldMatrix(const Matrix& matrix) { world_matrix_ = matrix; }
 
+  void SetScale(Vec2 scale) { scale_ = scale; }
+
+  Vec2 GetScale() const { return scale_; }
+
   Matrix GetLayerPhysicalMatrix(const Matrix& matrix) const;
 
   Rect CalculateLayerSpaceBounds(const Rect& local_rect,
@@ -124,6 +128,7 @@ class HWLayer : public HWDraw {
   Matrix bounds_to_physical_matrix_ = {};
   bool enable_merging_draw_call_ = {};
   ArenaAllocator* arena_allocator_ = nullptr;
+  Vec2 scale_ = {1.f, 1.f};
 };
 
 }  // namespace skity

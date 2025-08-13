@@ -2,10 +2,7 @@
 # Licensed under the Apache License Version 2.0 that can be found in the
 # LICENSE file in the root directory of this source tree.
 
-
-### add golden test case to skity_golden_test
-add_subdirectory(shape)
-add_subdirectory(gradient)
-add_subdirectory(clip)
-add_subdirectory(image_filter)
-add_subdirectory(save_layer)
+add_golden_test(
+  NAME save_layer
+  SOURCES ${CMAKE_CURRENT_LIST_DIR}/save_layer.cc
+)

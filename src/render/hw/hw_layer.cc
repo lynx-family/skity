@@ -150,6 +150,7 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
   sub_context.index_vector_cache = context->index_vector_cache;
   sub_context.total_clip_depth = state_.GetDrawDepth() + 1;
   sub_context.arena_allocator = context->arena_allocator;
+  sub_context.scale = scale_;
 
   // if one draw needs stencil we need create a stencil attachment
   for (auto draw : draw_ops_) {
@@ -175,6 +176,7 @@ void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
   sub_context.index_vector_cache = context->index_vector_cache;
   sub_context.total_clip_depth = state_.GetDrawDepth() + 1;
   sub_context.arena_allocator = context->arena_allocator;
+  sub_context.scale = scale_;
 
   for (auto draw : draw_ops_) {
     draw->GenerateCommand(&sub_context, layer_state_);

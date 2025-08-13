@@ -37,7 +37,7 @@ const std::vector<GPUVertexBufferLayout>& WGSLTextGeometry::GetBufferLayout()
 
 void WGSLTextGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
                                   const Matrix& transform, float clip_depth,
-                                  Command*) {
+                                  Command* stencil_cmd) {
   SKITY_TRACE_EVENT(WGSLTextGeometry_PrepareCMD);
 
   if (cmd->pipeline == nullptr) {

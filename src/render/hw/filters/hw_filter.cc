@@ -111,6 +111,7 @@ void HWFilter::InternalDrawChildrenOutpusWGX(
         color_format,
         1,
         BlendMode::kDefault,
+        context.scale,
     };
 
     auto cmd = context.draw_context->arena_allocator->Make<Command>();

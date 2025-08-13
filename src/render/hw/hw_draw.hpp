@@ -43,6 +43,7 @@ struct HWDrawContext {
   VectorCache<uint32_t>* index_vector_cache;
   uint32_t total_clip_depth = 0;
   ArenaAllocator* arena_allocator = nullptr;
+  Vec2 scale = {1.f, 1.f};
 };
 
 enum HWDrawState : uint32_t {

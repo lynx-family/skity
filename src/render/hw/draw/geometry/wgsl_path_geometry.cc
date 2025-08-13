@@ -144,23 +144,28 @@ void WGSLPathGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
     cmd->index_count = index.size();
   };
 
+  const Vec2& scale = context->scale;
+
   if (is_stroke_) {
-    HWPathStrokeRaster raster{paint_, transform, context->vertex_vector_cache,
-                              context->index_vector_cache};
+    HWPathStrokeRaster raster{
+        paint_, Matrix::Scale(scale.x, scale.y) * transform,
+        context->vertex_vector_cache, context->index_vector_cache};
 
     raster.StrokePath(path_);
 
     upload_data(raster.GetRawVertexBuffer(), raster.GetRawIndexBuffer());
   } else {
     if (contour_aa_) {
-      HWPathAAOutline raster{transform, context->vertex_vector_cache,
+      HWPathAAOutline raster{Matrix::Scale(scale.x, scale.y) * transform,
+                             context->vertex_vector_cache,
                              context->index_vector_cache, context->ctx_scale};
       raster.StrokeAAOutline(path_);
       upload_data(raster.GetRawVertexBuffer(), raster.GetRawIndexBuffer());
 
     } else {
-      HWPathFillRaster raster{paint_, transform, context->vertex_vector_cache,
-                              context->index_vector_cache};
+      HWPathFillRaster raster{
+          paint_, Matrix::Scale(scale.x, scale.y) * transform,
+          context->vertex_vector_cache, context->index_vector_cache};
 
       raster.FillPath(path_);
       upload_data(raster.GetRawVertexBuffer(), raster.GetRawIndexBuffer());
