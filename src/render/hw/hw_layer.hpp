@@ -18,6 +18,7 @@
 namespace skity {
 
 class GPUDevice;
+class GPUContext;
 
 class HWLayer : public HWDraw {
  public:
@@ -103,6 +104,10 @@ class HWLayer : public HWDraw {
         0, 0, static_cast<float>(GetWidth()), static_cast<float>(GetHeight()),
         0, 1};
   }
+
+  std::shared_ptr<Shader> CreateDrawLayerShader(
+      GPUContext* gpu_context, std::shared_ptr<GPUTexture> texture,
+      const Rect& bounds) const;
 
  private:
   void FlushPendingClip();

@@ -159,26 +159,10 @@ HWDrawState GLDrawTextureLayer::OnPrepare(HWDrawContext *context) {
     Path path;
     path.AddRect(bounds);
 
-    // FIXME: GL/GLES fbo texture need to flip the Y coordinate when drawing
-    // back to screen
-    Matrix local_matrix =
-        Matrix::Translate(0, bounds.Height()) * Matrix::Scale(1.f, -1.f);
-
     Paint paint;
     paint.SetStyle(Paint::kFill_Style);
-
-    auto texture = std::make_shared<InternalTexture>(
-        color_texture_, static_cast<size_t>(bounds.Width()),
-        static_cast<size_t>(bounds.Height()), AlphaType::kPremul_AlphaType);
-
-    auto image = Image::MakeHWImage(texture);
-
-    Matrix inv_matrix{};
-    local_matrix.Invert(&inv_matrix);
-
-    paint.SetShader(Shader::MakeShader(image, SamplingOptions{},
-                                       TileMode::kClamp, TileMode::kClamp,
-                                       inv_matrix));
+    paint.SetShader(
+        CreateDrawLayerShader(context->gpuContext, color_texture_, bounds));
     // Since 'can_blit_from_target_fbo_' is a experimental feature, we still
     // use 'kSrcOver' as the default blend mode.
     BlendMode blend_mode =
@@ -295,26 +279,10 @@ HWDrawState GLPartialDrawTextureLayer::OnPrepare(
     Path path;
     path.AddRect(bounds);
 
-    // FIXME: GL/GLES fbo texture need to flip the Y coordinate when drawing
-    // back to screen
-    Matrix local_matrix = Matrix::Translate(-bounds.Left(), bounds.Bottom()) *
-                          Matrix::Scale(1.f, -1.f);
-
     Paint paint;
     paint.SetStyle(Paint::kFill_Style);
-
-    auto texture = std::make_shared<InternalTexture>(
-        color_texture_, static_cast<size_t>(bounds.Width()),
-        static_cast<size_t>(bounds.Height()), AlphaType::kPremul_AlphaType);
-
-    auto image = Image::MakeHWImage(texture);
-
-    Matrix inv_matrix{};
-    local_matrix.Invert(&inv_matrix);
-
-    paint.SetShader(Shader::MakeShader(image, SamplingOptions{},
-                                       TileMode::kClamp, TileMode::kClamp,
-                                       inv_matrix));
+    paint.SetShader(
+        CreateDrawLayerShader(context->gpuContext, color_texture_, bounds));
     // Since 'can_blit_from_target_fbo_' is a experimental feature, we still
     // use 'kSrcOver' as the default blend mode.
     BlendMode blend_mode =

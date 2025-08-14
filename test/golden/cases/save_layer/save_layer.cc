@@ -10,6 +10,7 @@
 #include "common/golden_test_check.hpp"
 #include "skity/effect/image_filter.hpp"
 #include "skity/geometry/matrix.hpp"
+#include "skity/graphic/color.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
 
@@ -24,7 +25,7 @@ TEST(SaveLayerGolden, TwoCircle) {
   canvas->Scale(10, 10);
   canvas->DrawCircle(20, 20, 10, paint);
 
-  canvas->SaveLayer(skity::Rect::MakeLTRB(0, 0, 400, 400), skity::Paint{});
+  canvas->SaveLayer(skity::Rect::MakeLTRB(0, 0, 40, 40), skity::Paint{});
   paint.SetColor(skity::Color_RED);
   canvas->DrawCircle(20, 20, 10, paint);
   canvas->Restore();
@@ -32,6 +33,37 @@ TEST(SaveLayerGolden, TwoCircle) {
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("two_circle.png");
+
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      recorder.FinishRecording(), 400.f, 400.f, golden_path.c_str()));
+}
+
+TEST(SaveLayerGolden, ThreeCircle) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(400.f, 400.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->Save();
+  skity::Paint paint;
+  paint.SetColor(skity::Color_GREEN);
+  canvas->Scale(10.1, 10.1);
+  canvas->DrawCircle(20.3, 20.3, 10, paint);
+
+  canvas->SaveLayer(skity::Rect::MakeLTRB(10.3, 10.3, 30.3, 30.3),
+                    skity::Paint{});
+  paint.SetColor(skity::Color_RED);
+  canvas->DrawCircle(20.3, 20.3, 10, paint);
+  canvas->SaveLayer(skity::Rect::MakeLTRB(10.3, 10.3, 30.3, 30.3),
+                    skity::Paint{});
+  paint.SetColor(skity::Color_BLUE);
+  canvas->DrawCircle(20.3, 20.3, 10, paint);
+
+  canvas->Restore();
+  canvas->Restore();
+  canvas->Restore();
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append("three_circle.png");
 
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       recorder.FinishRecording(), 400.f, 400.f, golden_path.c_str()));

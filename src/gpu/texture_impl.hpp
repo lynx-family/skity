@@ -64,17 +64,13 @@ class TextureImpl : public Texture {
 
 class InternalTexture : public Texture {
  public:
-  InternalTexture(std::shared_ptr<GPUTexture> texture, size_t width,
-                  size_t height, AlphaType alpha_type)
-      : texture_(std::move(texture)),
-        width_(width),
-        height_(height),
-        alpha_type_(alpha_type) {}
+  InternalTexture(std::shared_ptr<GPUTexture> texture, AlphaType alpha_type)
+      : texture_(std::move(texture)), alpha_type_(alpha_type) {}
 
   ~InternalTexture() override = default;
 
-  size_t Width() override { return width_; }
-  size_t Height() override { return height_; }
+  size_t Width() override { return texture_->GetDescriptor().width; }
+  size_t Height() override { return texture_->GetDescriptor().height; }
 
   AlphaType GetAlphaType() override { return alpha_type_; }
 
@@ -90,8 +86,6 @@ class InternalTexture : public Texture {
 
  private:
   std::shared_ptr<GPUTexture> texture_;
-  size_t width_ = 0;
-  size_t height_ = 0;
   AlphaType alpha_type_ = AlphaType::kUnknown_AlphaType;
 };
 

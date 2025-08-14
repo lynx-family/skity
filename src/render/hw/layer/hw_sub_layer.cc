@@ -21,39 +21,12 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
     Path path;
     path.AddRect(bounds);
 
-    Matrix local_matrix = Matrix::Translate(-bounds.Left(), -bounds.Top());
-    // FIXME: GL/GLES fbo texture need to flip the Y coordinate when drawing
-    // back to screen
-    if (context->gpuContext->GetBackendType() == GPUBackendType::kOpenGL ||
-        context->gpuContext->GetBackendType() == GPUBackendType::kWebGL2) {
-      local_matrix = Matrix::Translate(
-                         0, bounds.Height() * texture_size_.y / GetHeight()) *
-                     Matrix::Scale(1.f, -1.f) * local_matrix;
-    }
-
-    auto width = bounds.Width() * texture_size_.x / GetWidth();
-    auto height = bounds.Height() * texture_size_.y / GetHeight();
-
     Paint paint;
     paint.SetBlendMode(blend_mode_);
     paint.SetAlphaF(alpha_);
     paint.SetStyle(Paint::kFill_Style);
-
-    // may be we can find a better way to do this
-    {
-      auto texture = std::make_shared<InternalTexture>(
-          layer_back_draw_texture_, static_cast<size_t>(width),
-          static_cast<size_t>(height), AlphaType::kPremul_AlphaType);
-
-      auto image = Image::MakeHWImage(texture);
-
-      Matrix inv_matrix{};
-      local_matrix.Invert(&inv_matrix);
-
-      paint.SetShader(Shader::MakeShader(image, SamplingOptions{},
-                                         TileMode::kClamp, TileMode::kClamp,
-                                         inv_matrix));
-    }
+    paint.SetShader(CreateDrawLayerShader(context->gpuContext,
+                                          layer_back_draw_texture_, bounds));
 
     layer_back_draw_ = context->arena_allocator->Make<HWDynamicPathDraw>(
         GetTransform(), std::move(path), std::move(paint), false);

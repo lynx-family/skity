@@ -5,6 +5,7 @@
 #include "src/render/hw/hw_layer.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <skity/effect/shader.hpp>
 
 #include "src/geometry/glm_helper.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
@@ -192,6 +193,33 @@ Rect HWLayer::CalculateLayerSpaceBounds(const Rect& local_rect,
   Rect layer_space_bounds;
   GetLayerPhysicalMatrix(matrix).MapRect(&layer_space_bounds, local_rect);
   return layer_space_bounds;
+}
+
+std::shared_ptr<Shader> HWLayer::CreateDrawLayerShader(
+    GPUContext* gpu_context, std::shared_ptr<GPUTexture> gpu_texture,
+    const Rect& bounds) const {
+  auto texture = std::make_shared<InternalTexture>(
+      gpu_texture, AlphaType::kPremul_AlphaType);
+
+  auto image = Image::MakeHWImage(texture);
+
+  Matrix local_matrix;
+  // FIXME: GL/GLES fbo texture need to flip the Y coordinate when drawing
+  // back to screen
+  if (gpu_context->GetBackendType() == GPUBackendType::kOpenGL ||
+      gpu_context->GetBackendType() == GPUBackendType::kWebGL2) {
+    local_matrix =
+        Matrix::Translate(bounds.Left(), bounds.Height() + bounds.Top()) *
+        Matrix::Scale(bounds.Width() / texture->Width(),
+                      -(bounds.Height() / texture->Height()));
+  } else {
+    local_matrix = Matrix::Translate(bounds.Left(), bounds.Top()) *
+                   Matrix::Scale(bounds.Width() / texture->Width(),
+                                 bounds.Height() / texture->Height());
+  }
+
+  return Shader::MakeShader(image, SamplingOptions{}, TileMode::kClamp,
+                            TileMode::kClamp, local_matrix);
 }
 
 }  // namespace skity
