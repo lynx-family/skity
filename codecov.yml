@@ -9,6 +9,10 @@ coverage:
         threshold: "0%"
         informational: true
 
+ignore:
+  - "test/ut/**/*"
+  - "test/ut/common.hpp"
+
 comment:
   layout: "header, files, footer"
   require_changes: false  # if true: only post the comment if coverage changes
