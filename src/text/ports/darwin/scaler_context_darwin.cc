@@ -210,8 +210,6 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
       is_color ? kCGImageByteOrder32Little | kCGImageAlphaPremultipliedFirst
                : kCGImageAlphaOnly;
 
-  CGColorSpaceRef color_space = is_color ? CGColorSpaceCreateDeviceRGB() : NULL;
-
   static size_t bits_per_component = 8;
 
   // The number of bytes per pixel is equal to `(bitsPerComponent * number
@@ -227,7 +225,7 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
 
   UniqueCFRef<CGContextRef> cg_context(CGBitmapContextCreate(
       os_context_.GetAddr(), width, height, bits_per_component, bytes_per_row,
-      color_space, bitmap_info));
+      os_context_.GetCGColorSpace(), bitmap_info));
   // clear the bitmap before set transform
   CGContextClearRect(cg_context.get(), CGRectMake(0, 0, width, height));
 
