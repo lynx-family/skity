@@ -62,21 +62,33 @@ endif()
 if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" AND NOT SKITY_USE_SELF_LIBCXX)
   include(ExternalProject)
 
+  set(SKITY_ZLIB_C_FLAGS "")
+
+  # check if build on linux
+  if (LINUX OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(SKITY_ZLIB_C_FLAGS "-fPIC")
+  endif()
+
   ExternalProject_Add(zlib
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/third_party/zlib
     PREFIX ${CMAKE_BINARY_DIR}/third_party/zlib_build
     CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/zlib
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    -DCMAKE_C_FLAGS=${SKITY_ZLIB_C_FLAGS}
   )
 
   target_include_directories(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/include)
   target_link_directories(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/lib)
   if (WIN32)
     # FIXME: zlib in msvc output a different name
-    target_link_libraries(skity PRIVATE zlibstaticd)
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+      target_link_libraries(skity PRIVATE zlibstaticd)
+    else()
+      target_link_libraries(skity PRIVATE zlibstatic)
+    endif()
   else()
-    target_link_libraries(skity PRIVATE z)
+    target_link_libraries(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/lib/libz.a)
   endif()
 
   add_dependencies(skity zlib)

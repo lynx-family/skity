@@ -12,5 +12,12 @@ deps = {
         "ignore_in_git": True,
         "decompress": True,
         "condition": system in ['linux', 'darwin'],
-    }, 
+    },
+    'buildtools/cmake': {
+        "type": "http",
+        "url" : "https://github.com/Kitware/CMake/releases/download/v4.1.0/cmake-4.1.0-windows-x86_64.zip",
+        "ignore_in_git": True,
+        "decompress": True,
+        "condition": system in ['windows'],
+    }
 }

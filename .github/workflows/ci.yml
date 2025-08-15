@@ -110,6 +110,23 @@ jobs:
             with:
               version_suffix: '-test'
 
+    windows_build_check:
+        runs-on: lynx-windows-2022-large
+        timeout-minutes: 30
+        steps:
+          - name: Download Source
+            uses: actions/checkout@v4.2.2
+          - name: Sync Dependencies
+            run: |
+                powershell -File "./tools/hab.ps1" sync -f --target dev,ci
+          - name: Run Build
+            run: |
+                ./buildtools/cmake/bin/cmake -B out/cmake_host_build -DSKITY_EXAMPLE=ON -DCMAKE_BUILD_TYPE=Debug -DSKITY_CODEC_MODULE=ON -DSKITY_TEST=ON
+                ./buildtools/cmake/bin/cmake --build out/cmake_host_build --target skity_unit_test
+                cd out/cmake_host_build/Debug
+                ./skity_unit_test
+
+
     osx_metal_golden_test:
         runs-on: lynx-darwin-14-medium
         timeout-minutes: 30

@@ -39,7 +39,7 @@ ExternalProject_Add(libpng
   -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/libpng
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DPNG_EXECUTABLES=OFF
-  -DPNG_SHARED=ON
+  -DPNG_SHARED=OFF
   -DPNG_STATIC=ON
   -DPNG_FRAMEWORK=OFF
   -DPNG_TESTS=OFF
@@ -79,9 +79,18 @@ target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/libpn
 if (WIN32)
   target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/zlib/lib)
   # FIXME: msvc generate different library name
-  target_link_libraries(skity-codec PRIVATE libpng16_staticd zlibstaticd)
+  if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_link_libraries(skity-codec PRIVATE libpng16_staticd zlibstaticd)
+  else()
+    target_link_libraries(skity-codec PRIVATE libpng16_static zlibstatic)
+  endif()
 else()
   target_link_libraries(skity-codec PRIVATE png)
+  if (${USE_THIRD_PARTY_ZLIB})
+    target_link_libraries(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/lib/libz.a)
+  else()
+    target_link_libraries(skity-codec PRIVATE z)
+  endif()
 endif()
 
 target_sources(
