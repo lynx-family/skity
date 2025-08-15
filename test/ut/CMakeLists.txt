@@ -20,6 +20,7 @@ add_executable(skity_unit_test
     geometry/vector_test.cc
     graphic/path_measure_test.cc
     graphic/path_test.cc
+    io/pixmap_test.cc
     render/canvas_state_test.cc
     render/resource_cache_test.cc
     recorder/display_list_test.cc
