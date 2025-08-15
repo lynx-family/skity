@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2020 The Lynx Authors. All rights reserved.
 import subprocess
+import os
 
 class MergeRequest:
   target_branch = 'main'
@@ -39,6 +40,9 @@ class MergeRequest:
               % (error)))
     for filename in result.split('\n'):
       filename = filename.strip()
+      # convert to absolute path
+      if not os.path.isabs(filename):
+        filename = os.path.join(self.GetRootDirectory(), filename)
       if filename and filename != '':
         file_list.append(filename)
     # Unstaged files
@@ -49,6 +53,9 @@ class MergeRequest:
               % (error)))
     for filename in result.split('\n'):
       filename = filename.strip()
+      # convert to absolute path
+      if not os.path.isabs(filename):
+        filename = os.path.join(self.GetRootDirectory(), filename)
       if filename and filename != '':
         if filename not in file_list:
           file_list.append(filename)
