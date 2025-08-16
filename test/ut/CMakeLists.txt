@@ -18,6 +18,7 @@ add_executable(skity_unit_test
     geometry/rrect_test.cc
     geometry/scalar_test.cc
     geometry/vector_test.cc
+    graphic/bitmap_test.cc
     graphic/path_measure_test.cc
     graphic/path_test.cc
     io/pixmap_test.cc
