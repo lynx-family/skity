@@ -178,20 +178,6 @@ class SKITY_API GPUContext {
   }
 
   /**
-   * Used to specify whether the size of the render target needs to be
-   * aligned to a power of 2 when off-screen rendering is required inside Skity
-   * (such as SaveLayer or Blur). It is recommended to set a reasonable resource
-   * cache limit while turning on this switch.
-   */
-  SKITY_EXPERIMENTAL
-  void SetTexturePow2Expansion(bool texture_pow2_expansion) {
-    texture_pow2_expansion_ = texture_pow2_expansion;
-  }
-
-  SKITY_EXPERIMENTAL
-  bool GetTexturePow2Expansion() const { return texture_pow2_expansion_; }
-
-  /**
    * Used to specify whether draw calls that have the opportunity to be merged
    * will be merged internally in Skity.
    */
@@ -257,7 +243,6 @@ class SKITY_API GPUContext {
  private:
   GPUErrorCallback error_callback_ = nullptr;
   void* error_callback_user_data_ = nullptr;
-  bool texture_pow2_expansion_ = false;
   bool enable_merging_draw_call_ = true;
   bool enable_contour_aa_ = false;
   bool enable_dynamic_shader_ = true;
