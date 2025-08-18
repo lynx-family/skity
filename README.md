@@ -1,6 +1,8 @@
 # Skity
 
+[![Apache licesed](https://img.shields.io/badge/License-Apache--2.0-cyan?logo=apache)](https://github.com/lynx-family/skity/blob/main/LICENSE)
 [![codecov](https://codecov.io/github/lynx-family/skity/graph/badge.svg?token=QTK6TSRIHU)](https://codecov.io/github/lynx-family/skity)
+[![Testing](https://github.com/lynx-family/skity/actions/workflows/ci.yml/badge.svg)](https://github.com/lynx-family/skity/actions/workflows/ci.yml)
 
 `Skity` is an open-source 2D graphics library developed in C++. 
 It focuses on GPU rendering, providing developers with efficient graphics drawing and rendering capabilities. 
@@ -42,6 +44,8 @@ cmake --build out/debug
 ```
 
 Pass `SKITY_EXAMPLE=ON` to cmake to enable build example code. More options can visit [cmake/Options.cmake](./cmake/Options.cmake).
+
+More details can visit [BUILD_AND_RUN.md](./docs/BUILD_AND_RUN.md).
 
 ### Development
 
@@ -119,7 +123,7 @@ canvas->DrawPath(path /* previouse created star path */, paint);
 ```
 
 <p align="center">
-  <img src="./resources/blur_star.png"  width="300"/>
+  <img src="./docs/resources/blur_star.png"  width="300"/>
 </p>
 
 
