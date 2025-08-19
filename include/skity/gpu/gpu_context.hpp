@@ -211,21 +211,6 @@ class SKITY_API GPUContext {
   std::uint8_t GetLargerAtlasMask() { return larger_atlas_mask_; }
 
   /**
-   * Used to specify whether to use dynamic shader.
-   * In this mode. The shader will be generated at runtime with WGSL language.
-   *
-   * @note This API is unstable, and may changed in the future
-   *
-   * @param enable_dynamic_shader true to enable dynamic shader when create
-   * backend pipeline. false to disable it.
-   */
-  void SetEnableDynamicShader(bool enable_dynamic_shader) {
-    enable_dynamic_shader_ = enable_dynamic_shader;
-  }
-
-  bool IsEnableDynamicShader() const { return enable_dynamic_shader_; }
-
-  /**
    * Used to set linear filter in text rendering. Normally, text texture
    * sampling should use nearest fliter, but since Skity currently does not
    * support the rendering of rotated text, linear filter is used to reduce
@@ -245,7 +230,6 @@ class SKITY_API GPUContext {
   void* error_callback_user_data_ = nullptr;
   bool enable_merging_draw_call_ = true;
   bool enable_contour_aa_ = false;
-  bool enable_dynamic_shader_ = true;
   std::uint8_t larger_atlas_mask_ = 0;
   bool enable_text_linear_filter_ = false;
 };
