@@ -84,6 +84,8 @@ glfwSwapBuffers(window);
 
 ```
 
+More details can visit [DEVELOPMENT.md](./docs/DEVELOPMENT.md).
+
 ### Drawing Path
 
 ```c++
