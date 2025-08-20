@@ -8,4 +8,4 @@ runs:
     - name: run habitat sync
       shell: bash
       run: |
-        tools/hab sync . --target dev,ci
+        tools/hab sync . --target dev,module,ci

@@ -6,12 +6,8 @@
 #include <skity/io/data.hpp>
 #include <vector>
 
-#ifdef SKITY_HAS_PNG
-#include "src/codec/png_codec.hpp"
-#endif
-#ifdef SKITY_HAS_JPEG
 #include "src/codec/jpeg_codec.hpp"
-#endif
+#include "src/codec/png_codec.hpp"
 
 namespace skity {
 
@@ -20,12 +16,8 @@ static std::vector<std::shared_ptr<Codec>> codec_list = {};
 void Codec::SetupCodecs() {
   codec_list.clear();
 
-#ifdef SKITY_HAS_PNG
   codec_list.emplace_back(std::make_shared<PNGCodec>());
-#endif
-#ifdef SKITY_HAS_JPEG
   codec_list.emplace_back(std::make_shared<JPEGCodec>());
-#endif  // SKITY_HAS_JPEG
 }
 
 std::shared_ptr<Codec> Codec::MakeFromData(const std::shared_ptr<Data>& data) {
@@ -48,16 +40,12 @@ std::shared_ptr<Codec> Codec::MakeFromData(const std::shared_ptr<Data>& data) {
   return nullptr;
 }
 
-#ifdef SKITY_HAS_PNG
 std::shared_ptr<Codec> Codec::MakePngCodec() {
   return std::make_shared<PNGCodec>();
 }
-#endif
 
-#ifdef SKITY_HAS_JPEG
 std::shared_ptr<Codec> Codec::MakeJPEGCodec() {
   return std::make_shared<JPEGCodec>();
 }
-#endif
 
 }  // namespace skity

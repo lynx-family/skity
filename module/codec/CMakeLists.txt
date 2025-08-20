@@ -68,8 +68,6 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/png_codec.hpp
 )
 
-target_compile_definitions(skity-codec PUBLIC -DSKITY_HAS_PNG=1)
-
 add_dependencies(libpng skity)
 add_dependencies(skity-codec libpng)
 
@@ -110,6 +108,3 @@ if (WIN32)
 else()
   target_link_libraries(skity-codec PRIVATE turbojpeg)
 endif()
-
-target_compile_definitions(skity-codec PUBLIC -DSKITY_HAS_JPEG=1)
-

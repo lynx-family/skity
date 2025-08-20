@@ -5,8 +5,6 @@
 #ifndef MODULE_CODEC_SRC_CODEC_JPEG_CODEC_HPP
 #define MODULE_CODEC_SRC_CODEC_JPEG_CODEC_HPP
 
-#ifdef SKITY_HAS_JPEG
-
 #include <skity/codec/codec.hpp>
 
 namespace skity {
@@ -24,7 +22,5 @@ class JPEGCodec : public Codec {
 };
 
 }  // namespace skity
-
-#endif  // SKITY_HAS_JPEG
 
 #endif  // MODULE_CODEC_SRC_CODEC_JPEG_CODEC_HPP

@@ -118,7 +118,7 @@ jobs:
             uses: actions/checkout@v4.2.2
           - name: Sync Dependencies
             run: |
-                powershell -File "./tools/hab.ps1" sync -f --target dev,ci
+                powershell -File "./tools/hab.ps1" sync -f --target dev,module,ci
           - name: Run Build
             run: |
                 ./buildtools/cmake/bin/cmake -B out/cmake_host_build -DSKITY_EXAMPLE=ON -DCMAKE_BUILD_TYPE=Debug -DSKITY_CODEC_MODULE=ON -DSKITY_TEST=ON
@@ -135,7 +135,7 @@ jobs:
             uses: actions/checkout@v4.2.2
           - name: Sync Dependencies
             run: |
-                ./tools/hab sync -f --target dev
+                ./tools/hab sync -f --target dev,module
           - name: Setup cmake
             run: |
                 brew install cmake

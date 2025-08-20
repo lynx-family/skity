@@ -5,10 +5,9 @@
 #ifndef MODULE_CODEC_SRC_CODEC_PNG_CODEC_HPP
 #define MODULE_CODEC_SRC_CODEC_PNG_CODEC_HPP
 
-#include <skity/codec/codec.hpp>
-
-#ifdef SKITY_HAS_PNG
 #include <png.h>
+
+#include <skity/codec/codec.hpp>
 
 namespace skity {
 
@@ -26,7 +25,5 @@ class PNGCodec : public Codec {
 };
 
 }  // namespace skity
-
-#endif  // SKITY_HAS_PNG
 
 #endif  // MODULE_CODEC_SRC_CODEC_PNG_CODEC_HPP

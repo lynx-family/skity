@@ -12,8 +12,6 @@
 
 namespace skity {
 
-#ifdef SKITY_HAS_PNG
-
 #define PNG_BYTES_TO_CHECK 4
 
 static void png_write_callback(png_structp png_ptr, png_bytep data,
@@ -117,7 +115,5 @@ bool skity::PNGCodec::RecognizeFileType(const char* header, size_t size) {
   return !png_sig_cmp((png_const_bytep)header, (png_size_t)0,
                       PNG_BYTES_TO_CHECK);
 }
-
-#endif  // SKITY_HAS_PNG
 
 }  // namespace skity
