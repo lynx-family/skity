@@ -37,10 +37,8 @@ class Allocator {
 
 class DefaultAllocator : public Allocator {
  public:
-  static std::shared_ptr<Allocator> GetInstance() {
-    static std::shared_ptr<DefaultAllocator> instance =
-        std::make_shared<DefaultAllocator>();
-    return instance;
+  static std::shared_ptr<Allocator> Create() {
+    return std::make_shared<DefaultAllocator>();
   }
 
   Block Alloc(size_t size) override;
@@ -70,7 +68,7 @@ class BlockCacheAllocator : public Allocator {
 class Arena {
  public:
   Arena(size_t block_size = kDefaultBlockSize,
-        std::shared_ptr<Allocator> allocator = DefaultAllocator::GetInstance());
+        std::shared_ptr<Allocator> allocator = DefaultAllocator::Create());
   ~Arena();
 
   void Reset();
@@ -93,7 +91,7 @@ class Arena {
 class ArenaAllocator {
  public:
   explicit ArenaAllocator(
-      std::shared_ptr<Allocator> allocator = DefaultAllocator::GetInstance())
+      std::shared_ptr<Allocator> allocator = DefaultAllocator::Create())
       : arena_(kDefaultBlockSize, allocator) {}
 
   template <typename T>

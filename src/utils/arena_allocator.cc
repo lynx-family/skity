@@ -15,7 +15,7 @@ Block DefaultAllocator::Alloc(size_t size) {
 void DefaultAllocator::Free(Block& block) { return std::free(block.head); }
 
 BlockCacheAllocator::BlockCacheAllocator()
-    : internal_(DefaultAllocator::GetInstance()) {}
+    : internal_(DefaultAllocator::Create()) {}
 
 BlockCacheAllocator::BlockCacheAllocator(std::shared_ptr<Allocator> internal)
     : internal_(std::move(internal)) {}
@@ -48,7 +48,7 @@ Arena::Arena(size_t block_size, std::shared_ptr<Allocator> allocator)
       end_(nullptr),
       block_size_(block_size),
       allocator_(allocator != nullptr ? allocator
-                                      : DefaultAllocator::GetInstance()) {
+                                      : DefaultAllocator::Create()) {
   DEBUG_CHECK(block_size > 0);
 }
 
