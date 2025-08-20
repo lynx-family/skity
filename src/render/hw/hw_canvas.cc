@@ -230,9 +230,9 @@ void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
     working_paint.SetMaskFilter(nullptr);
     working_paint.SetImageFilter(nullptr);
     working_paint.SetColorFilter(nullptr);
-    auto bounds_size = blob->GetBoundSize();
-    auto bounds =
-        Rect::MakeXYWH(x, y - bounds_size.y, bounds_size.x, bounds_size.y);
+    auto bounds = blob->GetBoundsRect().MakeOffset(x, y);
+    // Expand outward a little to prevent incomplete display of text content
+    bounds = bounds.MakeOutset(1, 1);
     auto layer_bounds = working_paint.ComputeFastBounds(bounds);
     auto result = GenLayer(restore_paint, layer_bounds, current_matrix);
     if (!result) {
