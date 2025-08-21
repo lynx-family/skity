@@ -46,7 +46,7 @@ jobs:
           - name: Compile Code
             run: |
                 export PATH=$PWD/buildtools/llvm/bin:$PATH
-                cmake -B out/cmake_host_build -DSKITY_TEST=ON -DSKITY_TEST_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS="-fPIC"
+                cmake -B out/cmake_host_build -DSKITY_TEST=ON -DSKITY_TEST_COVERAGE=ON -DSKITY_CODEC_MODULE=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS="-fPIC"
                 cmake --build out/cmake_host_build --target skity_unit_test
           - name: Test and Generate Coverage Report
             continue-on-error: true

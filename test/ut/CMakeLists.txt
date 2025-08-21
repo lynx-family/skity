@@ -42,6 +42,17 @@ target_link_libraries(skity_unit_test
     gmock_main
 )
 
+if (${SKITY_CODEC_MODULE})
+    target_sources(skity_unit_test
+        PUBLIC
+        codec/png_codec_test.cc
+    )
+
+    target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_PNG_FILE="${CMAKE_SOURCE_DIR}/example/images/firefox_64.png")
+
+    target_link_libraries(skity_unit_test PUBLIC skity::codec)
+endif()
+
 if (${SKITY_TEST_COVERAGE} AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     # Coverage flags
     target_compile_options(skity PRIVATE --coverage -O0 -g)
@@ -49,6 +60,11 @@ if (${SKITY_TEST_COVERAGE} AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 
     target_compile_options(wgsl-cross PRIVATE --coverage -O0 -g)
     target_link_options(wgsl-cross PRIVATE --coverage)
+
+    if (${SKITY_CODEC_MODULE})
+        target_compile_options(skity-codec PRIVATE --coverage -O0 -g)
+        target_link_options(skity-codec PRIVATE --coverage)
+    endif()
 
     target_compile_options(skity_unit_test PRIVATE --coverage -O0 -g)
     target_link_options(skity_unit_test PRIVATE --coverage)

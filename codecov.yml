@@ -12,6 +12,7 @@ coverage:
 ignore:
   - "test/ut/**/*"
   - "test/ut/common.hpp"
+  - "third_party/**/*"
 
 comment:
   layout: "header, files, footer"

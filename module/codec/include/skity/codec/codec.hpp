@@ -54,6 +54,9 @@ class SKITY_EXPERIMENTAL_API Codec {
   /**
    * Decode the data to pixmap.
    *
+   * @note Currently the codec only output pixmap with RGBA color type and
+   *       unpremul alpha type.
+   *
    * @return The decoded pixmap. nullptr if decode failed.
    */
   virtual std::shared_ptr<Pixmap> Decode() = 0;
