@@ -117,3 +117,70 @@ TEST(PNGCodecTest, Encode) {
   EXPECT_TRUE(codec->RecognizeFileType(
       reinterpret_cast<const char*>(data->Bytes()), data->Size()));
 }
+
+TEST(PNGCodecTest, EncodePremulAlpha) {
+  skity::Pixmap pixmap(1, 1, skity::AlphaType::kPremul_AlphaType);
+
+  {
+    auto addr = reinterpret_cast<uint32_t*>(pixmap.WritableAddr());
+
+    *addr = skity::ColorSetARGB(128, 128, 0, 0);
+  }
+
+  auto codec = skity::Codec::MakePngCodec();
+
+  auto data = codec->Encode(&pixmap);
+
+  EXPECT_TRUE(data != nullptr);
+
+  EXPECT_TRUE(codec->RecognizeFileType(
+      reinterpret_cast<const char*>(data->Bytes()), data->Size()));
+
+  codec->SetData(data);
+
+  auto decode_pixmap = codec->Decode();
+
+  EXPECT_TRUE(decode_pixmap != nullptr);
+  EXPECT_EQ(decode_pixmap->Width(), 1);
+  EXPECT_EQ(decode_pixmap->Height(), 1);
+  EXPECT_EQ(decode_pixmap->GetColorType(), skity::ColorType::kRGBA);
+  EXPECT_EQ(decode_pixmap->GetAlphaType(),
+            skity::AlphaType::kUnpremul_AlphaType);
+
+  auto decode_color = reinterpret_cast<const uint32_t*>(decode_pixmap->Addr());
+  EXPECT_EQ(*decode_color, skity::ColorSetARGB(128, 255, 0, 0));
+}
+
+TEST(PNGCodecTest, EncodeBGRA) {
+  skity::Pixmap pixmap(1, 1, skity::AlphaType::kUnpremul_AlphaType,
+                       skity::ColorType::kBGRA);
+
+  {
+    auto addr = reinterpret_cast<uint32_t*>(pixmap.WritableAddr());
+
+    *addr = skity::ColorSetARGB(128, 255, 0, 0);
+  }
+
+  auto codec = skity::Codec::MakePngCodec();
+
+  auto data = codec->Encode(&pixmap);
+
+  EXPECT_TRUE(data != nullptr);
+
+  EXPECT_TRUE(codec->RecognizeFileType(
+      reinterpret_cast<const char*>(data->Bytes()), data->Size()));
+
+  codec->SetData(data);
+
+  auto decode_pixmap = codec->Decode();
+
+  EXPECT_TRUE(decode_pixmap != nullptr);
+  EXPECT_EQ(decode_pixmap->Width(), 1);
+  EXPECT_EQ(decode_pixmap->Height(), 1);
+  EXPECT_EQ(decode_pixmap->GetColorType(), skity::ColorType::kRGBA);
+  EXPECT_EQ(decode_pixmap->GetAlphaType(),
+            skity::AlphaType::kUnpremul_AlphaType);
+
+  auto decode_color = reinterpret_cast<const uint32_t*>(decode_pixmap->Addr());
+  EXPECT_EQ(*decode_color, skity::ColorSetARGB(128, 0, 0, 255));
+}

@@ -62,8 +62,6 @@ static inline PMColor ColorToPMColor(Color c) {
                                ColorGetB(c));
 }
 
-Color PMColorToColor(PMColor c);
-
 // When Android is compiled optimizing for size, SkAlphaMulQ doesn't get
 // inlined; forcing inlining significantly improves performance.
 static inline uint32_t AlphaMulQ(uint32_t c, unsigned scale) {

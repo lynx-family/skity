@@ -10,6 +10,8 @@
 #include <skity/io/pixmap.hpp>
 #include <vector>
 
+#include "src/codec/codec_priv.hpp"
+
 namespace skity {
 
 #define PNG_BYTES_TO_CHECK 4
@@ -99,13 +101,23 @@ std::shared_ptr<Data> skity::PNGCodec::Encode(const Pixmap* pixmap) {
     bytepp[i] = ((uint8_t*)pixmap->Addr()) + pixmap->Width() * i * 4;  // NOLINT
   }
 
-  png_set_rows(png_ptr, info_ptr, (png_bytepp)bytepp.data());
-
   std::vector<uint8_t> encode_data{};
   png_set_write_fn(png_ptr, &encode_data, png_write_callback, nullptr);
 
   png_write_info(png_ptr, info_ptr);
-  png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, nullptr);
+
+  auto bytes_per_pixel = pixmap->RowBytes() / pixmap->Width();
+  for (int y = 0; y < pixmap->Height(); y++) {
+    std::vector<uint8_t> row(pixmap->RowBytes());
+
+    auto transform_line = codec_priv::ChooseLineTransformFunc(
+        pixmap->GetColorType(), pixmap->GetAlphaType());
+
+    transform_line(row.data(), bytepp[y], pixmap->Width(), bytes_per_pixel);
+
+    png_write_row(png_ptr, row.data());
+  }
+
   png_write_end(png_ptr, info_ptr);
 
   return Data::MakeWithCopy(encode_data.data(), encode_data.size());

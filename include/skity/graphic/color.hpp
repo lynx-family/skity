@@ -70,6 +70,13 @@ SKITY_API constexpr inline Color ColorSetA(Color c, uint8_t a) {
   return (c & 0x00FFFFFF) | (a << 24);
 }
 
+/**
+ * Swizzle red and blue component of color.
+ */
+SKITY_API constexpr inline Color ColorSwizzleRB(Color c) {
+  return ColorSetARGB(ColorGetA(c), ColorGetB(c), ColorGetG(c), ColorGetR(c));
+}
+
 constexpr uint8_t Color_AlphaTRANSPARENT = 0x00;
 constexpr uint8_t Color_AlphaOPAQUE = 0xFF;
 
@@ -135,6 +142,8 @@ using Color4f = Vec4;
 SKITY_API Color4f Color4fFromColor(Color color);
 
 SKITY_API Color Color4fToColor(Color4f color);
+
+SKITY_API Color PMColorToColor(PMColor c);
 
 namespace Colors {
 

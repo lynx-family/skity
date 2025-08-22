@@ -27,6 +27,8 @@ target_sources(
   PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/include/skity/codec/codec.hpp
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec_priv.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec_priv.hpp
 )
 
 target_compile_definitions(skity-codec PRIVATE -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
