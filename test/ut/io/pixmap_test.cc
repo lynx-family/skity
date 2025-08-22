@@ -2,9 +2,10 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <skity/io/pixmap.hpp>
-
 #include <gtest/gtest.h>
+
+#include <skity/graphic/color.hpp>
+#include <skity/io/pixmap.hpp>
 
 using namespace skity;
 
@@ -30,7 +31,7 @@ TEST(PixmapTest, ConstructorWithParams) {
 TEST(PixmapTest, RowBytes) {
   Pixmap pixmap(100, 200);
   // The default is ColorType::kRGBA, which occupies 4 bytes
-  ASSERT_EQ(pixmap.RowBytes(), 100 * 4); 
+  ASSERT_EQ(pixmap.RowBytes(), 100 * 4);
 }
 
 // pay attention to the matching rules
@@ -38,6 +39,23 @@ TEST(PixmapTest, SetColorInfoAlphaType) {
   Pixmap pixmap;
   pixmap.SetColorInfo(AlphaType::kUnknown_AlphaType, ColorType::kUnknown);
   ASSERT_EQ(pixmap.GetAlphaType(), skity::AlphaType::kUnknown_AlphaType);
+
+  // check if change color info work
+  Pixmap pixmap2(1, 1, AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
+
+  auto addr = reinterpret_cast<uint32_t*>(pixmap2.WritableAddr());
+
+  *addr = ColorSetARGB(128, 255, 0, 0);
+
+  auto pixel = reinterpret_cast<const uint32_t*>(pixmap2.Addr());
+
+  ASSERT_EQ(*pixel, ColorSetARGB(128, 255, 0, 0));
+
+  pixmap2.SetColorInfo(AlphaType::kPremul_AlphaType, ColorType::kRGBA);
+
+  pixel = reinterpret_cast<const uint32_t*>(pixmap2.Addr());
+
+  ASSERT_EQ(*pixel, ColorSetARGB(128, 128, 0, 0));
 }
 
 TEST(PixmapTest, SetColorInfoColorType) {

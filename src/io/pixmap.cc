@@ -95,9 +95,6 @@ bool Pixmap::SetColorInfo(AlphaType alpha_type, ColorType color_type) {
     return false;
   }
 
-  alpha_type_ = alpha_type;
-  color_type_ = color_type;
-
   if ((alpha_type_ == kPremul_AlphaType && alpha_type == kUnpremul_AlphaType) ||
       (alpha_type_ == kUnpremul_AlphaType && alpha_type == kPremul_AlphaType)) {
     auto f = alpha_type == kPremul_AlphaType ? ColorToPMColor : PMColorToColor;
@@ -110,6 +107,9 @@ bool Pixmap::SetColorInfo(AlphaType alpha_type, ColorType color_type) {
       }
     }
   }
+
+  alpha_type_ = alpha_type;
+  color_type_ = color_type;
 
   return true;
 }
