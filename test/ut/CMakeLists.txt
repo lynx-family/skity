@@ -26,6 +26,7 @@ add_executable(skity_unit_test
     render/canvas_state_test.cc
     render/resource_cache_test.cc
     recorder/display_list_test.cc
+    text/text_run_test.cc
     text/text_test.cc
     utils/arena_allocator_test.cc
     utils/array_list_test.cc
