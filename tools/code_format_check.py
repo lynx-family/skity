@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     for file_name in files:
         if file_name.endswith('.cc') or file_name.endswith('.mm') or file_name.endswith('.hpp') or file_name.endswith('.h'):
-            if file_name.count("third_party") > 0 or file_name.count("test") > 0:
+            if file_name.count("third_party") > 0:
                 continue
             if not checkFormat(file_name):
                 failed_path.append(file_name)

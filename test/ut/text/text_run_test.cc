@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <skity/text/text_run.hpp>
+
 #include "src/text/scaler_context.hpp"
 
 namespace skity {
