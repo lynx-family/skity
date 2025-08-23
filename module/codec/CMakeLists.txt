@@ -79,7 +79,7 @@ target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/libpn
 if (WIN32)
   target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/zlib/lib)
   # FIXME: msvc generate different library name
-  if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_link_libraries(skity-codec PRIVATE libpng16_staticd zlibstaticd)
   else()
     target_link_libraries(skity-codec PRIVATE libpng16_static zlibstatic)

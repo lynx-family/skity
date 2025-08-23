@@ -82,7 +82,7 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT ANDROID AND NOT CMAKE_SYSTEM
   target_link_directories(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/lib)
   if (WIN32)
     # FIXME: zlib in msvc output a different name
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "Debug")
       target_link_libraries(skity PRIVATE zlibstaticd)
     else()
       target_link_libraries(skity PRIVATE zlibstatic)
