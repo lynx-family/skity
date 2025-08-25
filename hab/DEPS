@@ -57,4 +57,16 @@ deps = {
         "ignore_in_git": True,
         "commit": "ee86beb30e4973f5feffe3ce63bfa4fbadf72f38",
     },
+    "third_party/SPIRV-Cross": {
+        "type": "git",
+        "url": "https://github.com/KhronosGroup/SPIRV-Cross.git",
+        "ignore_in_git": True,
+        "commit": "ebe2aa0cd80f5eb5cd8a605da604cacf72205f3b",
+    },
+    "third_party/glslang": {
+        "type": "git",
+        "url": "https://github.com/KhronosGroup/glslang.git",
+        "ignore_in_git": True,
+        "commit": "d1517d64cfca91f573af1bf7341dc3a5113349c0",
+    },
 }
