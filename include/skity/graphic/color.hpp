@@ -145,6 +145,8 @@ SKITY_API Color Color4fToColor(Color4f color);
 
 SKITY_API Color PMColorToColor(PMColor c);
 
+SKITY_API PMColor ColorToPMColor(Color c);
+
 namespace Colors {
 
 constexpr Color4f kTransparent = {0, 0, 0, 0};

@@ -102,4 +102,9 @@ Color PMColorToColor(PMColor c) {
                       UnPreMultiply::ApplyScale(scale, ColorGetB(c)));
 }
 
+PMColor ColorToPMColor(Color c) {
+  return PremultiplyARGBInline(ColorGetA(c), ColorGetR(c), ColorGetG(c),
+                               ColorGetB(c));
+}
+
 }  // namespace skity
