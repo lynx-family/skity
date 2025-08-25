@@ -198,5 +198,3 @@ static void BM_SWGradientSpanBrush(benchmark::State& state) {
 }
 
 BENCHMARK(BM_SWGradientSpanBrush)->Unit(benchmark::kMicrosecond);
-
-BENCHMARK_MAIN();

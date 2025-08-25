@@ -1,26 +1,71 @@
+# Copyright 2021 The Lynx Authors. All rights reserved.
+# Licensed under the Apache License Version 2.0 that can be found in the
+# LICENSE file in the root directory of this source tree.
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/google_benchmark third_party/google_benchmark)
+add_subdirectory(micro)
 
-add_executable(skity_benchmarks
-    hw_path_raster_benchmarks.cc
-    matrix_benchmarks.cc
-    sw_benchmarks.cc
-    ${CMAKE_SOURCE_DIR}/example/case/basic/example.cc
-    ${CMAKE_SOURCE_DIR}/example/case/basic/example.hpp
+if (NOT APPLE)
+    return()
+endif()
+
+add_executable(skity_hw_render_bench
+    hw_benchmarks.cc
+    case/draw_circle.cc
+    case/draw_circle.hpp
 )
 
-target_include_directories(skity_benchmarks
+target_sources(skity_hw_render_bench PRIVATE 
+    common/bench_target.cc
+    common/bench_target.hpp
+    common/bench_context.cc
+    common/bench_context.hpp
+)
+
+target_compile_options(skity_hw_render_bench PRIVATE "-fobjc-arc")
+
+if (${SKITY_MTL_BACKEND})
+  target_compile_definitions(skity_hw_render_bench PRIVATE -DSKITY_BENCH_MTL_BACKEND=1)
+  target_sources(skity_hw_render_bench PRIVATE 
+    common/bench_target_mtl.h
+    common/bench_target_mtl.mm
+    common/bench_context_mtl.h
+    common/bench_context_mtl.mm
+  )
+  target_link_libraries(skity_hw_render_bench PRIVATE "-framework Metal")
+endif()
+
+if (${SKITY_GL_BACKEND})
+    target_compile_definitions(skity_hw_render_bench PRIVATE -DSKITY_BENCH_GL_BACKEND=1)
+    target_sources(skity_hw_render_bench PRIVATE 
+        common/bench_target_gl.cc
+        common/bench_target_gl.hpp
+        common/bench_context_gl.cc
+        common/bench_context_gl.hpp
+        common/bench_gl_context_mac.h
+        common/bench_gl_context_mac.mm
+        common/bench_gl_context.hpp
+    )
+    target_link_libraries(skity_hw_render_bench PRIVATE "-framework OpenGL")
+endif()
+
+target_include_directories(skity_hw_render_bench
     PUBLIC
     ${CMAKE_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/example
 )
 
-target_compile_options(skity_benchmarks PUBLIC -fno-rtti)
-target_compile_options(skity_benchmarks PUBLIC -std=c++17)
+target_compile_options(skity_hw_render_bench PUBLIC -fno-rtti)
+target_compile_options(skity_hw_render_bench PUBLIC -std=c++17)
+target_compile_definitions(skity_hw_render_bench PUBLIC -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
 
-target_link_libraries(skity_benchmarks
+target_link_libraries(skity_hw_render_bench
     PUBLIC
+    skity::codec
     skity::skity
     benchmark::benchmark
 )
-target_link_libraries(skity_benchmarks PRIVATE glm::glm-header-only)
+target_link_libraries(skity_hw_render_bench
+    PRIVATE "-framework Carbon"
+            "-framework AppKit")
+
+target_link_libraries(skity_hw_render_bench PRIVATE glm::glm-header-only)

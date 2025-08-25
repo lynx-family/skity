@@ -5,6 +5,7 @@
 #include <benchmark/benchmark.h>
 
 #include <skity/skity.hpp>
+#include <sstream>
 
 #include "src/render/hw/hw_path_raster.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
@@ -17,6 +18,75 @@ enum PathIndex : int64_t {
   kBigConic = 3,
   kBigCubic = 4,
 };
+namespace {
+std::string GetFillLabel(PathIndex index) {
+  switch (index) {
+    case PathIndex::kBigCircle:
+      return "BigCircle";
+    case PathIndex::kLines:
+      return "Lines";
+    case PathIndex::kBigQuad:
+      return "BigQuad";
+    case PathIndex::kBigConic:
+      return "BigConic";
+    case PathIndex::kBigCubic:
+      return "BigCubic";
+  }
+}
+
+std::string GetStrokeLabel(PathIndex index, float stroke_width,
+                           skity::Paint::Cap cap, skity::Paint::Join join) {
+  std::stringstream ss;
+  switch (index) {
+    case PathIndex::kBigCircle:
+      ss << "BigCircle";
+      break;
+    case PathIndex::kLines:
+      ss << "Lines";
+      break;
+    case PathIndex::kBigQuad:
+      ss << "BigQuad";
+      break;
+    case PathIndex::kBigConic:
+      ss << "BigConic";
+      break;
+    case PathIndex::kBigCubic:
+      ss << "BigCubic";
+      break;
+  }
+
+  ss << "_";
+
+  switch (cap) {
+    case skity::Paint::kButt_Cap:
+      ss << "ButtCap";
+      break;
+    case skity::Paint::kRound_Cap:
+      ss << "RoundCap";
+      break;
+    case skity::Paint::kSquare_Cap:
+      ss << "SquareCap";
+      break;
+  }
+
+  ss << "_";
+
+  switch (join) {
+    case skity::Paint::kMiter_Join:
+      ss << "MiterJoin";
+      break;
+    case skity::Paint::kRound_Join:
+      ss << "RoundJoin";
+      break;
+    case skity::Paint::kBevel_Join:
+      ss << "BevelJoin";
+      break;
+  }
+
+  return ss.str();
+}
+
+}  // namespace
 
 static skity::Path GetPathByIndex(PathIndex index) {
   switch (index) {
@@ -56,7 +126,9 @@ static skity::Path GetPathByIndex(PathIndex index) {
   }
 }
 
-static void BM_HWPathFillRaster_FillPath(benchmark::State& state) {
+static void BM_HWPathRaster_FillPath(benchmark::State& state) {
+  state.SetLabel(GetFillLabel(static_cast<PathIndex>(state.range(0))));
+
   skity::Paint paint;
   skity::Matrix matrix;
   skity::VectorCache<float> vertex_vector_cache;
@@ -78,37 +150,17 @@ static void BM_HWPathFillRaster_FillPath(benchmark::State& state) {
   }
 }
 
-BENCHMARK(BM_HWPathFillRaster_FillPath)
-    ->Args({
-        PathIndex::kBigCircle,
-    })
+BENCHMARK(BM_HWPathRaster_FillPath)
+    ->ArgsProduct({{kBigCircle, kLines, kBigQuad, kBigConic, kBigCubic}})
+    ->ArgNames({"type"})
     ->Unit(benchmark::kMicrosecond);
 
-BENCHMARK(BM_HWPathFillRaster_FillPath)
-    ->Args({
-        PathIndex::kLines,
-    })
-    ->Unit(benchmark::kMicrosecond);
+static void BM_HWPathRaster_StrokePath(benchmark::State& state) {
+  state.SetLabel(
+      GetStrokeLabel(static_cast<PathIndex>(state.range(0)), state.range(1),
+                     static_cast<skity::Paint::Cap>(state.range(2)),
+                     static_cast<skity::Paint::Join>(state.range(3))));
 
-BENCHMARK(BM_HWPathFillRaster_FillPath)
-    ->Args({
-        PathIndex::kBigQuad,
-    })
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK(BM_HWPathFillRaster_FillPath)
-    ->Args({
-        PathIndex::kBigConic,
-    })
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK(BM_HWPathFillRaster_FillPath)
-    ->Args({
-        PathIndex::kBigCubic,
-    })
-    ->Unit(benchmark::kMicrosecond);
-
-static void BM_HWPathFillRaster_StrokePath(benchmark::State& state) {
   skity::Paint paint;
   skity::Matrix matrix;
   skity::VectorCache<float> vertex_vector_cache;
@@ -134,92 +186,31 @@ static void BM_HWPathFillRaster_StrokePath(benchmark::State& state) {
     }
   }
 }
-BENCHMARK(BM_HWPathFillRaster_StrokePath)
-    ->Args({
-        PathIndex::kBigCircle,
-        10,
-        skity::Paint::kRound_Cap,
-        skity::Paint::kRound_Join,
+
+BENCHMARK(BM_HWPathRaster_StrokePath)
+    ->ArgsProduct({
+        // type
+        {kBigCircle, kLines, kBigQuad, kBigConic, kBigCubic},
+        // stroke_width
+        {10},
+        // cap
+        {skity::Paint::kRound_Cap},
+        // join
+        {skity::Paint::kRound_Join},
     })
+    ->ArgNames({"type", "stroke_width", "cap", "join"})
     ->Unit(benchmark::kMicrosecond);
 
-BENCHMARK(BM_HWPathFillRaster_StrokePath)
-    ->Args({
-        PathIndex::kBigCircle,
-        10,
-        skity::Paint::kButt_Cap,
-        skity::Paint::kMiter_Join,
+BENCHMARK(BM_HWPathRaster_StrokePath)
+    ->ArgsProduct({
+        // type
+        {kBigCircle, kLines, kBigQuad, kBigConic, kBigCubic},
+        // stroke_width
+        {10},
+        // cap
+        {skity::Paint::kButt_Cap},
+        // join
+        {skity::Paint::kMiter_Join},
     })
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK(BM_HWPathFillRaster_StrokePath)
-    ->Args({
-        PathIndex::kLines,
-        10,
-        skity::Paint::kRound_Cap,
-        skity::Paint::kRound_Join,
-    })
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK(BM_HWPathFillRaster_StrokePath)
-    ->Args({
-        PathIndex::kLines,
-        10,
-        skity::Paint::kButt_Cap,
-        skity::Paint::kMiter_Join,
-    })
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK(BM_HWPathFillRaster_StrokePath)
-    ->Args({
-        PathIndex::kBigQuad,
-        10,
-        skity::Paint::kRound_Cap,
-        skity::Paint::kRound_Join,
-    })
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK(BM_HWPathFillRaster_StrokePath)
-    ->Args({
-        PathIndex::kBigQuad,
-        10,
-        skity::Paint::kButt_Cap,
-        skity::Paint::kMiter_Join,
-    })
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK(BM_HWPathFillRaster_StrokePath)
-    ->Args({
-        PathIndex::kBigConic,
-        10,
-        skity::Paint::kRound_Cap,
-        skity::Paint::kRound_Join,
-    })
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK(BM_HWPathFillRaster_StrokePath)
-    ->Args({
-        PathIndex::kBigConic,
-        10,
-        skity::Paint::kButt_Cap,
-        skity::Paint::kMiter_Join,
-    })
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK(BM_HWPathFillRaster_StrokePath)
-    ->Args({
-        PathIndex::kBigCubic,
-        10,
-        skity::Paint::kRound_Cap,
-        skity::Paint::kRound_Join,
-    })
-    ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK(BM_HWPathFillRaster_StrokePath)
-    ->Args({
-        PathIndex::kBigCubic,
-        10,
-        skity::Paint::kButt_Cap,
-        skity::Paint::kMiter_Join,
-    })
+    ->ArgNames({"type", "stroke_width", "cap", "join"})
     ->Unit(benchmark::kMicrosecond);
