@@ -57,11 +57,6 @@ static inline PMColor PremultiplyARGBInline(uint32_t a, uint32_t r, uint32_t g,
   return (a << 24) | (r << 16) | (g << 8) | (b << 0);
 }
 
-static inline PMColor ColorToPMColor(Color c) {
-  return PremultiplyARGBInline(ColorGetA(c), ColorGetR(c), ColorGetG(c),
-                               ColorGetB(c));
-}
-
 // When Android is compiled optimizing for size, SkAlphaMulQ doesn't get
 // inlined; forcing inlining significantly improves performance.
 static inline uint32_t AlphaMulQ(uint32_t c, unsigned scale) {

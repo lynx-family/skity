@@ -7,6 +7,24 @@
 namespace skity {
 namespace codec_priv {
 
+void CodecTransformLinePremul(uint8_t* dst, uint8_t* src, int width,
+                              int bytes_per_pixel) {
+  // currently we only support RGBA or BGRA
+  if (bytes_per_pixel != 4) {
+    return;
+  }
+
+  auto dst32 = reinterpret_cast<uint32_t*>(dst);
+  auto src32 = reinterpret_cast<uint32_t*>(src);
+  for (int x = 0; x < width; x++) {
+    auto pm_color = *src32;
+    *dst32 = ColorToPMColor(pm_color);
+
+    dst32++;
+    src32++;
+  }
+}
+
 void CodecTransformLineUnpremul(uint8_t* dst, uint8_t* src, int width,
                                 int bytes_per_pixel) {
   // currently we only support RGBA or BGRA

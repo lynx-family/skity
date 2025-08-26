@@ -46,10 +46,12 @@ target_link_libraries(skity_unit_test
 if (${SKITY_CODEC_MODULE})
     target_sources(skity_unit_test
         PUBLIC
+        codec/jpeg_codec_test.cc
         codec/png_codec_test.cc
     )
 
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_PNG_FILE="${CMAKE_SOURCE_DIR}/example/images/firefox_64.png")
+    target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_JPEG_FILE="${CMAKE_SOURCE_DIR}/example/images/image1.jpg")
 
     target_link_libraries(skity_unit_test PUBLIC skity::codec)
 endif()

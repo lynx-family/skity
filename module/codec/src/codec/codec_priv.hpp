@@ -23,14 +23,20 @@ static void CodecTransformLineByPass(uint8_t* dst, uint8_t* src, int width,
   }
 }
 
+void CodecTransformLinePremul(uint8_t* dst, uint8_t* src, int width,
+                              int bytes_per_pixel);
+
 void CodecTransformLineUnpremul(uint8_t* dst, uint8_t* src, int width,
                                 int bytes_per_pixel);
 
 void CodecTransformLineSwizzelRB(uint8_t* dst, uint8_t* src, int width,
                                  int bytes_per_pixel);
 
-std::function<void(uint8_t* dst, uint8_t* src, int width, int bytes_per_pixel)>
-ChooseLineTransformFunc(ColorType color_type, AlphaType alpha_type);
+using TransformLineFunc = std::function<void(uint8_t* dst, uint8_t* src,
+                                             int width, int bytes_per_pixel)>;
+
+TransformLineFunc ChooseLineTransformFunc(ColorType color_type,
+                                          AlphaType alpha_type);
 
 }  // namespace codec_priv
 }  // namespace skity
