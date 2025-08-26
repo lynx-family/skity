@@ -137,6 +137,8 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode() {
                                   width, height);
 }
 
+std::shared_ptr<MultiFrameDecoder> JPEGCodec::DecodeMultiFrame() { return {}; }
+
 std::shared_ptr<Data> JPEGCodec::Encode(const Pixmap* pixmap) {
   if (!pixmap || pixmap->Width() == 0 || pixmap->Height() == 0) {
     return nullptr;

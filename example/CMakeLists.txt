@@ -19,6 +19,7 @@ else()
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/example/case)
 endif()
 
+add_subdirectory(case/animated_image)
 add_subdirectory(case/basic)
 add_subdirectory(case/blend)
 add_subdirectory(case/clip)

@@ -29,9 +29,27 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec_priv.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec_priv.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/data_stream.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/data_stream.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/gif_codec.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/gif_codec.hpp
 )
 
 target_compile_definitions(skity-codec PRIVATE -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
+
+# wuffs
+target_include_directories(skity-codec PRIVATE ${CMAKE_SOURCE_DIR}/third_party/wuffs/release/c)
+
+target_sources(
+  skity-codec
+  PRIVATE
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec_frame.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec_frame.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_module.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_module.hpp
+)
 
 # libpng
 ExternalProject_Add(libpng

@@ -65,6 +65,8 @@ std::shared_ptr<Pixmap> skity::PNGCodec::Decode() {
   return pixmap_;
 }
 
+std::shared_ptr<MultiFrameDecoder> PNGCodec::DecodeMultiFrame() { return {}; }
+
 struct PNGDestructor {
   png_structp p;
   explicit PNGDestructor(png_structp p) : p(p) {}
