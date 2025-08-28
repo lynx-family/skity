@@ -438,6 +438,74 @@ if(${SKITY_HW_RENDERER})
       "-framework Foundation"
     )
   endif()
+
+  # Vulkan backend
+  if(${SKITY_VK_BACKEND})
+    target_sources(
+      skity
+      PRIVATE
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/formats_vk.h
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vk_interface.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vk_interface.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_blit_pass_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_blit_pass_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_buffer_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_buffer_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_command_buffer_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_command_buffer_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_context_impl_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_context_impl_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_device_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_device_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_descriptor_set_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_descriptor_set_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_pipeline_cache_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_pipeline_cache_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pass_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pass_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pipeline_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pipeline_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_sampler_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_sampler_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_shader_function_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_shader_function_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_surface_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_surface_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_window_surface_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_window_surface_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_texture_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_texture_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/sync_objects_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/sync_objects_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/spirv_compiler_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/spirv_compiler_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/formats_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/formats_vk.h
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vma_impl.cc
+      ${CMAKE_CURRENT_LIST_DIR}/render/hw/vk/vk_root_layer.cc
+      ${CMAKE_CURRENT_LIST_DIR}/render/hw/vk/vk_root_layer.hpp
+    )
+    
+    # Add Vulkan dependencies
+    target_include_directories(skity PRIVATE 
+      ${CMAKE_SOURCE_DIR}/third_party
+      ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include
+      ${CMAKE_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include
+    )
+    
+    # Add glslang subdirectory and link libraries
+    add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glslang third_party/glslang)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/SPIRV-Cross third_party/SPIRV-Cross)
+    
+    target_link_libraries(skity PRIVATE 
+      glslang 
+      SPIRV
+      glslang-default-resource-limits
+      spirv-cross-core
+      spirv-cross-glsl
+      volk
+    )
+  endif()
 endif()
 
 if(${SKITY_SW_RENDERER})
