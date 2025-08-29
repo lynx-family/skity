@@ -298,6 +298,7 @@ void Conic::ChopAt(float t1, float t2, Conic* dst) const {
 }
 
 uint32_t Conic::ChopIntoQuadsPOW2(Point* p_pts, uint32_t pow2) {
+  *p_pts = pts[0];
   if (pow2 == kMaxConicToQuadPOW2) {
     std::array<Conic, 2> dst = {};
     this->Chop(dst.data());
