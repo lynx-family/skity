@@ -1,3 +1,5 @@
+TESTING CLA BOT - DO NOT MERGE
+
 # Skity
 
 [![Apache licesed](https://img.shields.io/badge/License-Apache--2.0-cyan?logo=apache)](https://github.com/lynx-family/skity/blob/main/LICENSE)
