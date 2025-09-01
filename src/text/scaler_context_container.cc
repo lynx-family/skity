@@ -88,29 +88,6 @@ GlyphData *ScalerContextContainer::Glyph(GlyphID id) SKITY_REQUIRES(mutex_) {
   }
   auto glyph_data = std::make_unique<GlyphData>(id);
   scaler_context_->MakeGlyph(glyph_data.get());
-  // handle stroke metrics
-  ScalerContextDesc desc = scaler_context_->GetDesc();
-  if (desc.stroke_width > 0) {
-    Paint paint;
-    paint.SetStyle(Paint::kStroke_Style);
-    paint.SetStrokeWidth(desc.stroke_width);
-    paint.SetStrokeCap(desc.cap);
-    paint.SetStrokeJoin(desc.join);
-    paint.SetStrokeMiter(desc.miter_limit);
-    PreparePath(glyph_data.get());
-    Path quad_path;
-    Path fill_path;
-    Stroke stroke(paint);
-    stroke.QuadPath(glyph_data->GetPath(), &quad_path);
-    stroke.StrokePath(quad_path, &fill_path);
-
-    Rect bound = fill_path.GetBounds();
-    glyph_data->hori_bearing_x_ = bound.Left();
-    glyph_data->hori_bearing_y_ = -bound.Top();
-    glyph_data->width_ = bound.Width();
-    glyph_data->height_ = bound.Height();
-  }
-
   return this->AddGlyph(std::move(glyph_data));
 }
 
