@@ -13,18 +13,14 @@ namespace skity {
 
 class WuffsCodecFrame : public CodecFrame {
  public:
-  WuffsCodecFrame(const wuffs_base__frame_config& config);
+  explicit WuffsCodecFrame(const wuffs_base__frame_config& config);
 
   ~WuffsCodecFrame() override = default;
 
   uint64_t GetIOPos() const { return io_pos_; }
 
-  AlphaType GetAlphaType() const { return alpha_type_; }
-
  private:
   uint64_t io_pos_ = 0;
-
-  AlphaType alpha_type_ = AlphaType::kUnknown_AlphaType;
 };
 
 }  // namespace skity

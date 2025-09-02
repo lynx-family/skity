@@ -47,7 +47,9 @@ TEST(GIFCodecTest, DecodeMultipleFrame) {
 
   EXPECT_TRUE(frame_11 != nullptr);
 
-  auto pixmap = frame_decoder->DecodeFrame(frame_11);
+  auto pixmap = std::make_shared<skity::Pixmap>(100, 100);
+
+  pixmap = frame_decoder->DecodeFrame(frame_11, pixmap);
 
   EXPECT_TRUE(pixmap != nullptr);
   EXPECT_EQ(pixmap->GetAlphaType(), skity::AlphaType::kUnpremul_AlphaType);
@@ -77,7 +79,7 @@ TEST(GIFCodecTest, DecodeSingleFrame) {
 
   EXPECT_TRUE(frame_0 != nullptr);
 
-  auto pixmap = frame_decoder->DecodeFrame(frame_0);
+  auto pixmap = frame_decoder->DecodeFrame(frame_0, nullptr);
 
   EXPECT_TRUE(pixmap != nullptr);
 

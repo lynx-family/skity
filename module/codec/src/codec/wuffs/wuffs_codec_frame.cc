@@ -7,11 +7,7 @@
 namespace skity {
 
 WuffsCodecFrame::WuffsCodecFrame(const wuffs_base__frame_config& config)
-    : CodecFrame(config.index(), {}),
-      io_pos_(config.io_position()),
-      alpha_type_(config.opaque_within_bounds()
-                      ? AlphaType::kOpaque_AlphaType
-                      : AlphaType::kUnpremul_AlphaType) {
+    : CodecFrame(config.index(), {}), io_pos_(config.io_position()) {
   auto rect = config.bounds();
 
   SetXYWH(rect.min_incl_x, rect.min_incl_y, rect.width(), rect.height());
@@ -19,6 +15,8 @@ WuffsCodecFrame::WuffsCodecFrame(const wuffs_base__frame_config& config)
   SetDuration(config.duration() / WUFFS_BASE__FLICKS_PER_MILLISECOND);
   SetBlendMode(config.overwrite_instead_of_blend() ? CodecBlendMode::Src
                                                    : CodecBlendMode::SrcOver);
+  SetAlphaType(config.opaque_within_bounds() ? AlphaType::kOpaque_AlphaType
+                                             : AlphaType::kUnpremul_AlphaType);
 }
 
 }  // namespace skity

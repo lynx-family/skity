@@ -49,12 +49,14 @@ if (${SKITY_CODEC_MODULE})
         codec/jpeg_codec_test.cc
         codec/png_codec_test.cc
         codec/gif_codec_test.cc
+        codec/webp_codec_test.cc
     )
 
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_PNG_FILE="${CMAKE_SOURCE_DIR}/example/images/firefox_64.png")
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_JPEG_FILE="${CMAKE_SOURCE_DIR}/example/images/image1.jpg")
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_MF_GIF_FILE="${CMAKE_SOURCE_DIR}/example/images/alphabetAnim.gif")
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_SF_GIF_FILE="${CMAKE_SOURCE_DIR}/example/images/color_wheel.gif")
+    target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_WEBP_FILE="${CMAKE_SOURCE_DIR}/example/images/blendBG.webp")
 
     target_link_libraries(skity_unit_test PUBLIC skity::codec)
 endif()

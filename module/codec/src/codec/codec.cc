@@ -9,6 +9,7 @@
 #include "src/codec/gif_codec.hpp"
 #include "src/codec/jpeg_codec.hpp"
 #include "src/codec/png_codec.hpp"
+#include "src/codec/webp_codec.hpp"
 
 namespace skity {
 
@@ -20,6 +21,7 @@ void Codec::SetupCodecs() {
   codec_list.emplace_back(std::make_shared<PNGCodec>());
   codec_list.emplace_back(std::make_shared<JPEGCodec>());
   codec_list.emplace_back(std::make_shared<GIFCodec>());
+  codec_list.emplace_back(std::make_shared<WEBPCodec>());
 }
 
 std::shared_ptr<Codec> Codec::MakeFromData(const std::shared_ptr<Data>& data) {
@@ -52,6 +54,10 @@ std::shared_ptr<Codec> Codec::MakeJPEGCodec() {
 
 std::shared_ptr<Codec> Codec::MakeGIFCodec() {
   return std::make_shared<GIFCodec>();
+}
+
+std::shared_ptr<Codec> Codec::MakeWebpCodec() {
+  return std::make_shared<WEBPCodec>();
 }
 
 }  // namespace skity

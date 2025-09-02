@@ -29,10 +29,13 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec_priv.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec_priv.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/multi_frame_decoder.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/data_stream.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/data_stream.hpp
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/gif_codec.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/gif_codec.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp_codec.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp_codec.hpp
 )
 
 target_compile_definitions(skity-codec PRIVATE -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
@@ -76,6 +79,27 @@ ExternalProject_Add(libjpeg-turbo
   -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/libjpeg-turbo
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DENABLE_SHARED=OFF
+  -DCMAKE_INSTALL_MESSAGE=NEVER
+  -DCMAKE_MESSAGE_LOG_LEVEL=ERROR
+)
+
+# libwebp
+ExternalProject_Add(libwebp
+  SOURCE_DIR ${SKITY_ROOT}/third_party/libwebp
+  PREFIX ${CMAKE_CURRENT_BINARY_DIR}/third_party/libwebp
+  CMAKE_ARGS
+  -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/libwebp
+  -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+  -DENABLE_SHARED=OFF
+  -DBUILD_SHARED_LIBS=OFF
+  # disable webp command line tools
+  -DWEBP_BUILD_CWEBP=OFF
+  -DWEBP_BUILD_DWEBP=OFF
+  -DWEBP_BUILD_GIF2WEBP=OFF
+  -DWEBP_BUILD_IMG2WEBP=OFF
+  -DWEBP_BUILD_VWEBP=OFF
+  -DWEBP_BUILD_WEBPINFO=OFF
+  -DWEBP_BUILD_WEBPMUX=OFF
   -DCMAKE_INSTALL_MESSAGE=NEVER
   -DCMAKE_MESSAGE_LOG_LEVEL=ERROR
 )
@@ -127,4 +151,27 @@ if (WIN32)
   target_link_libraries(skity-codec PRIVATE turbojpeg-static)
 else()
   target_link_libraries(skity-codec PRIVATE turbojpeg)
+endif()
+
+add_dependencies(skity-codec libwebp)
+
+target_include_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libwebp/include)
+target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/libwebp/lib)
+
+
+target_sources(
+  skity-codec
+  PRIVATE
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_codec_frame.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_codec_frame.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_decoder.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_decoder.hpp
+)
+
+if (WIN32)
+  # This link config may not work if using llvm clang under minGW or msys2
+  # FIXME: use -llibwebp to solve name conflict with ExternalProject_Add(libwebp ...)
+  target_link_libraries(skity-codec PRIVATE libsharpyuv -llibwebp libwebpdecoder libwebpdemux libwebpmux)
+else()
+  target_link_libraries(skity-codec PRIVATE sharpyuv webp webpdecoder webpdemux webpmux)
 endif()

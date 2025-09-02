@@ -76,7 +76,7 @@ std::shared_ptr<Pixmap> GIFCodec::Decode() {
     return {};
   }
 
-  return wuffs_decoder_->DecodeFrame(first_frame);
+  return wuffs_decoder_->DecodeFrame(first_frame, nullptr);
 }
 
 std::shared_ptr<MultiFrameDecoder> GIFCodec::DecodeMultiFrame() {

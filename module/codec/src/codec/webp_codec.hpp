@@ -2,14 +2,14 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef SKITY_MODULE_CODEC_SRC_CODEC_WEBP_CODEC_HPP
-#define SKITY_MODULE_CODEC_SRC_CODEC_WEBP_CODEC_HPP
+#ifndef MODULE_CODEC_SRC_CODEC_WEBP_CODEC_HPP
+#define MODULE_CODEC_SRC_CODEC_WEBP_CODEC_HPP
 
 #include <skity/codec/codec.hpp>
 
 namespace skity {
 
-class WuffsDecoder;
+class WebpDecoder;
 
 class WEBPCodec : public Codec {
  public:
@@ -28,12 +28,12 @@ class WEBPCodec : public Codec {
   std::shared_ptr<MultiFrameDecoder> DecodeMultiFrame() override;
 
  private:
-  void CreateWuffsDecoderIfNeed();
+  void CreateDecoderIfNeed();
 
  private:
-  std::shared_ptr<WuffsDecoder> wuffs_decoder_;
+  std::shared_ptr<WebpDecoder> decoder_;
 };
 
 }  // namespace skity
 
-#endif  // SKITY_MODULE_CODEC_SRC_CODEC_WEBP_CODEC_HPP
+#endif  // MODULE_CODEC_SRC_CODEC_WEBP_CODEC_HPP

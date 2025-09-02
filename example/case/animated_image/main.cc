@@ -17,7 +17,7 @@ class AnimatedImageExample : public skity::example::WindowClient {
  protected:
   void OnStart(skity::GPUContext* context) override {
     auto data =
-        skity::Data::MakeFromFileName(EXAMPLE_IMAGE_ROOT "/color_wheel.gif");
+        skity::Data::MakeFromFileName(EXAMPLE_IMAGE_ROOT "/blendBG.webp");
 
     auto codec = skity::Codec::MakeFromData(data);
 
@@ -40,11 +40,14 @@ class AnimatedImageExample : public skity::example::WindowClient {
     std::cout << "\t width: " << decoder_->GetWidth() << std::endl;
     std::cout << "\t height: " << decoder_->GetHeight() << std::endl;
 
+    current_frame_ = std::make_shared<skity::Pixmap>(decoder_->GetWidth(),
+                                                     decoder_->GetHeight());
+
     last_frame_time_ = std::chrono::system_clock::now();
   }
 
   void OnDraw(skity::GPUContext* context, skity::Canvas* canvas) override {
-    canvas->DrawColor(skity::Color_TRANSPARENT, skity::BlendMode::kSrc);
+    canvas->DrawColor(skity::Color_WHITE, skity::BlendMode::kSrc);
 
     if (!decoder_) {
       return;
@@ -61,7 +64,7 @@ class AnimatedImageExample : public skity::example::WindowClient {
                           .count();
 
       if (duration >= current_frame_info_->GetDuration() * 3) {
-        current_frame_ = nullptr;
+        need_decode_ = true;
 
         last_frame_time_ = std::chrono::system_clock::now();
 
@@ -82,12 +85,11 @@ class AnimatedImageExample : public skity::example::WindowClient {
       return;
     }
 
-    if (!current_frame_) {
-      current_frame_ = decoder_->DecodeFrame(current_frame_info_);
-    }
+    if (need_decode_) {
+      current_frame_ =
+          decoder_->DecodeFrame(current_frame_info_, current_frame_);
 
-    if (!current_frame_) {
-      return;
+      need_decode_ = false;
     }
 
     auto image = skity::Image::MakeImage(current_frame_);
@@ -100,6 +102,7 @@ class AnimatedImageExample : public skity::example::WindowClient {
  private:
   std::shared_ptr<skity::MultiFrameDecoder> decoder_;
   std::shared_ptr<skity::Pixmap> current_frame_;
+  bool need_decode_ = true;
   const skity::CodecFrame* current_frame_info_ = nullptr;
 
   std::chrono::system_clock::time_point last_frame_time_ = {};

@@ -117,7 +117,6 @@ enum class CodecDisposalMethod {
  * The blend mode to use when drawing this frame.
  */
 enum class CodecBlendMode {
-
   /**
    * Blend this frame with the previous frame using the SRC_OVER blend mode.
    */
@@ -255,6 +254,9 @@ class SKITY_API CodecFrame {
     info_.fully_received = fully_received;
   }
 
+  AlphaType GetAlphaType() const { return info_.alpha_type; }
+  void SetAlphaType(AlphaType alpha_type) { info_.alpha_type = alpha_type; }
+
  private:
   int32_t id_;
   CodecFrameInfo info_;
@@ -310,10 +312,16 @@ class SKITY_EXPERIMENTAL_API MultiFrameDecoder {
    * Decode the specified frame to pixmap.
    *
    * @param frame The frame to decode.
+   * @param prev_pixmap The previous pixmap. If this is the first frame, this
+   *                    parameter can be null.
    *
    * @return The decoded pixmap. nullptr if decode failed.
    */
-  virtual std::shared_ptr<Pixmap> DecodeFrame(const CodecFrame* frame) = 0;
+  virtual std::shared_ptr<Pixmap> DecodeFrame(
+      const CodecFrame* frame, std::shared_ptr<Pixmap> prev_pixmap) = 0;
+
+ protected:
+  void SetAlphaAndRequiredFrame(CodecFrame* frame);
 };
 
 /**
@@ -389,6 +397,8 @@ class SKITY_EXPERIMENTAL_API Codec {
   static std::shared_ptr<Codec> MakeJPEGCodec();
 
   static std::shared_ptr<Codec> MakeGIFCodec();
+
+  static std::shared_ptr<Codec> MakeWebpCodec();
 
  protected:
   std::shared_ptr<Data> data_;

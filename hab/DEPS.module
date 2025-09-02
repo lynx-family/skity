@@ -17,5 +17,11 @@ deps = {
         "url": "https://github.com/google/wuffs-mirror-release-c.git",
         "ignore_in_git": True,
         "commit": "a29749ebe0be57d2b19d8406475bd2326d0f1a85",
+    },
+    "third_party/libwebp": {
+        "type": "git",
+        "url": "https://github.com/webmproject/libwebp.git",
+        "ignore_in_git": True,
+        "commit": "4fa21912338357f89e4fd51cf2368325b59e9bd9"
     }
 }

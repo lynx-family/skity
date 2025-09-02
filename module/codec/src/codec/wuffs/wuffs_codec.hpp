@@ -26,7 +26,8 @@ class WuffsDecoder : public MultiFrameDecoder {
 
   const CodecFrame* GetFrameInfo(int32_t frame_id) const override;
 
-  std::shared_ptr<Pixmap> DecodeFrame(const CodecFrame* frame) override;
+  std::shared_ptr<Pixmap> DecodeFrame(
+      const CodecFrame* frame, std::shared_ptr<Pixmap> prev_pixmap) override;
 
   const std::shared_ptr<DataStream>& GetDataStream() const { return stream_; }
 
@@ -41,8 +42,6 @@ class WuffsDecoder : public MultiFrameDecoder {
   bool SeekFrame(int32_t frame_index, uint64_t io_position);
 
   const char* DecodeFrameConfig(wuffs_base__frame_config* frame_config);
-
-  void SetAlphaAndRequiredFrame(CodecFrame* frame);
 
  private:
   WuffsImageDecoder decoder_;
