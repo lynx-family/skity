@@ -49,6 +49,8 @@ class GPUSurfaceImpl : public GPUSurface {
 
   virtual void OnFlush() = 0;
 
+  void FlushCanvas();
+
  private:
   uint32_t width_;
   uint32_t height_;
