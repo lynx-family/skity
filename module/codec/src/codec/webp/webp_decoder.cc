@@ -129,6 +129,8 @@ std::shared_ptr<Pixmap> WebpDecoder::DecodeFrame(
     config.output.u.RGBA.size =
         tmp_decode_buffer->Width() * tmp_decode_buffer->Height() * 4;
   } else {
+    pixmap->SetColorInfo(AlphaType::kUnpremul_AlphaType,
+                         pixmap->GetColorType());
     config.output.colorspace = MODE_RGBA;  // RGBA unpremultiplied alpha
     config.output.is_external_memory = 1;
     config.output.u.RGBA.rgba =
