@@ -48,7 +48,7 @@ struct WGX_API MslOptions {
   uint32_t msl_version_major = 2;
   uint32_t msl_version_minor = 3;
 
-  uint32_t buffer_base_index = 1;
+  uint32_t buffer_base_index = 2;
   uint32_t texture_base_index = 0;
   uint32_t sampler_base_index = 0;
 };

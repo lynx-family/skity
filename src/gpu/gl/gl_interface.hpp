@@ -153,6 +153,8 @@ struct GLInterface {
   PFNGLGENSAMPLERSPROC fGenSamplers = nullptr;
   PFNGLDELETESAMPLERSPROC fDeleteSamplers = nullptr;
   PFNGLSAMPLERPARAMETERIPROC fSamplerParameteri = nullptr;
+  PFNGLVERTEXATTRIBDIVISORPROC fVertexAttribDivisor = nullptr;
+  PFNGLDRAWELEMENTSINSTANCEDPROC fDrawElementsInstanced = nullptr;
 
   PFNGLFRAMEBUFFERTEXTURE2DMULTISAMPLEEXTPROC
   fFramebufferTexture2DMultisampleEXT = nullptr;

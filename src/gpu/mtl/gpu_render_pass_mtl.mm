@@ -161,12 +161,27 @@ void GPURenderPassMTL::EncodeCommands(std::optional<GPUViewport> viewport,
     cache.SetBuffer(GPUShaderStage::kVertex, 0, command->vertex_buffer.offset,
                     static_cast<GPUBufferMTL*>(command->vertex_buffer.buffer)->GetMTLBuffer());
 
-    [encoder_ drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-                         indexCount:command->index_count
-                          indexType:MTLIndexTypeUInt32
-                        indexBuffer:static_cast<GPUBufferMTL*>(command->index_buffer.buffer)
-                                        ->GetMTLBuffer()
-                  indexBufferOffset:command->index_buffer.offset];
+    if (command->IsInstanced()) {
+      cache.SetBuffer(GPUShaderStage::kVertex, 1, command->instance_buffer.offset,
+                      static_cast<GPUBufferMTL*>(command->instance_buffer.buffer)->GetMTLBuffer());
+    }
+
+    if (command->IsInstanced()) {
+      [encoder_ drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                           indexCount:command->index_count
+                            indexType:MTLIndexTypeUInt32
+                          indexBuffer:static_cast<GPUBufferMTL*>(command->index_buffer.buffer)
+                                          ->GetMTLBuffer()
+                    indexBufferOffset:command->index_buffer.offset
+                        instanceCount:command->instance_count];
+    } else {
+      [encoder_ drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                           indexCount:command->index_count
+                            indexType:MTLIndexTypeUInt32
+                          indexBuffer:static_cast<GPUBufferMTL*>(command->index_buffer.buffer)
+                                          ->GetMTLBuffer()
+                    indexBufferOffset:command->index_buffer.offset];
+    }
   }
 
   if (auto_end_encoding_) {

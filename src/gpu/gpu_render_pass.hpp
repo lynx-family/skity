@@ -180,12 +180,14 @@ struct Command {
   GPURenderPipeline* pipeline;
   GPUBufferView index_buffer;
   GPUBufferView vertex_buffer;
+  GPUBufferView instance_buffer;
   ArrayList<UniformBinding, 4> uniform_bindings;
   ArrayList<TextureSamplerBinding, 4> texture_sampler_bindings;
   ArrayList<TextureBinding, 4> texture_bindings;
   ArrayList<SamplerBinding, 4> sampler_bindings;
   uint32_t stencil_reference = 0u;
   uint32_t index_count = 0u;
+  uint32_t instance_count = 0u;
 
   GPUScissorRect scissor_rect = {};
 
@@ -219,6 +221,10 @@ struct Command {
     }
 
     return true;
+  }
+
+  bool IsInstanced() const {
+    return instance_count > 0u && instance_buffer.buffer != nullptr;
   }
 };
 

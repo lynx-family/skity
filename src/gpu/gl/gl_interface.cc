@@ -159,6 +159,8 @@ void GLInterface::InitGlobalInterface(void *proc_loader) {
   GET_PROC(GenSamplers);
   GET_PROC(DeleteSamplers);
   GET_PROC(SamplerParameteri);
+  GET_PROC(VertexAttribDivisor);
+  GET_PROC(DrawElementsInstanced);
 
   g_interface->LoadExtensions(loader);
 }
