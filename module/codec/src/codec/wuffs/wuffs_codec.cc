@@ -253,7 +253,7 @@ const char* WuffsDecoder::DecodeFrameConfig(
     auto status = decoder_->decode_frame_config(frame_config, &buffer_.buffer);
 
     if ((status.repr == wuffs_base__suspension__short_read) &&
-        (!buffer_.FillBuffer(stream_.get()))) {
+        buffer_.FillBuffer(stream_.get())) {
       continue;
     }
 
