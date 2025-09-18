@@ -19,6 +19,7 @@
 #include <limits>
 #include <skity/macros.hpp>
 
+#include "src/logging.hpp"
 #include "src/text/ports/darwin/types_darwin.hpp"
 #include "src/utils/no_destructor.hpp"
 
@@ -207,8 +208,13 @@ void FontManagerDarwin::InitSystemFamily() {
 
     sys_family_names_.emplace_back(std::string(buffer.data()));
   }
+  sys_family_names_.emplace_back("sans-serif");
+  sys_family_names_.emplace_back("serif");
+  sys_family_names_.emplace_back("monospace");
 
-  sys_style_sets_.resize(count);
+  sys_style_sets_.resize(sys_family_names_.size());
+  DEBUG_CHECK(sys_family_names_.size() == count + 3);
+  DEBUG_CHECK(sys_style_sets_.size() == count + 3);
 }
 
 int FontManagerDarwin::OnCountFamilies() const {
@@ -330,8 +336,6 @@ int32_t FontManagerDarwin::GetIndexByFamilyName(const char* family_name) const {
     return default_name_index_;
   }
 
-  family_name = map_css_names(family_name);
-
   for (int32_t i = 0; i < static_cast<int32_t>(sys_family_names_.size()); i++) {
     if (sys_family_names_[i] == family_name) {
       return i;
@@ -352,9 +356,20 @@ std::shared_ptr<FontStyleSetDarwin> FontManagerDarwin::MatchFamilyByIndex(
         kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
         &kCFTypeDictionaryValueCallBacks));
 
-    CFStringRef cf_family =
-        (CFStringRef)CFArrayGetValueAtIndex(cf_family_names_.get(), index);
-    CFDictionaryAddValue(cf_attr.get(), kCTFontFamilyNameAttribute, cf_family);
+    if (index < CFArrayGetCount(cf_family_names_.get())) {
+      CFStringRef cf_family =
+          (CFStringRef)CFArrayGetValueAtIndex(cf_family_names_.get(), index);
+      CFDictionaryAddValue(cf_attr.get(), kCTFontFamilyNameAttribute,
+                           cf_family);
+    } else {
+      // css names
+      auto* family_name = map_css_names(sys_family_names_[index].c_str());
+      CFStringRef css_cf_nmame = CFStringCreateWithCString(
+          kCFAllocatorDefault, family_name, kCFStringEncodingUTF8);
+      CFDictionaryAddValue(cf_attr.get(), kCTFontFamilyNameAttribute,
+                           css_cf_nmame);
+      CFRelease(css_cf_nmame);
+    }
 
     UniqueCFRef<CTFontDescriptorRef> desc(
         CTFontDescriptorCreateWithAttributes(cf_attr.get()));
