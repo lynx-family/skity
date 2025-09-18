@@ -95,8 +95,8 @@ const CodecFrame* WuffsDecoder::GetFrameInfo(int32_t frame_id) const {
   return &frames_[frame_id];
 }
 
-std::shared_ptr<Pixmap> WuffsDecoder::DecodeFrame(const CodecFrame* frame,
-                                                  std::shared_ptr<Pixmap>) {
+std::shared_ptr<Pixmap> WuffsDecoder::DecodeFrame(
+    const CodecFrame* frame, std::shared_ptr<Pixmap> prev_pixmap) {
   if (!frame) {
     return {};
   }
@@ -111,7 +111,8 @@ std::shared_ptr<Pixmap> WuffsDecoder::DecodeFrame(const CodecFrame* frame,
   }
 
   // create pixmap to store decoded frame
-  auto pixmap = std::make_shared<Pixmap>(width, height);
+  auto pixmap =
+      prev_pixmap ? prev_pixmap : std::make_shared<Pixmap>(width, height);
 
   wuffs_base__pixel_config pixel_config;
   pixel_config.set(WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL,
