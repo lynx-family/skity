@@ -171,7 +171,7 @@ HWDraw* DirectGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
   if (paint_.GetShader()) {
     geometry = arena_allocator->Make<WGSLTextGradientGeometry>(final_transform,
         std::move(glyph_rects), paint_.GetShader()->GetLocalMatrix(),
-        text_transform);
+        transform);
   } else {
     geometry = arena_allocator->Make<WGSLTextSolidColorGeometry>(final_transform,
         std::move(glyph_rects));
