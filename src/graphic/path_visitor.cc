@@ -5,22 +5,12 @@
 #include "src/graphic/path_visitor.hpp"
 
 #include "src/geometry/conic.hpp"
+#include "src/geometry/geometry.hpp"
 #include "src/geometry/wangs_formula.hpp"
 
 namespace skity {
 
 constexpr static float kPrecision = 4.0f;
-
-static void split_quad(Vec2* base) {
-  Vec2 a, b;
-
-  base[4] = base[2];
-  a = base[0] + base[1];
-  b = base[1] + base[2];
-  base[3] = b / 2.f;
-  base[2] = (a + b) / 4.f;
-  base[1] = a / 2.f;
-}
 
 void PathVisitor::VisitPath(const Path& path, bool force_close) {
   Path::Iter iter{path, force_close};
@@ -87,36 +77,26 @@ void PathVisitor::HandleQuadTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3) {
     return;
   }
 
-  std::array<Vec2, 33 * 3 + 1> bez_stack{};
-  std::array<int32_t, 33> level_stack{};
-
-  int32_t top, level;
-  int32_t* levels = level_stack.data();
-
-  auto arc = bez_stack.data();
-  arc[0] = p3;
+  std::array<Vec2, 3> arc;
+  arc[0] = p1;
   arc[1] = p2;
-  arc[2] = p1;
+  arc[2] = p3;
 
-  top = 0;
+  float num = std::ceil(wangs_formula::Quadratic(
+      kPrecision, arc.data(), wangs_formula::VectorXform(matrix_)));
+  if (num <= 1.0f) {
+    HandleLineTo(p1, p3);
+    return;
+  }
 
-  level = wangs_formula::QuadraticLog2(kPrecision, arc,
-                                       wangs_formula::VectorXform(matrix_));
-
-  levels[0] = std::max(0, level);
-  do {
-    level = levels[top];
-    if (level > 0) {
-      split_quad(arc);
-      arc += 2;
-      top++;
-      levels[top] = levels[top - 1] = level - 1;
-      continue;
-    }
-    HandleLineTo(prev_pt_, arc[0]);
-    top--;
-    arc -= 2;
-  } while (top >= 0);
+  QuadCoeff coeff(arc);
+  Vec2 prev_point = p1;
+  for (int i = 1; i <= num; i++) {
+    float t = i / num;
+    Vec2 curr_point = coeff.eval(t);
+    HandleLineTo(prev_point, curr_point);
+    prev_point = curr_point;
+  }
 }
 
 void PathVisitor::HandleConicTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,

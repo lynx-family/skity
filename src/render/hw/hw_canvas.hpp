@@ -15,6 +15,7 @@
 
 #include "src/render/hw/hw_pipeline_lib.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
+#include "src/render/hw/hw_static_buffer.hpp"
 #include "src/render/hw/layer/hw_root_layer.hpp"
 #include "src/utils/arena_allocator.hpp"
 #include "src/utils/vector_cache.hpp"
@@ -115,6 +116,7 @@ class HWCanvas : public Canvas {
   bool enable_msaa_ = false;
   bool enable_fxaa_ = false;
   HWStageBuffer* gpu_buffer_ = {};
+
   HWPipelineLib* pipeline_lib_ = {};
   std::unique_ptr<VectorCache<float>> vertex_vector_cache_;
   std::unique_ptr<VectorCache<uint32_t>> index_vector_cache_;
@@ -122,6 +124,7 @@ class HWCanvas : public Canvas {
 
   ArrayList<HWLayer*, 8> layer_stack_ = {};
   ArenaAllocator* arena_allocator_ = {};
+  HWStaticBuffer* static_buffer_ = {};
 };
 
 }  // namespace skity

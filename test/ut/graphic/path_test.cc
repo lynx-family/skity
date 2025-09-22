@@ -911,13 +911,21 @@ TEST(Path, Contains) {
   for (size_t i = 1; i < pts.size(); i += 2) {
     path.QuadTo(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
   }
-  EXPECT_TRUE(path.Contains(5, 6));
-  EXPECT_FALSE(path.Contains(6, 5));
-  for (size_t i = 0; i < pts.size() - 2; i += 2) {
-    auto p = skity::QuadCoeff{{pts[i], pts[i + 1], pts[i + 2]}}.eval(0.5f);
 
-    EXPECT_TRUE(path.Contains(p.x, p.y));
-  }
+  EXPECT_FALSE(path.Contains(4, 5));
+  EXPECT_FALSE(path.Contains(5, 5));
+  EXPECT_TRUE(path.Contains(4, 6));
+  EXPECT_TRUE(path.Contains(5, 6));
+  EXPECT_TRUE(path.Contains(6, 6));
+  EXPECT_FALSE(path.Contains(7, 6));
+  EXPECT_FALSE(path.Contains(4, 7));
+  EXPECT_TRUE(path.Contains(5, 7));
+  EXPECT_TRUE(path.Contains(6, 7));
+  EXPECT_FALSE(path.Contains(7, 7));
+  EXPECT_FALSE(path.Contains(4, 8));
+  EXPECT_FALSE(path.Contains(5, 8));
+  EXPECT_TRUE(path.Contains(6, 8));
+  EXPECT_FALSE(path.Contains(7, 8));
 
   // test conics
   std::array<skity::Vec2, 10> c_pts{

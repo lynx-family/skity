@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "src/render/hw/hw_render_target_cache.hpp"
+#include "src/render/hw/hw_static_buffer.hpp"
 #include "src/utils/arena_allocator.hpp"
 #include "src/utils/vector_cache.hpp"
 
@@ -44,6 +45,7 @@ struct HWDrawContext {
   uint32_t total_clip_depth = 0;
   ArenaAllocator* arena_allocator = nullptr;
   Vec2 scale = {1.f, 1.f};
+  HWStaticBuffer* static_buffer = nullptr;
 };
 
 enum HWDrawState : uint32_t {

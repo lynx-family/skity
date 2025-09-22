@@ -31,7 +31,8 @@ HWCanvas::HWCanvas(GPUSurfaceImpl* surface)
       enable_msaa_(surface->GetSampleCount() > 1),
       enable_fxaa_(surface->UseFxaa()),
       gpu_buffer_(surface->GetStageBuffer()),
-      arena_allocator_(surface_->GetArenaAllocator()) {
+      arena_allocator_(surface_->GetArenaAllocator()),
+      static_buffer_(surface_->GetStaticBuffer()) {
   Init();
 }
 
@@ -90,7 +91,8 @@ void HWCanvas::OnClipPath(const Path& path, ClipOp op) {
   }
 
   HWDraw* clip = arena_allocator_->Make<HWDynamicPathClip>(
-      CurrentMatrix(), path, op, layer->GetBounds());
+      CurrentMatrix(), path, op, layer->GetBounds(),
+      surface_->GetGPUContext()->IsEnableGPUTessellation());
 
   if (clip == nullptr) {
     return;
@@ -347,11 +349,15 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
     // Fall back to Contour AA while surface disables MSAA and paint enables AA
     need_contour_aa = !enable_msaa_ && !enable_fxaa_ && paint.IsAntiAlias();
   }
+  bool enable_gpu_tessellation =
+      surface_->GetGPUContext()->IsEnableGPUTessellation();
 
   auto draw_op_handler = [&](const Path& path, const Paint& paint,
                              bool use_stroke) {
-    HWDraw* draw = arena_allocator_->Make<HWDynamicPathDraw>(transform, path,
-                                                             paint, use_stroke);
+    bool use_gpu_tessellation =
+        enable_gpu_tessellation && !use_stroke && !paint.IsAntiAlias();
+    HWDraw* draw = arena_allocator_->Make<HWDynamicPathDraw>(
+        transform, path, paint, use_stroke, use_gpu_tessellation);
 
     if (draw == nullptr) {
       return;
@@ -499,6 +505,7 @@ void HWCanvas::OnFlush() {
     HWDrawContext draw_context;
     draw_context.ctx_scale = ctx_scale_;
     draw_context.stageBuffer = gpu_buffer_;
+    draw_context.static_buffer = static_buffer_;
     draw_context.pipelineLib = pipeline_lib_;
     draw_context.gpuContext = surface_->GetGPUContext();
     draw_context.pool = &pool;
@@ -535,6 +542,7 @@ uint32_t HWCanvas::GetCanvasSampleCount() {
 void HWCanvas::UploadMesh() {
   SKITY_TRACE_EVENT(HWCanvas_UploadMesh);
   gpu_buffer_->Flush();
+  static_buffer_->Flush();
 }
 
 HWLayer* HWCanvas::CurrentLayer() {

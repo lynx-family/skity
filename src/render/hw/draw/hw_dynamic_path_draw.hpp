@@ -9,12 +9,14 @@
 #include <skity/graphic/path.hpp>
 
 #include "src/render/hw/draw/hw_dynamic_draw.hpp"
+#include "src/render/hw/draw/hw_wgsl_geometry.hpp"
 
 namespace skity {
 
 class HWDynamicPathDraw : public HWDynamicDraw {
  public:
-  HWDynamicPathDraw(Matrix transform, Path path, Paint paint, bool is_stroke);
+  HWDynamicPathDraw(Matrix transform, Path path, Paint paint, bool is_stroke,
+                    bool use_gpu_tessellation);
 
   ~HWDynamicPathDraw() override = default;
 
@@ -27,10 +29,13 @@ class HWDynamicPathDraw : public HWDynamicDraw {
 
   HWWGSLFragment *GenFragment(HWDrawContext *context) const;
 
+  HWWGSLGeometry *GenPathGeometry(HWDrawContext *context, bool aa) const;
+
  private:
   Path path_;
   Paint paint_;
   bool is_stroke_;
+  bool use_gpu_tessellation_;
 };
 
 }  // namespace skity

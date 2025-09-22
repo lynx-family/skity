@@ -8,6 +8,7 @@
 #include <skity/gpu/gpu_surface.hpp>
 
 #include "src/gpu/gpu_context_impl.hpp"
+#include "src/render/hw/hw_static_buffer.hpp"
 #include "src/utils/arena_allocator.hpp"
 
 namespace skity {
@@ -38,6 +39,8 @@ class GPUSurfaceImpl : public GPUSurface {
 
   HWStageBuffer* GetStageBuffer() const { return stage_buffer_.get(); }
 
+  HWStaticBuffer* GetStaticBuffer() const { return static_buffer_.get(); }
+
   ArenaAllocator* GetArenaAllocator() const { return arena_allocator_.get(); }
 
   virtual GPUTextureFormat GetGPUFormat() const = 0;
@@ -57,6 +60,7 @@ class GPUSurfaceImpl : public GPUSurface {
 
   GPUContextImpl* ctx_;
   std::unique_ptr<HWStageBuffer> stage_buffer_;
+  std::unique_ptr<HWStaticBuffer> static_buffer_;
   std::unique_ptr<HWCanvas> canvas_;
   std::shared_ptr<BlockCacheAllocator> block_cache_allocator_;
   std::unique_ptr<ArenaAllocator> arena_allocator_;

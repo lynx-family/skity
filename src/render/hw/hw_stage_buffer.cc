@@ -5,6 +5,7 @@
 #include "src/render/hw/hw_stage_buffer.hpp"
 
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 
 #include "src/gpu/gpu_buffer.hpp"
@@ -35,6 +36,28 @@ HWStageBuffer::HWStageBuffer(GPUDevice* device,
 
 HWStageBuffer::~HWStageBuffer() {
   LOGI("HWStageBuffer: [ {:p} ] destroyed", reinterpret_cast<void*>(this));
+}
+
+void HWStageBuffer::BeginWritingInstance(uint32_t estimate_size,
+                                         uint32_t align) {
+  DEBUG_CHECK(!writing_offset_.has_value());
+  uint32_t aligned_stage_pos = ((stage_pos_ + align - 1) & ~(align - 1));
+  ResizeIfNeed(stage_buffer_, aligned_stage_pos, estimate_size);
+  stage_pos_ = aligned_stage_pos;
+  writing_offset_ = stage_pos_;
+}
+
+GPUBufferView HWStageBuffer::EndWritingInstance() {
+  DEBUG_CHECK(writing_offset_.has_value());
+  uint32_t offset = writing_offset_.value();
+  uint32_t size = stage_pos_ - writing_offset_.value();
+
+  writing_offset_.reset();
+  return GPUBufferView{
+      GetGPUBuffer(),
+      offset,
+      size,
+  };
 }
 
 HWBufferAllocation HWStageBuffer::Allocate(uint32_t size, bool align_offset) {
@@ -108,7 +131,7 @@ void HWStageBuffer::Flush() {
 
 void HWStageBuffer::ResizeIfNeed(std::vector<uint8_t>& buffer,
                                  uint32_t curr_pos, uint32_t size) {
-  if (buffer.size() - curr_pos > size) {
+  if (buffer.size() > curr_pos + size) {
     return;
   }
 

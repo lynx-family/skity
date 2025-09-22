@@ -54,6 +54,8 @@ int32_t CrossProductResult(T const& p, T const& q, T const& r) {
   return (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
 }
 
+constexpr uint32_t DivCeil(uint32_t a, uint32_t b) { return (a + b - 1) / b; }
+
 //! Returns the number of leading zero bits (0...32)
 // From Hacker's Delight 2nd Edition
 constexpr int CLZ(uint32_t x) {

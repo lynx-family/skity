@@ -5,6 +5,7 @@
 #include "src/render/hw/draw/wgx_utils.hpp"
 
 #include "src/gpu/gpu_render_pass.hpp"
+#include "src/logging.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 
@@ -123,6 +124,41 @@ bool SetupCommonInfo(const wgx::BindGroupEntry* entry, const Matrix& mvp,
   common_info->GetMember("extraInfo")
       ->type->SetData(std::array<float, 4>{clip_depth, 0.f, 0.f, 0.f});
 
+  return true;
+}
+
+bool SetupInvMatrix(const wgx::BindGroupEntry* inv_matrix_entry,
+                    const Matrix& local_matrix) {
+  if (inv_matrix_entry == nullptr ||
+      inv_matrix_entry->type_definition->name != "mat4x4<f32>") {
+    return false;
+  }
+
+  Matrix inv_matrix{};
+
+  local_matrix.Invert(&inv_matrix);
+
+  inv_matrix_entry->type_definition->SetData(&inv_matrix, sizeof(Matrix));
+  return true;
+}
+
+bool SetupImageBoundsInfo(const wgx::BindGroupEntry* image_bounds_entry,
+                          const Matrix& local_matrix, float width,
+                          float height) {
+  if (image_bounds_entry == nullptr ||
+      image_bounds_entry->type_definition->name != "ImageBoundsInfo") {
+    return false;
+  }
+
+  auto image_bounds_struct = static_cast<wgx::StructDefinition*>(
+      image_bounds_entry->type_definition.get());
+
+  std::array<float, 2> bounds{width, height};
+  image_bounds_struct->GetMember("bounds")->type->SetData(
+      bounds.data(), bounds.size() * sizeof(float));
+
+  image_bounds_struct->GetMember("inv_matrix")
+      ->type->SetData(&local_matrix, sizeof(Matrix));
   return true;
 }
 
@@ -609,6 +645,16 @@ bool WGXGradientFragment::SetupSweepInfo(
                                        sweep_pts.size() * sizeof(float));
 
   return true;
+}
+
+void ReplacePlaceholder(
+    std::string& wgsl,
+    const std::unordered_map<std::string, std::string>& replacements) {
+  for (const auto& [placeholder, value] : replacements) {
+    size_t pos = wgsl.find(placeholder);
+    DEBUG_CHECK(pos != std::string::npos);
+    wgsl.replace(pos, placeholder.length(), value);
+  }
 }
 
 }  // namespace skity

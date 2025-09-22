@@ -225,6 +225,12 @@ class SKITY_API GPUContext {
 
   bool IsEnableTextLinearFilter() const { return enable_text_linear_filter_; }
 
+  void SetEnableGPUTessellation(bool enable_gpu_tessellation) {
+    enable_gpu_tessellation_ = enable_gpu_tessellation;
+  }
+
+  bool IsEnableGPUTessellation() const { return enable_gpu_tessellation_; }
+
  private:
   GPUErrorCallback error_callback_ = nullptr;
   void* error_callback_user_data_ = nullptr;
@@ -232,6 +238,7 @@ class SKITY_API GPUContext {
   bool enable_contour_aa_ = false;
   std::uint8_t larger_atlas_mask_ = 0;
   bool enable_text_linear_filter_ = false;
+  bool enable_gpu_tessellation_ = false;
 };
 
 }  // namespace skity

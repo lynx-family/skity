@@ -43,3 +43,13 @@ TEST(MATH, Orientation) {
   skity::Orientation orientation2 = skity::CalculateOrientation(p1, p4, p3);
   EXPECT_EQ(orientation2, skity::Orientation::kAntiClockWise);
 }
+
+TEST(MATH, DivCeil) {
+  EXPECT_EQ(skity::DivCeil(1, 2), 1);
+  EXPECT_EQ(skity::DivCeil(2, 2), 1);
+  EXPECT_EQ(skity::DivCeil(3, 2), 2);
+
+  EXPECT_EQ(skity::DivCeil(32, 8), 4);
+  EXPECT_EQ(skity::DivCeil(35, 8), 5);
+  EXPECT_EQ(skity::DivCeil(0, 8), 0);
+}

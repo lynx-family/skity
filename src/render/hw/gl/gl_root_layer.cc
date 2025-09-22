@@ -169,7 +169,7 @@ HWDrawState GLDrawTextureLayer::OnPrepare(HWDrawContext *context) {
         can_blit_from_target_fbo_ ? BlendMode::kSrc : BlendMode::kSrcOver;
     paint.SetBlendMode(blend_mode);
     layer_back_draw_ = context->arena_allocator->Make<HWDynamicPathDraw>(
-        GetTransform(), std::move(path), std::move(paint), false);
+        GetTransform(), std::move(path), std::move(paint), false, false);
   }
 
   // If layer_back_draw_ is null means user want open WGSL pipeline
@@ -289,7 +289,7 @@ HWDrawState GLPartialDrawTextureLayer::OnPrepare(
         can_blit_from_target_fbo_ ? BlendMode::kSrc : BlendMode::kSrcOver;
     paint.SetBlendMode(blend_mode);
     layer_back_draw_ = context->arena_allocator->Make<HWDynamicPathDraw>(
-        GetTransform(), std::move(path), std::move(paint), false);
+        GetTransform(), std::move(path), std::move(paint), false, false);
   }
 
   // If layer_back_draw_ is null means user want open WGSL pipeline

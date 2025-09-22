@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "src/gpu/gpu_buffer.hpp"
@@ -37,6 +38,33 @@ class HWStageBuffer final {
 
   GPUBufferView PushIndex(void* data, uint32_t size);
 
+  void BeginWritingInstance(uint32_t estimate_size, uint32_t align);
+
+  template <typename T, typename... Args>
+  uint32_t AppendInstance(Args&&... args) {
+    static_assert(std::is_trivially_destructible<T>::value);
+    ResizeIfNeed(stage_buffer_, stage_pos_, sizeof(T));
+    uint32_t offset = stage_pos_;
+    if constexpr (sizeof...(Args) == 0 && std::is_standard_layout<T>::value &&
+                  std::is_trivial<T>::value) {
+      stage_pos_ += sizeof(T);
+      return offset;
+    } else {
+      uint8_t* p = stage_buffer_.data() + stage_pos_;
+      stage_pos_ += sizeof(T);
+      new (p) T{std::forward<Args>(args)...};
+    }
+    return offset;
+  }
+
+  template <typename T>
+  constexpr T* ToInstance(uint32_t offset) const {
+    uint8_t* p = const_cast<uint8_t*>(stage_buffer_.data()) + offset;
+    return reinterpret_cast<T*>(p);
+  }
+
+  GPUBufferView EndWritingInstance();
+
   void Flush();
 
   GPUBuffer* GetGPUBuffer() const { return gpu_buffer_.get(); }
@@ -58,6 +86,7 @@ class HWStageBuffer final {
   std::unique_ptr<GPUBuffer> gpu_buffer_;
   std::unique_ptr<GPUBuffer> gpu_index_buffer_;
   uint32_t ubo_alignment_;
+  std::optional<uint32_t> writing_offset_ = std::nullopt;
 };
 
 }  // namespace skity

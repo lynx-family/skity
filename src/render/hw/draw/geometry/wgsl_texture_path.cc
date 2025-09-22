@@ -130,20 +130,10 @@ void WGSLTexturePath::PrepareCMD(Command* cmd, HWDrawContext* context,
   }
 
   auto image_bounds_entry = group->GetEntry(1);
-  if (image_bounds_entry == nullptr ||
-      image_bounds_entry->type_definition->name != "ImageBoundsInfo") {
+  if (!SetupImageBoundsInfo(image_bounds_entry, local_matrix_, width_,
+                            height_)) {
     return;
   }
-
-  auto image_bounds_struct = static_cast<wgx::StructDefinition*>(
-      image_bounds_entry->type_definition.get());
-
-  std::array<float, 2> bounds{width_, height_};
-  image_bounds_struct->GetMember("bounds")->type->SetData(
-      bounds.data(), bounds.size() * sizeof(float));
-
-  image_bounds_struct->GetMember("inv_matrix")
-      ->type->SetData(&local_matrix_, sizeof(Matrix));
 
   UploadBindGroup(image_bounds_entry, cmd, context);
 }

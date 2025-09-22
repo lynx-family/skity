@@ -299,6 +299,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_resource_cache.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_stage_buffer.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_stage_buffer.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_static_buffer.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_static_buffer.hpp
   )
 
   # Dynamic shader
@@ -329,6 +331,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_gradient_path.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_path_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_path_geometry.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_text_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_text_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_texture_path.cc

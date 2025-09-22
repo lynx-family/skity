@@ -31,6 +31,10 @@ GPUShaderStageMask ToShaderStage(wgx::ShaderStage stage);
 
 const char* RemapTileFunction();
 
+void ReplacePlaceholder(
+    std::string& wgsl,
+    const std::unordered_map<std::string, std::string>& replacements);
+
 /**
  * Common code generator for all vertex shader.
  *
@@ -51,6 +55,13 @@ const char* CommonVertexWGSL();
 
 bool SetupCommonInfo(const wgx::BindGroupEntry* entry, const Matrix& mvp,
                      const Matrix& user_transform, float clip_depth);
+
+bool SetupInvMatrix(const wgx::BindGroupEntry* entry,
+                    const Matrix& local_matrix);
+
+bool SetupImageBoundsInfo(const wgx::BindGroupEntry* image_bounds_entry,
+                          const Matrix& local_matrix, float width,
+                          float height);
 
 /**
  * Common code generator for Gradient Shader.

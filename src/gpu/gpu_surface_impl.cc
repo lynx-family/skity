@@ -27,6 +27,10 @@ Canvas* GPUSurfaceImpl::LockCanvas(bool clear) {
     stage_buffer_ = std::make_unique<HWStageBuffer>(ctx_->GetGPUDevice());
   }
 
+  if (static_buffer_ == nullptr) {
+    static_buffer_ = std::make_unique<HWStaticBuffer>(ctx_->GetGPUDevice());
+  }
+
   if (block_cache_allocator_ == nullptr) {
     block_cache_allocator_ = std::make_unique<BlockCacheAllocator>();
   }

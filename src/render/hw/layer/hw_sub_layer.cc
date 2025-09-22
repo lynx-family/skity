@@ -29,7 +29,7 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
                                           layer_back_draw_texture_, bounds));
 
     layer_back_draw_ = context->arena_allocator->Make<HWDynamicPathDraw>(
-        GetTransform(), std::move(path), std::move(paint), false);
+        GetTransform(), std::move(path), std::move(paint), false, false);
   }
 
   layer_back_draw_->SetClipDepth(GetClipDepth());

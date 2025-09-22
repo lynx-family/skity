@@ -105,16 +105,9 @@ void WGSLGradientPath::PrepareCMD(Command* cmd, HWDrawContext* context,
 
   auto inv_matrix_entry = group->GetEntry(1);
 
-  if (inv_matrix_entry == nullptr ||
-      inv_matrix_entry->type_definition->name != "mat4x4<f32>") {
+  if (!SetupInvMatrix(inv_matrix_entry, local_matrix_)) {
     return;
   }
-
-  Matrix inv_matrix{};
-
-  local_matrix_.Invert(&inv_matrix);
-
-  inv_matrix_entry->type_definition->SetData(&inv_matrix, sizeof(Matrix));
 
   UploadBindGroup(inv_matrix_entry, cmd, context);
 }

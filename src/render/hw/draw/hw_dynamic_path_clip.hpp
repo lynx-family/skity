@@ -15,7 +15,7 @@ namespace skity {
 class HWDynamicPathClip : public HWDynamicDraw {
  public:
   HWDynamicPathClip(Matrix transform, Path path, Canvas::ClipOp op,
-                    const Rect &bounds);
+                    const Rect &bounds, bool use_gpu_tessellation);
 
   ~HWDynamicPathClip() override = default;
 
@@ -28,6 +28,7 @@ class HWDynamicPathClip : public HWDynamicDraw {
   Canvas::ClipOp op_;
   Path bounds_;
   Paint paint_ = {};
+  bool use_gpu_tessellation_;
 };
 
 }  // namespace skity

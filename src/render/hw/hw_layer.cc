@@ -142,6 +142,7 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
   HWDrawContext sub_context;
   sub_context.ctx_scale = context->ctx_scale;
   sub_context.stageBuffer = context->stageBuffer;
+  sub_context.static_buffer = context->static_buffer;
   sub_context.pipelineLib = context->pipelineLib;
   sub_context.gpuContext = context->gpuContext;
   sub_context.mvp = FromGLM(glm::ortho(bounds_.Left(), bounds_.Right(),
@@ -168,6 +169,7 @@ void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
   HWDrawContext sub_context;
   sub_context.ctx_scale = context->ctx_scale;
   sub_context.stageBuffer = context->stageBuffer;
+  sub_context.static_buffer = context->static_buffer;
   sub_context.pipelineLib = context->pipelineLib;
   sub_context.gpuContext = context->gpuContext;
   sub_context.mvp = FromGLM(glm::ortho(bounds_.Left(), bounds_.Right(),
