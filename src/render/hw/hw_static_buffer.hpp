@@ -28,6 +28,10 @@ class HWStaticBuffer final {
 
   GPUBufferView GetTessPathFillIndexBufferView();
 
+  GPUBufferView GetTessPathStrokeVertexBufferView();
+
+  GPUBufferView GetTessPathStrokeIndexBufferView();
+
  private:
   void Initialize();
 
@@ -35,6 +39,8 @@ class HWStaticBuffer final {
 
   std::optional<GPUBufferView> tess_path_fill_vertex_buffer_view_;
   std::optional<GPUBufferView> tess_path_fill_index_buffer_view_;
+  std::optional<GPUBufferView> tess_path_stroke_vertex_buffer_view_;
+  std::optional<GPUBufferView> tess_path_stroke_index_buffer_view_;
   bool initialized_ = false;
   bool needs_flush_ = false;
 };

@@ -198,11 +198,11 @@ std::string WGSLTessPathFillGeometry::GenSourceWGSL() const {
       fn vs_main(input: VSInput) -> VSOutput {
           var output: VSOutput;
           var pos: vec2<f32>;
-          var index: f32 = input.index + input.index_offset;
-          if input.index < 0.0 || index > input.num_segments {
+          var global_index: f32 = input.index + input.index_offset;
+          if input.index < 0.0 || global_index > input.num_segments {
             pos = input.fan_center;
           } else {
-            var t: f32 = index / input.num_segments;
+            var t: f32 = global_index / input.num_segments;
             var p0: vec2<f32> = input.p0p1.xy;
             var p1: vec2<f32> = input.p0p1.zw;
             var p2: vec2<f32> = input.p2p3.xy;

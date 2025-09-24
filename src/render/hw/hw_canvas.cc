@@ -354,8 +354,7 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
 
   auto draw_op_handler = [&](const Path& path, const Paint& paint,
                              bool use_stroke) {
-    bool use_gpu_tessellation =
-        enable_gpu_tessellation && !use_stroke && !paint.IsAntiAlias();
+    bool use_gpu_tessellation = enable_gpu_tessellation && !paint.IsAntiAlias();
     HWDraw* draw = arena_allocator_->Make<HWDynamicPathDraw>(
         transform, path, paint, use_stroke, use_gpu_tessellation);
 

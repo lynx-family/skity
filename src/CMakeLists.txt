@@ -333,6 +333,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_path_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_text_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_text_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_texture_path.cc

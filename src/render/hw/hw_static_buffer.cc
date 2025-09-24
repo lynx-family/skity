@@ -11,6 +11,7 @@
 
 #include "src/gpu/gpu_buffer.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
+#include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
 
 namespace skity {
 
@@ -40,11 +41,29 @@ GPUBufferView HWStaticBuffer::GetTessPathFillIndexBufferView() {
   return tess_path_fill_index_buffer_view_.value();
 }
 
+GPUBufferView HWStaticBuffer::GetTessPathStrokeVertexBufferView() {
+  if (!initialized_) {
+    Initialize();
+  }
+  return tess_path_stroke_vertex_buffer_view_.value();
+}
+
+GPUBufferView HWStaticBuffer::GetTessPathStrokeIndexBufferView() {
+  if (!initialized_) {
+    Initialize();
+  }
+  return tess_path_stroke_index_buffer_view_.value();
+}
+
 void HWStaticBuffer::Initialize() {
   tess_path_fill_vertex_buffer_view_ =
       WGSLTessPathFillGeometry::CreateVertexBufferView(stage_buffer_.get());
   tess_path_fill_index_buffer_view_ =
       WGSLTessPathFillGeometry::CreateIndexBufferView(stage_buffer_.get());
+  tess_path_stroke_vertex_buffer_view_ =
+      WGSLTessPathStrokeGeometry::CreateVertexBufferView(stage_buffer_.get());
+  tess_path_stroke_index_buffer_view_ =
+      WGSLTessPathStrokeGeometry::CreateIndexBufferView(stage_buffer_.get());
   initialized_ = true;
   needs_flush_ = true;
 }

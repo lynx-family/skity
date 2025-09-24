@@ -416,3 +416,9 @@ TEST(Vec4Test, UnaryMinus) {
   Vec4 v(1, -2, 3, -4);
   ASSERT_EQ(-v, Vec4(-1, 2, -3, 4));
 }
+
+TEST(Vec4Test, XYZW) {
+  Vec4 v(1, -2, 3, -4);
+  ASSERT_EQ(v.xy(), Vec2(1, -2));
+  ASSERT_EQ(v.zw(), Vec2(3, -4));
+}

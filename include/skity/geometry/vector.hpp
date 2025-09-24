@@ -291,6 +291,9 @@ struct SKITY_API Vec4 {
 
   constexpr float operator[](int i) const { return e[i]; }
   constexpr float& operator[](int i) { return e[i]; }
+
+  const Vec2& xy() const { return *reinterpret_cast<const Vec2*>(&x); }
+  const Vec2& zw() const { return *reinterpret_cast<const Vec2*>(&z); }
 };
 
 using Vector = Vec4;
