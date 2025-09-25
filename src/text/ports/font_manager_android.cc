@@ -178,9 +178,14 @@ class FontManagerAndroid : public FontManager {
   FontManagerAndroid() {
     std::unique_ptr<FontResources> font_resources =
         FontResources::MakeFromFile();
-    BuildNameToFamilyMap(font_resources->FontFamilies());
-    if (Settings::GetSettings().EnableThemeFont()) {
-      FindThemeTypeface(font_resources->FontFamilies()[0]);
+    if (font_resources && !font_resources->FontFamilies().empty()) {
+      valid_ = true;
+      BuildNameToFamilyMap(font_resources->FontFamilies());
+      if (Settings::GetSettings().EnableThemeFont()) {
+        FindThemeTypeface(font_resources->FontFamilies()[0]);
+      }
+    } else {
+      valid_ = false;
     }
   }
 
@@ -482,20 +487,33 @@ class FontManagerAndroid : public FontManager {
     return typeface;
   }
 
+  // acquire lock before getting state
+  bool IsValid() { return valid_; }
+
+  bool valid_ = false;
   std::vector<std::shared_ptr<FontStyleSetAndroid>> style_sets_;
   std::vector<NameToFamily> name_to_family_map_;
   std::vector<NameToFamily> fallback_name_to_family_map_;
 
   std::shared_ptr<TypefaceFreeType> theme_typeface_ = nullptr;
   std::shared_ptr<FontStyleSetAndroid> theme_font_style_set_ = nullptr;
+
+  friend std::shared_ptr<FontManager> FontManager::RefDefault();
 };
 
 }  // namespace
 
 std::shared_ptr<FontManager> FontManager::RefDefault() {
-  static const NoDestructor<std::shared_ptr<FontManager>> font_manager(
-      [] { return std::make_shared<FontManagerAndroid>(); }());
-  return *font_manager;
+  static std::mutex mutex;
+  static std::shared_ptr<FontManagerAndroid> instance;
+
+  std::lock_guard<std::mutex> lock(mutex);
+
+  if (!instance || !instance->IsValid()) {
+    instance = std::make_shared<FontManagerAndroid>();
+  }
+
+  return instance;
 }
 
 }  // namespace skity
