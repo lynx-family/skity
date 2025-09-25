@@ -43,10 +43,27 @@ if (${SKITY_MTL_BACKEND})
 
 endif()
 
+if (${SKITY_VK_BACKEND})
+  target_compile_definitions(skity_example_common PUBLIC -DSKITY_EXAMPLE_VK_BACKEND=1)
+
+  target_sources(skity_example_common PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/vk/window_vk.cc
+    ${CMAKE_CURRENT_LIST_DIR}/vk/window_vk.hpp
+  )
+  
+  target_link_libraries(skity_example_common PRIVATE volk)
+endif()
+
 add_library(skity::example_common ALIAS skity_example_common)
 
 target_include_directories(skity_example_common PUBLIC ${CMAKE_SOURCE_DIR}/example)
 target_include_directories(skity_example_common PUBLIC ${CMAKE_SOURCE_DIR}/third_party/glad/include)
+target_include_directories(skity_example_common PRIVATE ${CMAKE_SOURCE_DIR})
+target_include_directories(skity_example_common PRIVATE ${CMAKE_SOURCE_DIR}/module/wgx/include)
+target_include_directories(skity_example_common PRIVATE ${CMAKE_SOURCE_DIR}/third_party/glm)
+target_include_directories(skity_example_common PRIVATE ${CMAKE_SOURCE_DIR}/third_party/volk)
+target_include_directories(skity_example_common PRIVATE ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include)
+target_include_directories(skity_example_common PRIVATE ${CMAKE_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include)
 
 target_link_libraries(skity_example_common PUBLIC glfw skity::skity)
 target_link_libraries(skity_example_common PUBLIC skity::codec)
