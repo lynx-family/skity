@@ -6,6 +6,7 @@
 #define SRC_RENDER_HW_HW_PATH_RASTER_HPP
 
 #include <array>
+#include <cstddef>
 #include <optional>
 #include <vector>
 
@@ -98,18 +99,14 @@ class HWPathStrokeRaster : public HWPathVisitor {
 
   std::array<Vec2, 4> ExpandLine(const Vec2& p1, const Vec2& p2) const;
 
-  void GenRoundCap(const Vec2& center, const Vec2& out_dir);
-
   void GenSquareCap(const Vec2& center, const Vec2& out_dir);
 
   void GenMiterJoin(const Vec2& center, const Vec2& p1, const Vec2& p2);
 
   void GenBevelJoin(const Vec2& center, const Vec2& p1, const Vec2& p2);
 
-  void GenRoundJoin(const Vec2& center, const Vec2& p1, const Vec2& p2);
+  void GenerateCircleMesh(Vec2 const& center);
 
-  void GenerateCircleMesh(Vec2 const& center, Vec2 const& p1, Vec2 const& p2,
-                          int num);
   void GenerateSquareMesh(Vec2 const& p1, Vec2 const& p2, Vec2 const& out_dir);
 
  private:
@@ -122,6 +119,7 @@ class HWPathStrokeRaster : public HWPathVisitor {
   wangs_formula::VectorXform xform_ = {};
 
   std::vector<StrokePoint> stroke_pts_ = {};
+  std::vector<Vec2> circle_mesh_points_ = {};
 };
 
 }  // namespace skity

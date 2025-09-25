@@ -15,6 +15,7 @@ namespace skity {
 #define FloatInfinity std::numeric_limits<float>::infinity()
 #define FloatRoot2Over2 0.707106781f
 #define FloatSqrt2 1.41421356f
+#define FloatPI 3.14159265358979323846f
 
 constexpr static float kNearlyZero = (Float1 / (1 << 12));
 

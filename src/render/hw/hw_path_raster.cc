@@ -5,6 +5,7 @@
 #include "src/render/hw/hw_path_raster.hpp"
 
 #include "src/geometry/conic.hpp"
+#include "src/logging.hpp"
 
 namespace skity {
 
@@ -310,8 +311,10 @@ void HWPathStrokeRaster::HandleLineCap() {
   }
 
   if (cap_ == Paint::kRound_Cap) {
-    GenRoundCap(p1.xy, p1_out);
-    GenRoundCap(p2.xy, p2_out);
+    GenerateCircleMesh(p1.xy);
+    if (p1.xy != p2.xy) {
+      GenerateCircleMesh(p2.xy);
+    }
   } else {
     GenSquareCap(p1.xy, p1_out);
     GenSquareCap(p2.xy, p2_out);
@@ -381,16 +384,7 @@ void HWPathStrokeRaster::HandleLineJoin() {
       if (delta < 1.f) {
         GenBevelJoin(curr, prev_join, curr_join);
       } else {
-        if (orientation == Orientation::kLinear) {
-          auto out_dir = (curr - prev).Normalize();
-
-          auto c = curr + out_dir * stroke_radius_;
-
-          GenRoundJoin(curr, curr_join, c);
-          GenRoundJoin(curr, c, prev_join);
-        } else {
-          GenRoundJoin(curr, curr_join, prev_join);
-        }
+        GenerateCircleMesh(curr);
       }
     }
   }
@@ -410,22 +404,6 @@ std::array<Vec2, 4> HWPathStrokeRaster::ExpandLine(Vec2 const& p0,
   ret[3] = p1 - normal * stroke_radius_;
 
   return ret;
-}
-
-void HWPathStrokeRaster::GenRoundCap(const Vec2& center, const Vec2& out_dir) {
-  Vec2 norm{out_dir.y, -out_dir.x};
-
-  Vec2 p1 = center + norm * stroke_radius_;
-  Vec2 p2 = center - norm * stroke_radius_;
-  Vec2 c = center + out_dir * stroke_radius_;
-
-  std::array<const Vec2, 3> arc{center, p1, c};
-
-  float num = std::ceil(
-      wangs_formula::Conic(kPrecision, arc.data(), FloatRoot2Over2, xform_));
-
-  GenerateCircleMesh(center, p1, c, num);
-  GenerateCircleMesh(center, c, p2, num);
 }
 
 void HWPathStrokeRaster::GenSquareCap(const Vec2& center, const Vec2& out_dir) {
@@ -477,27 +455,30 @@ void HWPathStrokeRaster::GenBevelJoin(const Vec2& center, const Vec2& p1,
   AppendFrontTriangle(a, b, c);
 }
 
-void HWPathStrokeRaster::GenRoundJoin(const Vec2& center, const Vec2& p1,
-                                      const Vec2& p2) {
-  GenerateCircleMesh(center, p1, p2, 16);
-}
+void HWPathStrokeRaster::GenerateCircleMesh(Vec2 const& center) {
+  if (circle_mesh_points_.empty()) {
+    Vec2 p1 = center + Vec2{stroke_radius_, 0};
+    Vec2 p2 = center + Vec2{0, stroke_radius_};
+    std::array<const Vec2, 3> arc{p1, center, p2};
+    uint32_t semicircle_segments_num =
+        std::ceil(2 * wangs_formula::Conic(kPrecision, arc.data(),
+                                           FloatRoot2Over2, xform_));
+    semicircle_segments_num = std::max(semicircle_segments_num, 2u);
+    float angle = FloatPI / semicircle_segments_num;
+    circle_mesh_points_.reserve(2 * semicircle_segments_num + 1);
+    for (int i = 0; i <= 2 * semicircle_segments_num; i++) {
+      circle_mesh_points_.push_back(
+          Vec2{std::cos(angle * i), std::sin(angle * i)} * stroke_radius_);
+    }
+    DEBUG_CHECK(circle_mesh_points_.size() == 2 * semicircle_segments_num + 1);
+  }
 
-void HWPathStrokeRaster::GenerateCircleMesh(Vec2 const& center, Vec2 const& p1,
-                                            Vec2 const& p2, int num) {
-  auto c_i = AppendLineVertex(center);
-  num = std::max(num, 1);
-  auto prev_i = AppendLineVertex(p1);
-  auto start_unit_vec = (p1 - center).Normalize();
-  auto end_unit_vec = (p2 - center).Normalize();
-
-  std::vector<Vec2> result =
-      CircleInterpolation(start_unit_vec, end_unit_vec, num);
-
-  for (int32_t i = 0; i < num; i++) {
-    auto p = center + result[i] * stroke_radius_;
-    auto curr_i = AppendLineVertex(p);
-    AppendFrontTriangle(c_i, prev_i, curr_i);
-    prev_i = curr_i;
+  auto c = AppendLineVertex(center);
+  auto prev = AppendLineVertex(center + circle_mesh_points_[0]);
+  for (int i = 1; i <= circle_mesh_points_.size(); i++) {
+    auto curr = AppendLineVertex(center + circle_mesh_points_[i]);
+    AppendFrontTriangle(c, prev, curr);
+    prev = curr;
   }
 }
 
