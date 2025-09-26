@@ -14,6 +14,7 @@
 #include "src/render/hw/draw/geometry/wgsl_gradient_path.hpp"
 #include "src/render/hw/draw/geometry/wgsl_path_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
+#include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_texture_path.hpp"
 #include "src/render/hw/draw/step/color_step.hpp"
 #include "src/render/hw/draw/step/stencil_step.hpp"
@@ -98,11 +99,19 @@ HWWGSLGeometry *HWDynamicPathDraw::GenGeometry(HWDrawContext *context,
 
       pixmap_shader->GetLocalMatrix().Invert(&inv_local_matrix);
       if (use_gpu_tessellation_) {
-        DEBUG_CHECK(!is_stroke_);
         DEBUG_CHECK(!paint_.IsAntiAlias());
-        return arena_allocator->Make<WGSLTextureTessPathFill>(
-            path_, paint_, inv_local_matrix, static_cast<float>(image->Width()),
-            static_cast<float>(image->Height()));
+        if (is_stroke_) {
+          return arena_allocator->Make<WGSLTextureTessPathStroke>(
+              path_, paint_, inv_local_matrix,
+              static_cast<float>(image->Width()),
+              static_cast<float>(image->Height()));
+
+        } else {
+          return arena_allocator->Make<WGSLTextureTessPathFill>(
+              path_, paint_, inv_local_matrix,
+              static_cast<float>(image->Width()),
+              static_cast<float>(image->Height()));
+        }
       } else {
         return arena_allocator->Make<WGSLTexturePath>(
             path_, paint_, is_stroke_, aa, inv_local_matrix,
@@ -112,10 +121,14 @@ HWWGSLGeometry *HWDynamicPathDraw::GenGeometry(HWDrawContext *context,
 
     } else {
       if (use_gpu_tessellation_) {
-        DEBUG_CHECK(!is_stroke_);
         DEBUG_CHECK(!paint_.IsAntiAlias());
-        return arena_allocator->Make<WGSLGradientTessPathFill>(
-            path_, paint_, paint_.GetShader()->GetLocalMatrix());
+        if (is_stroke_) {
+          return arena_allocator->Make<WGSLGradientTessPathStroke>(
+              path_, paint_, paint_.GetShader()->GetLocalMatrix());
+        } else {
+          return arena_allocator->Make<WGSLGradientTessPathFill>(
+              path_, paint_, paint_.GetShader()->GetLocalMatrix());
+        }
       } else {
         return arena_allocator->Make<WGSLGradientPath>(
             path_, paint_, is_stroke_, aa,
@@ -198,10 +211,14 @@ HWWGSLFragment *HWDynamicPathDraw::GenFragment(HWDrawContext *context) const {
 HWWGSLGeometry *HWDynamicPathDraw::GenPathGeometry(HWDrawContext *context,
                                                    bool aa) const {
   if (use_gpu_tessellation_) {
-    DEBUG_CHECK(!is_stroke_);
     DEBUG_CHECK(!paint_.IsAntiAlias());
-    return context->arena_allocator->Make<WGSLTessPathFillGeometry>(path_,
-                                                                    paint_);
+    if (is_stroke_) {
+      return context->arena_allocator->Make<WGSLTessPathStrokeGeometry>(path_,
+                                                                        paint_);
+    } else {
+      return context->arena_allocator->Make<WGSLTessPathFillGeometry>(path_,
+                                                                      paint_);
+    }
   } else {
     return context->arena_allocator->Make<WGSLPathGeometry>(path_, paint_,
                                                             is_stroke_, aa);
