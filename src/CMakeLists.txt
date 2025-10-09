@@ -126,8 +126,10 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
     skity
     PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/base/platform/win/file_win.cc
+    ${CMAKE_CURRENT_LIST_DIR}/base/platform/win/handle_result.cc
     ${CMAKE_CURRENT_LIST_DIR}/base/platform/win/mapping_win.cc
   )
+  target_link_libraries(skity PRIVATE Shlwapi)
 else()
   target_sources(
     skity

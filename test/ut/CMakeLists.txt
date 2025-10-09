@@ -32,6 +32,10 @@ add_executable(skity_unit_test
     utils/array_list_test.cc
 )
 
+if(CMAKE_SYSTEM_NAME MATCHES "Windows")
+    target_sources(skity_unit_test PRIVATE base/platform/win/str_conversion_test.cc)
+endif()
+
 target_include_directories(skity_unit_test
     PUBLIC
     ${CMAKE_SOURCE_DIR}

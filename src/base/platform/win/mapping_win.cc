@@ -5,14 +5,11 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <fcntl.h>
-#include <io.h>
-#include <windows.h>
-
 #include <type_traits>
 
 #include "src/base/file.hpp"
 #include "src/base/mapping.hpp"
+#include "src/base/platform/win/lean_windows.hpp"
 
 namespace skity {
 
