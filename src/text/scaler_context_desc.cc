@@ -82,10 +82,10 @@ void ScalerContextDesc::DecomposeMatrix(PortScaleType type, float* scale_x,
       FloatNearlyZero(total.skew_x_) && FloatNearlyZero(total.skew_y_);
   if (only_scale) {
     if (FloatNearlyZero(total.scale_x_) || FloatNearlyZero(total.scale_y_)) {
-      *scale_x = 0.f;
-      *scale_y = 0.f;
-      transform->scale_x_ = 1.f;
-      transform->scale_y_ = 1.f;
+      *scale_x = 1.f;
+      *scale_y = 1.f;
+      transform->scale_x_ = 0.f;
+      transform->scale_y_ = 0.f;
       return;
     }
     if (type == PortScaleType::kVertical &&
@@ -104,10 +104,10 @@ void ScalerContextDesc::DecomposeMatrix(PortScaleType type, float* scale_x,
     Matrix22 q, r;
     total.QRDecompose(&q, &r);
     if (FloatNearlyZero(r.scale_x_) || FloatNearlyZero(r.scale_y_)) {
-      *scale_x = 0.f;
-      *scale_y = 0.f;
-      transform->scale_x_ = 1.f;
-      transform->scale_y_ = 1.f;
+      *scale_x = 1.f;
+      *scale_y = 1.f;
+      transform->scale_x_ = 0.f;
+      transform->scale_y_ = 0.f;
       return;
     }
     *scale_y = std::fabs(r.scale_y_);
