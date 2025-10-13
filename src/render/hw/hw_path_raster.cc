@@ -475,7 +475,7 @@ void HWPathStrokeRaster::GenerateCircleMesh(Vec2 const& center) {
 
   auto c = AppendLineVertex(center);
   auto prev = AppendLineVertex(center + circle_mesh_points_[0]);
-  for (int i = 1; i <= circle_mesh_points_.size(); i++) {
+  for (int i = 1; i < circle_mesh_points_.size(); i++) {
     auto curr = AppendLineVertex(center + circle_mesh_points_[i]);
     AppendFrontTriangle(c, prev, curr);
     prev = curr;
