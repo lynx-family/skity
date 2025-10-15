@@ -219,6 +219,12 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/harmony/harmony_fonts_parser.hpp
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/harmony/font_manager_harmony.cc
   )
+elseif(CMAKE_SYSTEM_NAME MATCHES "Windows")
+  target_sources(
+    skity
+    PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/text/ports/win/font_manager_win.cc
+  )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/text/ports/font_manager_freetype.cc)
 else()
