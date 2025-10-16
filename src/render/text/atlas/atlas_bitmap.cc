@@ -42,7 +42,7 @@ glm::ivec4 AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
   }
   uint32_t width = static_cast<uint32_t>(bitmap.width) + Atlas_Padding;
   uint32_t height = static_cast<uint32_t>(bitmap.height) + Atlas_Padding;
-  if (width > width_ || height > height_) {
+  if (width > width_ - 2 || height > height_ - 2) {
     return {0, 0, 0, 0};
   }
   glm::ivec4 region = allocator_->AllocateRegion(width, height);
@@ -50,6 +50,13 @@ glm::ivec4 AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
     return region;
   }
 
+  // Do not assume textures are zero-initialized on macOS — newly created
+  // texture contents may be non-zero.Therefore, we need to treat the padding
+  // area as a dirty region. Since the padding region is initialized to zero,
+  // sampling from it will result in transparent output.
+  glm::ivec4 dirty_region = region;
+  region.x += Atlas_Padding / 2;
+  region.y += Atlas_Padding / 2;
   region.z -= Atlas_Padding;
   region.w -= Atlas_Padding;
   glyph_regions_.insert(std::make_pair(key, region));
@@ -69,13 +76,14 @@ glm::ivec4 AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
 
   // calculate dirty rect
   if (!dirty_rect_.has_value()) {
-    dirty_rect_ = {region.x, region.y, region.x + region.z,
-                   region.y + region.w};
+    dirty_rect_ = {dirty_region.x, dirty_region.y,
+                   dirty_region.x + dirty_region.z,
+                   dirty_region.y + dirty_region.w};
   } else {
-    dirty_rect_->x = std::min(dirty_rect_->x, region.x);
-    dirty_rect_->y = std::min(dirty_rect_->y, region.y);
-    dirty_rect_->z = std::max(dirty_rect_->z, region.x + region.z);
-    dirty_rect_->w = std::max(dirty_rect_->w, region.y + region.w);
+    dirty_rect_->x = std::min(dirty_rect_->x, dirty_region.x);
+    dirty_rect_->y = std::min(dirty_rect_->y, dirty_region.y);
+    dirty_rect_->z = std::max(dirty_rect_->z, dirty_region.x + dirty_region.z);
+    dirty_rect_->w = std::max(dirty_rect_->w, dirty_region.y + dirty_region.w);
   }
 
   return region;
