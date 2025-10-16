@@ -9,6 +9,7 @@
 
 #include "src/geometry/glm_helper.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
+#include "src/logging.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -30,8 +31,16 @@ HWLayer::HWLayer(Matrix matrix, int32_t depth, Rect bounds, uint32_t width,
 void HWLayer::Draw(GPURenderPass* render_pass) {
   SKITY_TRACE_EVENT(HWLayer_Draw);
   auto cmd = CreateCommandBuffer();
+  if (!cmd) {
+    LOGE("Failed to create command buffer");
+    return;
+  }
 
   auto self_pass = OnBeginRenderPass(cmd.get());
+  if (!self_pass) {
+    LOGE("OnBeginRenderPass() returned null");
+    return;
+  }
 
   self_pass->SetArenaAllocator(arena_allocator_);
   for (auto draw : draw_ops_) {
@@ -145,8 +154,16 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
   sub_context.static_buffer = context->static_buffer;
   sub_context.pipelineLib = context->pipelineLib;
   sub_context.gpuContext = context->gpuContext;
-  sub_context.mvp = FromGLM(glm::ortho(bounds_.Left(), bounds_.Right(),
-                                       bounds_.Bottom(), bounds_.Top()));
+  // For Vulkan backend, adjust coordinate system to account for Y-axis
+  // differences
+  if (context->gpuContext &&
+      context->gpuContext->GetBackendType() == GPUBackendType::kVulkan) {
+    sub_context.mvp = FromGLM(glm::ortho(bounds_.Left(), bounds_.Right(),
+                                         bounds_.Top(), bounds_.Bottom()));
+  } else {
+    sub_context.mvp = FromGLM(glm::ortho(bounds_.Left(), bounds_.Right(),
+                                         bounds_.Bottom(), bounds_.Top()));
+  }
   sub_context.pool = &pool;
   sub_context.vertex_vector_cache = context->vertex_vector_cache;
   sub_context.index_vector_cache = context->index_vector_cache;
@@ -172,8 +189,18 @@ void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
   sub_context.static_buffer = context->static_buffer;
   sub_context.pipelineLib = context->pipelineLib;
   sub_context.gpuContext = context->gpuContext;
-  sub_context.mvp = FromGLM(glm::ortho(bounds_.Left(), bounds_.Right(),
-                                       bounds_.Bottom(), bounds_.Top()));
+
+  // Vulkan has Y-axis pointing down, while OpenGL has Y-axis pointing up
+  // Use flipped parameters for Vulkan
+  if (context->gpuContext &&
+      context->gpuContext->GetBackendType() == GPUBackendType::kVulkan) {
+    sub_context.mvp = FromGLM(glm::ortho(bounds_.Left(), bounds_.Right(),
+                                         bounds_.Top(), bounds_.Bottom()));
+  } else {
+    sub_context.mvp = FromGLM(glm::ortho(bounds_.Left(), bounds_.Right(),
+                                         bounds_.Bottom(), bounds_.Top()));
+  }
+
   sub_context.pool = &pool;
   sub_context.vertex_vector_cache = context->vertex_vector_cache;
   sub_context.index_vector_cache = context->index_vector_cache;

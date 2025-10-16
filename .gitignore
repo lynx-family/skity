@@ -17,3 +17,4 @@ build-*
 clion_compile.sh
 .python-version
 **/__pycache__
+src/.cache/*
