@@ -30,4 +30,17 @@ TileMode PixmapShader::GetXTileMode() const { return x_tile_mode_; }
 
 TileMode PixmapShader::GetYTileMode() const { return y_tile_mode_; }
 
+std::string_view PixmapShader::ProcName() const { return "SkImageShader"; }
+
+void PixmapShader::FlattenToBuffer(WriteBuffer& buffer) const {
+  buffer.WriteUint32(static_cast<uint32_t>(x_tile_mode_));
+  buffer.WriteUint32(static_cast<uint32_t>(y_tile_mode_));
+
+  buffer.WriteSampling(sampling_);
+
+  buffer.WriteImage(image_.get());
+
+  buffer.WriteBool(true);  // is raw
+}
+
 }  // namespace skity

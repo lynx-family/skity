@@ -12,6 +12,7 @@
 #include <skity/graphic/image.hpp>
 #include <skity/graphic/sampling_options.hpp>
 #include <skity/graphic/tile_mode.hpp>
+#include <skity/io/flattenable.hpp>
 #include <skity/macros.hpp>
 #include <vector>
 
@@ -24,10 +25,10 @@ class Pixmap;
  * if a paint has no shader, then the paint's color is used. If the paint has a
  * shader, then the shader's color(s) are use instead.
  */
-class SKITY_API Shader {
+class SKITY_API Shader : public Flattenable {
  public:
   Shader() = default;
-  virtual ~Shader() = default;
+  ~Shader() override = default;
   Shader(const Shader&) = delete;
   Shader& operator=(const Shader&) = delete;
 

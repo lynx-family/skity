@@ -26,6 +26,10 @@ class PixmapShader : public Shader {
 
   TileMode GetYTileMode() const;
 
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
+
  private:
   std::shared_ptr<Image> image_;
   SamplingOptions sampling_;

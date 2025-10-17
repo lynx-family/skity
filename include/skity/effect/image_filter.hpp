@@ -10,15 +10,16 @@
 #include <skity/geometry/point.hpp>
 #include <skity/geometry/rect.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/io/flattenable.hpp>
 #include <skity/macros.hpp>
 
 namespace skity {
 class ColorFilter;
 class Pixmap;
 
-class SKITY_API ImageFilter {
+class SKITY_API ImageFilter : public Flattenable {
  public:
-  virtual ~ImageFilter() = default;
+  ~ImageFilter() override = default;
 
   virtual Rect ComputeFastBounds(const Rect& src) const { return src; }
 

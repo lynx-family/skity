@@ -28,6 +28,38 @@ GradientShader::GradientType GradientShader::AsGradient(
   return type_;
 }
 
+void GradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
+  uint32_t flags = 0;
+
+  if (!info_.color_offsets.empty()) {
+    flags |= kHasPosition_GSF;
+  }
+
+  // we do not have color space
+
+  // premul alpha
+  if (info_.gradientFlags != 0) {
+    flags |= kInterpolationInPremul_GSF;
+  }
+
+  flags |= (static_cast<uint32_t>(info_.tile_mode) << kTileModeShift_GSF);
+  // skip the interpolation color space since it always be zero
+  // skip the interpolation hue method since it always be zero
+
+  buffer.WriteUint32(flags);
+
+  int32_t color_count = info_.color_count;
+  const auto colors = info_.colors.data();
+  const auto positions =
+      info_.color_offsets.empty() ? nullptr : info_.color_offsets.data();
+
+  buffer.WriteColor4fArray(colors, color_count);
+
+  if (positions) {
+    buffer.WriteFloatArray(positions, color_count);
+  }
+}
+
 void GradientShader::CopyInfo(GradientInfo *info) const {
   info->color_count = info_.color_count;
   std::memcpy(info->point.data(), info_.point.data(),
@@ -75,6 +107,21 @@ LinearGradientShader::LinearGradientShader(const Point *pts, const Vec4 *colors,
   info->gradientFlags = flag;
 }
 
+std::string_view LinearGradientShader::ProcName() const {
+  return "SkLinearGradient";
+}
+
+void LinearGradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
+  GradientShader::FlattenToBuffer(buffer);
+
+  GradientInfo info{};
+
+  AsGradient(&info);
+
+  buffer.WritePoint(Vec2{info.point[0].x, info.point[0].y});
+  buffer.WritePoint(Vec2{info.point[1].x, info.point[1].y});
+}
+
 RadialGradientShader::RadialGradientShader(Point const &center, float radius,
                                            const Vec4 colors[],
                                            const float pos[], int32_t count,
@@ -99,6 +146,21 @@ RadialGradientShader::RadialGradientShader(Point const &center, float radius,
   info->local_matrix = Matrix(1.f);
   info->tile_mode = tile_mode;
   info->gradientFlags = flag;
+}
+
+std::string_view RadialGradientShader::ProcName() const {
+  return "SkRadialGradient";
+}
+
+void RadialGradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
+  GradientShader::FlattenToBuffer(buffer);
+
+  GradientInfo info{};
+
+  AsGradient(&info);
+
+  buffer.WritePoint(Vec2{info.point[0].x, info.point[0].y});
+  buffer.WriteFloat(info.radius[0]);
 }
 
 TwoPointConicalGradientShader::TwoPointConicalGradientShader(
@@ -129,6 +191,24 @@ TwoPointConicalGradientShader::TwoPointConicalGradientShader(
   info->gradientFlags = flag;
 }
 
+std::string_view TwoPointConicalGradientShader::ProcName() const {
+  return "SkConicalGradient";
+}
+
+void TwoPointConicalGradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
+  GradientShader::FlattenToBuffer(buffer);
+
+  GradientInfo info{};
+
+  AsGradient(&info);
+
+  buffer.WritePoint(Vec2{info.point[0].x, info.point[0].y});
+  buffer.WritePoint(Vec2{info.point[1].x, info.point[1].y});
+
+  buffer.WriteFloat(info.radius[0]);
+  buffer.WriteFloat(info.radius[1]);
+}
+
 SweepGradientShader::SweepGradientShader(float cx, float cy, float bias,
                                          float scale, const Vec4 colors[],
                                          const float pos[], int32_t count,
@@ -155,6 +235,23 @@ SweepGradientShader::SweepGradientShader(float cx, float cy, float bias,
   info->local_matrix = Matrix(1.f);
   info->tile_mode = tile_mode;
   info->gradientFlags = flag;
+}
+
+std::string_view SweepGradientShader::ProcName() const {
+  return "SkSweepGradient";
+}
+
+void SweepGradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
+  GradientShader::FlattenToBuffer(buffer);
+
+  GradientInfo info{};
+
+  AsGradient(&info);
+
+  buffer.WritePoint(Vec2{info.point[0].x, info.point[0].y});
+
+  buffer.WriteFloat(info.radius[0]);  // bias
+  buffer.WriteFloat(info.radius[1]);  // scale
 }
 
 }  // namespace skity

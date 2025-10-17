@@ -62,6 +62,10 @@ class BlendColorFilter : public ColorFilterBase {
 
   ColorFilterType GetType() const override { return ColorFilterType::kBlend; }
 
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
+
  private:
   Color color_;
   Color pm_color_;
@@ -101,6 +105,10 @@ class MatrixColorFilter : public ColorFilterBase {
 
   ColorFilterType GetType() const override { return ColorFilterType::kMatrix; }
 
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
+
  private:
   float matrix_[20];
 #ifdef SKITY_CPU
@@ -115,6 +123,10 @@ class SRGBGammaColorFilter : public ColorFilterBase {
   PMColor OnFilterColor(PMColor c) const override;
 #endif
   ColorFilterType GetType() const override { return type_; }
+
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
 
  private:
   ColorFilterType type_;
@@ -135,6 +147,10 @@ class ComposeColorFilter : public ColorFilterBase {
   ColorFilterType GetType() const override { return ColorFilterType::kCompose; }
 
   const std::vector<ColorFilter*>& GetFilters() const { return filters_; }
+
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
 
  private:
   void ComputeFilters() {

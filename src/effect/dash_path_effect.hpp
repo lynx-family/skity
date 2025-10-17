@@ -16,6 +16,10 @@ class DashPathEffect : public PathEffect {
 
   ~DashPathEffect() override = default;
 
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer &buffer) const override;
+
  protected:
   bool OnFilterPath(Path *, const Path &, bool, Paint const &) const override;
 

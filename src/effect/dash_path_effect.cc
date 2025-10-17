@@ -101,6 +101,13 @@ DashPathEffect::DashPathEffect(const float* intervals, int32_t count,
   this->CalcDashParameters(phase);
 }
 
+std::string_view DashPathEffect::ProcName() const { return "SkDashImpl"; }
+
+void DashPathEffect::FlattenToBuffer(WriteBuffer& buffer) const {
+  buffer.WriteFloat(phase_);
+  buffer.WriteFloatArray(intervals_.get(), count_);
+}
+
 bool DashPathEffect::OnFilterPath(Path* dst, const Path& src, bool stroke,
                                   Paint const&) const {
   // do nothing if src wants to be filled

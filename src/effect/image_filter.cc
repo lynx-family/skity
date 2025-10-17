@@ -14,8 +14,10 @@
 #include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/graphic/path.hpp>
+#include <skity/graphic/tile_mode.hpp>
 #include <skity/render/canvas.hpp>
 
+#include "src/effect/color_filter_base.hpp"
 #include "src/effect/image_filter_base.hpp"
 
 #if defined(SKITY_CPU)
@@ -191,11 +193,38 @@ void ImageFilterBase::BlurBitmapToCanvas(Canvas* canvas, Bitmap& bitmap,
                     filter_bounds, &paint);
 }
 
+void ImageFilterBase::FlattenToBuffer(WriteBuffer& buffer) const {
+  buffer.WriteInt32(static_cast<int32_t>(inputs_.size()));
+
+  for (size_t i = 0; i < inputs_.size(); ++i) {
+    auto input = inputs_[i];
+    buffer.WriteBool(input != nullptr);
+
+    if (input != nullptr) {
+      buffer.WriteFlattenable(input);
+    }
+  }
+}
+
 void BlurImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
                                const Rect& filter_bounds,
                                const Paint& paint) const {
   BlurBitmapToCanvas(canvas, bitmap, filter_bounds, paint, radius_x_,
                      radius_y_);
+}
+
+std::string_view BlurImageFilter::ProcName() const {
+  return "SkBlurImageFilter";
+}
+
+void BlurImageFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  ImageFilterBase::FlattenToBuffer(buffer);
+
+  buffer.WriteFloat(ConvertRadiusToSigma(radius_x_));
+  buffer.WriteFloat(ConvertRadiusToSigma(radius_y_));
+
+  // pass default value
+  buffer.WriteInt32(static_cast<int32_t>(TileMode::kDecal));
 }
 
 void DropShadowImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
@@ -221,6 +250,25 @@ void DropShadowImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
 
   canvas->DrawImage(Image::MakeImage(bitmap.GetPixmap()), filter_bounds,
                     &paint);
+}
+
+std::string_view DropShadowImageFilter::ProcName() const {
+  // The last filter used to flatten is MatrixTransformImageFilter so we return
+  // SkMatrixTransformImageFilter as ProcName
+  return "SkMatrixTransformImageFilter";
+}
+
+void DropShadowImageFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  BlurImageFilter blur(ConvertRadiusToSigma(radius_x_),
+                       ConvertRadiusToSigma(radius_y_));
+
+  ColorFilterImageFilter color_filter(
+      &blur, ColorFilters::Blend(color_, BlendMode::kSrcIn));
+
+  MatrixImageFilter matrix_filter(
+      &color_filter, Matrix::Translate(GetOffsetX(), GetOffsetY()));
+
+  matrix_filter.FlattenToBuffer(buffer);
 }
 
 enum class MorphDirection { kX, kY };
@@ -333,11 +381,55 @@ void MorphologyImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
 
 #endif
 
-MatrixImageFilter::MatrixImageFilter(const Matrix& matrix) : matrix_(matrix) {}
+std::string_view MorphologyImageFilter::ProcName() const {
+  return "SkMorphologyImageFilter";
+}
 
-ColorFilterImageFilter::ColorFilterImageFilter(
-    std::shared_ptr<ColorFilter> cf) {
-  color_filter_ = cf;
+void MorphologyImageFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  ImageFilterBase::FlattenToBuffer(buffer);
+
+  buffer.WriteFloat(radius_x_);
+  buffer.WriteFloat(radius_y_);
+
+  if (type_ == ImageFilterType::kDilate) {
+    buffer.WriteInt32(1);  // MorphType::kDilate
+  } else if (type_ == ImageFilterType::kErode) {
+    buffer.WriteInt32(0);  // MorphType::kErode
+  }
+}
+
+MatrixImageFilter::MatrixImageFilter(const Matrix& matrix)
+    : ImageFilterBase({nullptr}), matrix_(matrix) {}
+
+MatrixImageFilter::MatrixImageFilter(ImageFilter* input, const Matrix& matrix)
+    : ImageFilterBase({input}), matrix_(matrix) {}
+
+std::string_view MatrixImageFilter::ProcName() const {
+  return "SkMatrixTransformImageFilter";
+}
+
+void MatrixImageFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  ImageFilterBase::FlattenToBuffer(buffer);
+
+  buffer.WriteMatrix(matrix_);
+  buffer.WriteSampling(SamplingOptions{});
+}
+
+ColorFilterImageFilter::ColorFilterImageFilter(std::shared_ptr<ColorFilter> cf)
+    : ImageFilterBase({nullptr}), color_filter_(std::move(cf)) {}
+
+ColorFilterImageFilter::ColorFilterImageFilter(ImageFilter* input,
+                                               std::shared_ptr<ColorFilter> cf)
+    : ImageFilterBase({input}), color_filter_(cf) {}
+
+std::string_view ColorFilterImageFilter::ProcName() const {
+  return "SkColorFilterImageFilter";
+}
+
+void ColorFilterImageFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  ImageFilterBase::FlattenToBuffer(buffer);
+
+  buffer.WriteFlattenable(color_filter_.get());
 }
 
 }  // namespace skity

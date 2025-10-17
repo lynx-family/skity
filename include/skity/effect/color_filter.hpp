@@ -8,13 +8,14 @@
 #include <memory>
 #include <skity/graphic/blend_mode.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/io/flattenable.hpp>
 
 namespace skity {
 
-class SKITY_API ColorFilter {
+class SKITY_API ColorFilter : public Flattenable {
  public:
   PMColor FilterColor(PMColor) const;
-  ~ColorFilter() = default;
+  ~ColorFilter() override = default;
 
  private:
   ColorFilter() = default;

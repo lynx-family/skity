@@ -50,7 +50,7 @@ class ImageFilterBase : public ImageFilter {
                                  float radius_x, float radius_y);
   virtual void OnFilter(Canvas*, Bitmap&, const Rect&, const Paint&) const {}
 #endif
-  virtual ~ImageFilterBase() = default;
+  ~ImageFilterBase() override = default;
 
   virtual float GetRadiusX() const { return 0.f; }
   virtual float GetRadiusY() const { return 0.f; }
@@ -61,8 +61,14 @@ class ImageFilterBase : public ImageFilter {
 
   virtual ImageFilterType GetType() const = 0;
 
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
+
  protected:
-  ImageFilterBase() = default;
+  explicit ImageFilterBase(std::vector<ImageFilter*> inputs)
+      : inputs_(std::move(inputs)) {}
+
+ private:
+  std::vector<ImageFilter*> inputs_;
 };
 
 static inline ImageFilterBase* As_IFB(ImageFilter* filter) {
@@ -78,7 +84,8 @@ bool operator==(const ImageFilterBase& a, const ImageFilterBase& b);
 class BlurImageFilter : public ImageFilterBase {
  public:
   BlurImageFilter(float sigma_x, float sigma_y)
-      : radius_x_(ConvertSigmaToRadius(sigma_x)),
+      : ImageFilterBase({nullptr}),
+        radius_x_(ConvertSigmaToRadius(sigma_x)),
         radius_y_(ConvertSigmaToRadius(sigma_y)) {}
   float GetRadiusX() const override { return radius_x_; }
   float GetRadiusY() const override { return radius_y_; }
@@ -96,6 +103,10 @@ class BlurImageFilter : public ImageFilterBase {
                           src.Bottom() + radius_y_);
   }
 
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
+
  private:
   float radius_x_;
   float radius_y_;
@@ -106,7 +117,8 @@ class DropShadowImageFilter : public ImageFilterBase {
   DropShadowImageFilter(float dx, float dy, float sigma_x, float sigma_y,
                         Color color, std::shared_ptr<ImageFilter> input,
                         const Rect& crop_rect)
-      : dx_(dx),
+      : ImageFilterBase({input.get()}),
+        dx_(dx),
         dy_(dy),
         radius_x_(ConvertSigmaToRadius(sigma_x)),
         radius_y_(ConvertSigmaToRadius(sigma_y)),
@@ -136,6 +148,10 @@ class DropShadowImageFilter : public ImageFilterBase {
     return rect;
   }
 
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
+
  private:
   float dx_;
   float dy_;
@@ -148,7 +164,10 @@ class DropShadowImageFilter : public ImageFilterBase {
 class MorphologyImageFilter : public ImageFilterBase {
  public:
   MorphologyImageFilter(ImageFilterType type, float radius_x, float radius_y)
-      : radius_x_(radius_x), radius_y_(radius_y), type_(type) {}
+      : ImageFilterBase({nullptr}),
+        radius_x_(radius_x),
+        radius_y_(radius_y),
+        type_(type) {}
   float GetRadiusX() const override { return radius_x_; }
   float GetRadiusY() const override { return radius_y_; }
 #if defined(SKITY_CPU)
@@ -169,6 +188,10 @@ class MorphologyImageFilter : public ImageFilterBase {
 
   ImageFilterType GetType() const override { return type_; }
 
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
+
  private:
   float radius_x_;
   float radius_y_;
@@ -178,6 +201,8 @@ class MorphologyImageFilter : public ImageFilterBase {
 class MatrixImageFilter : public ImageFilterBase {
  public:
   explicit MatrixImageFilter(const Matrix& matrix);
+
+  MatrixImageFilter(ImageFilter* input, const Matrix& matrix);
 
   const Matrix& GetMatrix() const { return matrix_; }
 
@@ -191,6 +216,10 @@ class MatrixImageFilter : public ImageFilterBase {
     return src;
   }
 
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
+
  private:
   Matrix matrix_;
 };
@@ -199,11 +228,17 @@ class ColorFilterImageFilter : public ImageFilterBase {
  public:
   explicit ColorFilterImageFilter(std::shared_ptr<ColorFilter> cf);
 
+  ColorFilterImageFilter(ImageFilter* input, std::shared_ptr<ColorFilter> cf);
+
   ImageFilterType GetType() const override {
     return ImageFilterType::kColorFilter;
   }
 
   std::shared_ptr<ColorFilter> GetColorFilter() const { return color_filter_; }
+
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
 
  private:
   std::shared_ptr<ColorFilter> color_filter_;
@@ -213,7 +248,9 @@ class ComposeImageFilter : public ImageFilterBase {
  public:
   ComposeImageFilter(std::shared_ptr<ImageFilter> outer,
                      std::shared_ptr<ImageFilter> inner)
-      : outer_(outer), inner_(inner) {}
+      : ImageFilterBase({outer.get(), inner.get()}),
+        outer_(outer),
+        inner_(inner) {}
 
   ImageFilterType GetType() const override {
     return ImageFilterType::kCompose;
@@ -238,6 +275,8 @@ class ComposeImageFilter : public ImageFilterBase {
 
     return outer_->ComputeFastBounds(inner_->ComputeFastBounds(src));
   }
+
+  std::string_view ProcName() const override { return "SkComposeImageFilter"; }
 
  private:
   std::shared_ptr<ImageFilter> outer_;

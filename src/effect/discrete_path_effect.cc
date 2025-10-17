@@ -66,6 +66,16 @@ DiscretePathEffect::DiscretePathEffect(float seg_length, float deviation,
       perterb_(deviation),
       seed_assist_(seed_assist) {}
 
+std::string_view DiscretePathEffect::ProcName() const {
+  return "SkDiscretePathEffect";
+}
+
+void DiscretePathEffect::FlattenToBuffer(WriteBuffer& buffer) const {
+  buffer.WriteFloat(seg_length_);
+  buffer.WriteFloat(perterb_);
+  buffer.WriteUint32(seed_assist_);
+}
+
 bool DiscretePathEffect::OnFilterPath(Path* dst, Path const& src, bool stroke,
                                       Paint const&) const {
   bool do_fill = !stroke;

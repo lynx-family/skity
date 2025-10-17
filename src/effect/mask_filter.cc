@@ -18,6 +18,22 @@
 
 namespace skity {
 
+namespace {
+
+constexpr float radial_to_sigma(float radius) {
+  return radius > 0.f ? radius * 0.57735f + 0.5f : 0.f;
+}
+
+}  // namespace
+
+std::string_view MaskFilter::ProcName() const { return "SkBlurMaskFilterImpl"; }
+
+void MaskFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  buffer.WriteFloat(radial_to_sigma(radius_));
+  buffer.WriteInt32(static_cast<int32_t>(style_) - 1);
+  buffer.WriteUint32(0);  // respectCTM, ignore it
+}
+
 std::shared_ptr<MaskFilter> MaskFilter::MakeBlur(BlurStyle style,
                                                  float radius) {
   if (radius <= 0) {

@@ -14,6 +14,10 @@ class DiscretePathEffect : public PathEffect {
   DiscretePathEffect(float seg_length, float deviation, uint32_t seed_assist);
   ~DiscretePathEffect() override = default;
 
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
+
  protected:
   bool OnFilterPath(Path* dst, Path const& src, bool stroke,
                     Paint const&) const override;

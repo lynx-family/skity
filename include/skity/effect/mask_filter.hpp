@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <skity/geometry/rect.hpp>
+#include <skity/io/flattenable.hpp>
 #include <skity/macros.hpp>
 
 namespace skity {
@@ -18,15 +19,19 @@ enum BlurStyle : int {
   kInner,       // fuzzy inside, nothing outside
 };
 
-class SKITY_API MaskFilter {
+class SKITY_API MaskFilter : public Flattenable {
  public:
   MaskFilter() = default;
-  ~MaskFilter() = default;
+  ~MaskFilter() override = default;
   MaskFilter& operator=(const MaskFilter&) = delete;
 
   BlurStyle GetBlurStyle() const { return style_; }
 
   float GetBlurRadius() const { return radius_; }
+
+  std::string_view ProcName() const override;
+
+  void FlattenToBuffer(WriteBuffer& buffer) const override;
 
   /**
    * Create a blur mask filter

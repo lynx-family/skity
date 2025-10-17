@@ -12,6 +12,47 @@
 
 namespace skity {
 
+namespace {
+
+static constexpr float transfer_fn_SRGB[] = {
+    2.4f,
+    static_cast<float>(1 / 1.055),
+    static_cast<float>(0.055 / 1.055),
+    static_cast<float>(1 / 12.92),
+    0.04045f,
+    0.0f,
+    0.0f,
+};
+
+static constexpr float transfer_fn_LINEAR[] = {
+    1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+};
+
+#define FixedToFloat(x) ((x) * 1.52587890625e-5f)
+
+static constexpr float named_gamut_SRGB[3][3] = {
+    {FixedToFloat(0x6FA2), FixedToFloat(0x6299), FixedToFloat(0x24A0)},
+    {FixedToFloat(0x38F5), FixedToFloat(0xB785), FixedToFloat(0x0F84)},
+    {FixedToFloat(0x0390), FixedToFloat(0x18DA), FixedToFloat(0xB6CF)},
+};
+
+enum Version {
+  k0_Version,  // Initial (deprecated) version, no longer supported
+  k1_Version,  // Simple header (version tag) + 16 floats
+
+  kCurrent_Version = k1_Version,
+};
+
+struct ColorSpaceHeader {
+  uint8_t version = kCurrent_Version;
+
+  uint8_t reserved0 = 0;
+  uint8_t reserved1 = 0;
+  uint8_t reserved2 = 0;
+};
+
+}  // namespace
+
 PMColor ColorFilter::FilterColor(PMColor c) const {
 #ifdef SKITY_CPU
   return As_CFB(this)->OnFilterColor(c);
@@ -144,5 +185,70 @@ PMColor ComposeColorFilter::OnFilterColor(PMColor src) const {
 }
 
 #endif
+
+std::string_view BlendColorFilter::ProcName() const {
+  return "SkBlendModeColorFilter";
+}
+
+void BlendColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  buffer.WriteColor4f(Color4fFromColor(color_));
+  buffer.WriteUint32(static_cast<uint32_t>(mode_));
+}
+
+std::string_view MatrixColorFilter::ProcName() const {
+  return "SkMatrixColorFilter";
+}
+
+void MatrixColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  buffer.WriteFloatArray(matrix_, 20);
+
+  // skity only support RGBA
+  buffer.WriteBool(true);  // always RGBA
+  buffer.WriteBool(true);  // clamp
+}
+
+std::string_view SRGBGammaColorFilter::ProcName() const {
+  return "SkColorSpaceXformColorFilter";
+}
+
+void SRGBGammaColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  const float* src_fn = nullptr;
+  const float* dst_fn = nullptr;
+
+  if (type_ == ColorFilterType::kLinearToSRGBGamma) {
+    src_fn = transfer_fn_LINEAR;
+    dst_fn = transfer_fn_SRGB;
+  } else {
+    src_fn = transfer_fn_SRGB;
+    dst_fn = transfer_fn_LINEAR;
+  }
+
+  ColorSpaceHeader header{};
+
+  std::vector<uint8_t> data(sizeof(ColorSpaceHeader) + 7 * sizeof(float) +
+                            9 * sizeof(float));
+  std::memcpy(data.data(), &header, sizeof(ColorSpaceHeader));
+  std::memcpy(data.data() + sizeof(ColorSpaceHeader) + 7 * sizeof(float),
+              named_gamut_SRGB, 9 * sizeof(float));
+
+  // write src
+  std::memcpy(data.data() + sizeof(ColorSpaceHeader), src_fn,
+              7 * sizeof(float));
+  buffer.WriteByteArray(data.data(), data.size());
+
+  // write dst
+  std::memcpy(data.data() + sizeof(ColorSpaceHeader), dst_fn,
+              7 * sizeof(float));
+  buffer.WriteByteArray(data.data(), data.size());
+}
+
+std::string_view ComposeColorFilter::ProcName() const {
+  return "SkComposeColorFilter";
+}
+
+void ComposeColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  buffer.WriteFlattenable(outer_.get());
+  buffer.WriteFlattenable(inner_.get());
+}
 
 }  // namespace skity

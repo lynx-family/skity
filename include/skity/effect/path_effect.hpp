@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <skity/io/flattenable.hpp>
 #include <skity/macros.hpp>
 
 namespace skity {
@@ -22,9 +23,9 @@ class Paint;
  *
  *  Dashing is implemented as a subclass of SkPathEffect.
  */
-class SKITY_API PathEffect {
+class SKITY_API PathEffect : public Flattenable {
  public:
-  virtual ~PathEffect() = default;
+  ~PathEffect() override = default;
   PathEffect(const PathEffect&) = delete;
   PathEffect& operator=(const PathEffect&) = delete;
 
