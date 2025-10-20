@@ -19,6 +19,10 @@
 #include "common/sw/window_sw.hpp"
 #endif
 
+#ifdef SKITY_EXAMPLE_VK_BACKEND
+#include "common/vk/window_vk.hpp"
+#endif
+
 namespace skity {
 namespace example {
 
@@ -44,6 +48,12 @@ std::unique_ptr<Window> Window::CreateWindow(Backend backend, uint32_t width,
     window = std::make_unique<WindowSW>(width, height, std::move(title));
 #else
     std::cerr << "Software backend is not supported." << std::endl;
+#endif
+  } else if (backend == Backend::kVulkan) {
+#ifdef SKITY_EXAMPLE_VK_BACKEND
+    window = std::make_unique<WindowVK>(width, height, std::move(title));
+#else
+    std::cerr << "Vulkan backend is not supported." << std::endl;
 #endif
   }
 

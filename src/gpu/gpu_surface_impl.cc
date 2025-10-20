@@ -4,6 +4,7 @@
 
 #include "src/gpu/gpu_surface_impl.hpp"
 
+#include "src/logging.hpp"
 #include "src/render/hw/hw_canvas.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 #include "src/utils/arena_allocator.hpp"
@@ -45,6 +46,11 @@ Canvas* GPUSurfaceImpl::LockCanvas(bool clear) {
 
   auto root_layer = OnBeginNextFrame(clear);
 
+  if (!root_layer) {
+    LOGE("OnBeginNextFrame failed to create root layer");
+    return nullptr;
+  }
+
   root_layer->SetEnableMergingDrawCall(ctx_->IsEnableMergingDrawCall());
 
   canvas_->BeginNewFrame(root_layer);
@@ -60,6 +66,12 @@ void GPUSurfaceImpl::Flush() {
   ctx_->GetAtlasManager()->ClearExtraRes();
   if (arena_allocator_ != nullptr) {
     arena_allocator_->Reset();
+  }
+}
+
+void GPUSurfaceImpl::FlushCanvas() {
+  if (canvas_) {
+    canvas_->Flush();
   }
 }
 

@@ -23,6 +23,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebI
   add_definitions(-DSKITY_RELEASE)
 endif()
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_definitions(-DSKITY_DEBUG)
+endif()
+
 if (${SKITY_OPTIMIZE_O3})
   message("build with o3")
   set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
