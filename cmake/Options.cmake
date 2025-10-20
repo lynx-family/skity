@@ -19,6 +19,12 @@ cmake_dependent_option(
 
 option(SKITY_VK_BACKEND "option for vulkan backend" OFF)
 option(SKITY_CODEC_MODULE "option for build codec module" ON)
+cmake_dependent_option(
+  SKITY_IO_MODULE "option for build io module"
+  ON
+  [[SKITY_CODEC_MODULE]]
+  OFF
+)
 
 # option for building example
 # User can pass -DSKITY_EXAMPLE=ON to build example if needed

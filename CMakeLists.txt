@@ -171,6 +171,11 @@ if(${SKITY_CODEC_MODULE})
   add_subdirectory(module/codec)
 endif()
 
+if(${SKITY_IO_MODULE})
+  add_subdirectory(module/io)
+endif()
+
+
 # header files
 add_subdirectory(include)
 
