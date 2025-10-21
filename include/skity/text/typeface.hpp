@@ -18,9 +18,11 @@
 #include <skity/io/data.hpp>
 #include <skity/macros.hpp>
 #include <skity/text/font_arguments.hpp>
+#include <skity/text/font_descriptor.hpp>
 #include <skity/text/font_metrics.hpp>
 #include <skity/text/font_style.hpp>
 #include <skity/text/glyph.hpp>
+#include <string>
 #include <unordered_map>
 
 namespace skity {
@@ -92,7 +94,7 @@ class SKITY_API Typeface : public std::enable_shared_from_this<Typeface> {
   size_t GetTableData(FontTableTag tag, size_t offset, size_t length,
                       void* data) const;
 
-  Data* GetData() { return this->OnGetData(); }
+  std::shared_ptr<Data> GetData() { return this->OnGetData(); }
 
   static std::shared_ptr<Typeface> MakeFromData(
       std::shared_ptr<Data> const& data);
@@ -123,6 +125,8 @@ class SKITY_API Typeface : public std::enable_shared_from_this<Typeface> {
 
   std::shared_ptr<Typeface> MakeVariation(const FontArguments& args) const;
 
+  FontDescriptor GetFontDescriptor() const;
+
  protected:
   explicit Typeface(const FontStyle& style)
       : typeface_id_(NewTypefaceID()), font_style_(style) {}
@@ -134,7 +138,8 @@ class SKITY_API Typeface : public std::enable_shared_from_this<Typeface> {
   virtual void OnCharsToGlyphs(const uint32_t* chars, int count,
                                GlyphID glyphs[]) const = 0;
 
-  virtual Data* OnGetData() = 0;
+  virtual std::shared_ptr<Data> OnGetData() = 0;
+
   virtual uint32_t OnGetUPEM() const = 0;
 
   virtual bool OnContainsColorTable() const = 0;
@@ -147,6 +152,8 @@ class SKITY_API Typeface : public std::enable_shared_from_this<Typeface> {
 
   virtual std::shared_ptr<Typeface> OnMakeVariation(
       const FontArguments& args) const = 0;
+
+  virtual void OnGetFontDescriptor(FontDescriptor& desc) const = 0;
 
   TypefaceID typeface_id_;
   class FontStyle font_style_;

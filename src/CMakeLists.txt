@@ -108,6 +108,7 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/text/text_run.cc
   ${CMAKE_CURRENT_LIST_DIR}/text/typeface.cc
   ${CMAKE_CURRENT_LIST_DIR}/text/utf.cc
+  ${CMAKE_CURRENT_LIST_DIR}/text/sfnt_header.hpp
   ${CMAKE_CURRENT_LIST_DIR}/utils/xml/xml_parser.cc
   ${CMAKE_CURRENT_LIST_DIR}/utils/annotation_mutex.hpp
   ${CMAKE_CURRENT_LIST_DIR}/utils/arena_allocator.cc

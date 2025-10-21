@@ -209,7 +209,7 @@ void TypefaceFreeType::OnCharsToGlyphs(const uint32_t* chars, int count,
     C2GCache_.clear();
   }
 }
-Data* TypefaceFreeType::OnGetData() {
+std::shared_ptr<Data> TypefaceFreeType::OnGetData() {
   AutoFTAccess fta(this);
   FT_Face face = fta.Face();
   if (!face) {
@@ -298,6 +298,24 @@ std::shared_ptr<Typeface> TypefaceFreeType::OnMakeVariation(
 
   FaceData face_data = GetFaceData();
   return TypefaceFreeType::Make(face_data.data, expected_args);
+}
+
+void TypefaceFreeType::OnGetFontDescriptor(FontDescriptor& desc) const {
+  AutoFTAccess fta(this);
+  FT_Face face = fta.Face();
+  if (!face) {
+    return;
+  }
+
+  desc.family_name = face->family_name;
+
+  auto post_script_name = FT_Get_Postscript_Name(face);
+
+  if (post_script_name) {
+    desc.post_script_name = post_script_name;
+  }
+
+  desc.factory_id = kFontFactoryID;
 }
 
 FaceData TypefaceFreeType::GetFaceData() const { return OnGetFaceData(); }

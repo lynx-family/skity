@@ -35,7 +35,7 @@ class ColorfulTypeface : public Typeface {
                         void *data) const override;
   void OnCharsToGlyphs(const uint32_t *chars, int count,
                        GlyphID *glyphs) const override;
-  Data *OnGetData() override;
+  std::shared_ptr<Data> OnGetData() override;
   uint32_t OnGetUPEM() const override;
   bool OnContainsColorTable() const override;
   std::unique_ptr<ScalerContext> OnCreateScalerContext(
@@ -47,6 +47,8 @@ class ColorfulTypeface : public Typeface {
   std::shared_ptr<Typeface> OnMakeVariation(
       const FontArguments &args) const override;
 
+  void OnGetFontDescriptor(FontDescriptor &desc) const override {}
+
  private:
   bool colorful_ = false;
 };
@@ -57,7 +59,7 @@ size_t ColorfulTypeface::OnGetTableData(FontTableTag, size_t, size_t,
 }
 void ColorfulTypeface::OnCharsToGlyphs(const uint32_t *, int, GlyphID *) const {
 }
-Data *ColorfulTypeface::OnGetData() { return nullptr; }
+std::shared_ptr<Data> ColorfulTypeface::OnGetData() { return nullptr; }
 uint32_t ColorfulTypeface::OnGetUPEM() const { return 0; }
 
 bool ColorfulTypeface::OnContainsColorTable() const { return colorful_; }

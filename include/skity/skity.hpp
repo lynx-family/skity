@@ -46,6 +46,7 @@
 // text
 #include <skity/text/font.hpp>
 #include <skity/text/font_arguments.hpp>
+#include <skity/text/font_descriptor.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/font_metrics.hpp>
 #include <skity/text/font_style.hpp>

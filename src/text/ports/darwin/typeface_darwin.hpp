@@ -20,6 +20,9 @@ namespace skity {
 
 class TypefaceDarwin : public Typeface {
  public:
+  static constexpr FourByteTag kFontFactoryID =
+      SetFourByteTag('c', 't', 'x', 't');
+
   static std::shared_ptr<TypefaceDarwin> Make(const FontStyle &style,
                                               UniqueCTFontRef ct_font);
   static std::shared_ptr<TypefaceDarwin> MakeWithoutCache(
@@ -40,7 +43,7 @@ class TypefaceDarwin : public Typeface {
   void OnCharsToGlyphs(const uint32_t *chars, int count,
                        GlyphID *glyphs) const override;
 
-  Data *OnGetData() override;
+  std::shared_ptr<Data> OnGetData() override;
 
   uint32_t OnGetUPEM() const override;
 
@@ -55,11 +58,18 @@ class TypefaceDarwin : public Typeface {
   std::shared_ptr<Typeface> OnMakeVariation(
       const FontArguments &args) const override;
 
+  void OnGetFontDescriptor(FontDescriptor &desc) const override;
+
+ private:
+  void SerializeData();
+
  private:
   UniqueCTFontRef ct_font_;
   bool has_color_glyphs_;
   UniqueCFRef<CFDataRef> ct_data_;
   UniqueCFRef<CFArrayRef> variation_axes_;
+
+  std::shared_ptr<Data> serialized_data_ = {};
 };
 
 }  // namespace skity

@@ -88,4 +88,16 @@ std::shared_ptr<Typeface> Typeface::MakeVariation(
   return OnMakeVariation(args);
 }
 
+FontDescriptor Typeface::GetFontDescriptor() const {
+  FontDescriptor desc;
+
+  OnGetFontDescriptor(desc);
+
+  desc.style = GetFontStyle();
+
+  desc.variation_position = GetVariationDesignPosition();
+
+  return desc;
+}
+
 }  // namespace skity

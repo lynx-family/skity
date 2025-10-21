@@ -55,6 +55,8 @@ class TypefaceFreeType : public Typeface {
   friend AutoFTAccess;
 
  public:
+  static constexpr uint32_t kFontFactoryID = SetFourByteTag('f', 'r', 'e', 'e');
+
   static std::shared_ptr<TypefaceFreeType> Make(std::shared_ptr<Data> stream,
                                                 const FontArguments& font_args);
 
@@ -69,7 +71,7 @@ class TypefaceFreeType : public Typeface {
 
   void OnCharsToGlyphs(const uint32_t* chars, int count,
                        GlyphID glyphs[]) const override;
-  Data* OnGetData() override;
+  std::shared_ptr<Data> OnGetData() override;
   bool OnContainsColorTable() const override;
 
   FaceData GetFaceData() const;
@@ -92,6 +94,8 @@ class TypefaceFreeType : public Typeface {
       const FontArguments& args) const override;
 
   virtual FaceData OnGetFaceData() const = 0;
+
+  void OnGetFontDescriptor(FontDescriptor& desc) const override;
 
  private:
   mutable std::once_flag flag_;

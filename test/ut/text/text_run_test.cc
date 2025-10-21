@@ -22,7 +22,7 @@ class MockTypeface : public Typeface {
     return 0;
   }
   void OnCharsToGlyphs(const uint32_t*, int, GlyphID*) const override {}
-  Data* OnGetData() override { return nullptr; }
+  std::shared_ptr<Data> OnGetData() override { return nullptr; }
   uint32_t OnGetUPEM() const override { return 2048; }
   bool OnContainsColorTable() const override { return false; }
   std::unique_ptr<ScalerContext> OnCreateScalerContext(
@@ -39,6 +39,8 @@ class MockTypeface : public Typeface {
       const FontArguments&) const override {
     return nullptr;
   }
+
+  void OnGetFontDescriptor(FontDescriptor& desc) const override {}
 };
 
 class TextRunTest : public ::testing::Test {

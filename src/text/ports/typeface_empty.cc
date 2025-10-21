@@ -21,7 +21,7 @@ size_t TypefaceEmpty::OnGetTableData(FontTableTag, size_t, size_t,
   return 0;
 }
 void TypefaceEmpty::OnCharsToGlyphs(const uint32_t *, int, GlyphID *) const {}
-Data *TypefaceEmpty::OnGetData() { return nullptr; }
+std::shared_ptr<Data> TypefaceEmpty::OnGetData() { return nullptr; }
 uint32_t TypefaceEmpty::OnGetUPEM() const { return 0; }
 bool TypefaceEmpty::OnContainsColorTable() const { return false; }
 std::unique_ptr<ScalerContext> TypefaceEmpty::OnCreateScalerContext(

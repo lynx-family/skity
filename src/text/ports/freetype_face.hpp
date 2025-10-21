@@ -58,7 +58,7 @@ class FreetypeFace {
   FT_Face Face() { return ft_face_ ? ft_face_.get() : nullptr; }
   bool Valid() { return !!ft_face_; }
 
-  Data* GetData() { return data_.get(); }
+  std::shared_ptr<Data> GetData() { return data_; }
 
   std::unique_ptr<FreetypeFace> MakeVariation(const FontArguments& args) const;
 
@@ -112,4 +112,5 @@ class FontScanner {
 };
 
 }  // namespace skity
+
 #endif  // SRC_TEXT_PORTS_FREETYPE_FACE_HPP

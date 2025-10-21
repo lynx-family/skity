@@ -15,14 +15,13 @@ class TypefaceEmpty : public Typeface {
   TypefaceEmpty() : Typeface(FontStyle()) {}
   ~TypefaceEmpty() override = default;
 
- public:
  protected:
   int OnGetTableTags(FontTableTag *tags) const override;
   size_t OnGetTableData(FontTableTag tag, size_t offset, size_t length,
                         void *data) const override;
   void OnCharsToGlyphs(const uint32_t *chars, int count,
                        GlyphID *glyphs) const override;
-  Data *OnGetData() override;
+  std::shared_ptr<Data> OnGetData() override;
   uint32_t OnGetUPEM() const override;
   bool OnContainsColorTable() const override;
   std::unique_ptr<ScalerContext> OnCreateScalerContext(
@@ -33,6 +32,8 @@ class TypefaceEmpty : public Typeface {
 
   std::shared_ptr<Typeface> OnMakeVariation(
       const FontArguments &args) const override;
+
+  void OnGetFontDescriptor(FontDescriptor &desc) const override {}
 };
 
 }  // namespace skity

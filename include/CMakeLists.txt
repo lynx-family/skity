@@ -35,6 +35,12 @@ set(SKITY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_LIST_DIR}/skity/macros.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/render/canvas.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/skity.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/skity/text/font.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/skity/text/font_arguments.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/skity/text/font_descriptor.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/skity/text/font_manager.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/skity/text/font_metrics.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/skity/text/font_style.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/text/text_blob.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/text/text_run.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/text/typeface.hpp

@@ -7,6 +7,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <skity/text/ports/typeface_ct.hpp>
@@ -15,14 +16,87 @@
 
 #include "src/text/ports/darwin/scaler_context_darwin.hpp"
 #include "src/text/ports/darwin/types_darwin.hpp"
+#include "src/text/sfnt_header.hpp"
 #include "src/utils/no_destructor.hpp"
 
 namespace skity {
+
+namespace {
 
 template <typename T>
 T skity_cf_retain(T t) {
   return (T)CFRetain(t);
 }
+
+std::string cf_string_to_string(UniqueCFRef<CFStringRef> str) {
+  if (!str) {
+    return {};
+  }
+
+  CFIndex length = CFStringGetMaximumSizeForEncoding(
+                       CFStringGetLength(str.get()), kCFStringEncodingUTF8) +
+                   1;
+
+  std::vector<char> buffer(length);
+
+  CFStringGetCString(str.get(), buffer.data(), length, kCFStringEncodingUTF8);
+
+  return std::string(buffer.data(), length - 1);
+}
+
+SKITY_SFNT_ULONG get_font_type_tag(CTFontRef ct_font) {
+  UniqueCFRef<CFNumberRef> fon_format(static_cast<CFNumberRef>(
+      CTFontCopyAttribute(ct_font, kCTFontFormatAttribute)));
+
+  if (!fon_format) {
+    return 0;
+  }
+
+  SInt32 font_format_value;
+
+  if (!CFNumberGetValue(fon_format.get(), kCFNumberSInt32Type,
+                        &font_format_value)) {
+    return 0;
+  }
+
+  switch (font_format_value) {
+    case kCTFontFormatOpenTypePostScript:
+      return kOpenTypeCFFTag;
+    case kCTFontFormatOpenTypeTrueType:
+      return kWindowsTrueTypeTag;
+    case kCTFontFormatTrueType:
+      return kMacTrueTypeTag;
+    case kCTFontFormatPostScript:
+      return kPostScriptTag;
+    case kCTFontFormatBitmap:
+      return kMacTrueTypeTag;
+    case kCTFontFormatUnrecognized:
+    default:
+      return 0;
+  }
+
+  return 0;
+}
+
+uint16_t EndianSwap16(uint16_t value) {
+  return ((value & 0xFF) << 8) | ((value & 0xFF00) >> 8);
+}
+
+uint32_t EndianSwap32(uint32_t value) {
+  return ((value & 0xFF) << 24) | ((value & 0xFF00) << 8) |
+         ((value & 0xFF0000) >> 8) | ((value & 0xFF000000) >> 24);
+}
+
+uint32_t CalcTableChecksum(uint32_t* data, size_t length) {
+  uint32_t sum = 0;
+  uint32_t* dataEnd = data + ((length + 3) & ~3) / sizeof(uint32_t);
+  for (; data < dataEnd; ++data) {
+    sum += EndianSwap32(*data);
+  }
+  return sum;
+}
+
+}  // namespace
 
 class TypefaceCache {
  public:
@@ -182,7 +256,13 @@ void TypefaceDarwin::OnCharsToGlyphs(const uint32_t* chars, int count,
   }
 }
 
-Data* TypefaceDarwin::OnGetData() { return nullptr; }
+std::shared_ptr<Data> TypefaceDarwin::OnGetData() {
+  if (!serialized_data_) {
+    SerializeData();
+  }
+
+  return serialized_data_;
+}
 
 uint32_t TypefaceDarwin::OnGetUPEM() const {
   CGFontRef cg_font = CTFontCopyGraphicsFont(ct_font_.get(), nullptr);
@@ -391,6 +471,22 @@ std::shared_ptr<Typeface> TypefaceDarwin::OnMakeVariation(
   return TypefaceDarwin::Make(font_style, std::move(variant_font));
 }
 
+void TypefaceDarwin::OnGetFontDescriptor(FontDescriptor& desc) const {
+  // get family name
+
+  desc.family_name = cf_string_to_string(
+      UniqueCFRef<CFStringRef>(CTFontCopyFamilyName(ct_font_.get())));
+  desc.full_name = cf_string_to_string(
+      UniqueCFRef<CFStringRef>(CTFontCopyFullName(ct_font_.get())));
+  desc.post_script_name = cf_string_to_string(
+      UniqueCFRef<CFStringRef>(CTFontCopyPostScriptName(ct_font_.get())));
+
+  desc.factory_id = kFontFactoryID;
+
+  // always return 0 for collection index
+  desc.collection_index = 0;
+}
+
 CTFontRef TypefaceCT::CTFontFromTypeface(
     const std::shared_ptr<Typeface>& typeface) {
   auto* typeface_drawin = static_cast<const TypefaceDarwin*>(typeface.get());
@@ -406,6 +502,118 @@ std::shared_ptr<Typeface> TypefaceCT::TypefaceFromCTFont(CTFontRef ct_font) {
   ct_desc_to_font_style(desc.get(), &style);
 
   return TypefaceDarwin::Make(style, UniqueCTFontRef(ct_font));
+}
+
+void TypefaceDarwin::SerializeData() {
+  auto font_type = get_font_type_tag(ct_font_.get());
+
+  auto num_tables = CountTables();
+
+  std::vector<FontTableTag> table_tags(num_tables);
+  GetTableTags(table_tags.data());
+
+  // CT seems to be unreliable in being able to obtain the type,
+  // even if all we want is the first four bytes of the font resource.
+  // Just the presence of the FontForge 'FFTM' table seems to throw it off.
+  if (font_type == 0) {
+    font_type = kWindowsTrueTypeTag;
+
+    bool could_be_cff = false;
+
+    constexpr uint32_t kCFFTag = SetFourByteTag('C', 'F', 'F', ' ');
+    constexpr uint32_t kCFF2Tag = SetFourByteTag('C', 'F', 'F', '2');
+
+    for (auto tag : table_tags) {
+      if (tag == kCFFTag || tag == kCFF2Tag) {
+        could_be_cff = true;
+        break;
+      }
+    }
+
+    if (could_be_cff) {
+      font_type = kOpenTypeCFFTag;
+    }
+  }
+
+  // Sometimes CoreGraphics incorrectly thinks a font is
+  // kCTFontFormatPostScript. It is exceedingly unlikely that this is the case,
+  // so double check
+  if (font_type == kPostScriptTag) {
+    bool could_be_typ1 = false;
+
+    constexpr uint32_t kTYPE1Tag = SetFourByteTag('T', 'Y', 'P', '1');
+    constexpr uint32_t kCIDTag = SetFourByteTag('C', 'I', 'D', ' ');
+
+    for (auto tag : table_tags) {
+      if (tag == kTYPE1Tag || tag == kCIDTag) {
+        could_be_typ1 = true;
+        break;
+      }
+    }
+
+    if (!could_be_typ1) {
+      font_type = kOpenTypeCFFTag;
+    }
+  }
+
+  std::vector<size_t> table_sizes;
+
+  size_t total_size =
+      sizeof(SFNTHeader) + sizeof(SFNTTableDirectoryEntry) * num_tables;
+
+  for (auto tag : table_tags) {
+    auto table_size = GetTableSize(tag);
+    total_size += (table_size + 3) & ~3;
+
+    table_sizes.push_back(table_size);
+  }
+
+  serialized_data_ = Data::MakeFromMalloc(std::malloc(total_size), total_size);
+
+  const char* data_start =
+      reinterpret_cast<const char*>(serialized_data_->RawData());
+  auto data_ptr = const_cast<char*>(data_start);
+
+  uint16_t entry_selector = 0;
+  uint16_t search_range = 1;
+
+  while (search_range < num_tables >> 1) {
+    entry_selector++;
+    search_range <<= 1;
+  }
+
+  search_range <<= 4;
+
+  uint16_t range_shift = (num_tables << 4) - search_range;
+
+  // write font header
+  SFNTHeader* header = reinterpret_cast<SFNTHeader*>(data_ptr);
+  header->font_type = EndianSwap32(font_type);
+  header->num_tables = EndianSwap16(num_tables);
+  header->search_range = EndianSwap16(search_range);
+  header->entry_selector = EndianSwap16(entry_selector);
+  header->range_shift = EndianSwap16(range_shift);
+
+  data_ptr += sizeof(SFNTHeader);
+
+  // write tables
+  auto entry = reinterpret_cast<SFNTTableDirectoryEntry*>(data_ptr);
+  data_ptr += sizeof(SFNTTableDirectoryEntry) * num_tables;
+
+  for (size_t i = 0; i < num_tables; i++) {
+    auto table_size = table_sizes[i];
+
+    GetTableData(table_tags[i], 0, table_size, data_ptr);
+
+    entry->tag = EndianSwap32(table_tags[i]);
+    entry->checksum = EndianSwap32(CalcTableChecksum(
+        reinterpret_cast<SKITY_SFNT_ULONG*>(data_ptr), table_size));
+    entry->offset = EndianSwap32(static_cast<uint32_t>(data_ptr - data_start));
+    entry->length = EndianSwap32(static_cast<uint32_t>(table_size));
+
+    data_ptr += (table_size + 3) & ~3;
+    entry++;
+  }
 }
 
 }  // namespace skity
