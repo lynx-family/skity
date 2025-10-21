@@ -39,3 +39,7 @@ add_subdirectory(case/render_target)
 add_subdirectory(case/save_layer)
 add_subdirectory(case/shape)
 add_subdirectory(case/text)
+
+if (${SKITY_IO_MODULE})
+  add_subdirectory(case/skp_loader)
+endif()

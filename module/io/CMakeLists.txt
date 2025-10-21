@@ -4,14 +4,44 @@
 
 add_library(skity-io STATIC
     # header files
+    include/skity/io/picture.hpp
     include/skity/io/stream.hpp
 
     # source files
+    src/io/flat/blender_flat.cc
+    src/io/flat/blender_flat.hpp
+    src/io/flat/blob_flat.cc
+    src/io/flat/color_filter_flat.cc
+    src/io/flat/font_desc_flat.cc
+    src/io/flat/font_desc_flat.hpp
+    src/io/flat/font_flat.cc
+    src/io/flat/image_filter_flat.cc
+    src/io/flat/local_matrix_flat.cc
+    src/io/flat/local_matrix_flat.hpp
+    src/io/flat/mask_filter_flat.cc
+    src/io/flat/matrix_flat.cc
+    src/io/flat/paint_flat.cc
+    src/io/flat/path_flat.cc
+    src/io/flat/path_effect_flat.cc
+    src/io/flat/rrect_flat.cc
+    src/io/flat/shader_flat.cc
+    src/io/flat/vertices_flat.cc
+    src/io/read/read_typeface.cc
+    src/io/read/read_typeface.hpp
+    src/io/memory_read.cc
+    src/io/memory_read.hpp
+    src/io/memory_writer.cc
+    src/io/memory_writer.hpp
+    src/record/draw_type.hpp
+    src/record/record_playback.cc
+    src/record/record_playback.hpp
     src/stream/file_read_stream.cc
     src/stream/file_read_stream.hpp
     src/stream/file_write_stream.cc
     src/stream/file_write_stream.hpp
     src/stream/stream.cc
+    src/picture_priv.hpp
+    src/picture.cc
 )
 
 
