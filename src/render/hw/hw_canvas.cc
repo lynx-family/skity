@@ -288,7 +288,12 @@ void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
       }
     }
 
-    const Point origin{x, y, 0, 1};
+    for (size_t i = 0; i < pos_x.size(); ++i) {
+      pos_x[i] += x;
+      pos_y[i] += y;
+    }
+
+    const Point origin{0, 0, 0, 1};
     DrawGlyphsInternal(static_cast<uint32_t>(glyphs.size()), glyphs.data(),
                        origin, pos_x.data(), pos_y.data(), font, working_paint,
                        current_matrix);
