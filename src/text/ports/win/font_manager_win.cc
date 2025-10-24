@@ -256,8 +256,8 @@ class FontManagerWin : public FontManager {
                  IDWriteFontCollection* font_collection,
                  IDWriteFontFallback* fallback, std::wstring locale_name)
       : factory_(RefComPtr(factory)),
-        font_collection_(SafeRefComPtr(font_collection)),
-        fallback_(RefComPtr(fallback)),
+        font_collection_(RefComPtr(font_collection)),
+        fallback_(SafeRefComPtr(fallback)),
         locale_name_(std::move(locale_name)) {}
 
   std::shared_ptr<Typeface> MakeTypefaceFromDWriteFont(
@@ -292,10 +292,6 @@ class FontManagerWin : public FontManager {
                                                         const char*[], int,
                                                         Unichar) const override;
 
-  std::shared_ptr<Typeface> fallback(const WCHAR* dwFamilyName, DWriteStyle,
-                                     const WCHAR* dwBcp47,
-                                     UINT32 character) const;
-
   std::shared_ptr<Typeface> OnMakeFromData(std::shared_ptr<Data> const& data,
                                            int ttcIndex) const override {
     return TypefaceFreeType::Make(data,
@@ -319,6 +315,141 @@ class FontManagerWin : public FontManager {
   ScopedComPtr<IDWriteFontCollection> font_collection_;
   ScopedComPtr<IDWriteFontFallback> fallback_;
   std::wstring locale_name_;
+
+  std::shared_ptr<Typeface> fallback(const WCHAR* dwFamilyName, DWriteStyle,
+                                     const WCHAR* dwBcp47,
+                                     UINT32 character) const;
+
+  std::shared_ptr<Typeface> layoutFallback(const WCHAR* dwFamilyName,
+                                           DWriteStyle, const WCHAR* dwBcp47,
+                                           UINT32 character) const;
+
+  friend class FontFallbackRenderer;
+};
+
+class FontFallbackRenderer : public IDWriteTextRenderer {
+ public:
+  FontFallbackRenderer(const FontManagerWin* font_manager, UINT32 character)
+      : ref_count_(1),
+        font_manager_(font_manager),
+        character_(character),
+        fallback_typeface_(nullptr) {}
+
+  // IUnknown methods
+  SK_STDMETHODIMP QueryInterface(IID const& riid, void** ppvObject) override {
+    if (__uuidof(IUnknown) == riid || __uuidof(IDWritePixelSnapping) == riid ||
+        __uuidof(IDWriteTextRenderer) == riid) {
+      *ppvObject = this;
+      this->AddRef();
+      return S_OK;
+    }
+    *ppvObject = nullptr;
+    return E_FAIL;
+  }
+
+  SK_STDMETHODIMP_(ULONG) AddRef() override {
+    return InterlockedIncrement(&ref_count_);
+  }
+
+  SK_STDMETHODIMP_(ULONG) Release() override {
+    ULONG newCount = InterlockedDecrement(&ref_count_);
+    if (0 == newCount) {
+      delete this;
+    }
+    return newCount;
+  }
+
+  // IDWriteTextRenderer methods
+  SK_STDMETHODIMP DrawGlyphRun(
+      void* clientDrawingContext, FLOAT baselineOriginX, FLOAT baselineOriginY,
+      DWRITE_MEASURING_MODE measuringMode, DWRITE_GLYPH_RUN const* glyphRun,
+      DWRITE_GLYPH_RUN_DESCRIPTION const* glyphRunDescription,
+      IUnknown* clientDrawingEffect) override {
+    if (!glyphRun->fontFace) {
+      HRM(E_INVALIDARG, "Glyph run without font face.");
+    }
+
+    ScopedComPtr<IDWriteFont> font;
+    HRM(font_manager_->font_collection_->GetFontFromFontFace(glyphRun->fontFace,
+                                                             &font),
+        "Could not get font from font face.");
+
+    // It is possible that the font passed does not actually have the requested
+    // character, due to no font being found and getting the fallback font.
+    // Check that the font actually contains the requested character.
+    BOOL exists;
+    HRM(font->HasCharacter(character_, &exists), "Could not find character.");
+
+    if (exists) {
+      ScopedComPtr<IDWriteFontFamily> fontFamily;
+      HRM(font->GetFontFamily(&fontFamily), "Could not get family.");
+      fallback_typeface_ = font_manager_->MakeTypefaceFromDWriteFont(
+          glyphRun->fontFace, font.get(), fontFamily.get());
+      has_simulations_ =
+          (font->GetSimulations() != DWRITE_FONT_SIMULATIONS_NONE) &&
+          !HasBitmapStrikes(font);
+    }
+
+    return S_OK;
+  }
+
+  SK_STDMETHODIMP DrawUnderline(void* clientDrawingContext,
+                                FLOAT baselineOriginX, FLOAT baselineOriginY,
+                                DWRITE_UNDERLINE const* underline,
+                                IUnknown* clientDrawingEffect) override {
+    return E_NOTIMPL;
+  }
+
+  SK_STDMETHODIMP DrawStrikethrough(void* clientDrawingContext,
+                                    FLOAT baselineOriginX,
+                                    FLOAT baselineOriginY,
+                                    DWRITE_STRIKETHROUGH const* strikethrough,
+                                    IUnknown* clientDrawingEffect) override {
+    return E_NOTIMPL;
+  }
+
+  SK_STDMETHODIMP DrawInlineObject(void* clientDrawingContext, FLOAT originX,
+                                   FLOAT originY,
+                                   IDWriteInlineObject* inlineObject,
+                                   BOOL isSideways, BOOL isRightToLeft,
+                                   IUnknown* clientDrawingEffect) override {
+    return E_NOTIMPL;
+  }
+
+  // IDWritePixelSnapping methods
+  SK_STDMETHODIMP IsPixelSnappingDisabled(void* clientDrawingContext,
+                                          BOOL* isDisabled) override {
+    *isDisabled = FALSE;
+    return S_OK;
+  }
+
+  SK_STDMETHODIMP GetCurrentTransform(void* clientDrawingContext,
+                                      DWRITE_MATRIX* transform) override {
+    const DWRITE_MATRIX ident = {1.0, 0.0, 0.0, 1.0, 0.0, 0.0};
+    *transform = ident;
+    return S_OK;
+  }
+
+  SK_STDMETHODIMP GetPixelsPerDip(void* clientDrawingContext,
+                                  FLOAT* pixelsPerDip) override {
+    *pixelsPerDip = 1.0f;
+    return S_OK;
+  }
+
+  std::shared_ptr<Typeface> ConsumeFallbackTypeface() {
+    return std::move(fallback_typeface_);
+  }
+
+  bool FallbackTypefaceHasSimulations() { return has_simulations_; }
+
+ private:
+  virtual ~FontFallbackRenderer() {}
+
+  ULONG ref_count_;
+  const FontManagerWin* font_manager_;
+  UINT32 character_;
+  std::shared_ptr<Typeface> fallback_typeface_;
+  bool has_simulations_{false};
 };
 
 /// FontStyleSetWin Impl
@@ -418,8 +549,10 @@ std::shared_ptr<Typeface> FontManagerWin::OnMatchFamilyStyleCharacter(
                           character);
   }
 
-  // TODO(jingle): Support old versions of Windows
-  return nullptr;
+  // Windows 7 does not support font fallback and performs a single layout pass
+  // to find a suitable font.
+  return layoutFallback(w_family_name.c_str(), dwStyle, dw_bcp47.c_str(),
+                        character);
 }
 
 std::shared_ptr<Typeface> FontManagerWin::fallback(const WCHAR* dwFamilyName,
@@ -477,6 +610,58 @@ std::shared_ptr<Typeface> FontManagerWin::fallback(const WCHAR* dwFamilyName,
   HRNM(font->GetFontFamily(&fontFamily), "Could not get family from font.");
   return this->MakeTypefaceFromDWriteFont(fontFace.get(), font.get(),
                                           fontFamily.get());
+}
+
+std::shared_ptr<Typeface> FontManagerWin::layoutFallback(
+    const WCHAR* dwFamilyName, DWriteStyle dwStyle, const WCHAR* dwBcp47,
+    UINT32 character) const {
+  WCHAR utf16[16];
+  size_t utf16_len =
+      UTF::ConvertToUTF16(character, reinterpret_cast<uint16_t*>(utf16));
+
+  bool noSimulations = false;
+  std::shared_ptr<Typeface> fallback_typeface{nullptr};
+  while (!noSimulations) {
+    ScopedComPtr<IDWriteTextFormat> fallbackFormat;
+    HRNM(factory_->CreateTextFormat(dwFamilyName ? dwFamilyName : L"",
+                                    font_collection_.get(), dwStyle.weight,
+                                    dwStyle.slant, dwStyle.width, 72.0f,
+                                    dwBcp47, &fallbackFormat),
+         "Could not create text format.");
+
+    // No matter how the font collection is set on this IDWriteTextLayout, it is
+    // not possible to
+    // disable use of the system font collection in fallback.
+    ScopedComPtr<IDWriteTextLayout> fallbackLayout;
+    HRNM(factory_->CreateTextLayout(utf16, utf16_len, fallbackFormat.get(),
+                                    200.0f, 200.0f, &fallbackLayout),
+         "Could not create text layout.");
+
+    ScopedComPtr<FontFallbackRenderer> fontFallbackRenderer(
+        new FontFallbackRenderer(this, character));
+    HRNM(fallbackLayout->SetFontCollection(
+             font_collection_.get(), {0, static_cast<uint32_t>(utf16_len)}),
+         "Could not set layout font collection.");
+    HRNM(
+        fallbackLayout->Draw(nullptr, fontFallbackRenderer.get(), 50.0f, 50.0f),
+        "Could not draw layout with renderer.");
+
+    noSimulations = !fontFallbackRenderer->FallbackTypefaceHasSimulations();
+    if (noSimulations) {
+      fallback_typeface = fontFallbackRenderer->ConsumeFallbackTypeface();
+    }
+
+    if (dwStyle.weight != DWRITE_FONT_WEIGHT_REGULAR) {
+      dwStyle.weight = DWRITE_FONT_WEIGHT_REGULAR;
+      continue;
+    }
+
+    if (dwStyle.slant != DWRITE_FONT_STYLE_NORMAL) {
+      dwStyle.slant = DWRITE_FONT_STYLE_NORMAL;
+      continue;
+    }
+  }
+  return fallback_typeface;
 }
 
 static std::wstring GetFontFilePath(IDWriteFontFile* fontFile) {
