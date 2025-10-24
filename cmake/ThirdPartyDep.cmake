@@ -11,6 +11,7 @@ target_link_libraries(skity PRIVATE glm::glm-header-only)
 # pugixml
 set(PUGIXML_NO_EXCEPTIONS ON CACHE BOOL "enable PUGIXML_NO_EXCEPTIONS")
 add_subdirectory(third_party/pugixml)
+target_compile_definitions(pugixml-static PRIVATE PUGIXML_NO_EXCEPTIONS)
 target_link_libraries(skity PUBLIC pugixml::pugixml)
 
 # spdlog
@@ -59,7 +60,7 @@ endif()
 
 # zlib
 # not iOS or not macOS and not Android and not OHOS
-if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" AND NOT SKITY_USE_SELF_LIBCXX)
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS")
   include(ExternalProject)
 
   set(SKITY_ZLIB_C_FLAGS "")
@@ -69,14 +70,17 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT ANDROID AND NOT CMAKE_SYSTEM
     set(SKITY_ZLIB_C_FLAGS "-fPIC")
   endif()
 
-  ExternalProject_Add(zlib
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/third_party/zlib
-    PREFIX ${CMAKE_BINARY_DIR}/third_party/zlib_build
-    CMAKE_ARGS
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/zlib
-    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-    -DCMAKE_C_FLAGS=${SKITY_ZLIB_C_FLAGS}
-  )
+  if (NOT SKITY_USE_SELF_LIBCXX OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    ExternalProject_Add(zlib
+      SOURCE_DIR ${CMAKE_SOURCE_DIR}/third_party/zlib
+      PREFIX ${CMAKE_BINARY_DIR}/third_party/zlib_build
+      CMAKE_ARGS
+      -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/zlib
+      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+      -DCMAKE_C_FLAGS=${SKITY_ZLIB_C_FLAGS}
+    )
+    add_dependencies(skity zlib)
+  endif()
 
   target_include_directories(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/include)
   target_link_directories(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/lib)
@@ -90,8 +94,6 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT ANDROID AND NOT CMAKE_SYSTEM
   else()
     target_link_libraries(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/lib/libz.a)
   endif()
-
-  add_dependencies(skity zlib)
 
   set(USE_THIRD_PARTY_ZLIB ON)
 endif()
