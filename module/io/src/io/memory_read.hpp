@@ -17,6 +17,7 @@
 #include <skity/graphic/paint.hpp>
 #include <skity/graphic/path.hpp>
 #include <skity/io/data.hpp>
+#include <string>
 
 namespace skity {
 

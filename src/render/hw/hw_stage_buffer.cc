@@ -34,9 +34,7 @@ HWStageBuffer::HWStageBuffer(GPUDevice* device,
       gpu_index_buffer_(std::move(gpu_index_buffer)),
       ubo_alignment_(ubo_alignment) {}
 
-HWStageBuffer::~HWStageBuffer() {
-  LOGI("HWStageBuffer: [ {:p} ] destroyed", reinterpret_cast<void*>(this));
-}
+HWStageBuffer::~HWStageBuffer() = default;
 
 void HWStageBuffer::BeginWritingInstance(uint32_t estimate_size,
                                          uint32_t align) {

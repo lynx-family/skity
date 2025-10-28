@@ -28,14 +28,15 @@ void draw_text_with_emoji(skity::Canvas* canvas) {
   skity::TextBlobBuilder builder;
   canvas->DrawSimpleText("this is ascii text", 5.f, 100.f, text_paint);
   text_paint.SetStyle(skity::Paint::kFill_Style);
+  const char* bcp[] = {"ja-JP"};
   static auto typeface_cjk = font_manager->MatchFamilyStyleCharacter(
       nullptr,
       FontStyle{FontStyle::Weight::kBlack_Weight,
                 FontStyle::Width::kNormal_Width,
                 FontStyle::Slant::kUpright_Slant},
-      nullptr, 0, 0x7ECF);
+      bcp, sizeof(bcp) / sizeof(bcp[0]), 0x95E8);
   text_paint.SetTypeface(typeface_cjk);
-  canvas->DrawSimpleText("你好", 5.f, 300.f, text_paint);
+  canvas->DrawSimpleText("门口", 5.f, 300.f, text_paint);
 
   const char* emoji_font_path = EXAMPLE_IMAGE_ROOT "/NotoColorEmoji.ttf";
   static auto emoji_typeface = skity::Typeface::MakeFromFile(emoji_font_path);

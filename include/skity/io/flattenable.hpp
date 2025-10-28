@@ -5,6 +5,7 @@
 #ifndef INCLUDE_SKITY_IO_FLATTENABLE_HPP
 #define INCLUDE_SKITY_IO_FLATTENABLE_HPP
 
+#include <memory>
 #include <skity/geometry/matrix.hpp>
 #include <skity/graphic/color.hpp>
 #include <skity/graphic/sampling_options.hpp>

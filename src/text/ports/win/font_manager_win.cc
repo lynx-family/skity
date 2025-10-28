@@ -541,7 +541,7 @@ std::shared_ptr<Typeface> FontManagerWin::OnMatchFamilyStyleCharacter(
   if (bcp47_count < 1) {
     dw_bcp47 = locale_name_;
   } else {
-    // TODO(jingle): Support bcp
+    HRN(StrConversion::StringToWideString(bcp47[bcp47_count - 1], &dw_bcp47));
   }
 
   if (fallback_) {
@@ -720,8 +720,9 @@ std::shared_ptr<Typeface> FontManagerWin::MakeTypefaceFromDWriteFont(
            "WideStringToString failed");
       LOGE("Font file path: {}\n", path);
       std::shared_ptr<Data> data = Data::MakeFromFileMapping(path.c_str());
-      return TypefaceFreeType::Make(data,
-                                    FontArguments().SetCollectionIndex(0));
+      UINT32 ttc_index = font_face->GetIndex();
+      return TypefaceFreeType::Make(
+          data, FontArguments().SetCollectionIndex(ttc_index));
     } else {
       LOGE("Font file path not available (maybe custom loader)");
     }
