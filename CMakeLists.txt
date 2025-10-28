@@ -78,7 +78,7 @@ else()
       target_link_options(skity PUBLIC
         "LINKER:-map,${CMAKE_BINARY_DIR}/libskity.so.map"
       )
-    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT WIN32)
       # using Clang
       target_link_options(skity PUBLIC
         "LINKER:-Map,${CMAKE_BINARY_DIR}/libskity.so.map"
@@ -220,6 +220,7 @@ install(
 # install library
 install(
   TARGETS skity EXPORT skity-targets
+  RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}  # For Windows DLL
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}

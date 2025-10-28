@@ -77,3 +77,8 @@ endif()
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_compile_options(wgsl-cross PRIVATE -fPIC)
 endif()
+
+# Link with libcxx for MSVC/clang-cl on Windows when using self libcxx
+if (${SKITY_USE_SELF_LIBCXX} AND WIN32)
+    target_link_libraries(wgsl-cross PRIVATE third_party__libcxx)
+endif()

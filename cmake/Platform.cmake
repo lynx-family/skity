@@ -5,7 +5,7 @@
 if(EMSCRIPTEN)
   # Build Skity with emsdk
   add_definitions(-DSKITY_WASM)
-elseif(WIN32)
+elseif(MSVC)
   # Fixme to solve NIM MAX macro defined in windows.h
   add_definitions(-DNOMINMAX)
   # specify dll outpu directory
@@ -78,8 +78,8 @@ elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Ios")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
   message("build for Harmony")
   add_definitions(-DSKITY_HARMONY=1)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  message("build for Linux")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR WIN32)
+  message("build for Linux or Windows")
 
   if (${SKITY_USE_SELF_LIBCXX})
     # FIXME: Lynx use custom sysroot and libcxx when build for unittest on Linux
@@ -87,11 +87,16 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     include_directories(${CMAKE_SOURCE_DIR}/third_party/libcxxabi/include)
     include_directories(${CMAKE_SOURCE_DIR}/build/secondary/third_party/libcxx/config)
 
-    add_definitions(-D_LIBCPP_DISABLE_AVAILABILITY=1 -D_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS -D_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS)
+    add_definitions(-D_LIBCPP_DISABLE_AVAILABILITY=1 -D_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS -DENABLE_LIBCPP_ABI_NAMESPACE_CR=1 -DLIBCPP_ABI_NAMESPACE_CR=Cr)
     set(CMAKE_CXX_FLAGS "-nostdinc++")
 
     include(cmake/Libcxx.cmake)
 
-    target_link_libraries(skity PRIVATE $<TARGET_OBJECTS:third_party__libcxx> $<TARGET_OBJECTS:third_party__libcxxabi>)
+    target_link_libraries(skity PRIVATE third_party__libcxx)
+    if(WIN32)
+      target_link_options(skity PRIVATE "/FORCE:MULTIPLE")
+    else()
+      target_link_libraries(skity PRIVATE third_party__libcxxabi)
+    endif()
   endif()
 endif()
