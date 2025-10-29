@@ -11,3 +11,6 @@ add_executable(basic_example
 )
 
 target_link_libraries(basic_example PUBLIC basic_example_shared skity::example_common)
+
+target_link_options(basic_example PRIVATE /nodefaultlib:msvcrtd.lib)
+    target_link_directories(basic_example PUBLIC $<BUILD_INTERFACE:${SKITY_LIBCXX_DIR}>)

@@ -19,6 +19,7 @@ deps = {
         "type": "git",
         "url": "https://github.com/madler/zlib.git",
         "ignore_in_git": True,
+        "patches": os.path.join(root_dir, 'patches', 'zlib', '0001-temp-change.patch'),
         "commit": "51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf",
     },
     "third_party/jsoncpp": {

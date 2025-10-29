@@ -1,0 +1,33 @@
+From 6a33793eda63b83b3241c49f417e76c4a185b401 Mon Sep 17 00:00:00 2001
+From: RuiwenTang <tangruiwen1989@gmail.com>
+Date: Wed, 29 Oct 2025 18:00:16 +0800
+Subject: [PATCH] temp change
+
+---
+ CMakeLists.txt | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 15ceebe..90ef1fb 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -122,11 +122,11 @@ set(ZLIB_SRCS
+     zutil.c
+ )
+ 
+-if(NOT MINGW)
+-    set(ZLIB_DLL_SRCS
+-        win32/zlib1.rc # If present will override custom build rule below.
+-    )
+-endif()
++# if(NOT MINGW)
++#     set(ZLIB_DLL_SRCS
++#         win32/zlib1.rc # If present will override custom build rule below.
++#     )
++# endif()
+ 
+ # parse the full version number from zlib.h and include in ZLIB_FULL_VERSION
+ file(READ ${CMAKE_CURRENT_SOURCE_DIR}/zlib.h _zlib_h_contents)
+-- 
+2.51.1.windows.1
+
