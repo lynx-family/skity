@@ -1,0 +1,63 @@
+From 2dee73db8ca6d40600c87bc352b385df2436efac Mon Sep 17 00:00:00 2001
+From: RuiwenTang <tangruiwen1989@gmail.com>
+Date: Wed, 29 Oct 2025 11:53:49 +0800
+Subject: [PATCH] Custom build change
+
+support custom namespace define and static libcxx build without
+exception support
+---
+ libcxx/CMakeLists.txt                         |  6 +++---
+ .../runtime/exception_pointer_msvc.ipp        | 20 +++++++++----------
+ 2 files changed, 13 insertions(+), 13 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ebaa6e9fd..43231e020 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -202,9 +202,9 @@ set(LIBCXX_LIBRARY_VERSION "${LIBCXX_ABI_VERSION}.0" CACHE STRING
+    libc++.x.y.dylib, along with the usual symlinks pointing to that. On Apple platforms,
+    this also controls the linker's 'current_version' property.")
+ set(LIBCXX_ABI_NAMESPACE "__${LIBCXX_ABI_VERSION}" CACHE STRING "The inline ABI namespace used by libc++. It defaults to __n where `n` is the current ABI version.")
+-if (NOT LIBCXX_ABI_NAMESPACE MATCHES "__.*")
+-  message(FATAL_ERROR "LIBCXX_ABI_NAMESPACE must be a reserved identifier, got '${LIBCXX_ABI_NAMESPACE}'.")
+-endif()
++# if (NOT LIBCXX_ABI_NAMESPACE MATCHES "__.*")
++#   message(FATAL_ERROR "LIBCXX_ABI_NAMESPACE must be a reserved identifier, got '${LIBCXX_ABI_NAMESPACE}'.")
++# endif()
+ option(LIBCXX_ABI_FORCE_ITANIUM "Ignore auto-detection and force use of the Itanium ABI.")
+ option(LIBCXX_ABI_FORCE_MICROSOFT "Ignore auto-detection and force use of the Microsoft ABI.")
+ 
+diff --git a/src/support/runtime/exception_pointer_msvc.ipp b/src/support/runtime/exception_pointer_msvc.ipp
+index 2be513617..be6ac6029 100644
+--- a/src/support/runtime/exception_pointer_msvc.ipp
++++ b/src/support/runtime/exception_pointer_msvc.ipp
+@@ -10,16 +10,16 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ 
+-_LIBCPP_CRT_FUNC void __cdecl __ExceptionPtrCreate(void*);
+-_LIBCPP_CRT_FUNC void __cdecl __ExceptionPtrDestroy(void*);
+-_LIBCPP_CRT_FUNC void __cdecl __ExceptionPtrCopy(void*, const void*);
+-_LIBCPP_CRT_FUNC void __cdecl __ExceptionPtrAssign(void*, const void*);
+-_LIBCPP_CRT_FUNC bool __cdecl __ExceptionPtrCompare(const void*, const void*);
+-_LIBCPP_CRT_FUNC bool __cdecl __ExceptionPtrToBool(const void*);
+-_LIBCPP_CRT_FUNC void __cdecl __ExceptionPtrSwap(void*, void*);
+-_LIBCPP_CRT_FUNC void __cdecl __ExceptionPtrCurrentException(void*);
+-[[noreturn]] _LIBCPP_CRT_FUNC void __cdecl __ExceptionPtrRethrow(const void*);
+-_LIBCPP_CRT_FUNC void __cdecl __ExceptionPtrCopyException(void*, const void*, const void*);
++ void __cdecl __ExceptionPtrCreate(void*) {}
++ void __cdecl __ExceptionPtrDestroy(void*) {}
++ void __cdecl __ExceptionPtrCopy(void*, const void*) {}
++ void __cdecl __ExceptionPtrAssign(void*, const void*) {}
++ bool __cdecl __ExceptionPtrCompare(const void*, const void*) { return true; }
++ bool __cdecl __ExceptionPtrToBool(const void*) { return true; }
++ void __cdecl __ExceptionPtrSwap(void*, void*) {}
++ void __cdecl __ExceptionPtrCurrentException(void*) {}
++[[noreturn]]  void __cdecl __ExceptionPtrRethrow(const void*) {}
++ void __cdecl __ExceptionPtrCopyException(void*, const void*, const void*) {}
+ 
+ namespace std {
+ 
+-- 
+2.51.1.windows.1
+

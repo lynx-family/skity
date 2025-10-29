@@ -16,6 +16,8 @@ elseif(WIN32)
     PUBLIC
     PRIVATE
     /EHs-c- # disable exceptions
+    -fno-exceptions
+    -fno-rtti
   )
 
 else()
@@ -93,5 +95,16 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     include(cmake/Libcxx.cmake)
 
     target_link_libraries(skity PRIVATE $<TARGET_OBJECTS:third_party__libcxx> $<TARGET_OBJECTS:third_party__libcxxabi>)
+  endif()
+
+elseif(MSVC)
+  if (${SKITY_USE_SELF_LIBCXX})
+    if (NOT DEFINED SKITY_LIBCXX_DIR)
+      message(FATAL_ERROR "SKITY_LIBCXX_DIR is not defined")
+    endif()
+
+    # remove  msvcrtd.lib
+    target_link_options(skity PRIVATE /nodefaultlib:msvcrtd.lib)
+    target_link_directories(skity PUBLIC $<BUILD_INTERFACE:${SKITY_LIBCXX_DIR}>)
   endif()
 endif()

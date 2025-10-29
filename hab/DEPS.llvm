@@ -1,0 +1,41 @@
+deps = {
+    'third_party/llvm/libcxx': {
+        "type": "http",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/libcxx-19.1.7.src.tar.xz",
+        "ignore_in_git": True,
+    },
+    'third_party/llvm/runtimes': {
+        "type": "http",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/runtimes-19.1.7.src.tar.xz",
+        "ignore_in_git": True,
+    },
+    'third_party/llvm/llvm': {
+        "type": "http",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/llvm-19.1.7.src.tar.xz",
+        "ignore_in_git": True,
+    },
+    "third_party/llvm/cmake": {
+        "type": "http",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/cmake-19.1.7.src.tar.xz",
+        "ignore_in_git": True
+    },
+    "third_party/llvm/third-party": {
+        "type": "http",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/third-party-19.1.7.src.tar.xz",
+        "ignore_in_git": True
+    },
+
+    "init git": {
+        "type": "action",
+        "commands": [
+            "git init",
+            "git add .",
+            'git commit -m "ssssss"',
+            'git apply ../../../patches/libcxx/0001-Custom-build-change.patch'
+        ],
+        "cwd": "third_party/llvm/libcxx",
+        "require": [
+            "third_party/llvm/libcxx",
+        ]
+    }
+}
