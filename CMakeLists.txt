@@ -36,6 +36,7 @@ set(SKITY_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 set(CMAKE_CXX_EXTENSIONS OFF) # disable -std=gnu++11 by default
 
 
+include(cmake/CMakeToGN.cmake)
 # options should set before define skity library
 include(cmake/Options.cmake)
 
@@ -237,3 +238,7 @@ install(
 if(${SKITY_GENERATE_FRAMEWORK})
   add_subdirectory(platform/darwin)
 endif()
+
+cmake_to_gni(skity)
+
+cmake_to_gni(skity-codec)
