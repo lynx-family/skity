@@ -35,7 +35,6 @@ set(SKITY_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 set(CMAKE_CXX_EXTENSIONS OFF) # disable -std=gnu++11 by default
 
-
 # options should set before define skity library
 include(cmake/Options.cmake)
 
@@ -236,4 +235,20 @@ install(
 # build frameowrk for iOS and macOS
 if(${SKITY_GENERATE_FRAMEWORK})
   add_subdirectory(platform/darwin)
+endif()
+
+if(${SKITY_CMAKE_TO_GN})
+  # check if define SKITY_GN_REBASE_PATH
+  if(NOT DEFINED SKITY_GN_REBASE_PATH)
+    set(SKITY_GN_REBASE_PATH ".")
+  endif()
+
+  # generate gn files for skity and skity-codec
+  include(cmake/CMakeToGN.cmake)
+
+  cmake_to_gni(skity)
+
+  if (${SKITY_CODEC_MODULE})
+    cmake_to_gni(skity-codec)
+  endif()
 endif()

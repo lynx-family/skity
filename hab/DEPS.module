@@ -1,11 +1,5 @@
 
 deps = {
-    "third_party/libpng": {
-        "type": "git",
-        "url": "https://github.com/pnggroup/libpng.git",
-        "ignore_in_git": True,
-        "commit": "f5e92d76973a7a53f517579bc95d61483bf108c0",
-    },
     "third_party/libjpeg-turbo": {
         "type": "git",
         "url": "https://github.com/libjpeg-turbo/libjpeg-turbo.git",

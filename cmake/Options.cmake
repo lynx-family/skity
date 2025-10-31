@@ -52,6 +52,7 @@ option(SKITY_CT_FONT "option for open CoreText font backend on Darwin" OFF)
 option(SKITY_USE_SELF_LIBCXX "option to force skity use self libcxx" OFF)
 option(SKITY_TRACE "option for enable skity tracing" OFF)
 option(SKITY_USE_ASAN "option for enable skity use asan" OFF)
+option(SKITY_CMAKE_TO_GN "option for generate skity.gni" OFF)
 
 cmake_dependent_option(
   SKITY_OPTIMIZE_O3 "Use '-O3' optimization flag in Release mode"

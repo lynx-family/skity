@@ -1,5 +1,6 @@
 build/*
 cmake-*
+.zed/*
 .idea/*
 .vscode/*
 .cache/*
@@ -17,3 +18,4 @@ build-*
 clion_compile.sh
 .python-version
 **/__pycache__
+*.gni

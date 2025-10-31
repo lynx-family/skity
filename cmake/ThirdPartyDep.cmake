@@ -7,6 +7,7 @@ set(GLM_BUILD_LIBRARY OFF CACHE BOOL "enable GLM_BUILD_LIBRARY")
 set(GLM_BUILD_INSTALL OFF CACHE BOOL "enable GLM_BUILD_INSTALL")
 add_subdirectory(third_party/glm)
 target_link_libraries(skity PRIVATE glm::glm-header-only)
+target_include_directories(skity PRIVATE third_party/glm)
 
 # pugixml
 set(PUGIXML_NO_EXCEPTIONS ON CACHE BOOL "enable PUGIXML_NO_EXCEPTIONS")
@@ -80,18 +81,17 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT ANDROID AND NOT CMAKE_SYSTEM
 
   target_include_directories(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/include)
   target_link_directories(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/lib)
+
+  set(SKITY_ZLIB_NAME "z")
+
   if (WIN32)
     # FIXME: zlib in msvc output a different name
     if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "Debug")
-      target_link_libraries(skity PRIVATE zlibstaticd)
+      set(SKITY_ZLIB_NAME zlibstaticd)
     else()
-      target_link_libraries(skity PRIVATE zlibstatic)
+      set(SKITY_ZLIB_NAME zlibstatic)
     endif()
-  else()
-    target_link_libraries(skity PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/lib/libz.a)
   endif()
-
-  add_dependencies(skity zlib)
 
   set(USE_THIRD_PARTY_ZLIB ON)
 endif()
@@ -101,3 +101,61 @@ if (SKITY_TRACE)
   message("Open Skity trace")
   target_compile_definitions(skity PRIVATE SKITY_ENABLE_TRACING=1)
 endif()
+
+if (NOT ${SKITY_CT_FONT} OR ${SKITY_CODEC_MODULE})
+
+  include(ExternalProject)
+
+  set(PNG_CONFIG_ARGS
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/libpng
+    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    -DPNG_EXECUTABLES=OFF
+    -DPNG_SHARED=OFF
+    -DPNG_STATIC=ON
+    -DPNG_FRAMEWORK=OFF
+    -DPNG_TESTS=OFF
+    -DCMAKE_INSTALL_MESSAGE=NEVER
+    -DCMAKE_MESSAGE_LOG_LEVEL=ERROR
+  )
+
+  if (LINUX OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    list(APPEND PNG_CONFIG_ARGS -DCMAKE_C_FLAGS="-fPIC")
+  endif()
+
+  if (ANDROID)
+    list(APPEND PNG_CONFIG_ARGS
+      -DANDROID_ABI=${ANDROID_ABI}
+      -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+      -DANDROID_STL=${ANDROID_STL}
+      -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+    )
+  endif()
+
+  if (${USE_THIRD_PARTY_ZLIB})
+    list(APPEND PNG_CONFIG_ARGS -DZLIB_ROOT=${CMAKE_BINARY_DIR}/third_party/zlib)
+  endif()
+
+  # libpng is required by codec module and freetype on windows
+  ExternalProject_Add(libpng
+    SOURCE_DIR ${SKITY_ROOT}/third_party/libpng
+    PREFIX ${CMAKE_CURRENT_BINARY_DIR}/third_party/libpng
+    CMAKE_ARGS
+    ${PNG_CONFIG_ARGS}
+  )
+
+  if (${USE_THIRD_PARTY_ZLIB})
+    add_dependencies(libpng zlib)
+  endif()
+
+  set(SKITY_LIBPNG_NAME "png")
+
+  if (WIN32)
+    if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+      set(SKITY_LIBPNG_NAME libpng16_staticd)
+    else()
+      set(SKITY_LIBPNG_NAME libpng16_static)
+    endif()
+  endif()
+
+endif()
+

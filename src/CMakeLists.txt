@@ -159,13 +159,25 @@ if (NOT ${SKITY_CT_FONT})
   if (NOT USE_THIRD_PARTY_ZLIB)
     # link system zlib
     target_link_libraries(skity PRIVATE z)
+  else()
+    target_link_libraries(skity PRIVATE ${SKITY_ZLIB_NAME})
   endif()
 
   target_include_directories(skity PRIVATE ${FREETYPE_DIR}/include)
 
-  # png needed by freetype2 from lynx
-  target_include_directories(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../third_party/nanopng/include)
-  target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../third_party/nanopng/src/nanopng16.cc)
+  if (NOT ANDROID)
+    # png needed by freetype2 from lynx
+    add_dependencies(skity libpng)
+
+    target_include_directories(skity PRIVATE $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/third_party/libpng/include>)
+    target_link_directories(skity PRIVATE $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/third_party/libpng/lib>)
+
+    target_link_libraries(skity PRIVATE ${SKITY_LIBPNG_NAME})
+  else()
+    # use nanopng in android
+    target_include_directories(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../third_party/nanopng/include)
+    target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../third_party/nanopng/src/nanopng16.cc)
+  endif()
 
   target_sources(
     skity

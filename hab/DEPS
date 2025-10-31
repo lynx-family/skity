@@ -15,6 +15,12 @@ deps = {
         "patches": os.path.join(root_dir, 'patches', 'nanopng', '0001-Adapt-nanopng-to-the-Skity-project.patch'),
         "ignore_in_git": True,
     },
+    "third_party/libpng": {
+        "type": "git",
+        "url": "https://github.com/pnggroup/libpng.git",
+        "ignore_in_git": True,
+        "commit": "f5e92d76973a7a53f517579bc95d61483bf108c0",
+    },
     "third_party/zlib": {
         "type": "git",
         "url": "https://github.com/madler/zlib.git",
