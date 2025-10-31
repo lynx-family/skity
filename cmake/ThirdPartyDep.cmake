@@ -7,6 +7,7 @@ set(GLM_BUILD_LIBRARY OFF CACHE BOOL "enable GLM_BUILD_LIBRARY")
 set(GLM_BUILD_INSTALL OFF CACHE BOOL "enable GLM_BUILD_INSTALL")
 add_subdirectory(third_party/glm)
 target_link_libraries(skity PRIVATE glm::glm-header-only)
+target_include_directories(skity PRIVATE third_party/glm)
 
 # pugixml
 set(PUGIXML_NO_EXCEPTIONS ON CACHE BOOL "enable PUGIXML_NO_EXCEPTIONS")
