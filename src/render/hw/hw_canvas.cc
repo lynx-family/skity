@@ -18,6 +18,7 @@
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/filters/hw_filters.hpp"
 #include "src/render/hw/layer/hw_filter_layer.hpp"
+#include "src/render/shape.hpp"
 #include "src/render/text/glyph_run.hpp"
 #include "src/tracing.hpp"
 #include "src/utils/arena_allocator.hpp"
@@ -124,7 +125,15 @@ void HWCanvas::OnDrawLine(float x0, float y0, float x1, float y1,
 
 void HWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
   SKITY_TRACE_EVENT(HWCanvas_OnDrawPath);
+  DrawShape(Shape(&path), paint);
+}
 
+void HWCanvas::OnDrawRRect(RRect const& rrect, Paint const& paint) {
+  SKITY_TRACE_EVENT(HWCanvas_OnDrawRRect);
+  DrawShape(Shape(&rrect), paint);
+}
+
+void HWCanvas::DrawShape(const Shape& shape, const Paint& paint) {
   if (CurrentLayer() == nullptr) {
     return;
   }
@@ -137,7 +146,7 @@ void HWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
     return;
   }
 
-  if (QuickReject(paint.ComputeFastBounds(path.GetBounds()))) {
+  if (QuickReject(paint.ComputeFastBounds(shape.GetBounds()))) {
     return;
   }
 
@@ -153,7 +162,7 @@ void HWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
     working_paint.SetMaskFilter(nullptr);
     working_paint.SetColorFilter(nullptr);
 
-    auto layer_bounds = working_paint.ComputeFastBounds(path.GetBounds());
+    auto layer_bounds = working_paint.ComputeFastBounds(shape.GetBounds());
 
     auto result = GenLayer(restore_paint, layer_bounds, current_matrix);
     if (!result) {
@@ -166,7 +175,12 @@ void HWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
     working_paint.SetBlendMode(BlendMode::kSrcOver);
   }
 
-  DrawPathInternal(path, working_paint, current_matrix);
+  if (shape.IsPath()) {
+    DrawPathInternal(*shape.GetPath(), working_paint, current_matrix);
+  } else if (shape.IsRRect()) {
+    DrawRRectInternal(*shape.GetRRect(), working_paint, current_matrix);
+  }
+
   if (has_layer) {
     layer_stack_.pop_back();
   }
@@ -415,6 +429,14 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
       draw_op_handler(*dst, work_paint, true);
     }
   }
+}
+
+void HWCanvas::DrawRRectInternal(const RRect& rrect, const Paint& paint,
+                                 const Matrix& transform) {
+  Path path;
+  path.AddRRect(rrect);
+  path.SetConvexityType(Path::ConvexityType::kConvex);
+  DrawPathInternal(path, paint, transform);
 }
 
 void HWCanvas::OnSave() {

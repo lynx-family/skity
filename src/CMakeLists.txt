@@ -80,6 +80,7 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/render/canvas.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/canvas_state.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/canvas_state.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/render/shape.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_allocator.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_allocator.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_bitmap.cc

@@ -17,6 +17,7 @@
 #include "src/render/hw/hw_stage_buffer.hpp"
 #include "src/render/hw/hw_static_buffer.hpp"
 #include "src/render/hw/layer/hw_root_layer.hpp"
+#include "src/render/shape.hpp"
 #include "src/utils/arena_allocator.hpp"
 #include "src/utils/vector_cache.hpp"
 
@@ -41,6 +42,8 @@ class HWCanvas : public Canvas {
                   Paint const& paint) override;
 
   void OnDrawRect(Rect const& rect, Paint const& paint) override;
+
+  void OnDrawRRect(RRect const& rrect, Paint const& paint) override;
 
   void OnClipRect(const Rect& rect, ClipOp op) override;
 
@@ -94,8 +97,13 @@ class HWCanvas : public Canvas {
                           const float* position_y, const Font& font,
                           const Paint& paint, const Matrix& transform);
 
+  void DrawShape(const Shape& shape, const Paint& paint);
+
   void DrawPathInternal(const Path& path, const Paint& paint,
                         const Matrix& transform);
+
+  void DrawRRectInternal(const RRect& rrect, const Paint& paint,
+                         const Matrix& transform);
 
   const Matrix& CurrentMatrix() const {
     return GetCanvasState()->CurrentLayerMatrix();

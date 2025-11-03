@@ -25,6 +25,7 @@ add_executable(skity_unit_test
     io/pixmap_test.cc
     render/canvas_state_test.cc
     render/resource_cache_test.cc
+    render/shape_test.cc
     recorder/display_list_test.cc
     text/text_run_test.cc
     text/text_test.cc
