@@ -194,43 +194,48 @@ if(${SKITY_TEST})
   add_subdirectory(test)
 endif()
 
-# package config file
-include(CMakePackageConfigHelpers)
-configure_package_config_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Config.cmake.in
-  ${CMAKE_CURRENT_BINARY_DIR}/skityConfig.cmake
-  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/skity
-)
+if(NOT EMSCRIPTEN)
+  # we only support install shared library since some internal static library
+  # does not config install and export targets
 
-# version
-write_basic_package_version_file(
-  ${CMAKE_CURRENT_BINARY_DIR}/skityConfigVersion.cmake
-  VERSION ${SKITY_VERSION}
-  COMPATIBILITY SameMajorVersion
-)
+  # package config file
+  include(CMakePackageConfigHelpers)
+  configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/skityConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/skity
+  )
 
-install(
-  FILES
-  ${CMAKE_CURRENT_BINARY_DIR}/skityConfig.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/skityConfigVersion.cmake
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/skity
-)
+  # version
+  write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/skityConfigVersion.cmake
+    VERSION ${SKITY_VERSION}
+    COMPATIBILITY SameMajorVersion
+  )
 
-# install library
-install(
-  TARGETS skity EXPORT skity-targets
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+  install(
+    FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/skityConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/skityConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/skity
+  )
 
-# install config file
-install(
-  EXPORT skity-targets
-  FILE skityTargets.cmake
-  NAMESPACE skity::
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/skity
-)
+  # install library
+  install(
+    TARGETS skity EXPORT skity-targets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  )
+
+  # install config file
+  install(
+    EXPORT skity-targets
+    FILE skityTargets.cmake
+    NAMESPACE skity::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/skity
+  )
+endif()
 
 # build frameowrk for iOS and macOS
 if(${SKITY_GENERATE_FRAMEWORK})

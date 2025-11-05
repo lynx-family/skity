@@ -210,8 +210,8 @@ EMSCRIPTEN_BINDINGS(skity) {
       .function("close", &skity::Path::Close);
 
   class_<skity::Typeface>("Typeface")
-      .class_function("MakeFromData", &skity::Typeface::MakeFromData,
-                      allow_raw_pointers());
+      .smart_ptr<std::shared_ptr<skity::Typeface>>("Typeface")
+      .class_function("MakeFromData", &skity::Typeface::MakeFromData);
 
   class_<skity::Paint>("Paint")
       .constructor()
@@ -220,7 +220,7 @@ EMSCRIPTEN_BINDINGS(skity) {
       .function("setStrokeJoin", &skity::Paint::SetStrokeJoin)
       .function("setStrokeCap", &skity::Paint::SetStrokeCap)
       .function("setColor", &skity::Paint::SetColor)
-      .function("setTypeface", &skity::Paint::SetTypeface, allow_raw_pointers())
+      .function("setTypeface", &skity::Paint::SetTypeface)
       .function("setTextSize", &skity::Paint::SetTextSize)
       .function("setShader", &skity::Paint::SetShader)
       .function("setPathEffect", &skity::Paint::SetPathEffect);

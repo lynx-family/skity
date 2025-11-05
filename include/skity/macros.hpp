@@ -26,7 +26,9 @@
 #define SKITY_LINUX
 #elif defined(__EMSCRIPTEN__) || defined(__wasm__) || defined(__wasm32__) || \
     defined(__wasm64__)
-#define SKITY_WASM
+#ifndef SKITY_WASM
+#define SKITY_WASM 1
+#endif
 #endif
 
 // wasm do not support shared library

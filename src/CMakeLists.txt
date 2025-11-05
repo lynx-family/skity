@@ -165,7 +165,7 @@ if (NOT ${SKITY_CT_FONT})
 
   target_include_directories(skity PRIVATE ${FREETYPE_DIR}/include)
 
-  if (NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS")
+  if (NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" AND NOT EMSCRIPTEN)
     # png needed by freetype2 from lynx
     add_dependencies(skity libpng)
 
@@ -239,7 +239,7 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Windows")
     PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/win/font_manager_win.cc
   )
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR EMSCRIPTEN)
   target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/text/ports/font_manager_freetype.cc)
 else()
   message(STATUS "typeface empty system: ${CMAKE_SYSTEM_NAME}")
@@ -493,6 +493,7 @@ endif()
 if(EMSCRIPTEN)
   target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/render/wasm/wasm_canvas.cc)
   add_executable(skity_wasm ${CMAKE_CURRENT_LIST_DIR}/render/wasm/wasm_binding.cc)
+  target_include_directories(skity_wasm PUBLIC ${CMAKE_SOURCE_DIR})
   target_compile_options(skity_wasm PUBLIC "-s" "USE_FREETYPE=1")
   target_link_libraries(skity_wasm skity::skity)
 
