@@ -102,7 +102,7 @@ if (SKITY_TRACE)
   target_compile_definitions(skity PRIVATE SKITY_ENABLE_TRACING=1)
 endif()
 
-if (NOT ${SKITY_CT_FONT} OR ${SKITY_CODEC_MODULE})
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" AND NOT ${SKITY_CT_FONT} OR ${SKITY_CODEC_MODULE})
 
   include(ExternalProject)
 
@@ -138,7 +138,7 @@ if (NOT ${SKITY_CT_FONT} OR ${SKITY_CODEC_MODULE})
   # libpng is required by codec module and freetype on windows
   ExternalProject_Add(libpng
     SOURCE_DIR ${SKITY_ROOT}/third_party/libpng
-    PREFIX ${CMAKE_CURRENT_BINARY_DIR}/third_party/libpng
+    PREFIX ${CMAKE_CURRENT_BINARY_DIR}/third_party/libpng_build
     CMAKE_ARGS
     ${PNG_CONFIG_ARGS}
   )

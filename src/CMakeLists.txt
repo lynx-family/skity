@@ -165,7 +165,7 @@ if (NOT ${SKITY_CT_FONT})
 
   target_include_directories(skity PRIVATE ${FREETYPE_DIR}/include)
 
-  if (NOT ANDROID)
+  if (NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS")
     # png needed by freetype2 from lynx
     add_dependencies(skity libpng)
 
