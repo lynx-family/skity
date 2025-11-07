@@ -10,9 +10,10 @@ target_link_libraries(skity PRIVATE glm::glm-header-only)
 target_include_directories(skity PRIVATE third_party/glm)
 
 # pugixml
+set(PUGIXML_INSTALL OFF CACHE BOOL "disable PUGIXML_INSTALL")
 set(PUGIXML_NO_EXCEPTIONS ON CACHE BOOL "enable PUGIXML_NO_EXCEPTIONS")
 add_subdirectory(third_party/pugixml)
-target_link_libraries(skity PUBLIC pugixml::pugixml)
+target_link_libraries(skity PRIVATE pugixml::pugixml)
 
 # spdlog
 if(${SKITY_LOG})

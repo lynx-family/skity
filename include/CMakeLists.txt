@@ -53,10 +53,14 @@ set(SKITY_PUBLIC_HEADERS
 target_sources(skity PRIVATE ${SKITY_PUBLIC_HEADERS})
 
 
-# install header
-install(
-  DIRECTORY
-  "${CMAKE_CURRENT_LIST_DIR}/skity"
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-  FILES_MATCHING PATTERN "*.hpp"
-)
+if (${SKITY_BUILD_INSTALL})
+
+  # install header
+  install(
+    DIRECTORY
+    "${CMAKE_CURRENT_LIST_DIR}/skity"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.hpp"
+  )
+
+endif()

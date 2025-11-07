@@ -71,6 +71,11 @@ function(cmake_to_gni TARGET)
             if (${LIB} STREQUAL "pugixml::pugixml")
                 set(LIB "pugixml-static")
             endif()
+
+            if (TARGET ${LIB}.gni)
+                # skip if library has already been generated
+                continue()
+            endif()
             message("link library: ${LIB}")
             get_target_property(target_type ${LIB} TYPE)
 

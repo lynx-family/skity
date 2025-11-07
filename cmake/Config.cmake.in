@@ -1,6 +1,11 @@
 @PACKAGE_INIT@
 
-find_package(glm REQUIRED)
 include("${CMAKE_CURRENT_LIST_DIR}/skityTargets.cmake")
+
+if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/skityCodecTargets.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/skityCodecTargets.cmake")
+
+    add_library(skity::codec ALIAS skity::skity-codec)
+endif()
 
 check_required_components(skity)

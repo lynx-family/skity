@@ -2,6 +2,8 @@
 # Licensed under the Apache License Version 2.0 that can be found in the
 # LICENSE file in the root directory of this source tree.
 
+set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "disable BENCHMARK_ENABLE_INSTALL")
+set(BENCHMARK_INSTALL_DOCS OFF CACHE BOOL "disable BENCHMARK_INSTALL_DOCS")
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/google_benchmark third_party/google_benchmark)
 add_subdirectory(micro)
 

@@ -70,3 +70,11 @@ cmake_dependent_option(
   [[APPLE]]
   OFF
 )
+
+# option for generate install configs
+cmake_dependent_option(
+  SKITY_BUILD_INSTALL "option for generate install configs"
+  ON
+  [[NOT EMSCRIPTEN AND NOT ANDROID]]
+  OFF
+)

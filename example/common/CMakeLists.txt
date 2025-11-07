@@ -1,6 +1,7 @@
 
 
 # glfw
+set(GLFW_INSTALL OFF CACHE BOOL "disable GLFW_INSTALL")
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glfw third_party/glfw)
 
 add_library(skity_example_common STATIC

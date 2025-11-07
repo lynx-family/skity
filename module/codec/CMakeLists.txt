@@ -7,7 +7,7 @@ include(ExternalProject)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-add_library(skity-codec STATIC)
+add_library(skity-codec SHARED)
 add_library(skity::codec ALIAS skity-codec)
 
 target_include_directories(skity-codec PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
@@ -43,6 +43,8 @@ target_compile_definitions(skity-codec PRIVATE -DDISABLE_SKITY_EXPERIMENTAL_WARN
 # wuffs
 target_include_directories(skity-codec PRIVATE ${CMAKE_SOURCE_DIR}/third_party/wuffs/release/c)
 
+target_link_libraries(skity-codec PUBLIC skity)
+
 target_sources(
   skity-codec
   PRIVATE
@@ -54,26 +56,35 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_module.hpp
 )
 
-
-# libjpeg-turbo
-ExternalProject_Add(libjpeg-turbo
-  SOURCE_DIR ${SKITY_ROOT}/third_party/libjpeg-turbo
-  PREFIX ${CMAKE_CURRENT_BINARY_DIR}/third_party/libjpeg-turbo
-  CMAKE_ARGS
+set(SKITY_LIBJPEG_ARGS
   -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/libjpeg-turbo
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+  -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
   -DENABLE_SHARED=OFF
   -DCMAKE_INSTALL_MESSAGE=NEVER
   -DCMAKE_MESSAGE_LOG_LEVEL=ERROR
 )
 
-# libwebp
-ExternalProject_Add(libwebp
-  SOURCE_DIR ${SKITY_ROOT}/third_party/libwebp
-  PREFIX ${CMAKE_CURRENT_BINARY_DIR}/third_party/libwebp
-  CMAKE_ARGS
+if (ANDROID)
+  list(APPEND SKITY_LIBJPEG_ARGS
+    -DANDROID_ABI=${ANDROID_ABI}
+    -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+    -DANDROID_STL=${ANDROID_STL}
+    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+  )
+endif()
+
+# libjpeg-turbo
+ExternalProject_Add(libjpeg-turbo
+  SOURCE_DIR ${SKITY_ROOT}/third_party/libjpeg-turbo
+  PREFIX ${CMAKE_CURRENT_BINARY_DIR}/third_party/libjpeg-turbo
+  CMAKE_ARGS ${SKITY_LIBJPEG_ARGS}
+)
+
+set(SKITY_LIBWEBP_ARGS
   -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/libwebp
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+  -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
   -DENABLE_SHARED=OFF
   -DBUILD_SHARED_LIBS=OFF
   # disable webp command line tools
@@ -89,6 +100,22 @@ ExternalProject_Add(libwebp
   -DCMAKE_MESSAGE_LOG_LEVEL=ERROR
 )
 
+if (ANDROID)
+  list(APPEND SKITY_LIBWEBP_ARGS
+    -DANDROID_ABI=${ANDROID_ABI}
+    -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+    -DANDROID_STL=${ANDROID_STL}
+    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+  )
+endif()
+
+# libwebp
+ExternalProject_Add(libwebp
+  SOURCE_DIR ${SKITY_ROOT}/third_party/libwebp
+  PREFIX ${CMAKE_CURRENT_BINARY_DIR}/third_party/libwebp
+  CMAKE_ARGS ${SKITY_LIBWEBP_ARGS}
+)
+
 # codec backends
 target_sources(
   skity-codec
@@ -100,7 +127,7 @@ target_sources(
 add_dependencies(skity-codec libpng)
 
 target_include_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libpng/include)
-target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/libpng/lib)
+target_link_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libpng/lib)
 
 target_link_libraries(skity-codec PRIVATE ${SKITY_LIBPNG_NAME})
 
@@ -108,7 +135,7 @@ if (NOT USE_THIRD_PARTY_ZLIB)
   # link system zlib
   target_link_libraries(skity-codec PRIVATE z)
 else()
-  target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/zlib/lib)
+  target_link_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/zlib/lib)
   target_link_libraries(skity-codec PRIVATE ${SKITY_ZLIB_NAME})
 endif()
 
@@ -122,7 +149,7 @@ target_sources(
 add_dependencies(skity-codec libjpeg-turbo)
 
 target_include_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libjpeg-turbo/include)
-target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/libjpeg-turbo/lib)
+target_link_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libjpeg-turbo/lib)
 
 if (WIN32)
   target_link_libraries(skity-codec PRIVATE turbojpeg-static)
@@ -133,7 +160,7 @@ endif()
 add_dependencies(skity-codec libwebp)
 
 target_include_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libwebp/include)
-target_link_directories(skity-codec PUBLIC ${CMAKE_BINARY_DIR}/third_party/libwebp/lib)
+target_link_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libwebp/lib)
 
 
 target_sources(
@@ -151,4 +178,32 @@ if (WIN32)
   target_link_libraries(skity-codec PRIVATE libsharpyuv -llibwebp libwebpdecoder libwebpdemux libwebpmux)
 else()
   target_link_libraries(skity-codec PRIVATE sharpyuv webp webpdecoder webpdemux webpmux)
+endif()
+
+if (${SKITY_BUILD_INSTALL})
+
+  # install header
+  install(
+    DIRECTORY
+    "${CMAKE_CURRENT_LIST_DIR}/include/skity"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.hpp"
+  )
+
+  # install library
+  install(
+    TARGETS skity-codec EXPORT skity-codec-targets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  )
+
+  # install config file
+  install(
+    EXPORT skity-codec-targets
+    FILE skityCodecTargets.cmake
+    NAMESPACE skity::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/skity
+  )
+
 endif()

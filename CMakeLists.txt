@@ -194,9 +194,7 @@ if(${SKITY_TEST})
   add_subdirectory(test)
 endif()
 
-if(NOT EMSCRIPTEN)
-  # we only support install shared library since some internal static library
-  # does not config install and export targets
+if(${SKITY_BUILD_INSTALL})
 
   # package config file
   include(CMakePackageConfigHelpers)
