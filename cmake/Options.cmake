@@ -75,6 +75,6 @@ cmake_dependent_option(
 cmake_dependent_option(
   SKITY_BUILD_INSTALL "option for generate install configs"
   ON
-  [[NOT EMSCRIPTEN AND NOT ANDROID]]
+  [[NOT EMSCRIPTEN]]
   OFF
 )

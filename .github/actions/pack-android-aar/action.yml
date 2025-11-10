@@ -8,6 +8,7 @@ runs:
     - name: build skity android aar
       shell: bash
       run: |
+        export PATH=$PWD/buildtools/ninja:$PATH
         cd platform/android
         echo $ANDROID_HOME
         rm $ANDROID_HOME/SDK

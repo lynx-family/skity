@@ -21,7 +21,7 @@ jobs:
             uses: actions/checkout@v4.2.2
           - name: Sync Dependencies
             run: |
-                ./tools/hab sync -f
+                ./tools/hab sync -f --target module,ci
           - name: Android Build Check
             uses: ./.github/actions/pack-android-aar
           - name: Copy AAR

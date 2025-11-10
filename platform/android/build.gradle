@@ -5,7 +5,7 @@ plugins {
 android {
     namespace 'com.lynxsdk.lynx.skity'
     compileSdk 35
-    ndkVersion = "21.3.6528147"
+    ndkVersion = "24.0.8215888" // needs use 24.0.8215888 or higher on MacOS 26.+ to prevent linking error
 
     defaultConfig {
         minSdk 16
@@ -16,7 +16,8 @@ android {
                             "-DSKITY_EXAMPLE=OFF",
                             "-DSKITY_TEST=OFF",
                             "-DSKITY_LOG=OFF",
-                            "-DSKITY_CODEC_MODULE=OFF"
+                            "-DSKITY_CODEC_MODULE=OFF",
+                            "-DSKITY_BUILD_INSTALL=OFF"
             }
         }
     }
