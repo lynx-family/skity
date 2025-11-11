@@ -32,8 +32,7 @@ void HWDynamicPathClip::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
   if (use_gpu_tessellation_) {
     geometry = arena_allocator->Make<WGSLTessPathFillGeometry>(path_, paint_);
   } else {
-    geometry =
-        arena_allocator->Make<WGSLPathGeometry>(path_, paint_, false, false);
+    geometry = arena_allocator->Make<WGSLPathGeometry>(path_, paint_, false);
   }
   // clip always use stencil first
   steps.emplace_back(arena_allocator->Make<StencilStep>(

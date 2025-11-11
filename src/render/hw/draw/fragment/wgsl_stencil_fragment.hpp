@@ -17,8 +17,6 @@ class WGSLStencilFragment : public HWWGSLFragment {
 
   std::string GenSourceWGSL() const override;
 
-  const char* GetEntryPoint() const override;
-
   uint32_t NextBindingIndex() const override { return 0; }
 
   void PrepareCMD(Command* cmd, HWDrawContext* context) override {}

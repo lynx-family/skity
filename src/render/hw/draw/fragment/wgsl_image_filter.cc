@@ -55,8 +55,6 @@ std::string WGSLImageFilter::GenSourceWGSL() const {
   return wgsl_code;
 }
 
-const char* WGSLImageFilter::GetEntryPoint() const { return "fs_main"; }
-
 uint32_t WGSLImageFilter::NextBindingIndex() const { return 2; }
 
 void WGSLImageFilter::PrepareCMD(Command* cmd, HWDrawContext* context) {

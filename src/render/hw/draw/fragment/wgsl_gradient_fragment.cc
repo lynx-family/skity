@@ -4,6 +4,7 @@
 
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
 
+#include "src/render/hw/draw/hw_wgsl_fragment.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/tracing.hpp"
 
@@ -11,37 +12,21 @@ namespace skity {
 
 WGSLGradientFragment::WGSLGradientFragment(Shader::GradientInfo info,
                                            Shader::GradientType type,
-                                           float global_alpha)
-    : info_(info),
+                                           float global_alpha,
+                                           const Matrix& local_matrix)
+    : HWWGSLFragment(Flags::kSnippet | Flags::kAffectsVertex),
+      info_(info),
       type_(type),
       global_alpha_(global_alpha),
-      gradient_fragment_(info_, type_) {}
+      gradient_fragment_(info_, type_),
+      local_matrix_(local_matrix) {}
 
-std::string WGSLGradientFragment::GetShaderName() const {
-  std::string name = gradient_fragment_.GetShaderName();
-
-  if (filter_ != nullptr) {
-    name += "_" + filter_->GetShaderName();
-  }
-
-  if (contour_aa_) {
-    name += "_AA";
-  }
-
-  name += "PathWGSL";
-
-  return name;
-}
-
-uint32_t WGSLGradientFragment::NextBindingIndex() const { return 2; }
-
-std::string WGSLGradientFragment::GenSourceWGSL() const {
-  std::string wgsl = gradient_fragment_.GenSourceWGSL(0);
+void WGSLGradientFragment::WriteFSFunctionsAndStructs(
+    std::stringstream& ss) const {
+  ss << gradient_fragment_.GenSourceWGSL(0);
 
   if (type_ == Shader::GradientType::kLinear) {
-    wgsl += R"(
-        @group(1) @binding(1) var<uniform> linear_pts       : vec4<f32>;
-
+    ss << R"(
         fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
             var cs: vec2<f32> = v_pos - linear_pts.xy;
             var se: vec2<f32> = linear_pts.zw - linear_pts.xy;
@@ -56,9 +41,7 @@ std::string WGSLGradientFragment::GenSourceWGSL() const {
         }
     )";
   } else if (type_ == Shader::GradientType::kRadial) {
-    wgsl += R"(
-        @group(1) @binding(1) var<uniform> radial_pts       : vec3<f32>;
-
+    ss << R"(
         fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
             var mixValue: f32 = distance(v_pos, radial_pts.xy);
             var radius: f32 = radial_pts.z;
@@ -72,9 +55,7 @@ std::string WGSLGradientFragment::GenSourceWGSL() const {
         }
     )";
   } else if (type_ == Shader::GradientType::kConical) {
-    wgsl += R"(
-      @group(1) @binding(1) var<uniform> conical_info     : ConicalInfo;
-
+    ss << R"(
       fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
         var res: vec2<f32> = calculate_conical_t(v_pos, conical_info.center1, conical_info.center2, conical_info.radius1, conical_info.radius2);
 
@@ -90,9 +71,7 @@ std::string WGSLGradientFragment::GenSourceWGSL() const {
       }
     )";
   } else if (type_ == Shader::GradientType::kSweep) {
-    wgsl += R"(
-      @group(1) @binding(1) var<uniform> sweep_pts       : vec4<f32>;
-
+    ss << R"(
       const k1Over2Pi: f32 = 0.1591549430918;
 
       fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
@@ -111,51 +90,72 @@ std::string WGSLGradientFragment::GenSourceWGSL() const {
       }
     )";
   }
-
-  if (filter_ != nullptr) {
-    wgsl += filter_->GenSourceWGSL();
-  }
-
-  if (contour_aa_) {
-    wgsl += R"(
-      struct GradientFSAAInput {
-        @location(0)  v_pos    : vec2<f32>,
-        @location(1)  v_pos_aa : f32,
-      };
-
-      @fragment
-      fn fs_main(input: GradientFSAAInput) -> @location(0) vec4<f32> {
-        var color: vec4<f32> = generate_gradient_color(input.v_pos);
-    )";
-  } else {
-    wgsl += R"(
-      @fragment
-      fn fs_main(@location(0) v_pos: vec2<f32>) -> @location(0) vec4<f32> {
-        var color: vec4<f32> = generate_gradient_color(v_pos);
-    )";
-  }
-
-  if (filter_ != nullptr) {
-    wgsl += R"(
-      color = filter_color(color);
-    )";
-  }
-
-  if (contour_aa_) {
-    wgsl += R"(
-       color *= input.v_pos_aa;
-    )";
-  }
-
-  wgsl += R"(
-        return color;
-    }
-  )";
-
-  return wgsl;
 }
 
-const char* WGSLGradientFragment::GetEntryPoint() const { return "fs_main"; }
+void WGSLGradientFragment::WriteFSUniforms(std::stringstream& ss) const {
+  if (type_ == Shader::GradientType::kLinear) {
+    ss << R"(
+      @group(1) @binding(1) var<uniform> linear_pts       : vec4<f32>;
+    )";
+  } else if (type_ == Shader::GradientType::kRadial) {
+    ss << R"(
+      @group(1) @binding(1) var<uniform> radial_pts       : vec3<f32>;
+    )";
+  } else if (type_ == Shader::GradientType::kConical) {
+    ss << R"(
+      @group(1) @binding(1) var<uniform> conical_info     : ConicalInfo;
+    )";
+  } else if (type_ == Shader::GradientType::kSweep) {
+    ss << R"(
+      @group(1) @binding(1) var<uniform> sweep_pts       : vec4<f32>;
+    )";
+  }
+}
+
+void WGSLGradientFragment::WriteFSMain(std::stringstream& ss) const {
+  ss << "color = generate_gradient_color(input.f_param_pos);";
+}
+
+std::optional<std::vector<std::string>> WGSLGradientFragment::GetVarings()
+    const {
+  return std::vector<std::string>{"f_param_pos: vec2<f32>"};
+}
+
+void WGSLGradientFragment::WriteVSUniforms(std::stringstream& ss) const {
+  ss << "@group(0) @binding(1) var<uniform> inv_matrix   : mat4x4<f32>;";
+}
+
+void WGSLGradientFragment::WriteVSAssgnShadingVarings(
+    std::stringstream& ss) const {
+  ss << R"(output.f_param_pos = (inv_matrix * vec4<f32>(local_pos.xy, 0.0, 1.0)).xy;)";
+}
+
+void WGSLGradientFragment::BindVSUniforms(Command* cmd, HWDrawContext* context,
+                                          const Matrix& transform,
+                                          float clip_depth,
+                                          Command* stencil_cmd) {
+  if (cmd->pipeline == nullptr) {
+    return;
+  }
+
+  auto group = cmd->pipeline->GetBindingGroup(0);
+  if (group == nullptr) {
+    return;
+  }
+
+  auto inv_matrix_entry = group->GetEntry(1);
+  if (!SetupInvMatrix(inv_matrix_entry, local_matrix_)) {
+    return;
+  }
+
+  UploadBindGroup(inv_matrix_entry, cmd, context);
+}
+
+std::string WGSLGradientFragment::GetShaderName() const {
+  return gradient_fragment_.GetShaderName();
+}
+
+uint32_t WGSLGradientFragment::NextBindingIndex() const { return 2; }
 
 void WGSLGradientFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
   SKITY_TRACE_EVENT(WGSLGradientFragment_PrepareCMD);
@@ -198,5 +198,7 @@ void WGSLGradientFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
     filter_->SetupBindGroup(cmd, context);
   }
 }
+
+std::string WGSLGradientFragment::GetVSNameSuffix() const { return "Gradient"; }
 
 }  // namespace skity

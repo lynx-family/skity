@@ -11,71 +11,24 @@
 
 namespace skity {
 
-WGSLSolidColor::WGSLSolidColor(const Color4f& color) : color_(color) {}
+WGSLSolidColor::WGSLSolidColor(const Color4f& color)
+    : HWWGSLFragment(Flags::kSnippet), color_(color) {}
 
 uint32_t WGSLSolidColor::NextBindingIndex() const { return 1; }
 
-std::string WGSLSolidColor::GetShaderName() const {
-  std::string name = "SolidColorFragmentWGSL";
+std::string WGSLSolidColor::GetShaderName() const { return "SolidColor"; }
 
-  if (filter_) {
-    name += "_" + filter_->GetShaderName();
-  }
-
-  if (contour_aa_) {
-    name += "AA";
-  }
-
-  return name;
+void WGSLSolidColor::WriteFSUniforms(std::stringstream& ss) const {
+  ss << R"(
+@group(1) @binding(0) var<uniform> uColor: vec4<f32>;
+)";
 }
 
-std::string WGSLSolidColor::GenSourceWGSL() const {
-  std::string wgsl_code = R"(
-    @group(1) @binding(0) var<uniform> uColor: vec4<f32>;
-  )";
-
-  if (filter_ != nullptr) {
-    wgsl_code += filter_->GenSourceWGSL();
-  }
-
-  if (contour_aa_) {
-    wgsl_code += R"(
-      @fragment
-      fn fs_main(@location(0) v_pos_aa: f32) -> @location(0) vec4<f32> {
-    )";
-  } else {
-    wgsl_code += R"(
-    @fragment
-    fn fs_main() -> @location(0) vec4<f32> {
-    )";
-  }
-
-  wgsl_code += R"(
-    var color : vec4<f32> = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
-  )";
-
-  if (filter_ != nullptr) {
-    wgsl_code += R"(
-       color = filter_color(color);
-    )";
-  }
-
-  if (contour_aa_) {
-    wgsl_code += R"(
-        return color * v_pos_aa;
-      }
-    )";
-  } else {
-    wgsl_code += R"(
-        return color;
-      }
-    )";
-  }
-
-  return wgsl_code;
+void WGSLSolidColor::WriteFSMain(std::stringstream& ss) const {
+  ss << R"(
+  color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
+)";
 }
-
-const char* WGSLSolidColor::GetEntryPoint() const { return "fs_main"; }
 
 void WGSLSolidColor::PrepareCMD(Command* cmd, HWDrawContext* context) {
   SKITY_TRACE_EVENT(WGSLSolidColor_PrepareCMD);

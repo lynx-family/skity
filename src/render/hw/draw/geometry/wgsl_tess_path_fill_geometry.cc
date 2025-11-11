@@ -12,6 +12,7 @@
 #include "src/geometry/wangs_formula.hpp"
 #include "src/graphic/path_visitor.hpp"
 #include "src/logging.hpp"
+#include "src/render/hw/draw/hw_wgsl_geometry.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_path_aa_outline.hpp"
@@ -165,73 +166,66 @@ struct TessPathFillVisitor : public PathVisitor {
 
 WGSLTessPathFillGeometry::WGSLTessPathFillGeometry(const Path& path,
                                                    const Paint& paint)
-    : path_(path), paint_(paint), layout_(InitVertexBufferLayout()) {}
+    : HWWGSLGeometry(Flags::kSnippet),
+      path_(path),
+      paint_(paint),
+      layout_(InitVertexBufferLayout()) {}
 
 const std::vector<GPUVertexBufferLayout>&
 WGSLTessPathFillGeometry::GetBufferLayout() const {
   return layout_;
 }
 
-std::string WGSLTessPathFillGeometry::GenSourceWGSL() const {
-  std::string wgsl_code = CommonVertexWGSL();
+void WGSLTessPathFillGeometry::WriteVSFunctionsAndStructs(
+    std::stringstream& ss) const {
+  ss << CommonVertexWGSL();
+}
 
-  wgsl_code += R"(
-      @group(0) @binding(0) var<uniform> common_slot: CommonSlot;
-      // @ExtraUniform
+void WGSLTessPathFillGeometry::WriteVSUniforms(std::stringstream& ss) const {
+  ss << "@group(0) @binding(0) var<uniform> common_slot: CommonSlot;\n";
+}
 
-      struct VSInput {
-          @location(0) index: f32,
-          @location(1) p0p1: vec4<f32>,
-          @location(2) p2p3: vec4<f32>,
-          @location(3) fan_center: vec2<f32>,
-          @location(4) index_offset: f32,
-          @location(5) num_segments: f32,
-      };
+void WGSLTessPathFillGeometry::WriteVSInput(std::stringstream& ss) const {
+  ss << R"(
+struct VSInput {
+  @location(0) index: f32,
+  @location(1) p0p1: vec4<f32>,
+  @location(2) p2p3: vec4<f32>,
+  @location(3) fan_center: vec2<f32>,
+  @location(4) index_offset: f32,
+  @location(5) num_segments: f32,
+};
+)";
+}
 
-      struct VSOutput {
-          @builtin(position) pos: vec4<f32>,
-          // @ExtraVSOutput
-      };
+void WGSLTessPathFillGeometry::WriteVSMain(std::stringstream& ss) const {
+  ss << R"(
+  var pos: vec2<f32>;
+  var global_index: f32 = input.index + input.index_offset;
+  if input.index < 0.0 || global_index > input.num_segments {
+    pos = input.fan_center;
+  } else {
+    var t: f32 = global_index / input.num_segments;
+    var p0: vec2<f32> = input.p0p1.xy;
+    var p1: vec2<f32> = input.p0p1.zw;
+    var p2: vec2<f32> = input.p2p3.xy;
+    var p3: vec2<f32> = input.p2p3.zw;
 
+    var p01: vec2<f32> = mix(p0, p1, t);
+    var p12: vec2<f32> = mix(p1, p2, t);
+    var p23: vec2<f32> = mix(p2, p3, t);
 
-      @vertex
-      fn vs_main(input: VSInput) -> VSOutput {
-          var output: VSOutput;
-          var pos: vec2<f32>;
-          var global_index: f32 = input.index + input.index_offset;
-          if input.index < 0.0 || global_index > input.num_segments {
-            pos = input.fan_center;
-          } else {
-            var t: f32 = global_index / input.num_segments;
-            var p0: vec2<f32> = input.p0p1.xy;
-            var p1: vec2<f32> = input.p0p1.zw;
-            var p2: vec2<f32> = input.p2p3.xy;
-            var p3: vec2<f32> = input.p2p3.zw;
-
-            var p01: vec2<f32> = mix(p0, p1, t);
-            var p12: vec2<f32> = mix(p1, p2, t);
-            var p23: vec2<f32> = mix(p2, p3, t);
-
-            var p012: vec2<f32> = mix(p01, p12, t);
-            var p123: vec2<f32> = mix(p12, p23, t);
-            pos = mix(p012, p123, t);
-          }
-
-          output.pos = get_vertex_position(pos.xy, common_slot);
-          // @ExtraBeforeReturn
-          return output;
-      }
-    )";
-
-  return wgsl_code;
+    var p012: vec2<f32> = mix(p01, p12, t);
+    var p123: vec2<f32> = mix(p12, p23, t);
+    pos = mix(p012, p123, t);
+  }
+  local_pos = pos;
+  output.pos = get_vertex_position(pos.xy, common_slot);
+)";
 }
 
 std::string WGSLTessPathFillGeometry::GetShaderName() const {
-  return "CommonTessPathFillVertexWGSL";
-}
-
-const char* WGSLTessPathFillGeometry::GetEntryPoint() const {
-  return "vs_main";
+  return "TessPathFill";
 }
 
 void WGSLTessPathFillGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
@@ -312,143 +306,6 @@ GPUBufferView WGSLTessPathFillGeometry::CreateIndexBufferView(
   DEBUG_CHECK(index_array.size() == kMaxNumSegmentsPerInstance * 3);
   return stage_bufer->PushIndex(const_cast<uint32_t*>(index_array.data()),
                                 index_array.size() * sizeof(uint32_t));
-}
-
-WGSLGradientTessPathFill::WGSLGradientTessPathFill(const Path& path,
-                                                   const Paint& paint,
-                                                   const Matrix& local_matrix)
-    : WGSLTessPathFillGeometry(path, paint), local_matrix_(local_matrix) {}
-
-std::string WGSLGradientTessPathFill::GenSourceWGSL() const {
-  auto wgsl = WGSLTessPathFillGeometry::GenSourceWGSL();
-  std::unordered_map<std::string, std::string> replacements = {
-      {
-          "// @ExtraUniform",
-          "@group(0) @binding(1) var<uniform> inv_matrix   : mat4x4<f32>;",
-      },
-      {
-          "// @ExtraVSOutput",
-          "@location(0)        v_pos   :   vec2<f32>,",
-      },
-      {
-          "// @ExtraBeforeReturn",
-          "output.v_pos = (inv_matrix * vec4<f32>(pos.xy, 0.0, 1.0)).xy;",
-      },
-  };
-
-  ReplacePlaceholder(wgsl, replacements);
-  return wgsl;
-}
-
-std::string WGSLGradientTessPathFill::GetShaderName() const {
-  return "CommonGradientTessPathVertexWGSL";
-}
-
-const char* WGSLGradientTessPathFill::GetEntryPoint() const {
-  return "vs_main";
-}
-
-void WGSLGradientTessPathFill::PrepareCMD(Command* cmd, HWDrawContext* context,
-                                          const Matrix& transform,
-                                          float clip_depth,
-                                          Command* stencil_cmd) {
-  SKITY_TRACE_EVENT(WGSLGradientTessPathFill_PrepareCMD);
-  WGSLTessPathFillGeometry::PrepareCMD(cmd, context, transform, clip_depth,
-                                       stencil_cmd);
-
-  if (cmd->pipeline == nullptr) {
-    return;
-  }
-
-  auto group = cmd->pipeline->GetBindingGroup(0);
-  if (group == nullptr) {
-    return;
-  }
-
-  auto inv_matrix_entry = group->GetEntry(1);
-  if (!SetupInvMatrix(inv_matrix_entry, local_matrix_)) {
-    return;
-  }
-
-  UploadBindGroup(inv_matrix_entry, cmd, context);
-}
-
-WGSLTextureTessPathFill::WGSLTextureTessPathFill(const Path& path,
-                                                 const Paint& paint,
-
-                                                 const Matrix& local_matrix,
-                                                 float width, float height)
-    : WGSLTessPathFillGeometry(path, paint),
-      local_matrix_(local_matrix),
-      width_(width),
-      height_(height) {}
-
-std::string WGSLTextureTessPathFill::GenSourceWGSL() const {
-  std::string wgsl_code = CommonVertexWGSL();
-  wgsl_code += R"(
-    struct ImageBoundsInfo {
-      bounds      : vec2<f32>,
-      inv_matrix  : mat4x4<f32>,
-    };
-
-  )";
-  wgsl_code += WGSLTessPathFillGeometry::GenSourceWGSL();
-  std::unordered_map<std::string, std::string> replacements = {
-      {
-          "// @ExtraUniform",
-          "@group(0) @binding(1) var<uniform> image_bounds : ImageBoundsInfo;",
-      },
-      {
-          "// @ExtraVSOutput",
-          "@location(0)        frag_coord  : vec2<f32>,",
-      },
-      {"// @ExtraBeforeReturn",
-       R"(
-          var mapped_pos  : vec2<f32>     = (image_bounds.inv_matrix * vec4<f32>(pos.xy, 0.0, 1.0)).xy;
-          var mapped_lt   : vec2<f32>     = vec2<f32>(0.0, 0.0);
-          var mapped_rb   : vec2<f32>     = image_bounds.bounds;
-          var total_x     : f32           = mapped_rb.x - mapped_lt.x;
-          var total_y     : f32           = mapped_rb.y - mapped_lt.y;
-          var v_x         : f32           = (mapped_pos.x - mapped_lt.x) / total_x;
-          var v_y         : f32           = (mapped_pos.y - mapped_lt.y) / total_y;
-
-          output.frag_coord = vec2<f32>(v_x, v_y);
-        )"}};
-
-  ReplacePlaceholder(wgsl_code, replacements);
-
-  return wgsl_code;
-}  // namespace skity
-
-std::string WGSLTextureTessPathFill::GetShaderName() const {
-  return "ImageTessPathFillVertexWGSL";
-}
-
-const char* WGSLTextureTessPathFill::GetEntryPoint() const { return "vs_main"; }
-
-void WGSLTextureTessPathFill::PrepareCMD(Command* cmd, HWDrawContext* context,
-                                         const Matrix& transform,
-                                         float clip_depth,
-                                         Command* stencil_cmd) {
-  SKITY_TRACE_EVENT(WGSLTextureTessPathFill_PrepareCMD);
-  WGSLTessPathFillGeometry::PrepareCMD(cmd, context, transform, clip_depth,
-                                       stencil_cmd);
-
-  if (cmd->pipeline == nullptr) {
-    return;
-  }
-
-  auto group = cmd->pipeline->GetBindingGroup(0);
-  if (group == nullptr) {
-    return;
-  }
-
-  auto image_bounds_entry = group->GetEntry(1);
-  if (!SetupImageBoundsInfo(image_bounds_entry, local_matrix_, width_,
-                            height_)) {
-    return;
-  }
-  UploadBindGroup(image_bounds_entry, cmd, context);
 }
 
 }  // namespace skity

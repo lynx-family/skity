@@ -14,23 +14,41 @@ class WGSLTextureFragment : public HWWGSLFragment {
  public:
   WGSLTextureFragment(std::shared_ptr<PixmapShader> shader,
                       std::shared_ptr<GPUTexture> texture,
-                      std::shared_ptr<GPUSampler> sampler, float global_alpha);
+                      std::shared_ptr<GPUSampler> sampler, float global_alpha,
+                      const Matrix& local_matrix, float width, float height);
 
   WGSLTextureFragment(AlphaType alpha_type, TileMode x_tile_mode,
                       TileMode y_tile_mode, std::shared_ptr<GPUTexture> texture,
-                      std::shared_ptr<GPUSampler> sampler, float global_alpha);
+                      std::shared_ptr<GPUSampler> sampler, float global_alpha,
+                      const Matrix& local_matrix, float width, float height);
 
   ~WGSLTextureFragment() override = default;
 
   uint32_t NextBindingIndex() const override;
 
-  std::string GenSourceWGSL() const override;
-
   std::string GetShaderName() const override;
 
-  const char* GetEntryPoint() const override;
-
   void PrepareCMD(Command* cmd, HWDrawContext* context) override;
+
+  void WriteFSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteFSUniforms(std::stringstream& ss) const override;
+
+  void WriteFSMain(std::stringstream& ss) const override;
+
+  void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteVSUniforms(std::stringstream& ss) const override;
+
+  void WriteVSAssgnShadingVarings(std::stringstream& ss) const override;
+
+  void BindVSUniforms(Command* cmd, HWDrawContext* context,
+                      const Matrix& transform, float clip_depth,
+                      Command* stencil_cmd) override;
+
+  std::string GetVSNameSuffix() const override;
+
+  std::optional<std::vector<std::string>> GetVarings() const override;
 
  private:
   AlphaType alpha_type_ = AlphaType::kUnpremul_AlphaType;
@@ -39,6 +57,10 @@ class WGSLTextureFragment : public HWWGSLFragment {
   std::shared_ptr<GPUTexture> texture_;
   std::shared_ptr<GPUSampler> sampler_;
   float global_alpha_ = 1.f;
+
+  Matrix local_matrix_;
+  float width_;
+  float height_;
 };
 
 }  // namespace skity

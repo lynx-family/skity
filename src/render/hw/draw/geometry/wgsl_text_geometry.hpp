@@ -41,20 +41,21 @@ class WGSLTextGeometry : public HWWGSLGeometry {
     @group(0) @binding(0) var<uniform> common_slot: CommonSlot;
   )";
 
-  explicit WGSLTextGeometry(const Matrix& transform, ArrayList<GlyphRect, 16> glyph_rects) {
-        for (auto&& glyph_rect : glyph_rects) {
-          auto rect = transform.MapRect({glyph_rect.vertex_coord.x, glyph_rect.vertex_coord.y,
-                             glyph_rect.vertex_coord.z, glyph_rect.vertex_coord.w});
-          glyph_rect.vertex_coord = {rect.Left(), rect.Top(), rect.Right(), rect.Bottom()};
-          glyph_rects_.emplace_back(std::move(glyph_rect));
-        }
-      }
+  explicit WGSLTextGeometry(const Matrix& transform,
+                            ArrayList<GlyphRect, 16> glyph_rects) {
+    for (auto&& glyph_rect : glyph_rects) {
+      auto rect = transform.MapRect(
+          {glyph_rect.vertex_coord.x, glyph_rect.vertex_coord.y,
+           glyph_rect.vertex_coord.z, glyph_rect.vertex_coord.w});
+      glyph_rect.vertex_coord = {rect.Left(), rect.Top(), rect.Right(),
+                                 rect.Bottom()};
+      glyph_rects_.emplace_back(std::move(glyph_rect));
+    }
+  }
 
   ~WGSLTextGeometry() override = default;
 
   const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
-
-  const char* GetEntryPoint() const override { return "vs_main"; }
 
   bool CanMerge(const HWWGSLGeometry* other) const override;
 
@@ -69,7 +70,8 @@ class WGSLTextGeometry : public HWWGSLGeometry {
 
 class WGSLTextSolidColorGeometry : public WGSLTextGeometry {
  public:
-  explicit WGSLTextSolidColorGeometry(const Matrix& transform, ArrayList<GlyphRect, 16> glyph_rects)
+  explicit WGSLTextSolidColorGeometry(const Matrix& transform,
+                                      ArrayList<GlyphRect, 16> glyph_rects)
       : WGSLTextGeometry(transform, std::move(glyph_rects)) {}
 
   ~WGSLTextSolidColorGeometry() override = default;
@@ -83,7 +85,7 @@ class WGSLTextSolidColorGeometry : public WGSLTextGeometry {
 
 class WGSLTextGradientGeometry : public WGSLTextGeometry {
  public:
-  explicit WGSLTextGradientGeometry(const Matrix& transform, 
+  explicit WGSLTextGradientGeometry(const Matrix& transform,
                                     ArrayList<GlyphRect, 16> glyph_rects,
                                     const Matrix& local_matrix,
                                     const Matrix& local_to_device)
@@ -104,7 +106,7 @@ class WGSLTextGradientGeometry : public WGSLTextGeometry {
   }
 
   bool CanMerge(const HWWGSLGeometry* other) const override;
-  
+
   void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
                   float clip_depth, Command* stencil_cmd) override;
 

@@ -22,11 +22,15 @@ class WGSLTessPathStrokeGeometry : public HWWGSLGeometry {
 
   const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
 
-  std::string GenSourceWGSL() const override;
+  void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteVSUniforms(std::stringstream& ss) const override;
+
+  void WriteVSInput(std::stringstream& ss) const override;
+
+  void WriteVSMain(std::stringstream& ss) const override;
 
   std::string GetShaderName() const override;
-
-  const char* GetEntryPoint() const override;
 
   void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
                   float clip_depth, Command* stencil_cmd) override;
@@ -39,49 +43,6 @@ class WGSLTessPathStrokeGeometry : public HWWGSLGeometry {
   const Path& path_;
   const Paint& paint_;
   std::vector<GPUVertexBufferLayout> layout_;
-};
-
-class WGSLGradientTessPathStroke : public WGSLTessPathStrokeGeometry {
- public:
-  WGSLGradientTessPathStroke(const Path& path, const Paint& paint,
-                             const Matrix& local_matrix);
-
-  ~WGSLGradientTessPathStroke() override = default;
-
-  std::string GenSourceWGSL() const override;
-
-  std::string GetShaderName() const override;
-
-  const char* GetEntryPoint() const override;
-
-  void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
-                  float clip_depth, Command* stencil_cmd) override;
-
- private:
-  Matrix local_matrix_;
-};
-
-class WGSLTextureTessPathStroke : public WGSLTessPathStrokeGeometry {
- public:
-  WGSLTextureTessPathStroke(const Path& path, const Paint& paint,
-                            const Matrix& local_matrix, float width,
-                            float height);
-
-  ~WGSLTextureTessPathStroke() override = default;
-
-  std::string GenSourceWGSL() const override;
-
-  std::string GetShaderName() const override;
-
-  const char* GetEntryPoint() const override;
-
-  void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
-                  float clip_depth, Command* stencil_cmd) override;
-
- private:
-  Matrix local_matrix_;
-  float width_;
-  float height_;
 };
 
 }  // namespace skity

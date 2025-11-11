@@ -6,6 +6,7 @@
 
 #include "src/gpu/gpu_device.hpp"
 #include "src/gpu/gpu_shader_module.hpp"
+#include "src/logging.hpp"
 #include "src/render/hw/hw_shader_generator.hpp"
 
 namespace skity {
@@ -195,8 +196,10 @@ std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
   module_desc.label = name;
   if (stage == GPUShaderStage::kVertex) {
     module_desc.source = shader_generator->GenVertexWGSL();
+    DEBUG_CHECK(!module_desc.source.empty());
   } else if (stage == GPUShaderStage::kFragment) {
     module_desc.source = shader_generator->GenFragmentWGSL();
+    DEBUG_CHECK(!module_desc.source.empty());
   } else {
     return {};
   }

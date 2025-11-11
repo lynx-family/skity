@@ -22,11 +22,7 @@ class WGSLTessPathFillGeometry : public HWWGSLGeometry {
 
   const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
 
-  std::string GenSourceWGSL() const override;
-
   std::string GetShaderName() const override;
-
-  const char* GetEntryPoint() const override;
 
   void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
                   float clip_depth, Command* stencil_cmd) override;
@@ -35,53 +31,18 @@ class WGSLTessPathFillGeometry : public HWWGSLGeometry {
 
   static GPUBufferView CreateIndexBufferView(HWStageBuffer* stage_bufer);
 
+  void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteVSUniforms(std::stringstream& ss) const override;
+
+  void WriteVSInput(std::stringstream& ss) const override;
+
+  void WriteVSMain(std::stringstream& ss) const override;
+
  private:
   const Path& path_;
   const Paint& paint_;
   std::vector<GPUVertexBufferLayout> layout_;
-};
-
-class WGSLGradientTessPathFill : public WGSLTessPathFillGeometry {
- public:
-  WGSLGradientTessPathFill(const Path& path, const Paint& paint,
-                           const Matrix& local_matrix);
-
-  ~WGSLGradientTessPathFill() override = default;
-
-  std::string GenSourceWGSL() const override;
-
-  std::string GetShaderName() const override;
-
-  const char* GetEntryPoint() const override;
-
-  void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
-                  float clip_depth, Command* stencil_cmd) override;
-
- private:
-  Matrix local_matrix_;
-};
-
-class WGSLTextureTessPathFill : public WGSLTessPathFillGeometry {
- public:
-  WGSLTextureTessPathFill(const Path& path, const Paint& paint,
-                          const Matrix& local_matrix, float width,
-                          float height);
-
-  ~WGSLTextureTessPathFill() override = default;
-
-  std::string GenSourceWGSL() const override;
-
-  std::string GetShaderName() const override;
-
-  const char* GetEntryPoint() const override;
-
-  void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
-                  float clip_depth, Command* stencil_cmd) override;
-
- private:
-  Matrix local_matrix_;
-  float width_;
-  float height_;
 };
 
 }  // namespace skity

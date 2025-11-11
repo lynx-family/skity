@@ -41,72 +41,61 @@ std::vector<GPUVertexBufferLayout> InitVertexBufferLayout(bool aa) {
   return layout;
 }
 
+void UploadData(Command* cmd, HWDrawContext* context,
+                const std::vector<float>& vertex,
+                const std::vector<uint32_t>& index) {
+  if (vertex.empty() || index.empty()) {
+    return;
+  }
+
+  cmd->vertex_buffer = context->stageBuffer->Push(
+      const_cast<float*>(vertex.data()), vertex.size() * sizeof(float));
+
+  cmd->index_buffer = context->stageBuffer->PushIndex(
+      const_cast<uint32_t*>(index.data()), index.size() * sizeof(uint32_t));
+
+  cmd->index_count = index.size();
+}
+
 }  // namespace
 
 WGSLPathGeometry::WGSLPathGeometry(const Path& path, const Paint& paint,
-                                   bool is_stroke, bool contour_aa)
-    : path_(path),
+                                   bool is_stroke)
+    : HWWGSLGeometry(Flags::kSnippet),
+      path_(path),
       paint_(paint),
       is_stroke_(is_stroke),
-      contour_aa_(contour_aa),
-      layout_(InitVertexBufferLayout(contour_aa_)) {}
+      layout_(InitVertexBufferLayout(false)) {}
 
 const std::vector<GPUVertexBufferLayout>& WGSLPathGeometry::GetBufferLayout()
     const {
   return layout_;
 }
 
-std::string WGSLPathGeometry::GenSourceWGSL() const {
-  std::string wgsl_code = CommonVertexWGSL();
-
-  if (contour_aa_) {
-    wgsl_code += R"(
-      struct ContourAAVSInput {
-          @location(0)  a_pos     :   vec2<f32>,
-          @location(1)  a_pos_aa  :   f32,
-      };
-
-      struct ContourAAVSOutput {
-          @builtin(position)  v_pos     :   vec4<f32>,
-          @location(0)        v_pos_aa  :   f32,
-      };
-
-      @group(0) @binding(0) var<uniform> common_slot  : CommonSlot;
-      @vertex
-      fn vs_main(input : ContourAAVSInput) -> ContourAAVSOutput {
-          var output: ContourAAVSOutput;
-
-          output.v_pos    = get_vertex_position(input.a_pos, common_slot);
-          output.v_pos_aa = input.a_pos_aa;
-
-          return output;
-      }
-    )";
-  } else {
-    wgsl_code += R"(
-      @group(0) @binding(0) var<uniform> common_slot: CommonSlot;
-
-      @vertex
-      fn vs_main(@location(0) pos: vec3<f32>) -> @builtin(position) vec4<f32> {
-          return get_vertex_position(pos.xy, common_slot);
-      }
-    )";
-  }
-
-  return wgsl_code;
+void WGSLPathGeometry::WriteVSFunctionsAndStructs(std::stringstream& ss) const {
+  ss << CommonVertexWGSL();
 }
 
-std::string WGSLPathGeometry::GetShaderName() const {
-  std::string name = "CommonPathVertexWGSL";
-
-  if (contour_aa_) {
-    name += "AA";
-  }
-
-  return name;
+void WGSLPathGeometry::WriteVSUniforms(std::stringstream& ss) const {
+  ss << "@group(0) @binding(0) var<uniform> common_slot  : CommonSlot;\n";
 }
 
-const char* WGSLPathGeometry::GetEntryPoint() const { return "vs_main"; }
+void WGSLPathGeometry::WriteVSInput(std::stringstream& ss) const {
+  ss << R"(
+struct VSInput {
+  @location(0)  a_pos: vec2<f32>,
+};
+)";
+}
+
+void WGSLPathGeometry::WriteVSMain(std::stringstream& ss) const {
+  ss << R"(
+  local_pos = input.a_pos;
+  output.pos = get_vertex_position(input.a_pos, common_slot);
+)";
+}
+
+std::string WGSLPathGeometry::GetShaderName() const { return "Path"; }
 
 void WGSLPathGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
                                   const Matrix& transform, float clip_depth,
@@ -116,33 +105,17 @@ void WGSLPathGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
   // check the stencil cmd to determine if this is inside a coverage step
   // but this may be changed when implement draw call mergeing in dynamic shader
   // pipeline.
-  if (stencil_cmd && !contour_aa_) {
+  if (stencil_cmd) {
     cmd->index_buffer = stencil_cmd->index_buffer;
     cmd->vertex_buffer = stencil_cmd->vertex_buffer;
     cmd->index_count = stencil_cmd->index_count;
     cmd->uniform_bindings = stencil_cmd->uniform_bindings.Clone();
-
     return;
   }
 
   if (cmd->pipeline == nullptr) {
     return;
   }
-
-  auto upload_data = [&](const std::vector<float>& vertex,
-                         const std::vector<uint32_t>& index) {
-    if (vertex.empty() || index.empty()) {
-      return;
-    }
-
-    cmd->vertex_buffer = context->stageBuffer->Push(
-        const_cast<float*>(vertex.data()), vertex.size() * sizeof(float));
-
-    cmd->index_buffer = context->stageBuffer->PushIndex(
-        const_cast<uint32_t*>(index.data()), index.size() * sizeof(uint32_t));
-
-    cmd->index_count = index.size();
-  };
 
   const Vec2& scale = context->scale;
 
@@ -153,23 +126,16 @@ void WGSLPathGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
 
     raster.StrokePath(path_);
 
-    upload_data(raster.GetRawVertexBuffer(), raster.GetRawIndexBuffer());
+    UploadData(cmd, context, raster.GetRawVertexBuffer(),
+               raster.GetRawIndexBuffer());
   } else {
-    if (contour_aa_) {
-      HWPathAAOutline raster{Matrix::Scale(scale.x, scale.y) * transform,
-                             context->vertex_vector_cache,
-                             context->index_vector_cache, context->ctx_scale};
-      raster.StrokeAAOutline(path_);
-      upload_data(raster.GetRawVertexBuffer(), raster.GetRawIndexBuffer());
+    HWPathFillRaster raster{paint_, Matrix::Scale(scale.x, scale.y) * transform,
+                            context->vertex_vector_cache,
+                            context->index_vector_cache};
 
-    } else {
-      HWPathFillRaster raster{
-          paint_, Matrix::Scale(scale.x, scale.y) * transform,
-          context->vertex_vector_cache, context->index_vector_cache};
-
-      raster.FillPath(path_);
-      upload_data(raster.GetRawVertexBuffer(), raster.GetRawIndexBuffer());
-    }
+    raster.FillPath(path_);
+    UploadData(cmd, context, raster.GetRawVertexBuffer(),
+               raster.GetRawIndexBuffer());
   }
 
   auto pipeline = cmd->pipeline;
@@ -188,6 +154,92 @@ void WGSLPathGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
   }
 
   UploadBindGroup(common_slot, cmd, context);
+}
+
+WGSLPathAAGeometry::WGSLPathAAGeometry(const Path& path, const Paint& paint)
+    : HWWGSLGeometry(Flags::kSnippet | Flags::kAffectsFragment),
+      path_(path),
+      paint_(paint),
+      layout_(InitVertexBufferLayout(true)) {}
+
+const std::vector<GPUVertexBufferLayout>& WGSLPathAAGeometry::GetBufferLayout()
+    const {
+  return layout_;
+}
+
+void WGSLPathAAGeometry::WriteVSFunctionsAndStructs(
+    std::stringstream& ss) const {
+  ss << CommonVertexWGSL();
+}
+
+void WGSLPathAAGeometry::WriteVSUniforms(std::stringstream& ss) const {
+  ss << "@group(0) @binding(0) var<uniform> common_slot  : CommonSlot;\n";
+}
+
+void WGSLPathAAGeometry::WriteVSInput(std::stringstream& ss) const {
+  ss << R"(
+struct VSInput {
+  @location(0)  a_pos: vec2<f32>,
+  @location(1)  a_pos_aa: f32,
+};
+)";
+}
+
+void WGSLPathAAGeometry::WriteVSMain(std::stringstream& ss) const {
+  ss << R"(
+  local_pos = input.a_pos;
+  output.pos = get_vertex_position(input.a_pos, common_slot);
+  output.v_pos_aa = input.a_pos_aa;
+)";
+}
+
+std::string WGSLPathAAGeometry::GetShaderName() const { return "PathAA"; }
+
+void WGSLPathAAGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
+                                    const Matrix& transform, float clip_depth,
+                                    Command* stencil_cmd) {
+  SKITY_TRACE_EVENT(WGSLPathGeometry_PrepareCMD);
+  if (cmd->pipeline == nullptr) {
+    return;
+  }
+
+  const Vec2& scale = context->scale;
+
+  HWPathAAOutline raster{Matrix::Scale(scale.x, scale.y) * transform,
+                         context->vertex_vector_cache,
+                         context->index_vector_cache, context->ctx_scale};
+  raster.StrokeAAOutline(path_);
+  UploadData(cmd, context, raster.GetRawVertexBuffer(),
+             raster.GetRawIndexBuffer());
+
+  auto pipeline = cmd->pipeline;
+
+  auto group = pipeline->GetBindingGroup(0);
+
+  if (group == nullptr) {
+    return;
+  }
+
+  // bind CommonSlot
+  auto common_slot = group->GetEntry(0);
+
+  if (!SetupCommonInfo(common_slot, context->mvp, transform, clip_depth)) {
+    return;
+  }
+
+  UploadBindGroup(common_slot, cmd, context);
+}
+
+std::optional<std::vector<std::string>> WGSLPathAAGeometry::GetVarings() const {
+  return std::vector<std::string>{"v_pos_aa: f32"};
+}
+
+std::string WGSLPathAAGeometry::GetFSNameSuffix() const { return "AA"; }
+
+void WGSLPathAAGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
+  ss << R"(
+  mask_alpha = input.v_pos_aa;
+)";
 }
 
 }  // namespace skity

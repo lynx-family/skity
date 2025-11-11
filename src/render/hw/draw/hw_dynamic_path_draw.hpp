@@ -7,8 +7,10 @@
 
 #include <skity/graphic/paint.hpp>
 #include <skity/graphic/path.hpp>
+#include <utility>
 
 #include "src/render/hw/draw/hw_dynamic_draw.hpp"
+#include "src/render/hw/draw/hw_wgsl_fragment.hpp"
 #include "src/render/hw/draw/hw_wgsl_geometry.hpp"
 
 namespace skity {
@@ -28,8 +30,6 @@ class HWDynamicPathDraw : public HWDynamicDraw {
   HWWGSLGeometry *GenGeometry(HWDrawContext *context, bool aa) const;
 
   HWWGSLFragment *GenFragment(HWDrawContext *context) const;
-
-  HWWGSLGeometry *GenPathGeometry(HWDrawContext *context, bool aa) const;
 
  private:
   Path path_;

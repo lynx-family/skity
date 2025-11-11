@@ -24,8 +24,6 @@ class WGSLImageFilter : public HWWGSLFragment {
 
   std::string GenSourceWGSL() const override;
 
-  const char *GetEntryPoint() const override;
-
   uint32_t NextBindingIndex() const override;
 
   void PrepareCMD(Command *cmd, HWDrawContext *context) override;

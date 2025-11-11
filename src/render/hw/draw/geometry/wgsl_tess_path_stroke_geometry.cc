@@ -427,107 +427,102 @@ struct TessPathStrokeVisitor : public PathVisitor {
 
 WGSLTessPathStrokeGeometry::WGSLTessPathStrokeGeometry(const Path& path,
                                                        const Paint& paint)
-    : path_(path), paint_(paint), layout_(InitVertexBufferLayout()) {}
+    : HWWGSLGeometry(Flags::kSnippet),
+      path_(path),
+      paint_(paint),
+      layout_(InitVertexBufferLayout()) {}
 
 const std::vector<GPUVertexBufferLayout>&
 WGSLTessPathStrokeGeometry::GetBufferLayout() const {
   return layout_;
 }
 
-std::string WGSLTessPathStrokeGeometry::GenSourceWGSL() const {
-  std::string wgsl_code = CommonVertexWGSL();
+void WGSLTessPathStrokeGeometry::WriteVSFunctionsAndStructs(
+    std::stringstream& ss) const {
+  ss << CommonVertexWGSL();
+  ss << R"(
+fn cubic_bezier_tangent(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec2<f32>, t: f32) -> vec2<f32> {
+  var u: f32 = 1.0 - t;
+  var tangent: vec2<f32> = 3.0 * u * u * (p1 - p0) +
+                           6.0 * u * t * (p2 - p1) +
+                           3.0 * t * t * (p3 - p2);
+  return tangent;
+}
 
-  wgsl_code += R"(
-      @group(0) @binding(0) var<uniform> common_slot: CommonSlot;
-      // @ExtraUniform
+fn get_join_pos(index: i32, j0: vec2<f32>, j1: vec2<f32>, j2: vec2<f32>, j3: vec2<f32>) -> vec2<f32> {
+  var points: array<vec2<f32>, 4> = array<vec2<f32>, 4>(j0, j1, j2, j3);
+  let idx: u32 = u32(-index - 1);
+  return points[idx];
+}
+)";
+}
 
-      struct VSInput {
-          @location(0) index: f32,
-          @location(1) offset : f32,
-          @location(2) p0p1 : vec4<f32>,
-          @location(3) p2p3 : vec4<f32>,
-          @location(4) j0j1 : vec4<f32>,
-          @location(5) j2j3 : vec4<f32>,
-          @location(6) pack : vec4<f32>,
-      };
+void WGSLTessPathStrokeGeometry::WriteVSUniforms(std::stringstream& ss) const {
+  ss << "@group(0) @binding(0) var<uniform> common_slot: CommonSlot;\n";
+}
 
-      struct VSOutput {
-          @builtin(position) pos: vec4<f32>,
-          // @ExtraVSOutput
-      };
+void WGSLTessPathStrokeGeometry::WriteVSInput(std::stringstream& ss) const {
+  ss << R"(
+struct VSInput {
+  @location(0) index: f32,
+  @location(1) offset : f32,
+  @location(2) p0p1 : vec4<f32>,
+  @location(3) p2p3 : vec4<f32>,
+  @location(4) j0j1 : vec4<f32>,
+  @location(5) j2j3 : vec4<f32>,
+  @location(6) pack : vec4<f32>,
+};
+)";
+}
 
-      fn cubic_bezier_tangent(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec2<f32>, t: f32) -> vec2<f32> {
-         var u: f32 = 1.0 - t;
-         var tangent: vec2<f32> = 3.0 * u * u * (p1 - p0) +
-                                  6.0 * u * t * (p2 - p1) +
-                                  3.0 * t * t * (p3 - p2);
-         return tangent;
-      }
+void WGSLTessPathStrokeGeometry::WriteVSMain(std::stringstream& ss) const {
+  ss << R"(
+  var pos: vec2<f32>;
+  var p0: vec2<f32> = input.p0p1.xy;
+  var p1: vec2<f32> = input.p0p1.zw;
+  var p2: vec2<f32> = input.p2p3.xy;
+  var p3: vec2<f32> = input.p2p3.zw;
+  var j0: vec2<f32> = input.j0j1.xy;
+  var j1: vec2<f32> = input.j0j1.zw;
+  var j2: vec2<f32> = input.j2j3.xy;
+  var j3: vec2<f32> = input.j2j3.zw;
 
-      fn get_join_pos(index: i32, j0: vec2<f32>, j1: vec2<f32>, j2: vec2<f32>, j3: vec2<f32>) -> vec2<f32> {
-        var points: array<vec2<f32>, 4> = array<vec2<f32>, 4>(j0, j1, j2, j3);
-        let idx: u32 = u32(-index - 1);
-        return points[idx];
-      }
+  var index_offset: f32 = input.pack.x;
+  var num_segments: f32 = input.pack.y;
+  var stroke_radius: f32 = input.pack.z;
+  var is_circle: f32 = input.pack.w;
 
-      @vertex
-      fn vs_main(input: VSInput) -> VSOutput {
-          var output: VSOutput;
-          var pos: vec2<f32>;
+  var global_index: f32 = input.index + index_offset;
+  if is_circle == 1.0 {
+    var angle: f32 = input.offset * global_index / num_segments * 3.1415926;
+    var dir: vec2<f32> = vec2<f32>(cos(angle), sin(angle));
+    pos = p0 + dir * stroke_radius;
+  } else if input.index < 0.0 {
+    pos = get_join_pos(i32(input.index), j0, j1, j2, j3);
+  } else if global_index > num_segments {
+    pos = p3;
+  } else {
+    var t: f32 = global_index / num_segments;
+    var p01: vec2<f32> = mix(p0, p1, t);
+    var p12: vec2<f32> = mix(p1, p2, t);
+    var p23: vec2<f32> = mix(p2, p3, t);
 
-          var p0: vec2<f32> = input.p0p1.xy;
-          var p1: vec2<f32> = input.p0p1.zw;
-          var p2: vec2<f32> = input.p2p3.xy;
-          var p3: vec2<f32> = input.p2p3.zw;
-          var j0: vec2<f32> = input.j0j1.xy;
-          var j1: vec2<f32> = input.j0j1.zw;
-          var j2: vec2<f32> = input.j2j3.xy;
-          var j3: vec2<f32> = input.j2j3.zw;
+    var p012: vec2<f32> = mix(p01, p12, t);
+    var p123: vec2<f32> = mix(p12, p23, t);
+    pos = mix(p012, p123, t);
 
-          var index_offset: f32 = input.pack.x;
-          var num_segments: f32 = input.pack.y;
-          var stroke_radius: f32 = input.pack.z;
-          var is_circle: f32 = input.pack.w;
-
-          var global_index: f32 = input.index + index_offset;
-          if is_circle == 1.0 {
-            var angle: f32 = input.offset * global_index / num_segments * 3.1415926;
-            var dir: vec2<f32> = vec2<f32>(cos(angle), sin(angle));
-            pos = p0 + dir * stroke_radius;
-          } else if input.index < 0.0 {
-            pos = get_join_pos(i32(input.index), j0, j1, j2, j3);
-          } else if global_index > num_segments {
-            pos = p3;
-          } else {
-            var t: f32 = global_index / num_segments;
-            var p01: vec2<f32> = mix(p0, p1, t);
-            var p12: vec2<f32> = mix(p1, p2, t);
-            var p23: vec2<f32> = mix(p2, p3, t);
-
-            var p012: vec2<f32> = mix(p01, p12, t);
-            var p123: vec2<f32> = mix(p12, p23, t);
-            pos = mix(p012, p123, t);
-
-            var tangent: vec2<f32> = normalize(cubic_bezier_tangent(p0, p1, p2, p3, t));
-            var norm: vec2<f32> = vec2<f32>(tangent.y, -tangent.x);
-            pos = pos + norm.xy * stroke_radius * input.offset;
-          }
-          
-          output.pos = get_vertex_position(pos.xy, common_slot);
-          // @ExtraBeforeReturn
-          return output;
-      }
-    )";
-
-  return wgsl_code;
+    var tangent: vec2<f32> = normalize(cubic_bezier_tangent(p0, p1, p2, p3, t));
+    var norm: vec2<f32> = vec2<f32>(tangent.y, -tangent.x);
+    pos = pos + norm.xy * stroke_radius * input.offset;
+  }
+  local_pos = pos;
+  output.pos = get_vertex_position(pos.xy, common_slot);
+)";
 }
 
 std::string WGSLTessPathStrokeGeometry::GetShaderName() const {
-  return "CommonTessPathStrokeVertexWGSL";
-}
-
-const char* WGSLTessPathStrokeGeometry::GetEntryPoint() const {
-  return "vs_main";
+  std::string name = "TessPathStroke";
+  return name;
 }
 
 void WGSLTessPathStrokeGeometry::PrepareCMD(Command* cmd,
@@ -637,146 +632,6 @@ GPUBufferView WGSLTessPathStrokeGeometry::CreateIndexBufferView(
 
   return stage_bufer->PushIndex(const_cast<uint32_t*>(index_array.data()),
                                 index_array.size() * sizeof(uint32_t));
-}
-
-WGSLGradientTessPathStroke::WGSLGradientTessPathStroke(
-    const Path& path, const Paint& paint, const Matrix& local_matrix)
-    : WGSLTessPathStrokeGeometry(path, paint), local_matrix_(local_matrix) {}
-
-std::string WGSLGradientTessPathStroke::GenSourceWGSL() const {
-  auto wgsl = WGSLTessPathStrokeGeometry::GenSourceWGSL();
-  std::unordered_map<std::string, std::string> replacements = {
-      {
-          "// @ExtraUniform",
-          "@group(0) @binding(1) var<uniform> inv_matrix   : mat4x4<f32>;",
-      },
-      {
-          "// @ExtraVSOutput",
-          "@location(0)        v_pos   :   vec2<f32>,",
-      },
-      {
-          "// @ExtraBeforeReturn",
-          "output.v_pos = (inv_matrix * vec4<f32>(pos.xy, 0.0, 1.0)).xy;",
-      },
-  };
-
-  ReplacePlaceholder(wgsl, replacements);
-  return wgsl;
-}
-
-std::string WGSLGradientTessPathStroke::GetShaderName() const {
-  return "CommonGradientTessPathStrokeVertexWGSL";
-}
-
-const char* WGSLGradientTessPathStroke::GetEntryPoint() const {
-  return "vs_main";
-}
-
-void WGSLGradientTessPathStroke::PrepareCMD(Command* cmd,
-                                            HWDrawContext* context,
-                                            const Matrix& transform,
-                                            float clip_depth,
-                                            Command* stencil_cmd) {
-  SKITY_TRACE_EVENT(WGSLGradientPath_PrepareCMD);
-
-  WGSLTessPathStrokeGeometry::PrepareCMD(cmd, context, transform, clip_depth,
-                                         stencil_cmd);
-
-  if (cmd->pipeline == nullptr) {
-    return;
-  }
-
-  auto group = cmd->pipeline->GetBindingGroup(0);
-  if (group == nullptr) {
-    return;
-  }
-
-  auto inv_matrix_entry = group->GetEntry(1);
-
-  if (!SetupInvMatrix(inv_matrix_entry, local_matrix_)) {
-    return;
-  }
-
-  UploadBindGroup(inv_matrix_entry, cmd, context);
-}
-
-WGSLTextureTessPathStroke::WGSLTextureTessPathStroke(const Path& path,
-                                                     const Paint& paint,
-
-                                                     const Matrix& local_matrix,
-                                                     float width, float height)
-    : WGSLTessPathStrokeGeometry(path, paint),
-      local_matrix_(local_matrix),
-      width_(width),
-      height_(height) {}
-
-std::string WGSLTextureTessPathStroke::GenSourceWGSL() const {
-  std::string wgsl_code = CommonVertexWGSL();
-  wgsl_code += R"(
-    struct ImageBoundsInfo {
-      bounds      : vec2<f32>,
-      inv_matrix  : mat4x4<f32>,
-    };
-  )";
-  wgsl_code += WGSLTessPathStrokeGeometry::GenSourceWGSL();
-  std::unordered_map<std::string, std::string> replacements = {
-      {
-          "// @ExtraUniform",
-          "@group(0) @binding(1) var<uniform> image_bounds : ImageBoundsInfo;",
-      },
-      {
-          "// @ExtraVSOutput",
-          "@location(0)        frag_coord  : vec2<f32>,",
-      },
-      {"// @ExtraBeforeReturn",
-       R"(
-          var mapped_pos  : vec2<f32>     = (image_bounds.inv_matrix * vec4<f32>(pos.xy, 0.0, 1.0)).xy;
-          var mapped_lt   : vec2<f32>     = vec2<f32>(0.0, 0.0);
-          var mapped_rb   : vec2<f32>     = image_bounds.bounds;
-          var total_x     : f32           = mapped_rb.x - mapped_lt.x;
-          var total_y     : f32           = mapped_rb.y - mapped_lt.y;
-          var v_x         : f32           = (mapped_pos.x - mapped_lt.x) / total_x;
-          var v_y         : f32           = (mapped_pos.y - mapped_lt.y) / total_y;
-
-          output.frag_coord = vec2<f32>(v_x, v_y);
-        )"}};
-  ReplacePlaceholder(wgsl_code, replacements);
-  return wgsl_code;
-}  // namespace skity
-
-std::string WGSLTextureTessPathStroke::GetShaderName() const {
-  return "ImageTessPathStrokeVertexWGSL";
-}
-
-const char* WGSLTextureTessPathStroke::GetEntryPoint() const {
-  return "vs_main";
-}
-
-void WGSLTextureTessPathStroke::PrepareCMD(Command* cmd, HWDrawContext* context,
-                                           const Matrix& transform,
-                                           float clip_depth,
-                                           Command* stencil_cmd) {
-  SKITY_TRACE_EVENT(WGSLTextureTessPath_PrepareCMD);
-
-  WGSLTessPathStrokeGeometry::PrepareCMD(cmd, context, transform, clip_depth,
-                                         stencil_cmd);
-
-  if (cmd->pipeline == nullptr) {
-    return;
-  }
-
-  auto group = cmd->pipeline->GetBindingGroup(0);
-  if (group == nullptr) {
-    return;
-  }
-
-  auto image_bounds_entry = group->GetEntry(1);
-  if (!SetupImageBoundsInfo(image_bounds_entry, local_matrix_, width_,
-                            height_)) {
-    return;
-  }
-
-  UploadBindGroup(image_bounds_entry, cmd, context);
 }
 
 }  // namespace skity

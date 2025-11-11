@@ -6,7 +6,6 @@
 
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
-#include "src/render/hw/draw/geometry/wgsl_texture_path.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/hw_render_pass_builder.hpp"
 

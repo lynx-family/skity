@@ -26,8 +26,6 @@ class WGSLFilterGeometry : public HWWGSLGeometry {
 
   std::string GenSourceWGSL() const override;
 
-  const char *GetEntryPoint() const override;
-
   void PrepareCMD(Command *cmd, HWDrawContext *context, const Matrix &transform,
                   float clip_depth, Command *stencil_cmd) override;
 

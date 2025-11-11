@@ -349,8 +349,6 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_clip_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_filter_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_filter_geometry.hpp
-    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_gradient_path.cc
-    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_gradient_path.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_path_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_path_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.cc
@@ -359,8 +357,6 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_text_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_text_geometry.hpp
-    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_texture_path.cc
-    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_texture_path.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_draw_step.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_draw_step.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_draw.cc
@@ -373,6 +369,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_text_draw.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_wgsl_fragment.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_wgsl_geometry.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_wgsl_shader_writer.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_wgsl_shader_writer.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/step/clip_step.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/step/clip_step.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/step/color_step.cc

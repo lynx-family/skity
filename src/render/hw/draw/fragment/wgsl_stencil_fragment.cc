@@ -19,6 +19,4 @@ std::string WGSLStencilFragment::GenSourceWGSL() const {
     )";
 }
 
-const char* WGSLStencilFragment::GetEntryPoint() const { return "fs_main"; }
-
 }  // namespace skity

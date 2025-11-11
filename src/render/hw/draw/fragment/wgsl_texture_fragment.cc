@@ -14,12 +14,18 @@ namespace skity {
 WGSLTextureFragment::WGSLTextureFragment(std::shared_ptr<PixmapShader> shader,
                                          std::shared_ptr<GPUTexture> texture,
                                          std::shared_ptr<GPUSampler> sampler,
-                                         float global_alpha)
-    : x_tile_mode_(shader->GetXTileMode()),
+                                         float global_alpha,
+                                         const Matrix& local_matrix,
+                                         float width, float height)
+    : HWWGSLFragment(Flags::kSnippet | Flags::kAffectsVertex),
+      x_tile_mode_(shader->GetXTileMode()),
       y_tile_mode_(shader->GetYTileMode()),
       texture_(std::move(texture)),
       sampler_(std::move(sampler)),
-      global_alpha_(global_alpha) {
+      global_alpha_(global_alpha),
+      local_matrix_(local_matrix),
+      width_(width),
+      height_(height) {
   auto image = shader->AsImage();
   if (image == nullptr) {
     return;
@@ -28,112 +34,125 @@ WGSLTextureFragment::WGSLTextureFragment(std::shared_ptr<PixmapShader> shader,
   alpha_type_ = (*image)->GetAlphaType();
 }
 
-WGSLTextureFragment::WGSLTextureFragment(AlphaType alpha_type,
-                                         TileMode x_tile_mode,
-                                         TileMode y_tile_mode,
-                                         std::shared_ptr<GPUTexture> texture,
-                                         std::shared_ptr<GPUSampler> sampler,
-                                         float global_alpha)
-    : alpha_type_(alpha_type),
+WGSLTextureFragment::WGSLTextureFragment(
+    AlphaType alpha_type, TileMode x_tile_mode, TileMode y_tile_mode,
+    std::shared_ptr<GPUTexture> texture, std::shared_ptr<GPUSampler> sampler,
+    float global_alpha, const Matrix& local_matrix, float width, float height)
+    : HWWGSLFragment(Flags::kSnippet | Flags::kAffectsVertex),
+      alpha_type_(alpha_type),
       x_tile_mode_(x_tile_mode),
       y_tile_mode_(y_tile_mode),
       texture_(std::move(texture)),
       sampler_(std::move(sampler)),
-      global_alpha_(global_alpha) {}
+      global_alpha_(global_alpha),
+      local_matrix_(local_matrix),
+      width_(width),
+      height_(height) {}
 
 uint32_t WGSLTextureFragment::NextBindingIndex() const { return 3; }
 
-std::string WGSLTextureFragment::GenSourceWGSL() const {
-  std::string wgsl_code = RemapTileFunction();
-
-  wgsl_code += R"(
+void WGSLTextureFragment::WriteFSFunctionsAndStructs(
+    std::stringstream& ss) const {
+  ss << RemapTileFunction();
+  ss << R"(
     struct ImageColorInfo {
         infos           : vec3<i32>,
         global_alpha    : f32,
     };
+  )";
+}
 
+void WGSLTextureFragment::WriteFSUniforms(std::stringstream& ss) const {
+  ss << R"(
     @group(1) @binding(0) var<uniform>  image_color_info    : ImageColorInfo;
     @group(1) @binding(1) var           uSampler            : sampler;
     @group(1) @binding(2) var           uTexture            : texture_2d<f32>;
   )";
+}
 
-  if (filter_ != nullptr) {
-    wgsl_code += filter_->GenSourceWGSL();
-  }
+void WGSLTextureFragment::WriteFSMain(std::stringstream& ss) const {
+  ss << R"(
+    var frag_coord: vec2<f32> = input.f_frag_coord;
 
-  if (contour_aa_) {
-    wgsl_code += R"(
-      struct ImageAAFSInput {
-        @location(0) frag_coord : vec2<f32>,
-        @location(1) v_pos_aa   : f32,
-      };
+    var uv  : vec2<f32> = frag_coord;
 
-      @fragment
-      fn fs_main(input: ImageAAFSInput) -> @location(0) vec4<f32> {
-        var frag_coord: vec2<f32> = input.frag_coord;
-    )";
-  } else {
-    wgsl_code += R"(
-      @fragment
-      fn fs_main(@location(0) frag_coord: vec2<f32>) -> @location(0) vec4<f32> {
-    )";
-  }
-
-  wgsl_code += R"(
-        var uv  : vec2<f32> = frag_coord;
-
-        if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) || (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0))
-        {
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
-        }
-
-        uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
-        uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
-
-        var color : vec4<f32> = textureSample(uTexture, uSampler, uv);
-
-        if image_color_info.infos.x == 3 {
-            color.xyz *= color.w;
-        }
-
-        color *= image_color_info.global_alpha;
-  )";
-
-  if (filter_ != nullptr) {
-    wgsl_code += R"(
-      color = filter_color(color);
-    )";
-  }
-
-  if (contour_aa_) {
-    wgsl_code += R"(
-      color *= input.v_pos_aa;
-    )";
-  }
-
-  wgsl_code += R"(
-        return color;
+    if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) || (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0))
+    {
+      return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
+
+    uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
+    uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
+
+    color = textureSample(uTexture, uSampler, uv);
+
+    if image_color_info.infos.x == 3 {
+      color.xyz *= color.w;
+    }
+
+    color *= image_color_info.global_alpha;
   )";
-
-  return wgsl_code;
 }
 
-std::string WGSLTextureFragment::GetShaderName() const {
-  std::string name = "TextureFragmentWGSL";
-
-  if (filter_ != nullptr) {
-    name += "_" + filter_->GetShaderName();
-  }
-
-  if (contour_aa_) {
-    name += "_AA";
-  }
-
-  return name;
+std::optional<std::vector<std::string>> WGSLTextureFragment::GetVarings()
+    const {
+  return std::vector<std::string>{"f_frag_coord: vec2<f32>"};
 }
 
-const char* WGSLTextureFragment::GetEntryPoint() const { return "fs_main"; }
+void WGSLTextureFragment::WriteVSFunctionsAndStructs(
+    std::stringstream& ss) const {
+  ss << R"(
+    struct ImageBoundsInfo {
+      bounds      : vec2<f32>,
+      inv_matrix  : mat4x4<f32>,
+    };
+  )";
+}
+
+void WGSLTextureFragment::WriteVSUniforms(std::stringstream& ss) const {
+  ss << R"(
+    @group(0) @binding(1) var<uniform> image_bounds : ImageBoundsInfo;
+  )";
+}
+
+void WGSLTextureFragment::WriteVSAssgnShadingVarings(
+    std::stringstream& ss) const {
+  ss << R"(
+  {
+    var mapped_pos  : vec2<f32>     = (image_bounds.inv_matrix * vec4<f32>(local_pos.xy, 0.0, 1.0)).xy;
+    var mapped_lt   : vec2<f32>     = vec2<f32>(0.0, 0.0);
+    var mapped_rb   : vec2<f32>     = image_bounds.bounds;
+    var total_x     : f32           = mapped_rb.x - mapped_lt.x;
+    var total_y     : f32           = mapped_rb.y - mapped_lt.y;
+    var v_x         : f32           = (mapped_pos.x - mapped_lt.x) / total_x;
+    var v_y         : f32           = (mapped_pos.y - mapped_lt.y) / total_y;
+    output.f_frag_coord = vec2<f32>(v_x, v_y);
+  }
+)";
+}
+
+void WGSLTextureFragment::BindVSUniforms(Command* cmd, HWDrawContext* context,
+                                         const Matrix& transform,
+                                         float clip_depth,
+                                         Command* stencil_cmd) {
+  if (cmd->pipeline == nullptr) {
+    return;
+  }
+
+  auto group = cmd->pipeline->GetBindingGroup(0);
+  if (group == nullptr) {
+    return;
+  }
+
+  auto image_bounds_entry = group->GetEntry(1);
+  if (!SetupImageBoundsInfo(image_bounds_entry, local_matrix_, width_,
+                            height_)) {
+    return;
+  }
+  UploadBindGroup(image_bounds_entry, cmd, context);
+}
+
+std::string WGSLTextureFragment::GetShaderName() const { return "Texture"; }
 
 void WGSLTextureFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
   SKITY_TRACE_EVENT(WGSLTextureFragment_PrepareCMD);
@@ -190,5 +209,7 @@ void WGSLTextureFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
     filter_->SetupBindGroup(cmd, context);
   }
 }
+
+std::string WGSLTextureFragment::GetVSNameSuffix() const { return "Texture"; }
 
 }  // namespace skity

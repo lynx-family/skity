@@ -21,9 +21,9 @@ class WGSLSolidColor : public HWWGSLFragment {
 
   std::string GetShaderName() const override;
 
-  std::string GenSourceWGSL() const override;
+  void WriteFSUniforms(std::stringstream& ss) const override;
 
-  const char* GetEntryPoint() const override;
+  void WriteFSMain(std::stringstream& ss) const override;
 
   void PrepareCMD(Command* cmd, HWDrawContext* context) override;
 

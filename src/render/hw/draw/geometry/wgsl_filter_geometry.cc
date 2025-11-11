@@ -87,8 +87,6 @@ std::string WGSLFilterGeometry::GenSourceWGSL() const {
     )";
 }
 
-const char *WGSLFilterGeometry::GetEntryPoint() const { return "vs_main"; }
-
 void WGSLFilterGeometry::PrepareCMD(Command *cmd, HWDrawContext *context,
                                     const Matrix &transform, float clip_depth,
                                     Command *) {

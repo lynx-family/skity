@@ -14,30 +14,62 @@ namespace skity {
 
 class WGSLPathGeometry : public HWWGSLGeometry {
  public:
-  WGSLPathGeometry(const Path& path, const Paint& paint, bool is_stroke,
-                   bool contour_aa);
+  WGSLPathGeometry(const Path& path, const Paint& paint, bool is_stroke);
 
   ~WGSLPathGeometry() override = default;
 
   const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
 
-  std::string GenSourceWGSL() const override;
-
   std::string GetShaderName() const override;
-
-  const char* GetEntryPoint() const override;
 
   void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
                   float clip_depth, Command* stencil_cmd) override;
 
- protected:
-  bool IsContourAA() const { return contour_aa_; }
+  void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteVSUniforms(std::stringstream& ss) const override;
+
+  void WriteVSInput(std::stringstream& ss) const override;
+
+  void WriteVSMain(std::stringstream& ss) const override;
 
  private:
   const Path& path_;
   const Paint& paint_;
   bool is_stroke_;
-  bool contour_aa_;
+  std::vector<GPUVertexBufferLayout> layout_;
+};
+
+class WGSLPathAAGeometry : public HWWGSLGeometry {
+ public:
+  WGSLPathAAGeometry(const Path& path, const Paint& paint);
+
+  ~WGSLPathAAGeometry() override = default;
+
+  const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
+
+  std::string GetShaderName() const override;
+
+  void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteVSUniforms(std::stringstream& ss) const override;
+
+  void WriteVSInput(std::stringstream& ss) const override;
+
+  void WriteVSMain(std::stringstream& ss) const override;
+
+  void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
+                  float clip_depth, Command* stencil_cmd) override;
+
+  std::optional<std::vector<std::string>> GetVarings() const override;
+
+  std::string GetFSNameSuffix() const override;
+
+  void WriteFSAlphaMask(std::stringstream& ss) const override;
+
+ private:
+  const Path& path_;
+  const Paint& paint_;
   std::vector<GPUVertexBufferLayout> layout_;
 };
 

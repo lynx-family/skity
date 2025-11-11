@@ -24,6 +24,7 @@ add_executable(skity_unit_test
     graphic/path_test.cc
     io/pixmap_test.cc
     render/canvas_state_test.cc
+    render/hw/draw/hw_wgsl_shader_writer_test.cc
     render/resource_cache_test.cc
     render/shape_test.cc
     recorder/display_list_test.cc
@@ -84,5 +85,6 @@ if (${SKITY_TEST_COVERAGE} AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
+target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
 
 gtest_add_tests(skity_unit_test "" AUTO)

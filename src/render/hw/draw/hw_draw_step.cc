@@ -26,7 +26,10 @@ void HWDrawStep::GenerateCommand(const HWDrawStepContext& ctx, Command* cmd,
 
   geometry_->PrepareCMD(cmd, ctx.context, ctx.transform, ctx.clip_depth,
                         stencil_cmd);
-
+  if (fragment_->AffectsVertex()) {
+    fragment_->BindVSUniforms(cmd, ctx.context, ctx.transform, ctx.clip_depth,
+                              stencil_cmd);
+  }
   fragment_->PrepareCMD(cmd, ctx.context);
 }
 
@@ -79,8 +82,8 @@ GPURenderPipeline* HWDrawStep::GetPipeline(HWDrawContext* context,
 
   return context->pipelineLib->GetPipeline(
       {
-          geometry_->GetShaderName(),
-          fragment_->GetShaderName(),
+          GetVertexName(),
+          GetFragmentName(),
       },
       pipeline);
 }

@@ -56,8 +56,6 @@ class WGSLTextFragment : public HWWGSLFragment {
 
   ~WGSLTextFragment() override = default;
 
-  const char* GetEntryPoint() const override { return "fs_main"; }
-
   bool CanMerge(const HWWGSLFragment* other) const override;
 
   void PrepareCMD(Command* cmd, HWDrawContext* context) override;

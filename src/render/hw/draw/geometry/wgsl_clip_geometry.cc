@@ -10,7 +10,7 @@ namespace skity {
 
 WGSLClipGeometry::WGSLClipGeometry(const Path& path, const Paint& paint,
                                    bool is_stroke, Canvas::ClipOp op)
-    : WGSLPathGeometry(path, paint, is_stroke, false), op_(op) {}
+    : WGSLPathGeometry(path, paint, is_stroke), op_(op) {}
 
 void WGSLClipGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
                                   const Matrix& transform, float clip_depth,

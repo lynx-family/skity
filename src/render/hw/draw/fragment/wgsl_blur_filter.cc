@@ -106,8 +106,6 @@ std::string WGSLBlurFilter::GenSourceWGSL() const {
   )";
 }
 
-const char* WGSLBlurFilter::GetEntryPoint() const { return "fs_main"; }
-
 void WGSLBlurFilter::PrepareCMD(Command* cmd, HWDrawContext* context) {
   SKITY_TRACE_EVENT(WGSLBlurFilter_PrepareCMD);
 

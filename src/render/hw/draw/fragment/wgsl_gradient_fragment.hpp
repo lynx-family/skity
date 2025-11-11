@@ -15,7 +15,7 @@ namespace skity {
 class WGSLGradientFragment : public HWWGSLFragment {
  public:
   WGSLGradientFragment(Shader::GradientInfo info, Shader::GradientType type,
-                       float global_alpha);
+                       float global_alpha, const Matrix& local_matrix);
 
   ~WGSLGradientFragment() override = default;
 
@@ -23,17 +23,33 @@ class WGSLGradientFragment : public HWWGSLFragment {
 
   std::string GetShaderName() const override;
 
-  std::string GenSourceWGSL() const override;
-
-  const char* GetEntryPoint() const override;
-
   void PrepareCMD(Command* cmd, HWDrawContext* context) override;
+
+  void WriteFSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteFSUniforms(std::stringstream& ss) const override;
+
+  void WriteFSMain(std::stringstream& ss) const override;
+
+  std::optional<std::vector<std::string>> GetVarings() const override;
+
+  void WriteVSUniforms(std::stringstream& ss) const override;
+
+  void WriteVSAssgnShadingVarings(std::stringstream& ss) const override;
+
+  void BindVSUniforms(Command* cmd, HWDrawContext* context,
+                      const Matrix& transform, float clip_depth,
+                      Command* stencil_cmd) override;
+
+  std::string GetVSNameSuffix() const override;
 
  private:
   Shader::GradientInfo info_;
   Shader::GradientType type_;
   float global_alpha_ = 1.0f;
   WGXGradientFragment gradient_fragment_;
+
+  Matrix local_matrix_;
 };
 
 }  // namespace skity
