@@ -45,10 +45,19 @@ if(${SKITY_VK_BACKEND})
 endif()
 
 # json parser
-if(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
+if(CMAKE_SYSTEM_NAME STREQUAL "OHOS" OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR
+    (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT SKITY_CT_FONT))
   message("SKITY_HARMONY")
   set(JSONCPP_WITH_TESTS OFF)
   add_subdirectory(third_party/jsoncpp)
+
+  if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if(TARGET jsoncpp_static)
+      target_compile_options(jsoncpp_static PRIVATE -fPIC)
+    elseif(TARGET jsoncpp_lib)
+      target_compile_options(jsoncpp_lib PRIVATE -fPIC)
+    endif()
+  endif()
 
   if(TARGET jsoncpp_static)
     add_library(JsonCpp::JsonCpp ALIAS jsoncpp_static)
@@ -57,6 +66,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
   endif()
 
   target_link_libraries(skity PUBLIC JsonCpp::JsonCpp)
+
 endif()
 
 # zlib
@@ -159,4 +169,3 @@ if (NOT EMSCRIPTEN AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" AND NOT ${SKITY_CT_
   endif()
 
 endif()
-

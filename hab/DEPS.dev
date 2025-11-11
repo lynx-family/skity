@@ -17,4 +17,10 @@ deps = {
         "ignore_in_git": True,
         "commit": "7b6aead9fb88b3623e3b3725ebb42670cbe4c579",
     },
+    'test/fonts/resources': {
+        "type": "http",
+        'url': f"https://lf-lynx.tiktok-cdns.com/obj/lynx-artifacts-oss-sg/skity/fonts_v1.zip",
+        "ignore_in_git": True,
+        "decompress": True,
+    },
 }

@@ -128,22 +128,41 @@ jobs:
                 cd out/cmake_host_build/Debug
                 ./skity_unit_test
 
-
     osx_metal_golden_test:
         runs-on: lynx-darwin-14-medium
         timeout-minutes: 30
         steps:
           - name: Download Source
             uses: actions/checkout@v4.2.2
-          - name: Sync Dependencies
-            run: |
-                ./tools/hab sync -f --target dev,module
+          - name: Install Common Dependencies
+            uses: ./.github/actions/sync-deps
+            with:
+              cache-backend: 'lynx-infra'
           - name: Setup cmake
             run: |
                 brew install cmake
           - name: Build And Test
             run: |
                 cmake -B out/cmake_golden_test -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSKITY_MTL_BACKEND=ON -DSKITY_TEST=ON -DSKITY_GOLDEN_GUI=OFF
-                cmake --build out/cmake_golden_test --target skity_golden_test
-                ./out/cmake_golden_test/test/golden/skity_golden_test
+                cmake --build out/cmake_golden_test --target skity_golden_test_shape skity_golden_test_text_ft
+                ./out/cmake_golden_test/test/golden/skity_golden_test_shape
+                ./out/cmake_golden_test/test/golden/skity_golden_test_text_ft
 
+    osx_metal_golden_test_ct:
+        runs-on: lynx-darwin-14-medium
+        timeout-minutes: 30
+        steps:
+          - name: Download Source
+            uses: actions/checkout@v4.2.2
+          - name: Install Common Dependencies
+            uses: ./.github/actions/sync-deps
+            with:
+              cache-backend: 'lynx-infra'
+          - name: Setup cmake
+            run: |
+                brew install cmake
+          - name: Build And Test
+            run: |
+                cmake -B out/cmake_golden_test -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSKITY_MTL_BACKEND=ON -DSKITY_TEST=ON -DSKITY_GOLDEN_GUI=OFF -DSKITY_CT_FONT=ON
+                cmake --build out/cmake_golden_test --target skity_golden_test_text_ct
+                ./out/cmake_golden_test/test/golden/skity_golden_test_text_ct

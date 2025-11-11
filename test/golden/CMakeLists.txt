@@ -14,8 +14,7 @@ endif()
 
 set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -fobjc-arc", "-std=c++17")
 
-add_executable(skity_golden_test
-  ${CMAKE_CURRENT_LIST_DIR}/golden_test.cc
+add_library(skity_golden_test OBJECT
   ${CMAKE_CURRENT_LIST_DIR}/common/golden_test_check.cc
   ${CMAKE_CURRENT_LIST_DIR}/common/golden_test_check.hpp
   ${CMAKE_CURRENT_LIST_DIR}/common/golden_test_env.cc
@@ -54,6 +53,17 @@ endif()
 
 set(SKITY_GOLDEN_TEST_DIR ${CMAKE_CURRENT_LIST_DIR})
 
+add_executable(skity_golden_test_shape ${CMAKE_CURRENT_LIST_DIR}/golden_test.cc)
+target_link_libraries(skity_golden_test_shape PRIVATE skity_golden_test)
+
+if (NOT ${SKITY_CT_FONT})
+  add_executable(skity_golden_test_text_ft ${CMAKE_CURRENT_LIST_DIR}/golden_test.cc)
+  target_link_libraries(skity_golden_test_text_ft PRIVATE skity_golden_test)
+else()
+  add_executable(skity_golden_test_text_ct ${CMAKE_CURRENT_LIST_DIR}/golden_test.cc)
+  target_link_libraries(skity_golden_test_text_ct PRIVATE skity_golden_test)
+endif()
+
 ### add golden test case to skity_golden_test
 ###
 ### @param NAME test case name
@@ -71,7 +81,7 @@ set(SKITY_GOLDEN_TEST_DIR ${CMAKE_CURRENT_LIST_DIR})
 ###   DEFINES   <other compile definitions>
 ### )
 ###
-function(add_golden_test)
+function(add_golden_test TARGET_NAME GOLDEN_DIR_POSTFIX)
   set(options )
   set(oneValueArgs NAME)
   set(multiValueArgs SOURCES INCLUDES LIBS DEFINES)
@@ -117,7 +127,7 @@ function(add_golden_test)
   target_compile_definitions(${ARG_NAME}
     PRIVATE
     CASE_NAME="${ARG_NAME}"
-    CASE_DIR="${CMAKE_CURRENT_LIST_DIR}"
+    CASE_DIR="${CMAKE_CURRENT_LIST_DIR}/${GOLDEN_DIR_POSTFIX}"
   )
 
   # append other user defined defines
@@ -128,10 +138,26 @@ function(add_golden_test)
     )
   endif()
 
-  target_link_libraries(skity_golden_test
+  target_link_libraries(${TARGET_NAME} PRIVATE
     $<TARGET_OBJECTS:${ARG_NAME}>
   )
 
 endfunction(add_golden_test)
+
+function(add_golden_test_shape)
+  add_golden_test(skity_golden_test_shape "" ${ARGV})
+endfunction()
+
+function(add_golden_test_text)
+if (NOT ${SKITY_CT_FONT})
+  add_golden_test(skity_golden_test_text_ft "ft" ${ARGV})
+else()
+  add_golden_test(skity_golden_test_text_ct "ct" ${ARGV})
+  target_compile_definitions(text
+    PRIVATE
+    CASE_DIR="${CMAKE_CURRENT_LIST_DIR}/ct"
+  )
+endif()
+endfunction()
 
 add_subdirectory(cases)

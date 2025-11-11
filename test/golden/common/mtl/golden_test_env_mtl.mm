@@ -39,13 +39,13 @@ const char* diff_shader_source = R"(
     float4 source_color = source_image.read(gid);
     float4 target_color = target_image.read(gid);
 
-    if (source_color.a > 0.01) {
+    if (source_color.a > 0.001) {
       source_color.rgb /= source_color.a;
     }
 
     float4 diff = abs(source_color - target_color);
 
-    if (diff.x > 0.01 || diff.y > 0.01 || diff.z > 0.01 || diff.w > 0.01) {
+    if (diff.x > 0.001 || diff.y > 0.001 || diff.z > 0.001 || diff.w > 0.001) {
       float4 diff_image_color = float4(abs(float3(1.0, 1.0, 1.0) - target_color.rgb), 1.0);
 
       isolate_image.write(diff_image_color, gid);

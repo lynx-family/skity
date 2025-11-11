@@ -14,4 +14,3 @@ endif()
 if (${SKITY_MTL_BACKEND} AND ${SKITY_CODEC_MODULE})
   add_subdirectory(golden)
 endif()
-

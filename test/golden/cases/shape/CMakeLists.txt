@@ -3,7 +3,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-add_golden_test(
+add_golden_test_shape(
   NAME shape
   SOURCES ${CMAKE_CURRENT_LIST_DIR}/shape.cc
 )

@@ -1,0 +1,1847 @@
+[
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 100.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 200.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 200
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 300.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 400.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 500.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 600.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 700.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 800.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 800
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 900.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 900
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 100.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 200.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 200
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 300.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 400.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 500.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 600.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 700.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 800.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 800
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 900.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 900
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "sans-serif",
+      "arial",
+      "helvetica",
+      "tahoma",
+      "verdana"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 100.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 100.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 100
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "sans-serif-thin"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 300.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 300.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 300
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "sans-serif-light"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 500.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 500.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 500
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "sans-serif-medium"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 900.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 900
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 100.0,
+          "wght" : 900.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 900
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "sans-serif-black"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 100.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 200.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 200
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 300.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 400.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 500.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 600.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 700.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 800.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 800
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 900.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 900
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 100.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 200.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 200
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 300.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 400.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 500.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 600.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 700.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 800.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 800
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 900.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 900
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "sans-serif-condensed"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 300.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 300.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 300
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "sans-serif-condensed-light"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "ital" : 0.0,
+          "wdth" : 75.0,
+          "wght" : 500.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "ital" : 1.0,
+          "wdth" : 75.0,
+          "wght" : 500.0
+        },
+        "file_name" : "Roboto-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 500
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "sans-serif-condensed-medium"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "NotoSerif-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : {},
+        "file_name" : "NotoSerif-Bold.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : {},
+        "file_name" : "NotoSerif-Italic.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : {},
+        "file_name" : "NotoSerif-BoldItalic.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 700
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "serif",
+      "times",
+      "times new roman",
+      "palatino",
+      "georgia",
+      "baskerville",
+      "goudy",
+      "fantasy",
+      "itc stone serif"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "NotoSerif-Bold.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : {},
+        "file_name" : "NotoSerif-BoldItalic.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 700
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "serif-bold"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "DroidSansMono.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "monospace",
+      "sans-serif-monospace",
+      "monaco"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "CutiveMono.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "serif-monospace",
+      "courier",
+      "courier new"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "ComingSoon.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "casual"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "wght" : 400.0
+        },
+        "file_name" : "DancingScript-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 700.0
+        },
+        "file_name" : "DancingScript-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 700
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "cursive"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "CarroisGothicSC-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "sans-serif-smallcaps"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "SourceSansPro-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : {},
+        "file_name" : "SourceSansPro-Italic.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : {},
+        "file_name" : "SourceSansPro-SemiBold.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : {},
+        "file_name" : "SourceSansPro-SemiBoldItalic.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : {},
+        "file_name" : "SourceSansPro-Bold.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : {},
+        "file_name" : "SourceSansPro-BoldItalic.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 700
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "source-sans-pro"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "SourceSansPro-SemiBold.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : {},
+        "file_name" : "SourceSansPro-SemiBoldItalic.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 600
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "source-sans-pro-semi-bold"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "slnt" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 100.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 200.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 200
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 300.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 400.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 500.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 600.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 700.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 800.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 800
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : 0.0,
+          "wdth" : 100.0,
+          "wght" : 900.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 900
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : -10.0,
+          "wdth" : 100.0,
+          "wght" : 100.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : -10.0,
+          "wdth" : 100.0,
+          "wght" : 200.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 200
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : -10.0,
+          "wdth" : 100.0,
+          "wght" : 300.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : -10.0,
+          "wdth" : 100.0,
+          "wght" : 400.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : -10.0,
+          "wdth" : 100.0,
+          "wght" : 500.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : -10.0,
+          "wdth" : 100.0,
+          "wght" : 600.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : -10.0,
+          "wdth" : 100.0,
+          "wght" : 700.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : -10.0,
+          "wdth" : 100.0,
+          "wght" : 800.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 800
+      },
+      {
+        "axis_tags" : 
+        {
+          "slnt" : -10.0,
+          "wdth" : 100.0,
+          "wght" : 900.0
+        },
+        "file_name" : "RobotoFlex-Regular.ttf",
+        "index" : 0,
+        "style" : 2,
+        "weight" : 900
+      }
+    ],
+    "is_fallback_font" : false,
+    "languages" : [],
+    "names" : 
+    [
+      "roboto-flex"
+    ],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : 
+    {
+      "serif" : 
+      {
+        "base_path" : "fonts/resources/",
+        "fallback_families" : {},
+        "fallback_for" : "serif",
+        "fonts" : 
+        [
+          {
+            "axis_tags" : {},
+            "file_name" : "NotoSerifCJK-Regular.ttc",
+            "index" : 2,
+            "style" : 1,
+            "weight" : 400
+          }
+        ],
+        "is_fallback_font" : true,
+        "languages" : 
+        [
+          "zh-Hans"
+        ],
+        "names" : [],
+        "variant" : 1
+      }
+    },
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "wght" : 100.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 2,
+        "style" : 1,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 200.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 2,
+        "style" : 1,
+        "weight" : 200
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 300.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 2,
+        "style" : 1,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 400.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 2,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 500.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 2,
+        "style" : 1,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 600.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 2,
+        "style" : 1,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 700.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 2,
+        "style" : 1,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 800.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 2,
+        "style" : 1,
+        "weight" : 800
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 900.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 2,
+        "style" : 1,
+        "weight" : 900
+      }
+    ],
+    "is_fallback_font" : true,
+    "languages" : 
+    [
+      "zh-Hans"
+    ],
+    "names" : [],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : 
+    {
+      "serif" : 
+      {
+        "base_path" : "fonts/resources/",
+        "fallback_families" : {},
+        "fallback_for" : "serif",
+        "fonts" : 
+        [
+          {
+            "axis_tags" : {},
+            "file_name" : "NotoSerifCJK-Regular.ttc",
+            "index" : 3,
+            "style" : 1,
+            "weight" : 400
+          }
+        ],
+        "is_fallback_font" : true,
+        "languages" : 
+        [
+          "zh-Hant,zh-Bopo"
+        ],
+        "names" : [],
+        "variant" : 1
+      }
+    },
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "wght" : 100.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 3,
+        "style" : 1,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 200.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 3,
+        "style" : 1,
+        "weight" : 200
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 300.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 3,
+        "style" : 1,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 400.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 3,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 500.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 3,
+        "style" : 1,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 600.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 3,
+        "style" : 1,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 700.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 3,
+        "style" : 1,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 800.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 3,
+        "style" : 1,
+        "weight" : 800
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 900.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 3,
+        "style" : 1,
+        "weight" : 900
+      }
+    ],
+    "is_fallback_font" : true,
+    "languages" : 
+    [
+      "zh-Hant,zh-Bopo"
+    ],
+    "names" : [],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : 
+    {
+      "serif" : 
+      {
+        "base_path" : "fonts/resources/",
+        "fallback_families" : {},
+        "fallback_for" : "serif",
+        "fonts" : 
+        [
+          {
+            "axis_tags" : {},
+            "file_name" : "NotoSerifCJK-Regular.ttc",
+            "index" : 0,
+            "style" : 1,
+            "weight" : 400
+          }
+        ],
+        "is_fallback_font" : true,
+        "languages" : 
+        [
+          "ja"
+        ],
+        "names" : [],
+        "variant" : 1
+      }
+    },
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "wght" : 100.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 200.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 200
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 300.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 400.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 500.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 600.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 700.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 800.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 800
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 900.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 900
+      }
+    ],
+    "is_fallback_font" : true,
+    "languages" : 
+    [
+      "ja"
+    ],
+    "names" : [],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "wght" : 400.0
+        },
+        "file_name" : "NotoSerifHentaigana.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 700.0
+        },
+        "file_name" : "NotoSerifHentaigana.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 700
+      }
+    ],
+    "is_fallback_font" : true,
+    "languages" : 
+    [
+      "ja"
+    ],
+    "names" : [],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : 
+    {
+      "serif" : 
+      {
+        "base_path" : "fonts/resources/",
+        "fallback_families" : {},
+        "fallback_for" : "serif",
+        "fonts" : 
+        [
+          {
+            "axis_tags" : {},
+            "file_name" : "NotoSerifCJK-Regular.ttc",
+            "index" : 1,
+            "style" : 1,
+            "weight" : 400
+          }
+        ],
+        "is_fallback_font" : true,
+        "languages" : 
+        [
+          "ko"
+        ],
+        "names" : [],
+        "variant" : 1
+      }
+    },
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : 
+        {
+          "wght" : 100.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 1,
+        "style" : 1,
+        "weight" : 100
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 200.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 1,
+        "style" : 1,
+        "weight" : 200
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 300.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 1,
+        "style" : 1,
+        "weight" : 300
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 400.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 1,
+        "style" : 1,
+        "weight" : 400
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 500.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 1,
+        "style" : 1,
+        "weight" : 500
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 600.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 1,
+        "style" : 1,
+        "weight" : 600
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 700.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 1,
+        "style" : 1,
+        "weight" : 700
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 800.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 1,
+        "style" : 1,
+        "weight" : 800
+      },
+      {
+        "axis_tags" : 
+        {
+          "wght" : 900.0
+        },
+        "file_name" : "NotoSansCJK-Regular.ttc",
+        "index" : 1,
+        "style" : 1,
+        "weight" : 900
+      }
+    ],
+    "is_fallback_font" : true,
+    "languages" : 
+    [
+      "ko"
+    ],
+    "names" : [],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "NotoColorEmojiLegacy.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      }
+    ],
+    "is_fallback_font" : true,
+    "languages" : 
+    [
+      "und-Zsye"
+    ],
+    "names" : [],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "NotoColorEmoji.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      }
+    ],
+    "is_fallback_font" : true,
+    "languages" : 
+    [
+      "und-Zsye"
+    ],
+    "names" : [],
+    "variant" : 1
+  },
+  {
+    "base_path" : "fonts/resources/",
+    "fallback_families" : {},
+    "fallback_for" : "",
+    "fonts" : 
+    [
+      {
+        "axis_tags" : {},
+        "file_name" : "NotoColorEmojiFlags.ttf",
+        "index" : 0,
+        "style" : 1,
+        "weight" : 400
+      }
+    ],
+    "is_fallback_font" : true,
+    "languages" : 
+    [
+      "und-Zsye"
+    ],
+    "names" : [],
+    "variant" : 1
+  }
+]

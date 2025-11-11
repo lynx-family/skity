@@ -240,7 +240,9 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Windows")
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/win/font_manager_win.cc
   )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR EMSCRIPTEN)
-  target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/text/ports/font_manager_freetype.cc)
+  target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/text/ports/test/font_manager_test.cc)
+  target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/text/ports/test/font_manager_test.hpp)
+  target_compile_definitions(skity PRIVATE -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/")
 else()
   message(STATUS "typeface empty system: ${CMAKE_SYSTEM_NAME}")
   target_sources(

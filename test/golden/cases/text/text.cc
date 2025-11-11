@@ -1,0 +1,53 @@
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
+
+#include <gtest/gtest.h>
+
+#include <filesystem>
+#include <skity/recorder/picture_recorder.hpp>
+#include <skity/text/font.hpp>
+#include <skity/text/font_arguments.hpp>
+#include <skity/text/font_descriptor.hpp>
+#include <skity/text/font_manager.hpp>
+#include <skity/text/font_metrics.hpp>
+#include <skity/text/font_style.hpp>
+#include <skity/text/text_blob.hpp>
+#include <skity/text/text_run.hpp>
+#include <skity/text/typeface.hpp>
+#include <skity/text/utf.hpp>
+
+#include "common/golden_test_check.hpp"
+
+static const char* kGoldenTestImageDir = CASE_DIR;
+
+TEST(TextGolden, Basic) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(400.f, 400.f));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Save();
+
+  auto typeface = skity::Typeface::GetDefaultTypeface();
+
+  // TODO(jingle): Add more test cases
+  skity::Paint paint;
+  paint.SetTextSize(64.f);
+  paint.SetAntiAlias(true);
+  paint.SetFillColor(1.f, 0.f, 0.f, 1.f);
+  paint.SetStyle(skity::Paint::kFill_Style);
+  paint.SetTypeface(typeface);
+
+  canvas->DrawSimpleText("SKITY skity", 20.f, 50.f, paint);
+
+  auto typeface_cjk =
+      skity::FontManager::RefDefault()->MatchFamilyStyleCharacter(
+          nullptr, skity::FontStyle(), nullptr, 0, 0x95E8);
+  paint.SetTypeface(typeface_cjk);
+  canvas->DrawSimpleText("你好", 20.f, 150.f, paint);
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append("text_basic.png");
+
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      recorder.FinishRecording(), 400.f, 400.f, golden_path.c_str()));
+}
