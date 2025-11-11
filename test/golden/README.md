@@ -31,20 +31,24 @@ If you want to disable the GUI, you can pass `-DSKITY_GOLDEN_GUI=OFF` to cmake.
 After compile, you can run the golden test code by the following command:
 
 ```bash
-./<build directory>/test/golden/skity_golden_test
+./<build directory>/test/golden/skity_golden_test_shape
+```
+or
+```bash
+./<build directory>/test/golden/skity_golden_test_text
 ```
 
 Since we use [GoogleTest](https://github.com/google/googletest) to test the golden test code,
 you can use the `--gtest_filter` option to run the specific test case.
 
 ```bash
-./<build directory>/test/golden/skity_golden_test --gtest_filter=<test_case_name>
+./<build directory>/test/golden/skity_golden_test_shape --gtest_filter=<test_case_name>
 
 # Run all GradientGolden test cases
-./<build directory>/test/golden/skity_golden_test --gtest_filter="GradientGolden*"
+./<build directory>/test/golden/skity_golden_test_shape --gtest_filter="GradientGolden*"
 
 # Only run the GradientGolden.LinearGradientTileMode test case
-./<build directory>/test/golden/skity_golden_test --gtest_filter=GradientGolden.LinearGradientTileMode
+./<build directory>/test/golden/skity_golden_test_shape --gtest_filter=GradientGolden.LinearGradientTileMode
 ```
 
 
@@ -62,11 +66,11 @@ The subdirectory should contain the following files:
 - golden image the golden image for the test case
 
 #### CMakeLists.txt
-We provide a cmake function `add_golden_test` to help add the test code.
+We provide cmake functions `add_golden_test_shape` and `add_golden_test_text` to help add test codes. `add_golden_test_shape` is used for non-text testing scenarios, while add_golden_test_text is used for text-related tests. The latter automatically selects between CoreText- or FreeType-based font rendering depending on the `SKITY_CT_FONT` option. Both functions share the same usage pattern, and the following example demonstrates using `add_golden_test_shape`.
 
 ```cmake
 
-add_golden_test(
+add_golden_test_shape(
   NAME <test_case_name>
   SOURCES <test_case_source_files>
   INCLUDES <test_case_include_directories>
@@ -78,7 +82,7 @@ add_golden_test(
 
 
 > Note:
-> The `add_golden_test` function will automatically define `CASE_DIR` to the directory of the test case.
+> The `add_golden_test_shape` function will automatically define `CASE_DIR` to the directory of the test case.
 > But you can also define some other macros to the test case.
 
 You can reference existing test cases to see how to use the function.
@@ -94,8 +98,8 @@ A simple test case looks like this:
 #include <skity/recorder/picture_recorder.hpp>
 #include "common/golden_test_check.hpp"
 
-// the macro CASE_DIR point to the directory of the test case defined by the cmake function add_golden_test
-constexpr const char* kSourceDir = CASE_DIR; 
+// the macro CASE_DIR point to the directory of the test case defined by the cmake function _add_golden_test_shape
+constexpr const char* kSourceDir = CASE_DIR;
 
 TEST(TestName, CaseName) {
   // create a display list
@@ -114,4 +118,3 @@ TEST(TestName, CaseName) {
 
 We recommend test one feature per test case. and make the golden image as small as possible.
 This can make the test code more readable and maintainable. Also it can make the test code more efficient.
-

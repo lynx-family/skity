@@ -56,13 +56,8 @@ set(SKITY_GOLDEN_TEST_DIR ${CMAKE_CURRENT_LIST_DIR})
 add_executable(skity_golden_test_shape ${CMAKE_CURRENT_LIST_DIR}/golden_test.cc)
 target_link_libraries(skity_golden_test_shape PRIVATE skity_golden_test)
 
-if (NOT ${SKITY_CT_FONT})
-  add_executable(skity_golden_test_text_ft ${CMAKE_CURRENT_LIST_DIR}/golden_test.cc)
-  target_link_libraries(skity_golden_test_text_ft PRIVATE skity_golden_test)
-else()
-  add_executable(skity_golden_test_text_ct ${CMAKE_CURRENT_LIST_DIR}/golden_test.cc)
-  target_link_libraries(skity_golden_test_text_ct PRIVATE skity_golden_test)
-endif()
+add_executable(skity_golden_test_text ${CMAKE_CURRENT_LIST_DIR}/golden_test.cc)
+target_link_libraries(skity_golden_test_text PRIVATE skity_golden_test)
 
 ### add golden test case to skity_golden_test
 ###
@@ -150,13 +145,9 @@ endfunction()
 
 function(add_golden_test_text)
 if (NOT ${SKITY_CT_FONT})
-  add_golden_test(skity_golden_test_text_ft "ft" ${ARGV})
+  add_golden_test(skity_golden_test_text "ft" ${ARGV})
 else()
-  add_golden_test(skity_golden_test_text_ct "ct" ${ARGV})
-  target_compile_definitions(text
-    PRIVATE
-    CASE_DIR="${CMAKE_CURRENT_LIST_DIR}/ct"
-  )
+  add_golden_test(skity_golden_test_text "ct" ${ARGV})
 endif()
 endfunction()
 

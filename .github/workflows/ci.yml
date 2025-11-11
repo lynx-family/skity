@@ -144,9 +144,9 @@ jobs:
           - name: Build And Test
             run: |
                 cmake -B out/cmake_golden_test -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSKITY_MTL_BACKEND=ON -DSKITY_TEST=ON -DSKITY_GOLDEN_GUI=OFF
-                cmake --build out/cmake_golden_test --target skity_golden_test_shape skity_golden_test_text_ft
+                cmake --build out/cmake_golden_test --target skity_golden_test_shape skity_golden_test_text
                 ./out/cmake_golden_test/test/golden/skity_golden_test_shape
-                ./out/cmake_golden_test/test/golden/skity_golden_test_text_ft
+                ./out/cmake_golden_test/test/golden/skity_golden_test_text
 
     osx_metal_golden_test_ct:
         runs-on: lynx-darwin-14-medium
@@ -164,5 +164,5 @@ jobs:
           - name: Build And Test
             run: |
                 cmake -B out/cmake_golden_test -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSKITY_MTL_BACKEND=ON -DSKITY_TEST=ON -DSKITY_GOLDEN_GUI=OFF -DSKITY_CT_FONT=ON
-                cmake --build out/cmake_golden_test --target skity_golden_test_text_ct
-                ./out/cmake_golden_test/test/golden/skity_golden_test_text_ct
+                cmake --build out/cmake_golden_test --target skity_golden_test_text
+                ./out/cmake_golden_test/test/golden/skity_golden_test_text
