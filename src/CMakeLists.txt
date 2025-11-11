@@ -163,7 +163,7 @@ if (NOT ${SKITY_CT_FONT})
     target_link_libraries(skity PRIVATE ${SKITY_ZLIB_NAME})
   endif()
 
-  target_include_directories(skity PRIVATE ${FREETYPE_DIR}/include)
+  target_include_directories(skity SYSTEM BEFORE PRIVATE ${FREETYPE_DIR}/include)
 
   if (NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" AND NOT EMSCRIPTEN)
     # png needed by freetype2 from lynx
@@ -497,5 +497,5 @@ if(EMSCRIPTEN)
 
   # output dir
   set_target_properties(skity_wasm PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
-  set_target_properties(skity_wasm PROPERTIES LINK_FLAGS "-s WASM=1 -sSINGLE_FILE -sMAX_WEBGL_VERSION=2 -sFULL_ES3 -s MODULARIZE=1 -sGL_PREINITIALIZED_CONTEXT -s USE_FREETYPE=1 --bind")
+  set_target_properties(skity_wasm PROPERTIES LINK_FLAGS "-s WASM=1 -sSINGLE_FILE -sMAX_WEBGL_VERSION=2 -sFULL_ES3 -s MODULARIZE=1 -sGL_PREINITIALIZED_CONTEXT -sALLOW_MEMORY_GROWTH --bind")
 endif()
