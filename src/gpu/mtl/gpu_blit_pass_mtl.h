@@ -16,6 +16,8 @@ class GPUBlitPassMTL : public GPUBlitPass {
   GPUBlitPassMTL(id<MTLDevice> mtl_device,
                  id<MTLBlitCommandEncoder> blit_encoder);
 
+  ~GPUBlitPassMTL() override = default;
+
   void UploadTextureData(std::shared_ptr<GPUTexture> texture, uint32_t offset_x,
                          uint32_t offset_y, uint32_t width, uint32_t height,
                          void* data) override;
