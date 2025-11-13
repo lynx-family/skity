@@ -12,12 +12,16 @@
 #include <vector>
 
 #include "src/utils/no_destructor.hpp"
+
+#ifndef SKITY_WASM
 #include "third_party/jsoncpp/include/json/json.h"
 
 #define DEFAULT_FONT_NAME "sans-serif"
+#endif
 
 namespace skity {
 
+#ifndef SKITY_WASM
 // ---------- FontFileInfo ----------
 static FontFileInfo FontFileInfoFromJson(const Json::Value& value) {
   FontFileInfo info;
@@ -378,6 +382,13 @@ std::shared_ptr<Typeface> FontManagerTest::OnMatchFamilyStyleCharacter(
   return nullptr;
 }
 
+std::shared_ptr<Typeface> FontManagerTest::OnGetDefaultTypeface(
+    const FontStyle& font_style) const {
+  return OnMatchFamilyStyle(DEFAULT_FONT_NAME, font_style);
+}
+
+#endif
+
 std::shared_ptr<Typeface> FontManagerTest::OnMakeFromData(
     std::shared_ptr<Data> const& data, int ttcIndex) const {
   return TypefaceFreeType::Make(data,
@@ -388,11 +399,6 @@ std::shared_ptr<Typeface> FontManagerTest::OnMakeFromFile(const char path[],
                                                           int ttcIndex) const {
   auto data = Data::MakeFromFileMapping(path);
   return this->OnMakeFromData(data, ttcIndex);
-}
-
-std::shared_ptr<Typeface> FontManagerTest::OnGetDefaultTypeface(
-    const FontStyle& font_style) const {
-  return OnMatchFamilyStyle(DEFAULT_FONT_NAME, font_style);
 }
 
 std::shared_ptr<FontManager> FontManager::RefDefault() {

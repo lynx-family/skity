@@ -14,6 +14,8 @@
 
 namespace skity {
 
+#ifndef SKITY_WASM
+
 struct NameToFamily;
 
 class TypefaceFreeTypeTest : public TypefaceFreeType {
@@ -124,6 +126,54 @@ class FontManagerTest : public FontManager {
   void BuildNameToFamilyMap(std::vector<FontFamily>& font_families);
   void AddFamily(FontFamily& family, size_t index);
 };
+
+#else
+class FontManagerTest : public FontManager {
+ public:
+  void SetDefaultTypeface(std::shared_ptr<Typeface> typeface) override {
+    default_typeface_ = typeface;
+  }
+
+ protected:
+  int OnCountFamilies() const override { return 0; }
+
+  std::string OnGetFamilyName(int) const override { return ""; }
+
+  std::shared_ptr<FontStyleSet> OnCreateStyleSet(int) const override {
+    return nullptr;
+  }
+
+  std::shared_ptr<FontStyleSet> OnMatchFamily(const char[]) const override {
+    return FontStyleSet::CreateEmpty();
+  }
+
+  std::shared_ptr<Typeface> OnMatchFamilyStyle(
+      const char[], const FontStyle&) const override {
+    return nullptr;
+  }
+
+  std::shared_ptr<Typeface> OnMatchFamilyStyleCharacter(
+      const char[], const FontStyle&, const char*[], int,
+      Unichar) const override {
+    return nullptr;
+  }
+
+  std::shared_ptr<Typeface> OnMakeFromData(std::shared_ptr<Data> const& data,
+                                           int ttcIndex) const override;
+
+  std::shared_ptr<Typeface> OnMakeFromFile(const char path[],
+                                           int ttcIndex) const override;
+
+  std::shared_ptr<Typeface> OnGetDefaultTypeface(
+      FontStyle const&) const override {
+    return default_typeface_;
+  }
+
+ private:
+  std::shared_ptr<Typeface> default_typeface_;
+};
+
+#endif
 
 }  // namespace skity
 
