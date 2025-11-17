@@ -33,6 +33,10 @@ if (${SKITY_MTL_BACKEND})
     common/bench_target_mtl.mm
     common/bench_context_mtl.h
     common/bench_context_mtl.mm
+    common/bench_command_queue_proxy.h
+    common/bench_command_queue_proxy.mm
+    common/bench_gpu_time_tracer.hpp
+    common/bench_gpu_time_tracer.cc
   )
   target_link_libraries(skity_hw_render_bench PRIVATE "-framework Metal")
 endif()

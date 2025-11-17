@@ -16,6 +16,7 @@
 
 #include "test/bench/case/draw_circle.hpp"
 #include "test/bench/common/bench_context.hpp"
+#include "test/bench/common/bench_gpu_time_tracer.hpp"
 #include "test/bench/common/bench_target.hpp"
 
 namespace fs = std::filesystem;
@@ -154,10 +155,24 @@ static void RunBenchmark(benchmark::State& state,
   options.aa = aa;
   auto target = context->CreateTarget(options);
 
+  skity::BenchGPUTimeTracer::Instance().SetEnable(
+      backend_type == skity::GPUBackendType::kMetal);
+  skity::BenchGPUTimeTracer::Instance().ClearFrame();
+
   for (auto _ : state) {
+    state.PauseTiming();
+    skity::BenchGPUTimeTracer::Instance().StartTracing();
+    skity::BenchGPUTimeTracer::Instance().StartFrame();
+    state.ResumeTiming();
+
     auto canvas = target->LockCanvas();
     benchmark->Draw(canvas, 0);
     target->Flush();
+
+    state.PauseTiming();
+    skity::BenchGPUTimeTracer::Instance().EndFrame();
+    skity::BenchGPUTimeTracer::Instance().StopTracing();
+    state.ResumeTiming();
   }
 
 #if SKITY_BENCH_WRITE_PNG

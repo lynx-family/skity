@@ -14,6 +14,8 @@
 #include "test/bench/common/bench_target.hpp"
 #include "test/bench/common/bench_target_mtl.h"
 
+#import "test/bench/common/bench_command_queue_proxy.h"
+
 namespace skity {
 
 class BenchContextMTL : public BenchContext {
@@ -33,7 +35,8 @@ class BenchContextMTL : public BenchContext {
 std::shared_ptr<BenchContext> CreateBenchContextMTL() {
   auto device = MTLCreateSystemDefaultDevice();
   auto queue = [device newCommandQueue];
-  auto gpu_context = skity::MTLContextCreate(device, queue);
+  id<MTLCommandQueue> proxy_queue = [[CommandQueueProxy alloc] initWithRealCommandQueue:queue];
+  auto gpu_context = skity::MTLContextCreate(device, proxy_queue);
   return std::make_shared<BenchContextMTL>(std::move(gpu_context), device, queue);
 }
 
