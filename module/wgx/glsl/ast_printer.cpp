@@ -96,6 +96,15 @@ void AstPrinter::Visit(ast::Expression* expression) {
         }
         ss_ << ")";
         return;
+      } else if (call->ident->ident->name == "select") {
+        ss_ << "(";
+        call->args[2]->Accept(this);
+        ss_ << " ? ";
+        call->args[1]->Accept(this);
+        ss_ << " : ";
+        call->args[0]->Accept(this);
+        ss_ << ")";
+        return;
       }
 
       ast::Type type{call->ident};
