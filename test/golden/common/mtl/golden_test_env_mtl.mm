@@ -125,8 +125,9 @@ std::unique_ptr<skity::GPUContext> GoldenTestEnvMTL::CreateGPUContext() {
   return skity::MTLContextCreate(device_, command_queue_);
 }
 
-std::shared_ptr<GoldenTexture> GoldenTestEnvMTL::DisplayListToTexture(
-    std::unique_ptr<DisplayList> dl, uint32_t width, uint32_t height) {
+std::shared_ptr<GoldenTexture> GoldenTestEnvMTL::DisplayListToTexture(DisplayList* dl,
+                                                                      uint32_t width,
+                                                                      uint32_t height) {
   // create a Metal texture
   MTLTextureDescriptor* texture_descriptor =
       [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm

@@ -12,13 +12,18 @@ namespace skity {
 namespace testing {
 
 bool OpenPlayground(bool passed, std::shared_ptr<GoldenTexture> texture,
-                    std::shared_ptr<Pixmap> target, const char* golden_path) {
+                    std::shared_ptr<Pixmap> target, const char* golden_path,
+                    std::string suffix) {
   auto test_info = ::testing::UnitTest::GetInstance()->current_test_info();
 
   std::string title = "[Test] ";
   title.append(test_info->test_case_name());
   title.append(" - ");
   title.append(test_info->name());
+  if (!suffix.empty()) {
+    title.append(" - ");
+    title.append(suffix);
+  }
 
   {
     auto window = Window::Create(800, 800, title);

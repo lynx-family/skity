@@ -60,9 +60,9 @@ TEST(ClipGolden, ClipRect) {
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("clip_rect.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 400.f, 400.f, golden_path.c_str()));
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400.f, 400.f,
+                                                   golden_path.c_str()));
 }
 
 TEST(ClipGolden, ClipPath) {
@@ -97,9 +97,9 @@ TEST(ClipGolden, ClipPath) {
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("clip_path.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 400.f, 400.f, golden_path.c_str()));
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400.f, 400.f,
+                                                   golden_path.c_str()));
 }
 
 TEST(ClipGolden, ClipPathDifference) {
@@ -134,7 +134,9 @@ TEST(ClipGolden, ClipPathDifference) {
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("clip_path_difference.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 400.f, 400.f, golden_path.c_str()));
+      dl.get(), 400.f, 400.f,
+      skity::testing::PathList{.cpu_tess_path = golden_path.c_str(),
+                               .gpu_tess_path = golden_path.c_str()}));
 }

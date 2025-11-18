@@ -24,7 +24,7 @@ class GoldenTestEnv : public ::testing::Environment {
   void TearDown() override;
 
   virtual std::shared_ptr<GoldenTexture> DisplayListToTexture(
-      std::unique_ptr<DisplayList> dl, uint32_t width, uint32_t height) = 0;
+      DisplayList* dl, uint32_t width, uint32_t height) = 0;
 
   virtual bool SaveGoldenImage(std::shared_ptr<Pixmap> image,
                                const char* path) = 0;

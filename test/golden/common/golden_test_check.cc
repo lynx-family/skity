@@ -18,6 +18,38 @@
 namespace skity {
 namespace testing {
 
+struct GoldenTestEnvConfig {
+  static GoldenTestEnvConfig GPUTessellation() {
+    return GoldenTestEnvConfig{true};
+  }
+
+  bool enable_gpu_tessellation = false;
+};
+
+struct AutoRestoreConfig {
+  AutoRestoreConfig(GPUContext* gpu_context, GoldenTestEnvConfig config)
+      : gpu_context(gpu_context),
+        restore_config{gpu_context->IsEnableGPUTessellation()} {
+    gpu_context->SetEnableGPUTessellation(config.enable_gpu_tessellation);
+  }
+
+  ~AutoRestoreConfig() {
+    gpu_context->SetEnableGPUTessellation(
+        restore_config.enable_gpu_tessellation);
+  }
+
+  std::string GetNameSuffix() const {
+    if (gpu_context->IsEnableGPUTessellation()) {
+      return "gpu_tess";
+    }
+    return "";
+  }
+
+ private:
+  GPUContext* gpu_context = gpu_context;
+  GoldenTestEnvConfig restore_config;
+};
+
 std::shared_ptr<Pixmap> ReadImage(const char* path) {
   auto data = skity::Data::MakeFromFileName(path);
 
@@ -36,8 +68,9 @@ std::shared_ptr<Pixmap> ReadImage(const char* path) {
   return codec->Decode();
 }
 
-bool CompareGoldenTexture(std::unique_ptr<DisplayList> dl, uint32_t width,
-                          uint32_t height, const char* path) {
+static bool CompareGoldenTextureImpl(DisplayList* dl, uint32_t width,
+                                     uint32_t height, const char* path,
+                                     GoldenTestEnvConfig config) {
   auto test_info = ::testing::UnitTest::GetInstance()->current_test_info();
 
   std::cout << "test name: " << test_info->name() << std::endl;
@@ -45,8 +78,8 @@ bool CompareGoldenTexture(std::unique_ptr<DisplayList> dl, uint32_t width,
   std::cout << "test suite name: " << test_info->test_suite_name() << std::endl;
 
   auto env = GoldenTestEnv::GetInstance();
-
-  auto texture = env->DisplayListToTexture(std::move(dl), width, height);
+  AutoRestoreConfig auto_restore_config(env->GetGPUContext(), config);
+  auto texture = env->DisplayListToTexture(dl, width, height);
 
   EXPECT_TRUE(texture != nullptr)
       << "Failed to generate rendering result texture";
@@ -73,10 +106,35 @@ bool CompareGoldenTexture(std::unique_ptr<DisplayList> dl, uint32_t width,
   auto result = ComparePixels(source, target);
 
 #ifdef SKITY_GOLDEN_GUI
-  return OpenPlayground(result.Passed(), texture, target, path);
+  return OpenPlayground(result.Passed(), texture, target, path,
+                        auto_restore_config.GetNameSuffix());
 #else
   return result.Passed();
 #endif
+}
+
+bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
+                          const char* path) {
+  return CompareGoldenTextureImpl(dl, width, height, path, {});
+}
+
+bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
+                          PathList path_list) {
+  if (path_list.cpu_tess_path != nullptr) {
+    if (!CompareGoldenTextureImpl(dl, width, height, path_list.cpu_tess_path,
+                                  {})) {
+      return false;
+    }
+  }
+
+  if (path_list.gpu_tess_path != nullptr) {
+    if (!CompareGoldenTextureImpl(dl, width, height, path_list.gpu_tess_path,
+                                  {.enable_gpu_tessellation = true})) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 bool DiffResult::Passed() const {

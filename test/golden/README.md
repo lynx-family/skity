@@ -109,10 +109,10 @@ TEST(TestName, CaseName) {
   // draw something
   canvas->drawRect(skity::Rect::MakeXYWH(0, 0, 100, 100), skity::Paint());
   // end the display list
-  auto picture = recorder.finishRecordingAsPicture();
+  auto dl = recorder.FinishRecording();
 
   // compare the golden image with the test result
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(picture, <width>, <height>, kSourceDir"/<case_name>.png"));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), <width>, <height>, kSourceDir"/<case_name>.png"));
 }
 ```
 

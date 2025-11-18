@@ -12,7 +12,8 @@ namespace testing {
 class GoldenTexture;
 
 bool OpenPlayground(bool passed, std::shared_ptr<GoldenTexture> source,
-                    std::shared_ptr<Pixmap> target, const char* golden_path);
+                    std::shared_ptr<Pixmap> target, const char* golden_path,
+                    std::string suffix);
 
 }  // namespace testing
 }  // namespace skity

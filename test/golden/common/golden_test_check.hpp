@@ -10,6 +10,11 @@
 namespace skity {
 namespace testing {
 
+struct PathList {
+  const char* cpu_tess_path = nullptr;
+  const char* gpu_tess_path = nullptr;
+};
+
 /**
  * @brief compare the display list with the golden texture. If the golden_test
  * is compiled with SKITY_GOLDEN_GUI, a window will be opened to show the
@@ -26,8 +31,27 @@ namespace testing {
  * @return false the display list is different from the golden texture.
  * @return
  */
-bool CompareGoldenTexture(std::unique_ptr<DisplayList> dl, uint32_t width,
-                          uint32_t height, const char* path);
+bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
+                          const char* path);
+
+/**
+ * @brief compare the display list with the golden texture. If the golden_test
+ * is compiled with SKITY_GOLDEN_GUI, a window will be opened to show the
+ * display list result, the expected result and the diff result.
+ *
+ * @param dl         the display list to be compared.
+ * @param width      the width of the target image list.
+ * @param height     the height of the target image list.
+ * @param path_list  the path list of the expected golden images. If the image
+ *                   does not exist, the image will be saved to the path. And
+ *                   the test will be treated as passed.
+ *
+ * @return true  the display list is the same as the golden texture.
+ * @return false the display list is different from the golden texture.
+ * @return
+ */
+bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
+                          PathList path_list);
 
 struct DiffResult {
   // whether the test passed.

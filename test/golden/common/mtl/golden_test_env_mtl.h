@@ -21,9 +21,9 @@ class GoldenTestEnvMTL : public GoldenTestEnv {
 
   void TearDown() override;
 
-  std::shared_ptr<GoldenTexture> DisplayListToTexture(
-      std::unique_ptr<DisplayList> dl, uint32_t width,
-      uint32_t height) override;
+  std::shared_ptr<GoldenTexture> DisplayListToTexture(DisplayList* dl,
+                                                      uint32_t width,
+                                                      uint32_t height) override;
 
   bool SaveGoldenImage(std::shared_ptr<Pixmap> image,
                        const char* path) override;

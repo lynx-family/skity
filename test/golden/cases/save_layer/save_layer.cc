@@ -33,9 +33,11 @@ TEST(SaveLayerGolden, TwoCircle) {
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("two_circle.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 400.f, 400.f, golden_path.c_str()));
+      dl.get(), 400.f, 400.f,
+      skity::testing::PathList{.cpu_tess_path = golden_path.c_str(),
+                               .gpu_tess_path = golden_path.c_str()}));
 }
 
 TEST(SaveLayerGolden, ThreeCircle) {
@@ -64,9 +66,11 @@ TEST(SaveLayerGolden, ThreeCircle) {
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("three_circle.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 400.f, 400.f, golden_path.c_str()));
+      dl.get(), 400.f, 400.f,
+      skity::testing::PathList{.cpu_tess_path = golden_path.c_str(),
+                               .gpu_tess_path = golden_path.c_str()}));
 }
 
 TEST(SaveLayerGolden, TwoCircleWithTranslate) {
@@ -91,6 +95,9 @@ TEST(SaveLayerGolden, TwoCircleWithTranslate) {
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("two_circle_with_translate.png");
 
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 400.f, 400.f, golden_path.c_str()));
+      dl.get(), 400.f, 400.f,
+      skity::testing::PathList{.cpu_tess_path = golden_path.c_str(),
+                               .gpu_tess_path = golden_path.c_str()}));
 }

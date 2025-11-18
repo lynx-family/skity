@@ -30,9 +30,11 @@ TEST(ImageFilterGolden, BlurFilter_10_5) {
 
   std::filesystem::path expected_image_path(kGoldenTestDir);
   expected_image_path.append("blur_filter_10_5.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 200, 200, expected_image_path.c_str()));
+      dl.get(), 200, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }
 
 TEST(ImageFilterGolden, BlurFilter_10_10) {
@@ -55,9 +57,11 @@ TEST(ImageFilterGolden, BlurFilter_10_10) {
 
   std::filesystem::path expected_image_path(kGoldenTestDir);
   expected_image_path.append("blur_filter_10_10.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 200, 200, expected_image_path.c_str()));
+      dl.get(), 200, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }
 
 TEST(ImageFilterGolden, BlurFilter_10_0) {
@@ -77,9 +81,11 @@ TEST(ImageFilterGolden, BlurFilter_10_0) {
 
   std::filesystem::path expected_image_path(kGoldenTestDir);
   expected_image_path.append("blur_filter_10_0.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 200, 200, expected_image_path.c_str()));
+      dl.get(), 200, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }
 
 TEST(ImageFilterGolden, DropShadow_0_0_10_10) {
@@ -98,9 +104,11 @@ TEST(ImageFilterGolden, DropShadow_0_0_10_10) {
   canvas->Restore();
   std::filesystem::path expected_image_path(kGoldenTestDir);
   expected_image_path.append("drop_shadow_0_0_10_10.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 200, 200, expected_image_path.c_str()));
+      dl.get(), 200, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }
 
 TEST(ImageFilterGolden, DropShadow_10_n10_5_5) {
@@ -121,9 +129,11 @@ TEST(ImageFilterGolden, DropShadow_10_n10_5_5) {
 
   std::filesystem::path expected_image_path(kGoldenTestDir);
   expected_image_path.append("drop_shadow_10_n10_5_5.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 200, 200, expected_image_path.c_str()));
+      dl.get(), 200, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }
 
 TEST(ImageFilterGolden, Matrix_translate_50_50) {
@@ -150,8 +160,11 @@ TEST(ImageFilterGolden, Matrix_translate_50_50) {
 
   std::filesystem::path expected_image_path(kGoldenTestDir);
   expected_image_path.append("matrix_translate_50_50.png");
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 200, 200, expected_image_path.c_str()));
+      dl.get(), 200, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }
 
 TEST(ImageFilterGolden, ComposeBlurMatrix) {
@@ -184,6 +197,9 @@ TEST(ImageFilterGolden, ComposeBlurMatrix) {
   std::filesystem::path expected_image_path(kGoldenTestDir);
   expected_image_path.append("compose_blur_matrix.png");
 
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 200, 200, expected_image_path.c_str()));
+      dl.get(), 200, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }

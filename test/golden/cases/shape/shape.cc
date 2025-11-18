@@ -45,9 +45,11 @@ TEST(ShapeGolden, StrokeMiterLimit) {
 
   std::filesystem::path expected_image_path(kGoldenTestImageDir);
   expected_image_path.append("stroke_miter_limit.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 400, 200, expected_image_path.c_str()));
+      dl.get(), 400, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }
 
 TEST(ShapeGolden, LargeStrokeWidth) {
@@ -75,9 +77,11 @@ TEST(ShapeGolden, LargeStrokeWidth) {
 
   std::filesystem::path expected_image_path(kGoldenTestImageDir);
   expected_image_path.append("large_stroke_width.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 200, 100, expected_image_path.c_str()));
+      dl.get(), 200, 100,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }
 
 TEST(ShapeGolden, StrokeJoinAndCap) {
@@ -113,9 +117,11 @@ TEST(ShapeGolden, StrokeJoinAndCap) {
 
   std::filesystem::path expected_image_path(kGoldenTestImageDir);
   expected_image_path.append("stroke_join_and_cap.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 500, 200, expected_image_path.c_str()));
+      dl.get(), 500, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }
 
 TEST(ShapeGolden, PathTransformFillType) {
@@ -140,7 +146,9 @@ TEST(ShapeGolden, PathTransformFillType) {
 
   std::filesystem::path expected_image_path(kGoldenTestImageDir);
   expected_image_path.append("path_copy_fill_typpe.png");
-
+  auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 400, 200, expected_image_path.c_str()));
+      dl.get(), 400, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
 }

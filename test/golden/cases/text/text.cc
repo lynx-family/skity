@@ -47,7 +47,7 @@ TEST(TextGolden, Basic) {
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("text_basic.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      recorder.FinishRecording(), 400.f, 400.f, golden_path.c_str()));
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400.f, 400.f,
+                                                   golden_path.c_str()));
 }
