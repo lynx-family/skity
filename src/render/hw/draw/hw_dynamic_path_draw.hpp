@@ -29,8 +29,6 @@ class HWDynamicPathDraw : public HWDynamicDraw {
  private:
   HWWGSLGeometry *GenGeometry(HWDrawContext *context, bool aa) const;
 
-  HWWGSLFragment *GenFragment(HWDrawContext *context) const;
-
  private:
   Path path_;
   Paint paint_;

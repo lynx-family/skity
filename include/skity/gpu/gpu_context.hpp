@@ -231,6 +231,14 @@ class SKITY_API GPUContext {
 
   bool IsEnableGPUTessellation() const { return enable_gpu_tessellation_; }
 
+  void SetEnableSimpleShapePipeline(bool enable_simple_shape_pipeline) {
+    enable_simple_shape_pipeline_ = enable_simple_shape_pipeline;
+  }
+
+  bool IsEnableSimpleShapePipeline() const {
+    return enable_simple_shape_pipeline_;
+  }
+
  private:
   GPUErrorCallback error_callback_ = nullptr;
   void* error_callback_user_data_ = nullptr;
@@ -239,6 +247,7 @@ class SKITY_API GPUContext {
   std::uint8_t larger_atlas_mask_ = 0;
   bool enable_text_linear_filter_ = false;
   bool enable_gpu_tessellation_ = false;
+  bool enable_simple_shape_pipeline_ = false;
 };
 
 }  // namespace skity

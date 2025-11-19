@@ -17,6 +17,7 @@
 #include "src/render/hw/draw/step/color_step.hpp"
 #include "src/render/hw/draw/step/stencil_step.hpp"
 #include "src/render/hw/draw/wgx_filter.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
 
 namespace skity {
 
@@ -34,7 +35,7 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
 
   auto geom = GenGeometry(context, false);
 
-  auto frag = GenFragment(context);
+  auto frag = GenShadingFragment(context, paint_, is_stroke_);
 
   if (paint_.GetColorFilter()) {
     frag->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
@@ -63,7 +64,7 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
   if (paint_.IsAntiAlias()) {
     auto geometry = GenGeometry(context, true);
 
-    auto fragment = GenFragment(context);
+    auto fragment = GenShadingFragment(context, paint_, is_stroke_);
 
     if (paint_.GetColorFilter()) {
       fragment->SetFilter(
@@ -95,80 +96,6 @@ HWWGSLGeometry *HWDynamicPathDraw::GenGeometry(HWDrawContext *context,
 
     } else {
       return arena_allocator->Make<WGSLPathGeometry>(path_, paint_, is_stroke_);
-    }
-  }
-}
-
-HWWGSLFragment *HWDynamicPathDraw::GenFragment(HWDrawContext *context) const {
-  auto arena_allocator = context->arena_allocator;
-  if (paint_.GetShader()) {
-    auto type = paint_.GetShader()->AsGradient(nullptr);
-
-    if (type == Shader::GradientType::kNone) {
-      // handle image rendering in the future
-      auto pixmap_shader =
-          std::static_pointer_cast<PixmapShader>(paint_.GetShader());
-
-      const std::shared_ptr<Image> &image = *(pixmap_shader->AsImage());
-
-      std::shared_ptr<GPUTexture> texture;
-      if (image->GetTexture()) {
-        const auto &texture_image = *(image->GetTexture());
-        texture = texture_image->GetGPUTexture();
-      } else if (image->GetPixmap()) {
-        const auto &pixmap_image = *(image->GetPixmap());
-        auto texture_handler =
-            context->gpuContext->GetTextureManager()->FindOrCreateTexture(
-                Texture::FormatFromColorType(pixmap_image->GetColorType()),
-                pixmap_image->Width(), pixmap_image->Height(),
-                pixmap_image->GetAlphaType(), pixmap_image);
-        texture_handler->UploadImage(pixmap_image);
-        texture = texture_handler->GetGPUTexture();
-      } else {
-        auto texture_handler = image->GetTextureByContext(context->gpuContext);
-
-        if (texture_handler) {
-          texture = texture_handler->GetGPUTexture();
-        }
-      }
-
-      if (texture != nullptr) {
-        GPUSamplerDescriptor descriptor;
-        descriptor.mag_filter =
-            ToGPUFilterMode(pixmap_shader->GetSamplingOptions()->filter);
-        descriptor.min_filter =
-            ToGPUFilterMode(pixmap_shader->GetSamplingOptions()->filter);
-        descriptor.mipmap_filter =
-            ToGPUMipmapMode(pixmap_shader->GetSamplingOptions()->mipmap);
-        auto sampler =
-            context->gpuContext->GetGPUDevice()->CreateSampler(descriptor);
-
-        Matrix inv_local_matrix{};
-        pixmap_shader->GetLocalMatrix().Invert(&inv_local_matrix);
-
-        return arena_allocator->Make<WGSLTextureFragment>(
-            pixmap_shader, texture, sampler, paint_.GetAlphaF(),
-            inv_local_matrix, static_cast<float>(image->Width()),
-            static_cast<float>(image->Height()));
-
-      } else {
-        return arena_allocator->Make<WGSLSolidColor>(Colors::kRed);
-      }
-
-    } else {
-      Shader::GradientInfo info{};
-
-      paint_.GetShader()->AsGradient(&info);
-
-      return arena_allocator->Make<WGSLGradientFragment>(
-          info, type, paint_.GetAlphaF(), paint_.GetShader()->GetLocalMatrix());
-    }
-
-  } else {
-    if (is_stroke_) {
-      return arena_allocator->Make<WGSLSolidColor>(paint_.GetStrokeColor());
-    } else {
-      return arena_allocator->Make<WGSLSolidColor>(paint_.GetFillColor());
     }
   }
 }

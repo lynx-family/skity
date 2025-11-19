@@ -86,6 +86,11 @@ void RecordingCanvas::OnDrawRect(Rect const& rect, Paint const& paint) {
   AccumulateOpBounds(rect, &paint);
 }
 
+void RecordingCanvas::OnDrawRRect(RRect const& rrect, Paint const& paint) {
+  Push<DrawRRectOp>(rrect, paint);
+  AccumulateOpBounds(rrect.GetBounds(), &paint);
+}
+
 void RecordingCanvas::OnDrawPath(Path const& path, Paint const& paint) {
   Push<DrawPathOp>(path, paint);
   AccumulateOpBounds(path.GetBounds(), &paint);

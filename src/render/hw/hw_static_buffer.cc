@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "src/gpu/gpu_buffer.hpp"
+#include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
 
@@ -55,6 +56,20 @@ GPUBufferView HWStaticBuffer::GetTessPathStrokeIndexBufferView() {
   return tess_path_stroke_index_buffer_view_.value();
 }
 
+GPUBufferView HWStaticBuffer::GetRRectVertexBufferView() {
+  if (!initialized_) {
+    Initialize();
+  }
+  return rrect_vertex_buffer_view_.value();
+}
+
+GPUBufferView HWStaticBuffer::GetRRectIndexBufferView() {
+  if (!initialized_) {
+    Initialize();
+  }
+  return rrect_index_buffer_view_.value();
+}
+
 void HWStaticBuffer::Initialize() {
   tess_path_fill_vertex_buffer_view_ =
       WGSLTessPathFillGeometry::CreateVertexBufferView(stage_buffer_.get());
@@ -64,6 +79,11 @@ void HWStaticBuffer::Initialize() {
       WGSLTessPathStrokeGeometry::CreateVertexBufferView(stage_buffer_.get());
   tess_path_stroke_index_buffer_view_ =
       WGSLTessPathStrokeGeometry::CreateIndexBufferView(stage_buffer_.get());
+  rrect_vertex_buffer_view_ =
+      WGSLRRectGeometry::CreateVertexBufferView(stage_buffer_.get());
+  rrect_index_buffer_view_ =
+      WGSLRRectGeometry::CreateIndexBufferView(stage_buffer_.get());
+
   initialized_ = true;
   needs_flush_ = true;
 }

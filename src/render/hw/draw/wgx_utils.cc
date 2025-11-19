@@ -4,8 +4,14 @@
 
 #include "src/render/hw/draw/wgx_utils.hpp"
 
+#include "src/effect/pixmap_shader.hpp"
+#include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
 #include "src/logging.hpp"
+#include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
+#include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
+#include "src/render/hw/draw/fragment/wgsl_stencil_fragment.hpp"
+#include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 
@@ -95,16 +101,16 @@ const char* RemapTileFunction() {
 
 const char* CommonVertexWGSL() {
   return R"(
-    struct CommonSlot {
-        mvp           : mat4x4<f32>,
-        userTransform : mat4x4<f32>,
-        extraInfo     : vec4<f32>,
-    };
+struct CommonSlot {
+    mvp           : mat4x4<f32>,
+    userTransform : mat4x4<f32>,
+    extraInfo     : vec4<f32>,
+};
 
-    fn get_vertex_position(a_pos: vec2<f32>, cs: CommonSlot) -> vec4<f32> {
-        var pos: vec4<f32> = cs.mvp * cs.userTransform * vec4<f32>(a_pos, 0.0, 1.0);
-        return vec4<f32>(pos.x, pos.y, cs.extraInfo[0] * pos.w, pos.w);
-    }
+fn get_vertex_position(a_pos: vec2<f32>, cs: CommonSlot) -> vec4<f32> {
+    var pos: vec4<f32> = cs.mvp * cs.userTransform * vec4<f32>(a_pos, 0.0, 1.0);
+    return vec4<f32>(pos.x, pos.y, cs.extraInfo[0] * pos.w, pos.w);
+}
   )";
 }
 
@@ -647,13 +653,78 @@ bool WGXGradientFragment::SetupSweepInfo(
   return true;
 }
 
-void ReplacePlaceholder(
-    std::string& wgsl,
-    const std::unordered_map<std::string, std::string>& replacements) {
-  for (const auto& [placeholder, value] : replacements) {
-    size_t pos = wgsl.find(placeholder);
-    DEBUG_CHECK(pos != std::string::npos);
-    wgsl.replace(pos, placeholder.length(), value);
+HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
+                                   bool is_stroke) {
+  auto arena_allocator = context->arena_allocator;
+  if (paint.GetShader()) {
+    auto type = paint.GetShader()->AsGradient(nullptr);
+
+    if (type == Shader::GradientType::kNone) {
+      // handle image rendering in the future
+      auto pixmap_shader =
+          std::static_pointer_cast<PixmapShader>(paint.GetShader());
+
+      const std::shared_ptr<Image>& image = *(pixmap_shader->AsImage());
+
+      std::shared_ptr<GPUTexture> texture;
+      if (image->GetTexture()) {
+        const auto& texture_image = *(image->GetTexture());
+        texture = texture_image->GetGPUTexture();
+      } else if (image->GetPixmap()) {
+        const auto& pixmap_image = *(image->GetPixmap());
+        auto texture_handler =
+            context->gpuContext->GetTextureManager()->FindOrCreateTexture(
+                Texture::FormatFromColorType(pixmap_image->GetColorType()),
+                pixmap_image->Width(), pixmap_image->Height(),
+                pixmap_image->GetAlphaType(), pixmap_image);
+        texture_handler->UploadImage(pixmap_image);
+        texture = texture_handler->GetGPUTexture();
+      } else {
+        auto texture_handler = image->GetTextureByContext(context->gpuContext);
+
+        if (texture_handler) {
+          texture = texture_handler->GetGPUTexture();
+        }
+      }
+
+      if (texture != nullptr) {
+        GPUSamplerDescriptor descriptor;
+        descriptor.mag_filter =
+            ToGPUFilterMode(pixmap_shader->GetSamplingOptions()->filter);
+        descriptor.min_filter =
+            ToGPUFilterMode(pixmap_shader->GetSamplingOptions()->filter);
+        descriptor.mipmap_filter =
+            ToGPUMipmapMode(pixmap_shader->GetSamplingOptions()->mipmap);
+        auto sampler =
+            context->gpuContext->GetGPUDevice()->CreateSampler(descriptor);
+
+        Matrix inv_local_matrix{};
+        pixmap_shader->GetLocalMatrix().Invert(&inv_local_matrix);
+
+        return arena_allocator->Make<WGSLTextureFragment>(
+            pixmap_shader, texture, sampler, paint.GetAlphaF(),
+            inv_local_matrix, static_cast<float>(image->Width()),
+            static_cast<float>(image->Height()));
+
+      } else {
+        return arena_allocator->Make<WGSLSolidColor>(Colors::kRed);
+      }
+
+    } else {
+      Shader::GradientInfo info{};
+
+      paint.GetShader()->AsGradient(&info);
+
+      return arena_allocator->Make<WGSLGradientFragment>(
+          info, type, paint.GetAlphaF(), paint.GetShader()->GetLocalMatrix());
+    }
+
+  } else {
+    if (is_stroke) {
+      return arena_allocator->Make<WGSLSolidColor>(paint.GetStrokeColor());
+    } else {
+      return arena_allocator->Make<WGSLSolidColor>(paint.GetFillColor());
+    }
   }
 }
 

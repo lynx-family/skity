@@ -353,6 +353,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_filter_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_path_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_path_geometry.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_rrect_geometry.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_rrect_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.cc
@@ -367,6 +369,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_path_clip.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_path_draw.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_path_draw.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_rrect_draw.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_rrect_draw.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_text_draw.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_text_draw.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_wgsl_fragment.hpp

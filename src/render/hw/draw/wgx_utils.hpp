@@ -17,6 +17,8 @@ namespace skity {
 
 struct Command;
 struct HWDrawContext;
+class HWWGSLFragment;
+class Paint;
 
 void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
                      HWDrawContext* ctx);
@@ -30,10 +32,6 @@ void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
 GPUShaderStageMask ToShaderStage(wgx::ShaderStage stage);
 
 const char* RemapTileFunction();
-
-void ReplacePlaceholder(
-    std::string& wgsl,
-    const std::unordered_map<std::string, std::string>& replacements);
 
 /**
  * Common code generator for all vertex shader.
@@ -63,6 +61,8 @@ bool SetupImageBoundsInfo(const wgx::BindGroupEntry* image_bounds_entry,
                           const Matrix& local_matrix, float width,
                           float height);
 
+HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
+                                   bool is_stroke);
 /**
  * Common code generator for Gradient Shader.
  * It contains the struct for common gradient info:

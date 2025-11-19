@@ -24,23 +24,33 @@ struct GoldenTestEnvConfig {
   }
 
   bool enable_gpu_tessellation = false;
+  bool enable_simple_shape_pipeline = false;
 };
 
 struct AutoRestoreConfig {
   AutoRestoreConfig(GPUContext* gpu_context, GoldenTestEnvConfig config)
       : gpu_context(gpu_context),
-        restore_config{gpu_context->IsEnableGPUTessellation()} {
+        restore_config{gpu_context->IsEnableGPUTessellation(),
+                       gpu_context->IsEnableSimpleShapePipeline()} {
     gpu_context->SetEnableGPUTessellation(config.enable_gpu_tessellation);
+    gpu_context->SetEnableSimpleShapePipeline(
+        config.enable_simple_shape_pipeline);
   }
 
   ~AutoRestoreConfig() {
     gpu_context->SetEnableGPUTessellation(
         restore_config.enable_gpu_tessellation);
+    gpu_context->SetEnableSimpleShapePipeline(
+        restore_config.enable_simple_shape_pipeline);
   }
 
   std::string GetNameSuffix() const {
     if (gpu_context->IsEnableGPUTessellation()) {
       return "gpu_tess";
+    }
+
+    if (gpu_context->IsEnableSimpleShapePipeline()) {
+      return "simple_shape";
     }
     return "";
   }
@@ -120,21 +130,29 @@ bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
 
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
                           PathList path_list) {
+  bool result = true;
   if (path_list.cpu_tess_path != nullptr) {
     if (!CompareGoldenTextureImpl(dl, width, height, path_list.cpu_tess_path,
                                   {})) {
-      return false;
+      result = false;
     }
   }
 
   if (path_list.gpu_tess_path != nullptr) {
     if (!CompareGoldenTextureImpl(dl, width, height, path_list.gpu_tess_path,
                                   {.enable_gpu_tessellation = true})) {
-      return false;
+      result = false;
     }
   }
 
-  return true;
+  if (path_list.simple_shape_path != nullptr) {
+    if (!CompareGoldenTextureImpl(dl, width, height,
+                                  path_list.simple_shape_path,
+                                  {.enable_simple_shape_pipeline = true})) {
+      result = false;
+    }
+  }
+  return result;
 }
 
 bool DiffResult::Passed() const {

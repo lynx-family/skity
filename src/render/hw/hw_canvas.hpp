@@ -118,6 +118,9 @@ class HWCanvas : public Canvas {
 
   bool NeesOffScreenLayer(const Paint& paint) const;
 
+  bool NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
+                               const Matrix& transform) const;
+
  private:
   GPUSurfaceImpl* surface_ = nullptr;
   float ctx_scale_ = 1.f;

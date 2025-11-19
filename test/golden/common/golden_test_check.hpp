@@ -13,6 +13,7 @@ namespace testing {
 struct PathList {
   const char* cpu_tess_path = nullptr;
   const char* gpu_tess_path = nullptr;
+  const char* simple_shape_path = nullptr;
 };
 
 /**

@@ -16,6 +16,7 @@
 #include "src/render/canvas_state.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_clip.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
+#include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
 #include "src/render/hw/filters/hw_filters.hpp"
 #include "src/render/hw/layer/hw_filter_layer.hpp"
 #include "src/render/shape.hpp"
@@ -221,10 +222,8 @@ void HWCanvas::OnSaveLayer(const Rect& bounds, const Paint& paint) {
 void HWCanvas::OnDrawRect(Rect const& rect, Paint const& paint) {
   SKITY_TRACE_EVENT(HWCanvas_OnDrawRect);
 
-  Path path;
-  path.AddRect(rect);
-
-  this->OnDrawPath(path, paint);
+  RRect rrect = RRect::MakeRect(rect);
+  this->OnDrawRRect(rrect, paint);
 }
 
 void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
@@ -431,12 +430,83 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
   }
 }
 
+bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
+                                       const Matrix& transform) const {
+  if (!surface_->GetGPUContext()->IsEnableSimpleShapePipeline()) {
+    return true;
+  }
+
+  if (paint.GetPathEffect() != nullptr) {
+    return true;
+  }
+
+  Rect rect = rrect.GetRect();
+  rect.Sort();
+
+  if (rect.Width() == 0 || rect.Height() == 0) {
+    return true;
+  }
+
+  if (paint.GetStyle() != Paint::kFill_Style) {
+    if (rect.Width() < paint.GetStrokeWidth() ||
+        rect.Height() < paint.GetStrokeWidth()) {
+      return true;
+    }
+  }
+
+  if (transform.HasPersp() || rrect.IsComplex()) {
+    return true;
+  }
+
+  if (rrect.IsRect() && paint.GetStyle() != Paint::kStroke_Style) {
+    return true;
+  }
+
+  return false;
+}
+
 void HWCanvas::DrawRRectInternal(const RRect& rrect, const Paint& paint,
                                  const Matrix& transform) {
-  Path path;
-  path.AddRRect(rrect);
-  path.SetConvexityType(Path::ConvexityType::kConvex);
-  DrawPathInternal(path, paint, transform);
+  if (NeedsFallbackToPathDraw(rrect, paint, transform)) {
+    Path path;
+    path.AddRRect(rrect);
+    path.SetConvexityType(Path::ConvexityType::kConvex);
+    DrawPathInternal(path, paint, transform);
+    return;
+  }
+
+  SKITY_TRACE_EVENT(HWCanvas_DrawRRectInternal);
+  DEBUG_CHECK(paint.GetPathEffect() == nullptr);
+
+  bool need_fill = paint.GetStyle() != Paint::kStroke_Style;
+  bool need_stroke = paint.GetStyle() != Paint::kFill_Style;
+
+  auto draw_op_handler = [&](const RRect& rrect, const Paint& paint,
+                             bool use_stroke) {
+    HWDraw* draw =
+        arena_allocator_->Make<HWDynamicRRectDraw>(transform, rrect, paint);
+    if (draw == nullptr) {
+      return;
+    }
+
+    draw->SetSampleCount(GetCanvasSampleCount());
+    auto bounds = use_stroke ? paint.ComputeFastBounds(rrect.GetBounds())
+                             : rrect.GetBounds();
+    SetupLayerSpaceBoundsForDraw(draw, bounds);
+    CurrentLayer()->AddDraw(draw);
+  };
+
+  if (need_fill) {
+    Paint work_paint(paint);
+    work_paint.SetStyle(Paint::kFill_Style);
+    draw_op_handler(rrect, work_paint, false);
+  }
+
+  if (need_stroke) {
+    Paint work_paint(paint);
+    work_paint.SetStyle(Paint::kStroke_Style);
+    draw_op_handler(rrect, work_paint, true);
+  }
 }
 
 void HWCanvas::OnSave() {
@@ -542,7 +612,8 @@ void HWCanvas::OnFlush() {
     draw_context.index_vector_cache = index_vector_cache_.get();
     draw_context.total_clip_depth = root_layer_->GetState()->GetDrawDepth() + 1;
     draw_context.arena_allocator = arena_allocator_;
-    draw_context.scale = Vec2{1, 1};
+    root_layer_->SetScale(Vec2{ctx_scale_, ctx_scale_});
+    draw_context.scale = root_layer_->GetScale();
 
     auto state = root_layer_->Prepare(&draw_context);
 
