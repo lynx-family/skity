@@ -406,7 +406,16 @@ void Function::InitBindGroups() {
           static_cast<uint32_t>(binding->index),
       };
       entry.stage = stage;
-      entry.type_definition = CreateTypeDefinition(var->type, this, layout_);
+
+      // currently we only use uniform buffer, so it can switch to std140 if
+      // layout is kWGSL
+
+      auto layout = layout_;
+      if (layout == MemoryLayout::kWGSL) {
+        layout = MemoryLayout::kStd140;
+      }
+
+      entry.type_definition = CreateTypeDefinition(var->type, this, layout);
       entry.name = var->name->name;
       bind_group.entries.push_back(entry);
     } else if (var->type.expr->ident->name == "texture_2d") {

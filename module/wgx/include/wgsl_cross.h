@@ -324,6 +324,16 @@ class WGX_API Program {
   Result WriteToMsl(const char* entry_point, const MslOptions& options,
                     std::optional<CompilerContext> ctx = std::nullopt) const;
 
+  /**
+   * Get the bind groups of the entry point function from original WGSL source
+   * code.
+   *
+   * @param entry_point The entry point function name. In the WGSL source code.
+   *
+   * @return The bind groups of the entry point function captured.
+   */
+  std::vector<BindGroup> GetWGSLBindGroups(const char* entry_point) const;
+
  private:
   explicit Program(std::string source);
 

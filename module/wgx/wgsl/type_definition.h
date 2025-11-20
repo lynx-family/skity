@@ -24,6 +24,7 @@ enum class MemoryLayout {
   kStd140,
   kStd430,
   kStd430MSL,
+  kWGSL,  // uniform use std140 layout, storage use std430 layout
 };
 
 std::unique_ptr<TypeDefinition> CreateTypeDefinition(const ast::Type& type,

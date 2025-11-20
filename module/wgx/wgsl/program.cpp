@@ -87,6 +87,23 @@ Result Program::WriteToMsl(const char *entry_point, const MslOptions &options,
   return {};
 }
 
+std::vector<BindGroup> Program::GetWGSLBindGroups(
+    const char *entry_point) const {
+  auto func = module_->GetFunction(entry_point);
+
+  if (func == nullptr || !func->IsEntryPoint()) {
+    return {};
+  }
+
+  auto entry_point_func = Function::Create(module_, func, MemoryLayout::kWGSL);
+
+  if (entry_point_func == nullptr) {
+    return {};
+  }
+
+  return entry_point_func->GetBindGroups();
+}
+
 Program::Program(std::string source)
     : ast_allocator_(new ast::NodeAllocator), mSource(std::move(source)) {}
 
