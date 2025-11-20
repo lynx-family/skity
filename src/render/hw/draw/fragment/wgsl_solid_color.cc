@@ -50,7 +50,7 @@ void WGSLSolidColor::PrepareCMD(Command* cmd, HWDrawContext* context) {
 
   color_binding->type_definition->SetData(&color_, sizeof(Color4f));
 
-  UploadBindGroup(color_binding, cmd, context);
+  UploadBindGroup(group->group, color_binding, cmd, context);
 
   if (filter_ != nullptr) {
     filter_->SetupBindGroup(cmd, context);

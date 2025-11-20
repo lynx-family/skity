@@ -143,7 +143,7 @@ void WGSLBlurFilter::PrepareCMD(Command* cmd, HWDrawContext* context) {
 
     slot_struct->GetMember("dir")->type->SetData(dir);
 
-    UploadBindGroup(slot_entry, cmd, context);
+    UploadBindGroup(group->group, slot_entry, cmd, context);
   }
 
   auto sampler_entry = group->GetEntry(1);
@@ -160,7 +160,7 @@ void WGSLBlurFilter::PrepareCMD(Command* cmd, HWDrawContext* context) {
 
     auto sampler = context->gpuContext->GetGPUDevice()->CreateSampler(desc);
 
-    UploadBindGroup(sampler_entry, cmd, sampler);
+    UploadBindGroup(group->group, sampler_entry, cmd, sampler);
   }
 
   auto texture_entry = group->GetEntry(2);
@@ -170,7 +170,7 @@ void WGSLBlurFilter::PrepareCMD(Command* cmd, HWDrawContext* context) {
     return;
   }
 
-  UploadBindGroup(texture_entry, cmd, texture_);
+  UploadBindGroup(group->group, texture_entry, cmd, texture_);
 }
 
 }  // namespace skity

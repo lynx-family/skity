@@ -153,7 +153,7 @@ void WGSLPathGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
     return;
   }
 
-  UploadBindGroup(common_slot, cmd, context);
+  UploadBindGroup(group->group, common_slot, cmd, context);
 }
 
 WGSLPathAAGeometry::WGSLPathAAGeometry(const Path& path, const Paint& paint)
@@ -227,7 +227,7 @@ void WGSLPathAAGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
     return;
   }
 
-  UploadBindGroup(common_slot, cmd, context);
+  UploadBindGroup(group->group, common_slot, cmd, context);
 }
 
 std::optional<std::vector<std::string>> WGSLPathAAGeometry::GetVarings() const {

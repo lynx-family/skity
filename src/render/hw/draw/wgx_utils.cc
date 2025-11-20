@@ -17,8 +17,8 @@
 
 namespace skity {
 
-void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
-                     HWDrawContext* ctx) {
+void UploadBindGroup(uint32_t group, const wgx::BindGroupEntry* entry,
+                     Command* cmd, HWDrawContext* ctx) {
   if (entry->type != wgx::BindingType::kUniformBuffer) {
     return;
   }
@@ -29,6 +29,8 @@ void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
   cmd->uniform_bindings.emplace_back(UniformBinding{
       ToShaderStage(entry->stage),
       entry->index,
+      group,
+      entry->index,
       entry->name,
       GPUBufferView{
           ctx->stageBuffer->GetGPUBuffer(),
@@ -38,8 +40,8 @@ void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
   });
 }
 
-void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
-                     const std::shared_ptr<GPUSampler>& sampler) {
+void UploadBindGroup(uint32_t group, const wgx::BindGroupEntry* entry,
+                     Command* cmd, const std::shared_ptr<GPUSampler>& sampler) {
   if (entry->type != wgx::BindingType::kSampler) {
     return;
   }
@@ -47,20 +49,24 @@ void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
   cmd->sampler_bindings.emplace_back(SamplerBinding{
       ToShaderStage(entry->stage),
       entry->index,
+      group,
+      entry->index,
       entry->units,
       entry->name,
       sampler,
   });
 }
 
-void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
-                     const std::shared_ptr<GPUTexture>& texture) {
+void UploadBindGroup(uint32_t group, const wgx::BindGroupEntry* entry,
+                     Command* cmd, const std::shared_ptr<GPUTexture>& texture) {
   if (entry->type != wgx::BindingType::kTexture) {
     return;
   }
 
   cmd->texture_bindings.emplace_back(TextureBinding{
       ToShaderStage(entry->stage),
+      entry->index,
+      group,
       entry->index,
       entry->name,
       texture,

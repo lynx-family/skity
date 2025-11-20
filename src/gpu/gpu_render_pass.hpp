@@ -97,7 +97,22 @@ enum class GPUIndexFormat { kUint16, kUint32 };
 
 struct UniformBinding {
   GPUShaderStageMask stages;
+  /**
+   * Flat slot index used in shader pipeline.
+   */
   uint32_t index;
+  /**
+   * Group index from orginal WGSL shader source.
+   * Used in Vulkan as DescriptorSet index.
+   * Used in WebGPU as BindingGroup index.
+   */
+  uint32_t group;
+  /**
+   * Binding index from orginal WGSL shader source.
+   * Used in Vulkan as Binding index in DescriptorSet.
+   * Used in WebGPU as Binding index in BindingGroup.
+   */
+  uint32_t binding;
   std::string name;
   GPUBufferView buffer;
 };
@@ -135,6 +150,18 @@ struct TextureBinding {
    *   For example: If index is 9. Means we bind the texture in `[[texture(9)]]`
    */
   uint32_t index;
+  /**
+   * Group index from orginal WGSL shader source.
+   * Used in Vulkan as DescriptorSet index.
+   * Used in WebGPU as BindingGroup index.
+   */
+  uint32_t group;
+  /**
+   * Binding index from orginal WGSL shader source.
+   * Used in Vulkan as Binding index in DescriptorSet.
+   * Used in WebGPU as Binding index in BindingGroup.
+   */
+  uint32_t binding;
   std::string name;
   std::shared_ptr<GPUTexture> texture;
 };
@@ -155,6 +182,18 @@ struct SamplerBinding {
    *   For example: If index is 9. Means we bind the sampler in `GL_TEXTURE9`
    */
   uint32_t index;
+  /**
+   * Group index from orginal WGSL shader source.
+   * Used in Vulkan as DescriptorSet index.
+   * Used in WebGPU as BindingGroup index.
+   */
+  uint32_t group;
+  /**
+   * Binding index from orginal WGSL shader source.
+   * Used in Vulkan as Binding index in DescriptorSet.
+   * Used in WebGPU as Binding index in BindingGroup.
+   */
+  uint32_t binding;
   /**
    * This value is generate by `wgsl-cross`. And is only valid in OpenGL.
    * If the value is not `nullopt`, it means the sampler object is used by more

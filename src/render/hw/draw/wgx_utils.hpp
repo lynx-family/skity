@@ -20,14 +20,14 @@ struct HWDrawContext;
 class HWWGSLFragment;
 class Paint;
 
-void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
-                     HWDrawContext* ctx);
+void UploadBindGroup(uint32_t group, const wgx::BindGroupEntry* entry,
+                     Command* cmd, HWDrawContext* ctx);
 
-void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
-                     const std::shared_ptr<GPUSampler>& sampler);
+void UploadBindGroup(uint32_t group, const wgx::BindGroupEntry* entry,
+                     Command* cmd, const std::shared_ptr<GPUSampler>& sampler);
 
-void UploadBindGroup(const wgx::BindGroupEntry* entry, Command* cmd,
-                     const std::shared_ptr<GPUTexture>& texture);
+void UploadBindGroup(uint32_t group, const wgx::BindGroupEntry* entry,
+                     Command* cmd, const std::shared_ptr<GPUTexture>& texture);
 
 GPUShaderStageMask ToShaderStage(wgx::ShaderStage stage);
 

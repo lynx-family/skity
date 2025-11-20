@@ -81,7 +81,7 @@ void WGSLImageFilter::PrepareCMD(Command* cmd, HWDrawContext* context) {
 
     auto sampler = context->gpuContext->GetGPUDevice()->CreateSampler(desc);
 
-    UploadBindGroup(sampler_entry, cmd, sampler);
+    UploadBindGroup(group->group, sampler_entry, cmd, sampler);
   }
 
   auto texture_entry = group->GetEntry(1);
@@ -91,7 +91,7 @@ void WGSLImageFilter::PrepareCMD(Command* cmd, HWDrawContext* context) {
     return;
   }
 
-  UploadBindGroup(texture_entry, cmd, texture_);
+  UploadBindGroup(group->group, texture_entry, cmd, texture_);
 
   if (filter_) {
     filter_->SetupBindGroup(cmd, context);

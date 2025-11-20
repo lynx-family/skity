@@ -149,7 +149,7 @@ void WGSLTextureFragment::BindVSUniforms(Command* cmd, HWDrawContext* context,
                             height_)) {
     return;
   }
-  UploadBindGroup(image_bounds_entry, cmd, context);
+  UploadBindGroup(group->group, image_bounds_entry, cmd, context);
 }
 
 std::string WGSLTextureFragment::GetShaderName() const { return "Texture"; }
@@ -189,7 +189,7 @@ void WGSLTextureFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
     image_color_info_struct->GetMember("global_alpha")
         ->type->SetData(&global_alpha_, sizeof(float));
 
-    UploadBindGroup(image_color_info_entry, cmd, context);
+    UploadBindGroup(group->group, image_color_info_entry, cmd, context);
   }
 
   auto sampler_binding = group->GetEntry(1);
@@ -202,8 +202,8 @@ void WGSLTextureFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
     return;
   }
 
-  UploadBindGroup(sampler_binding, cmd, sampler_);
-  UploadBindGroup(texture_binding, cmd, texture_);
+  UploadBindGroup(group->group, sampler_binding, cmd, sampler_);
+  UploadBindGroup(group->group, texture_binding, cmd, texture_);
 
   if (filter_ != nullptr) {
     filter_->SetupBindGroup(cmd, context);

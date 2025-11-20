@@ -579,7 +579,7 @@ void WGSLTessPathStrokeGeometry::PrepareCMD(Command* cmd,
     return;
   }
 
-  UploadBindGroup(common_slot, cmd, context);
+  UploadBindGroup(group->group, common_slot, cmd, context);
 }
 
 GPUBufferView WGSLTessPathStrokeGeometry::CreateVertexBufferView(

@@ -78,7 +78,7 @@ void WGSLTextGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
     return;
   }
 
-  UploadBindGroup(common_slot, cmd, context);
+  UploadBindGroup(group->group, common_slot, cmd, context);
 }
 
 bool WGSLTextGeometry::CanMerge(const HWWGSLGeometry* other) const {
@@ -89,7 +89,6 @@ void WGSLTextGeometry::Merge(const HWWGSLGeometry* other) {
   for (auto&& glyph_rect : o->glyph_rects_) {
     glyph_rects_.emplace_back(std::move(glyph_rect));
   }
-
 }
 
 std::string WGSLTextSolidColorGeometry::GenSourceWGSL() const {
@@ -178,11 +177,10 @@ void WGSLTextGradientGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
 
   entry->type_definition->SetData(&inv_matrix_, sizeof(Matrix));
 
-  UploadBindGroup(entry, cmd, context);
+  UploadBindGroup(group->group, entry, cmd, context);
 }
 
 bool WGSLTextGradientGeometry::CanMerge(const HWWGSLGeometry* other) const {
-  //TODO: Support in the future
   return false;
 }
 

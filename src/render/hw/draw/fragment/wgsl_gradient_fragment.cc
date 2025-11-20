@@ -148,7 +148,7 @@ void WGSLGradientFragment::BindVSUniforms(Command* cmd, HWDrawContext* context,
     return;
   }
 
-  UploadBindGroup(inv_matrix_entry, cmd, context);
+  UploadBindGroup(group->group, inv_matrix_entry, cmd, context);
 }
 
 std::string WGSLGradientFragment::GetShaderName() const {
@@ -180,7 +180,7 @@ void WGSLGradientFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
     return;
   }
 
-  UploadBindGroup(gradient_info_entry, cmd, context);
+  UploadBindGroup(group->group, gradient_info_entry, cmd, context);
 
   auto gradient_type_entry = group->GetEntry(1);
 
@@ -192,7 +192,7 @@ void WGSLGradientFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
     return;
   }
 
-  UploadBindGroup(gradient_type_entry, cmd, context);
+  UploadBindGroup(group->group, gradient_type_entry, cmd, context);
 
   if (filter_ != nullptr) {
     filter_->SetupBindGroup(cmd, context);

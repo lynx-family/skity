@@ -212,7 +212,7 @@ class WGXBlendFilter : public WGXFilterFragment {
     color4f[2] *= color4f[3];
     entry->type_definition->SetData(&color4f, sizeof(float) * 4);
 
-    UploadBindGroup(entry, cmd, context);
+    UploadBindGroup(group->group, entry, cmd, context);
   }
 
  private:
@@ -319,7 +319,7 @@ class WGXMatrixFilter : public WGXFilterFragment {
     info_struct->GetMember("matrix_mul")
         ->type->SetData(&matrix_mul_, sizeof(float) * 16);
 
-    UploadBindGroup(entry, cmd, context);
+    UploadBindGroup(group->group, entry, cmd, context);
   }
 
  private:

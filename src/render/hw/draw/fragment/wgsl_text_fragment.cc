@@ -41,7 +41,7 @@ void WGSLTextFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
       return;
     }
 
-    UploadBindGroup(entry, cmd, sampler_);
+    UploadBindGroup(group->group, entry, cmd, sampler_);
   }
 
   // bind texture
@@ -66,7 +66,7 @@ void WGSLTextFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
         return;
       }
 
-      UploadBindGroup(entry, cmd, texture);
+      UploadBindGroup(group->group, entry, cmd, texture);
     }
   }
 }
@@ -149,7 +149,7 @@ void WGSLColorTextFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
 
   entry->type_definition->SetData(&color_, sizeof(Color4f));
 
-  UploadBindGroup(entry, cmd, context);
+  UploadBindGroup(group->group, entry, cmd, context);
 
   if (filter_ != nullptr) {
     filter_->SetupBindGroup(cmd, context);
@@ -202,7 +202,7 @@ void WGSLColorEmojiFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
 
   entry->type_definition->SetData(&alpha_, sizeof(float));
 
-  UploadBindGroup(entry, cmd, context);
+  UploadBindGroup(group->group, entry, cmd, context);
 
   if (filter_ != nullptr) {
     filter_->SetupBindGroup(cmd, context);
@@ -382,7 +382,7 @@ void WGSLGradientTextFragment::PrepareCMD(Command* cmd,
     return;
   }
 
-  UploadBindGroup(entry, cmd, context);
+  UploadBindGroup(group->group, entry, cmd, context);
 
   entry = group->GetEntry(6);
   if (entry == nullptr) {
@@ -393,7 +393,7 @@ void WGSLGradientTextFragment::PrepareCMD(Command* cmd,
     return;
   }
 
-  UploadBindGroup(entry, cmd, context);
+  UploadBindGroup(group->group, entry, cmd, context);
 
   if (filter_ != nullptr) {
     filter_->SetupBindGroup(cmd, context);
@@ -401,7 +401,6 @@ void WGSLGradientTextFragment::PrepareCMD(Command* cmd,
 }
 
 bool WGSLGradientTextFragment::CanMerge(const HWWGSLFragment* other) const {
-  //TODO: Support in the future
   return false;
 }
 
@@ -424,7 +423,7 @@ void WGSLSdfColorTextFragment::PrepareCMD(Command* cmd,
 
   entry->type_definition->SetData(&color_, sizeof(Color4f));
 
-  UploadBindGroup(entry, cmd, context);
+  UploadBindGroup(group->group, entry, cmd, context);
 
   if (filter_ != nullptr) {
     filter_->SetupBindGroup(cmd, context);
