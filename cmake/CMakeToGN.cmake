@@ -8,6 +8,9 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 function(cmake_to_gni TARGET)
     message("cmake_to_gni: ${TARGET}")
 
+    # Sanitize target name for use in custom target names (replace :: with _)
+    string(REPLACE "::" "_" SANITIZED_TARGET "${TARGET}")
+
     get_target_property(SOURCE_LISTS ${TARGET} SOURCES)
     get_target_property(INCLUDE_DIRS ${TARGET} INCLUDE_DIRECTORIES)
     get_target_property(COMPILE_DEFINITIONS ${TARGET} COMPILE_DEFINITIONS)
@@ -46,16 +49,16 @@ function(cmake_to_gni TARGET)
     endif()
 
     # write source lists to file
-    file(WRITE ${CMAKE_BINARY_DIR}/${TARGET}.sources "")
+    file(WRITE ${CMAKE_BINARY_DIR}/${SANITIZED_TARGET}.sources "")
     foreach(SRC ${SOURCE_LISTS})
-        file(APPEND ${CMAKE_BINARY_DIR}/${TARGET}.sources "${SRC}\n")
+        file(APPEND ${CMAKE_BINARY_DIR}/${SANITIZED_TARGET}.sources "${SRC}\n")
     endforeach()
 
-    add_custom_target(${TARGET}.gni
+    add_custom_target(${SANITIZED_TARGET}.gni
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/gen_target_gni.py
             --target_name ${TARGET}
-            --gn_file ${CMAKE_SOURCE_DIR}/${TARGET}.gni
-            --sources "@${CMAKE_BINARY_DIR}/${TARGET}.sources"
+            --gn_file ${CMAKE_SOURCE_DIR}/${SANITIZED_TARGET}.gni
+            --sources "@${CMAKE_BINARY_DIR}/${SANITIZED_TARGET}.sources"
             --include_dirs ${INCLUDE_DIRS}
             --compile_definitions ${COMPILE_DEFINITIONS_LIST}
             --compile_options ${COMPILE_OPTIONS_LIST}
@@ -72,7 +75,10 @@ function(cmake_to_gni TARGET)
                 set(LIB "pugixml-static")
             endif()
 
-            if (TARGET ${LIB}.gni)
+            # Sanitize library name for checking .gni target existence
+            string(REPLACE "::" "_" SANITIZED_LIB "${LIB}")
+
+            if (TARGET ${SANITIZED_LIB}.gni)
                 # skip if library has already been generated
                 continue()
             endif()
@@ -84,14 +90,26 @@ function(cmake_to_gni TARGET)
                 message("${LIB} is an interface library, aliased target: ${aliased_target}")
                 if(aliased_target)
                     set(LIB ${aliased_target})
+                    # Check if the aliased target is still an INTERFACE_LIBRARY
+                    get_target_property(aliased_type ${LIB} TYPE)
+                    if(aliased_type STREQUAL "INTERFACE_LIBRARY")
+                        message("Skipping INTERFACE_LIBRARY ${LIB} - no sources to process")
+                        continue()
+                    endif()
                 else()
                     get_target_property(NM ${LIB} NAME)
                     message("${LIB} raw name, name: ${NM}")
-                    break()
+                    continue()
                 endif()
             endif()
 
             message("${LIB} is a target, type: ${target_type}")
+
+            # Skip INTERFACE_LIBRARY targets as they don't have sources
+            if(target_type STREQUAL "INTERFACE_LIBRARY")
+                message("Skipping INTERFACE_LIBRARY ${LIB} - no sources to process")
+                continue()
+            endif()
 
             # check if library has sources
             get_target_property(TS ${LIB} SOURCES)
@@ -103,10 +121,9 @@ function(cmake_to_gni TARGET)
 
             cmake_to_gni(${LIB})
 
-            add_dependencies(${TARGET}.gni ${LIB}.gni)
+            # Use sanitized names for dependencies
+            add_dependencies(${SANITIZED_TARGET}.gni ${SANITIZED_LIB}.gni)
         endif()
     endforeach()
 
 endfunction(cmake_to_gni)
-
-
