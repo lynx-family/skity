@@ -32,6 +32,12 @@ enum class GPUBackendType {
    */
   kWebGL2,
   /**
+   * WebGPU backend type, used in webassembly environment
+   *
+   * @note This backend is experimental, and not all features are supported.
+   */
+  kWebGPU,
+  /**
    * Metal backend type, used in MacOS and iOS
    */
   kMetal,

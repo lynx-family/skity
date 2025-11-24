@@ -35,7 +35,7 @@ void WGSLGradientFragment::WriteFSFunctionsAndStructs(
 
             var color: vec4<f32> = calculate_gradient_color(t);
 
-            color.xyz *= color.w;
+            color = vec4<f32>(color.xyz * color.w, color.w);
 
             return color * gradient_info.global_alpha;
         }
@@ -49,7 +49,7 @@ void WGSLGradientFragment::WriteFSFunctionsAndStructs(
 
             var color: vec4<f32> = calculate_gradient_color(t);
 
-            color.xyz *= color.w;
+            color = vec4<f32>(color.xyz * color.w, color.w);
 
             return color * gradient_info.global_alpha;
         }
@@ -64,7 +64,7 @@ void WGSLGradientFragment::WriteFSFunctionsAndStructs(
         } else {
           var color: vec4<f32> = calculate_gradient_color(res.x);
 
-          color.xyz *= color.w;
+          color = vec4<f32>(color.xyz * color.w, color.w);
 
           return color * gradient_info.global_alpha;
         }
@@ -84,7 +84,7 @@ void WGSLGradientFragment::WriteFSFunctionsAndStructs(
 
         var color: vec4<f32> = calculate_gradient_color(t);
 
-        color.xyz *= color.w;
+        color = vec4<f32>(color.xyz * color.w, color.w);
 
         return color * gradient_info.global_alpha;
       }

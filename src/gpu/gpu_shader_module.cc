@@ -9,6 +9,9 @@
 
 namespace skity {
 
+GPUShaderModule::GPUShaderModule(GPUShaderModule& base)
+    : label_(std::move(base.label_)), program_(std::move(base.program_)) {}
+
 std::shared_ptr<GPUShaderModule> GPUShaderModule::Create(
     const GPUShaderModuleDescriptor& desc) {
   SKITY_TRACE_EVENT(GPUShaderModule_CreateWGX);

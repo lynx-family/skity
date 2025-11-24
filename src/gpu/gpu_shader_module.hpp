@@ -23,6 +23,8 @@ class GPUShaderModule {
  public:
   GPUShaderModule() = default;
 
+  explicit GPUShaderModule(GPUShaderModule& base);
+
   virtual ~GPUShaderModule() = default;
 
   static std::shared_ptr<GPUShaderModule> Create(

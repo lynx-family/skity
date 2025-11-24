@@ -495,7 +495,40 @@ if(${SKITY_SW_RENDERER})
 endif()
 
 if(EMSCRIPTEN)
-  target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/render/wasm/wasm_canvas.cc)
+  target_sources(skity PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/render/wasm/wasm_canvas.cc
+    # webgpu backend
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/format_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_blit_pass_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_blit_pass_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_buffer_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_buffer_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_command_buffer_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_command_buffer_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_context_impl_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_context_impl_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_device_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_device_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_render_pass_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_render_pass_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_render_pipeline_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_render_pipeline_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_sampler_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_sampler_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_shader_function_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_shader_function_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_shader_module_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_shader_module_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_surface_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_surface_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_texture_web.cc
+    ${CMAKE_CURRENT_LIST_DIR}/gpu/web/gpu_texture_web.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/web/web_root_layer.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/web/web_root_layer.hpp
+  )
+
+  target_compile_options(skity PUBLIC "--use-port=emdawnwebgpu")
+
   add_executable(skity_wasm ${CMAKE_CURRENT_LIST_DIR}/render/wasm/wasm_binding.cc)
   target_include_directories(skity_wasm PUBLIC ${CMAKE_SOURCE_DIR})
   target_compile_options(skity_wasm PUBLIC "-s" "USE_FREETYPE=1")

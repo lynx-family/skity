@@ -87,7 +87,7 @@ void WGSLTextureFragment::WriteFSMain(std::stringstream& ss) const {
     color = textureSample(uTexture, uSampler, uv);
 
     if image_color_info.infos.x == 3 {
-      color.xyz *= color.w;
+      color = vec4<f32>(color.xyz * color.w, color.w);
     }
 
     color *= image_color_info.global_alpha;

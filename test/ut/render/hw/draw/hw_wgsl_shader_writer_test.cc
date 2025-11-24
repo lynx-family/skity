@@ -558,7 +558,7 @@ fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
   var se: vec2<f32> = linear_pts.zw - linear_pts.xy;
   var t: f32 = dot(cs, se) / dot(se, se);
   var color: vec4<f32> = calculate_gradient_color(t);
-  color.xyz *= color.w;
+  color = vec4<f32>(color.xyz * color.w, color.w);
   return color * gradient_info.global_alpha;
 }
 
@@ -623,7 +623,7 @@ fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
   var se: vec2<f32> = linear_pts.zw - linear_pts.xy;
   var t: f32 = dot(cs, se) / dot(se, se);
   var color: vec4<f32> = calculate_gradient_color(t);
-  color.xyz *= color.w;
+  color = vec4<f32>(color.xyz * color.w, color.w);
   return color * gradient_info.global_alpha;
 }
 
@@ -692,7 +692,7 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   color = textureSample(uTexture, uSampler, uv);
 
   if image_color_info.infos.x == 3 {
-    color.xyz *= color.w;
+    color = vec4<f32>(color.xyz * color.w, color.w);
   }
 
   color *= image_color_info.global_alpha;
@@ -748,7 +748,7 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   color = textureSample(uTexture, uSampler, uv);
 
   if image_color_info.infos.x == 3 {
-    color.xyz *= color.w;
+    color = vec4<f32>(color.xyz * color.w, color.w);
   }
 
   color *= image_color_info.global_alpha;
@@ -1170,7 +1170,7 @@ fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
 
   var color: vec4<f32> = calculate_gradient_color(t);
 
-  color.xyz *= color.w;
+  color = vec4<f32>(color.xyz * color.w, color.w);
 
   return color * gradient_info.global_alpha;
 }
@@ -1578,7 +1578,7 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   color = textureSample(uTexture, uSampler, uv);
 
   if image_color_info.infos.x == 3 {
-    color.xyz *= color.w;
+    color = vec4<f32>(color.xyz * color.w, color.w);
   }
 
   color *= image_color_info.global_alpha;
