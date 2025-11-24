@@ -8,8 +8,8 @@ if(EMSCRIPTEN)
 
   if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     # enable debug symbol for wasm when build in debug mode
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g4")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g4")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -gsource-map")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gsource-map")
   endif()
 elseif(WIN32)
   # Fixme to solve NIM MAX macro defined in windows.h
