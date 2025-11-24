@@ -65,7 +65,7 @@ class GPUDevice {
    */
   virtual uint32_t GetMaxTextureSize() = 0;
 
-  std::shared_ptr<GPUShaderModule> CreateShaderModule(
+  virtual std::shared_ptr<GPUShaderModule> CreateShaderModule(
       const GPUShaderModuleDescriptor& desc);
 };
 
