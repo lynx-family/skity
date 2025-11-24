@@ -16,6 +16,8 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/effect/dash_path_effect.hpp
   ${CMAKE_CURRENT_LIST_DIR}/effect/discrete_path_effect.cc
   ${CMAKE_CURRENT_LIST_DIR}/effect/discrete_path_effect.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/effect/gradient_fallback.cc
+  ${CMAKE_CURRENT_LIST_DIR}/effect/gradient_fallback.hpp
   ${CMAKE_CURRENT_LIST_DIR}/effect/gradient_shader.cc
   ${CMAKE_CURRENT_LIST_DIR}/effect/gradient_shader.hpp
   ${CMAKE_CURRENT_LIST_DIR}/effect/image_filter.cc

@@ -345,3 +345,85 @@ TEST(GradientGolden, LinearGradientWithColorStops) {
       skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
                                .gpu_tess_path = expected_image_path.c_str()}));
 }
+
+TEST(GradientGolden, LinearGradientFallbackTileMode) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(300.f, 300.f));
+
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->Save();
+  canvas->Translate(50, 50);
+
+  skity::Paint paint;
+  std::vector<skity::Vec3> offsets = {
+      {0, 0, 0}, {0, 150, 0}, {150, 0, 0}, {150, 150, 0}};
+  std::vector<skity::TileMode> tile_modes = {
+      skity::TileMode::kClamp, skity::TileMode::kRepeat,
+      skity::TileMode::kMirror, skity::TileMode::kDecal};
+  for (int i = 0; i < 4; i++) {
+    canvas->Save();
+    canvas->Translate(offsets[i].x, offsets[i].y);
+    skity::Vec4 gradient_colors[] = {skity::Colors::kRed, skity::Colors::kBlue};
+    float gradient_positions[] = {0.f, 1.f};
+    std::vector<skity::Point> gradient_points = {
+        skity::Point{50.f, 50.f, 0.f, 1.f},
+        skity::Point{50.f, 50.f, 0.f, 1.f},
+    };
+    auto lgs =
+        skity::Shader::MakeLinear(gradient_points.data(), gradient_colors,
+                                  gradient_positions, 2, tile_modes[i]);
+    paint.SetShader(lgs);
+    canvas->DrawRect({0, 0, 100, 100}, paint);
+    canvas->Restore();
+  }
+
+  canvas->Restore();
+
+  std::filesystem::path expected_image_path(kGoldenTestImageDir);
+  expected_image_path.append("gradient_fallback_tile_mode.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 500, 500,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
+}
+
+TEST(GradientGolden, RadialGradientFallbackTileMode) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(300.f, 300.f));
+
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->Save();
+  canvas->Translate(50, 50);
+
+  skity::Paint paint;
+  std::vector<skity::Vec3> offsets = {
+      {0, 0, 0}, {0, 150, 0}, {150, 0, 0}, {150, 150, 0}};
+  std::vector<skity::TileMode> tile_modes = {
+      skity::TileMode::kClamp, skity::TileMode::kRepeat,
+      skity::TileMode::kMirror, skity::TileMode::kDecal};
+  for (int i = 0; i < 4; i++) {
+    canvas->Save();
+    canvas->Translate(offsets[i].x, offsets[i].y);
+    skity::Vec4 gradient_colors[] = {skity::Colors::kRed, skity::Colors::kBlue};
+    float gradient_positions[] = {0.f, 1.f};
+    auto lgs =
+        skity::Shader::MakeRadial({50.f, 50.f, 0.f, 1.f}, 0.f, gradient_colors,
+                                  gradient_positions, 2, tile_modes[i]);
+    paint.SetShader(lgs);
+    canvas->DrawRect({0, 0, 100, 100}, paint);
+    canvas->Restore();
+  }
+
+  canvas->Restore();
+
+  std::filesystem::path expected_image_path(kGoldenTestImageDir);
+  expected_image_path.append("gradient_fallback_tile_mode.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 500, 500,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
+}

@@ -4,6 +4,7 @@
 
 #include "src/render/hw/draw/wgx_utils.hpp"
 
+#include "src/effect/gradient_fallback.hpp"
 #include "src/effect/pixmap_shader.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
@@ -721,10 +722,14 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
 
       paint.GetShader()->AsGradient(&info);
 
+      Color4f fallback_color;
+      if (NeedsFallbackToSolidColor(type, info, fallback_color)) {
+        return arena_allocator->Make<WGSLSolidColor>(fallback_color);
+      }
+
       return arena_allocator->Make<WGSLGradientFragment>(
           info, type, paint.GetAlphaF(), paint.GetShader()->GetLocalMatrix());
     }
-
   } else {
     if (is_stroke) {
       return arena_allocator->Make<WGSLSolidColor>(paint.GetStrokeColor());

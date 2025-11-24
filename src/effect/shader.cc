@@ -39,7 +39,7 @@ std::shared_ptr<Shader> Shader::MakeRadial(Point const& center, float radius,
     return nullptr;
   }
 
-  if (radius <= 0.f) {
+  if (radius < 0.f) {
     return nullptr;
   }
 
