@@ -446,3 +446,26 @@ TEST(RRect, TestInset) {
   rrect1.Inset(FloatInfinity, FloatInfinity, &rrect2);
   EXPECT_TRUE(rrect2.IsEmpty());
 }
+
+TEST(RRect, ScaleRadii) {
+  RRect rrect;
+  Rect rect = Rect::MakeXYWH(1.f, 1.12f, 47.7599983f, 47.7599983f);
+  std::array<Vec2, 4> radii = {
+      Vec2{0.f, 0.f},
+      Vec2{48.8800011f, 48.8800011f},
+      Vec2{0.f, 0.f},
+      Vec2{0.f, 0.f},
+  };
+  rrect.SetRectRadii(rect, radii.data());
+  EXPECT_TRUE(rrect.IsComplex());
+  EXPECT_FLOAT_EQ(rrect.Radii(skity::RRect::Corner::kUpperLeft).x, 0);
+  EXPECT_FLOAT_EQ(rrect.Radii(skity::RRect::Corner::kUpperLeft).y, 0);
+  EXPECT_FLOAT_EQ(rrect.Radii(skity::RRect::Corner::kUpperRight).x,
+                  47.7599983f);
+  EXPECT_FLOAT_EQ(rrect.Radii(skity::RRect::Corner::kUpperRight).y,
+                  47.7599983f);
+  EXPECT_FLOAT_EQ(rrect.Radii(skity::RRect::Corner::kLowerRight).x, 0);
+  EXPECT_FLOAT_EQ(rrect.Radii(skity::RRect::Corner::kLowerRight).y, 0);
+  EXPECT_FLOAT_EQ(rrect.Radii(skity::RRect::Corner::kLowerLeft).x, 0);
+  EXPECT_FLOAT_EQ(rrect.Radii(skity::RRect::Corner::kLowerLeft).y, 0);
+}

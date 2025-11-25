@@ -1,3 +1,10 @@
+/*
+ * Copyright 2016 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 // Copyright 2021 The Lynx Authors. All rights reserved.
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
@@ -7,15 +14,71 @@
 #include <skity/geometry/rrect.hpp>
 
 #include "src/geometry/math.hpp"
+#include "src/logging.hpp"
 
 namespace skity {
+
+class ScaleToSides {
+ public:
+  // This code assumes that a and b fit in a float, and therefore the resulting
+  // smaller value of a and b will fit in a float. The side of the rectangle may
+  // be larger than a float. Scale must be less than or equal to the ratio limit
+  // / (*a + *b). This code assumes that NaN and Inf are never passed in.
+  static void AdjustRadii(double limit, double scale, float* a, float* b) {
+    DEBUG_CHECK(scale < 1.0 && scale > 0.0);
+
+    *a = static_cast<float>(static_cast<double>(*a * scale));
+    *b = static_cast<float>(static_cast<double>(*b * scale));
+
+    if (*a + *b > limit) {
+      float* min_radius = a;
+      float* max_radius = b;
+
+      // Force minRadius to be the smaller of the two.
+      if (*min_radius > *max_radius) {
+        using std::swap;
+        swap(min_radius, max_radius);
+      }
+
+      // newMinRadius must be float in order to give the actual value of the
+      // radius. The newMinRadius will always be smaller than limit. The largest
+      // that minRadius can be is 1/2 the ratio of minRadius : (minRadius +
+      // maxRadius), therefore in the resulting division, minRadius can be no
+      // larger than 1/2 limit + ULP.
+      float new_min_radius = *min_radius;
+
+      float new_max_radius = static_cast<float>(limit - new_min_radius);
+
+      // Reduce newMaxRadius an ulp at a time until it fits. This usually never
+      // happens, but if it does it could be 1 or 2 times. In certain
+      // pathological cases it could be more. Max iterations seen so far is 17.
+      while (new_max_radius + new_min_radius > limit) {
+        new_max_radius = nextafterf(new_max_radius, 0.0f);
+      }
+      *max_radius = new_max_radius;
+    }
+
+    DEBUG_CHECK(*a >= 0.0f && *b >= 0.0f);
+    DEBUG_CHECK(*a + *b <= limit);
+  }
+};
 
 static bool are_radius_check_predicates_valid(float rad, float min, float max) {
   return (min <= max) && (rad <= max - min) && (min + rad <= max) &&
          (max - rad >= min) && rad >= 0;
 }
 
-static bool clamp_to_zero(Vec2 radii[4]) {
+static void FlushToZero(float& a, float& b) {
+  DEBUG_CHECK(a >= 0);
+  DEBUG_CHECK(b >= 0);
+  if (a + b == a) {
+    b = 0;
+  } else if (a + b == b) {
+    a = 0;
+  }
+}
+
+static bool ClampToZero(Vec2 radii[4]) {
   bool all_corners_square = true;
 
   for (int i = 0; i < 4; i++) {
@@ -46,9 +109,10 @@ void RRect::SetRect(Rect const& rect) {
   assert(this->IsValid());
 }
 namespace {
-float CalculateMinScale(float r1, float r2, float limit, float curr_scale) {
+double CalculateMinScale(double r1, double r2, double limit,
+                         double curr_scale) {
   if (r1 + r2 > limit) {
-    return std::min(curr_scale, SkityIEEEFloatDivided(limit, (r1 + r2)));
+    return std::min(curr_scale, limit / (r1 + r2));
   }
   return curr_scale;
 }
@@ -56,22 +120,33 @@ float CalculateMinScale(float r1, float r2, float limit, float curr_scale) {
 
 bool RRect::ScaleRadii() {
   float scale = 1.0f;
-  scale =
-      CalculateMinScale(radii_[0].x, radii_[1].x, rect_.Width(), scale);  // Top
-  scale = CalculateMinScale(radii_[1].y, radii_[2].y, rect_.Height(),
+
+  // The sides of the rectangle may be larger than a float.
+  double width =
+      static_cast<double>(rect_.Right()) - static_cast<double>(rect_.Left());
+  double height =
+      static_cast<double>(rect_.Bottom()) - static_cast<double>(rect_.Top());
+  scale = CalculateMinScale(radii_[0].x, radii_[1].x, width, scale);  // Top
+  scale = CalculateMinScale(radii_[1].y, radii_[2].y, height,
                             scale);  // Right
-  scale = CalculateMinScale(radii_[2].x, radii_[3].x, rect_.Width(),
+  scale = CalculateMinScale(radii_[2].x, radii_[3].x, width,
                             scale);  // Bottom
-  scale = CalculateMinScale(radii_[3].y, radii_[0].y, rect_.Height(),
+  scale = CalculateMinScale(radii_[3].y, radii_[0].y, height,
                             scale);  // Left
+
+  FlushToZero(radii_[0].x, radii_[1].x);
+  FlushToZero(radii_[1].y, radii_[2].y);
+  FlushToZero(radii_[2].x, radii_[3].x);
+  FlushToZero(radii_[3].y, radii_[0].y);
+
   if (scale < 1.0f) {
-    radii_[0] *= scale;
-    radii_[1] *= scale;
-    radii_[2] *= scale;
-    radii_[3] *= scale;
+    ScaleToSides::AdjustRadii(width, scale, &radii_[0].x, &radii_[1].x);
+    ScaleToSides::AdjustRadii(height, scale, &radii_[1].y, &radii_[2].y);
+    ScaleToSides::AdjustRadii(width, scale, &radii_[2].x, &radii_[3].x);
+    ScaleToSides::AdjustRadii(height, scale, &radii_[3].y, &radii_[0].y);
   }
 
-  clamp_to_zero(radii_.data());
+  ClampToZero(radii_.data());
 
   ComputeType();
 
@@ -87,7 +162,7 @@ void RRect::SetRectRadii(Rect const& rect, const Vec2 radii[4]) {
   this->radii_[2] = radii[2];
   this->radii_[3] = radii[3];
 
-  if (clamp_to_zero(radii_.data())) {
+  if (ClampToZero(radii_.data())) {
     this->SetRect(rect);
     return;
   }
