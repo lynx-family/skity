@@ -91,6 +91,39 @@ TEST(GradientGolden, RadialGradient) {
                                .gpu_tess_path = expected_image_path.c_str()}));
 }
 
+TEST(GradientGolden, RadialGradient2) {
+  static constexpr float kCaseSize = 300;
+
+  skity::Vec4 colors[] = {skity::Color4fFromColor(skity::Color_GREEN),
+                          skity::Color4fFromColor(skity::Color_TRANSPARENT)};
+  float positions[] = {0.75f, 1.f};
+
+  auto gs = skity::Shader::MakeRadial({kCaseSize / 2.f, kCaseSize / 2.f, 0, 1},
+                                      kCaseSize / 2.f, colors, positions, 2,
+                                      skity::TileMode::kClamp);
+
+  skity::Paint paint;
+  paint.SetStyle(skity::Paint::kFill_Style);
+  paint.SetShader(gs);
+
+  auto r = skity::Rect::MakeLTRB(0, 0, kCaseSize, kCaseSize);
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(kCaseSize, kCaseSize));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->DrawRect(r, paint);
+
+  std::filesystem::path expected_image_path(kGoldenTestImageDir);
+
+  expected_image_path.append("radial_gradient2.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 300, 300,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
+}
+
 static void draw_radial_gradient(skity::Canvas* canvas, float x0, float y0,
                                  float r0, float x1, float y1, float r1,
                                  float sz) {

@@ -346,6 +346,12 @@ std::string WGXGradientFragment::GenSourceWGSL(size_t index) const {
   return wgsl;
 }
 
+bool WGXGradientFragment::CanUseLerpColorFast() const {
+  return info_.color_count == 2 &&
+         (info_.color_offsets.empty() ||
+          (info_.color_offsets[0] == 0 && info_.color_offsets[1] == 1));
+}
+
 std::string WGXGradientFragment::GetShaderName() const {
   std::string name = "Gradient";
   name += GradientTypeName();
@@ -354,7 +360,7 @@ std::string WGXGradientFragment::GetShaderName() const {
     name += "OffsetFast";
   }
 
-  if (info_.color_count == 2) {
+  if (CanUseLerpColorFast()) {
     name += "ColorFast";
   }
 
@@ -510,7 +516,7 @@ std::string WGXGradientFragment::GenerateGradientCommonWGSL(
     )";
   }
 
-  if (info_.colors.size() == 2) {
+  if (CanUseLerpColorFast()) {
     wgsl += R"(
       fn lerp_color(current: f32) -> vec4<f32> {
         return mix(gradient_info.colors[0], gradient_info.colors[1], current);

@@ -130,6 +130,8 @@ class WGXGradientFragment {
 
   bool SetupSweepInfo(const wgx::BindGroupEntry* info_entry) const;
 
+  bool CanUseLerpColorFast() const;
+
  private:
   const Shader::GradientInfo& info_;
   Shader::GradientType type_;

@@ -98,11 +98,15 @@ bool NeedsFallbackToSolidColor(Shader::GradientType type,
         break;
       case TileMode::kRepeat:
         fallback_color = AverageGradientColor(
-            info.colors.data(), info.color_offsets.data(), info.color_count);
+            info.colors.data(),
+            info.color_offsets.empty() ? nullptr : info.color_offsets.data(),
+            info.color_count);
         break;
       case TileMode::kMirror:
         fallback_color = AverageGradientColor(
-            info.colors.data(), info.color_offsets.data(), info.color_count);
+            info.colors.data(),
+            info.color_offsets.empty() ? nullptr : info.color_offsets.data(),
+            info.color_count);
         break;
       case TileMode::kDecal:
         fallback_color = Colors::kTransparent;
