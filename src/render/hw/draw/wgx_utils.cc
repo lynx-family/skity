@@ -367,6 +367,13 @@ std::string WGXGradientFragment::GetShaderName() const {
   return name;
 }
 
+namespace {
+Color4f Premul(const Color4f& color) {
+  return Color4f{color.r * color.a, color.g * color.a, color.b * color.a,
+                 color.a};
+}
+}  // namespace
+
 bool WGXGradientFragment::SetupCommonInfo(const wgx::BindGroupEntry* info_entry,
                                           float global_alpha) const {
   if (info_entry->type_definition == nullptr ||
@@ -391,7 +398,12 @@ bool WGXGradientFragment::SetupCommonInfo(const wgx::BindGroupEntry* info_entry,
       gradient_info_struct->GetMember("colors")->type);
 
   for (size_t i = 0; i < info_.colors.size(); i++) {
-    colors->SetDataAt(i, &info_.colors[i], sizeof(float) * 4);
+    if (info_.gradientFlags > 0) {
+      Color4f pm_color = Premul(info_.colors[i]);
+      colors->SetDataAt(i, &pm_color, sizeof(float) * 4);
+    } else {
+      colors->SetDataAt(i, &info_.colors[i], sizeof(float) * 4);
+    }
   }
 
   if (!info_.color_offsets.empty()) {
@@ -415,6 +427,7 @@ bool WGXGradientFragment::SetupCommonInfo(const wgx::BindGroupEntry* info_entry,
   }
 
   gradient_info_struct->GetMember("global_alpha")->type->SetData(global_alpha);
+  gradient_info_struct->GetMember("flags")->type->SetData(info_.gradientFlags);
 
   return true;
 }
@@ -485,6 +498,7 @@ std::string WGXGradientFragment::GenerateGradientCommonWGSL(
   }
 
   wgsl += "global_alpha: f32,\n";
+  wgsl += "flags: i32,\n";
   wgsl += "};\n";
 
   wgsl += RemapTileFunction();

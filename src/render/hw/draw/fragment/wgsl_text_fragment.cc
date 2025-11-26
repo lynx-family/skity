@@ -293,8 +293,10 @@ std::string WGSLGradientTextFragment::GenSourceWGSL() const {
         var se        : vec2<f32> = uLinearInfo.zw - uLinearInfo.xy;
         var t         : f32       = dot(cs, se) / dot(se, se);
         var color     : vec4<f32> = calculate_gradient_color(t);
-
-        return vec4<f32>(color.rgb * color.a, color.a) * gradient_info.global_alpha;
+        if gradient_info.flags == 0 {
+          color = vec4<f32>(color.xyz * color.w, color.w);
+        }
+        return color * gradient_info.global_alpha;
       }
     )";
   } else if (type_ == Shader::GradientType::kRadial) {
@@ -306,8 +308,10 @@ std::string WGSLGradientTextFragment::GenSourceWGSL() const {
         var radius    : f32       = uRadialInfo.z;
         var t         : f32       = mixValue / radius;
         var color     : vec4<f32> = calculate_gradient_color(t);
-
-        return vec4<f32>(color.rgb * color.a, color.a) * gradient_info.global_alpha;
+        if gradient_info.flags == 0 {
+          color = vec4<f32>(color.xyz * color.w, color.w);
+        }
+        return color * gradient_info.global_alpha;
       }
     )";
 
@@ -326,9 +330,9 @@ std::string WGSLGradientTextFragment::GenSourceWGSL() const {
           return vec4<f32>(0.0, 0.0, 0.0, 0.0);
         } else {
           var color     : vec4<f32> = calculate_gradient_color(res.x);
-
-          color = vec4<f32>(color.xyz * color.w, color.w);
-
+          if gradient_info.flags == 0 {
+            color = vec4<f32>(color.xyz * color.w, color.w);
+          }
           return color * gradient_info.global_alpha;
         }
       }

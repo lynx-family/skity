@@ -166,7 +166,7 @@ static void draw_linear_gradient_example(skity::Canvas* canvas) {
       matrix = skity::Matrix::RotateDeg(45, skity::Vec2(blockX, blockY));
     }
     auto lgs = skity::Shader::MakeLinear(pts.data(), colors, positions, 3,
-                                         skity::TileMode::kClamp, flag);
+                                         skity::TileMode::kMirror, flag);
     lgs->SetLocalMatrix(matrix);
     p.SetShader(lgs);
     auto r = skity::Rect::MakeLTRB(blockX, blockY, blockX + 100, blockY + 100);

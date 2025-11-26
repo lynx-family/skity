@@ -518,6 +518,7 @@ struct GradientInfo {
   infos : vec4<i32>,
   colors: array<vec4<f32>, 2>,
   global_alpha: f32,
+  flags: i32,
 };
 
 fn remap_float_tile(t: f32, tile_mode: i32) -> f32 {
@@ -558,7 +559,9 @@ fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
   var se: vec2<f32> = linear_pts.zw - linear_pts.xy;
   var t: f32 = dot(cs, se) / dot(se, se);
   var color: vec4<f32> = calculate_gradient_color(t);
-  color = vec4<f32>(color.xyz * color.w, color.w);
+  if gradient_info.flags == 0 {
+    color = vec4<f32>(color.xyz * color.w, color.w);
+  }
   return color * gradient_info.global_alpha;
 }
 
@@ -583,6 +586,7 @@ struct GradientInfo {
   infos : vec4<i32>,
   colors: array<vec4<f32>, 2>,
   global_alpha: f32,
+  flags: i32,
 };
 
 fn remap_float_tile(t: f32, tile_mode: i32) -> f32 {
@@ -623,7 +627,9 @@ fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
   var se: vec2<f32> = linear_pts.zw - linear_pts.xy;
   var t: f32 = dot(cs, se) / dot(se, se);
   var color: vec4<f32> = calculate_gradient_color(t);
-  color = vec4<f32>(color.xyz * color.w, color.w);
+  if gradient_info.flags == 0 {
+    color = vec4<f32>(color.xyz * color.w, color.w);
+  }
   return color * gradient_info.global_alpha;
 }
 
@@ -1124,6 +1130,7 @@ struct GradientInfo {
   infos : vec4<i32>,
   colors: array<vec4<f32>, 2>,
   global_alpha: f32,
+  flags: i32,
 };
 
 fn remap_float_tile(t: f32, tile_mode: i32) -> f32 {
@@ -1169,9 +1176,9 @@ fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
   var t: f32 = dot(cs, se) / dot(se, se);
 
   var color: vec4<f32> = calculate_gradient_color(t);
-
-  color = vec4<f32>(color.xyz * color.w, color.w);
-
+  if gradient_info.flags == 0 {
+    color = vec4<f32>(color.xyz * color.w, color.w);
+  }
   return color * gradient_info.global_alpha;
 }
 
@@ -1618,7 +1625,7 @@ static std::vector<std::string> NormalizeLines(const std::string &input) {
   return lines;
 }
 
-bool CompareShader(const std::string &expected, const std::string &actual) {
+bool CompareShader(const std::string &actual, const std::string &expected) {
   auto expLines = NormalizeLines(expected);
   auto actLines = NormalizeLines(actual);
 
