@@ -20,14 +20,15 @@ class DrawCircleBenchmark : public Benchmark {
   Size GetSize() override { return {1024, 1024}; }
   std::string GetName() override {
     std::stringstream ss;
-    ss << "DrawCircle_"
-       << "C" << count_ << "_R" << radius_;
+    ss << count_;
+    ss << "_";
     if (is_stroke_) {
-      ss << "_SW" << stroke_width_;
+      ss << "Stroke";
+    } else {
+      ss << "Fill";
     }
-    if (is_opaque_) {
-      ss << "_O";
-    }
+    ss << "Circle_";
+    ss << radius_;
     return ss.str();
   }
 

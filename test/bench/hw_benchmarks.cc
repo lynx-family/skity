@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <numeric>
 #include <skity/gpu/gpu_backend_type.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/skity.hpp>
@@ -21,26 +22,11 @@
 
 namespace fs = std::filesystem;
 
-#define SKITY_BENCH_ALL_GPU_TYPES 0
-#define SKITY_BENCH_ALL_AA_TYPES 0
+#define SKITY_BENCH_ALL_GPU_TYPES 1
+#define SKITY_BENCH_ALL_AA_TYPES 1
 #define SKITY_BENCH_WRITE_PNG 0
 
 fs::path kOutputDir;
-
-int main(int argc, char** argv) {
-  benchmark::Initialize(&argc, argv);
-
-  fs::path exePath = fs::absolute(argv[0]);
-  fs::path exeDir = exePath.parent_path();
-  kOutputDir = exeDir / "output";
-
-  if (!fs::exists(kOutputDir)) {
-    fs::create_directory(kOutputDir);
-  }
-
-  benchmark::RunSpecifiedBenchmarks();
-  benchmark::Shutdown();
-}
 
 using BenchmarkProvider = std::function<std::shared_ptr<skity::Benchmark>()>;
 
@@ -133,6 +119,35 @@ std::vector<int64_t> GetAATypes() {
   };
 #endif
 }
+
+std::vector<std::vector<int64_t>> ArgsProduct(
+    const std::vector<std::vector<int64_t>>& arglists) {
+  std::vector<std::vector<int64_t>> output_args;
+
+  std::vector<std::size_t> indices(arglists.size());
+  const std::size_t total = std::accumulate(
+      std::begin(arglists), std::end(arglists), std::size_t{1},
+      [](const std::size_t res, const std::vector<int64_t>& arglist) {
+        return res * arglist.size();
+      });
+  std::vector<int64_t> args;
+  args.reserve(arglists.size());
+  for (std::size_t i = 0; i < total; i++) {
+    for (std::size_t arg = 0; arg < arglists.size(); arg++) {
+      args.push_back(arglists[arg][indices[arg]]);
+    }
+    output_args.push_back(args);
+    args.clear();
+
+    std::size_t arg = 0;
+    do {
+      indices[arg] = (indices[arg] + 1) % arglists[arg].size();
+    } while (indices[arg++] == 0 && arg < arglists.size());
+  }
+
+  return output_args;
+}
+
 }  // namespace
 
 static void RunBenchmark(benchmark::State& state,
@@ -182,51 +197,83 @@ static void RunBenchmark(benchmark::State& state,
 #endif
 }
 
-static void BM_FillCircle(benchmark::State& state) {
-  RunBenchmark(state, GetGPUBackendType(state.range(0)),
-               GetAAType(state.range(1)), [&state]() {
-                 return std::make_shared<skity::DrawCircleBenchmark>(
-                     state.range(2), state.range(3), false);
-               });
+static void RegisterBenchmark(std::shared_ptr<skity::Benchmark> benchmark,
+                              skity::GPUBackendType backend_type,
+                              skity::BenchTarget::AAType aa) {
+  benchmark::RegisterBenchmark(
+      (benchmark->GetName() + "_" + GetLabel(backend_type, aa)).c_str(),
+      [benchmark, backend_type, aa](benchmark::State& state) {
+        RunBenchmark(state, backend_type, aa,
+                     [benchmark]() { return benchmark; });
+      });
 }
 
-BENCHMARK(BM_FillCircle)
-    ->ArgsProduct({
-        // gpu backend type
-        GetGPUBackendTypes(),
-        // aa
-        GetAATypes(),
-        // count
-        {1, 10, 100, 1000, 10000},
-        // radius
-        {32, 256},
-    })
-    ->ArgNames({"gpu", "aa", "count", "radius"})
-    ->Unit(benchmark::kMicrosecond);
+static void RegisterFillCircleBenchmark() {
+  auto all_args = ArgsProduct({
+      // gpu backend type
+      GetGPUBackendTypes(),
+      // aa
+      GetAATypes(),
+      // count
+      {1, 10, 100, 1000, 10000},
+      // radius
+      {32, 256},
+  });
 
-static void BM_StrokeCircle(benchmark::State& state) {
-  RunBenchmark(state, GetGPUBackendType(state.range(0)),
-               GetAAType(state.range(1)), [&state]() {
-                 auto result = std::make_shared<skity::DrawCircleBenchmark>(
-                     state.range(2), state.range(3), false);
-                 result->SetStroke(true);
-                 result->SetStrokeWidth(state.range(4));
-                 return result;
-               });
+  for (auto args : all_args) {
+    auto backend_type = GetGPUBackendType(args[0]);
+    auto aa = GetAAType(args[1]);
+    auto count = args[2];
+    auto radius = args[3];
+    auto benchmark =
+        std::make_shared<skity::DrawCircleBenchmark>(count, radius, false);
+    RegisterBenchmark(benchmark, backend_type, aa);
+  }
 }
 
-BENCHMARK(BM_StrokeCircle)
-    ->ArgsProduct({
-        // gpu backend type
-        GetGPUBackendTypes(),
-        // aa
-        GetAATypes(),
-        // count
-        {1, 10, 100, 1000, 10000},
-        // radius
-        {32, 256},
-        // stroke width
-        {10},
-    })
-    ->ArgNames({"gpu", "aa", "count", "radius", "stroke_width"})
-    ->Unit(benchmark::kMicrosecond);
+static void RegisterStrokeCircleBenchmark() {
+  auto all_args = ArgsProduct({
+      // gpu backend type
+      GetGPUBackendTypes(),
+      // aa
+      GetAATypes(),
+      // count
+      {1, 10, 100, 1000, 10000},
+      // radius
+      {32, 256},
+  });
+
+  for (auto args : all_args) {
+    auto backend_type = GetGPUBackendType(args[0]);
+    auto aa = GetAAType(args[1]);
+    auto count = args[2];
+    auto radius = args[3];
+    auto benchmark =
+        std::make_shared<skity::DrawCircleBenchmark>(count, radius, false);
+    benchmark->SetStroke(true);
+    benchmark->SetStrokeWidth(10);
+    RegisterBenchmark(benchmark, backend_type, aa);
+  }
+}
+
+static void RegisterAllBenchmarks() {
+  RegisterFillCircleBenchmark();
+  RegisterStrokeCircleBenchmark();
+}
+
+int main(int argc, char** argv) {
+  benchmark::Initialize(&argc, argv);
+
+  fs::path exePath = fs::absolute(argv[0]);
+  fs::path exeDir = exePath.parent_path();
+  kOutputDir = exeDir / "output";
+
+  if (!fs::exists(kOutputDir)) {
+    fs::create_directory(kOutputDir);
+  }
+
+  RegisterAllBenchmarks();
+
+  benchmark::RunSpecifiedBenchmarks();
+  benchmark::Shutdown();
+}

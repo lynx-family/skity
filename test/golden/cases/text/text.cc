@@ -54,7 +54,7 @@ TEST(TextGolden, Basic) {
                                                    golden_path.c_str()));
 }
 
-TEST(TextGolden, TextLinearGradient_flags) {
+TEST(TextGolden, TextLinearGradientFlags) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(400.f, 400.f));
   auto canvas = recorder.GetRecordingCanvas();
