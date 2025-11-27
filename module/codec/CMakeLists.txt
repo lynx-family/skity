@@ -41,7 +41,7 @@ target_sources(
 target_compile_definitions(skity-codec PRIVATE -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
 
 # wuffs
-target_include_directories(skity-codec PRIVATE ${CMAKE_SOURCE_DIR}/third_party/wuffs/release/c)
+target_include_directories(skity-codec PRIVATE ${SKITY_ROOT}/third_party/wuffs/release/c)
 
 target_link_libraries(skity-codec PUBLIC skity)
 
