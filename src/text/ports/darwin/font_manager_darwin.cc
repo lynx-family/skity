@@ -206,7 +206,10 @@ void FontManagerDarwin::InitSystemFamily() {
       default_name_index_ = i;
     }
 
-    sys_family_names_.emplace_back(std::string(buffer.data()));
+    std::string name{buffer.data()};
+    std::transform(name.begin(), name.end(), name.begin(),
+                   [](char c) { return (c & 0x80) ? c : ::tolower(c); });
+    sys_family_names_.emplace_back(std::move(name));
   }
   sys_family_names_.emplace_back("sans-serif");
   sys_family_names_.emplace_back("serif");
@@ -336,8 +339,11 @@ int32_t FontManagerDarwin::GetIndexByFamilyName(const char* family_name) const {
     return default_name_index_;
   }
 
+  std::string name(family_name);
+  std::transform(name.begin(), name.end(), name.begin(),
+                 [](char c) { return (c & 0x80) ? c : ::tolower(c); });
   for (int32_t i = 0; i < static_cast<int32_t>(sys_family_names_.size()); i++) {
-    if (sys_family_names_[i] == family_name) {
+    if (sys_family_names_[i] == name) {
       return i;
     }
   }
