@@ -8,6 +8,7 @@
 
 #include "src/gpu/web/gpu_device_web.hpp"
 #include "src/gpu/web/gpu_surface_web.hpp"
+#include "src/gpu/web/gpu_texture_web.hpp"
 
 namespace skity {
 
@@ -62,7 +63,32 @@ std::unique_ptr<GPUDevice> GPUContextImplWEB::CreateGPUDevice() {
 std::shared_ptr<GPUTexture> GPUContextImplWEB::OnWrapTexture(
     GPUBackendTextureInfo *info, ReleaseCallback callback,
     ReleaseUserData user_data) {
-  return {};
+  if (info == nullptr || info->backend != GPUBackendType::kWebGPU) {
+    return {};
+  }
+
+  auto web_info = static_cast<GPUBackendTextureInfoWEB *>(info);
+
+  if (!web_info->texture) {
+    return {};
+  }
+
+  GPUTextureDescriptor descriptor{};
+  descriptor.width = web_info->width;
+  descriptor.height = web_info->height;
+  descriptor.format = static_cast<GPUTextureFormat>(web_info->format);
+  descriptor.usage =
+      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
+  descriptor.storage_mode = GPUTextureStorageMode::kPrivate;
+
+  // add ref for the texture
+  wgpuTextureAddRef(web_info->texture);
+
+  auto texture = std::make_shared<GPUTextureWEB>(descriptor, web_info->texture);
+
+  texture->SetRelease(callback, user_data);
+
+  return texture;
 }
 
 std::unique_ptr<GPURenderTarget> GPUContextImplWEB::OnCreateRenderTarget(

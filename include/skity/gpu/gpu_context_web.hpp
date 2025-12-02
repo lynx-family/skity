@@ -20,6 +20,18 @@ struct GPUSurfaceDescriptorWEB : public GPUSurfaceDescriptor {
   WGPUTexture texture = {};
 };
 
+struct GPUBackendTextureInfoWEB : public GPUBackendTextureInfo {
+  /**
+   * @brief WebGPU texture that will be used as the sampled texture.
+   *        The Texture will be referenced by the engine. The user can call
+   *        wgpuTextureRelease to release the texture after the GPUContext
+   *        wraped this texture.
+   *
+   * @note The texture must have usage WGPUTextureUsage_TextureBinding.
+   */
+  WGPUTexture texture = {};
+};
+
 /**
  * Create a WebGPU backend GPUContext.
  *
