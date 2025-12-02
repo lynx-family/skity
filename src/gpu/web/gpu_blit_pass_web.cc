@@ -8,6 +8,7 @@
 
 #include "src/gpu/web/gpu_buffer_web.hpp"
 #include "src/gpu/web/gpu_command_buffer_web.hpp"
+#include "src/gpu/web/gpu_texture_web.hpp"
 
 namespace skity {
 
@@ -23,7 +24,63 @@ GPUBlitPassWEB::~GPUBlitPassWEB() { wgpuCommandEncoderRelease(encoder_); }
 void GPUBlitPassWEB::UploadTextureData(std::shared_ptr<GPUTexture> texture,
                                        uint32_t offset_x, uint32_t offset_y,
                                        uint32_t width, uint32_t height,
-                                       void* data) {}
+                                       void* data) {
+  auto texture_web = dynamic_cast<GPUTextureWEB*>(texture.get());
+  if (!texture_web) {
+    // check texture is valid
+    return;
+  }
+
+  auto bytes_per_pixel =
+      GetTextureFormatBytesPerPixel(texture->GetDescriptor().format);
+  auto size = width * height * bytes_per_pixel;
+  // create a stage buffer
+  WGPUBufferDescriptor desc = {};
+  desc.size = size;
+  desc.usage = WGPUBufferUsage_CopySrc | WGPUBufferUsage_MapWrite;
+  desc.mappedAtCreation = true;
+
+  WGPUBuffer stage_buffer = wgpuDeviceCreateBuffer(device_, &desc);
+
+  if (!stage_buffer) {
+    // check stage buffer is valid
+    return;
+  }
+
+  auto ptr = wgpuBufferGetMappedRange(stage_buffer, 0, size);
+
+  if (!ptr) {
+    // check mapped range is valid
+    wgpuBufferRelease(stage_buffer);
+    wgpuBufferDestroy(stage_buffer);
+    return;
+  }
+
+  std::memcpy(ptr, data, size);
+
+  wgpuBufferUnmap(stage_buffer);
+
+  WGPUTexelCopyBufferInfo src_info{};
+  src_info.buffer = stage_buffer;
+  src_info.layout.offset = 0;
+  src_info.layout.bytesPerRow = width * bytes_per_pixel;
+  src_info.layout.rowsPerImage = height;
+
+  WGPUTexelCopyTextureInfo dst_info{};
+  dst_info.texture = texture_web->GetTexture();
+  dst_info.mipLevel = 0;
+  dst_info.origin.x = offset_x;
+  dst_info.origin.y = offset_y;
+  dst_info.origin.z = 0;
+  dst_info.aspect = WGPUTextureAspect_All;
+
+  WGPUExtent3D copy_size = {width, height, 1};
+
+  wgpuCommandEncoderCopyBufferToTexture(encoder_, &src_info, &dst_info,
+                                        &copy_size);
+
+  command_buffer_->RecordStageBuffer(stage_buffer);
+}
 
 void GPUBlitPassWEB::UploadBufferData(GPUBuffer* buffer, void* data,
                                       size_t size) {

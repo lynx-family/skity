@@ -21,6 +21,8 @@ class GPUTextureWEB : public GPUTexture {
 
   WGPUTextureView GetTextureView();
 
+  WGPUTexture GetTexture() const { return texture_; }
+
   static std::shared_ptr<GPUTexture> Create(WGPUDevice device,
                                             const GPUTextureDescriptor& desc);
 

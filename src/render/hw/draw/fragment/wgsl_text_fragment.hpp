@@ -35,16 +35,21 @@ class WGSLTextFragment : public HWWGSLFragment {
        var texture_uv        : vec2<f32> = vec2<f32>(uv.x / f32(texture_dimension.x),
                                                      uv.y / f32(texture_dimension.y));
 
+        var color1 : vec4<f32> = textureSample(uFontTexture0, uSampler, texture_uv);
+        var color2 : vec4<f32> = textureSample(uFontTexture1, uSampler, texture_uv);
+        var color3 : vec4<f32> = textureSample(uFontTexture2, uSampler, texture_uv);
+        var color4 : vec4<f32> = textureSample(uFontTexture3, uSampler, texture_uv);
+
        if font_index == 0 {
-         return textureSample(uFontTexture0, uSampler, texture_uv);
+         return color1;
        } else if font_index == 1 {
-         return textureSample(uFontTexture1, uSampler, texture_uv);
+         return color2;
        } else if font_index == 2 {
-         return textureSample(uFontTexture2, uSampler, texture_uv);
+         return color3;
        } else if font_index == 3 {
-         return textureSample(uFontTexture3, uSampler, texture_uv);
+         return color4;
        } else {
-         return textureSample(uFontTexture0, uSampler, texture_uv);
+         return color1;
        }
     }
   )";

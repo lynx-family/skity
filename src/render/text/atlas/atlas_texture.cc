@@ -49,7 +49,8 @@ void AtlasTexture::InitTexture() {
       break;
   }
   descriptor.usage =
-      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
+      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding) |
+      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kCopyDst);
   descriptor.storage_mode = GPUTextureStorageMode::kPrivate;
   texture_ = gpu_device_->CreateTexture(descriptor);
   valid_texture_ = true;
