@@ -440,6 +440,10 @@ bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
     return true;
   }
 
+  if (paint.GetBlendMode() != BlendMode::kSrcOver) {
+    return true;
+  }
+
   Rect rect = rrect.GetRect();
   rect.Sort();
 

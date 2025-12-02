@@ -10,7 +10,6 @@
 #include <string>
 
 #include "common/golden_test_check.hpp"
-#include "skity/geometry/rect.hpp"
 
 static const char* kGoldenTestImageSimpleDir = CASE_DIR "simple_images/";
 static const char* kGoldenTestImageCPUTessDir = CASE_DIR "cpu_tess_images/";
@@ -349,6 +348,35 @@ TEST(SimpleShapeGolden, DrawStrokeRRectWithScale) {
   auto dl = recorder.FinishRecording();
   PathListContext context("draw_stroke_rrect_with_scale.png");
 
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400, 400,
+                                                   context.ToPathList()));
+}
+
+TEST(SimpleShapeGolden, DrawStrokeRRectBlending) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(400.f, 400.f));
+
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Clear(skity::Color_WHITE);
+
+  skity::Paint paint;
+  paint.SetColor(skity::Color_GREEN);
+  paint.SetStrokeWidth(10);
+  paint.SetStyle(skity::Paint::kStroke_Style);
+  canvas->Save();
+  canvas->Translate(50.f, 50.f);
+  canvas->DrawRoundRect(skity::Rect::MakeWH(80, 200), 10, 10, paint);
+
+  paint.SetBlendMode(skity::BlendMode::kSrc);
+  canvas->Translate(100, 0);
+  canvas->DrawRoundRect(skity::Rect::MakeWH(80, 200), 10, 10, paint);
+
+  paint.SetAlphaF(0.5f);
+  canvas->Translate(100, 0);
+  canvas->DrawRoundRect(skity::Rect::MakeWH(80, 200), 10, 10, paint);
+
+  auto dl = recorder.FinishRecording();
+  PathListContext context("draw_stroke_rect_with_blending.png");
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400, 400,
                                                    context.ToPathList()));
 }
