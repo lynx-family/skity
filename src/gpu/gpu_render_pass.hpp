@@ -247,6 +247,10 @@ struct Command {
       return false;
     }
 
+    if (instance_buffer.buffer != nullptr && instance_count == 0) {
+      return false;
+    }
+
     for (const auto& uniform : uniform_bindings) {
       if (uniform.buffer.buffer == nullptr) {
         return false;

@@ -145,6 +145,8 @@ jobs:
             run: |
                 cmake -B out/cmake_golden_test -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSKITY_MTL_BACKEND=ON -DSKITY_TEST=ON -DSKITY_GOLDEN_GUI=OFF
                 cmake --build out/cmake_golden_test --target skity_golden_test_shape skity_golden_test_text
+                export MTL_DEBUG_LAYER=1
+                export METAL_DEBUG_ERROR_MODE=1
                 ./out/cmake_golden_test/test/golden/skity_golden_test_shape
                 ./out/cmake_golden_test/test/golden/skity_golden_test_text
 
@@ -165,4 +167,6 @@ jobs:
             run: |
                 cmake -B out/cmake_golden_test -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSKITY_MTL_BACKEND=ON -DSKITY_TEST=ON -DSKITY_GOLDEN_GUI=OFF -DSKITY_CT_FONT=ON
                 cmake --build out/cmake_golden_test --target skity_golden_test_text
+                export MTL_DEBUG_LAYER=1
+                export METAL_DEBUG_ERROR_MODE=1
                 ./out/cmake_golden_test/test/golden/skity_golden_test_text

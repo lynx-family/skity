@@ -152,3 +152,41 @@ TEST(ShapeGolden, PathTransformFillType) {
       skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
                                .gpu_tess_path = expected_image_path.c_str()}));
 }
+
+TEST(ShapeGolden, DrawEmptyPath) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(400.f, 200.f));
+
+  auto canvas = recorder.GetRecordingCanvas();
+
+  skity::Paint paint;
+  paint.SetColor(skity::Color_RED);
+  paint.SetStyle(skity::Paint::kStroke_Style);
+  paint.SetStrokeWidth(20.f);
+  paint.SetStrokeMiter(1.415f);
+
+  skity::Path path;
+  canvas->Save();
+  canvas->Translate(50.f, 50.f);
+  canvas->DrawPath(path, paint);
+  canvas->Restore();
+
+  canvas->Save();
+  path.MoveTo(100, 100);
+  canvas->DrawPath(path, paint);
+  canvas->Restore();
+
+  canvas->Save();
+  path.MoveTo(200, 200);
+  path.MoveTo(300, 100);
+  canvas->DrawPath(path, paint);
+  canvas->Restore();
+
+  std::filesystem::path expected_image_path(kGoldenTestImageDir);
+  expected_image_path.append("draw_empty_path.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 400, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
+}
