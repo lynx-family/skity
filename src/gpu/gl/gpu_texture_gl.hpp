@@ -52,7 +52,7 @@ class GPUTextureGL : public GPUTexture {
       const GPUTextureDescriptor& descriptor);
 
   void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
-                  uint32_t height, void* data);
+                  uint32_t height, void* data) override;
 
   uint32_t GetGLTextureID() const { return texture_id_; }
 
@@ -90,6 +90,9 @@ class GPUTexturePlaceholderGL : public GPUTextureGL {
 
   void Bind() const override {}
 
+  void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
+                  uint32_t height, void* data) override {}
+
   void Unbind() const override {}
 
   size_t GetBytes() const override { return 0; }
@@ -105,6 +108,9 @@ class GPUExternalTextureGL : public GPUTextureGL {
   }
 
   ~GPUExternalTextureGL() override;
+
+  void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
+                  uint32_t height, void* data) override {}
 
   static std::shared_ptr<GPUTexture> Make(
       const GPUTextureDescriptor& descriptor, uint32_t id, bool owned_by_engine,
@@ -127,6 +133,9 @@ class GPUTextureRenderBufferGL : public GPUTexture {
   uint32_t GetBufferId() const { return buffer_id_; }
 
   void SetFramebuffer(uint32_t fbo_id, bool need_free);
+
+  void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
+                  uint32_t height, void* data) override {}
 
   const std::optional<GLFramebufferHolder>& GetFramebuffer() const {
     return fbo_;

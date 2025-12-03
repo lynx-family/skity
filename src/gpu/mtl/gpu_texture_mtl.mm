@@ -32,6 +32,14 @@ GPUTextureMTL::GPUTextureMTL(id<MTLDevice> mtl_device, id<MTLCommandQueue> mtl_c
 
 GPUTextureMTL::~GPUTextureMTL() = default;
 
+void GPUTextureMTL::UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
+                               uint32_t height, void* data) {
+  [mtl_texture_ replaceRegion:MTLRegionMake2D(offset_x, offset_y, width, height)
+                  mipmapLevel:0
+                    withBytes:data
+                  bytesPerRow:width * GetTextureFormatBytesPerPixel(GetDescriptor().format)];
+}
+
 size_t GPUTextureMTL::GetBytes() const {
   auto& desc = GetDescriptor();
   if (desc.storage_mode == GPUTextureStorageMode::kMemoryless) {

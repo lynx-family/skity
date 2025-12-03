@@ -77,6 +77,9 @@ class GPUTexture {
   void SetRelease(ReleaseCallback release_callback,
                   ReleaseUserData release_user_data);
 
+  virtual void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
+                          uint32_t height, void* data) = 0;
+
  protected:
   explicit GPUTexture(const GPUTextureDescriptor& descriptor);
 

@@ -19,6 +19,9 @@ class GPUTextureWEB : public GPUTexture {
 
   size_t GetBytes() const override;
 
+  void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
+                  uint32_t height, void* data) override {}
+
   WGPUTextureView GetTextureView();
 
   WGPUTexture GetTexture() const { return texture_; }

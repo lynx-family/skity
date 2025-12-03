@@ -27,6 +27,9 @@ class GPUTextureMTL : public GPUTexture {
 
   id<MTLTexture> GetMTLTexture() const { return mtl_texture_; }
 
+  void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
+                  uint32_t height, void* data) override;
+
   size_t GetBytes() const override;
 
   SKT_BACKEND_CAST(GPUTextureMTL, GPUTexture)
