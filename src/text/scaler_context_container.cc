@@ -7,8 +7,6 @@
 #include <skity/geometry/stroke.hpp>
 #include <skity/text/glyph.hpp>
 
-#include "src/logging.hpp"
-
 namespace skity {
 
 static FontMetrics GenerateMetrics(ScalerContext *context) {
@@ -83,7 +81,6 @@ void ScalerContextContainer::PrepareImageInfos(const GlyphID *glyph_ids,
 GlyphData *ScalerContextContainer::Glyph(GlyphID id) SKITY_REQUIRES(mutex_) {
   auto it = glyph_data_map_.find(id);
   if (it != glyph_data_map_.end()) {
-    DEBUG_CHECK(!it->second->NeedFree());
     return it->second.get();
   }
   auto glyph_data = std::make_unique<GlyphData>(id);

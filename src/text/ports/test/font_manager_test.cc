@@ -22,7 +22,7 @@
 namespace skity {
 
 #ifndef SKITY_WASM
-// ---------- FontFileInfo ----------
+
 static FontFileInfo FontFileInfoFromJson(const Json::Value& value) {
   FontFileInfo info;
 
@@ -39,7 +39,6 @@ static FontFileInfo FontFileInfoFromJson(const Json::Value& value) {
   return info;
 }
 
-// ---------- FontFamily ----------
 static std::unique_ptr<FontFamily> FontFamilyFromJson(
     const Json::Value& value) {
   auto family = std::make_unique<FontFamily>("", false);
@@ -71,7 +70,6 @@ static std::unique_ptr<FontFamily> FontFamilyFromJson(
   return family;
 }
 
-// ---------- 顶层入口 ----------
 static std::vector<FontFamily> LoadFontFamiliesFromJsonFile(
     const std::string& filename) {
   std::ifstream ifs(filename);

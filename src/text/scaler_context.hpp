@@ -10,6 +10,7 @@
 #include <skity/text/font.hpp>
 #include <skity/text/typeface.hpp>
 
+#include "src/logging.hpp"
 #include "src/text/scaler_context_desc.hpp"
 
 namespace skity {
@@ -69,13 +70,20 @@ class Descriptor {
 
 class ScalerContext {
  public:
-  ScalerContext(std::shared_ptr<Typeface> typeface,
+  ScalerContext(std::weak_ptr<Typeface> typeface,
                 const ScalerContextDesc* desc);
   virtual ~ScalerContext() = default;
 
  public:
   const ScalerContextDesc& GetDesc() const { return desc_; }
-  std::shared_ptr<Typeface> GetTypeface() { return typeface_; }
+  // ScalerContext is created or retrieved from the cache through the typeface.
+  // If a ScalerContext is used, the typeface is guaranteed to exist; we just no
+  // longer hold a strong reference to the typeface here.
+  std::shared_ptr<Typeface> GetTypeface() {
+    auto typeface = typeface_.lock();
+    DEBUG_CHECK(typeface != nullptr);
+    return typeface;
+  }
   void MakeGlyph(GlyphData* glyph_data);
   void GetImage(GlyphData* glyph, const StrokeDesc& stroke_desc);
   void GetImageInfo(GlyphData* glyph, const StrokeDesc& stroke_desc);
@@ -97,7 +105,7 @@ class ScalerContext {
   virtual uint16_t OnGetFixedSize() = 0;
 
  protected:
-  std::shared_ptr<Typeface> typeface_;
+  std::weak_ptr<Typeface> typeface_;
   ScalerContextDesc desc_;
 };
 }  // namespace skity

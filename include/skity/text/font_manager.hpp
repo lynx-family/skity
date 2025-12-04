@@ -89,9 +89,6 @@ class SKITY_API FontManager {
 
   virtual std::shared_ptr<Typeface> OnGetDefaultTypeface(
       FontStyle const& font_style) const = 0;
-
- protected:
-  std::vector<std::shared_ptr<Typeface>> font_lst_;
 };
 
 }  // namespace skity

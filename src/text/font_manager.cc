@@ -180,12 +180,7 @@ std::shared_ptr<Typeface> FontManager::MakeFromData(
   if (nullptr == data) {
     return nullptr;
   }
-  auto typeface = this->OnMakeFromData(data, ttcIndex);
-  if (!typeface) {
-    return nullptr;
-  }
-  font_lst_.push_back(std::move(typeface));
-  return font_lst_.back();
+  return this->OnMakeFromData(data, ttcIndex);
 }
 
 std::shared_ptr<Typeface> FontManager::MakeFromFile(const char* path,
@@ -193,12 +188,7 @@ std::shared_ptr<Typeface> FontManager::MakeFromFile(const char* path,
   if (nullptr == path) {
     return nullptr;
   }
-  auto typeface = this->OnMakeFromFile(path, ttcIndex);
-  if (!typeface) {
-    return nullptr;
-  }
-  font_lst_.push_back(std::move(typeface));
-  return font_lst_.back();
+  return this->OnMakeFromFile(path, ttcIndex);
 }
 
 std::shared_ptr<Typeface> FontManager::GetDefaultTypeface(
