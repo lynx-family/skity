@@ -190,6 +190,7 @@ void GPURenderPassWEB::EncodeCommands(std::optional<GPUViewport> viewport,
   }
 
   wgpuRenderPassEncoderEnd(render_pass);
+  wgpuRenderPassEncoderRelease(render_pass);
 }
 
 WGPURenderPassEncoder GPURenderPassWEB::BeginRenderPass() {
@@ -296,6 +297,8 @@ void GPURenderPassWEB::SetupBindGroup(WGPURenderPassEncoder render_pass,
                                       nullptr);
 
     command_buffer_->RecordBindGroup(bind_group);
+
+    wgpuBindGroupLayoutRelease(layout);
   }
 }
 

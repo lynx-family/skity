@@ -92,6 +92,8 @@ bool GPUCommandBufferWEB::Submit() {
                   .userdata2 = nullptr,
               });
 
+  wgpuCommandBufferRelease(command_buffer);
+
   return true;
 }
 

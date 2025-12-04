@@ -11,9 +11,7 @@ namespace skity {
 
 GPUSurfaceImplWEB::GPUSurfaceImplWEB(const GPUSurfaceDescriptor& desc,
                                      GPUContextImpl* ctx, WGPUTexture texture)
-    : GPUSurfaceImpl(desc, ctx), texture_(texture) {
-  wgpuTextureAddRef(texture_);
-}
+    : GPUSurfaceImpl(desc, ctx), texture_(texture) {}
 
 GPUSurfaceImplWEB::~GPUSurfaceImplWEB() { wgpuTextureRelease(texture_); }
 
