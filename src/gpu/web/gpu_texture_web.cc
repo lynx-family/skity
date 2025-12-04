@@ -5,6 +5,7 @@
 #include "src/gpu/web/gpu_texture_web.hpp"
 
 #include "src/gpu/web/format_web.hpp"
+#include "src/gpu/web/gpu_device_web.hpp"
 
 namespace skity {
 
@@ -60,8 +61,8 @@ WGPUTextureDescriptor ConvertToWGPUTextureDescriptor(
 }  // namespace
 
 GPUTextureWEB::GPUTextureWEB(const GPUTextureDescriptor& descriptor,
-                             WGPUTexture texture)
-    : GPUTexture(descriptor), texture_(texture) {}
+                             GPUDeviceWEB* device, WGPUTexture texture)
+    : GPUTexture(descriptor), device_(device), texture_(texture) {}
 
 GPUTextureWEB::~GPUTextureWEB() {
   wgpuTextureViewRelease(texture_view_);
@@ -96,16 +97,35 @@ WGPUTextureView GPUTextureWEB::GetTextureView() {
   return texture_view_;
 }
 
+void GPUTextureWEB::UploadData(uint32_t offset_x, uint32_t offset_y,
+                               uint32_t width, uint32_t height, void* data) {
+  if (device_ == nullptr || data == nullptr || width == 0 || height == 0) {
+    return;
+  }
+
+  auto cmd = device_->CreateCommandBuffer();
+
+  auto blit_pass = cmd->BeginBlitPass();
+
+  blit_pass->UploadTextureData(shared_from_this(), offset_x, offset_y, width,
+                               height, data);
+
+  blit_pass->End();
+
+  cmd->Submit();
+}
+
 std::shared_ptr<GPUTexture> GPUTextureWEB::Create(
-    WGPUDevice device, const GPUTextureDescriptor& desc) {
+    GPUDeviceWEB* device, const GPUTextureDescriptor& desc) {
   auto wgpu_desc = ConvertToWGPUTextureDescriptor(desc);
-  WGPUTexture texture = wgpuDeviceCreateTexture(device, &wgpu_desc);
+  WGPUTexture texture =
+      wgpuDeviceCreateTexture(device->GetDevice(), &wgpu_desc);
 
   if (!texture) {
     return nullptr;
   }
 
-  return std::make_shared<GPUTextureWEB>(desc, texture);
+  return std::make_shared<GPUTextureWEB>(desc, device, texture);
 }
 
 }  // namespace skity

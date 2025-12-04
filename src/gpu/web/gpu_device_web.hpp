@@ -50,6 +50,8 @@ class GPUDeviceWEB : public GPUDevice {
   std::shared_ptr<GPUShaderModule> CreateShaderModule(
       const GPUShaderModuleDescriptor& desc) override;
 
+  WGPUDevice GetDevice() const { return device_; }
+
  private:
   WGPUDevice device_;
   WGPUQueue queue_;

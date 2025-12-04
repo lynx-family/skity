@@ -86,7 +86,7 @@ std::shared_ptr<GPUSampler> GPUDeviceWEB::CreateSampler(
 
 std::shared_ptr<GPUTexture> GPUDeviceWEB::CreateTexture(
     const GPUTextureDescriptor& desc) {
-  return GPUTextureWEB::Create(device_, desc);
+  return GPUTextureWEB::Create(this, desc);
 }
 
 std::shared_ptr<GPUShaderModule> GPUDeviceWEB::CreateShaderModule(

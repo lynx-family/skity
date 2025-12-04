@@ -11,25 +11,30 @@
 
 namespace skity {
 
-class GPUTextureWEB : public GPUTexture {
+class GPUDeviceWEB;
+
+class GPUTextureWEB : public GPUTexture,
+                      public std::enable_shared_from_this<GPUTextureWEB> {
  public:
-  GPUTextureWEB(const GPUTextureDescriptor& descriptor, WGPUTexture texture);
+  GPUTextureWEB(const GPUTextureDescriptor& descriptor, GPUDeviceWEB* device,
+                WGPUTexture texture);
 
   ~GPUTextureWEB() override;
 
   size_t GetBytes() const override;
 
   void UploadData(uint32_t offset_x, uint32_t offset_y, uint32_t width,
-                  uint32_t height, void* data) override {}
+                  uint32_t height, void* data) override;
 
   WGPUTextureView GetTextureView();
 
   WGPUTexture GetTexture() const { return texture_; }
 
-  static std::shared_ptr<GPUTexture> Create(WGPUDevice device,
+  static std::shared_ptr<GPUTexture> Create(GPUDeviceWEB* device,
                                             const GPUTextureDescriptor& desc);
 
  private:
+  GPUDeviceWEB* device_ = nullptr;
   WGPUTexture texture_ = nullptr;
   WGPUTextureView texture_view_ = nullptr;
 };

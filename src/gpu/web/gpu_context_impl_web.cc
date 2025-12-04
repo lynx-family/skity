@@ -84,7 +84,9 @@ std::shared_ptr<GPUTexture> GPUContextImplWEB::OnWrapTexture(
   // add ref for the texture
   wgpuTextureAddRef(web_info->texture);
 
-  auto texture = std::make_shared<GPUTextureWEB>(descriptor, web_info->texture);
+  auto texture = std::make_shared<GPUTextureWEB>(
+      descriptor, dynamic_cast<GPUDeviceWEB *>(this->GetGPUDevice()),
+      web_info->texture);
 
   texture->SetRelease(callback, user_data);
 

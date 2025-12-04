@@ -37,7 +37,7 @@ void WebRootLayer::PrepareAttachments(HWDrawContext *context) {
 
   wgpuTextureAddRef(
       texture_);  // release will be called when GPUTextureWEB delete
-  color_attachment_ = std::make_shared<GPUTextureWEB>(desc, texture_);
+  color_attachment_ = std::make_shared<GPUTextureWEB>(desc, nullptr, texture_);
 }
 
 void WebRootLayer::PrepareRenderPassDesc(HWDrawContext *context) {
