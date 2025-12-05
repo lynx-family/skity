@@ -38,6 +38,7 @@ target_link_libraries(skity_golden_test
   gtest
   skity::skity
   skity::codec
+  skity::io
   "-framework Metal"
   "-framework CoreGraphics"
   "-framework ImageIO"
@@ -110,7 +111,7 @@ function(add_golden_test TARGET_NAME GOLDEN_DIR_POSTFIX)
     )
   endif()
 
-  target_link_libraries(${ARG_NAME} PRIVATE gtest skity::skity)
+  target_link_libraries(${ARG_NAME} PRIVATE gtest skity::skity skity::io)
   target_include_directories(${ARG_NAME} PRIVATE ${SKITY_GOLDEN_TEST_DIR})
 
   if (ARG_LIBS)
@@ -123,6 +124,7 @@ function(add_golden_test TARGET_NAME GOLDEN_DIR_POSTFIX)
     PRIVATE
     CASE_NAME="${ARG_NAME}"
     CASE_DIR="${CMAKE_CURRENT_LIST_DIR}/${GOLDEN_DIR_POSTFIX}"
+    RESOURCES_DIR="${SKITY_ROOT}/resources"
   )
 
   # append other user defined defines
