@@ -101,7 +101,7 @@ struct TessPathStrokeVisitor : public PathVisitor {
       : PathVisitor(false, matrix),
 
         xform_(wangs_formula::VectorXform(matrix)),
-        stroke_radius_(std::max(0.5f, paint.GetStrokeWidth() * 0.5f)),
+        stroke_radius_(std::max(0.5f, paint.GetStrokeWidth()) * 0.5f),
         stroke_miter_(paint.GetStrokeMiter()),
         join_(paint.GetStrokeJoin()),
         cap_(paint.GetStrokeCap()),

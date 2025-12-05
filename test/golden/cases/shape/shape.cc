@@ -84,6 +84,39 @@ TEST(ShapeGolden, LargeStrokeWidth) {
                                .gpu_tess_path = expected_image_path.c_str()}));
 }
 
+TEST(ShapeGolden, TinyStrokeWidth) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(200.f, 100.f));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Clear(skity::Color_WHITE);
+  skity::Paint paint;
+
+  paint.SetColor(skity::Color_RED);
+  paint.SetStyle(skity::Paint::kStroke_Style);
+  paint.SetStrokeWidth(0.1f);
+  paint.SetStrokeMiter(4.f);
+
+  canvas->Save();
+  canvas->Translate(20.f, 50.f);
+  canvas->DrawRect(skity::Rect::MakeWH(50.f, 0.f), paint);
+  canvas->Restore();
+
+  paint.SetStrokeJoin(skity::Paint::kRound_Join);
+
+  canvas->Save();
+  canvas->Translate(120.f, 50.f);
+  canvas->DrawRect(skity::Rect::MakeWH(50.f, 0.f), paint);
+  canvas->Restore();
+
+  std::filesystem::path expected_image_path(kGoldenTestImageDir);
+  expected_image_path.append("tiny_stroke_width.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 200, 100,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
+}
+
 TEST(ShapeGolden, StrokeJoinAndCap) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(500.f, 200.f));
