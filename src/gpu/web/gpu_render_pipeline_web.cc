@@ -15,7 +15,7 @@ struct VertexBufferLayout {
   WGPUVertexBufferLayout layout;
   std::vector<WGPUVertexAttribute> attributes;
 
-  VertexBufferLayout(const GPUVertexBufferLayout& l) {
+  explicit VertexBufferLayout(const GPUVertexBufferLayout& l) {
     layout.arrayStride = l.array_stride;
     if (l.step_mode == GPUVertexStepMode::kVertex) {
       layout.stepMode = WGPUVertexStepMode_Vertex;
@@ -42,7 +42,7 @@ struct FragmentState {
   WGPUColorTargetState target = {};
   WGPUBlendState blend = {};
 
-  FragmentState(const GPUColorTargetState& fragment) {
+  explicit FragmentState(const GPUColorTargetState& fragment) {
     state.targetCount = 1;
     state.targets = &target;
 
@@ -128,6 +128,7 @@ WGPUDepthStencilState GetDepthStencilStatus(
         WGPUStencilOperation_Keep;
     status.stencilFront.passOp = status.stencilBack.passOp =
         WGPUStencilOperation_Keep;
+    status.stencilReadMask = status.stencilWriteMask = 0;
   }
 
   return status;
@@ -187,10 +188,7 @@ std::unique_ptr<GPURenderPipeline> GPURenderPipelineWeb::Create(
 
   wgpu_desc.multisample.count = desc.sample_count;
   wgpu_desc.multisample.mask = ~0u;
-  // only enable alphaToCoverage when write mask is not 0, which means this is a
-  // color pass
-  wgpu_desc.multisample.alphaToCoverageEnabled =
-      desc.sample_count > 1 && desc.target.write_mask != 0;
+  wgpu_desc.multisample.alphaToCoverageEnabled = false;
   FragmentState fragment{desc.target};
 
   fragment.state.module = fs_function->GetShaderModule();
