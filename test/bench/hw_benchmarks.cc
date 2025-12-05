@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "test/bench/case/draw_circle.hpp"
+#include "test/bench/case/draw_skp.hpp"
 #include "test/bench/common/bench_context.hpp"
 #include "test/bench/common/bench_gpu_time_tracer.hpp"
 #include "test/bench/common/bench_target.hpp"
@@ -256,7 +257,44 @@ static void RegisterStrokeCircleBenchmark() {
   }
 }
 
+static const char* kTigerSKP = RESOURCES_DIR "/skp/tiger.skp";
+
+static void RegisterTigerSKPBenchmark() {
+  auto all_args = ArgsProduct({
+      // gpu backend type
+      GetGPUBackendTypes(),
+      // aa
+      GetAATypes(),
+  });
+
+  for (auto args : all_args) {
+    auto backend_type = GetGPUBackendType(args[0]);
+    auto aa = GetAAType(args[1]);
+    if (backend_type == skity::GPUBackendType::kOpenGL &&
+        aa == skity::BenchTarget::AAType::kMSAA) {
+      // OpenGL MSAA performance results on macOS should not be taken as a
+      // meaningful benchmark.
+      continue;
+    }
+    auto tiger_1000 = std::make_shared<skity::DrawSKPBenchmark>(
+        "Tiger_1000", kTigerSKP, 1000, 1000,
+        skity::Matrix::Translate(-130, 20));
+    RegisterBenchmark(tiger_1000, backend_type, aa);
+
+    auto tiger_2000 = std::make_shared<skity::DrawSKPBenchmark>(
+        "Tiger_2000", kTigerSKP, 2000, 2000,
+        skity::Matrix::Scale(2, 2) * skity::Matrix::Translate(-130, 20));
+    RegisterBenchmark(tiger_2000, backend_type, aa);
+
+    auto tiger_4000 = std::make_shared<skity::DrawSKPBenchmark>(
+        "Tiger_4000", kTigerSKP, 4000, 4000,
+        skity::Matrix::Scale(4, 4) * skity::Matrix::Translate(-130, 20));
+    RegisterBenchmark(tiger_4000, backend_type, aa);
+  }
+}
+
 static void RegisterAllBenchmarks() {
+  RegisterTigerSKPBenchmark();
   RegisterFillCircleBenchmark();
   RegisterStrokeCircleBenchmark();
 }

@@ -15,6 +15,8 @@ add_executable(skity_hw_render_bench
     hw_benchmarks.cc
     case/draw_circle.cc
     case/draw_circle.hpp
+    case/draw_skp.cc
+    case/draw_skp.hpp
 )
 
 target_sources(skity_hw_render_bench PRIVATE 
@@ -63,11 +65,13 @@ target_include_directories(skity_hw_render_bench
 target_compile_options(skity_hw_render_bench PUBLIC -fno-rtti)
 target_compile_options(skity_hw_render_bench PUBLIC -std=c++17)
 target_compile_definitions(skity_hw_render_bench PUBLIC -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
+target_compile_definitions(skity_hw_render_bench PRIVATE RESOURCES_DIR="${SKITY_ROOT}/resources")
 
 target_link_libraries(skity_hw_render_bench
     PUBLIC
     skity::codec
     skity::skity
+    skity::io
     benchmark::benchmark
 )
 target_link_libraries(skity_hw_render_bench
