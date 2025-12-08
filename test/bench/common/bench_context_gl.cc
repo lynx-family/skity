@@ -4,6 +4,8 @@
 
 #include "test/bench/common/bench_context_gl.hpp"
 
+#include <OpenGL/gl.h>
+
 #include <memory>
 #include <skity/codec/codec.hpp>
 #include <skity/gpu/gpu_context.hpp>
@@ -48,6 +50,17 @@ class BenchContextGL : public BenchContext {
 
   bool WriteToFile(std::shared_ptr<BenchTarget> target,
                    std::string path) override;
+
+  void WaitTillFinished() override {
+    GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    while (true) {
+      GLenum r = glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 0);
+      if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED) {
+        break;
+      }
+    }
+    glDeleteSync(fence);
+  }
 
  private:
   std::unique_ptr<BenchGLContext> gl_context_;

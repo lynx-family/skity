@@ -28,6 +28,8 @@ class BenchContext {
                            std::string path) = 0;
   GPUContext* GetGPUContext() const { return gpu_context_.get(); }
 
+  virtual void WaitTillFinished() {}
+
  protected:
   std::unique_ptr<GPUContext> gpu_context_;
 };

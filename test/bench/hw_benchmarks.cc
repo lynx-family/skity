@@ -188,6 +188,7 @@ static void RunBenchmark(benchmark::State& state,
     state.PauseTiming();
     skity::BenchGPUTimeTracer::Instance().EndFrame();
     skity::BenchGPUTimeTracer::Instance().StopTracing();
+    context->WaitTillFinished();
     state.ResumeTiming();
   }
 
