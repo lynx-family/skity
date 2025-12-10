@@ -37,6 +37,37 @@ TEST(ImageFilterGolden, BlurFilter_10_5) {
                                .gpu_tess_path = expected_image_path.c_str()}));
 }
 
+TEST(ImageFilterGolden, BlurFilter_10_5_Perspective) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
+
+  skity::Paint paint;
+  paint.SetStyle(skity::Paint::kFill_Style);
+  paint.SetColor(skity::Color_RED);
+  paint.SetImageFilter(skity::ImageFilters::Blur(10, 5));
+
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->Save();
+  canvas->Translate(50.f, 50.f);
+  canvas->Concat(skity::Matrix{
+      2000, 0, 0, 0,     //
+      0, 2000, 0, 0,     //
+      800, 1200, 1, 1,   //
+      0, 0, 2000, 2000,  //
+  });
+  canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
+  canvas->Restore();
+
+  std::filesystem::path expected_image_path(kGoldenTestDir);
+  expected_image_path.append("blur_filter_10_5_perspective.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 200, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
+}
+
 TEST(ImageFilterGolden, BlurFilter_10_10) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));

@@ -683,9 +683,41 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
     }
   }
 
-  float sx = Vec2{world_matrix.GetScaleX(), world_matrix.GetSkewY()}.Length();
-  float sy = Vec2{world_matrix.GetSkewX(), world_matrix.GetScaleY()}.Length();
-  Vec2 scale{sx * ctx_scale_, sy * ctx_scale_};
+  Vec2 scale;
+  if (world_matrix.HasPersp()) {
+    Vec2 src_layer_bounds_pts[4] = {
+        {layer_bounds.Left(), layer_bounds.Top()},
+        {layer_bounds.Right(), layer_bounds.Top()},
+        {layer_bounds.Right(), layer_bounds.Bottom()},
+        {layer_bounds.Left(), layer_bounds.Bottom()},
+    };
+    Vec2 dst_layer_bounds_pts[4];
+    world_matrix.MapPoints(dst_layer_bounds_pts, src_layer_bounds_pts, 4);
+    auto top_edge_length_squared =
+        (dst_layer_bounds_pts[1] - dst_layer_bounds_pts[0]).LengthSquared();
+    auto bottom_edge_length_squared =
+        (dst_layer_bounds_pts[2] - dst_layer_bounds_pts[3]).LengthSquared();
+    auto left_edge_length_squared =
+        (dst_layer_bounds_pts[3] - dst_layer_bounds_pts[0]).LengthSquared();
+    auto right_edge_length_squared =
+        (dst_layer_bounds_pts[2] - dst_layer_bounds_pts[1]).LengthSquared();
+
+    float sx = layer_bounds.Width() > 0
+                   ? std::sqrt(std::max(top_edge_length_squared,
+                                        bottom_edge_length_squared)) /
+                         layer_bounds.Width()
+                   : 1.f;
+    float sy = layer_bounds.Height() > 0
+                   ? std::sqrt(std::max(left_edge_length_squared,
+                                        right_edge_length_squared)) /
+                         layer_bounds.Height()
+                   : 1.f;
+    scale = {sx * ctx_scale_, sy * ctx_scale_};
+  } else {
+    float sx = Vec2{world_matrix.GetScaleX(), world_matrix.GetSkewY()}.Length();
+    float sy = Vec2{world_matrix.GetSkewX(), world_matrix.GetScaleY()}.Length();
+    scale = {sx * ctx_scale_, sy * ctx_scale_};
+  }
 
   float width_f = layer_bounds.Width() * scale.x;
   float height_f = layer_bounds.Height() * scale.y;
