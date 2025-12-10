@@ -35,11 +35,12 @@ class PathVisitor {
  private:
   void HandleMoveTo(Vec2 const& p);
   void HandleLineTo(Vec2 const& p1, Vec2 const& p2);
-  void HandleQuadTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3);
+  void HandleQuadTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,
+                    float precision);
   void HandleConicTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,
-                     float weight);
+                     float weight, float precision);
   void HandleCubicTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,
-                     Vec2 const& p4);
+                     Vec2 const& p4, float precision);
   void HandleClose();
 
  protected:
