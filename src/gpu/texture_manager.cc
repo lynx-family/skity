@@ -93,7 +93,8 @@ void TextureManager::UploadTextureImage(const TextureImpl& texture,
         descriptor.height = pixmap->Height();
         descriptor.format = static_cast<GPUTextureFormat>(format);
         descriptor.usage =
-            static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
+            static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding) |
+            static_cast<GPUTextureUsageMask>(GPUTextureUsage::kCopyDst);
         descriptor.storage_mode = GPUTextureStorageMode::kHostVisible;
         auto gpu_texture = device->CreateTexture(descriptor);
         gpu_texture->UploadData(0, 0, pixmap->Width(), pixmap->Height(),

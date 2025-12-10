@@ -31,9 +31,15 @@ void GPUBlitPassWEB::UploadTextureData(std::shared_ptr<GPUTexture> texture,
     return;
   }
 
+  uint32_t buffer_width = width;
+  if (buffer_width % 256 != 0) {
+    // webgpu require buffer width must be multiple of 256
+    buffer_width = (width + 255) & ~255;
+  }
+
   auto bytes_per_pixel =
       GetTextureFormatBytesPerPixel(texture->GetDescriptor().format);
-  auto size = width * height * bytes_per_pixel;
+  auto size = buffer_width * height * bytes_per_pixel;
   // create a stage buffer
   WGPUBufferDescriptor desc = {};
   desc.size = size;
@@ -56,14 +62,26 @@ void GPUBlitPassWEB::UploadTextureData(std::shared_ptr<GPUTexture> texture,
     return;
   }
 
-  std::memcpy(ptr, data, size);
+  if (buffer_width != width) {
+    auto buffer_ptr = static_cast<uint8_t*>(ptr);
+    auto data_ptr = static_cast<const uint8_t*>(data);
+
+    for (uint32_t y = 0; y < height; y++) {
+      std::memcpy(buffer_ptr, data_ptr, width * bytes_per_pixel);
+      buffer_ptr += buffer_width * bytes_per_pixel;
+      data_ptr += width * bytes_per_pixel;
+    }
+
+  } else {
+    std::memcpy(ptr, data, size);
+  }
 
   wgpuBufferUnmap(stage_buffer);
 
   WGPUTexelCopyBufferInfo src_info{};
   src_info.buffer = stage_buffer;
   src_info.layout.offset = 0;
-  src_info.layout.bytesPerRow = width * bytes_per_pixel;
+  src_info.layout.bytesPerRow = buffer_width * bytes_per_pixel;
   src_info.layout.rowsPerImage = height;
 
   WGPUTexelCopyTextureInfo dst_info{};
