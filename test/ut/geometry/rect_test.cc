@@ -245,6 +245,7 @@ TEST(Rect, SetWH) {
 
 TEST(Rect, SetWithTwoPoints) {
   Rect rect;
+  // Point is a Vec4 alias, so we need to provide all 4 components
   Point p0{100, 200, 0, 0};
   Point p1{10, 20, 0, 0};
   
@@ -257,6 +258,7 @@ TEST(Rect, SetWithTwoPoints) {
 }
 
 TEST(Rect, SetBounds) {
+  // Point is a Vec4 alias, so we need to provide all 4 components
   Point pts[] = {
     {10, 20, 0, 0},
     {100, 50, 0, 0},
@@ -573,18 +575,18 @@ TEST(Rect, JoinToEmpty) {
 }
 
 TEST(Rect, Intersect) {
-  skity::Rect rect1 = skity::Rect::MakeLTRB(0, 0, 100, 100);
-  skity::Rect rect2 = skity::Rect::MakeLTRB(200, 200, 300, 300);
-  skity::Rect rect3 = skity::Rect::MakeLTRB(150, 250, 350, 260);
+  Rect rect1 = Rect::MakeLTRB(0, 0, 100, 100);
+  Rect rect2 = Rect::MakeLTRB(200, 200, 300, 300);
+  Rect rect3 = Rect::MakeLTRB(150, 250, 350, 260);
 
   EXPECT_FALSE(rect1.Intersect(rect2));
-  EXPECT_EQ(skity::Rect::MakeLTRB(0, 0, 100, 100), rect1);
+  EXPECT_EQ(Rect::MakeLTRB(0, 0, 100, 100), rect1);
 
-  EXPECT_FALSE(rect1.Intersect(skity::Rect::MakeEmpty()));
-  EXPECT_EQ(skity::Rect::MakeLTRB(0, 0, 100, 100), rect1);
+  EXPECT_FALSE(rect1.Intersect(Rect::MakeEmpty()));
+  EXPECT_EQ(Rect::MakeLTRB(0, 0, 100, 100), rect1);
 
   EXPECT_TRUE(rect2.Intersect(rect3));
-  EXPECT_EQ(skity::Rect::MakeLTRB(200, 250, 300, 260), rect2);
+  EXPECT_EQ(Rect::MakeLTRB(200, 250, 300, 260), rect2);
 }
 
 TEST(Rect, IntersectOverlapping) {
