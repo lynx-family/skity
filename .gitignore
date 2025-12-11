@@ -19,3 +19,20 @@ clion_compile.sh
 .python-version
 **/__pycache__
 *.gni
+# Third-party dependencies managed by habitat
+third_party/Vulkan-Headers/
+third_party/fmt/
+third_party/freetype2/
+third_party/glfw/
+third_party/glm/
+third_party/google_benchmark/
+third_party/gtest/
+third_party/jsoncpp/
+third_party/libjpeg-turbo/
+third_party/libpng/
+third_party/libwebp/
+third_party/nanopng/
+third_party/pugixml/
+third_party/volk/
+third_party/wuffs/
+third_party/zlib/
