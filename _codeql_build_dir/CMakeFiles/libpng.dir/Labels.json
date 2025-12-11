@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/CMakeFiles/libpng"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/CMakeFiles/libpng.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/CMakeFiles/libpng-complete.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-build.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-configure.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-download.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-install.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-mkdir.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-patch.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"libpng"
+		],
+		"name" : "libpng"
+	}
+}

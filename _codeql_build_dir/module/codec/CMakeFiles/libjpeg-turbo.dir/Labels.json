@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libjpeg-turbo"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libjpeg-turbo.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libjpeg-turbo-complete.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-build.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-configure.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-download.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-install.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-mkdir.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-patch.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"libjpeg-turbo"
+		],
+		"name" : "libjpeg-turbo"
+	}
+}

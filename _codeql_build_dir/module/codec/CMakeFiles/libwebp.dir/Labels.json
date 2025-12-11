@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libwebp"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libwebp.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libwebp-complete.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-build.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-configure.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-download.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-install.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-mkdir.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-patch.rule"
+		},
+		{
+			"file" : "/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"libwebp"
+		],
+		"name" : "libwebp"
+	}
+}

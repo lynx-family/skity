@@ -1,0 +1,13 @@
+# Target labels
+ libwebp
+# Source files and their labels
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libwebp
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libwebp.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libwebp-complete.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-build.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-configure.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-download.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-install.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-mkdir.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-patch.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libwebp/src/libwebp-stamp/libwebp-update.rule

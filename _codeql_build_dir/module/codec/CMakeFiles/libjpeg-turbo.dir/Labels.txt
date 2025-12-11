@@ -1,0 +1,13 @@
+# Target labels
+ libjpeg-turbo
+# Source files and their labels
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libjpeg-turbo
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libjpeg-turbo.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/CMakeFiles/libjpeg-turbo-complete.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-build.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-configure.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-download.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-install.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-mkdir.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-patch.rule
+/home/runner/work/skity/skity/_codeql_build_dir/module/codec/third_party/libjpeg-turbo/src/libjpeg-turbo-stamp/libjpeg-turbo-update.rule

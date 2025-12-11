@@ -1,0 +1,13 @@
+# Target labels
+ libpng
+# Source files and their labels
+/home/runner/work/skity/skity/_codeql_build_dir/CMakeFiles/libpng
+/home/runner/work/skity/skity/_codeql_build_dir/CMakeFiles/libpng.rule
+/home/runner/work/skity/skity/_codeql_build_dir/CMakeFiles/libpng-complete.rule
+/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-build.rule
+/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-configure.rule
+/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-download.rule
+/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-install.rule
+/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-mkdir.rule
+/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-patch.rule
+/home/runner/work/skity/skity/_codeql_build_dir/third_party/libpng_build/src/libpng-stamp/libpng-update.rule

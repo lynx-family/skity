@@ -1,0 +1,1 @@
+cmd='/usr/local/bin/cmake;-DCMAKE_INSTALL_PREFIX=/home/runner/work/skity/skity/_codeql_build_dir/third_party/zlib;-DCMAKE_BUILD_TYPE=Release;-DCMAKE_C_FLAGS=-fPIC;-GUnix Makefiles;-S;<SOURCE_DIR><SOURCE_SUBDIR>;-B;<BINARY_DIR>'
