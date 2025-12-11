@@ -246,7 +246,7 @@ class SKITY_API GPUContext {
   bool enable_contour_aa_ = false;
   std::uint8_t larger_atlas_mask_ = 0;
   bool enable_text_linear_filter_ = false;
-  bool enable_gpu_tessellation_ = false;
+  bool enable_gpu_tessellation_ = true;
   bool enable_simple_shape_pipeline_ = false;
 };
 
