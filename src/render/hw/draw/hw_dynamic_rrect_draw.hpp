@@ -20,6 +20,8 @@ class HWDynamicRRectDraw : public HWDynamicDraw {
 
   ~HWDynamicRRectDraw() override = default;
 
+  bool OnMergeIfPossible(HWDraw* draw) override;
+
  protected:
   void OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
                           HWDrawContext *context) override;
@@ -27,6 +29,7 @@ class HWDynamicRRectDraw : public HWDynamicDraw {
  private:
   RRect rrect_;
   Paint paint_;
+  HWWGSLGeometry* geometry_ = nullptr;
 };
 
 }  // namespace skity

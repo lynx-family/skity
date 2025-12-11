@@ -21,7 +21,7 @@ void HWDynamicRRectDraw::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
                                             HWDrawContext *context) {
   auto arena_allocator = context->arena_allocator;
 
-  auto geom = arena_allocator->Make<WGSLRRectGeometry>(rrect_, paint_);
+  geometry_ = arena_allocator->Make<WGSLRRectGeometry>(rrect_, paint_);
   auto frag = GenShadingFragment(context, paint_,
                                  paint_.GetStyle() == Paint::kStroke_Style);
 
@@ -30,7 +30,29 @@ void HWDynamicRRectDraw::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
   }
 
   steps.emplace_back(context->arena_allocator->Make<ColorStep>(
-      std::move(geom), std::move(frag), CoverageType::kNone));
+      geometry_, std::move(frag), CoverageType::kNone));
+}
+
+bool HWDynamicRRectDraw::OnMergeIfPossible(HWDraw* draw) {
+  if (!HWDynamicDraw::OnMergeIfPossible(draw)) {
+    return false;
+  }
+  
+  auto other = static_cast<HWDynamicRRectDraw*>(draw);
+  
+  // Check if geometry can be merged
+  if (geometry_ == nullptr || other->geometry_ == nullptr) {
+    return false;
+  }
+  
+  if (!geometry_->CanMerge(other->geometry_)) {
+    return false;
+  }
+  
+  // Merge the geometries
+  geometry_->Merge(other->geometry_);
+  
+  return true;
 }
 
 }  // namespace skity

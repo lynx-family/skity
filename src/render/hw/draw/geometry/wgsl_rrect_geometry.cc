@@ -85,13 +85,48 @@ static_assert(sizeof(Instance) == 48);
 
 WGSLRRectGeometry::WGSLRRectGeometry(const RRect& rrect, const Paint& paint)
     : HWWGSLGeometry(Flags::kSnippet | Flags::kAffectsFragment),
-      rrect_(rrect),
-      paint_(paint),
-      layout_(InitVertexBufferLayout()) {}
+      layout_(InitVertexBufferLayout()) {
+  // Store the first instance data
+  instance_data_.push_back({rrect, paint});
+}
 
 const std::vector<GPUVertexBufferLayout>& WGSLRRectGeometry::GetBufferLayout()
     const {
   return layout_;
+}
+
+bool WGSLRRectGeometry::CanMerge(const HWWGSLGeometry* other) const {
+  // Can only merge if same shader
+  if (GetShaderName() != other->GetShaderName()) {
+    return false;
+  }
+  
+  // Check if it's the same type
+  auto other_rrect = dynamic_cast<const WGSLRRectGeometry*>(other);
+  if (other_rrect == nullptr) {
+    return false;
+  }
+  
+  // Can merge if paint properties are compatible
+  // For simplicity, we check if both have the same style
+  const auto& first_paint = instance_data_[0].paint;
+  const auto& other_paint = other_rrect->instance_data_[0].paint;
+  
+  // Must have same style (fill or stroke)
+  if (first_paint.GetStyle() != other_paint.GetStyle()) {
+    return false;
+  }
+  
+  return true;
+}
+
+void WGSLRRectGeometry::Merge(const HWWGSLGeometry* other) {
+  auto other_rrect = static_cast<const WGSLRRectGeometry*>(other);
+  
+  // Merge all instances from the other geometry
+  for (const auto& instance : other_rrect->instance_data_) {
+    instance_data_.push_back(instance);
+  }
 }
 
 void WGSLRRectGeometry::WriteVSFunctionsAndStructs(
@@ -334,34 +369,43 @@ void WGSLRRectGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
 
   auto m = Vec4(inv_m.GetScaleX(), inv_m.GetSkewY(), inv_m.GetSkewX(),
                 inv_m.GetScaleY());
+  
+  // Prepare instances for all stored RRects
+  std::vector<Instance> instances;
+  instances.reserve(instance_data_.size());
+  
+  for (const auto& data : instance_data_) {
+    const Rect& rect = data.rrect.GetRect();
+    const float stroke_radius =
+        data.paint.GetStyle() == Paint::kStroke_Style
+            ? std::max(data.paint.GetStrokeWidth() / 2.0f, 0.5f)
+            : 0.0f;
 
-  const Rect& rect = rrect_.GetRect();
-  const float stroke_radius =
-      paint_.GetStyle() == Paint::kStroke_Style
-          ? std::max(paint_.GetStrokeWidth() / 2.0f, 0.5f)
-          : 0.0f;
+    static_assert(static_cast<float>(Paint::kMiter_Join) == 0.0f);
+    static_assert(static_cast<float>(Paint::kRound_Join) == 1.0f);
+    static_assert(static_cast<float>(Paint::kBevel_Join) == 2.0f);
 
-  static_assert(static_cast<float>(Paint::kMiter_Join) == 0.0f);
-  static_assert(static_cast<float>(Paint::kRound_Join) == 1.0f);
-  static_assert(static_cast<float>(Paint::kBevel_Join) == 2.0f);
-
-  float join = 0.0f;
-  if (paint_.GetStyle() == Paint::kStroke_Style && rrect_.IsRect()) {
-    if (paint_.GetStrokeJoin() == Paint::kMiter_Join &&
-        paint_.GetStrokeMiter() < FloatSqrt2) {
-      join = static_cast<float>(Paint::kBevel_Join);
-    } else {
-      join = static_cast<float>(paint_.GetStrokeJoin());
+    float join = 0.0f;
+    if (data.paint.GetStyle() == Paint::kStroke_Style && data.rrect.IsRect()) {
+      if (data.paint.GetStrokeJoin() == Paint::kMiter_Join &&
+          data.paint.GetStrokeMiter() < FloatSqrt2) {
+        join = static_cast<float>(Paint::kBevel_Join);
+      } else {
+        join = static_cast<float>(data.paint.GetStrokeJoin());
+      }
     }
+
+    Instance instance = {
+        Vec4{rect.Left(), rect.Top(), rect.Right(), rect.Bottom()},
+        data.rrect.GetSimpleRadii(), Vec2{stroke_radius, join}, m};
+    
+    instances.push_back(instance);
   }
 
-  Instance instance = {
-      Vec4{rect.Left(), rect.Top(), rect.Right(), rect.Bottom()},
-      rrect_.GetSimpleRadii(), Vec2{stroke_radius, join}, m};
-
-  cmd->instance_count = 1;
-  cmd->instance_buffer =
-      context->stageBuffer->Push(&instance, sizeof(Instance));
+  // Upload all instances in a single buffer
+  cmd->instance_count = instances.size();
+  cmd->instance_buffer = context->stageBuffer->Push(
+      instances.data(), instances.size() * sizeof(Instance));
 
   auto pipeline = cmd->pipeline;
 

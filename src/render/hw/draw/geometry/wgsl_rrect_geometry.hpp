@@ -40,13 +40,21 @@ class WGSLRRectGeometry : public HWWGSLGeometry {
   void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
                   float clip_depth, Command* stencil_cmd) override;
 
+  bool CanMerge(const HWWGSLGeometry* other) const override;
+
+  void Merge(const HWWGSLGeometry* other) override;
+
   static GPUBufferView CreateVertexBufferView(HWStageBuffer* stage_bufer);
 
   static GPUBufferView CreateIndexBufferView(HWStageBuffer* stage_bufer);
 
  private:
-  const RRect& rrect_;
-  const Paint& paint_;
+  struct InstanceData {
+    RRect rrect;
+    Paint paint;
+  };
+
+  std::vector<InstanceData> instance_data_;
   std::vector<GPUVertexBufferLayout> layout_;
 };
 
