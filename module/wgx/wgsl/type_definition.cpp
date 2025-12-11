@@ -205,7 +205,9 @@ StructDefinition::StructDefinition(const std::string_view& name,
     offset += member->type->size;
   }
 
-  this->size = round_up(this->alignment, offset);
+  // round up size to 16 bytes to make sure buffer is big enough for all GPU
+  // validations
+  this->size = round_up(16, offset);
 }
 
 bool StructDefinition::SetData(const void* data, size_t size) {
