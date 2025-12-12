@@ -3,6 +3,7 @@
 # LICENSE file in the root directory of this source tree.
 
 add_executable(skity_micro_bench
+    array_list_benchmarks.cc
     hw_path_raster_benchmarks.cc
     matrix_benchmarks.cc
     micro_bench_main.cc
