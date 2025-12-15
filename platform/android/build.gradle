@@ -5,10 +5,20 @@ plugins {
 android {
     namespace 'com.lynxsdk.lynx.skity'
     compileSdk 35
-    ndkVersion = "24.0.8215888" // needs use 24.0.8215888 or higher on MacOS 26.+ to prevent linking error
+
+    def osName = System.properties['os.name'].toLowerCase()
+    if (osName.contains('mac')) {
+        ndkVersion = "24.0.8215888" // needs use 24.0.8215888 or higher on MacOS 26.+ to prevent linking error
+    } else {
+        ndkVersion = "21.3.6528147"
+    }
 
     defaultConfig {
-        minSdk 16
+        if (osName.contains('mac')) {
+            minSdk 19 // ndk 24.0.8215888 only support minSdk 19
+        } else {
+            minSdk 16
+        }
 
         externalNativeBuild {
             cmake {
