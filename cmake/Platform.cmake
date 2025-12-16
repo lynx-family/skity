@@ -28,7 +28,7 @@ else()
   target_compile_options(
     skity
     PUBLIC
-    PRIVATE -fno-exceptions)
+    PRIVATE -fno-exceptions -fno-rtti)
 
     if (NOT ${SKITY_TEST})
       target_compile_options(
@@ -37,7 +37,6 @@ else()
         PRIVATE
         -fvisibility=hidden
         -fvisibility-inlines-hidden
-        -fno-rtti
       )
     endif()
 

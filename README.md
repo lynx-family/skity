@@ -27,7 +27,7 @@ First fetch sources from like this:
 git clone git@github.com:lynx-family/skity.git
 cd skity
 # fetch binary dependency (ninja, gn .. etc)
-./tools/hab sync --target dev
+./tools/hab sync --target dev,module
 
 ```
 

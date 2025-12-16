@@ -72,7 +72,7 @@ set_property(TARGET skity-io PROPERTY CXX_STANDARD_REQUIRED ON)
 if (MSVC)
     target_compile_options(skity-io PRIVATE /EHsc)
 else()
-    target_compile_options(skity-io PRIVATE -fno-exceptions)
+    target_compile_options(skity-io PRIVATE -fno-exceptions -fno-rtti)
 endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")

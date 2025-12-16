@@ -67,6 +67,13 @@ if (${SKITY_CODEC_MODULE})
     target_link_libraries(skity_unit_test PUBLIC skity::codec)
 endif()
 
+# no-rtti
+if (MSVC)
+    target_compile_options(skity_unit_test PUBLIC /EHsc /GR-)
+else()
+    target_compile_options(skity_unit_test PUBLIC -fno-rtti)
+endif()
+
 if (${SKITY_TEST_COVERAGE} AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     # Coverage flags
     target_compile_options(skity PRIVATE --coverage -O0 -g)
