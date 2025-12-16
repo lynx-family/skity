@@ -1326,3 +1326,112 @@ TEST(Path, StrokePath) {
   stroke.StrokePath(src, &dst);
   EXPECT_TRUE(dst.Contains(120, 30));
 }
+
+TEST(Path, SegmentMask) {
+  skity::Path path;
+  EXPECT_EQ(path.GetSegmentMasks(), 0);
+  path.MoveTo(0, 0);
+  EXPECT_EQ(path.GetSegmentMasks(), 0);
+
+  path.Reset();
+  path.MoveTo(0, 0);
+  path.MoveTo(1, 1);
+  EXPECT_EQ(path.GetSegmentMasks(), 0);
+
+  path.Reset();
+  path.MoveTo(0, 0);
+  path.LineTo(1, 1);
+  EXPECT_EQ(path.GetSegmentMasks(), skity::Path::SegmentMask::kLine);
+
+  path.Reset();
+  path.MoveTo(0, 0);
+  path.QuadTo(1, 1, 2, 2);
+  EXPECT_EQ(path.GetSegmentMasks(), skity::Path::SegmentMask::kQuad);
+
+  path.Reset();
+  path.MoveTo(0, 0);
+  path.ConicTo(1, 1, 2, 2, 0.5f);
+  EXPECT_EQ(path.GetSegmentMasks(), skity::Path::SegmentMask::kConic);
+
+  path.Reset();
+  path.MoveTo(0, 0);
+  path.CubicTo(1, 1, 2, 2, 3, 3);
+  EXPECT_EQ(path.GetSegmentMasks(), skity::Path::SegmentMask::kCubic);
+
+  path.Reset();
+  path.MoveTo(0, 0);
+  path.QuadTo(1, 1, 2, 2);
+  path.CubicTo(3, 3, 4, 4, 5, 5);
+  EXPECT_EQ(path.GetSegmentMasks(),
+            skity::Path::SegmentMask::kQuad | skity::Path::SegmentMask::kCubic);
+
+  path.Reset();
+  path.MoveTo(0, 0);
+  path.LineTo(1, 1);
+  path.QuadTo(2, 2, 3, 3);
+  path.ConicTo(4, 4, 5, 5, 0.5f);
+  path.CubicTo(4, 4, 5, 5, 6, 6);
+  EXPECT_EQ(path.GetSegmentMasks(), skity::Path::SegmentMask::kLine |
+                                        skity::Path::SegmentMask::kQuad |
+                                        skity::Path::SegmentMask::kConic |
+                                        skity::Path::SegmentMask::kCubic);
+
+  path.Reset();
+  EXPECT_EQ(path.GetSegmentMasks(), 0);
+
+  // Swap
+  {
+    skity::Path a;
+    a.MoveTo(0, 0);
+    a.LineTo(1, 1);
+    EXPECT_EQ(a.GetSegmentMasks(), skity::Path::SegmentMask::kLine);
+    skity::Path b;
+    b.MoveTo(0, 0);
+    b.QuadTo(1, 1, 3, 3);
+    EXPECT_EQ(b.GetSegmentMasks(), skity::Path::SegmentMask::kQuad);
+    a.Swap(b);
+    EXPECT_EQ(a.GetSegmentMasks(), skity::Path::SegmentMask::kQuad);
+    EXPECT_EQ(b.GetSegmentMasks(), skity::Path::SegmentMask::kLine);
+  }
+
+  // AddPath
+  {
+    skity::Path a;
+    a.MoveTo(0, 0);
+    a.LineTo(1, 1);
+    EXPECT_EQ(a.GetSegmentMasks(), skity::Path::SegmentMask::kLine);
+    skity::Path b;
+    b.MoveTo(0, 0);
+    b.QuadTo(1, 1, 3, 3);
+    EXPECT_EQ(b.GetSegmentMasks(), skity::Path::SegmentMask::kQuad);
+    a.AddPath(b);
+    EXPECT_EQ(a.GetSegmentMasks(), skity::Path::SegmentMask::kLine |
+                                       skity::Path::SegmentMask::kQuad);
+  }
+
+  // CopyWithMatrix
+  {
+    skity::Path a;
+    a.MoveTo(0, 0);
+    a.LineTo(1, 1);
+    a.CubicTo(2, 2, 3, 3, 4, 4);
+    EXPECT_EQ(a.GetSegmentMasks(), skity::Path::SegmentMask::kLine |
+                                       skity::Path::SegmentMask::kCubic);
+    skity::Path b = a.CopyWithMatrix(skity::Matrix::Translate(10, 10));
+    EXPECT_EQ(b.GetSegmentMasks(), skity::Path::SegmentMask::kLine |
+                                       skity::Path::SegmentMask::kCubic);
+  }
+
+  // CopyWithScale
+  {
+    skity::Path a;
+    a.MoveTo(0, 0);
+    a.LineTo(1, 1);
+    a.CubicTo(2, 2, 3, 3, 4, 4);
+    EXPECT_EQ(a.GetSegmentMasks(), skity::Path::SegmentMask::kLine |
+                                       skity::Path::SegmentMask::kCubic);
+    skity::Path b = a.CopyWithScale(3);
+    EXPECT_EQ(b.GetSegmentMasks(), skity::Path::SegmentMask::kLine |
+                                       skity::Path::SegmentMask::kCubic);
+  }
+}

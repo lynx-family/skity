@@ -139,11 +139,16 @@ void HWCanvas::DrawShape(const Shape& shape, const Paint& paint) {
     return;
   }
 
-  // early fail
+  // Early fail if shader is image and texture is not ready.
   if (const auto* image_ptr =
           paint.GetShader() ? paint.GetShader()->AsImage() : nullptr;
       image_ptr && (*image_ptr)->IsTextureBackend() &&
       !(*image_ptr)->IsLazy() && (*image_ptr)->GetTexture() == nullptr) {
+    return;
+  }
+
+  // Early fail if path is empty.
+  if (shape.IsPath() && shape.GetPath()->GetSegmentMasks() == 0) {
     return;
   }
 

@@ -505,6 +505,7 @@ Path& Path::LineTo(float x, float y) {
 
   verbs_.emplace_back(Verb::kLine);
   points_.emplace_back(Point{x, y, 0, 1});
+  segment_masks_ |= SegmentMask::kLine;
 
   return *this;
 }
@@ -515,6 +516,8 @@ Path& Path::QuadTo(float x1, float y1, float x2, float y2) {
   verbs_.emplace_back(Verb::kQuad);
   points_.emplace_back(Point{x1, y1, 0, 1});
   points_.emplace_back(Point{x2, y2, 0, 1});
+  segment_masks_ |= SegmentMask::kQuad;
+
   return *this;
 }
 
@@ -533,6 +536,7 @@ Path& Path::ConicTo(float x1, float y1, float x2, float y2, float weight) {
     conic_weights_.emplace_back(weight);
     points_.emplace_back(Point{x1, y1, 0, 1});
     points_.emplace_back(Point{x2, y2, 0, 1});
+    segment_masks_ |= SegmentMask::kConic;
   }
   return *this;
 }
@@ -546,6 +550,7 @@ Path& Path::CubicTo(float x1, float y1, float x2, float y2, float x3,
   points_.emplace_back(Point{x1, y1, 0, 1});
   points_.emplace_back(Point{x2, y2, 0, 1});
   points_.emplace_back(Point{x3, y3, 0, 1});
+  segment_masks_ |= SegmentMask::kCubic;
 
   return *this;
 }
@@ -1120,6 +1125,7 @@ void Path::Swap(Path& that) {
     std::swap(verbs_, that.verbs_);
     std::swap(conic_weights_, that.conic_weights_);
     std::swap(is_finite_, that.is_finite_);
+    std::swap(segment_masks_, that.segment_masks_);
   }
 }
 
@@ -1148,6 +1154,7 @@ Path& Path::AddPath(const Path& src, const Matrix& matrix, AddMode mode) {
 
     // add verb
     verbs_.insert(verbs_.end(), src.verbs_.begin(), src.verbs_.end());
+    segment_masks_ |= src.segment_masks_;
     // add weights
     conic_weights_.insert(conic_weights_.end(), src.conic_weights_.begin(),
                           src.conic_weights_.end());
@@ -1237,6 +1244,7 @@ Path Path::CopyWithMatrix(const Matrix& matrix) const {
 
   ret.conic_weights_ = conic_weights_;
   ret.verbs_ = verbs_;
+  ret.segment_masks_ = segment_masks_;
 
   ret.is_finite_ = is_finite_;
   ret.bounds_ = bounds_;
@@ -1264,6 +1272,7 @@ Path Path::CopyWithScale(float scale) const {
               conic_weights_.size() * sizeof(float));
   ret.verbs_.resize(verbs_.size());
   std::memcpy(ret.verbs_.data(), verbs_.data(), verbs_.size() * sizeof(Verb));
+  ret.segment_masks_ = segment_masks_;
 
   ret.is_finite_ = is_finite_;
   ret.bounds_ = bounds_;
@@ -1289,15 +1298,7 @@ void Path::ComputeBounds() const {
   is_finite_ = ComputePtBounds(std::addressof(bounds_), *this);
 }
 
-bool Path::HasOnlyMoveTos() const {
-  for (auto it : verbs_) {
-    if (it == Verb::kLine || it == Verb::kQuad || it == Verb::kConic ||
-        it == Verb::kCubic) {
-      return false;
-    }
-  }
-  return true;
-}
+bool Path::HasOnlyMoveTos() const { return segment_masks_ == 0; }
 
 bool Path::ComputePtBounds(Rect* bounds, const Path& ref) {
   return bounds->SetBoundsCheck(ref.points_.data(), ref.CountPoints());
@@ -1340,6 +1341,10 @@ static void append_params(std::ostream& os, const std::string& label,
 }
 
 bool Path::IsRect(Rect* rect, bool* is_closed, Direction* direction) const {
+  if (segment_masks_ != SegmentMask::kLine) {
+    return false;
+  }
+
   int32_t verb_cnt = CountVerbs();
 
   int32_t corners = 0;

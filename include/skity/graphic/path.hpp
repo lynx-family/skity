@@ -1,3 +1,5 @@
+// Copyright 2006 The Android Open Source Project
+
 // Copyright 2021 The Lynx Authors. All rights reserved.
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
@@ -518,6 +520,25 @@ class SKITY_API Path {
   }
   bool IsConvex() const { return GetConvexityType() == ConvexityType::kConvex; }
 
+  struct SegmentMask {
+    enum Value : uint32_t {
+      kLine = 0x0001,
+      kQuad = 0x0002,
+      kConic = 0x0004,
+      kCubic = 0x0008,
+    };
+  };
+
+  /**
+   * Returns a mask, where each set bit corresponds to a SegmentMask constant if
+   * Path contains one or more verbs of that type. Returns zero if Path contains
+   * no lines, or curves: quads, conics, or cubics.
+   *
+   * GetSegmentMasks() returns a cached result; it is very fast.
+   * @return  SegmentMask bits or zero
+   */
+  uint32_t GetSegmentMasks() const { return segment_masks_; }
+
  private:
   void InjectMoveToIfNeed();
   void ComputeBounds() const;
@@ -544,6 +565,7 @@ class SKITY_API Path {
   mutable bool is_finite_ = true;
   mutable Rect bounds_;
   PathFillType fill_type_ = PathFillType::kWinding;
+  uint32_t segment_masks_ = 0;
 };
 
 }  // namespace skity
