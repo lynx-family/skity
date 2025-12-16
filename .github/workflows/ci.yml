@@ -51,10 +51,9 @@ jobs:
                 cmake -B out/cmake_host_build -DSKITY_TEST=ON -DSKITY_TEST_COVERAGE=ON -DSKITY_CODEC_MODULE=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS="-fPIC"
                 cmake --build out/cmake_host_build --target skity_unit_test
           - name: Test and Generate Coverage Report
-            continue-on-error: true
             run: |
                 cd out/cmake_host_build/test/ut/
-                ctest --output-junit test.xml --output-on-failure
+                ctest --output-junit test.xml
                 cd ../../
                 lcov --capture --directory . --output-file coverage.info
                 lcov --remove coverage.info '/usr/**/*' 'test/ut/**/*' 'third_party/**/*' 'Library/*' '**/clipper2/*' --output-file coverage.filtered.info
