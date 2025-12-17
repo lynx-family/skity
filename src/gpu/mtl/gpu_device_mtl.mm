@@ -48,7 +48,8 @@ GPUDeviceMTL::GPUDeviceMTL(id<MTLDevice> device, id<MTLCommandQueue> queue)
     : GPUDevice(),
       mtl_device_(device),
       mtl_command_queue_(queue),
-      supports_memoryless_(SupportsMemoryless(device)) {}
+      supports_memoryless_(SupportsMemoryless(device)),
+      max_texture_size_(0) {}
 
 GPUDeviceMTL::~GPUDeviceMTL() = default;
 
