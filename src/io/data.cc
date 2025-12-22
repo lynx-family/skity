@@ -52,7 +52,10 @@ std::shared_ptr<Data> Data::PrivateNewWithCopy(const void* srcOrNull,
     return Data::MakeEmpty();
   }
 
-  void* data = std::malloc(length);
+  void* data = g_allocator ? g_allocator->Malloc(length) : std::malloc(length);
+  if (data == nullptr) {
+    return Data::MakeEmpty();
+  }
   std::memcpy(data, srcOrNull, length);
 
   return Data::MakeFromMalloc(data, length);
@@ -66,7 +69,7 @@ std::shared_ptr<Data> Data::MakeFromFileMapping(const char path[]) {
   std::unique_ptr<FileMapping> file_mapping = FileMapping::CreateReadOnly(path);
   if (!file_mapping || !file_mapping->IsValid() ||
       file_mapping->GetSize() <= 0) {
-    return nullptr;
+    return MakeEmpty();
   }
   FileMapping* file_mapping_pointer = file_mapping.release();
   return MakeWithProc(file_mapping_pointer->GetMapping(),
@@ -76,16 +79,15 @@ std::shared_ptr<Data> Data::MakeFromFileMapping(const char path[]) {
 
 std::shared_ptr<Data> Data::MakeEmpty() {
   static std::shared_ptr<Data> empty;
-  std::once_flag flag;
+  static std::once_flag flag;
   std::call_once(flag,
                  [] { empty.reset(new Data(nullptr, 0, nullptr, nullptr)); });
   return empty;
 }
 
 std::shared_ptr<Data> Data::MakeWithCopy(const void* data, size_t length) {
-  // assert(data);
   if (!data || length == 0) {
-    return nullptr;
+    return MakeEmpty();
   }
   return PrivateNewWithCopy(data, length);
 }
@@ -119,6 +121,11 @@ std::shared_ptr<Data> Data::MakeWithProc(const void* ptr, size_t length,
 std::shared_ptr<Data> Data::MakeFromMalloc(const void* data, size_t length) {
   return std::shared_ptr<Data>(
       new Data(data, length, skity_free_releaseproc, nullptr));
+}
+
+DataAllocator* Data::g_allocator = nullptr;
+void Data::SetAllocatorForTest(DataAllocator* allocator) {
+  g_allocator = allocator;
 }
 
 }  // namespace skity

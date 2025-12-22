@@ -10,7 +10,21 @@
 #include <memory>
 #include <skity/macros.hpp>
 
+class AllocatorAutoReset;
+
 namespace skity {
+
+/**
+ * This interface is intended to simulate malloc failure scenarios in unit
+ * tests. External developers should not use this class to hook or override the
+ * standard library’s malloc behavior.
+ */
+class DataAllocator {
+ public:
+  virtual ~DataAllocator() = default;
+  virtual void* Malloc(size_t size) = 0;
+  virtual void Free(void* ptr) = 0;
+};
 
 /**
  * This class holds an immutable data buffer. Not only is the data immutable,
@@ -90,12 +104,17 @@ class SKITY_API Data final {
   static std::shared_ptr<Data> PrivateNewWithCopy(const void* srcOrNull,
                                                   size_t length);
 
+  static void SetAllocatorForTest(DataAllocator* allocator);
+
  private:
   Data(const void* ptr, size_t size, ReleaseProc proc, void* context);
   const void* ptr_;
   size_t size_;
   ReleaseProc proc_;
   void* context_;
+
+  static DataAllocator* g_allocator;
+  friend class ::AllocatorAutoReset;
 };
 
 }  // namespace skity
