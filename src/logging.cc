@@ -14,6 +14,8 @@
 #include <android/log.h>
 #elif defined(SKITY_HARMONY)
 #include <hilog/log.h>
+#elif defined(SKITY_IOS)
+#include <os/log.h>
 #endif
 #endif  // SKITY_LOG
 
@@ -45,6 +47,9 @@ void Log::WriteInfo(const std::string& msg) {
 #elif defined(SKITY_HARMONY)
     OH_LOG_Print(LOG_APP, LOG_INFO, LOG_PRINT_DOMAIN, "skity", "%{public}s",
                  msg.c_str());
+#elif defined(SKITY_IOS)
+    os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_INFO, "%{public}s",
+                     msg.c_str());
 #else
     auto style = fmt::fg(fmt::color::green);
     fmt::print(style, "{}\n", msg);
@@ -61,6 +66,9 @@ void Log::WriteWarn(const std::string& msg) {
 #elif defined(SKITY_HARMONY)
     OH_LOG_Print(LOG_APP, LOG_WARN, LOG_PRINT_DOMAIN, "skity", "%{public}s",
                  msg.c_str());
+#elif defined(SKITY_IOS)
+    os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT, "%{public}s",
+                     msg.c_str());
 #else
     auto style = fmt::fg(fmt::color::yellow);
     fmt::print(style, "{}\n", msg);
@@ -77,6 +85,9 @@ void Log::WriteError(const std::string& msg) {
 #elif defined(SKITY_HARMONY)
     OH_LOG_Print(LOG_APP, LOG_ERROR, LOG_PRINT_DOMAIN, "skity", "%{public}s",
                  msg.c_str());
+#elif defined(SKITY_IOS)
+    os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_ERROR, "%{public}s",
+                     msg.c_str());
 #else
     auto style = fmt::fg(fmt::color::red);
     fmt::print(style, "{}\n", msg);
@@ -93,6 +104,9 @@ void Log::WriteDebug(const std::string& msg) {
 #elif defined(SKITY_HARMONY)
     OH_LOG_Print(LOG_APP, LOG_DEBUG, LOG_PRINT_DOMAIN, "skity", "%{public}s",
                  msg.c_str());
+#elif defined(SKITY_IOS)
+    os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEBUG, "%{public}s",
+                     msg.c_str());
 #else
     fmt::print("{}\n", msg);
 #endif

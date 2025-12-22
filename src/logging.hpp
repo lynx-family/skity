@@ -5,7 +5,8 @@
 #ifndef SRC_LOGGING_HPP
 #define SRC_LOGGING_HPP
 
-#include <memory>
+#include <skity/macros.hpp>
+
 #ifdef SKITY_LOG
 #include <fmt/format.h>
 #endif
@@ -60,10 +61,17 @@ class Log {
 }  // namespace skity
 
 #ifdef SKITY_LOG
+
+#ifndef SKITY_RELEASE
 #define LOGI(...) skity::Log::Info(__VA_ARGS__)
+#define LOGD(...) skity::Log::Debug(__VA_ARGS__)
+#else
+#define LOGI(...)
+#define LOGD(...)
+#endif
+
 #define LOGW(...) skity::Log::Warn(__VA_ARGS__)
 #define LOGE(...) skity::Log::Error(__VA_ARGS__)
-#define LOGD(...) skity::Log::Debug(__VA_ARGS__)
 #else  // SKITY_LOG
 #define LOGI(...)
 #define LOGW(...)
