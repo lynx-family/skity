@@ -2,6 +2,10 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#if !__has_feature(objc_arc)
+#error ARC must be enabled!
+#endif
+
 #include <skity/gpu/gpu_context_mtl.h>
 
 #include <Metal/Metal.h>
@@ -36,8 +40,6 @@ std::shared_ptr<skity::Image> MakeImageMTL(const std::shared_ptr<skity::Pixmap> 
   info.texture = mtl_texture;
 
   auto texture = gpu_context->WrapTexture(&info);
-
-  [device release];
 
   return skity::Image::MakeHWImage(texture);
 }

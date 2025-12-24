@@ -1,3 +1,11 @@
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
+
+#if !__has_feature(objc_arc)
+#error ARC must be enabled!
+#endif
+
 #include "src/gpu/mtl/gpu_context_impl_mtl.h"
 
 #include <skity/gpu/gpu_context_mtl.h>

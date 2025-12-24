@@ -2,6 +2,10 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#if !__has_feature(objc_arc)
+#error ARC must be enabled!
+#endif
+
 #include "common/mtl/window_mtl.hpp"
 
 #define GLFW_EXPOSE_NATIVE_COCOA
@@ -14,8 +18,6 @@
 
 namespace skity {
 namespace example {
-
-NSAutoreleasePool* pool = nil;
 
 bool WindowMTL::OnInit() {
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -74,8 +76,6 @@ void WindowMTL::OnShow() {
 }
 
 skity::Canvas* WindowMTL::AquireCanvas() {
-  pool = [[NSAutoreleasePool alloc] init];
-
   if (surface_ == nullptr) {
     return nullptr;
   }
@@ -91,10 +91,6 @@ void WindowMTL::OnPresent() {
   surface_->Flush();
 
   canvas_ = nullptr;
-
-  [pool release];
-
-  pool = nil;
 }
 
 void WindowMTL::OnTerminate() { surface_ = nullptr; }

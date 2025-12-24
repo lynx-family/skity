@@ -19,6 +19,8 @@
 #include "common/sw/window_sw.hpp"
 #endif
 
+#include "common/auto_release_pool.hpp"
+
 namespace skity {
 namespace example {
 
@@ -95,6 +97,7 @@ void Window::Show(WindowClient &client) {
   client.OnStart(gpu_context_.get());
 
   while (!glfwWindowShouldClose(native_window_)) {
+    AutoReleasePool pool;
     auto canvas = AquireCanvas();
 
     if (canvas == nullptr) {

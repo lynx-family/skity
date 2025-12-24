@@ -2,6 +2,10 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#if !__has_feature(objc_arc)
+#error ARC must be enabled!
+#endif
+
 #include "src/gpu/mtl/formats_mtl.h"
 #include "src/gpu/gpu_render_pass.hpp"
 #include "src/gpu/mtl/gpu_texture_mtl.h"
