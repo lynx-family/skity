@@ -9,6 +9,7 @@ add_library(skity_example_common STATIC
     ${CMAKE_CURRENT_LIST_DIR}/app.hpp
     ${CMAKE_CURRENT_LIST_DIR}/app_utils.cc
     ${CMAKE_CURRENT_LIST_DIR}/app_utils.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/auto_release_pool.hpp
     ${CMAKE_CURRENT_LIST_DIR}/window.cc
     ${CMAKE_CURRENT_LIST_DIR}/window.hpp
 )
@@ -52,4 +53,5 @@ target_include_directories(skity_example_common PUBLIC ${CMAKE_SOURCE_DIR}/third
 target_link_libraries(skity_example_common PUBLIC glfw skity::skity)
 target_link_libraries(skity_example_common PUBLIC skity::codec)
 
+target_compile_options(skity_example_common PRIVATE "-fobjc-arc")
 target_compile_definitions(skity_example_common PRIVATE -DEXAMPLE_DEFAULT_FONT="${CMAKE_SOURCE_DIR}/example/images/RobotoMonoNerdFont-Regular.ttf")
