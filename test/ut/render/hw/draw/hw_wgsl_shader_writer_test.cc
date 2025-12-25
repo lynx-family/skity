@@ -799,7 +799,7 @@ fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
 fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
   let p_sign: vec2<f32> = sign(pos_to_corner);
   let s: vec2<f32> = p_sign * corner_sign;
-  return s.x > 0 && s.y > 0;
+  return s.x > 0.0 && s.y > 0.0;
 }
 @group(0) @binding(0) var<uniform> common_slot  : CommonSlot;
 
@@ -843,7 +843,7 @@ fn vs_main(input: VSInput) -> VSOutput {
   var center: vec2<f32> = (input.rect.xy + input.rect.zw) * 0.5;
   var harf_wh: vec2<f32> = center - input.rect.xy;
   var j: mat2x2<f32> = mat2x2<f32>(input.j.xy, input.j.zw);
-  var aa: vec2<f32> = abs(j * vec2<f32>(1, 1));
+  var aa: vec2<f32> = abs(j * vec2<f32>(1.0, 1.0));
   var stroke_vec: vec2<f32> = vec2<f32>(input.stroke.x);
 
   var r_outer: vec2<f32> = harf_wh + stroke_vec + aa;
@@ -865,7 +865,7 @@ fn vs_main(input: VSInput) -> VSOutput {
 
   var pos: vec2<f32> = center + corner_sign * r_final;
 
-  let is_center: bool = input.stroke.x == 0 && region > 0;
+  let is_center: bool = input.stroke.x == 0.0 && region > 0.0;
   if (is_center) {
     pos = center;
   }
@@ -908,8 +908,8 @@ fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
 fn ellipse_sdf(p: vec2<f32>,ab: vec2<f32>, j:mat2x2<f32>) -> f32 {
   var inv_a2b2: vec2<f32> = 1.0 / (ab * ab);
   var x2y2: vec2<f32> = p * p;
-  var k1: f32 = dot(x2y2, inv_a2b2) - 1;
-  var k2: f32 = inverse_grid_length(2 * p * inv_a2b2, j);
+  var k1: f32 = dot(x2y2, inv_a2b2) - 1.0;
+  var k2: f32 = inverse_grid_length(2.0 * p * inv_a2b2, j);
   return k1 * k2;
 }
 
@@ -930,37 +930,37 @@ fn get_corner_sign(corner_idx: i32) -> vec2<f32> {
 fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
   let p_sign: vec2<f32> = sign(pos_to_corner);
   let s: vec2<f32> = p_sign * corner_sign;
-  return s.x > 0 && s.y > 0;
+  return s.x > 0.0 && s.y > 0.0;
 }
 
 fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect: vec4<f32>, v_radii: vec2<f32>, v_stroke: vec2<f32>, v_j: vec4<f32>, v_inv_grid: vec2<f32>) -> f32 {
-  if (v_region > 0 && v_stroke.x == 0) {
+  if (v_region > 0.0 && v_stroke.x == 0.0) {
     return 1.0;
   } else {
     var alpha: f32 = 0.0;
     var d_inner: f32 = 1.0;
-    let is_rect: bool = v_radii.x == 0 && v_radii.y == 0;
+    let is_rect: bool = v_radii.x == 0.0 && v_radii.y == 0.0;
     var j : mat2x2<f32> = mat2x2<f32>(v_j.xy, v_j.zw);
     var edge_distances : vec4<f32> = v_rect - vec4<f32>(v_pos, v_pos);
     edge_distances.zw = -edge_distances.zw;
     var outer_distances: vec4<f32> = edge_distances - v_stroke.x;
     var max_outer_d2 : vec2<f32> = max(outer_distances.xy, outer_distances.zw);
-    var need_handle_join : bool = v_stroke.x > 0 && is_rect &&
+    var need_handle_join : bool = v_stroke.x > 0.0 && is_rect &&
                                   max_outer_d2.x > -v_stroke.x &&
                                   max_outer_d2.y > -v_stroke.x;
 
     max_outer_d2 = max_outer_d2 * v_inv_grid;
     var d_outer: f32 = max(max_outer_d2.x, max_outer_d2.y);
 
-    if v_stroke.x > 0 {
+    if v_stroke.x > 0.0 {
       var inner_distances: vec4<f32> = edge_distances + v_stroke.x;
       var max_inner_d2 : vec2<f32> = max(inner_distances.xy, inner_distances.zw);
       max_inner_d2 = max_inner_d2 * v_inv_grid;
       d_inner = max(max_inner_d2.x, max_inner_d2.y);
     }
       
-    // corner_idx is valid only if v_reion < 0
-    if (v_region < 0) {
+    // corner_idx is valid only if v_reion < 0.0
+    if (v_region < 0.0) {
       var core_rect: vec4<f32> = vec4<f32>(v_rect.xy + v_radii, v_rect.zw - v_radii);
       var core_rect_x: vec4<f32> = core_rect.xzzx;
       var core_rect_y: vec4<f32> = core_rect.yyww;
@@ -969,9 +969,9 @@ fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect
       var corner_sign: vec2<f32> = get_corner_sign(corner_idx);
       var in_corner: bool = in_corner_region(pos_to_corner, corner_sign);
       var may_has_round_corner: bool = in_corner && !is_rect;
-      var needs_handle_inner_ellipse: bool = may_has_round_corner && v_stroke.x > 0;
-      var needs_handle_outer_ellipse: bool = may_has_round_corner || (v_stroke.y == 1 && need_handle_join);
-      let needs_handle_bevel: bool = v_stroke.y == 2 && need_handle_join;
+      var needs_handle_inner_ellipse: bool = may_has_round_corner && v_stroke.x > 0.0;
+      var needs_handle_outer_ellipse: bool = may_has_round_corner || (v_stroke.y == 1.0 && need_handle_join);
+      let needs_handle_bevel: bool = v_stroke.y == 2.0 && need_handle_join;
 
       if needs_handle_bevel {
         var pos_to_corner_abs: vec2<f32> = abs(pos_to_corner);
@@ -1049,12 +1049,10 @@ fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
 fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
   let p_sign: vec2<f32> = sign(pos_to_corner);
   let s: vec2<f32> = p_sign * corner_sign;
-  return s.x > 0 && s.y > 0;
+  return s.x > 0.0 && s.y > 0.0;
 }
-
 @group(0) @binding(0) var<uniform> common_slot  : CommonSlot;
 @group(0) @binding(1) var<uniform> inv_matrix   : mat4x4<f32>;
-
 struct VSInput {
   @location(0)  packed        :   vec4<f32>,
   @location(1)  rect          :   vec4<f32>,
@@ -1094,7 +1092,7 @@ fn vs_main(input: VSInput) -> VSOutput {
   var center: vec2<f32> = (input.rect.xy + input.rect.zw) * 0.5;
   var harf_wh: vec2<f32> = center - input.rect.xy;
   var j: mat2x2<f32> = mat2x2<f32>(input.j.xy, input.j.zw);
-  var aa: vec2<f32> = abs(j * vec2<f32>(1, 1));
+  var aa: vec2<f32> = abs(j * vec2<f32>(1.0, 1.0));
   var stroke_vec: vec2<f32> = vec2<f32>(input.stroke.x);
 
   var r_outer: vec2<f32> = harf_wh + stroke_vec + aa;
@@ -1116,7 +1114,7 @@ fn vs_main(input: VSInput) -> VSOutput {
 
   var pos: vec2<f32> = center + corner_sign * r_final;
 
-  let is_center: bool = input.stroke.x == 0 && region > 0;
+  let is_center: bool = input.stroke.x == 0.0 && region > 0.0;
   if (is_center) {
     pos = center;
   }
@@ -1216,8 +1214,8 @@ fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
 fn ellipse_sdf(p: vec2<f32>,ab: vec2<f32>, j:mat2x2<f32>) -> f32 {
   var inv_a2b2: vec2<f32> = 1.0 / (ab * ab);
   var x2y2: vec2<f32> = p * p;
-  var k1: f32 = dot(x2y2, inv_a2b2) - 1;
-  var k2: f32 = inverse_grid_length(2 * p * inv_a2b2, j);
+  var k1: f32 = dot(x2y2, inv_a2b2) - 1.0;
+  var k2: f32 = inverse_grid_length(2.0 * p * inv_a2b2, j);
   return k1 * k2;
 }
 
@@ -1238,37 +1236,37 @@ fn get_corner_sign(corner_idx: i32) -> vec2<f32> {
 fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
   let p_sign: vec2<f32> = sign(pos_to_corner);
   let s: vec2<f32> = p_sign * corner_sign;
-  return s.x > 0 && s.y > 0;
+  return s.x > 0.0 && s.y > 0.0;
 }
 
 fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect: vec4<f32>, v_radii: vec2<f32>, v_stroke: vec2<f32>, v_j: vec4<f32>, v_inv_grid: vec2<f32>) -> f32 {
-  if (v_region > 0 && v_stroke.x == 0) {
+  if (v_region > 0.0 && v_stroke.x == 0.0) {
     return 1.0;
   } else {
     var alpha: f32 = 0.0;
     var d_inner: f32 = 1.0;
-    let is_rect: bool = v_radii.x == 0 && v_radii.y == 0;
+    let is_rect: bool = v_radii.x == 0.0 && v_radii.y == 0.0;
     var j : mat2x2<f32> = mat2x2<f32>(v_j.xy, v_j.zw);
     var edge_distances : vec4<f32> = v_rect - vec4<f32>(v_pos, v_pos);
     edge_distances.zw = -edge_distances.zw;
     var outer_distances: vec4<f32> = edge_distances - v_stroke.x;
     var max_outer_d2 : vec2<f32> = max(outer_distances.xy, outer_distances.zw);
-    var need_handle_join : bool = v_stroke.x > 0 && is_rect &&
+    var need_handle_join : bool = v_stroke.x > 0.0 && is_rect &&
                                   max_outer_d2.x > -v_stroke.x &&
                                   max_outer_d2.y > -v_stroke.x;
 
     max_outer_d2 = max_outer_d2 * v_inv_grid;
     var d_outer: f32 = max(max_outer_d2.x, max_outer_d2.y);
 
-    if v_stroke.x > 0 {
+    if v_stroke.x > 0.0 {
       var inner_distances: vec4<f32> = edge_distances + v_stroke.x;
       var max_inner_d2 : vec2<f32> = max(inner_distances.xy, inner_distances.zw);
       max_inner_d2 = max_inner_d2 * v_inv_grid;
       d_inner = max(max_inner_d2.x, max_inner_d2.y);
     }
 
-    // corner_idx is valid only if v_reion < 0
-    if (v_region < 0) {
+    // corner_idx is valid only if v_reion < 0.0
+    if (v_region < 0.0) {
       var core_rect: vec4<f32> = vec4<f32>(v_rect.xy + v_radii, v_rect.zw - v_radii);
       var core_rect_x: vec4<f32> = core_rect.xzzx;
       var core_rect_y: vec4<f32> = core_rect.yyww;
@@ -1277,9 +1275,9 @@ fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect
       var corner_sign: vec2<f32> = get_corner_sign(corner_idx);
       var in_corner: bool = in_corner_region(pos_to_corner, corner_sign);
       var may_has_round_corner: bool = in_corner && !is_rect;
-      var needs_handle_inner_ellipse: bool = may_has_round_corner && v_stroke.x > 0;
-      var needs_handle_outer_ellipse: bool = may_has_round_corner || (v_stroke.y == 1 && need_handle_join);
-      let needs_handle_bevel: bool = v_stroke.y == 2 && need_handle_join;
+      var needs_handle_inner_ellipse: bool = may_has_round_corner && v_stroke.x > 0.0;
+      var needs_handle_outer_ellipse: bool = may_has_round_corner || (v_stroke.y == 1.0 && need_handle_join);
+      let needs_handle_bevel: bool = v_stroke.y == 2.0 && need_handle_join;
 
       if needs_handle_bevel {
         var pos_to_corner_abs: vec2<f32> = abs(pos_to_corner);
@@ -1288,11 +1286,10 @@ fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect
         d_outer = max(d_outer,  d_outer_bevel);
       }
 
-
       if needs_handle_outer_ellipse {
         d_outer = max(ellipse_sdf(pos_to_corner, v_radii + vec2<f32>(v_stroke.x), j), d_outer);
       }
-
+                      
       if needs_handle_inner_ellipse {
         d_inner = max(ellipse_sdf(pos_to_corner, v_radii - vec2<f32>(v_stroke.x), j), d_inner);
       }
@@ -1358,7 +1355,7 @@ fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
 fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
   let p_sign: vec2<f32> = sign(pos_to_corner);
   let s: vec2<f32> = p_sign * corner_sign;
-  return s.x > 0 && s.y > 0;
+  return s.x > 0.0 && s.y > 0.0;
 }
 
 struct ImageBoundsInfo {
@@ -1409,7 +1406,7 @@ fn vs_main(input: VSInput) -> VSOutput {
   var center: vec2<f32> = (input.rect.xy + input.rect.zw) * 0.5;
   var harf_wh: vec2<f32> = center - input.rect.xy;
   var j: mat2x2<f32> = mat2x2<f32>(input.j.xy, input.j.zw);
-  var aa: vec2<f32> = abs(j * vec2<f32>(1, 1));
+  var aa: vec2<f32> = abs(j * vec2<f32>(1.0, 1.0));
   var stroke_vec: vec2<f32> = vec2<f32>(input.stroke.x);
 
   var r_outer: vec2<f32> = harf_wh + stroke_vec + aa;
@@ -1431,7 +1428,7 @@ fn vs_main(input: VSInput) -> VSOutput {
 
   var pos: vec2<f32> = center + corner_sign * r_final;
 
-  let is_center: bool = input.stroke.x == 0 && region > 0;
+  let is_center: bool = input.stroke.x == 0.0 && region > 0.0;
   if (is_center) {
     pos = center;
   }
@@ -1502,8 +1499,8 @@ fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
 fn ellipse_sdf(p: vec2<f32>,ab: vec2<f32>, j:mat2x2<f32>) -> f32 {
   var inv_a2b2: vec2<f32> = 1.0 / (ab * ab);
   var x2y2: vec2<f32> = p * p;
-  var k1: f32 = dot(x2y2, inv_a2b2) - 1;
-  var k2: f32 = inverse_grid_length(2 * p * inv_a2b2, j);
+  var k1: f32 = dot(x2y2, inv_a2b2) - 1.0;
+  var k2: f32 = inverse_grid_length(2.0 * p * inv_a2b2, j);
   return k1 * k2;
 }
 
@@ -1524,37 +1521,37 @@ fn get_corner_sign(corner_idx: i32) -> vec2<f32> {
 fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
   let p_sign: vec2<f32> = sign(pos_to_corner);
   let s: vec2<f32> = p_sign * corner_sign;
-  return s.x > 0 && s.y > 0;
+  return s.x > 0.0 && s.y > 0.0;
 }
 
 fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect: vec4<f32>, v_radii: vec2<f32>, v_stroke: vec2<f32>, v_j: vec4<f32>, v_inv_grid: vec2<f32>) -> f32 {
-  if (v_region > 0 && v_stroke.x == 0) {
+  if (v_region > 0.0 && v_stroke.x == 0.0) {
     return 1.0;
   } else {
     var alpha: f32 = 0.0;
     var d_inner: f32 = 1.0;
-    let is_rect: bool = v_radii.x == 0 && v_radii.y == 0;
+    let is_rect: bool = v_radii.x == 0.0 && v_radii.y == 0.0;
     var j : mat2x2<f32> = mat2x2<f32>(v_j.xy, v_j.zw);
     var edge_distances : vec4<f32> = v_rect - vec4<f32>(v_pos, v_pos);
     edge_distances.zw = -edge_distances.zw;
     var outer_distances: vec4<f32> = edge_distances - v_stroke.x;
     var max_outer_d2 : vec2<f32> = max(outer_distances.xy, outer_distances.zw);
-    var need_handle_join : bool = v_stroke.x > 0 && is_rect &&
+    var need_handle_join : bool = v_stroke.x > 0.0 && is_rect &&
                                   max_outer_d2.x > -v_stroke.x &&
                                   max_outer_d2.y > -v_stroke.x;
 
     max_outer_d2 = max_outer_d2 * v_inv_grid;
     var d_outer: f32 = max(max_outer_d2.x, max_outer_d2.y);
 
-    if v_stroke.x > 0 {
+    if v_stroke.x > 0.0 {
       var inner_distances: vec4<f32> = edge_distances + v_stroke.x;
       var max_inner_d2 : vec2<f32> = max(inner_distances.xy, inner_distances.zw);
       max_inner_d2 = max_inner_d2 * v_inv_grid;
       d_inner = max(max_inner_d2.x, max_inner_d2.y);
     }
 
-    // corner_idx is valid only if v_reion < 0
-    if (v_region < 0) {
+    // corner_idx is valid only if v_reion < 0.0
+    if (v_region < 0.0) {
       var core_rect: vec4<f32> = vec4<f32>(v_rect.xy + v_radii, v_rect.zw - v_radii);
       var core_rect_x: vec4<f32> = core_rect.xzzx;
       var core_rect_y: vec4<f32> = core_rect.yyww;
@@ -1563,9 +1560,9 @@ fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect
       var corner_sign: vec2<f32> = get_corner_sign(corner_idx);
       var in_corner: bool = in_corner_region(pos_to_corner, corner_sign);
       var may_has_round_corner: bool = in_corner && !is_rect;
-      var needs_handle_inner_ellipse: bool = may_has_round_corner && v_stroke.x > 0;
-      var needs_handle_outer_ellipse: bool = may_has_round_corner || (v_stroke.y == 1 && need_handle_join);
-      let needs_handle_bevel: bool = v_stroke.y == 2 && need_handle_join;
+      var needs_handle_inner_ellipse: bool = may_has_round_corner && v_stroke.x > 0.0;
+      var needs_handle_outer_ellipse: bool = may_has_round_corner || (v_stroke.y == 1.0 && need_handle_join);
+      let needs_handle_bevel: bool = v_stroke.y == 2.0 && need_handle_join;
 
       if needs_handle_bevel {
         var pos_to_corner_abs: vec2<f32> = abs(pos_to_corner);
@@ -1578,7 +1575,7 @@ fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect
       if needs_handle_outer_ellipse {
         d_outer = max(ellipse_sdf(pos_to_corner, v_radii + vec2<f32>(v_stroke.x), j), d_outer);
       }
-
+                   
       if needs_handle_inner_ellipse {
         d_inner = max(ellipse_sdf(pos_to_corner, v_radii - vec2<f32>(v_stroke.x), j), d_inner);
       }
