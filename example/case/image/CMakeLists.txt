@@ -26,4 +26,5 @@ if (${SKITY_MTL_BACKEND})
   )
 endif()
 
+target_compile_options(image_example PRIVATE "-fobjc-arc")
 target_link_libraries(image_example PUBLIC skity::example_common)
