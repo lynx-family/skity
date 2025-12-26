@@ -21,8 +21,15 @@ class SKITY_API Settings {
   bool EnableThemeFont() const;
   void SetEnableThemeFont(bool enable);
 
+  /**
+   * When using system variable fonts, non-hundred weight values are acceptable
+   */
+  bool IsAnyWeightEnabled() const;
+  void SetAnyWeightEnabled(bool enable);
+
  private:
   std::atomic<bool> enable_theme_font_{false};
+  std::atomic<bool> enable_any_weight_{true};
 };
 
 }  // namespace skity
