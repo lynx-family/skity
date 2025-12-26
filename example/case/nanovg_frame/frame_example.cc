@@ -51,11 +51,13 @@ void draw_scissor(skity::Canvas* canvas, float x, float y, float t);
 void draw_window(skity::Canvas* canvas, const char* title, float x, float y,
                  float w, float h);
 
-void draw_search_box(skity::Canvas* canvas, const char* title, float x, float y,
-                     float w, float h);
+void draw_search_box(skity::Canvas* canvas,
+                     std::shared_ptr<skity::Typeface> typeface,
+                     const char* title, float x, float y, float w, float h);
 
-void draw_drop_down(skity::Canvas* canvas, const char* text, float x, float y,
-                    float w, float h);
+void draw_drop_down(skity::Canvas* canvas,
+                    std::shared_ptr<skity::Typeface> typeface, const char* text,
+                    float x, float y, float w, float h);
 
 void draw_label(skity::Canvas* canvas, const char* text, float x, float y,
                 float w, float h);
@@ -66,11 +68,14 @@ void draw_edit_box_base(skity::Canvas* canvas, float x, float y, float w,
 void draw_edit_box(skity::Canvas* canvas, const char* text, float x, float y,
                    float w, float h);
 
-void draw_check_box(skity::Canvas* canvas, const char* text, float x, float y,
-                    float w, float h);
+void draw_check_box(skity::Canvas* canvas,
+                    std::shared_ptr<skity::Typeface> typeface, const char* text,
+                    float x, float y, float w, float h);
 
-void draw_button(skity::Canvas* canvas, const char* pre_icon, const char* text,
-                 float x, float y, float w, float h, skity::Color col);
+void draw_button(skity::Canvas* canvas,
+                 std::shared_ptr<skity::Typeface> typeface,
+                 const char* pre_icon, const char* text, float x, float y,
+                 float w, float h, skity::Color col);
 
 void draw_edit_box_num(skity::Canvas* canvas, const char* text,
                        const char* units, float x, float y, float w, float h);
@@ -117,9 +122,9 @@ void render_frame_demo(
   draw_window(canvas, "Widgets 'n Stuff", 50, 50, 300, 400);
   x = 60;
   y = 95;
-  draw_search_box(canvas, "Search", x, y, 280, 25);
+  draw_search_box(canvas, typeface, "Search", x, y, 280, 25);
   y += 40;
-  draw_drop_down(canvas, "Effects", x, y, 280, 28);
+  draw_drop_down(canvas, typeface, "Effects", x, y, 280, 28);
   popy = y + 14.f;
   y += 45.f;
 
@@ -130,9 +135,9 @@ void render_frame_demo(
   y += 35.f;
   draw_edit_box(canvas, "Password", x, y, 280, 28);
   y += 38.f;
-  draw_check_box(canvas, "Remember me", x, y, 140, 28);
-  draw_button(canvas, "\ufafb" /* login */, "Sign in", x + 138.f, y, 140, 28,
-              skity::ColorSetARGB(255, 0, 96, 128));
+  draw_check_box(canvas, typeface, "Remember me", x, y, 140, 28);
+  draw_button(canvas, typeface, "\ufafb" /* login */, "Sign in", x + 138.f, y,
+              140, 28, skity::ColorSetARGB(255, 0, 96, 128));
 
   y += 45.f;
   // Slider
@@ -142,9 +147,9 @@ void render_frame_demo(
   draw_slider(canvas, 0.4f, x, y, 170, 28);
 
   y += 55;
-  draw_button(canvas, "\uf1f8" /* trash */, "Delete", x, y, 160, 28,
+  draw_button(canvas, typeface, "\uf1f8" /* trash */, "Delete", x, y, 160, 28,
               skity::ColorSetARGB(255, 128, 16, 8));
-  draw_button(canvas, nullptr, "Cancel", x + 170, y, 110, 28,
+  draw_button(canvas, typeface, nullptr, "Cancel", x + 170, y, 110, 28,
               skity::Color_TRANSPARENT);
 
   // Thumbnails box
@@ -746,11 +751,13 @@ void draw_window(skity::Canvas* canvas, const char* title, float x, float y,
   canvas->DrawSimpleText2(title, x + w / 2.f - 80.f, y + 16 + 2, paint);
 }
 
-void draw_search_box(skity::Canvas* canvas, const char* title, float x, float y,
-                     float w, float h) {
+void draw_search_box(skity::Canvas* canvas,
+                     std::shared_ptr<skity::Typeface> typeface,
+                     const char* title, float x, float y, float w, float h) {
   float corner_radius = h / 2.f - 1.f;
 
   skity::Paint paint;
+  paint.SetTypeface(typeface);
   paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   // Edit
@@ -795,11 +802,13 @@ void draw_search_box(skity::Canvas* canvas, const char* title, float x, float y,
                           paint);
 }
 
-void draw_drop_down(skity::Canvas* canvas, const char* text, float x, float y,
-                    float w, float h) {
+void draw_drop_down(skity::Canvas* canvas,
+                    std::shared_ptr<skity::Typeface> typeface, const char* text,
+                    float x, float y, float w, float h) {
   float corner_radius = 4.f;
   skity::RRect rrect;
   skity::Paint paint;
+  paint.SetTypeface(typeface);
   paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   {
@@ -876,9 +885,11 @@ void draw_edit_box(skity::Canvas* canvas, const char* text, float x, float y,
   canvas->DrawSimpleText2(text, x + h * 0.3f, y + h * 0.7f, paint);
 }
 
-void draw_check_box(skity::Canvas* canvas, const char* text, float x, float y,
-                    float, float h) {
+void draw_check_box(skity::Canvas* canvas,
+                    std::shared_ptr<skity::Typeface> typeface, const char* text,
+                    float x, float y, float, float h) {
   skity::Paint paint;
+  paint.SetTypeface(typeface);
   paint.SetAntiAlias(true);
   paint.SetTextSize(15.f);
   paint.SetStyle(skity::Paint::kFill_Style);
@@ -898,12 +909,15 @@ void draw_check_box(skity::Canvas* canvas, const char* text, float x, float y,
   canvas->DrawSimpleText2(icon_check.c_str(), x + 1.f, y + h * 0.8f, paint);
 }
 
-void draw_button(skity::Canvas* canvas, const char* pre_icon, const char* text,
-                 float x, float y, float w, float h, skity::Color col) {
+void draw_button(skity::Canvas* canvas,
+                 std::shared_ptr<skity::Typeface> typeface,
+                 const char* pre_icon, const char* text, float x, float y,
+                 float w, float h, skity::Color col) {
   float corner_radius = 4.f;
   float tw = 0.f, iw = 0.f;
 
   skity::Paint paint;
+  paint.SetTypeface(typeface);
   paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   skity::RRect rrect;
