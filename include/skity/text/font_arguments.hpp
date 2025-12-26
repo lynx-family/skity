@@ -5,6 +5,8 @@
 #ifndef INCLUDE_SKITY_TEXT_FONT_ARGUMENTS_HPP
 #define INCLUDE_SKITY_TEXT_FONT_ARGUMENTS_HPP
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <skity/macros.hpp>
@@ -56,6 +58,35 @@ class VariationPosition {
   }
 
   const std::vector<Coordinate>& GetCoordinates() const { return coordinates; }
+
+  bool operator==(const VariationPosition& other) const {
+    if (coordinates.size() != other.coordinates.size()) {
+      return false;
+    }
+
+    auto a = coordinates;
+    auto b = other.coordinates;
+
+    auto cmp = [](const Coordinate& x, const Coordinate& y) {
+      if (x.axis != y.axis) return x.axis < y.axis;
+      return x.value < y.value;
+    };
+
+    std::sort(a.begin(), a.end(), cmp);
+    std::sort(b.begin(), b.end(), cmp);
+
+    constexpr float kEpsilon = 1e-6f;
+    for (size_t i = 0; i < a.size(); ++i) {
+      if (a[i].axis != b[i].axis) return false;
+      if (std::fabs(a[i].value - b[i].value) > kEpsilon) return false;
+    }
+
+    return true;
+  }
+
+  bool operator!=(const VariationPosition& other) const {
+    return !(*this == other);
+  }
 
  private:
   std::vector<Coordinate> coordinates;

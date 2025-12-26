@@ -2,14 +2,17 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
+#include <set>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/typeface.hpp>
 #include <skity/utils/settings.hpp>
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "src/logging.hpp"
@@ -22,6 +25,53 @@
 namespace skity {
 
 namespace {
+
+std::pair<float, float> find_interval_interpolated(
+    const std::vector<std::pair<float, float>>& v, float key) {
+  const int n = v.size();
+  if (n == 0) return {key, key};
+
+  if (key <= v[0].first) {
+    return v[0];
+  }
+
+  if (key >= v[n - 1].first) {
+    return v[n - 1];
+  }
+
+  int left = 0, right = n - 1, mid;
+  while (left <= right) {
+    mid = (left + right) / 2;
+    if (v[mid].first < key) {
+      left = mid + 1;
+    } else {
+      right = mid - 1;
+    }
+  }
+
+  if (v[left].first == key) {
+    return v[left];
+  }
+
+  int i0 = left - 1;
+  int i1 = left;
+
+  float x0 = v[i0].first;
+  float y0 = v[i0].second;
+
+  float x1 = v[i1].first;
+  float y1 = v[i1].second;
+
+  if (FloatNearlyZero(x1 - x0)) {
+    return {key, y0};
+  }
+
+  float t = (key - x0) / (x1 - x0);
+
+  float y = y0 + (y1 - y0) * t;
+
+  return {key, y};
+}
 
 class TypefaceFreeTypeAndroid : public TypefaceFreeType {
  public:
@@ -37,11 +87,15 @@ class TypefaceFreeTypeAndroid : public TypefaceFreeType {
         font_args_(font_args) {}
   ~TypefaceFreeTypeAndroid() override = default;
 
+  const std::string GetFontPath() const { return font_file_; }
+
   const std::vector<std::string>& GetFontLanguages() const {
     return font_languages_;
   }
 
   FontVariants GetFontVariants() const { return variant_; }
+
+  FontArguments GetFontArguments() const { return font_args_; }
 
  protected:
   FaceData OnGetFaceData() const override;
@@ -64,33 +118,148 @@ class FontStyleSetAndroid : public FontStyleSet {
  public:
   explicit FontStyleSetAndroid(const FontFamily& family) {
     fallback_for_ = family.fallback_for;
+
+    // scan font files
+    std::unordered_map<std::string, std::shared_ptr<TypefaceFreeType>>
+        base_typeface_map_;
+    size_t variation_count = 0;
+    std::string variation_url = "";
     for (size_t index = 0; index < family.fonts.size(); ++index) {
       const FontFileInfo& font_file = family.fonts[index];
       std::string full_path = family.base_path + font_file.file_name;
+      if (base_typeface_map_.find(full_path) != base_typeface_map_.end()) {
+        continue;
+      }
 
       auto data = Data::MakeFromFileMapping(full_path.c_str());
       if (!data) {
         continue;
       }
-
       FontArguments font_args;
       font_args.SetCollectionIndex(font_file.index);
-      FontStyle font_style;
-      bool use_xml_style = true;
-      if (font_file.axis_tags.empty()) {
-        std::shared_ptr<TypefaceFreeType> typeface =
-            TypefaceFreeType::Make(data, font_args);
-        if (!typeface) {
+      std::shared_ptr<TypefaceFreeType> typeface =
+          TypefaceFreeType::Make(std::move(data), font_args);
+      if (!typeface) {
+        continue;
+      }
+      if (typeface->IsVariationTypeface()) {
+        variation_count++;
+        variation_url = full_path;
+      }
+      base_typeface_map_.emplace(std::move(full_path), std::move(typeface));
+    }
+
+    // check axes
+    bool has_same_axes = false;  // except for weight
+    if (Settings::GetSettings().IsAnyWeightEnabled() && variation_count == 1 &&
+        !variation_url.empty()) {
+      std::array<std::vector<VariationPosition>, 2> position_lists;
+      std::array<std::vector<std::pair<float, float>>, 2>
+          weight_mapping_lists{};
+
+      for (size_t index = 0; index < family.fonts.size(); ++index) {
+        const FontFileInfo& font_file = family.fonts[index];
+        std::string full_path = family.base_path + font_file.file_name;
+
+        if (variation_url == full_path) {
+          std::vector<VariationPosition>* positions_ptr = &position_lists[0];
+          std::vector<std::pair<float, float>>* weight_mapping_ptr =
+              &weight_mapping_lists[0];
+          VariationPosition position;
+          for (auto& axis : font_file.axis_tags) {
+            if (axis.first == "ital" && axis.second == 1.f) {
+              positions_ptr = &position_lists[1];
+              weight_mapping_ptr = &weight_mapping_lists[1];
+            }
+
+            // Several DEBUG_CHECKs are added here to help identify uncommon or
+            // non-standard font configurations.
+            if (axis.first == "ital" && axis.second > 0.f &&
+                axis.second < 1.f) {
+              DEBUG_CHECK(false);
+            }
+            if (axis.first == "ital" && axis.second == 1.f &&
+                font_file.style != FontFileInfo::Style::kItalic) {
+              DEBUG_CHECK(false);
+            }
+            if (axis.first == "ital" && axis.second == 0.f &&
+                font_file.style != FontFileInfo::Style::kNormal) {
+              DEBUG_CHECK(false);
+            }
+
+            if (axis.first != "wght") {
+              const char* chars = axis.first.c_str();
+              position.AddCoordinate(
+                  SetFourByteTag(chars[0], chars[1], chars[2], chars[3]),
+                  axis.second);
+            } else {
+              weight_mapping_ptr->emplace_back(font_file.weight, axis.second);
+            }
+          }
+          positions_ptr->emplace_back(position);
+        }
+      }
+
+      std::function<bool(const std::vector<VariationPosition>&)>
+          check_positions =
+              [](const std::vector<VariationPosition>& positions) -> bool {
+        if (positions.empty()) {
+          return true;
+        }
+        const VariationPosition& base_pos = positions[0];
+        for (auto& pos : positions) {
+          if (pos != base_pos) {
+            return false;
+          }
+        }
+        return true;
+      };
+
+      if (check_positions(position_lists[0]) &&
+          check_positions(position_lists[1])) {
+        has_same_axes = true;
+        // construct weight mapping
+        std::function<void(std::vector<std::pair<float, float>>&)>
+            sort_mapping = [](std::vector<std::pair<float, float>>& mapping) {
+              std::sort(mapping.begin(), mapping.end(),
+                        [](const std::pair<float, float>& a,
+                           const std::pair<float, float>& b) {
+                          if (a.first < b.first) return true;
+                          if (a.first > b.first) return false;
+                          // a.first == b.first → compare second
+                          return a.second < b.second;
+                        });
+            };
+        sort_mapping(weight_mapping_lists[0]);
+        sort_mapping(weight_mapping_lists[1]);
+        weight_mappings_ = std::move(weight_mapping_lists);
+      }
+    }
+
+    // This logic depends on the device manufacturer’s configuration. If the
+    // configuration does not match expectations, fall back to the old logic.
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (variation_count == 1 && has_same_axes) {
+      match_any_weight_ = true;
+      std::set<std::string> keys;
+      for (const auto& kv : base_typeface_map_) {
+        keys.insert(kv.first);
+      }
+      for (size_t index = 0; index < family.fonts.size(); ++index) {
+        const FontFileInfo& font_file = family.fonts[index];
+        std::string full_path = family.base_path + font_file.file_name;
+        if (keys.find(full_path) == keys.end()) {
           continue;
         }
+        keys.erase(full_path);
+        std::shared_ptr<TypefaceFreeType> typeface =
+            base_typeface_map_.at(full_path);
+        FontStyle font_style;
         font_style = typeface->GetFontStyle();
-      } else {
-        std::shared_ptr<TypefaceFreeType> typeface =
-            TypefaceFreeType::Make(data, font_args);
-        if (!typeface) {
-          continue;
-        }
-        if (typeface->IsVariationTypeface()) {
+        FontArguments font_args;
+        font_args.SetCollectionIndex(font_file.index);
+        bool is_variation = typeface->IsVariationTypeface();
+        if (is_variation) {
           VariationPosition position;
           for (auto& axis : font_file.axis_tags) {
             const char* chars = axis.first.c_str();
@@ -99,41 +268,86 @@ class FontStyleSetAndroid : public FontStyleSet {
                 axis.second);
           }
           font_args.SetVariationDesignPosition(position);
-          auto variation_face = typeface->MakeVariation(font_args);
-          if (!variation_face) {
-            continue;
-          }
-          TypefaceFreeType* variation_ft_face =
-              static_cast<TypefaceFreeType*>(variation_face.get());
-          font_style = variation_ft_face->GetFontStyle();
-          font_args = variation_ft_face->GetFaceData().font_args;
+          variation_base_ = std::make_shared<TypefaceFreeTypeAndroid>(
+              full_path, family.languages, family.variant, font_args,
+              font_style);
         } else {
-          use_xml_style = false;
-          font_style = typeface->GetFontStyle();
+          auto typeface_android = std::make_shared<TypefaceFreeTypeAndroid>(
+              full_path, family.languages, family.variant, font_args,
+              font_style);
+          typefaces_freetype_.push_back(std::move(typeface_android));
         }
       }
+    } else {
+      for (size_t index = 0; index < family.fonts.size(); ++index) {
+        const FontFileInfo& font_file = family.fonts[index];
+        std::string full_path = family.base_path + font_file.file_name;
+        if (base_typeface_map_.find(full_path) == base_typeface_map_.end()) {
+          continue;
+        }
 
-      int xml_weight =
-          font_file.weight != 0 ? font_file.weight : font_style.weight();
-      FontStyle::Slant xml_slant = font_style.slant();
-      if (font_file.style == FontFileInfo::Style::kNormal) {
-        xml_slant = FontStyle::kUpright_Slant;
-      } else if (font_file.style == FontFileInfo::Style::kItalic) {
-        xml_slant = FontStyle::kItalic_Slant;
+        FontArguments font_args;
+        font_args.SetCollectionIndex(font_file.index);
+        FontStyle font_style;
+        bool use_xml_style = true;
+
+        std::shared_ptr<TypefaceFreeType> typeface =
+            base_typeface_map_.at(full_path);
+        if (font_file.axis_tags.empty()) {
+          font_style = typeface->GetFontStyle();
+        } else {
+          if (typeface->IsVariationTypeface()) {
+            VariationPosition position;
+            for (auto& axis : font_file.axis_tags) {
+              const char* chars = axis.first.c_str();
+              position.AddCoordinate(
+                  SetFourByteTag(chars[0], chars[1], chars[2], chars[3]),
+                  axis.second);
+            }
+            font_args.SetVariationDesignPosition(position);
+            auto variation_face = typeface->MakeVariation(font_args);
+            if (!variation_face) {
+              continue;
+            }
+            TypefaceFreeType* variation_ft_face =
+                static_cast<TypefaceFreeType*>(variation_face.get());
+            font_style = variation_ft_face->GetFontStyle();
+            font_args = variation_ft_face->GetFaceData().font_args;
+          } else {
+            use_xml_style = false;
+            font_style = typeface->GetFontStyle();
+          }
+        }
+
+        int xml_weight =
+            font_file.weight != 0 ? font_file.weight : font_style.weight();
+        FontStyle::Slant xml_slant = font_style.slant();
+        if (font_file.style == FontFileInfo::Style::kNormal) {
+          xml_slant = FontStyle::kUpright_Slant;
+        } else if (font_file.style == FontFileInfo::Style::kItalic) {
+          xml_slant = FontStyle::kItalic_Slant;
+        }
+        FontStyle xml_font_style(xml_weight, font_style.width(), xml_slant);
+
+        auto typeface_android = std::make_shared<TypefaceFreeTypeAndroid>(
+            full_path, family.languages, family.variant, font_args,
+            use_xml_style ? xml_font_style : font_style);
+        typefaces_freetype_.push_back(std::move(typeface_android));
       }
-      FontStyle xml_font_style(xml_weight, font_style.width(), xml_slant);
-
-      std::unique_ptr<TypefaceFreeType> typeface_android =
-          std::make_unique<TypefaceFreeTypeAndroid>(
-              full_path, family.languages, family.variant, font_args,
-              use_xml_style ? xml_font_style : font_style);
-      typefaces_freetype_.push_back(std::move(typeface_android));
     }
   }
 
-  int Count() override { return typefaces_freetype_.size(); }
+  int Count() override {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    int count = typefaces_freetype_.size();
+    if (count == 0 && match_any_weight_) {
+      return 1;
+    }
+    return count;
+  }
 
   void GetStyle(int index, FontStyle* style, std::string* name) override {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (index < 0 || typefaces_freetype_.size() <= static_cast<size_t>(index)) {
       return;
     }
@@ -146,6 +360,7 @@ class FontStyleSetAndroid : public FontStyleSet {
   }
 
   std::shared_ptr<Typeface> CreateTypeface(int index) override {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (index < 0 || typefaces_freetype_.size() <= static_cast<size_t>(index)) {
       return nullptr;
     }
@@ -153,12 +368,76 @@ class FontStyleSetAndroid : public FontStyleSet {
   }
 
   std::shared_ptr<Typeface> MatchStyle(const FontStyle& pattern) override {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (match_any_weight_) {
+      // check whether to match exactly
+      bool has_exact_weight_slant = false;
+      for (auto& typeface : typefaces_freetype_) {
+        FontStyle font_style = typeface->GetFontStyle();
+        if (font_style.weight() == pattern.weight() &&
+            font_style.slant() == pattern.slant()) {
+          has_exact_weight_slant = true;
+        }
+      }
+
+      // variation from base
+      if (!has_exact_weight_slant && variation_base_) {
+        // We create a variant typeface and insert it into the candidate list.
+        FontArguments font_args = variation_base_->GetFontArguments();
+        VariationPosition position;
+        float xml_weight = 0.f;
+        FontStyle::Slant xml_slant = FontStyle::Slant::kUpright_Slant;
+        for (auto& coord :
+             font_args.GetVariationDesignPosition().GetCoordinates()) {
+          if (coord.axis == SetFourByteTag('w', 'g', 'h', 't')) {
+            auto* weight_mapping = &weight_mappings_[0];
+            if (pattern.slant() != FontStyle::kUpright_Slant &&
+                !weight_mappings_[1].empty()) {
+              weight_mapping = &weight_mappings_[1];
+            }
+            auto pair =
+                find_interval_interpolated(*weight_mapping, pattern.weight());
+            xml_weight = pair.first;
+            position.AddCoordinate(coord.axis, pair.second);
+          } else if (coord.axis == SetFourByteTag('i', 't', 'a', 'l')) {
+            float ital_pos = 0.f;
+            if (pattern.slant() != FontStyle::kUpright_Slant &&
+                !weight_mappings_[1].empty()) {
+              xml_slant = FontStyle::kItalic_Slant;
+              ital_pos = 1.f;
+            }
+            position.AddCoordinate(coord.axis, ital_pos);
+          } else {
+            position.AddCoordinate(coord.axis, coord.value);
+          }
+        }
+        font_args.SetVariationDesignPosition(position);
+        auto variation = variation_base_->MakeVariation(font_args);
+        std::shared_ptr<TypefaceFreeType> variation_freetype =
+            std::static_pointer_cast<TypefaceFreeType>(variation);
+        FontStyle font_style = variation_freetype->GetFontStyle();
+        xml_weight = xml_weight != 0 ? xml_weight : font_style.weight();
+        FontStyle xml_font_style(xml_weight, font_style.width(), xml_slant);
+        font_args = variation_freetype->GetFaceData().font_args;
+
+        auto typeface_android = std::make_shared<TypefaceFreeTypeAndroid>(
+            variation_base_->GetFontPath(), variation_base_->GetFontLanguages(),
+            variation_base_->GetFontVariants(), font_args, xml_font_style);
+        typefaces_freetype_.push_back(std::move(typeface_android));
+      }
+    }
+
     return this->MatchStyleCSS3(pattern);
   }
 
  private:
-  std::vector<std::shared_ptr<TypefaceFreeType>> typefaces_freetype_;
+  bool match_any_weight_ = false;
+  std::shared_ptr<TypefaceFreeTypeAndroid> variation_base_ = nullptr;
+  std::array<std::vector<std::pair<float, float>>, 2> weight_mappings_;
+  std::vector<std::shared_ptr<TypefaceFreeTypeAndroid>> typefaces_freetype_;
   std::string fallback_for_;
+
+  std::recursive_mutex mutex_;
 
   friend class FontManagerAndroid;
 };

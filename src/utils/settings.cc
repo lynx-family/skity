@@ -18,4 +18,10 @@ void Settings::SetEnableThemeFont(bool enable) {
   enable_theme_font_.store(enable);
 }
 
+bool Settings::IsAnyWeightEnabled() const { return enable_any_weight_.load(); }
+
+void Settings::SetAnyWeightEnabled(bool enable) {
+  enable_any_weight_.store(enable);
+}
+
 }  // namespace skity
