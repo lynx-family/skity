@@ -25,7 +25,7 @@ android {
                 arguments   "-DANDROID_STL=c++_shared",
                             "-DSKITY_EXAMPLE=OFF",
                             "-DSKITY_TEST=OFF",
-                            "-DSKITY_LOG=OFF",
+                            "-DSKITY_LOG=ON",
                             "-DSKITY_CODEC_MODULE=OFF",
                             "-DSKITY_BUILD_INSTALL=OFF"
             }
