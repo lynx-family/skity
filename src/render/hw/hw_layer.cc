@@ -123,7 +123,11 @@ void HWLayer::Restore() { state_.Restore(); }
 void HWLayer::RestoreToCount(int32_t count) { state_.RestoreToCount(count); }
 
 std::shared_ptr<GPUCommandBuffer> HWLayer::CreateCommandBuffer() {
-  return gpu_device_->CreateCommandBuffer();
+  auto cmd = gpu_device_->CreateCommandBuffer();
+
+  cmd->SetLabel("SubLayer CommandBuffer");
+
+  return cmd;
 }
 
 void HWLayer::FlushPendingClip() {

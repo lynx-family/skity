@@ -17,14 +17,8 @@
 #include "src/gpu/mtl/gpu_sampler_mtl.h"
 #include "src/gpu/mtl/gpu_shader_function_mtl.h"
 #include "src/gpu/mtl/gpu_texture_mtl.h"
-#include "src/tracing.hpp"
-
-// FIXME: spdlog seems to have some problem with fmt. when build in objc++
-#ifdef FMT_EXCEPTIONS
-#undef FMT_EXCEPTIONS
-#endif
-#define FMT_EXCEPTIONS 0
 #include "src/logging.hpp"
+#include "src/tracing.hpp"
 
 namespace skity {
 

@@ -10,6 +10,7 @@
 
 #include "src/gpu/mtl/gpu_buffer_mtl.h"
 #include "src/gpu/mtl/gpu_texture_mtl.h"
+#include "src/logging.hpp"
 
 namespace skity {
 
@@ -42,6 +43,7 @@ void GPUBlitPassMTL::UploadTextureData(std::shared_ptr<GPUTexture> texture, uint
 
 void GPUBlitPassMTL::UploadBufferData(GPUBuffer* buffer, void* data, size_t size) {
   if (size == 0 || data == nullptr) {
+    LOGE("UploadBufferData called with empty size or data");
     return;
   }
 

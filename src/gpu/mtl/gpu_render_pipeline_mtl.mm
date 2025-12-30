@@ -14,6 +14,7 @@
 #include "src/gpu/mtl/formats_mtl.h"
 #include "src/gpu/mtl/gpu_device_mtl.h"
 #include "src/gpu/mtl/gpu_shader_function_mtl.h"
+#include "src/logging.hpp"
 
 namespace skity {
 
@@ -64,10 +65,15 @@ std::unique_ptr<GPURenderPipelineMTL> GPURenderPipelineMTL::Make(
       static_cast<MTLColorWriteMask>(MTLColorWriteMaskAll & target.write_mask);
   render_pipeline_desc.label = @(desc.label.c_str());
 
-  NSError* psoError;
+  NSError* psoError = nil;
   id<MTLRenderPipelineState> render_pipeline_state =
       [device.GetMTLDevice() newRenderPipelineStateWithDescriptor:render_pipeline_desc
                                                             error:&psoError];
+
+  if (psoError) {
+    LOGE("Failed to create MTLRenderPipelineState with error: {}",
+         psoError.localizedDescription.UTF8String);
+  }
 
   id<MTLDepthStencilState> depthStencilState =
       device.FindOrCreateDepthStencilState(desc.depth_stencil);

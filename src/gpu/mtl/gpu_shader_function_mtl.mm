@@ -7,6 +7,7 @@
 #endif
 
 #include "src/gpu/mtl/gpu_shader_function_mtl.h"
+#include "src/logging.hpp"
 
 namespace skity {
 
@@ -30,6 +31,8 @@ GPUShaderFunctionMTL::GPUShaderFunctionMTL(std::string label, id<MTLDevice> devi
     if (error_callback) {
       error_callback([[err localizedDescription] UTF8String]);
     }
+
+    LOGE("Failed to compile shader {} : {}", GetLabel(), [[err localizedDescription] UTF8String]);
   }
 
   // Some old version Metal may generate warning error during library creation
@@ -56,6 +59,9 @@ GPUShaderFunctionMTL::GPUShaderFunctionMTL(std::string label, id<MTLDevice> devi
       if (error_callback) {
         error_callback([[err localizedDescription] UTF8String]);
       }
+
+      LOGD("Failed create shader function {} with error: {}", GetLabel(),
+           [[err localizedDescription] UTF8String]);
     }
   }
 }

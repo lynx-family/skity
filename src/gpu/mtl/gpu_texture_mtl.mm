@@ -11,6 +11,7 @@
 #include <memory>
 #include "src/gpu/gpu_texture.hpp"
 #include "src/gpu/mtl/formats_mtl.h"
+#include "src/logging.hpp"
 
 namespace skity {
 
@@ -20,6 +21,7 @@ std::shared_ptr<GPUTextureMTL> GPUTextureMTL::Create(GPUDeviceMTL& device,
       newTextureWithDescriptor:ToMTLTextureDescriptor(descriptor, device.IsSupportsMemoryless())];
 
   if (!texture) {
+    LOGE("Failed to create MTLTexture with size {}x{}", descriptor.width, descriptor.height);
     return nullptr;
   }
 

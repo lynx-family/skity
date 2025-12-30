@@ -7,6 +7,7 @@
 #endif
 
 #include "src/gpu/mtl/gpu_buffer_mtl.h"
+#include "src/logging.hpp"
 
 namespace skity {
 
@@ -17,6 +18,10 @@ GPUBufferMTL::GPUBufferMTL(GPUBufferUsageMask usage, id<MTLDevice> device,
 void GPUBufferMTL::RecreateBufferIfNeeded(size_t size) {
   if (mtl_buffer_.length < size) {
     mtl_buffer_ = [device_ newBufferWithLength:size options:MTLResourceStorageModePrivate];
+
+    if (mtl_buffer_ == nil) {
+      LOGE("Failed to create MTLBuffer with size {}, mabye out of memory?", size);
+    }
   }
 }
 

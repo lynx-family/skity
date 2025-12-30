@@ -115,6 +115,7 @@ GPUBufferView HWStageBuffer::PushIndex(void* data, uint32_t size) {
 
 void HWStageBuffer::Flush() {
   auto cmd_buffer = gpu_device_->CreateCommandBuffer();
+  cmd_buffer->SetLabel("StageBuffer CommandBuffer");
   auto blit_pass = cmd_buffer->BeginBlitPass();
   blit_pass->UploadBufferData(gpu_buffer_.get(), stage_buffer_.data(),
                               stage_pos_);

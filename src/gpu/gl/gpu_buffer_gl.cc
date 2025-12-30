@@ -4,6 +4,7 @@
 
 #include "src/gpu/gl/gpu_buffer_gl.hpp"
 
+#include "src/logging.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -23,6 +24,7 @@ GPUBufferGL::~GPUBufferGL() { GL_CALL(DeleteBuffers, 1, &gl_buffer_); }
 void GPUBufferGL::UploadData(void* data, size_t size) {
   SKITY_TRACE_EVENT(GPUBufferGL_UploadData);
   if (size == 0 || data == nullptr) {
+    LOGW("Uploading data to a buffer with size or data is 0 !!");
     return;
   }
 

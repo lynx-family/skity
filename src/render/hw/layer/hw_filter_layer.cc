@@ -21,6 +21,8 @@ HWDrawState HWFilterLayer::OnPrepare(HWDrawContext* context) {
   auto command_buffer =
       std::make_shared<GPUCommandBufferProxy>(device->CreateCommandBuffer());
 
+  command_buffer->SetLabel("Filter CommandBuffer");
+
   HWFilterOutput filter_result{
       input_texture,
       GetBounds(),

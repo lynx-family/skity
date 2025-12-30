@@ -6,6 +6,7 @@
 #define SRC_GPU_GPU_COMMAND_BUFFER_HPP
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "src/gpu/gpu_blit_pass.hpp"
@@ -23,6 +24,13 @@ class GPUCommandBuffer {
   virtual std::shared_ptr<GPUBlitPass> BeginBlitPass() = 0;
 
   virtual bool Submit() = 0;
+
+  void SetLabel(const std::string& label) { label_ = label; }
+
+  const std::string& GetLabel() const { return label_; }
+
+ private:
+  std::string label_;
 };
 
 class GPUCommandBufferProxy : public GPUCommandBuffer {

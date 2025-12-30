@@ -8,6 +8,7 @@
 
 #include "src/gpu/gl/gl_interface.hpp"
 #include "src/gpu/gl/gpu_texture_gl.hpp"
+#include "src/logging.hpp"
 
 namespace skity {
 
@@ -84,6 +85,10 @@ GPUSamplerGL::GPUSamplerGL(const GPUSamplerDescriptor& descriptor)
           ToGLParam(descriptor.address_mode_u));
   GL_CALL(SamplerParameteri, sampler_id_, GL_TEXTURE_WRAP_T,
           ToGLParam(descriptor.address_mode_v));
+
+  if (sampler_id_ == 0) {
+    LOGE("Failed to create GL Sampler !!");
+  }
 }
 
 GPUSamplerGL::~GPUSamplerGL() {

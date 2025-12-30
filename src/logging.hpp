@@ -8,6 +8,13 @@
 #include <skity/macros.hpp>
 
 #ifdef SKITY_LOG
+
+// force disable fmt exceptions
+#ifdef FMT_EXCEPTIONS
+#undef FMT_EXCEPTIONS
+#endif
+#define FMT_EXCEPTIONS 0
+
 #include <fmt/format.h>
 #endif
 

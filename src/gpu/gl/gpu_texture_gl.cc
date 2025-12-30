@@ -7,6 +7,7 @@
 #include "src/gpu/gl/formats_gl.h"
 #include "src/gpu/gl/gl_interface.hpp"
 #include "src/gpu/gl/gpu_sampler_gl.hpp"
+#include "src/logging.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -43,10 +44,12 @@ void GPUTextureGL::UploadData(uint32_t offset_x, uint32_t offset_y,
   SKITY_TRACE_EVENT(GPUTextureGL_UploadData);
   if (texture_target_ != GL_TEXTURE_2D) {
     // MSAA texture can not upload data directly from CPU
+    LOGW("Trying to upload data to a texture not target GL_TEXTURE_2D !!");
     return;
   }
 
   if (desc_.height == 0 || desc_.width == 0) {
+    LOGW("Uploading data to a texture with width or height is 0 !!");
     return;
   }
   Bind();
@@ -58,6 +61,12 @@ void GPUTextureGL::UploadData(uint32_t offset_x, uint32_t offset_y,
 
 void GPUTextureGL::Initialize() {
   GL_CALL(GenTextures, 1, &texture_id_);
+
+  if (texture_id_ == 0) {
+    LOGE(
+        "Failed to create GL Texture, maybe out of memory or GL context is not "
+        "valid !!");
+  }
 
   Bind();
 

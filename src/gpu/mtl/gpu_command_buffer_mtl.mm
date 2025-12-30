@@ -14,6 +14,7 @@
 #include "src/gpu/mtl/formats_mtl.h"
 #include "src/gpu/mtl/gpu_blit_pass_mtl.h"
 #include "src/gpu/mtl/gpu_render_pass_mtl.h"
+#include "src/logging.hpp"
 
 namespace skity {
 
@@ -30,6 +31,15 @@ std::shared_ptr<GPUBlitPass> GPUCommandBufferMTL::BeginBlitPass() {
 }
 
 bool GPUCommandBufferMTL::Submit() {
+  mtl_command_buffer_.label = [NSString stringWithUTF8String:GetLabel().c_str()];
+  [mtl_command_buffer_ addCompletedHandler:^(id<MTLCommandBuffer> cmd) {
+    if (cmd.error == nil) {
+      return;
+    }
+
+    auto label = cmd.label ? cmd.label.UTF8String : "";
+    LOGE("CMD {} failed: {}", label, [[cmd.error localizedDescription] UTF8String]);
+  }];
   [mtl_command_buffer_ commit];
   return true;
 }
