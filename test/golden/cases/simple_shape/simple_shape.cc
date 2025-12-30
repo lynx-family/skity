@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <skity/io/parse_path.hpp>
 #include <skity/recorder/picture_recorder.hpp>
 #include <skity/skity.hpp>
 #include <string>
@@ -377,6 +378,38 @@ TEST(SimpleShapeGolden, DrawStrokeRRectBlending) {
 
   auto dl = recorder.FinishRecording();
   PathListContext context("draw_stroke_rect_with_blending.png");
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400, 400,
+                                                   context.ToPathList()));
+}
+
+// https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/yinyang.svg
+TEST(SimpleShapeGolden, DrawYinAndYang) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(400.f, 200.f));
+  auto canvas = recorder.GetRecordingCanvas();
+  auto path_opt = skity::ParsePath::FromSVGString(
+      "M50,2a48,48 0 1 1 0,96a24 24 0 1 1 0-48a24 24 0 1 0 0-48");
+  ASSERT_TRUE(path_opt.has_value());
+
+  skity::Path temp;
+  temp.AddPath(path_opt.value());
+  temp.AddCircle(50, 26, 6);
+  auto str = skity::ParsePath::ToSVGString(temp);
+  auto dst = skity::ParsePath::FromSVGString(str.c_str());
+  ASSERT_TRUE(dst.has_value());
+
+  skity::Paint paint;
+  paint.SetColor(skity::Color_BLACK);
+  canvas->Scale(4, 4);
+  canvas->DrawColor(skity::Color_WHITE);
+  paint.SetStyle(skity::Paint::Style::kStroke_Style);
+  canvas->DrawCircle(50, 50, 48, paint);
+  paint.SetStyle(skity::Paint::Style::kFill_Style);
+  canvas->DrawPath(dst.value(), paint);
+  paint.SetColor(skity::Color_WHITE);
+  canvas->DrawCircle(50, 74, 6, paint);
+  auto dl = recorder.FinishRecording();
+  PathListContext context("draw_yin_and_yang.png");
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400, 400,
                                                    context.ToPathList()));
 }

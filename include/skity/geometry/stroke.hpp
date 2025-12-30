@@ -18,6 +18,8 @@ class SKITY_API Stroke {
 
   void QuadPath(const Path& src, Path* dst) const;
 
+  void QuadPath(const Path& src, Path* dst, bool keep_cubic) const;
+
  private:
   float width_;
   float miter_limit_;

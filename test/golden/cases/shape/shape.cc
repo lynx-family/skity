@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <skity/io/parse_path.hpp>
 #include <skity/recorder/picture_recorder.hpp>
 #include <skity/skity.hpp>
 
@@ -223,3 +224,27 @@ TEST(ShapeGolden, DrawEmptyPath) {
       skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
                                .gpu_tess_path = expected_image_path.c_str()}));
 }
+
+// https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/check.svg
+TEST(ShapeGolden, DrawCheck) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(400.f, 200.f));
+  auto canvas = recorder.GetRecordingCanvas();
+  auto path_opt = skity::ParsePath::FromSVGString(
+      R"(M30,76q6-14,13-26q6-12,14-23q8-12,13-17q3-4,6-6q1-1,5-2q8-1,12-1q1,0,1,1q0,1-1,2q-13,11-27,33q-14,21-24,44q-4,9-5,11q-1,2-9,2q-5,0-6-1q-1-1-5-6q-5-8-12-15q-3-4-3-6q0-2,4-5q3-2,6-2q3,0,8,3q5,4,10,14z)");
+  ASSERT_TRUE(path_opt.has_value());
+  skity::Paint paint;
+  paint.SetColor(skity::Color_GREEN);
+  canvas->Scale(4, 4);
+  canvas->DrawColor(skity::Color_WHITE);
+  canvas->DrawPath(path_opt.value(), paint);
+
+  std::filesystem::path expected_image_path(kGoldenTestImageDir);
+  expected_image_path.append("draw_check.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 400, 400,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
+}
+

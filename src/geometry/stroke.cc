@@ -908,6 +908,10 @@ DONE:
 }
 
 void Stroke::QuadPath(const Path& src, Path* dst) const {
+  QuadPath(src, dst, false);
+}
+
+void Stroke::QuadPath(const Path& src, Path* dst, bool keep_cubic) const {
   Path::Iter iter{src, false};
   std::array<Point, 4> pts = {};
   for (;;) {
@@ -934,11 +938,15 @@ void Stroke::QuadPath(const Path& src, Path* dst) const {
         // mark_point(dst, points[4]);
       } break;
       case Path::Verb::kCubic: {
-        Cubic cubic(pts[0], pts[1], pts[2], pts[3]);
-        std::vector<std::array<Point, 3>> quads = cubic.ToQuads();
-        for (auto& points : quads) {
-          // mark_point(dst, points[0]);
-          dst->QuadTo(points[1], points[2]);
+        if (keep_cubic) {
+          dst->CubicTo(pts[1], pts[2], pts[3]);
+        } else {
+          Cubic cubic(pts[0], pts[1], pts[2], pts[3]);
+          std::vector<std::array<Point, 3>> quads = cubic.ToQuads();
+          for (auto& points : quads) {
+            // mark_point(dst, points[0]);
+            dst->QuadTo(points[1], points[2]);
+          }
         }
       } break;
       case Path::Verb::kClose:

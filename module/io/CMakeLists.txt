@@ -6,6 +6,7 @@ add_library(skity-io STATIC
     # header files
     include/skity/io/picture.hpp
     include/skity/io/stream.hpp
+    include/skity/io/parse_path.hpp
 
     # source files
     src/io/flat/blender_flat.cc
@@ -40,6 +41,7 @@ add_library(skity-io STATIC
     src/stream/file_write_stream.cc
     src/stream/file_write_stream.hpp
     src/stream/stream.cc
+    src/utils/parse_path.cc
     src/picture_priv.hpp
     src/picture.cc
 )
