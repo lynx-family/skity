@@ -79,11 +79,11 @@ def pack_all_frameworks(version_suffix: str):
     # pack macos framework
     cmake_build_and_install('out/osx_framework', 'out/osx_install', '15.0', 'x86_64;arm64', 'macosx', version_suffix)
     # pack iOS framework
-    cmake_build_and_install('out/ios_framework', 'out/ios_install', '11.0', 'arm64', 'iphoneos', version_suffix)
+    cmake_build_and_install('out/ios_framework', 'out/ios_install', '13.0', 'arm64', 'iphoneos', version_suffix)
     # pack iOS simulator x86_64 framework
-    cmake_build_and_install('out/ios_simulator_framework_x86_64', 'out/ios_simulator_install_x86_64', '11.0', 'x86_64', 'iphonesimulator', version_suffix)
+    cmake_build_and_install('out/ios_simulator_framework_x86_64', 'out/ios_simulator_install_x86_64', '13.0', 'x86_64', 'iphonesimulator', version_suffix)
     # pack iOS simulator arm64 framework
-    cmake_build_and_install('out/ios_simulator_framework_arm64', 'out/ios_simulator_install_arm64', '11.0', 'arm64', 'iphonesimulator', version_suffix)
+    cmake_build_and_install('out/ios_simulator_framework_arm64', 'out/ios_simulator_install_arm64', '13.0', 'arm64', 'iphonesimulator', version_suffix)
     pass
 
 def pack_zip_bundle():

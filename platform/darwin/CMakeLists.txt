@@ -97,6 +97,53 @@ endif()
 
 target_compile_definitions(skity_framework PRIVATE ${wgx_compile_definitions})
 
+# set codec source file
+target_sources(skity_framework PRIVATE ${CMAKE_SOURCE_DIR}/module/codec/src/codec/apple/codec_apple.mm)
+target_include_directories(skity_framework PRIVATE ${CMAKE_SOURCE_DIR}/module/codec/include)
+target_link_libraries(skity_framework PRIVATE "-framework ImageIO" "-framework CoreGraphics" "-framework CoreServices" "-framework MobileCoreServices")
+
+# io sources file
+target_sources(skity_framework PRIVATE
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/blender_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/blender_flat.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/blob_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/color_filter_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/font_desc_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/font_desc_flat.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/font_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/image_filter_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/local_matrix_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/local_matrix_flat.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/mask_filter_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/matrix_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/paint_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/path_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/path_effect_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/rrect_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/shader_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/flat/vertices_flat.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/read/read_typeface.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/read/read_typeface.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/memory_read.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/memory_read.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/memory_writer.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/io/memory_writer.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/record/draw_type.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/record/record_playback.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/record/record_playback.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/stream/file_read_stream.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/stream/file_read_stream.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/stream/file_write_stream.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/stream/file_write_stream.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/stream/stream.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/utils/parse_path.cc
+  ${CMAKE_SOURCE_DIR}/module/io/src/picture_priv.hpp
+  ${CMAKE_SOURCE_DIR}/module/io/src/picture.cc
+)
+target_include_directories(skity_framework PRIVATE
+  ${CMAKE_SOURCE_DIR}/module/io/include
+  ${CMAKE_SOURCE_DIR}/module/io
+)
 
 # set cxx standard
 set_target_properties(skity_framework PROPERTIES
@@ -186,6 +233,20 @@ install(
 
 install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/include/skity/utils"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
+    COMPONENT Runtime
+)
+
+# codec headers
+install(
+    DIRECTORY "${CMAKE_SOURCE_DIR}/module/codec/include/skity/codec"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
+    COMPONENT Runtime
+)
+
+# io headers
+install(
+    DIRECTORY "${CMAKE_SOURCE_DIR}/module/io/include/skity/io"
     DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
     COMPONENT Runtime
 )
