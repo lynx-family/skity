@@ -7,7 +7,8 @@
 #import "skity/io/pixmap.hpp"
 
 #import <CoreGraphics/CoreGraphics.h>
-#import <CoreServices/UTCoreTypes.h>
+#import <CoreServices/CoreServices.h>
+#import <Foundation/Foundation.h>
 #import <ImageIO/ImageIO.h>
 
 namespace skity {
