@@ -41,7 +41,7 @@ class SKITY_API Logger final {
    *
    * @param log Contains custom log function. If pass null, means unregiste
    */
-  static void RegisteLog(CustomLogger* log);
+  static void RegisterLog(CustomLogger* log);
 };
 
 }  // namespace skity

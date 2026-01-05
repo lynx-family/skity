@@ -119,7 +119,7 @@ void Log::Init() {}
 
 void KillProcess() { abort(); }
 
-void Logger::RegisteLog(CustomLogger* log) {
+void Logger::RegisterLog(CustomLogger* log) {
 #ifdef SKITY_LOG
   if (log) {
     g_custom_log_i = log->log_i;
