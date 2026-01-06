@@ -119,8 +119,14 @@ void HWStageBuffer::Flush() {
   auto blit_pass = cmd_buffer->BeginBlitPass();
   blit_pass->UploadBufferData(gpu_buffer_.get(), stage_buffer_.data(),
                               stage_pos_);
-  blit_pass->UploadBufferData(gpu_index_buffer_.get(),
-                              stage_index_buffer_.data(), stage_index_pos_);
+
+  // The index buffer data here can be empty if all rendering in the scene
+  // uses instanced rendering.
+  if (stage_index_pos_ > 0) {
+    blit_pass->UploadBufferData(gpu_index_buffer_.get(),
+                                stage_index_buffer_.data(), stage_index_pos_);
+  }
+
   blit_pass->End();
   cmd_buffer->Submit();
 
