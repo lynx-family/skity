@@ -53,7 +53,7 @@ jobs:
           - name: Test and Generate Coverage Report
             run: |
                 cd out/cmake_host_build/test/ut/
-                ctest --output-junit test.xml
+                ctest --output-junit test.xml --rerun-failed --output-on-failure
                 cd ../../
                 lcov --capture --directory . --output-file coverage.info
                 lcov --remove coverage.info '/usr/**/*' 'test/ut/**/*' 'third_party/**/*' 'Library/*' '**/clipper2/*' --output-file coverage.filtered.info
