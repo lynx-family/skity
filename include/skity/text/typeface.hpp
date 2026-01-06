@@ -106,8 +106,6 @@ class SKITY_API Typeface : public std::enable_shared_from_this<Typeface> {
 
   bool ContainGlyph(Unichar code_point) const;
 
-  void GetFontMetrics(FontMetrics& metrics, float font_size);
-
   uint32_t GetUnitsPerEm() const;
 
   /**
