@@ -94,9 +94,29 @@ if (${SKITY_TEST_COVERAGE} AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 
     target_compile_options(skity_unit_test PRIVATE --coverage -O0 -g)
     target_link_options(skity_unit_test PRIVATE --coverage)
+else()
+    target_compile_options(skity PRIVATE
+        -fsanitize=thread
+        -fno-omit-frame-pointer
+        -g
+    )
+    target_compile_options(skity_unit_test PRIVATE
+        -fsanitize=thread
+        -fno-omit-frame-pointer
+        -g
+    )
+
+    target_link_options(skity PRIVATE
+        -fsanitize=thread
+    )
+
+    target_link_options(skity_unit_test PRIVATE
+        -fsanitize=thread
+    )
 endif()
 
 target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
 target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
+
 
 gtest_add_tests(skity_unit_test "" AUTO)
