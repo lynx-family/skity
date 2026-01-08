@@ -259,6 +259,10 @@ static void RegisterStrokeCircleBenchmark() {
 }
 
 static const char* kTigerSKP = RESOURCES_DIR "/skp/tiger.skp";
+static const char* kFlutter01SKP = RESOURCES_DIR "/skp/flutter_01.skp";
+static const char* kFlutter02SKP = RESOURCES_DIR "/skp/flutter_02.skp";
+static const char* kFlutter03SKP = RESOURCES_DIR "/skp/flutter_03.skp";
+static const char* kFlutter04SKP = RESOURCES_DIR "/skp/flutter_04.skp";
 
 static void RegisterTigerSKPBenchmark() {
   auto all_args = ArgsProduct({
@@ -294,8 +298,44 @@ static void RegisterTigerSKPBenchmark() {
   }
 }
 
+static void RegisterGUIBenchmark() {
+  auto all_args = ArgsProduct({
+      // gpu backend type
+      GetGPUBackendTypes(),
+      // aa
+      GetAATypes(),
+  });
+
+  for (auto args : all_args) {
+    auto backend_type = GetGPUBackendType(args[0]);
+    auto aa = GetAAType(args[1]);
+    if (backend_type == skity::GPUBackendType::kOpenGL &&
+        aa == skity::BenchTarget::AAType::kMSAA) {
+      // OpenGL MSAA performance results on macOS should not be taken as a
+      // meaningful benchmark.
+      continue;
+    }
+    auto flutter_01 = std::make_shared<skity::DrawSKPBenchmark>(
+        "Flutter_01", kFlutter01SKP, 1080, 1920, skity::Matrix{});
+    RegisterBenchmark(flutter_01, backend_type, aa);
+
+    auto flutter_02 = std::make_shared<skity::DrawSKPBenchmark>(
+        "Flutter_02", kFlutter02SKP, 1080, 1920, skity::Matrix{});
+    RegisterBenchmark(flutter_02, backend_type, aa);
+
+    auto flutter_03 = std::make_shared<skity::DrawSKPBenchmark>(
+        "Flutter_03", kFlutter03SKP, 1080, 1920, skity::Matrix{});
+    RegisterBenchmark(flutter_03, backend_type, aa);
+
+    auto flutter_04 = std::make_shared<skity::DrawSKPBenchmark>(
+        "Flutter_04", kFlutter04SKP, 1080, 1920, skity::Matrix{});
+    RegisterBenchmark(flutter_04, backend_type, aa);
+  }
+}
+
 static void RegisterAllBenchmarks() {
   RegisterTigerSKPBenchmark();
+  RegisterGUIBenchmark();
   RegisterFillCircleBenchmark();
   RegisterStrokeCircleBenchmark();
 }
