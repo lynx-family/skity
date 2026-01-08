@@ -2,8 +2,10 @@ plugins {
     alias(libs.plugins.android.library)
 }
 
+apply from: './publish.gradle'
+
 android {
-    namespace 'com.lynxsdk.lynx.skity'
+    namespace 'org.lynxsdk.lynx.skity'
     compileSdk 35
 
     def osName = System.properties['os.name'].toLowerCase()
