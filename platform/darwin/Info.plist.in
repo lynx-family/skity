@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>skity</string>
+    <string>Skity</string>
     <key>CFBundleIdentifier</key>
-    <string>com.lynxsdk.skity</string>
+    <string>org.lynxsdk.lynx.skity</string>
 
     <key>CFBundleShortVersionString</key>
     <string>@FM_VERSION_STRING@</string>

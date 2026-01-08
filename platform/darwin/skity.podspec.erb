@@ -1,0 +1,18 @@
+Pod::Spec.new do |s|
+    s.name             = 'skity'
+    s.version          = '<%= ENV["VERSION"] %>'
+    s.source           = { :http => '<%= ENV["PODSPEC_URL"] %>' }
+    s.summary          = 'A cross-platform 2D graphics library written in C++'
+    s.homepage         = 'https://github.com/lynx-family/skity'
+    s.license          = { :type => 'Apache-2.0', :file => 'LICENSE' }
+    s.author           = { 'lynx' => 'lynx.family@gmail.com' }
+    s.static_framework = true
+    s.ios.deployment_target = '13.0'
+    s.osx.deployment_target = '15.0'
+
+    s.vendored_frameworks = 'skity.xcframework'
+
+    s.ios.frameworks = 'ImageIO', 'CoreGraphics', 'CoreServices', 'Metal', 'OpenGLES'
+    s.osx.frameworks = 'ImageIO', 'CoreGraphics', 'CoreServices', 'Metal', 'OpenGL'
+    s.requires_arc = true
+end
