@@ -29,6 +29,10 @@ class DrawCircleBenchmark : public Benchmark {
     }
     ss << "Circle_";
     ss << radius_;
+
+    if (is_gradient_) {
+      ss << "_Gradient";
+    }
     return ss.str();
   }
 
@@ -41,12 +45,15 @@ class DrawCircleBenchmark : public Benchmark {
 
   void SetStroke(bool is_stroke) { is_stroke_ = is_stroke; }
 
+  void SetIsGradient(bool is_gradient) { is_gradient_ = is_gradient; }
+
  private:
   uint32_t count_ = 1;
   float radius_;
   bool is_opaque_;
   bool is_stroke_ = false;
   float stroke_width_ = 0;
+  bool is_gradient_ = false;
 };
 }  // namespace skity
 

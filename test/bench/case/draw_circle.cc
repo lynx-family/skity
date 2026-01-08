@@ -20,13 +20,34 @@ void DrawCircleBenchmark::OnDraw(Canvas *canvas, int index) {
     paint.SetStrokeWidth(stroke_width_);
   }
   for (auto i = 0; i < count_; i++) {
-    auto color = color_dist(rng);
-    if (is_opaque_) {
-      color = color | 0xFF000000;
-    }
-    paint.SetColor(color);
     paint.SetAntiAlias(true);
-    canvas->DrawCircle(x_dist(rng), y_dist(rng), radius_, paint);
+    auto x = x_dist(rng);
+    auto y = y_dist(rng);
+
+    if (!is_gradient_) {
+      auto color = color_dist(rng);
+      if (is_opaque_) {
+        color = color | 0xFF000000;
+      }
+      paint.SetColor(color);
+    } else {
+      auto color0 = color_dist(rng);
+      auto color1 = color_dist(rng);
+      if (is_opaque_) {
+        color0 = color0 | 0xFF000000;
+        color1 = color1 | 0xFF000000;
+      }
+      std::array<Point, 2> points{Point{x - radius_, y - radius_, 0, 1},
+                                  Point{x + radius_, y + radius_, 0, 1}};
+      std::array<Vec4, 2> colors{
+          Color4fFromColor(color0),
+          Color4fFromColor(color1),
+      };
+
+      paint.SetShader(
+          Shader::MakeLinear(points.data(), colors.data(), nullptr, 2));
+    }
+    canvas->DrawCircle(x, y, radius_, paint);
   }
 }
 }  // namespace skity
