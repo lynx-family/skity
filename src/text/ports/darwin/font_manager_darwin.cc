@@ -66,9 +66,10 @@ std::shared_ptr<TypefaceDarwin> typeface_from_desc(CTFontDescriptorRef desc) {
 }
 
 int32_t compute_metric(const FontStyle& a, const FontStyle& b) {
-  return std::sqrt(a.weight() - b.weight()) +
-         std::sqrt((a.width() - b.width()) * 100) +
-         std::sqrt((a.slant() != b.slant()) * 900);
+  int delta_weight = a.weight() - b.weight();
+  int delta_width = a.width() - b.width();
+  return delta_weight * delta_weight + delta_width * delta_width * 100 * 100 +
+         (a.slant() != b.slant()) * 900 * 900;
 }
 
 static UniqueCFRef<CFDataRef> cfdata_from_skdata(
