@@ -230,6 +230,11 @@ static void RegisterFillCircleBenchmark() {
     auto benchmark =
         std::make_shared<skity::DrawCircleBenchmark>(count, radius, false);
     RegisterBenchmark(benchmark, backend_type, aa);
+
+    auto gradient_benchmark =
+        std::make_shared<skity::DrawCircleBenchmark>(count, radius, false);
+    gradient_benchmark->SetIsGradient(true);
+    RegisterBenchmark(gradient_benchmark, backend_type, aa);
   }
 }
 
@@ -255,6 +260,13 @@ static void RegisterStrokeCircleBenchmark() {
     benchmark->SetStroke(true);
     benchmark->SetStrokeWidth(10);
     RegisterBenchmark(benchmark, backend_type, aa);
+
+    auto gradient_benchmark =
+        std::make_shared<skity::DrawCircleBenchmark>(count, radius, false);
+    gradient_benchmark->SetStroke(true);
+    gradient_benchmark->SetStrokeWidth(10);
+    gradient_benchmark->SetIsGradient(true);
+    RegisterBenchmark(gradient_benchmark, backend_type, aa);
   }
 }
 

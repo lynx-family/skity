@@ -86,7 +86,7 @@ bool BenchContextMTL::WriteToFile(std::shared_ptr<BenchTarget> target, std::stri
 
   auto encoded_data = codec->Encode(&pixmap);
 
-  char full_file_name[128];
+  char full_file_name[256];
 
   snprintf(full_file_name, sizeof(full_file_name), "%s.png", path.c_str());
 
