@@ -2,7 +2,12 @@
 # We use static library to prevent code sign at build time
 add_library(skity_framework STATIC)
 
-set(FM_VERSION_STRING "${CMAKE_PROJECT_VERSION}${SKITY_BUNDLE_SUFFIX}")
+set(FM_VERSION_STRING "$ENV{VERSION}")
+
+# fallback to use project version if env version is empty
+if (FM_VERSION_STRING STREQUAL "")
+  set(FM_VERSION_STRING "${CMAKE_PROJECT_VERSION}")
+endif()
 
 configure_file(
   ${CMAKE_CURRENT_LIST_DIR}/Info.plist.in

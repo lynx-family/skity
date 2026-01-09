@@ -16,7 +16,7 @@ import os
 import subprocess
 import sys
 
-def cmake_build_and_install(out_dir: str, install_dir: str, target_version: str, arch: str, sys_root: str, version_suffix: str):
+def cmake_build_and_install(out_dir: str, install_dir: str, target_version: str, arch: str, sys_root: str, version_string: str):
     cmake_config_command = [
         'cmake',
         '-B',
@@ -33,17 +33,17 @@ def cmake_build_and_install(out_dir: str, install_dir: str, target_version: str,
         '-DCMAKE_OSX_SYSROOT={}'.format(sys_root),
     ]
 
-    # if version_suffix is not none and not empty
-    if version_suffix != '':
-        cmake_config_command.append('-DSKITY_BUNDLE_SUFFIX={}'.format(version_suffix))
-
-    print('version_suffix: {}'.format(version_suffix))
+    print('version_string: {}'.format(version_string))
     print('-----------------')
     print('cmake_config_command: {}'.format(cmake_config_command))
     print('-----------------')
 
+    env = os.environ.copy()
+    if version_string != '':
+        env['VERSION'] = version_string
+
     # check config result
-    subprocess.check_call(cmake_config_command)
+    subprocess.check_call(cmake_config_command, env=env)
 
     # build framework
     cmake_build_command = [
@@ -57,7 +57,7 @@ def cmake_build_and_install(out_dir: str, install_dir: str, target_version: str,
     ]
 
     # check build result
-    subprocess.check_call(cmake_build_command)
+    subprocess.check_call(cmake_build_command, env=env)
 
     # install framework
     cmake_install_command = [
@@ -71,19 +71,19 @@ def cmake_build_and_install(out_dir: str, install_dir: str, target_version: str,
     ]
 
     # check install result
-    subprocess.check_call(cmake_install_command)
+    subprocess.check_call(cmake_install_command, env=env)
 
     return 1
 
-def pack_all_frameworks(version_suffix: str):
+def pack_all_frameworks(version_string: str):
     # pack macos framework
-    cmake_build_and_install('out/osx_framework', 'out/osx_install', '15.0', 'x86_64;arm64', 'macosx', version_suffix)
+    cmake_build_and_install('out/osx_framework', 'out/osx_install', '15.0', 'x86_64;arm64', 'macosx', version_string)
     # pack iOS framework
-    cmake_build_and_install('out/ios_framework', 'out/ios_install', '13.0', 'arm64', 'iphoneos', version_suffix)
+    cmake_build_and_install('out/ios_framework', 'out/ios_install', '13.0', 'arm64', 'iphoneos', version_string)
     # pack iOS simulator x86_64 framework
-    cmake_build_and_install('out/ios_simulator_framework_x86_64', 'out/ios_simulator_install_x86_64', '13.0', 'x86_64', 'iphonesimulator', version_suffix)
+    cmake_build_and_install('out/ios_simulator_framework_x86_64', 'out/ios_simulator_install_x86_64', '13.0', 'x86_64', 'iphonesimulator', version_string)
     # pack iOS simulator arm64 framework
-    cmake_build_and_install('out/ios_simulator_framework_arm64', 'out/ios_simulator_install_arm64', '13.0', 'arm64', 'iphonesimulator', version_suffix)
+    cmake_build_and_install('out/ios_simulator_framework_arm64', 'out/ios_simulator_install_arm64', '13.0', 'arm64', 'iphonesimulator', version_string)
     pass
 
 def pack_zip_bundle():
@@ -110,8 +110,8 @@ def pack_zip_bundle():
     pass
 
 
-def main(version_suffix: str):
-    pack_all_frameworks(version_suffix)
+def main(version_string: str):
+    pack_all_frameworks(version_string)
 
     # before genreate the final xcframework, we needs to merge
     # ios_simulator_framework_x86_64 and ios_simulator_framework_arm64
@@ -154,9 +154,9 @@ def main(version_suffix: str):
 
 
 if __name__ == '__main__':
-    version_suffix = ''
+    version_string = ''
 
     if len(sys.argv) > 1:
-        version_suffix = sys.argv[1]
+        version_string = sys.argv[1]
 
-    main(version_suffix)
+    main(version_string)
