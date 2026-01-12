@@ -36,11 +36,11 @@ class LRUCache {
  public:
   explicit LRUCache(size_t max_count) : max_count_(max_count) {}
 
-  bool exsit(const K& key) const {
+  bool Exsit(const K& key) const {
     return cache_map_.find(key) != cache_map_.end();
   }
 
-  V* find(const K& key) {
+  V* Find(const K& key) {
     auto it = cache_map_.find(key);
     if (it == cache_map_.end()) {
       return nullptr;
@@ -53,18 +53,26 @@ class LRUCache {
     return &entry->value;
   }
 
-  V* insert(const K& key, V value) {
+  V* Insert(const K& key, V value) {
     Entry* entry = new Entry(key, std::move(value));
     cache_map_.emplace(key, entry);
     cache_list_.push_front(entry);
     while (cache_map_.size() > max_count_) {
-      this->remove(cache_list_.back()->key);
+      this->Remove(cache_list_.back()->key);
     }
     return &entry->value;
   }
 
- private:
-  void remove(const K& key) {
+  std::vector<K> CollectKeys() {
+    std::vector<K> keys;
+    keys.reserve(cache_map_.size());
+    for (const auto& [key, value] : cache_map_) {
+      keys.push_back(key);
+    }
+    return keys;
+  }
+
+  void Remove(const K& key) {
     auto it = cache_map_.find(key);
     if (it == cache_map_.end()) {
       // error
@@ -82,6 +90,7 @@ class LRUCache {
     delete entry;
   }
 
+ private:
   size_t max_count_;
   std::list<Entry*> cache_list_;
   std::unordered_map<K, Entry*, Hash, Equal> cache_map_;

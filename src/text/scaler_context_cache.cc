@@ -21,14 +21,25 @@ std::shared_ptr<ScalerContextContainer>
 ScalerContextCache::FindOrCreateScalerContext(
     const ScalerContextDesc& desc, const std::shared_ptr<Typeface>& typeface) {
   std::unique_lock<std::mutex> lock(mutex_);
-  auto p_scaler_context = cache_.find(desc);
+  auto p_scaler_context = cache_.Find(desc);
   if (p_scaler_context) {
     return *p_scaler_context;
   }
   std::shared_ptr<ScalerContextContainer> scaler_context =
       this->CreateScalerContext(desc, typeface);
-  cache_.insert(desc, scaler_context);
+  cache_.Insert(desc, scaler_context);
   return scaler_context;
+}
+
+void ScalerContextCache::PurgeByTypeface(TypefaceID typeface_id) {
+  std::unique_lock<std::mutex> lock(mutex_);
+
+  std::vector<ScalerContextDesc> keys = cache_.CollectKeys();
+  for (auto& key : keys) {
+    if (key.typeface_id == typeface_id) {
+      cache_.Remove(key);
+    }
+  }
 }
 
 std::shared_ptr<ScalerContextContainer> ScalerContextCache::CreateScalerContext(
