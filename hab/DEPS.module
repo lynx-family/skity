@@ -1,3 +1,4 @@
+import os
 
 deps = {
     "third_party/libjpeg-turbo": {
@@ -5,6 +6,7 @@ deps = {
         "url": "https://github.com/libjpeg-turbo/libjpeg-turbo.git",
         "ignore_in_git": True,
         "commit": "f29eda648547b36aa594c4116c7764a6c8a079b9",
+        "patches": os.path.join(root_dir, 'patches', 'libjpeg-turbo', '0001-disable-TLS-in-Android.patch'),
     },
     "third_party/wuffs": {
         "type": "git",

@@ -1,0 +1,27 @@
+From 51f2717649edc951daf3e5905e8a0af4f4d7a389 Mon Sep 17 00:00:00 2001
+From: RuiwenTang <tangruiwen1989@gmail.com>
+Date: Mon, 12 Jan 2026 16:19:28 +0800
+Subject: [PATCH] disable TLS in Android
+
+---
+ CMakeLists.txt | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d18298d5..0ea71050 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -540,6 +540,10 @@ else()
+   unset(THREAD_LOCAL)
+ endif()
+ 
++if (ANDROID)
++  unset(THREAD_LOCAL)
++endif()
++
+ if(UNIX AND NOT APPLE)
+   file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/conftest.map "VERS_1 { global: *; };")
+   set(CMAKE_REQUIRED_FLAGS
+-- 
+2.49.0
+
