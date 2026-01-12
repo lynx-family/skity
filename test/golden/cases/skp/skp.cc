@@ -15,6 +15,32 @@
 static const char* kGoldenTestImageDir = CASE_DIR;
 static const char* kTigerSKP = RESOURCES_DIR "/skp/tiger.skp";
 
+static const char* kGoldenTestImageCPUTessDir = CASE_DIR "cpu_tess_images/";
+static const char* kGoldenTestImageGPUTessDir = CASE_DIR "gpu_tess_images/";
+
+namespace {
+
+struct PathListContext {
+  PathListContext(std::string name)
+      : expected_image_cpu_tess_path(kGoldenTestImageCPUTessDir),
+        expected_image_gpu_tess_path(kGoldenTestImageGPUTessDir) {
+    expected_image_cpu_tess_path.append(name);
+    expected_image_gpu_tess_path.append(name);
+  }
+
+  skity::testing::PathList ToPathList() const {
+    return {
+        .cpu_tess_path = expected_image_cpu_tess_path.c_str(),
+        .gpu_tess_path = expected_image_gpu_tess_path.c_str(),
+    };
+  }
+
+  std::filesystem::path expected_image_cpu_tess_path;
+  std::filesystem::path expected_image_gpu_tess_path;
+};
+
+}  // namespace
+
 TEST(SKP_Golden, Tiger) {
   auto stream = skity::ReadStream::CreateFromFile(kTigerSKP);
   ASSERT_NE(stream, nullptr) << "Failed to open SKP file: " << kTigerSKP;
@@ -28,11 +54,8 @@ TEST(SKP_Golden, Tiger) {
   canvas->Translate(-130, 20);
   picture->PlayBack(canvas);
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("tiger.png");
+  PathListContext context("tiger.png");
   auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 1000, 1000,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 1000, 1000,
+                                                   context.ToPathList()));
 }
