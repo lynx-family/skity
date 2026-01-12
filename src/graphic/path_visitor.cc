@@ -14,8 +14,6 @@ namespace skity {
 constexpr static float kPrecision = 4.0f;
 constexpr static float kMaxPrecision = 10000.f;
 
-namespace {
-
 float get_persp_ratio(const Matrix& transform) {
   std::array<Vec2, 3> src{Vec2{0, 0}, Vec2{1, 0}, Vec2{0, 1}};
   std::array<Vec2, 3> dst;
@@ -43,8 +41,6 @@ float device_precision_to_local_precision(float device_precision,
 
   return std::min(kMaxPrecision, device_precision * ratio);
 }
-
-}  // namespace
 
 void PathVisitor::VisitPath(const Path& path, bool force_close) {
   Path::Iter iter{path, force_close};

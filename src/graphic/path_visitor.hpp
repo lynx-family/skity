@@ -71,6 +71,12 @@ class PathVisitor {
   Matrix matrix_ = {};
 };
 
+float get_persp_ratio(const Matrix& transform);
+
+float device_precision_to_local_precision(float device_precision,
+                                          const Path& path,
+                                          const Matrix& transform);
+
 }  // namespace skity
 
 #endif  // SRC_GRAPHIC_PATH_VISITOR_HPP

@@ -95,11 +95,10 @@ struct Instance {
 
 static_assert(sizeof(Instance) == 20 * sizeof(float));
 
-struct TessPathStrokeVisitor : public PathVisitor {
+struct TessPathStrokeVisitor {
   explicit TessPathStrokeVisitor(const Matrix& matrix, const Paint& paint,
                                  HWStageBuffer* stage_buffer)
-      : PathVisitor(false, matrix),
-
+      : matrix_(matrix),
         xform_(wangs_formula::VectorXform(matrix)),
         stroke_radius_(std::max(0.5f, paint.GetStrokeWidth()) * 0.5f),
         stroke_miter_(paint.GetStrokeMiter()),
@@ -107,9 +106,7 @@ struct TessPathStrokeVisitor : public PathVisitor {
         cap_(paint.GetStrokeCap()),
         stage_buffer_(stage_buffer) {}
 
-  void OnBeginPath() override {}
-
-  void OnEndPath() override { HandleCaps(); }
+  void OnEndPath() { HandleCaps(); }
 
   void HandleCaps() {
     if (only_has_move_to_ || is_closed_ || cap_ == Paint::kButt_Cap) {
@@ -149,7 +146,7 @@ struct TessPathStrokeVisitor : public PathVisitor {
     }
   }
 
-  void OnMoveTo(Vec2 const& p) override {
+  void OnMoveTo(Vec2 const& p) {
     HandleCaps();
     only_has_move_to_ = true;
     first_point_ = p;
@@ -158,7 +155,7 @@ struct TessPathStrokeVisitor : public PathVisitor {
     is_closed_ = false;
   }
 
-  void OnLineTo(Vec2 const& p0, Vec2 const& p1) override {
+  void OnLineTo(Vec2 const& p0, Vec2 const& p1) {
     only_has_move_to_ = false;
     if (p0 == p1) {
       return;
@@ -173,14 +170,13 @@ struct TessPathStrokeVisitor : public PathVisitor {
     last_point_ = p1;
   }
 
-  void OnQuadTo(Vec2 const& p0, Vec2 const& p1, Vec2 const& p2) override {
+  void OnQuadTo(Vec2 const& p0, Vec2 const& p1, Vec2 const& p2) {
     auto ctrl1 = (p0 + 2 * p1) / 3.f;
     auto ctrl2 = (2 * p1 + p2) / 3.f;
     OnCubicTo(p0, ctrl1, ctrl2, p2);
   }
 
-  void OnConicTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,
-                 float weight) override {
+  void OnConicTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3, float weight) {
     Point start = {p1.x, p1.y, 0.f, 1.f};
     Point control = {p2.x, p2.y, 0.f, 1.f};
     Point end = {p3.x, p3.y, 0.f, 1.f};
@@ -194,7 +190,7 @@ struct TessPathStrokeVisitor : public PathVisitor {
   }
 
   void OnCubicTo(Vec2 const& p0, Vec2 const& p1, Vec2 const& p2,
-                 Vec2 const& p3) override {
+                 Vec2 const& p3) {
     only_has_move_to_ = false;
     if (p0 == p1 && p1 == p2 && p2 == p3) {
       return;
@@ -204,7 +200,7 @@ struct TessPathStrokeVisitor : public PathVisitor {
     arc_[1] = p1;
     arc_[2] = p2;
     arc_[3] = p3;
-    uint32_t num = std::ceil(wangs_formula::Cubic(kPrecision, arc_, xform_));
+    uint32_t num = std::ceil(wangs_formula::Cubic(precision_, arc_, xform_));
     num = std::max(num, 1u);
 
     uint32_t count = DivCeil(num, kMaxNumSegmentsPerInstance);
@@ -225,7 +221,7 @@ struct TessPathStrokeVisitor : public PathVisitor {
     join_point_ = GetTangentPoint(p3, p2, p1, p0);
   }
 
-  void OnClose() override {
+  void OnClose() {
     if (only_has_move_to_) {
       return;
     }
@@ -252,6 +248,54 @@ struct TessPathStrokeVisitor : public PathVisitor {
       return p2;
     }
     return p3;
+  }
+
+  void VisitPath(const Path& path, bool force_close) {
+    Path::Iter iter{path, force_close};
+    std::array<Point, 4> pts = {};
+
+    if (matrix_.HasPersp()) {
+      precision_ =
+          device_precision_to_local_precision(kPrecision, path, matrix_);
+    }
+
+    for (;;) {
+      Path::Verb verb = iter.Next(pts.data());
+      switch (verb) {
+        case Path::Verb::kMove:
+          OnMoveTo(reinterpret_cast<const Vec2&>(pts[0]));
+          break;
+        case Path::Verb::kLine:
+          OnLineTo(reinterpret_cast<const Vec2&>(pts[0]),
+                   reinterpret_cast<const Vec2&>(pts[1]));
+          break;
+        case Path::Verb::kQuad:
+          OnQuadTo(reinterpret_cast<const Vec2&>(pts[0]),
+                   reinterpret_cast<const Vec2&>(pts[1]),
+                   reinterpret_cast<const Vec2&>(pts[2]));
+          break;
+        case Path::Verb::kConic:
+          OnConicTo(reinterpret_cast<const Vec2&>(pts[0]),
+                    reinterpret_cast<const Vec2&>(pts[1]),
+                    reinterpret_cast<const Vec2&>(pts[2]), iter.ConicWeight());
+          break;
+        case Path::Verb::kCubic:
+          OnCubicTo(reinterpret_cast<const Vec2&>(pts[0]),
+                    reinterpret_cast<const Vec2&>(pts[1]),
+                    reinterpret_cast<const Vec2&>(pts[2]),
+                    reinterpret_cast<const Vec2&>(pts[3]));
+          break;
+        case Path::Verb::kClose:
+          OnClose();
+          break;
+        case Path::Verb::kDone:
+          goto DONE;
+          break;
+      }
+    }
+
+  DONE:
+    OnEndPath();
   }
 
  private:
@@ -405,6 +449,7 @@ struct TessPathStrokeVisitor : public PathVisitor {
     }
   }
 
+  Matrix matrix_;
   wangs_formula::VectorXform xform_;
   Vec2 arc_[4];
 
@@ -421,6 +466,7 @@ struct TessPathStrokeVisitor : public PathVisitor {
   const Paint::Cap cap_;
   std::optional<uint32_t> semicircle_segments_num_;
   HWStageBuffer* stage_buffer_;
+  float precision_ = kPrecision;
 };
 
 }  // namespace
