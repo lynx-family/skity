@@ -62,7 +62,7 @@ class TypefaceFreeType : public Typeface {
 
   explicit TypefaceFreeType(const FontStyle& style);
 
-  ~TypefaceFreeType() override = default;
+  ~TypefaceFreeType() override;
 
   int OnGetTableTags(FontTableTag tags[]) const override;
 

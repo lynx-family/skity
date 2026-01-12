@@ -27,6 +27,8 @@ class ScalerContextCache final {
   std::shared_ptr<ScalerContextContainer> FindOrCreateScalerContext(
       const ScalerContextDesc& desc, const std::shared_ptr<Typeface>& typeface);
 
+  void PurgeByTypeface(TypefaceID typeface_id);
+
  private:
   std::shared_ptr<ScalerContextContainer> CreateScalerContext(
       const ScalerContextDesc& desc, const std::shared_ptr<Typeface>& typeface);

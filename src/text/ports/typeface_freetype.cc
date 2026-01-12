@@ -20,6 +20,7 @@
 #include <skity/text/font_manager.hpp>
 
 #include "src/text/ports/scaler_context_freetype.hpp"
+#include "src/text/scaler_context_cache.hpp"
 
 namespace skity {
 
@@ -104,6 +105,10 @@ std::shared_ptr<TypefaceFreeType> TypefaceFreeType::Make(
 
 TypefaceFreeType::TypefaceFreeType(const class FontStyle& style)
     : Typeface(style) {}
+
+TypefaceFreeType::~TypefaceFreeType() {
+  ScalerContextCache::GlobalScalerContextCache()->PurgeByTypeface(typeface_id_);
+}
 
 int TypefaceFreeType::OnGetTableTags(FontTableTag tags[]) const {
   AutoFTAccess fta(this);
