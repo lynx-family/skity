@@ -17,6 +17,7 @@
 #include <unordered_map>
 
 #include "src/utils/function_wrapper.hpp"
+#include "src/utils/no_destructor.hpp"
 
 namespace skity {
 using UniqueFTFace =
@@ -51,8 +52,8 @@ class FreetypeFace {
   ~FreetypeFace();
 
   static std::mutex& f_t_mutex() {
-    static std::mutex mutex;
-    return mutex;
+    static NoDestructor<std::mutex> mutex;
+    return *mutex;
   }
 
   FT_Face Face() { return ft_face_ ? ft_face_.get() : nullptr; }
