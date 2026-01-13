@@ -50,15 +50,23 @@ jobs:
             run: |
                 TAG_NAME=${{ github.event.release.tag_name }}
                 VERSION=${TAG_NAME#v}
+                PODSPEC_URL="https://github.com/lynx-family/skity/releases/download/${TAG_NAME}/skity.framework-${TAG_NAME}.zip"
+                echo "podspec url: $PODSPEC_URL"
                 echo "version string: $VERSION"
+                echo "VERSION=$VERSION" >> $GITHUB_ENV
+                echo "PODSPEC_URL=$PODSPEC_URL" >> $GITHUB_ENV
                 tools/pack_skity_framework.py $VERSION
           - name: Copy XCFramework
             run: |
                 mkdir -p out/release
                 cp -r out/skity.framework.zip out/release/skity.framework-${{ github.event.release.tag_name }}.zip
+          - name: Generate Podspec
+            run: |
+                ruby -rerb -e 'puts ERB.new(File.read("platform/darwin/skity.podspec.erb")).result' > ./out/skity.podspec
           - name: Upload Assets
             uses: softprops/action-gh-release@v2
             with:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 files: |
                     out/release/skity.framework-${{ github.event.release.tag_name }}.zip
+                    out/skity.podspec
