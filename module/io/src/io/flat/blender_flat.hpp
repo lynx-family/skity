@@ -19,7 +19,7 @@ class BlenderModeFlattenable : public Flattenable {
 
   ~BlenderModeFlattenable() override = default;
 
-  std::string_view ProcName() const override { return "BlendModeFlattener"; }
+  std::string_view ProcName() const override { return "SkBlendModeBlender"; }
 
   void FlattenToBuffer(WriteBuffer& buffer) const override {
     buffer.WriteInt32(static_cast<int32_t>(blend_mode_));

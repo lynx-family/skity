@@ -42,4 +42,5 @@ add_subdirectory(case/text)
 
 if (${SKITY_IO_MODULE})
   add_subdirectory(case/skp_loader)
+  add_subdirectory(case/skp_writer)
 endif()
