@@ -367,6 +367,20 @@ fn cubic_bezier_tangent(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec2<f3
   var tangent: vec2<f32> = 3.0 * u * u * (p1 - p0) +
                            6.0 * u * t * (p2 - p1) +
                            3.0 * t * t * (p3 - p2);
+
+  let eps: f32 = 0.00024;
+  let is_t0: bool = t < eps;
+  let is_t1: bool = t > 1.0 - eps;
+
+  if (is_t0 && p0.x == p1.x && p0.y == p1.y) {
+    tangent = p2 - p0;
+  } else if (is_t1 && p2.x == p3.x && p2.y == p3.y) {
+    tangent = p3 - p1;
+  }
+
+  if (tangent.x == 0.0 && tangent.y == 0.0) {
+    tangent = p3 - p0;
+  }
   return tangent;
 }
 
