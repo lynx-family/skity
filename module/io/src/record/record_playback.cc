@@ -128,6 +128,7 @@ void RecordPlayback::Serialize(WriteStream& stream, const SerialProc* proc,
 
   buffer.SetTypefaceSet(typeface_set);
   buffer.SetFactorySet(&factory_set);
+  buffer.SetSerialProc(proc);
 
   FlattenToBuffer(buffer);
 

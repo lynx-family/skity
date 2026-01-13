@@ -11,8 +11,6 @@ namespace skity {
 namespace {
 
 void SkipBlendModeBlender(ReadBuffer& buffer) {
-  (void)buffer.ReadU32();  // skip the factory id
-
   (void)buffer.ReadU32();  // skip the blend mode
 }
 
