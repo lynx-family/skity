@@ -9,6 +9,8 @@
 
 #ifdef SKITY_LOG
 
+#include <mutex>
+
 // force disable fmt exceptions
 #ifdef FMT_EXCEPTIONS
 #undef FMT_EXCEPTIONS
@@ -54,6 +56,8 @@ class Log {
     ms += fmt::format(fmt, args...);
     WriteDebug(ms);
   }
+
+  static std::mutex& GetLogMutex();
 
  private:
   static void WriteInfo(const std::string& msg);
