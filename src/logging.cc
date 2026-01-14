@@ -38,79 +38,104 @@ Logger::LogHandler g_custom_log_i = nullptr;
 Logger::LogHandler g_custom_log_d = nullptr;
 Logger::LogHandler g_custom_log_e = nullptr;
 
+std::mutex& Log::GetLogMutex() {
+  static std::mutex log_mutex{};
+
+  return log_mutex;
+}
+
 void Log::WriteInfo(const std::string& msg) {
-  if (g_custom_log_i) {
-    g_custom_log_i(msg.c_str());
-  } else {
-#ifdef SKITY_ANDROID
-    __android_log_print(ANDROID_LOG_INFO, "skity", "%s", msg.c_str());
-#elif defined(SKITY_HARMONY)
-    OH_LOG_Print(LOG_APP, LOG_INFO, LOG_PRINT_DOMAIN, "skity", "%{public}s",
-                 msg.c_str());
-#elif defined(SKITY_IOS)
-    os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_INFO, "%{public}s",
-                     msg.c_str());
-#else
-    auto style = fmt::fg(fmt::color::green);
-    fmt::print(style, "{}\n", msg);
-#endif
+  {
+    std::lock_guard guard(Log::GetLogMutex());
+
+    if (g_custom_log_i) {
+      g_custom_log_i(msg.c_str());
+      return;
+    }
   }
+
+#ifdef SKITY_ANDROID
+  __android_log_print(ANDROID_LOG_INFO, "skity", "%s", msg.c_str());
+#elif defined(SKITY_HARMONY)
+  OH_LOG_Print(LOG_APP, LOG_INFO, LOG_PRINT_DOMAIN, "skity", "%{public}s",
+               msg.c_str());
+#elif defined(SKITY_IOS)
+  os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_INFO, "%{public}s", msg.c_str());
+#else
+  auto style = fmt::fg(fmt::color::green);
+  fmt::print(style, "{}\n", msg);
+#endif
 }
 
 void Log::WriteWarn(const std::string& msg) {
-  if (g_custom_log_i) {
-    g_custom_log_i(msg.c_str());
-  } else {
-#ifdef SKITY_ANDROID
-    __android_log_print(ANDROID_LOG_WARN, "skity", "%s", msg.c_str());
-#elif defined(SKITY_HARMONY)
-    OH_LOG_Print(LOG_APP, LOG_WARN, LOG_PRINT_DOMAIN, "skity", "%{public}s",
-                 msg.c_str());
-#elif defined(SKITY_IOS)
-    os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT, "%{public}s",
-                     msg.c_str());
-#else
-    auto style = fmt::fg(fmt::color::yellow);
-    fmt::print(style, "{}\n", msg);
-#endif
+  {
+    std::lock_guard guard(Log::GetLogMutex());
+
+    if (g_custom_log_i) {
+      g_custom_log_i(msg.c_str());
+      return;
+    }
   }
+
+#ifdef SKITY_ANDROID
+  __android_log_print(ANDROID_LOG_WARN, "skity", "%s", msg.c_str());
+#elif defined(SKITY_HARMONY)
+  OH_LOG_Print(LOG_APP, LOG_WARN, LOG_PRINT_DOMAIN, "skity", "%{public}s",
+               msg.c_str());
+#elif defined(SKITY_IOS)
+  os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT, "%{public}s",
+                   msg.c_str());
+#else
+  auto style = fmt::fg(fmt::color::yellow);
+  fmt::print(style, "{}\n", msg);
+#endif
 }
 
 void Log::WriteError(const std::string& msg) {
-  if (g_custom_log_i) {
-    g_custom_log_i(msg.c_str());
-  } else {
-#ifdef SKITY_ANDROID
-    __android_log_print(ANDROID_LOG_ERROR, "skity", "%s", msg.c_str());
-#elif defined(SKITY_HARMONY)
-    OH_LOG_Print(LOG_APP, LOG_ERROR, LOG_PRINT_DOMAIN, "skity", "%{public}s",
-                 msg.c_str());
-#elif defined(SKITY_IOS)
-    os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_ERROR, "%{public}s",
-                     msg.c_str());
-#else
-    auto style = fmt::fg(fmt::color::red);
-    fmt::print(style, "{}\n", msg);
-#endif
+  {
+    std::lock_guard guard(Log::GetLogMutex());
+
+    if (g_custom_log_i) {
+      g_custom_log_i(msg.c_str());
+      return;
+    }
   }
+
+#ifdef SKITY_ANDROID
+  __android_log_print(ANDROID_LOG_ERROR, "skity", "%s", msg.c_str());
+#elif defined(SKITY_HARMONY)
+  OH_LOG_Print(LOG_APP, LOG_ERROR, LOG_PRINT_DOMAIN, "skity", "%{public}s",
+               msg.c_str());
+#elif defined(SKITY_IOS)
+  os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_ERROR, "%{public}s",
+                   msg.c_str());
+#else
+  auto style = fmt::fg(fmt::color::red);
+  fmt::print(style, "{}\n", msg);
+#endif
 }
 
 void Log::WriteDebug(const std::string& msg) {
-  if (g_custom_log_i) {
-    g_custom_log_i(msg.c_str());
-  } else {
-#ifdef SKITY_ANDROID
-    __android_log_print(ANDROID_LOG_DEBUG, "skity", "%s", msg.c_str());
-#elif defined(SKITY_HARMONY)
-    OH_LOG_Print(LOG_APP, LOG_DEBUG, LOG_PRINT_DOMAIN, "skity", "%{public}s",
-                 msg.c_str());
-#elif defined(SKITY_IOS)
-    os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEBUG, "%{public}s",
-                     msg.c_str());
-#else
-    fmt::print("{}\n", msg);
-#endif
+  {
+    std::lock_guard guard(Log::GetLogMutex());
+
+    if (g_custom_log_i) {
+      g_custom_log_i(msg.c_str());
+      return;
+    }
   }
+
+#ifdef SKITY_ANDROID
+  __android_log_print(ANDROID_LOG_DEBUG, "skity", "%s", msg.c_str());
+#elif defined(SKITY_HARMONY)
+  OH_LOG_Print(LOG_APP, LOG_DEBUG, LOG_PRINT_DOMAIN, "skity", "%{public}s",
+               msg.c_str());
+#elif defined(SKITY_IOS)
+  os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEBUG, "%{public}s",
+                   msg.c_str());
+#else
+  fmt::print("{}\n", msg);
+#endif
 }
 
 void Log::Init() {}
@@ -121,6 +146,8 @@ void KillProcess() { abort(); }
 
 void Logger::RegisterLog(CustomLogger* log) {
 #ifdef SKITY_LOG
+  std::lock_guard guard(Log::GetLogMutex());
+
   if (log) {
     g_custom_log_i = log->log_i;
     g_custom_log_d = log->log_d;
