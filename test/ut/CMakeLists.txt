@@ -29,6 +29,7 @@ add_executable(skity_unit_test
     render/resource_cache_test.cc
     render/shape_test.cc
     recorder/display_list_test.cc
+    text/scaler_context_cache_test.cc
     text/text_run_test.cc
     text/text_test.cc
     utils/arena_allocator_test.cc
@@ -39,7 +40,10 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
     target_sources(skity_unit_test PRIVATE base/platform/win/str_conversion_test.cc)
 endif()
 
+# Place the cases that depend on specific fonts here.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT SKITY_CT_FONT))
+  target_compile_definitions(skity_unit_test PRIVATE -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/")
+
   target_sources(skity_unit_test PRIVATE text/typeface_test.cc)
 endif()
 

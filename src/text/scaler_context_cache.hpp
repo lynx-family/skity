@@ -35,6 +35,14 @@ class ScalerContextCache final {
 
   LRUCache<ScalerContextDesc, std::shared_ptr<ScalerContextContainer>> cache_;
   std::mutex mutex_;
+
+  // for test
+  bool FindScalerContext(const ScalerContextDesc& desc);
+
+  friend class ScalerContextCacheTest_PurgeByTypefaceReleaseTypeface_Test;
+  friend class
+      ScalerContextCacheTest_PurgeByTypefaceReleaseTypefaceThreadSafe_Test;
+  friend class ScalerContextCacheTest_PurgeByTypefaceCacheFullThreadSafe_Test;
 };
 
 }  // namespace skity

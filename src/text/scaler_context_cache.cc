@@ -48,4 +48,11 @@ std::shared_ptr<ScalerContextContainer> ScalerContextCache::CreateScalerContext(
   return std::make_shared<ScalerContextContainer>(std::move(scaler_context));
 }
 
+bool ScalerContextCache::FindScalerContext(const ScalerContextDesc& desc) {
+  std::unique_lock<std::mutex> lock(mutex_);
+
+  bool find = cache_.Find(desc) != nullptr;
+  return find;
+}
+
 }  // namespace skity
