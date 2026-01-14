@@ -248,3 +248,31 @@ TEST(ShapeGolden, DrawCheck) {
                                .gpu_tess_path = expected_image_path.c_str()}));
 }
 
+TEST(ShapeGolden, DrawDegenerateCubic) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(400.f, 400.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  skity::Paint paint;
+  skity::Path path;
+  path.MoveTo(100, 100);
+  path.CubicTo(100, 100, 300, 100, 300, 100);
+  path.CubicTo(300, 100, 300, 300, 300, 300);
+  path.CubicTo(300, 300, 100, 300, 100, 300);
+  path.Close();
+
+  paint.SetColor(skity::Color_GREEN);
+  paint.SetStrokeJoin(skity::Paint::Join::kBevel_Join);
+  paint.SetStyle(skity::Paint::kStroke_Style);
+
+  paint.SetStrokeWidth(40.f);
+  canvas->DrawPath(path, paint);
+
+  std::filesystem::path expected_image_path(kGoldenTestImageDir);
+  expected_image_path.append("draw_degenerate_cubic.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 400, 400,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
+}
