@@ -4,10 +4,13 @@
 
 #include "src/render/hw/draw/wgx_filter.hpp"
 
+#include <vector>
+
 #include "src/effect/color_filter_base.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 
 namespace skity {
@@ -73,6 +76,43 @@ class WGXBlendFilter : public WGXFilterFragment {
         return "BlendScreenFilter";
       default:
         return "UnsupportedBlendFilter";
+    }
+  }
+
+  HWColorFilterKeyType::Value GetType() const override {
+    switch (mode_) {
+      case BlendMode::kClear:
+        return HWColorFilterKeyType::kClear;
+      case BlendMode::kSrc:
+        return HWColorFilterKeyType::kSrc;
+      case BlendMode::kDst:
+        return HWColorFilterKeyType::kDst;
+      case BlendMode::kSrcOver:
+        return HWColorFilterKeyType::kSrcOver;
+      case BlendMode::kDstOver:
+        return HWColorFilterKeyType::kDstOver;
+      case BlendMode::kSrcIn:
+        return HWColorFilterKeyType::kSrcIn;
+      case BlendMode::kDstIn:
+        return HWColorFilterKeyType::kDstIn;
+      case BlendMode::kSrcOut:
+        return HWColorFilterKeyType::kSrcOut;
+      case BlendMode::kDstOut:
+        return HWColorFilterKeyType::kDstOut;
+      case BlendMode::kSrcATop:
+        return HWColorFilterKeyType::kSrcATop;
+      case BlendMode::kDstATop:
+        return HWColorFilterKeyType::kDstATop;
+      case BlendMode::kXor:
+        return HWColorFilterKeyType::kXor;
+      case BlendMode::kPlus:
+        return HWColorFilterKeyType::kPlus;
+      case BlendMode::kModulate:
+        return HWColorFilterKeyType::kModulate;
+      case BlendMode::kScreen:
+        return HWColorFilterKeyType::kScreen;
+      default:
+        return HWColorFilterKeyType::kUnknown;
     }
   }
 
@@ -237,6 +277,10 @@ class WGXMatrixFilter : public WGXFilterFragment {
 
   std::string GetShaderName() const override { return "MatrixFilter"; }
 
+  HWColorFilterKeyType::Value GetType() const override {
+    return HWColorFilterKeyType::kMatrix;
+  }
+
   uint32_t InitBinding(uint32_t binding) override {
     binding_ = binding;
     return binding + 1;
@@ -350,6 +394,16 @@ class WGXGammaFilter : public WGXFilterFragment {
     }
   }
 
+  HWColorFilterKeyType::Value GetType() const override {
+    if (type_ == ColorFilterType::kLinearToSRGBGamma) {
+      return HWColorFilterKeyType::kLinearToSRGBGamma;
+    } else if (type_ == ColorFilterType::kSRGBToLinearGamma) {
+      return HWColorFilterKeyType::kSRGBToLinearGamma;
+    } else {
+      return HWColorFilterKeyType::kUnknown;
+    }
+  }
+
   std::string GenSourceWGSL() const override {
     std::string wgsl_source = GenFunctionSignature();
 
@@ -425,6 +479,19 @@ class WGXComposeFilter : public WGXFilterFragment {
     }
 
     return name;
+  }
+
+  HWColorFilterKeyType::Value GetType() const override {
+    return HWColorFilterKeyType::kCompose;
+  }
+
+  std::optional<std::vector<uint32_t>> GetComposeKeys() const override {
+    std::vector<uint32_t> keys;
+    keys.reserve(filters_.size());
+    for (auto& filter : filters_) {
+      keys.push_back(filter->GetType());
+    }
+    return keys;
   }
 
   std::string GenSourceWGSL() const override {

@@ -22,7 +22,8 @@ std::shared_ptr<GPUShaderModule> GPUShaderModule::Create(
     auto diagnosis = *(program->GetDiagnosis());
 
     LOGE("WGX: Failed to parse shader source > {} <, at {}:{} error : {}",
-         desc.label, diagnosis.line, diagnosis.column, diagnosis.message);
+         desc.label.ToString(), diagnosis.line, diagnosis.column,
+         diagnosis.message);
 
     return nullptr;
   }

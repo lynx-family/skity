@@ -24,6 +24,10 @@ class WGSLRRectGeometry : public HWWGSLGeometry {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override {
+    return HWGeometryKeyType::kRRect;
+  }
+
   void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
 
   void WriteVSUniforms(std::stringstream& ss) const override;

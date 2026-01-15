@@ -7,6 +7,7 @@
 
 #include "src/effect/pixmap_shader.hpp"
 #include "src/render/hw/draw/hw_wgsl_fragment.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace skity {
 
@@ -47,6 +48,10 @@ class WGSLTextureFragment : public HWWGSLFragment {
                       Command* stencil_cmd) override;
 
   std::string GetVSNameSuffix() const override;
+
+  HWFunctionBaseKey GetMainKey() const override;
+
+  HWFunctionBaseKey GetVSSubKey() const override;
 
   std::optional<std::vector<std::string>> GetVarings() const override;
 

@@ -10,6 +10,7 @@
 
 #include "src/gpu/gpu_render_pass.hpp"
 #include "src/logging.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace skity {
 
@@ -55,6 +56,17 @@ class HWWGSLGeometry {
    * The vertex shader name.
    */
   virtual std::string GetShaderName() const = 0;
+
+  /**
+   * The vertex shader main key.
+   */
+  virtual HWFunctionBaseKey GetMainKey() const = 0;
+
+  /**
+   * Supplies fragment shader sub key. This method is called only when
+   * 'Flags::kAffectsFragment' is specified.
+   */
+  virtual HWFunctionBaseKey GetFSSubKey() const { return GetMainKey(); }
 
   /*
    * Generates the complete vertex shader. This method is called only when

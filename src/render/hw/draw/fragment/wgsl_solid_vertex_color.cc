@@ -19,6 +19,11 @@ uint32_t WGSLSolidVertexColor::NextBindingIndex() const { return 1; }
 std::string WGSLSolidVertexColor::GetShaderName() const {
   return "SolidVertexColor";
 }
+
+HWFunctionBaseKey WGSLSolidVertexColor::GetMainKey() const {
+  return HWFragmentKeyType::kSolidVertex;
+}
+
 std::optional<std::vector<std::string>> WGSLSolidVertexColor::GetVarings()
     const {
   return std::vector<std::string>{"f_color: vec4<f32>"};

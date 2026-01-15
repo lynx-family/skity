@@ -8,6 +8,7 @@
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_path_aa_outline.hpp"
 #include "src/render/hw/hw_path_raster.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 #include "src/tracing.hpp"
 
@@ -235,6 +236,10 @@ std::optional<std::vector<std::string>> WGSLPathAAGeometry::GetVarings() const {
 }
 
 std::string WGSLPathAAGeometry::GetFSNameSuffix() const { return "AA"; }
+
+HWFunctionBaseKey WGSLPathAAGeometry::GetFSSubKey() const {
+  return HWGeometryKeyType::kPathAA;
+}
 
 void WGSLPathAAGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
   ss << R"(

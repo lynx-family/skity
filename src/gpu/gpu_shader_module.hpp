@@ -7,10 +7,12 @@
 
 #include <wgsl_cross.h>
 
+#include "src/gpu/gpu_shader_function.hpp"
+
 namespace skity {
 
 struct GPUShaderModuleDescriptor {
-  std::string label = {};
+  GPULabel label = {};
   std::string source = {};
 };
 
@@ -30,12 +32,12 @@ class GPUShaderModule {
   static std::shared_ptr<GPUShaderModule> Create(
       const GPUShaderModuleDescriptor& desc);
 
-  const std::string& GetLabel() const { return label_; }
+  const std::string GetLabel() const { return label_.ToString(); }
 
   wgx::Program* GetProgram() const { return program_.get(); }
 
  private:
-  std::string label_ = {};
+  GPULabel label_ = {};
   std::unique_ptr<wgx::Program> program_ = {};
 };
 

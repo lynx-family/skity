@@ -15,6 +15,7 @@
 #include "src/render/hw/draw/fragment/wgsl_stencil_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 #include "src/render/hw/hw_draw.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 
 namespace skity {
@@ -178,7 +179,9 @@ bool SetupImageBoundsInfo(const wgx::BindGroupEntry* image_bounds_entry,
 
 WGXGradientFragment::WGXGradientFragment(const Shader::GradientInfo& info,
                                          Shader::GradientType type)
-    : info_(info), type_(type), max_color_count_(RoundGradientColorCount()) {}
+    : info_(info),
+      type_(type),
+      max_color_count_shift_(RoundGradientColorCountShift()) {}
 
 std::string WGXGradientFragment::GenSourceWGSL(size_t index) const {
   std::string wgsl = GenerateGradientCommonWGSL(index);
@@ -356,7 +359,7 @@ bool WGXGradientFragment::CanUseLerpColorFast() const {
 std::string WGXGradientFragment::GetShaderName() const {
   std::string name = "Gradient";
   name += GradientTypeName();
-  name += std::to_string(max_color_count_);
+  name += std::to_string(GetMaxColorCount());
   if (info_.color_offsets.empty()) {
     name += "OffsetFast";
   }
@@ -366,6 +369,41 @@ std::string WGXGradientFragment::GetShaderName() const {
   }
 
   return name;
+}
+
+constexpr static uint32_t kGradientTypeShift = 0;
+constexpr static uint32_t kMaxColorCountShift = 3;
+constexpr static uint32_t kOffsetFastShift = 6;
+constexpr static uint32_t kColorFastShift = 7;
+
+constexpr static uint32_t kGradientTypeLinear = 1;
+constexpr static uint32_t kGradientTypeRadial = 2;
+constexpr static uint32_t kGradientTypeConical = 3;
+constexpr static uint32_t kGradientTypeSweep = 4;
+
+HWFunctionBaseKey WGXGradientFragment::GetCustomKey() const {
+  HWFunctionBaseKey gradient_type = 0;
+  switch (type_) {
+    case Shader::GradientType::kLinear:
+      gradient_type = kGradientTypeLinear;
+      break;
+    case Shader::GradientType::kRadial:
+      gradient_type = kGradientTypeRadial;
+      break;
+    case Shader::GradientType::kConical:
+      gradient_type = kGradientTypeConical;
+      break;
+    case Shader::GradientType::kSweep:
+      gradient_type = kGradientTypeSweep;
+      break;
+    default:
+      break;
+  }
+
+  return gradient_type << kGradientTypeShift |
+         max_color_count_shift_ << kMaxColorCountShift |
+         (info_.color_offsets.empty() ? 1 : 0) << kOffsetFastShift |
+         (CanUseLerpColorFast() ? 1 : 0) << kColorFastShift;
 }
 
 namespace {
@@ -464,22 +502,23 @@ const char* WGXGradientFragment::GradientTypeName() const {
 }
 
 uint32_t WGXGradientFragment::GetOffsetCount() const {
-  return (max_color_count_ + 3) / 4;
+  return (GetMaxColorCount() + 3) / 4;
 }
 
-uint32_t WGXGradientFragment::RoundGradientColorCount() const {
+uint32_t WGXGradientFragment::RoundGradientColorCountShift() const {
   uint32_t count = static_cast<uint32_t>(info_.colors.size());
 
-  uint32_t round_count = 1;
-  while (round_count < count) {
-    round_count <<= 1;
+  uint32_t shift = 0;
+  while ((1u << shift) < count) {
+    shift += 1;
   }
 
-  if (round_count > 64) {
-    round_count = 64;
+  // max round color count is 64.
+  if (shift > 6) {
+    shift = 6;
   }
 
-  return round_count;
+  return shift;
 }
 
 std::string WGXGradientFragment::GenerateGradientCommonWGSL(
@@ -489,7 +528,7 @@ std::string WGXGradientFragment::GenerateGradientCommonWGSL(
       infos : vec4<i32>,
       colors: array<vec4<f32>, )";
 
-  wgsl += std::to_string(max_color_count_);
+  wgsl += std::to_string(GetMaxColorCount());
   wgsl += ">,\n";
 
   if (!info_.color_offsets.empty()) {

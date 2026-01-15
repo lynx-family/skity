@@ -11,7 +11,7 @@
 
 namespace skity {
 
-GPUShaderFunctionMTL::GPUShaderFunctionMTL(std::string label, id<MTLDevice> device,
+GPUShaderFunctionMTL::GPUShaderFunctionMTL(GPULabel label, id<MTLDevice> device,
                                            GPUShaderStage stage, const char* source,
                                            const char* entry_point,
                                            const std::vector<int32_t>& constant_values,

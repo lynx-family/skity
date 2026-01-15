@@ -4,6 +4,8 @@
 
 #include "src/render/hw/draw/hw_draw_step.hpp"
 
+#include "src/logging.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_pipeline_lib.hpp"
 #include "src/tracing.hpp"
 
@@ -80,12 +82,8 @@ GPURenderPipeline* HWDrawStep::GetPipeline(HWDrawContext* context,
 
   pipeline.shader_generator = this;
 
-  return context->pipelineLib->GetPipeline(
-      {
-          GetVertexName(),
-          GetFragmentName(),
-      },
-      pipeline);
+  HWPipelineKey key = GetPipelineKey();
+  return context->pipelineLib->GetPipeline(key, pipeline);
 }
 
 }  // namespace skity

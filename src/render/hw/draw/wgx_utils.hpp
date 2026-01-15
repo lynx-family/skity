@@ -12,6 +12,7 @@
 #include "src/gpu/gpu_sampler.hpp"
 #include "src/gpu/gpu_shader_function.hpp"
 #include "src/gpu/gpu_texture.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace skity {
 
@@ -108,6 +109,8 @@ class WGXGradientFragment {
 
   std::string GetShaderName() const;
 
+  HWFunctionBaseKey GetCustomKey() const;
+
   bool SetupCommonInfo(const wgx::BindGroupEntry* info_entry,
                        float global_alpha) const;
 
@@ -118,7 +121,7 @@ class WGXGradientFragment {
 
   uint32_t GetOffsetCount() const;
 
-  uint32_t RoundGradientColorCount() const;
+  uint32_t RoundGradientColorCountShift() const;
 
   std::string GenerateGradientCommonWGSL(size_t index) const;
 
@@ -132,10 +135,14 @@ class WGXGradientFragment {
 
   bool CanUseLerpColorFast() const;
 
+  constexpr uint32_t GetMaxColorCount() const {
+    return 1u << max_color_count_shift_;
+  }
+
  private:
   const Shader::GradientInfo& info_;
   Shader::GradientType type_;
-  uint32_t max_color_count_ = 0;
+  uint32_t max_color_count_shift_ = 0;
 };
 
 }  // namespace skity

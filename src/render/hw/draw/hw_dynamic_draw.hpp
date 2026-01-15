@@ -28,6 +28,8 @@ class HWDynamicDraw : public HWDraw {
 
   bool OnMergeIfPossible(HWDraw* draw) override;
 
+  const ArrayList<HWDrawStep*, 2>& GetSteps() const { return steps_; }
+
  protected:
   HWDrawState OnPrepare(HWDrawContext* context) override;
 

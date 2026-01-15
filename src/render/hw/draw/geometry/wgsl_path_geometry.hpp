@@ -22,6 +22,10 @@ class WGSLPathGeometry : public HWWGSLGeometry {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override {
+    return HWGeometryKeyType::kPath;
+  }
+
   void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
                   float clip_depth, Command* stencil_cmd) override;
 
@@ -50,6 +54,10 @@ class WGSLPathAAGeometry : public HWWGSLGeometry {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override {
+    return HWGeometryKeyType::kPathAA;
+  }
+
   void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
 
   void WriteVSUniforms(std::stringstream& ss) const override;
@@ -64,6 +72,8 @@ class WGSLPathAAGeometry : public HWWGSLGeometry {
   std::optional<std::vector<std::string>> GetVarings() const override;
 
   std::string GetFSNameSuffix() const override;
+
+  HWFunctionBaseKey GetFSSubKey() const override;
 
   void WriteFSAlphaMask(std::stringstream& ss) const override;
 

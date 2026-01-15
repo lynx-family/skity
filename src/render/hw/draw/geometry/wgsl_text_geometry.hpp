@@ -6,6 +6,7 @@
 #define SRC_RENDER_HW_DRAW_GEOMETRY_WGSL_TEXT_GEOMETRY_HPP
 
 #include "src/render/hw/draw/hw_wgsl_geometry.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 #include "src/utils/batch_group.hpp"
 
@@ -91,6 +92,10 @@ class WGSLTextSolidColorGeometry : public WGSLTextGeometry {
   std::string GetShaderName() const override {
     return "TextSolidColorVertexWGSL";
   }
+
+  HWFunctionBaseKey GetMainKey() const override {
+    return HWGeometryKeyType::kColorText;
+  }
 };
 
 class WGSLTextGradientGeometry : public WGSLTextGeometry {
@@ -113,6 +118,10 @@ class WGSLTextGradientGeometry : public WGSLTextGeometry {
 
   std::string GetShaderName() const override {
     return "TextGradientVertexWGSL";
+  }
+
+  HWFunctionBaseKey GetMainKey() const override {
+    return HWGeometryKeyType::kGradientText;
   }
 
   bool CanMerge(const HWWGSLGeometry* other) const override;

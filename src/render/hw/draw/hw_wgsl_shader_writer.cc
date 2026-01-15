@@ -5,6 +5,7 @@
 #include <sstream>
 
 #include "src/logging.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace skity {
 
@@ -198,6 +199,15 @@ std::string HWWGSLShaderWriter::GetVSShaderName() const {
   return name;
 }
 
+HWFunctionBaseKey HWWGSLShaderWriter::GetVSKey() const {
+  HWFunctionBaseKey main_key = geometry_->GetMainKey();
+  HWFunctionBaseKey sub_key = 0;
+  if (fragment_ && fragment_->AffectsVertex()) {
+    sub_key = fragment_->GetVSSubKey();
+  }
+  return MakeFunctionBaseKey(main_key, sub_key, 0);
+}
+
 std::string HWWGSLShaderWriter::GetFSShaderName() const {
   DEBUG_CHECK(fragment_);
   std::string name = "FS_" + fragment_->GetShaderName();
@@ -209,6 +219,20 @@ std::string HWWGSLShaderWriter::GetFSShaderName() const {
     name += "_" + fragment_->GetFilter()->GetShaderName();
   }
   return name;
+}
+
+HWFunctionBaseKey HWWGSLShaderWriter::GetFSKey() const {
+  DEBUG_CHECK(fragment_);
+  HWFunctionBaseKey main_key = fragment_->GetMainKey();
+  HWFunctionBaseKey sub_key = 0;
+  HWFunctionBaseKey filter_key = 0;
+  if (geometry_ && geometry_->AffectsFragment()) {
+    sub_key = geometry_->GetFSSubKey();
+  }
+  if (fragment_->GetFilter()) {
+    filter_key = fragment_->GetFilter()->GetType();
+  }
+  return MakeFunctionBaseKey(main_key, sub_key, filter_key);
 }
 
 }  // namespace skity

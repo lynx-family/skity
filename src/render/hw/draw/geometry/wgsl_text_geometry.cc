@@ -103,7 +103,7 @@ void WGSLTextGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
 }
 
 bool WGSLTextGeometry::CanMerge(const HWWGSLGeometry* other) const {
-  return GetShaderName() == other->GetShaderName();
+  return GetMainKey() == other->GetMainKey();
 }
 void WGSLTextGeometry::Merge(const HWWGSLGeometry* other) {
   auto o = static_cast<const WGSLTextGeometry*>(other);

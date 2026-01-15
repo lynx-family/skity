@@ -63,7 +63,7 @@ std::unique_ptr<GPURenderPipelineMTL> GPURenderPipelineMTL::Make(
 
   render_pipeline_desc.colorAttachments[0].writeMask =
       static_cast<MTLColorWriteMask>(MTLColorWriteMaskAll & target.write_mask);
-  render_pipeline_desc.label = @(desc.label.c_str());
+  render_pipeline_desc.label = @(desc.label.ToString().c_str());
 
   NSError* psoError = nil;
   id<MTLRenderPipelineState> render_pipeline_state =

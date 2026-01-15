@@ -80,6 +80,8 @@ class WGSLColorTextFragment : public WGSLTextFragment {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override;
+
   uint32_t NextBindingIndex() const override;
 
   std::string GenSourceWGSL() const override;
@@ -101,6 +103,8 @@ class WGSLColorEmojiFragment : public WGSLTextFragment {
   ~WGSLColorEmojiFragment() override = default;
 
   std::string GetShaderName() const override;
+
+  HWFunctionBaseKey GetMainKey() const override;
 
   uint32_t NextBindingIndex() const override;
 
@@ -133,6 +137,8 @@ class WGSLGradientTextFragment : public WGSLTextFragment {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override;
+
   std::string GenSourceWGSL() const override;
 
   bool CanMerge(const HWWGSLFragment* other) const override;
@@ -156,6 +162,8 @@ class WGSLSdfColorTextFragment : public WGSLTextFragment {
   ~WGSLSdfColorTextFragment() override = default;
 
   std::string GetShaderName() const override;
+
+  HWFunctionBaseKey GetMainKey() const override;
 
   uint32_t NextBindingIndex() const override;
 

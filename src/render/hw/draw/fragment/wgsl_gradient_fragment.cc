@@ -6,6 +6,7 @@
 
 #include "src/render/hw/draw/hw_wgsl_fragment.hpp"
 #include "src/render/hw/hw_draw.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -155,6 +156,11 @@ std::string WGSLGradientFragment::GetShaderName() const {
   return gradient_fragment_.GetShaderName();
 }
 
+HWFunctionBaseKey WGSLGradientFragment::GetMainKey() const {
+  return MakeMainKey(HWFragmentKeyType::kGradient,
+                     gradient_fragment_.GetCustomKey());
+}
+
 uint32_t WGSLGradientFragment::NextBindingIndex() const { return 2; }
 
 void WGSLGradientFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
@@ -200,5 +206,9 @@ void WGSLGradientFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
 }
 
 std::string WGSLGradientFragment::GetVSNameSuffix() const { return "Gradient"; }
+
+HWFunctionBaseKey WGSLGradientFragment::GetVSSubKey() const {
+  return HWFragmentKeyType::kGradient;
+}
 
 }  // namespace skity
