@@ -19,8 +19,6 @@ class WGSLSolidColor : public HWWGSLFragment {
 
   uint32_t NextBindingIndex() const override;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override;
 
   void WriteFSUniforms(std::stringstream& ss) const override;

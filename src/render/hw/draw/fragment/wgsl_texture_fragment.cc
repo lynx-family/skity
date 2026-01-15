@@ -152,8 +152,6 @@ void WGSLTextureFragment::BindVSUniforms(Command* cmd, HWDrawContext* context,
   UploadBindGroup(group->group, image_bounds_entry, cmd, context);
 }
 
-std::string WGSLTextureFragment::GetShaderName() const { return "Texture"; }
-
 HWFunctionBaseKey WGSLTextureFragment::GetMainKey() const {
   return HWFragmentKeyType::kTexture;
 }
@@ -213,8 +211,6 @@ void WGSLTextureFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
     filter_->SetupBindGroup(cmd, context);
   }
 }
-
-std::string WGSLTextureFragment::GetVSNameSuffix() const { return "Texture"; }
 
 HWFunctionBaseKey WGSLTextureFragment::GetVSSubKey() const {
   return HWFragmentKeyType::kTexture;

@@ -22,8 +22,6 @@ class WGSLRRectGeometry : public HWWGSLGeometry {
 
   const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kRRect;
   }

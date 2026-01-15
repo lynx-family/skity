@@ -58,14 +58,7 @@ class HWDrawStep : public HWShaderGenerator {
   }
 
   HWPipelineKey GetPipelineKey() const {
-    HWPipelineKey key;
-    key.base_key = MakePipelineBaseKey(shader_writer_.GetVSKey(),
-                                       shader_writer_.GetFSKey());
-    if ((key.base_key & kFilterKeyMask) == HWColorFilterKeyType::kCompose) {
-      DEBUG_CHECK(fragment_->GetFilter() != nullptr);
-      key.compose_keys = fragment_->GetFilter()->GetComposeKeys();
-    }
-    return key;
+    return shader_writer_.GetPipelineKey();
   }
 
   HWFunctionBaseKey GetVertexKey() const { return shader_writer_.GetVSKey(); }

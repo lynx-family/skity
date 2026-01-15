@@ -5,6 +5,7 @@
 #include "src/render/hw/hw_pipeline_lib.hpp"
 
 #include "src/gpu/gpu_device.hpp"
+#include "src/gpu/gpu_shader_function.hpp"
 #include "src/gpu/gpu_shader_module.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
@@ -137,11 +138,9 @@ std::unique_ptr<HWPipeline> HWPipelineLib::CreatePipeline(
   gpu_pso_desc.error_callback = [this](char const *message) {
     ctx_->TriggerErrorCallback(GPUError::kPipelineError, message);
   };
-#ifdef NDEBUG
-  gpu_pso_desc.label = GPULabel(key.base_key);
-#else
-  gpu_pso_desc.label = GPULabel(desc.shader_generator->GetFragmentName());
-#endif
+  gpu_pso_desc.label =
+      GPULabel(key.GetFunctionKey(GPUShaderStage::kFragment).base_key,
+               FunctionBaseKeyToShaderName);
 
   SetupShaderFunction(gpu_pso_desc, key, desc.shader_generator);
 
@@ -200,18 +199,9 @@ std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
   }
 
   GPUShaderModuleDescriptor module_desc{};
-#ifdef NDEBUG
-  module_desc.label = GPULabel(function_key.base_key);
-#else
-  switch (stage) {
-    case GPUShaderStage::kVertex:
-      module_desc.label = GPULabel(shader_generator->GetVertexName());
-      break;
-    case GPUShaderStage::kFragment:
-      module_desc.label = GPULabel(shader_generator->GetFragmentName());
-      break;
-  }
-#endif
+
+  module_desc.label =
+      GPULabel(function_key.base_key, FunctionBaseKeyToShaderName);
 
   if (stage == GPUShaderStage::kVertex) {
     module_desc.source = shader_generator->GenVertexWGSL();

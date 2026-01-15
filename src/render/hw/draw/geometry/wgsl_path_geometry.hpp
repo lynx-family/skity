@@ -20,8 +20,6 @@ class WGSLPathGeometry : public HWWGSLGeometry {
 
   const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kPath;
   }
@@ -52,8 +50,6 @@ class WGSLPathAAGeometry : public HWWGSLGeometry {
 
   const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kPathAA;
   }
@@ -70,8 +66,6 @@ class WGSLPathAAGeometry : public HWWGSLGeometry {
                   float clip_depth, Command* stencil_cmd) override;
 
   std::optional<std::vector<std::string>> GetVarings() const override;
-
-  std::string GetFSNameSuffix() const override;
 
   HWFunctionBaseKey GetFSSubKey() const override;
 

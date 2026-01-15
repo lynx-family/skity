@@ -78,8 +78,6 @@ class WGSLColorTextFragment : public WGSLTextFragment {
 
   ~WGSLColorTextFragment() override = default;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override;
 
   uint32_t NextBindingIndex() const override;
@@ -101,8 +99,6 @@ class WGSLColorEmojiFragment : public WGSLTextFragment {
         alpha_(alpha) {}
 
   ~WGSLColorEmojiFragment() override = default;
-
-  std::string GetShaderName() const override;
 
   HWFunctionBaseKey GetMainKey() const override;
 
@@ -135,8 +131,6 @@ class WGSLGradientTextFragment : public WGSLTextFragment {
 
   uint32_t NextBindingIndex() const override;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override;
 
   std::string GenSourceWGSL() const override;
@@ -160,8 +154,6 @@ class WGSLSdfColorTextFragment : public WGSLTextFragment {
         color_(color) {}
 
   ~WGSLSdfColorTextFragment() override = default;
-
-  std::string GetShaderName() const override;
 
   HWFunctionBaseKey GetMainKey() const override;
 

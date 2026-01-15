@@ -16,10 +16,6 @@ WGSLSolidVertexColor::WGSLSolidVertexColor()
 
 uint32_t WGSLSolidVertexColor::NextBindingIndex() const { return 1; }
 
-std::string WGSLSolidVertexColor::GetShaderName() const {
-  return "SolidVertexColor";
-}
-
 HWFunctionBaseKey WGSLSolidVertexColor::GetMainKey() const {
   return HWFragmentKeyType::kSolidVertex;
 }

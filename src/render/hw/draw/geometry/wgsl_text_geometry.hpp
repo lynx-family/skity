@@ -89,10 +89,6 @@ class WGSLTextSolidColorGeometry : public WGSLTextGeometry {
 
   std::string GenSourceWGSL() const override;
 
-  std::string GetShaderName() const override {
-    return "TextSolidColorVertexWGSL";
-  }
-
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kColorText;
   }
@@ -115,10 +111,6 @@ class WGSLTextGradientGeometry : public WGSLTextGeometry {
   ~WGSLTextGradientGeometry() override = default;
 
   std::string GenSourceWGSL() const override;
-
-  std::string GetShaderName() const override {
-    return "TextGradientVertexWGSL";
-  }
 
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kGradientText;

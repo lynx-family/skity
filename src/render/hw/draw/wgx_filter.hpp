@@ -35,8 +35,6 @@ class WGXFilterFragment {
 
   virtual std::string GenSourceWGSL() const = 0;
 
-  virtual std::string GetShaderName() const = 0;
-
   virtual HWColorFilterKeyType::Value GetType() const = 0;
 
   virtual std::optional<std::vector<uint32_t>> GetComposeKeys() const {

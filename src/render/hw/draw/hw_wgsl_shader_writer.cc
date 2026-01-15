@@ -191,12 +191,7 @@ bool HWWGSLShaderWriter::HasVarings() const {
 
 std::string HWWGSLShaderWriter::GetVSShaderName() const {
   DEBUG_CHECK(geometry_);
-  std::string name = "VS_" + geometry_->GetShaderName();
-  if (fragment_ && fragment_->AffectsVertex()) {
-    DEBUG_CHECK(fragment_->GetVSNameSuffix().size() > 0);
-    name += +"_" + fragment_->GetVSNameSuffix();
-  }
-  return name;
+  return "VS_" + VertexKeyToShaderName(GetVSKey());
 }
 
 HWFunctionBaseKey HWWGSLShaderWriter::GetVSKey() const {
@@ -210,14 +205,10 @@ HWFunctionBaseKey HWWGSLShaderWriter::GetVSKey() const {
 
 std::string HWWGSLShaderWriter::GetFSShaderName() const {
   DEBUG_CHECK(fragment_);
-  std::string name = "FS_" + fragment_->GetShaderName();
-  if (geometry_ && geometry_->AffectsFragment()) {
-    DEBUG_CHECK(geometry_->GetFSNameSuffix().size() > 0);
-    name += "_" + geometry_->GetFSNameSuffix();
-  }
-  if (fragment_->GetFilter()) {
-    name += "_" + fragment_->GetFilter()->GetShaderName();
-  }
+  auto fs_key = GetFSKey();
+  std::string name =
+      "FS_" + FragmentKeyToShaderName(fs_key, GetComposeKeys(fs_key));
+
   return name;
 }
 

@@ -339,8 +339,6 @@ void WGSLRRectGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
 )";
 }
 
-std::string WGSLRRectGeometry::GetShaderName() const { return "RRect"; }
-
 void WGSLRRectGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
                                    const Matrix& transform, float clip_depth,
                                    Command* stencil_cmd) {

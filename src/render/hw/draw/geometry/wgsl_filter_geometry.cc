@@ -60,10 +60,6 @@ const std::vector<GPUVertexBufferLayout> &WGSLFilterGeometry::GetBufferLayout()
   return layout;
 }
 
-std::string WGSLFilterGeometry::GetShaderName() const {
-  return "CommonFilterVertexWGSL";
-}
-
 HWFunctionBaseKey WGSLFilterGeometry::GetMainKey() const {
   return HWGeometryKeyType::kFilter;
 }

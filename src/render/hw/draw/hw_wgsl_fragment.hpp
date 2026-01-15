@@ -50,10 +50,22 @@ class HWWGSLFragment {
   HWWGSLFragment(uint32_t flags = Flags::kNone) : flags_(flags) {}
 
   virtual ~HWWGSLFragment() = default;
+
   /**
    * The fragment shader name.
    */
-  virtual std::string GetShaderName() const = 0;
+  std::string GetShaderName() const {
+    HWFunctionBaseKey main_key = GetMainKey();
+    HWFunctionBaseKey filter_key = 0;
+    if (filter_) {
+      filter_key = static_cast<HWFunctionBaseKey>(filter_->GetType());
+    }
+
+    return FragmentKeyToShaderName(MakeFunctionBaseKey(main_key, 0, filter_key),
+                                   filter_key == HWColorFilterKeyType::kCompose
+                                       ? GetFilter()->GetComposeKeys()
+                                       : std::nullopt);
+  }
 
   virtual const char* GetEntryPoint() const { return "fs_main"; }
 
@@ -95,12 +107,6 @@ class HWWGSLFragment {
   virtual std::optional<std::vector<std::string>> GetVarings() const {
     return std::nullopt;
   }
-
-  /**
-   * Supplies vertex shader name suffix. This method is called only when
-   * 'Flags::kAffectsVertex' is specified.
-   */
-  virtual std::string GetVSNameSuffix() const { return GetShaderName(); }
 
   /**
    * The fragment shader main key.

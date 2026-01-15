@@ -28,20 +28,29 @@ enum class GPUShaderSourceType {
   kWGX,
 };
 
+using GPULabelIdToNameProc = std::string (*)(uint64_t);
+
 struct GPULabel {
-  explicit constexpr GPULabel(uint64_t id) : id(id) {}
+  explicit constexpr GPULabel(uint64_t id,
+                              GPULabelIdToNameProc id_to_name_proc = nullptr)
+      : id(id), id_to_name_proc(id_to_name_proc) {}
   explicit GPULabel(std::string label) : label(std::move(label)) {}
   constexpr GPULabel() : id(0u) {}
 
   const std::string& ToString() const {
     if (!label.has_value()) {
-      label = std::to_string(id);
+      if (id_to_name_proc != nullptr) {
+        label = id_to_name_proc(id);
+      } else {
+        label = std::to_string(id);
+      }
     }
     return label.value();
   }
 
  private:
   uint64_t id;
+  GPULabelIdToNameProc id_to_name_proc = nullptr;
   mutable std::optional<std::string> label = std::nullopt;
 };
 

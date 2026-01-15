@@ -20,8 +20,6 @@ class WGSLImageFilter : public HWWGSLFragment {
 
   ~WGSLImageFilter() override = default;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override;
 
   std::string GenSourceWGSL() const override;
