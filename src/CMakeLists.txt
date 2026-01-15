@@ -318,6 +318,7 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_path_raster.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_path_visitor.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_path_visitor.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_pipeline_key.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_pipeline_lib.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_pipeline_lib.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_render_pass_builder.cc

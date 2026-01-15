@@ -8,6 +8,7 @@
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -23,6 +24,10 @@ std::string WGSLImageFilter::GetShaderName() const {
   }
 
   return name;
+}
+
+HWFunctionBaseKey WGSLImageFilter::GetMainKey() const {
+  return HWFragmentKeyType::kImageFilter;
 }
 
 std::string WGSLImageFilter::GenSourceWGSL() const {

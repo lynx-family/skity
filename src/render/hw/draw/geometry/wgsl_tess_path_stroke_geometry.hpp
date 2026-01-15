@@ -32,6 +32,10 @@ class WGSLTessPathStrokeGeometry : public HWWGSLGeometry {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override {
+    return HWGeometryKeyType::kTessStroke;
+  }
+
   void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
                   float clip_depth, Command* stencil_cmd) override;
 

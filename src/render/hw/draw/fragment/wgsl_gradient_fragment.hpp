@@ -23,6 +23,8 @@ class WGSLGradientFragment : public HWWGSLFragment {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override;
+
   void PrepareCMD(Command* cmd, HWDrawContext* context) override;
 
   void WriteFSFunctionsAndStructs(std::stringstream& ss) const override;
@@ -42,6 +44,8 @@ class WGSLGradientFragment : public HWWGSLFragment {
                       Command* stencil_cmd) override;
 
   std::string GetVSNameSuffix() const override;
+
+  HWFunctionBaseKey GetVSSubKey() const override;
 
  private:
   Shader::GradientInfo info_;

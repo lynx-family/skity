@@ -7,6 +7,7 @@
 #include "src/gpu/gpu_device.hpp"
 #include "src/gpu/gpu_shader_module.hpp"
 #include "src/logging.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_shader_generator.hpp"
 
 namespace skity {
@@ -127,6 +128,7 @@ GPURenderPipeline *HWPipelineLib::GetPipeline(
 
 std::unique_ptr<HWPipeline> HWPipelineLib::CreatePipeline(
     const HWPipelineKey &key, const HWPipelineDescriptor &desc) {
+  DEBUG_CHECK(desc.shader_generator);
   GPURenderPipelineDescriptor gpu_pso_desc{};
 
   gpu_pso_desc.buffers = desc.buffers;
@@ -135,8 +137,11 @@ std::unique_ptr<HWPipeline> HWPipelineLib::CreatePipeline(
   gpu_pso_desc.error_callback = [this](char const *message) {
     ctx_->TriggerErrorCallback(GPUError::kPipelineError, message);
   };
-
-  gpu_pso_desc.label = key.frag_name;
+#ifdef NDEBUG
+  gpu_pso_desc.label = GPULabel(key.base_key);
+#else
+  gpu_pso_desc.label = GPULabel(desc.shader_generator->GetFragmentName());
+#endif
 
   SetupShaderFunction(gpu_pso_desc, key, desc.shader_generator);
 
@@ -166,8 +171,9 @@ void HWPipelineLib::SetupShaderFunction(GPURenderPipelineDescriptor &desc,
   wgx::CompilerContext wgx_ctx{};
 
   desc.vertex_function =
-      GetShaderFunction(key.vert_name, GPUShaderStage::kVertex,
-                        shader_generator, wgx_ctx, desc.error_callback);
+      GetShaderFunction(key, GPUShaderStage::kVertex, shader_generator, wgx_ctx,
+                        desc.error_callback);
+
   if (!desc.vertex_function) {
     return;
   }
@@ -175,17 +181,18 @@ void HWPipelineLib::SetupShaderFunction(GPURenderPipelineDescriptor &desc,
   wgx_ctx = desc.vertex_function->GetWGXContext();
 
   desc.fragment_function =
-      GetShaderFunction(key.frag_name, GPUShaderStage::kFragment,
-                        shader_generator, wgx_ctx, desc.error_callback);
+      GetShaderFunction(key, GPUShaderStage::kFragment, shader_generator,
+                        wgx_ctx, desc.error_callback);
 }
 
 std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
-    const std::string &name, GPUShaderStage stage,
+    const HWPipelineKey &pipeline_key, GPUShaderStage stage,
     HWShaderGenerator *shader_generator,
     const wgx::CompilerContext &wgx_context,
     const GPUShaderFunctionErrorCallback &error_callback) {
-  if (shader_functions_.count(name)) {
-    return shader_functions_[name];
+  HWFunctionKey function_key = pipeline_key.GetFunctionKey(stage);
+  if (shader_functions_.count(function_key)) {
+    return shader_functions_[function_key];
   }
 
   if (shader_generator == nullptr) {
@@ -193,7 +200,19 @@ std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
   }
 
   GPUShaderModuleDescriptor module_desc{};
-  module_desc.label = name;
+#ifdef NDEBUG
+  module_desc.label = GPULabel(function_key.base_key);
+#else
+  switch (stage) {
+    case GPUShaderStage::kVertex:
+      module_desc.label = GPULabel(shader_generator->GetVertexName());
+      break;
+    case GPUShaderStage::kFragment:
+      module_desc.label = GPULabel(shader_generator->GetFragmentName());
+      break;
+  }
+#endif
+
   if (stage == GPUShaderStage::kVertex) {
     module_desc.source = shader_generator->GenVertexWGSL();
     DEBUG_CHECK(!module_desc.source.empty());
@@ -208,7 +227,7 @@ std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
 
   GPUShaderFunctionDescriptor desc{};
 
-  desc.label = name;
+  desc.label = module_desc.label;
   desc.stage = stage;
   desc.error_callback = desc.error_callback;
   desc.source_type = GPUShaderSourceType::kWGX;
@@ -230,7 +249,7 @@ std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
   if (!gpu_shader_function) {
     return {};
   }
-  shader_functions_.insert({name, gpu_shader_function});
+  shader_functions_.insert({function_key, gpu_shader_function});
   return gpu_shader_function;
 }
 

@@ -15,6 +15,8 @@ class WGSLStencilFragment : public HWWGSLFragment {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override;
+
   std::string GenSourceWGSL() const override;
 
   uint32_t NextBindingIndex() const override { return 0; }

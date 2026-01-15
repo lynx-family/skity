@@ -12,8 +12,7 @@ namespace skity {
 
 class GPUShaderFunctionGL : public GPUShaderFunction {
  public:
-  GPUShaderFunctionGL(std::string label, GPUShaderStage stage,
-                      const char* source,
+  GPUShaderFunctionGL(GPULabel label, GPUShaderStage stage, const char* source,
                       const std::vector<int32_t>& constant_values,
                       GPUShaderFunctionErrorCallback error_callback);
 

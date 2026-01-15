@@ -18,6 +18,10 @@ uint32_t WGSLSolidColor::NextBindingIndex() const { return 1; }
 
 std::string WGSLSolidColor::GetShaderName() const { return "SolidColor"; }
 
+HWFunctionBaseKey WGSLSolidColor::GetMainKey() const {
+  return HWFragmentKeyType::kSolid;
+}
+
 void WGSLSolidColor::WriteFSUniforms(std::stringstream& ss) const {
   ss << R"(
 @group(1) @binding(0) var<uniform> uColor: vec4<f32>;

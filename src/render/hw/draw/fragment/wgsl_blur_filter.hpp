@@ -21,6 +21,8 @@ class WGSLBlurFilter : public HWWGSLFragment {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override;
+
   std::string GenSourceWGSL() const override;
 
   uint32_t NextBindingIndex() const override;

@@ -8,6 +8,9 @@
 #include <memory>
 #include <skity/effect/color_filter.hpp>
 #include <string>
+#include <vector>
+
+#include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace skity {
 
@@ -33,6 +36,12 @@ class WGXFilterFragment {
   virtual std::string GenSourceWGSL() const = 0;
 
   virtual std::string GetShaderName() const = 0;
+
+  virtual HWColorFilterKeyType::Value GetType() const = 0;
+
+  virtual std::optional<std::vector<uint32_t>> GetComposeKeys() const {
+    return std::nullopt;
+  }
 
   virtual void SetupBindGroup(Command* cmd, HWDrawContext* context) = 0;
 

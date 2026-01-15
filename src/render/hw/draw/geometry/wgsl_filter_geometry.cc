@@ -10,6 +10,7 @@
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_render_pipeline.hpp"
 #include "src/render/hw/hw_draw.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 #include "src/tracing.hpp"
 
@@ -60,7 +61,11 @@ const std::vector<GPUVertexBufferLayout> &WGSLFilterGeometry::GetBufferLayout()
 }
 
 std::string WGSLFilterGeometry::GetShaderName() const {
-  return "CommonFilaterVertexWGSL";
+  return "CommonFilterVertexWGSL";
+}
+
+HWFunctionBaseKey WGSLFilterGeometry::GetMainKey() const {
+  return HWGeometryKeyType::kFilter;
 }
 
 std::string WGSLFilterGeometry::GenSourceWGSL() const {

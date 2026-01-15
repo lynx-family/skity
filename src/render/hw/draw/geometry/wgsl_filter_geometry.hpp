@@ -24,6 +24,8 @@ class WGSLFilterGeometry : public HWWGSLGeometry {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override;
+
   std::string GenSourceWGSL() const override;
 
   void PrepareCMD(Command *cmd, HWDrawContext *context, const Matrix &transform,

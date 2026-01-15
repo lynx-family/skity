@@ -6,6 +6,7 @@
 
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/render/hw/hw_draw.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 #include "src/tracing.hpp"
 
@@ -81,6 +82,18 @@ bool WGSLTextFragment::CanMerge(const HWWGSLFragment* other) const {
   if (sampler_ != o->sampler_) {
     return false;
   }
+  if ((filter_ && !o->filter_) || (!filter_ && o->filter_)) {
+    return false;
+  }
+  if (filter_) {
+    DEBUG_CHECK(o->filter_ != nullptr);
+    if (filter_->GetType() != o->filter_->GetType()) {
+      return false;
+    }
+    if (filter_->GetType() == HWColorFilterKeyType::kCompose) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -92,6 +105,10 @@ std::string WGSLColorTextFragment::GetShaderName() const {
   }
 
   return name;
+}
+
+HWFunctionBaseKey WGSLColorTextFragment::GetMainKey() const {
+  return HWFragmentKeyType::kColorText;
 }
 
 uint32_t WGSLColorTextFragment::NextBindingIndex() const { return 6; }
@@ -147,9 +164,10 @@ bool WGSLColorTextFragment::CanMerge(const HWWGSLFragment* other) const {
   if (!WGSLTextFragment::CanMerge(other)) {
     return false;
   }
-  if (GetShaderName() != other->GetShaderName()) {
+  if (GetMainKey() != other->GetMainKey()) {
     return false;
   }
+
   return true;
 }
 
@@ -164,6 +182,12 @@ std::string WGSLColorEmojiFragment::GetShaderName() const {
   name += "FragmentWGSL";
 
   return name;
+}
+
+HWFunctionBaseKey WGSLColorEmojiFragment::GetMainKey() const {
+  auto main_key =
+      MakeMainKey(HWFragmentKeyType::kEmojiText, swizzle_rb_ ? 1 : 0);
+  return main_key;
 }
 
 uint32_t WGSLColorEmojiFragment::NextBindingIndex() const { return 6; }
@@ -196,7 +220,7 @@ bool WGSLColorEmojiFragment::CanMerge(const HWWGSLFragment* other) const {
   if (!WGSLTextFragment::CanMerge(other)) {
     return false;
   }
-  if (GetShaderName() != other->GetShaderName()) {
+  if (GetMainKey() != other->GetMainKey()) {
     return false;
   }
   auto o = static_cast<const WGSLColorEmojiFragment*>(other);
@@ -252,6 +276,12 @@ std::string WGSLGradientTextFragment::GetShaderName() const {
   name += "TextWGSL";
 
   return name;
+}
+
+HWFunctionBaseKey WGSLGradientTextFragment::GetMainKey() const {
+  HWFunctionBaseKey main = MakeMainKey(HWFragmentKeyType::kGradientText,
+                                       gradient_fragment_.GetCustomKey());
+  return main;
 }
 
 std::string WGSLGradientTextFragment::GenSourceWGSL() const {
@@ -427,6 +457,10 @@ std::string WGSLSdfColorTextFragment::GetShaderName() const {
   return name;
 }
 
+HWFunctionBaseKey WGSLSdfColorTextFragment::GetMainKey() const {
+  return HWFragmentKeyType::kSDFText;
+}
+
 uint32_t WGSLSdfColorTextFragment::NextBindingIndex() const { return 6; }
 
 std::string WGSLSdfColorTextFragment::GenSourceWGSL() const {
@@ -484,7 +518,7 @@ bool WGSLSdfColorTextFragment::CanMerge(const HWWGSLFragment* other) const {
   if (!WGSLTextFragment::CanMerge(other)) {
     return false;
   }
-  if (GetShaderName() != other->GetShaderName()) {
+  if (GetMainKey() != other->GetMainKey()) {
     return false;
   }
   auto o = static_cast<const WGSLSdfColorTextFragment*>(other);

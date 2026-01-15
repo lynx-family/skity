@@ -22,6 +22,8 @@ class WGSLSolidVertexColor : public HWWGSLFragment {
 
   std::string GetShaderName() const override;
 
+  HWFunctionBaseKey GetMainKey() const override;
+
   std::optional<std::vector<std::string>> GetVarings() const override;
 
   void WriteVSAssgnShadingVarings(std::stringstream& ss) const override;

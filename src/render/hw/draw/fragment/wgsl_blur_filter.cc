@@ -27,6 +27,10 @@ uint32_t WGSLBlurFilter::NextBindingIndex() const { return 3; }
 
 std::string WGSLBlurFilter::GetShaderName() const { return "BlurFragmentWGSL"; }
 
+HWFunctionBaseKey WGSLBlurFilter::GetMainKey() const {
+  return HWFragmentKeyType::kBlur;
+}
+
 std::string WGSLBlurFilter::GenSourceWGSL() const {
   return R"(
     struct BlurFragSlot {

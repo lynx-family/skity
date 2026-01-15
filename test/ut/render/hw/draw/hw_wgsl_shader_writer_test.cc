@@ -23,6 +23,7 @@
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace {
 
@@ -1709,7 +1710,11 @@ TEST(ShaderWriter, PathWithSolidColor) {
   ASSERT_FALSE(geometry.AffectsFragment());
   ASSERT_FALSE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_Path");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kPath));
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid));
   ASSERT_TRUE(CompareShader(vs, GetPathGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorFS()));
 }
@@ -1729,7 +1734,12 @@ TEST(ShaderWriter, PathAAWithSolidColor) {
   ASSERT_TRUE(geometry.AffectsFragment());
   ASSERT_FALSE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_PathAA");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kPathAA));
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor_AA");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
+                                       skity::HWGeometryKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAFS()));
 }
@@ -1749,7 +1759,11 @@ TEST(ShaderWriter, TessPathFillWithSolidColor) {
   ASSERT_FALSE(geometry.AffectsFragment());
   ASSERT_FALSE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_TessPathFill");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kTessFill));
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid));
   ASSERT_TRUE(CompareShader(vs, GetTessPathFillVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorFS()));
 }
@@ -1769,7 +1783,11 @@ TEST(ShaderWriter, TessPathStrokeWithSolidColor) {
   ASSERT_FALSE(geometry.AffectsFragment());
   ASSERT_FALSE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_TessPathStroke");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kTessStroke));
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid));
   ASSERT_TRUE(CompareShader(vs, GetTessPathStrokeVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorFS()));
 }
@@ -1800,8 +1818,14 @@ TEST(ShaderWriter, PathWithLinearGradient) {
   ASSERT_FALSE(geometry.AffectsFragment());
   ASSERT_TRUE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_Path_Gradient");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kPath,
+                                       skity::HWFragmentKeyType::kGradient));
   ASSERT_EQ(shader_writer.GetFSShaderName(),
             "FS_GradientLinear2OffsetFastColorFast");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::MakeMainKey(
+                skity::HWFragmentKeyType::kGradient, 0b11001001)));
   ASSERT_TRUE(CompareShader(vs, GetPathGeometryGradientVS()));
   ASSERT_TRUE(CompareShader(fs, GetLinearGradientFS()));
 }
@@ -1832,8 +1856,16 @@ TEST(ShaderWriter, PathAAWithLinearGradient) {
   ASSERT_TRUE(geometry.AffectsFragment());
   ASSERT_TRUE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_PathAA_Gradient");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kPathAA,
+                                       skity::HWFragmentKeyType::kGradient));
   ASSERT_EQ(shader_writer.GetFSShaderName(),
             "FS_GradientLinear2OffsetFastColorFast_AA");
+  ASSERT_EQ(
+      shader_writer.GetFSKey(),
+      skity::MakeFunctionBaseKey(
+          skity::MakeMainKey(skity::HWFragmentKeyType::kGradient, 0b11001001),
+          skity::HWGeometryKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryGradientVS()));
   ASSERT_TRUE(CompareShader(fs, GetLinearGradientAAFS()));
 }
@@ -1859,7 +1891,12 @@ TEST(ShaderWriter, PathWithTexture) {
   ASSERT_FALSE(geometry.AffectsFragment());
   ASSERT_TRUE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_Path_Texture");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kPath,
+                                       skity::HWFragmentKeyType::kTexture));
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_Texture");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kTexture));
   ASSERT_TRUE(CompareShader(vs, GetPathTextureVS()));
   ASSERT_TRUE(CompareShader(fs, GetTextureFS()));
 }
@@ -1884,7 +1921,13 @@ TEST(ShaderWriter, PathAAWithTexture) {
   ASSERT_TRUE(geometry.AffectsFragment());
   ASSERT_TRUE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_PathAA_Texture");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kPathAA,
+                                       skity::HWFragmentKeyType::kTexture));
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_Texture_AA");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kTexture,
+                                       skity::HWGeometryKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAATextureVS()));
   ASSERT_TRUE(CompareShader(fs, GetTextureAAFS()));
 }
@@ -1910,7 +1953,13 @@ TEST(ShaderWriter, PathAAWithSolidColorAndColorFilter) {
   ASSERT_TRUE(geometry.AffectsFragment());
   ASSERT_FALSE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_PathAA");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kPathAA));
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor_AA_MatrixFilter");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
+                                       skity::HWGeometryKeyType::kPathAA,
+                                       skity::HWColorFilterKeyType::kMatrix));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAWithCFFS()));
 }
@@ -1932,7 +1981,13 @@ TEST(ShaderWriter, RRectWithSolidColor) {
   ASSERT_TRUE(geometry.AffectsFragment());
   ASSERT_TRUE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_RRect_SolidVertexColor");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kRRect,
+                                       skity::HWFragmentKeyType::kSolidVertex));
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidVertexColor_RRect");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolidVertex,
+                                       skity::HWGeometryKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorRRectFS()));
 }
@@ -1966,8 +2021,16 @@ TEST(ShaderWriter, RRectWithLinearGradient) {
   ASSERT_TRUE(geometry.AffectsFragment());
   ASSERT_TRUE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_RRect_Gradient");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kRRect,
+                                       skity::HWFragmentKeyType::kGradient));
   ASSERT_EQ(shader_writer.GetFSShaderName(),
             "FS_GradientLinear2OffsetFastColorFast_RRect");
+  ASSERT_EQ(
+      shader_writer.GetFSKey(),
+      skity::MakeFunctionBaseKey(
+          skity::MakeMainKey(skity::HWFragmentKeyType::kGradient, 0b11001001),
+          skity::HWGeometryKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectGeometryGradientVS()));
   ASSERT_TRUE(CompareShader(fs, GetLinearGradientRRectFS()));
 }
@@ -1996,7 +2059,13 @@ TEST(ShaderWriter, RRectWithTexture) {
   ASSERT_TRUE(geometry.AffectsFragment());
   ASSERT_TRUE(fragment.AffectsVertex());
   ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_RRect_Texture");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kRRect,
+                                       skity::HWFragmentKeyType::kTexture));
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_Texture_RRect");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kTexture,
+                                       skity::HWGeometryKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectTextureVS()));
   ASSERT_TRUE(CompareShader(fs, GetTextureRRectFS()));
 }

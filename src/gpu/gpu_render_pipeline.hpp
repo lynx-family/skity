@@ -154,7 +154,7 @@ struct GPURenderPipelineDescriptor {
   GPUDepthStencilState depth_stencil = {};
   int32_t sample_count = 1;
   GPUShaderFunctionErrorCallback error_callback;
-  std::string label;
+  GPULabel label;
 };
 
 class GPURenderPipeline {

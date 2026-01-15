@@ -154,6 +154,10 @@ void WGSLTextureFragment::BindVSUniforms(Command* cmd, HWDrawContext* context,
 
 std::string WGSLTextureFragment::GetShaderName() const { return "Texture"; }
 
+HWFunctionBaseKey WGSLTextureFragment::GetMainKey() const {
+  return HWFragmentKeyType::kTexture;
+}
+
 void WGSLTextureFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
   SKITY_TRACE_EVENT(WGSLTextureFragment_PrepareCMD);
 
@@ -211,5 +215,9 @@ void WGSLTextureFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
 }
 
 std::string WGSLTextureFragment::GetVSNameSuffix() const { return "Texture"; }
+
+HWFunctionBaseKey WGSLTextureFragment::GetVSSubKey() const {
+  return HWFragmentKeyType::kTexture;
+}
 
 }  // namespace skity

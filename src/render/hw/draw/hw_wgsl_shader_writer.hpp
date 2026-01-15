@@ -11,6 +11,7 @@
 
 #include "src/render/hw/draw/hw_wgsl_fragment.hpp"
 #include "src/render/hw/draw/hw_wgsl_geometry.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace skity {
 
@@ -24,6 +25,9 @@ class HWWGSLShaderWriter {
   std::string GenFSSourceWGSL() const;
   std::string GetVSShaderName() const;
   std::string GetFSShaderName() const;
+
+  HWFunctionBaseKey GetVSKey() const;
+  HWFunctionBaseKey GetFSKey() const;
 
  private:
   void WriteVSFunctionsAndStructs(std::stringstream& ss) const;

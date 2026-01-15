@@ -13,6 +13,7 @@
 #include "src/render/hw/draw/hw_wgsl_geometry.hpp"
 #include "src/render/hw/draw/hw_wgsl_shader_writer.hpp"
 #include "src/render/hw/hw_draw.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_shader_generator.hpp"
 
 namespace skity {
@@ -56,6 +57,19 @@ class HWDrawStep : public HWShaderGenerator {
     }
   }
 
+  HWPipelineKey GetPipelineKey() const {
+    HWPipelineKey key;
+    key.base_key = MakePipelineBaseKey(shader_writer_.GetVSKey(),
+                                       shader_writer_.GetFSKey());
+    if ((key.base_key & kFilterKeyMask) == HWColorFilterKeyType::kCompose) {
+      DEBUG_CHECK(fragment_->GetFilter() != nullptr);
+      key.compose_keys = fragment_->GetFilter()->GetComposeKeys();
+    }
+    return key;
+  }
+
+  HWFunctionBaseKey GetVertexKey() const { return shader_writer_.GetVSKey(); }
+
   std::string GenVertexWGSL() const override {
     if (geometry_->IsSnippet()) {
       return shader_writer_.GenVSSourceWGSL();
@@ -75,6 +89,8 @@ class HWDrawStep : public HWShaderGenerator {
       return fragment_->GetShaderName();
     }
   }
+
+  HWFunctionBaseKey GetFragmentKey() const { return shader_writer_.GetFSKey(); }
 
   std::string GenFragmentWGSL() const override {
     if (fragment_->IsSnippet()) {

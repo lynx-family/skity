@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "src/gpu/gpu_render_pipeline.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace skity {
 
@@ -57,41 +58,14 @@ class HWPipeline {
   std::vector<std::unique_ptr<GPURenderPipeline>> gpu_pipelines_;
 };
 
-struct HWPipelineKey {
-  std::string vert_name;
-  std::string frag_name;
-  std::vector<int32_t> vert_constant_values;
-  std::vector<int32_t> frag_constant_values;
-
-  bool operator==(const HWPipelineKey& other) const {
-    return vert_name == other.vert_name && frag_name == other.frag_name &&
-           vert_constant_values == other.vert_constant_values &&
-           frag_constant_values == other.frag_constant_values;
-  }
-};
-
-struct HWPipelineKeyHash {
-  std::size_t operator()(const HWPipelineKey& key) const {
-    size_t res = 17;
-    res += std::hash<std::string>()(key.vert_name);
-    for (int32_t value : key.vert_constant_values) {
-      res += std::hash<int32_t>()(value);
-    }
-    res += std::hash<std::string>()(key.frag_name);
-    for (int32_t value : key.frag_constant_values) {
-      res += std::hash<int32_t>()(value);
-    }
-    return res;
-  }
-};
-
 class HWPipelineLib final {
   using PipelineMap =
       std::unordered_map<HWPipelineKey, std::unique_ptr<HWPipeline>,
                          HWPipelineKeyHash>;
 
   using ShaderFunctionCache =
-      std::unordered_map<std::string, std::shared_ptr<GPUShaderFunction>>;
+      std::unordered_map<HWFunctionKey, std::shared_ptr<GPUShaderFunction>,
+                         HWFunctionKeyHash>;
 
  public:
   HWPipelineLib(GPUContext* ctx, GPUBackendType backend, GPUDevice* device)
@@ -111,7 +85,7 @@ class HWPipelineLib final {
                            HWShaderGenerator* shader_generator);
 
   std::shared_ptr<GPUShaderFunction> GetShaderFunction(
-      const std::string& name, GPUShaderStage stage,
+      const HWPipelineKey& name, GPUShaderStage stage,
       HWShaderGenerator* shader_generator,
       const wgx::CompilerContext& wgx_context,
       const GPUShaderFunctionErrorCallback& error_callback);

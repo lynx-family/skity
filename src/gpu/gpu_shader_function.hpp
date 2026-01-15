@@ -12,7 +12,6 @@
 #include <functional>
 #include <string>
 #include <vector>
-
 namespace skity {
 
 typedef std::function<void(char const*)> GPUShaderFunctionErrorCallback;
@@ -29,8 +28,25 @@ enum class GPUShaderSourceType {
   kWGX,
 };
 
+struct GPULabel {
+  explicit constexpr GPULabel(uint64_t id) : id(id) {}
+  explicit GPULabel(std::string label) : label(std::move(label)) {}
+  constexpr GPULabel() : id(0u) {}
+
+  const std::string& ToString() const {
+    if (!label.has_value()) {
+      label = std::to_string(id);
+    }
+    return label.value();
+  }
+
+ private:
+  uint64_t id;
+  mutable std::optional<std::string> label = std::nullopt;
+};
+
 struct GPUShaderFunctionDescriptor {
-  std::string label = {};
+  GPULabel label;
   GPUShaderStage stage = GPUShaderStage::kVertex;
   std::vector<int32_t> constant_values = {};
   GPUShaderFunctionErrorCallback error_callback = {};
@@ -46,12 +62,12 @@ struct GPUShaderSourceRaw {
 
 class GPUShaderFunction {
  public:
-  explicit GPUShaderFunction(std::string label) : label_(std::move(label)) {}
+  explicit GPUShaderFunction(GPULabel label) : label_(std::move(label)) {}
 
   virtual ~GPUShaderFunction() = default;
   virtual bool IsValid() const = 0;
 
-  const std::string& GetLabel() const { return label_; }
+  const std::string GetLabel() const { return label_.ToString(); }
 
   const std::vector<wgx::BindGroup>& GetBindGroups() const {
     return bind_groups_;
@@ -68,7 +84,7 @@ class GPUShaderFunction {
   }
 
  private:
-  std::string label_ = {};
+  GPULabel label_ = {};
 
   // The wgx context infor for this shader function.
   // The context contains the uniform buffer slot and texture slot used in this

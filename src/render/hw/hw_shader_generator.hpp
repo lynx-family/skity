@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "src/render/hw/hw_pipeline_key.hpp"
+
 namespace skity {
 
 class HWShaderGenerator {

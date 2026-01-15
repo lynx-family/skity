@@ -137,15 +137,19 @@ class ArrayList {
     DEBUG_ASSERT(tail_ == nullptr || tail_->offset > 0);
   }
 
-  T& operator[](size_t pos) {
+  const T& operator[](size_t pos) const {
     size_t node_index = pos / N;
     size_t offset = pos % N;
     Node* curr = header_;
     for (size_t i = 0; i < node_index; i++) {
       curr = curr->next;
     }
-    T* o = ToPointer(curr, offset);
+    const T* o = ToPointer(curr, offset);
     return *o;
+  }
+
+  T& operator[](size_t pos) {
+    return const_cast<T&>(std::as_const(*this)[pos]);
   }
 
   constexpr size_t size() const { return count_; }
@@ -233,6 +237,10 @@ class ArrayList {
  private:
   constexpr T* ToPointer(Node* node, size_t offset) {
     return reinterpret_cast<T*>(node->storage + offset * sizeof(T));
+  }
+
+  constexpr const T* ToPointer(Node* node, size_t offset) const {
+    return reinterpret_cast<const T*>(node->storage + offset * sizeof(T));
   }
 
   Node* AllocateNode() {

@@ -9,6 +9,7 @@
 
 #include "src/gpu/gpu_render_pass.hpp"
 #include "src/render/hw/draw/wgx_filter.hpp"
+#include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace skity {
 
@@ -100,6 +101,17 @@ class HWWGSLFragment {
    * 'Flags::kAffectsVertex' is specified.
    */
   virtual std::string GetVSNameSuffix() const { return GetShaderName(); }
+
+  /**
+   * The fragment shader main key.
+   */
+  virtual HWFunctionBaseKey GetMainKey() const = 0;
+
+  /**
+   * Supplies vertex shader sub key. This method is called only when
+   * 'Flags::kAffectsVertex' is specified.
+   */
+  virtual HWFunctionBaseKey GetVSSubKey() const { return GetMainKey(); }
 
   /**
    * Supplies functions and data structs used by the vertex shader. This
