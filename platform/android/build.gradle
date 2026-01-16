@@ -28,7 +28,8 @@ android {
                             "-DSKITY_EXAMPLE=OFF",
                             "-DSKITY_TEST=OFF",
                             "-DSKITY_LOG=ON",
-                            "-DSKITY_CODEC_MODULE=OFF",
+                            "-DSKITY_CODEC_MODULE=ON",
+                            "-DSKITY_IO_MODULE=ON",
                             "-DSKITY_BUILD_INSTALL=OFF"
             }
         }
@@ -58,6 +59,15 @@ android {
     prefab {
         skity {
             headers "../../include"
+        }
+        codec {
+            headers "../../module/codec/include/"
+            name "skity-codec"
+        }
+
+        io {
+            headers "../../module/io/include/"
+            name "skity-io"
         }
     }
 
