@@ -26,43 +26,44 @@ static void png_write_callback(png_structp png_ptr, png_bytep data,
   }
 }
 
+struct PNGImage {
+  png_image image = {};
+
+  PNGImage() : image() { image.version = PNG_IMAGE_VERSION; }
+
+  ~PNGImage() { png_image_free(&image); }
+};
+
 PNGCodec::PNGCodec() = default;
 
-PNGCodec::~PNGCodec() { png_image_free(&image_); }
+PNGCodec::~PNGCodec() {}
 
 std::shared_ptr<Pixmap> skity::PNGCodec::Decode() {
-  if (image_.opaque) {
-    png_image_free(&image_);
-    image_.opaque = nullptr;
-  }
-  image_.version = PNG_IMAGE_VERSION;
-  if (!png_image_begin_read_from_memory(&image_, data_->RawData(),
+  PNGImage png_image{};
+  if (!png_image_begin_read_from_memory(&png_image.image, data_->RawData(),
                                         data_->Size())) {
     return nullptr;
   }
 
   png_bytep buffer;
-  image_.format = PNG_FORMAT_RGBA;
-  size_t raw_data_size = PNG_IMAGE_SIZE(image_);
+  png_image.image.format = PNG_FORMAT_RGBA;
+  size_t raw_data_size = PNG_IMAGE_SIZE(png_image.image);
   buffer = static_cast<png_bytep>(std::malloc(raw_data_size));
   if (!buffer) {
     // out of memory
-    png_image_free(&image_);
     return nullptr;
   }
 
-  if (!png_image_finish_read(&image_, nullptr, buffer, 0, nullptr)) {
+  if (!png_image_finish_read(&png_image.image, nullptr, buffer, 0, nullptr)) {
     std::free(buffer);
     return nullptr;
   }
 
   auto raw_data = Data::MakeFromMalloc(buffer, raw_data_size);
-  uint32_t width = image_.width;
-  uint32_t height = image_.height;
+  uint32_t width = png_image.image.width;
+  uint32_t height = png_image.image.height;
 
-  pixmap_ = std::make_shared<Pixmap>(raw_data, width * 4, width, height);
-
-  return pixmap_;
+  return std::make_shared<Pixmap>(raw_data, width * 4, width, height);
 }
 
 std::shared_ptr<MultiFrameDecoder> PNGCodec::DecodeMultiFrame() { return {}; }
