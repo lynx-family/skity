@@ -42,14 +42,18 @@ void WindowGL::OnShow() {
   int32_t pp_width, pp_height;
   glfwGetFramebufferSize(window, &pp_width, &pp_height);
 
-  float density = (float)(pp_width * pp_width + pp_height * pp_height) /
-                  (float)(GetWidth() * GetWidth() + GetHeight() * GetHeight());
+  int32_t logical_width, logical_height;
+  glfwGetWindowSize(window, &logical_width, &logical_height);
+
+  float density =
+      (float)(pp_width * pp_width + pp_height * pp_height) /
+      (float)(logical_width * logical_width + logical_height * logical_height);
   auto screen_scale = std::sqrt(density);
 
   skity::GPUSurfaceDescriptorGL desc{};
   desc.backend = skity::GPUBackendType::kOpenGL;
-  desc.width = GetWidth();
-  desc.height = GetHeight();
+  desc.width = logical_width;
+  desc.height = logical_height;
   desc.sample_count = 4;
   desc.content_scale = screen_scale;
 
