@@ -19,8 +19,6 @@ class WGSLBlurFilter : public HWWGSLFragment {
 
   ~WGSLBlurFilter() override = default;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override;
 
   std::string GenSourceWGSL() const override;

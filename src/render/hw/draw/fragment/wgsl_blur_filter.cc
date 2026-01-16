@@ -25,7 +25,6 @@ WGSLBlurFilter::WGSLBlurFilter(std::shared_ptr<GPUTexture> texture, Vec2 dir,
 
 uint32_t WGSLBlurFilter::NextBindingIndex() const { return 3; }
 
-std::string WGSLBlurFilter::GetShaderName() const { return "BlurFragmentWGSL"; }
 
 HWFunctionBaseKey WGSLBlurFilter::GetMainKey() const {
   return HWFragmentKeyType::kBlur;

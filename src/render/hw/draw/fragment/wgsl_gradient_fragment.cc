@@ -152,10 +152,6 @@ void WGSLGradientFragment::BindVSUniforms(Command* cmd, HWDrawContext* context,
   UploadBindGroup(group->group, inv_matrix_entry, cmd, context);
 }
 
-std::string WGSLGradientFragment::GetShaderName() const {
-  return gradient_fragment_.GetShaderName();
-}
-
 HWFunctionBaseKey WGSLGradientFragment::GetMainKey() const {
   return MakeMainKey(HWFragmentKeyType::kGradient,
                      gradient_fragment_.GetCustomKey());
@@ -204,8 +200,6 @@ void WGSLGradientFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
     filter_->SetupBindGroup(cmd, context);
   }
 }
-
-std::string WGSLGradientFragment::GetVSNameSuffix() const { return "Gradient"; }
 
 HWFunctionBaseKey WGSLGradientFragment::GetVSSubKey() const {
   return HWFragmentKeyType::kGradient;

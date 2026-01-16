@@ -580,11 +580,6 @@ void WGSLTessPathStrokeGeometry::WriteVSMain(std::stringstream& ss) const {
 )";
 }
 
-std::string WGSLTessPathStrokeGeometry::GetShaderName() const {
-  std::string name = "TessPathStroke";
-  return name;
-}
-
 void WGSLTessPathStrokeGeometry::PrepareCMD(Command* cmd,
                                             HWDrawContext* context,
                                             const Matrix& transform,

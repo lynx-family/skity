@@ -30,8 +30,6 @@ class WGSLTessPathStrokeGeometry : public HWWGSLGeometry {
 
   void WriteVSMain(std::stringstream& ss) const override;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kTessStroke;
   }

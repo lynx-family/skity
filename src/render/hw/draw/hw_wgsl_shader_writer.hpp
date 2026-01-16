@@ -5,6 +5,7 @@
 #ifndef SRC_RENDER_HW_DRAW_HW_WGSL_SHADER_WRITER_HPP
 #define SRC_RENDER_HW_DRAW_HW_WGSL_SHADER_WRITER_HPP
 
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -28,6 +29,21 @@ class HWWGSLShaderWriter {
 
   HWFunctionBaseKey GetVSKey() const;
   HWFunctionBaseKey GetFSKey() const;
+
+  HWPipelineKey GetPipelineKey() const {
+    HWPipelineKey key;
+    key.base_key = MakePipelineBaseKey(GetVSKey(), GetFSKey());
+    key.compose_keys = GetComposeKeys(key.base_key);
+    return key;
+  }
+
+  std::optional<std::vector<uint32_t>> GetComposeKeys(uint64_t base_key) const {
+    if ((base_key & kFilterKeyMask) == HWColorFilterKeyType::kCompose) {
+      DEBUG_CHECK(fragment_->GetFilter() != nullptr);
+      return fragment_->GetFilter()->GetComposeKeys();
+    }
+    return std::nullopt;
+  }
 
  private:
   void WriteVSFunctionsAndStructs(std::stringstream& ss) const;

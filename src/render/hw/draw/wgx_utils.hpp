@@ -107,8 +107,6 @@ class WGXGradientFragment {
 
   std::string GenSourceWGSL(size_t index) const;
 
-  std::string GetShaderName() const;
-
   HWFunctionBaseKey GetCustomKey() const;
 
   bool SetupCommonInfo(const wgx::BindGroupEntry* info_entry,

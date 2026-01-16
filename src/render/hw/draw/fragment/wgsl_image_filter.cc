@@ -16,16 +16,6 @@ namespace skity {
 WGSLImageFilter::WGSLImageFilter(std::shared_ptr<GPUTexture> texture)
     : texture_(std::move(texture)) {}
 
-std::string WGSLImageFilter::GetShaderName() const {
-  std::string name = "ImageFilterFragmentWGSL";
-
-  if (filter_) {
-    name += filter_->GetShaderName();
-  }
-
-  return name;
-}
-
 HWFunctionBaseKey WGSLImageFilter::GetMainKey() const {
   return HWFragmentKeyType::kImageFilter;
 }

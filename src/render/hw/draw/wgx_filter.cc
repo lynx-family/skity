@@ -42,43 +42,6 @@ class WGXBlendFilter : public WGXFilterFragment {
     return binding + 1;
   }
 
-  std::string GetShaderName() const override {
-    switch (mode_) {
-      case BlendMode::kClear:
-        return "BlendClearFilter";
-      case BlendMode::kSrc:
-        return "BlendSrcFilter";
-      case BlendMode::kDst:
-        return "BlendDstFilter";
-      case BlendMode::kSrcOver:
-        return "BlendSrcOverFilter";
-      case BlendMode::kDstOver:
-        return "BlendDstOverFilter";
-      case BlendMode::kSrcIn:
-        return "BlendSrcInFilter";
-      case BlendMode::kDstIn:
-        return "BlendDstInFilter";
-      case BlendMode::kSrcOut:
-        return "BlendSrcOutFilter";
-      case BlendMode::kDstOut:
-        return "BlendDstOutFilter";
-      case BlendMode::kSrcATop:
-        return "BlendSrcATopFilter";
-      case BlendMode::kDstATop:
-        return "BlendDstATopFilter";
-      case BlendMode::kXor:
-        return "BlendXorFilter";
-      case BlendMode::kPlus:
-        return "BlendPlusFilter";
-      case BlendMode::kModulate:
-        return "BlendModulateFilter";
-      case BlendMode::kScreen:
-        return "BlendScreenFilter";
-      default:
-        return "UnsupportedBlendFilter";
-    }
-  }
-
   HWColorFilterKeyType::Value GetType() const override {
     switch (mode_) {
       case BlendMode::kClear:
@@ -275,8 +238,6 @@ class WGXMatrixFilter : public WGXFilterFragment {
 
   ~WGXMatrixFilter() override = default;
 
-  std::string GetShaderName() const override { return "MatrixFilter"; }
-
   HWColorFilterKeyType::Value GetType() const override {
     return HWColorFilterKeyType::kMatrix;
   }
@@ -384,16 +345,6 @@ class WGXGammaFilter : public WGXFilterFragment {
 
   uint32_t InitBinding(uint32_t binding) override { return binding; }
 
-  std::string GetShaderName() const override {
-    if (type_ == ColorFilterType::kLinearToSRGBGamma) {
-      return "LinearToSRGBGammaFilter";
-    } else if (type_ == ColorFilterType::kSRGBToLinearGamma) {
-      return "SRGBToLinearGammaFilter";
-    } else {
-      return "Unknown";
-    }
-  }
-
   HWColorFilterKeyType::Value GetType() const override {
     if (type_ == ColorFilterType::kLinearToSRGBGamma) {
       return HWColorFilterKeyType::kLinearToSRGBGamma;
@@ -469,16 +420,6 @@ class WGXComposeFilter : public WGXFilterFragment {
       binding = filter->InitBinding(binding);
     }
     return binding;
-  }
-
-  std::string GetShaderName() const override {
-    std::string name = "ComposeFilter";
-
-    for (auto& filter : filters_) {
-      name += "_" + filter->GetShaderName();
-    }
-
-    return name;
   }
 
   HWColorFilterKeyType::Value GetType() const override {

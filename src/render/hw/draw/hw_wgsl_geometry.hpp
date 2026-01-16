@@ -55,7 +55,9 @@ class HWWGSLGeometry {
   /**
    * The vertex shader name.
    */
-  virtual std::string GetShaderName() const = 0;
+  std::string GetShaderName() const {
+    return VertexKeyToShaderName(MakeFunctionBaseKey(GetMainKey()));
+  }
 
   /**
    * The vertex shader main key.
@@ -110,12 +112,6 @@ class HWWGSLGeometry {
   virtual std::optional<std::vector<std::string>> GetVarings() const {
     return std::nullopt;
   }
-
-  /**
-   * Supplies fragment shader name suffix. This method is called only when
-   * 'Flags::kAffectsFragment' is specified.
-   */
-  virtual std::string GetFSNameSuffix() const { return GetShaderName(); }
 
   /**
    * Supplies functions and data structs used by the fragment shader. This

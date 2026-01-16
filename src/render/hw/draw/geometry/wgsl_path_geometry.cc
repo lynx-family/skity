@@ -96,8 +96,6 @@ void WGSLPathGeometry::WriteVSMain(std::stringstream& ss) const {
 )";
 }
 
-std::string WGSLPathGeometry::GetShaderName() const { return "Path"; }
-
 void WGSLPathGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
                                   const Matrix& transform, float clip_depth,
                                   Command* stencil_cmd) {
@@ -194,8 +192,6 @@ void WGSLPathAAGeometry::WriteVSMain(std::stringstream& ss) const {
 )";
 }
 
-std::string WGSLPathAAGeometry::GetShaderName() const { return "PathAA"; }
-
 void WGSLPathAAGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
                                     const Matrix& transform, float clip_depth,
                                     Command* stencil_cmd) {
@@ -234,8 +230,6 @@ void WGSLPathAAGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
 std::optional<std::vector<std::string>> WGSLPathAAGeometry::GetVarings() const {
   return std::vector<std::string>{"v_pos_aa: f32"};
 }
-
-std::string WGSLPathAAGeometry::GetFSNameSuffix() const { return "AA"; }
 
 HWFunctionBaseKey WGSLPathAAGeometry::GetFSSubKey() const {
   return HWGeometryKeyType::kPathAA;

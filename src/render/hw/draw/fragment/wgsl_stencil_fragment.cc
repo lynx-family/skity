@@ -6,10 +6,6 @@
 
 namespace skity {
 
-std::string WGSLStencilFragment::GetShaderName() const {
-  return "StencilFragmentWGSL";
-}
-
 HWFunctionBaseKey WGSLStencilFragment::GetMainKey() const {
   return HWFragmentKeyType::kStencil;
 }

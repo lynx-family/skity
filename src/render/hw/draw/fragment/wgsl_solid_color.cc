@@ -16,8 +16,6 @@ WGSLSolidColor::WGSLSolidColor(const Color4f& color)
 
 uint32_t WGSLSolidColor::NextBindingIndex() const { return 1; }
 
-std::string WGSLSolidColor::GetShaderName() const { return "SolidColor"; }
-
 HWFunctionBaseKey WGSLSolidColor::GetMainKey() const {
   return HWFragmentKeyType::kSolid;
 }

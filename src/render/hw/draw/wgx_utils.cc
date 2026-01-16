@@ -356,31 +356,6 @@ bool WGXGradientFragment::CanUseLerpColorFast() const {
           (info_.color_offsets[0] == 0 && info_.color_offsets[1] == 1));
 }
 
-std::string WGXGradientFragment::GetShaderName() const {
-  std::string name = "Gradient";
-  name += GradientTypeName();
-  name += std::to_string(GetMaxColorCount());
-  if (info_.color_offsets.empty()) {
-    name += "OffsetFast";
-  }
-
-  if (CanUseLerpColorFast()) {
-    name += "ColorFast";
-  }
-
-  return name;
-}
-
-constexpr static uint32_t kGradientTypeShift = 0;
-constexpr static uint32_t kMaxColorCountShift = 3;
-constexpr static uint32_t kOffsetFastShift = 6;
-constexpr static uint32_t kColorFastShift = 7;
-
-constexpr static uint32_t kGradientTypeLinear = 1;
-constexpr static uint32_t kGradientTypeRadial = 2;
-constexpr static uint32_t kGradientTypeConical = 3;
-constexpr static uint32_t kGradientTypeSweep = 4;
-
 HWFunctionBaseKey WGXGradientFragment::GetCustomKey() const {
   HWFunctionBaseKey gradient_type = 0;
   switch (type_) {

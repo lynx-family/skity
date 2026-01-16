@@ -13,8 +13,6 @@ class WGSLStencilFragment : public HWWGSLFragment {
  public:
   ~WGSLStencilFragment() override = default;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override;
 
   std::string GenSourceWGSL() const override;

@@ -22,12 +22,10 @@ struct HWGeometryKeyType {
     kTessFill = 3,
     kTessStroke = 4,
     kColorText = 5,
-    kEmojiText = 6,
-    kGradientText = 7,
-    kTextureText = 8,
-    kRRect = 9,
-    kClip = 10,
-    kFilter = 11,
+    kGradientText = 6,
+    kRRect = 7,
+    kClip = 8,
+    kFilter = 9,
     kLast = kFilter,
   };
 };
@@ -166,6 +164,23 @@ struct HWPipelineKeyHash {
   }
 };
 using HWFunctionKeyHash = HWPipelineKeyHash;
+
+constexpr static uint32_t kGradientTypeShift = 0;
+constexpr static uint32_t kMaxColorCountShift = 3;
+constexpr static uint32_t kOffsetFastShift = 6;
+constexpr static uint32_t kColorFastShift = 7;
+
+constexpr static uint32_t kGradientTypeLinear = 1;
+constexpr static uint32_t kGradientTypeRadial = 2;
+constexpr static uint32_t kGradientTypeConical = 3;
+constexpr static uint32_t kGradientTypeSweep = 4;
+
+std::string FunctionBaseKeyToShaderName(uint64_t base_key);
+
+std::string VertexKeyToShaderName(uint32_t base_key);
+
+std::string FragmentKeyToShaderName(
+    uint32_t base_key, std::optional<std::vector<uint32_t>> compose_keys);
 
 }  // namespace skity
 

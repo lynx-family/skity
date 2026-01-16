@@ -263,10 +263,6 @@ void WGSLTessPathFillGeometry::WriteVSMain(std::stringstream& ss) const {
 )";
 }
 
-std::string WGSLTessPathFillGeometry::GetShaderName() const {
-  return "TessPathFill";
-}
-
 void WGSLTessPathFillGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
                                           const Matrix& transform,
                                           float clip_depth,

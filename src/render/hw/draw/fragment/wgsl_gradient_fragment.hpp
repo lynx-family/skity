@@ -21,8 +21,6 @@ class WGSLGradientFragment : public HWWGSLFragment {
 
   uint32_t NextBindingIndex() const override;
 
-  std::string GetShaderName() const override;
-
   HWFunctionBaseKey GetMainKey() const override;
 
   void PrepareCMD(Command* cmd, HWDrawContext* context) override;
@@ -42,8 +40,6 @@ class WGSLGradientFragment : public HWWGSLFragment {
   void BindVSUniforms(Command* cmd, HWDrawContext* context,
                       const Matrix& transform, float clip_depth,
                       Command* stencil_cmd) override;
-
-  std::string GetVSNameSuffix() const override;
 
   HWFunctionBaseKey GetVSSubKey() const override;
 
