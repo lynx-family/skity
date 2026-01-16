@@ -6,7 +6,7 @@
 
 namespace skity {
 
-GPUShaderFunctionWeb::GPUShaderFunctionWeb(std::string label,
+GPUShaderFunctionWeb::GPUShaderFunctionWeb(GPULabel label,
                                            std::string entry_point,
                                            WGPUShaderModule shader_module)
     : GPUShaderFunction(std::move(label)),
