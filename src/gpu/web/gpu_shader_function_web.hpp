@@ -13,7 +13,7 @@ namespace skity {
 
 class GPUShaderFunctionWeb : public GPUShaderFunction {
  public:
-  GPUShaderFunctionWeb(std::string label, std::string entry_point,
+  GPUShaderFunctionWeb(GPULabel label, std::string entry_point,
                        WGPUShaderModule shader_module);
 
   ~GPUShaderFunctionWeb() override;

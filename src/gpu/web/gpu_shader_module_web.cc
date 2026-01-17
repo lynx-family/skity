@@ -54,8 +54,9 @@ std::shared_ptr<GPUShaderModule> GPUShaderModuleWEB::Create(
   }
 
   WGPUShaderModuleDescriptor wgpu_desc = {};
-  wgpu_desc.label.data = desc.label.c_str();
-  wgpu_desc.label.length = desc.label.length();
+  const std::string& label = desc.label.ToString();
+  wgpu_desc.label.data = label.c_str();
+  wgpu_desc.label.length = label.length();
 
   WGPUShaderSourceWGSL wgpu_source = WGPU_SHADER_SOURCE_WGSL_INIT;
   wgpu_source.code.data = desc.source.c_str();

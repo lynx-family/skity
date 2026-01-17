@@ -147,9 +147,9 @@ GPURenderPipelineWeb::~GPURenderPipelineWeb() {
 std::unique_ptr<GPURenderPipeline> GPURenderPipelineWeb::Create(
     WGPUDevice device, const GPURenderPipelineDescriptor& desc) {
   WGPURenderPipelineDescriptor wgpu_desc = {};
-
-  wgpu_desc.label.data = desc.label.c_str();
-  wgpu_desc.label.length = desc.label.size();
+  const std::string& label = desc.label.ToString();
+  wgpu_desc.label.data = label.c_str();
+  wgpu_desc.label.length = label.size();
 
   auto vs_function =
       dynamic_cast<const GPUShaderFunctionWeb*>(desc.vertex_function.get());
