@@ -473,14 +473,11 @@ struct TessPathStrokeVisitor {
 
 WGSLTessPathStrokeGeometry::WGSLTessPathStrokeGeometry(const Path& path,
                                                        const Paint& paint)
-    : HWWGSLGeometry(Flags::kSnippet),
-      path_(path),
-      paint_(paint),
-      layout_(InitVertexBufferLayout()) {}
+    : HWWGSLGeometry(Flags::kSnippet), path_(path), paint_(paint) {}
 
-const std::vector<GPUVertexBufferLayout>&
-WGSLTessPathStrokeGeometry::GetBufferLayout() const {
-  return layout_;
+std::vector<GPUVertexBufferLayout>
+WGSLTessPathStrokeGeometry::GetBufferLayout() {
+  return InitVertexBufferLayout();
 }
 
 void WGSLTessPathStrokeGeometry::WriteVSFunctionsAndStructs(

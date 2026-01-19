@@ -50,8 +50,6 @@ class HWWGSLGeometry {
 
   virtual ~HWWGSLGeometry() = default;
 
-  virtual const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const = 0;
-
   /**
    * The vertex shader name.
    */

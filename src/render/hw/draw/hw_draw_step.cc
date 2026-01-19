@@ -5,6 +5,7 @@
 #include "src/render/hw/draw/hw_draw_step.hpp"
 
 #include "src/logging.hpp"
+#include "src/render/hw/hw_buffer_layout_map.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_pipeline_lib.hpp"
 #include "src/tracing.hpp"
@@ -54,7 +55,8 @@ GPURenderPipeline* HWDrawStep::GetPipeline(HWDrawContext* context,
 
   pipeline.color_format = target_format;
   pipeline.sample_count = sample_count;
-  pipeline.buffers = geometry_->GetBufferLayout();
+  pipeline.buffers = HWBufferLayoutMap::GetInstance().GetBufferLayout(
+      static_cast<HWGeometryKeyType::Value>(geometry_->GetMainKey()));
 
   if (state == HWDrawState::kDrawStateNone) {
     pipeline.depth_stencil.format = GPUTextureFormat::kInvalid;

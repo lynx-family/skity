@@ -149,7 +149,7 @@ struct GPUColorTargetState {
 struct GPURenderPipelineDescriptor {
   std::shared_ptr<GPUShaderFunction> vertex_function;
   std::shared_ptr<GPUShaderFunction> fragment_function;
-  std::vector<GPUVertexBufferLayout> buffers;
+  const std::vector<GPUVertexBufferLayout>* buffers = nullptr;
   GPUColorTargetState target;
   GPUDepthStencilState depth_stencil = {};
   int32_t sample_count = 1;

@@ -97,7 +97,8 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
                    ->GetBufferId());
 
     // Set vertex
-    for (auto& buffer_layout : pipeline->GetDescriptor().buffers) {
+    auto const& buffer_layouts = *pipeline->GetDescriptor().buffers;
+    for (auto& buffer_layout : buffer_layouts) {
       if (buffer_layout.step_mode == GPUVertexStepMode::kVertex) {
         BindBuffer(GL_ARRAY_BUFFER,
                    static_cast<GPUBufferGL*>(command->vertex_buffer.buffer)

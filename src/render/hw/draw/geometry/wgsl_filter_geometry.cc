@@ -36,9 +36,8 @@ WGSLFilterGeometry::WGSLFilterGeometry(
     float u_factor, float v_factor, const std::array<float, 8> &vertex_buffer)
     : u_factor_(u_factor), v_factor_(v_factor), vertex_buffer_(vertex_buffer) {}
 
-const std::vector<GPUVertexBufferLayout> &WGSLFilterGeometry::GetBufferLayout()
-    const {
-  static const std::vector<GPUVertexBufferLayout> layout = {
+std::vector<GPUVertexBufferLayout> WGSLFilterGeometry::GetBufferLayout() {
+  return std::vector<GPUVertexBufferLayout>{
       GPUVertexBufferLayout{
           4 * sizeof(float),
           GPUVertexStepMode::kVertex,
@@ -56,8 +55,6 @@ const std::vector<GPUVertexBufferLayout> &WGSLFilterGeometry::GetBufferLayout()
           },
       },
   };
-
-  return layout;
 }
 
 HWFunctionBaseKey WGSLFilterGeometry::GetMainKey() const {

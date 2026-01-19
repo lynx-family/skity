@@ -18,7 +18,7 @@ class WGSLPathGeometry : public HWWGSLGeometry {
 
   ~WGSLPathGeometry() override = default;
 
-  const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
+  static std::vector<GPUVertexBufferLayout> GetBufferLayout();
 
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kPath;
@@ -39,7 +39,6 @@ class WGSLPathGeometry : public HWWGSLGeometry {
   const Path& path_;
   const Paint& paint_;
   bool is_stroke_;
-  std::vector<GPUVertexBufferLayout> layout_;
 };
 
 class WGSLPathAAGeometry : public HWWGSLGeometry {
@@ -48,7 +47,7 @@ class WGSLPathAAGeometry : public HWWGSLGeometry {
 
   ~WGSLPathAAGeometry() override = default;
 
-  const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
+  static std::vector<GPUVertexBufferLayout> GetBufferLayout();
 
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kPathAA;
@@ -74,7 +73,6 @@ class WGSLPathAAGeometry : public HWWGSLGeometry {
  private:
   const Path& path_;
   const Paint& paint_;
-  std::vector<GPUVertexBufferLayout> layout_;
 };
 
 }  // namespace skity

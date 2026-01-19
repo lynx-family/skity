@@ -20,7 +20,7 @@ class WGSLTessPathStrokeGeometry : public HWWGSLGeometry {
 
   ~WGSLTessPathStrokeGeometry() override = default;
 
-  const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
+  static std::vector<GPUVertexBufferLayout> GetBufferLayout();
 
   void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
 
@@ -44,7 +44,6 @@ class WGSLTessPathStrokeGeometry : public HWWGSLGeometry {
  private:
   const Path& path_;
   const Paint& paint_;
-  std::vector<GPUVertexBufferLayout> layout_;
 };
 
 }  // namespace skity
