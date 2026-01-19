@@ -305,8 +305,8 @@ struct TessPathStrokeVisitor {
       arc_[0] = center + Vec2{stroke_radius_, 0};
       arc_[1] = center;
       arc_[2] = center + Vec2{0, stroke_radius_};
-      num = std::ceil(2 *
-                      wangs_formula::Conic(kPrecision, arc_, FloatRoot2Over2));
+      num = std::ceil(
+          2 * wangs_formula::Conic(precision_, arc_, FloatRoot2Over2, xform_));
       num = std::max(num, 1u);
       semicircle_segments_num_ = num;
     } else {
