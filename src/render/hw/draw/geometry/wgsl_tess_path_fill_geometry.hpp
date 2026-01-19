@@ -20,7 +20,7 @@ class WGSLTessPathFillGeometry : public HWWGSLGeometry {
 
   ~WGSLTessPathFillGeometry() override = default;
 
-  const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
+  static std::vector<GPUVertexBufferLayout> GetBufferLayout();
 
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kTessFill;
@@ -44,7 +44,6 @@ class WGSLTessPathFillGeometry : public HWWGSLGeometry {
  private:
   const Path& path_;
   const Paint& paint_;
-  std::vector<GPUVertexBufferLayout> layout_;
 };
 
 }  // namespace skity

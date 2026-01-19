@@ -28,7 +28,7 @@ std::unique_ptr<GPURenderPipelineMTL> GPURenderPipelineMTL::Make(
       static_cast<GPUShaderFunctionMTL*>(desc.fragment_function.get())->GetMTLFunction();
   render_pipeline_desc.vertexFunction = vertex_function;
   render_pipeline_desc.fragmentFunction = fragment_function;
-  render_pipeline_desc.vertexDescriptor = ToMTLVertexDescriptor(desc.buffers);
+  render_pipeline_desc.vertexDescriptor = ToMTLVertexDescriptor(*desc.buffers);
 
   if (@available(macOS 10.13, iOS 11.0, *)) {
     render_pipeline_desc.vertexBuffers[0].mutability = MTLMutabilityImmutable;

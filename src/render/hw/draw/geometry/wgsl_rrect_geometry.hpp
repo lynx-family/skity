@@ -20,7 +20,7 @@ class WGSLRRectGeometry : public HWWGSLGeometry {
 
   ~WGSLRRectGeometry() override = default;
 
-  const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
+  static std::vector<GPUVertexBufferLayout> GetBufferLayout();
 
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kRRect;
@@ -49,7 +49,6 @@ class WGSLRRectGeometry : public HWWGSLGeometry {
 
  private:
   const std::vector<BatchGroup<RRect>>& batch_group_;
-  std::vector<GPUVertexBufferLayout> layout_;
 };
 
 }  // namespace skity

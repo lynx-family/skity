@@ -11,9 +11,8 @@
 
 namespace skity {
 
-const std::vector<GPUVertexBufferLayout>& WGSLTextGeometry::GetBufferLayout()
-    const {
-  static const std::vector<GPUVertexBufferLayout> layout = {
+std::vector<GPUVertexBufferLayout> WGSLTextGeometry::GetBufferLayout() {
+  return std::vector<GPUVertexBufferLayout>{
       GPUVertexBufferLayout{
           4 * sizeof(float),
           GPUVertexStepMode::kVertex,
@@ -47,8 +46,6 @@ const std::vector<GPUVertexBufferLayout>& WGSLTextGeometry::GetBufferLayout()
           },
       },
   };
-
-  return layout;
 }
 
 struct Instance {

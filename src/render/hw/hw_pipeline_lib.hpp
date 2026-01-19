@@ -33,7 +33,7 @@ class HWShaderGenerator;
 struct HWPipelineDescriptor {
   int32_t color_mask = 0xF;
   uint32_t sample_count = 1;
-  std::vector<GPUVertexBufferLayout> buffers = {};
+  const std::vector<GPUVertexBufferLayout>* buffers = nullptr;
   BlendMode blend_mode = BlendMode::kDefault;
   GPUTextureFormat color_format = GPUTextureFormat::kRGBA8Unorm;
   GPUDepthStencilState depth_stencil = {};

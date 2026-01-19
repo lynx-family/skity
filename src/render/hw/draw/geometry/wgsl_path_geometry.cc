@@ -65,12 +65,10 @@ WGSLPathGeometry::WGSLPathGeometry(const Path& path, const Paint& paint,
     : HWWGSLGeometry(Flags::kSnippet),
       path_(path),
       paint_(paint),
-      is_stroke_(is_stroke),
-      layout_(InitVertexBufferLayout(false)) {}
+      is_stroke_(is_stroke) {}
 
-const std::vector<GPUVertexBufferLayout>& WGSLPathGeometry::GetBufferLayout()
-    const {
-  return layout_;
+std::vector<GPUVertexBufferLayout> WGSLPathGeometry::GetBufferLayout() {
+  return InitVertexBufferLayout(false);
 }
 
 void WGSLPathGeometry::WriteVSFunctionsAndStructs(std::stringstream& ss) const {
@@ -158,12 +156,10 @@ void WGSLPathGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
 WGSLPathAAGeometry::WGSLPathAAGeometry(const Path& path, const Paint& paint)
     : HWWGSLGeometry(Flags::kSnippet | Flags::kAffectsFragment),
       path_(path),
-      paint_(paint),
-      layout_(InitVertexBufferLayout(true)) {}
+      paint_(paint) {}
 
-const std::vector<GPUVertexBufferLayout>& WGSLPathAAGeometry::GetBufferLayout()
-    const {
-  return layout_;
+std::vector<GPUVertexBufferLayout> WGSLPathAAGeometry::GetBufferLayout() {
+  return InitVertexBufferLayout(true);
 }
 
 void WGSLPathAAGeometry::WriteVSFunctionsAndStructs(

@@ -61,7 +61,7 @@ class WGSLTextGeometry : public HWWGSLGeometry {
 
   ~WGSLTextGeometry() override = default;
 
-  const std::vector<GPUVertexBufferLayout>& GetBufferLayout() const override;
+  static std::vector<GPUVertexBufferLayout> GetBufferLayout();
 
   bool CanMerge(const HWWGSLGeometry* other) const override;
 

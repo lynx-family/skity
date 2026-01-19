@@ -104,12 +104,10 @@ static_assert(sizeof(Instance) == 88);
 WGSLRRectGeometry::WGSLRRectGeometry(
     const std::vector<BatchGroup<RRect>>& batch_group)
     : HWWGSLGeometry(Flags::kSnippet | Flags::kAffectsFragment),
-      batch_group_(batch_group),
-      layout_(InitVertexBufferLayout()) {}
+      batch_group_(batch_group) {}
 
-const std::vector<GPUVertexBufferLayout>& WGSLRRectGeometry::GetBufferLayout()
-    const {
-  return layout_;
+std::vector<GPUVertexBufferLayout> WGSLRRectGeometry::GetBufferLayout() {
+  return InitVertexBufferLayout();
 }
 
 void WGSLRRectGeometry::WriteVSFunctionsAndStructs(

@@ -302,6 +302,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/layer/hw_root_layer.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/layer/hw_sub_layer.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/layer/hw_sub_layer.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_buffer_layout_map.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_buffer_layout_map.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_canvas.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_canvas.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_draw.cc

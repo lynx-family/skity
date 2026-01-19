@@ -205,14 +205,10 @@ struct TessPathFillVisitor {
 
 WGSLTessPathFillGeometry::WGSLTessPathFillGeometry(const Path& path,
                                                    const Paint& paint)
-    : HWWGSLGeometry(Flags::kSnippet),
-      path_(path),
-      paint_(paint),
-      layout_(InitVertexBufferLayout()) {}
+    : HWWGSLGeometry(Flags::kSnippet), path_(path), paint_(paint) {}
 
-const std::vector<GPUVertexBufferLayout>&
-WGSLTessPathFillGeometry::GetBufferLayout() const {
-  return layout_;
+std::vector<GPUVertexBufferLayout> WGSLTessPathFillGeometry::GetBufferLayout() {
+  return InitVertexBufferLayout();
 }
 
 void WGSLTessPathFillGeometry::WriteVSFunctionsAndStructs(

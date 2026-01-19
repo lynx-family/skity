@@ -20,7 +20,7 @@ class WGSLFilterGeometry : public HWWGSLGeometry {
 
   ~WGSLFilterGeometry() override = default;
 
-  const std::vector<GPUVertexBufferLayout> &GetBufferLayout() const override;
+  static std::vector<GPUVertexBufferLayout> GetBufferLayout();
 
   HWFunctionBaseKey GetMainKey() const override;
 

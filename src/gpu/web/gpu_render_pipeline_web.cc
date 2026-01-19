@@ -166,7 +166,8 @@ std::unique_ptr<GPURenderPipeline> GPURenderPipelineWeb::Create(
   wgpu_desc.vertex.entryPoint.length = vs_function->GetEntryPoint().size();
 
   std::vector<VertexBufferLayout> buffer_layouts;
-  for (const auto& layout : desc.buffers) {
+  auto const& origin_buffer_layouts = *desc.buffers;
+  for (const auto& layout : origin_buffer_layouts) {
     buffer_layouts.emplace_back(layout);
   }
 
