@@ -1,0 +1,43 @@
+name: Install EMSDK
+
+description: Install EMSDK for skity wasm build
+
+inputs:
+  emsdk-version-file:
+    description: "Path to file containing desired emsdk version or tag (used for cache key)."
+    default: '.github/actions/install-emsdk/emsdk-version.txt'
+    required: true
+
+outputs:
+  cache-hit:
+    description: "Whether the emsdk cache hit or not."
+    value: ${{ steps.emsdk-cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Restore emsdk cache
+      id: emsdk-cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ runner.workspace }}/emsdk
+        key: ${{ runner.os }}-emsdk-${{ hashFiles(inputs.emsdk-version-file) }}
+        restore-keys: |
+          ${{ runner.os }}-emsdk-
+
+    - name: Install emsdk (only on cache miss)
+      if: steps.emsdk-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        EMSDK_VERSION=$(cat ${{ inputs.emsdk-version-file }})
+        git clone https://github.com/emscripten-core/emsdk.git ${{ runner.workspace }}/emsdk
+        cd ${{ runner.workspace }}/emsdk
+        ./emsdk install $EMSDK_VERSION
+        ./emsdk activate $EMSDK_VERSION
+
+    - name: Load and persist emsdk environment
+      shell: bash
+      run: |
+        source ${{ runner.workspace }}/emsdk/emsdk_env.sh
+        echo "PATH=$PATH" >> "$GITHUB_ENV"
+
