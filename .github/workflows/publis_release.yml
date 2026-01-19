@@ -24,16 +24,25 @@ jobs:
                 ./tools/hab sync -f --target module,ci
           - name: Android Build Check
             uses: ./.github/actions/pack-android-aar
-          - name: Copy AAR
+          - name: Build Android Release Artifact
             run: |
-                mkdir -p out/release
-                cp platform/android/build/outputs/aar/skity-native-release.aar out/release/skity-native-${{ github.event.release.tag_name }}.aar
-          - name: Upload Assets
-            uses: softprops/action-gh-release@v2
+              cd platform/android
+              ./gradlew publish \
+              -Pversion=${{ github.event.release.tag_name }} \
+              -Psigning.keyId=${{ secrets.SIGNING_KEY_ID }} \
+              -Psigning.password=${{ secrets.SIGNING_PASSWORD }} \
+              -Psigning.secretKey=${{ secrets.SIGNING_SECRET_KEY }}
+              ./gradlew zipArtifacts -Pversion=${{ github.event.release.tag_name }} getArtifactList
+              pushd build/
+              artifact_list=$(<artifact-list)
+              echo "artifact_list=$artifact_list" >> $GITHUB_OUTPUT;
+              popd
+            id: build_artifact
+          - name: Publish artifact to maven
+            uses: lynx-infra/maven-publish-action@8f547cf037360752cc9f195d04c2d8f327fee434
             with:
-                token: ${{ secrets.GITHUB_TOKEN }}
-                files: |
-                    out/release/skity-native-${{ github.event.release.tag_name }}.aar
+              portal_api_token: ${{ secrets.PORTAL_API_TOKEN }}
+              artifact_path_list: ${{ steps.build_artifact.outputs.artifact_list }}
 
     build-xcframework:
         runs-on: lynx-darwin-14-medium
