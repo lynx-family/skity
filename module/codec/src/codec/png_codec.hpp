@@ -19,6 +19,11 @@ class PNGCodec : public Codec {
   std::shared_ptr<MultiFrameDecoder> DecodeMultiFrame() override;
   std::shared_ptr<Data> Encode(const Pixmap* pixmap) override;
   bool RecognizeFileType(const char* header, size_t size) override;
+
+ protected:
+  std::shared_ptr<Codec> Fork() override {
+    return std::make_shared<PNGCodec>();
+  }
 };
 
 }  // namespace skity

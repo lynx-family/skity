@@ -24,6 +24,11 @@ class GIFCodec : public Codec {
 
   bool RecognizeFileType(const char* header, size_t size) override;
 
+ protected:
+  std::shared_ptr<Codec> Fork() override {
+    return std::make_shared<GIFCodec>();
+  }
+
  private:
   void CreateWuffsDecoderIfNeed();
 

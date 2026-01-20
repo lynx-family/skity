@@ -198,6 +198,9 @@ class CodecApple : public Codec {
     return true;
   }
 
+ protected:
+  std::shared_ptr<Codec> Fork() override { return std::make_shared<CodecApple>(type_); }
+
  private:
   TargetImageType type_;
   NSData* ns_data_ = nil;
