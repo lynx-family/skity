@@ -27,6 +27,11 @@ class WEBPCodec : public Codec {
 
   std::shared_ptr<MultiFrameDecoder> DecodeMultiFrame() override;
 
+ protected:
+  std::shared_ptr<Codec> Fork() override {
+    return std::make_shared<WEBPCodec>();
+  }
+
  private:
   void CreateDecoderIfNeed();
 

@@ -403,6 +403,20 @@ class SKITY_EXPERIMENTAL_API Codec {
  protected:
   std::shared_ptr<Data> data_;
 
+  /**
+   * Fork a new codec instance.
+   * The current API deocde the image from SetData() which is not thread safe.
+   * To support multi-thread decode, this method will create a new codec
+   * instance with the same codec implementation.
+   *
+   * @note In the next major version, this method will be removed. And the
+   * Decode() method will accept a Data object instread of using a blob data
+   * from SetData().
+   *
+   * @return The new codec instance.
+   */
+  virtual std::shared_ptr<Codec> Fork() = 0;
+
  private:
   static void SetupCodecs();
 };

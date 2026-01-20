@@ -37,7 +37,7 @@ std::shared_ptr<Codec> Codec::MakeFromData(const std::shared_ptr<Data>& data) {
 
   for (auto const& codec : codec_list) {
     if (codec->RecognizeFileType(header, data->Size())) {
-      return codec;
+      return codec->Fork();
     }
   }
 
