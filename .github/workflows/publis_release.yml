@@ -1,5 +1,8 @@
 name: publish release
 
+permissions:
+  contents: write
+
 on:
     release:
         types: [created]
@@ -45,16 +48,19 @@ jobs:
               artifact_path_list: ${{ steps.build_artifact.outputs.artifact_list }}
 
     build-xcframework:
-        runs-on: lynx-darwin-14-medium
+        runs-on: macos-14
         steps:
           - name: Download Source
             uses: actions/checkout@v4.2.2
           - name: Sync Dependencies
             run: |
                 ./tools/hab sync -f
-          - name: Setup cmake
-            run: |
-                brew install cmake
+          - name: Setup ruby
+            uses: ruby/setup-ruby@v1
+            with:
+                ruby-version: '3.0'
+                bundler-cache: true
+                working-directory: platform/darwin
           - name: Generate XCFramework
             run: |
                 TAG_NAME=${{ github.event.release.tag_name }}
@@ -79,3 +85,8 @@ jobs:
                 files: |
                     out/release/skity.framework-${{ github.event.release.tag_name }}.zip
                     out/skity.podspec
+          - name: Upload Podspec to Release
+            working-directory: platform/darwin
+            run: |
+              SKITY_PODSPEC_TOKEN=${{ secrets.REPO_SKITY_COCOAPODS_TRUNK_TOKEN }}
+              COCOAPODS_TRUNK_TOKEN=$SKITY_PODSPEC_TOKEN bundle exec pod trunk push $GITHUB_WORKSPACE/out/skity.podspec --allow-warnings --verbose
