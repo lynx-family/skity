@@ -134,11 +134,25 @@ void Canvas::ClipRect(const Rect &rect, ClipOp op) {
   this->OnClipRect(rect, op);
 }
 
+void Canvas::ClipRRect(const RRect &rrect, ClipOp op) {
+  if (tracing_canvas_state_) {
+    CalculateGlobalClipBounds(rrect.GetBounds(), op);
+  }
+  this->OnClipRRect(rrect, op);
+}
+
 void Canvas::OnClipRect(const Rect &rect, ClipOp op) {
   Path path;
   path.AddRect(rect);
   path.SetConvexityType(Path::ConvexityType::kConvex);
 
+  this->OnClipPath(path, op);
+}
+
+void Canvas::OnClipRRect(const RRect &rrect, ClipOp op) {
+  Path path;
+  path.AddRRect(rrect);
+  path.SetConvexityType(Path::ConvexityType::kConvex);
   this->OnClipPath(path, op);
 }
 

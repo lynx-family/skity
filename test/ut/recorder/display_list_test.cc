@@ -14,6 +14,9 @@ class MockCanvas : public skity::Canvas {
  public:
   MOCK_METHOD(void, OnClipRect,
               (skity::Rect const& rect, skity::Canvas::ClipOp op), (override));
+  MOCK_METHOD(void, OnClipRRect,
+              (skity::RRect const& rrect, skity::Canvas::ClipOp op),
+              (override));
   MOCK_METHOD(void, OnClipPath,
               (skity::Path const& path, skity::Canvas::ClipOp op), (override));
 
@@ -250,6 +253,43 @@ TEST(DisplayList, ClipRect) {
     MockCanvas mock_canvas;
     EXPECT_CALL(mock_canvas, OnClipRect(skity::Rect::MakeLTRB(0, 0, 100, 100),
                                         skity::Canvas::ClipOp::kDifference))
+        .Times(1);
+    display_list->Draw(&mock_canvas);
+  }
+}
+
+TEST(DisplayList, ClipRRect) {
+  {
+    skity::PictureRecorder recorder;
+    recorder.BeginRecording();
+    auto canvas = recorder.GetRecordingCanvas();
+
+    canvas->ClipRRect(
+        skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(0, 0, 100, 100), 10, 10),
+        skity::Canvas::ClipOp::kIntersect);
+    auto display_list = recorder.FinishRecording();
+    MockCanvas mock_canvas;
+    EXPECT_CALL(mock_canvas,
+                OnClipRRect(skity::RRect::MakeRectXY(
+                                skity::Rect::MakeLTRB(0, 0, 100, 100), 10, 10),
+                            skity::Canvas::ClipOp::kIntersect))
+        .Times(1);
+    display_list->Draw(&mock_canvas);
+  }
+  {
+    skity::PictureRecorder recorder;
+    recorder.BeginRecording();
+    auto canvas = recorder.GetRecordingCanvas();
+
+    canvas->ClipRRect(
+        skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(0, 0, 100, 100), 10, 10),
+        skity::Canvas::ClipOp::kDifference);
+    auto display_list = recorder.FinishRecording();
+    MockCanvas mock_canvas;
+    EXPECT_CALL(mock_canvas,
+                OnClipRRect(skity::RRect::MakeRectXY(
+                                skity::Rect::MakeLTRB(0, 0, 100, 100), 10, 10),
+                            skity::Canvas::ClipOp::kDifference))
         .Times(1);
     display_list->Draw(&mock_canvas);
   }

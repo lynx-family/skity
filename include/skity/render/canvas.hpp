@@ -137,6 +137,20 @@ class SKITY_API Canvas {
    */
   void ClipRect(Rect const& rect, ClipOp op = ClipOp::kIntersect);
 
+  /**
+   * Replaces clip with the intersection or difference of clip and rrect
+   *
+   * @param rrect RRect to combine with clip
+   * @param op    ClipOp to apply to clip
+   */
+  void ClipRRect(RRect const& rrect, ClipOp op = ClipOp::kIntersect);
+
+  /**
+   * Replaces clip with the intersection or difference of clip and path
+   *
+   * @param path  Path to combine with clip
+   * @param op    ClipOp to apply to clip
+   */
   void ClipPath(Path const& path, ClipOp op = ClipOp::kIntersect);
 
   /**
@@ -342,6 +356,9 @@ class SKITY_API Canvas {
  protected:
   // default implement dispatch this to OnClipPath
   virtual void OnClipRect(Rect const& rect, ClipOp op);
+
+  virtual void OnClipRRect(RRect const& rrect, ClipOp op);
+
   virtual void OnClipPath(Path const& path, ClipOp op) = 0;
 
   // default implement dispatch this to OnDrawPath
