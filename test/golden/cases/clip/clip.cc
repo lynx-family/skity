@@ -140,3 +140,43 @@ TEST(ClipGolden, ClipPathDifference) {
       skity::testing::PathList{.cpu_tess_path = golden_path.c_str(),
                                .gpu_tess_path = golden_path.c_str()}));
 }
+
+TEST(ClipGolden, ClipRRect) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(400.f, 400.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  skity::RRect clip_rrect = skity::RRect::MakeRectXY(
+      skity::Rect::MakeXYWH(20.f, 20.f, 175.f, 375.f), 40.f, 40.f);
+  canvas->ClipRRect(clip_rrect);
+
+  skity::Paint paint;
+  paint.SetColor(skity::Color_BLUE);
+  canvas->DrawPaint(paint);
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append("clip_rrect.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400.f, 400.f,
+                                                   golden_path.c_str()));
+}
+
+TEST(ClipGolden, ClipRRectDifference) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(400.f, 400.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  skity::RRect clip_rrect = skity::RRect::MakeRectXY(
+      skity::Rect::MakeXYWH(20.f, 20.f, 175.f, 375.f), 40.f, 40.f);
+  canvas->ClipRRect(clip_rrect, skity::Canvas::ClipOp::kDifference);
+
+  skity::Paint paint;
+  paint.SetColor(skity::Color_BLUE);
+  canvas->DrawPaint(paint);
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append("clip_rrect_difference.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400.f, 400.f,
+                                                   golden_path.c_str()));
+}

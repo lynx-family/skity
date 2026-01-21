@@ -31,6 +31,7 @@ class SKITY_API RecordingCanvas : public Canvas {
 
  protected:
   void OnClipRect(Rect const& rect, ClipOp op) override;
+  void OnClipRRect(RRect const& rrect, ClipOp op) override;
   void OnClipPath(Path const& path, ClipOp op) override;
   void OnDrawRect(Rect const& rect, Paint const& paint) override;
   void OnDrawRRect(RRect const& rrect, Paint const& paint) override;

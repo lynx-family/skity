@@ -77,6 +77,10 @@ void RecordingCanvas::OnClipRect(Rect const& rect, ClipOp op) {
   Push<ClipRectOp>(rect, op);
 }
 
+void RecordingCanvas::OnClipRRect(RRect const& rrect, ClipOp op) {
+  Push<ClipRRectOp>(rrect, op);
+}
+
 void RecordingCanvas::OnClipPath(Path const& path, ClipOp op) {
   Push<ClipPathOp>(path, op);
 }

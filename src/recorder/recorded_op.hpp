@@ -29,6 +29,7 @@ namespace skity {
   V(SetMatrix)                  \
   V(ResetMatrix)                \
   V(ClipRect)                   \
+  V(ClipRRect)                  \
   V(ClipPath)                   \
   V(DrawLine)                   \
   V(DrawCircle)                 \
@@ -131,6 +132,14 @@ struct ClipRectOp : RecordedOp {
                       Canvas::ClipOp op = Canvas::ClipOp::kIntersect)
       : RecordedOp(RecordedOpType::kClipRect), rect(rect), op(op) {}
   Rect rect;
+  Canvas::ClipOp op;
+};
+
+struct ClipRRectOp : RecordedOp {
+  explicit ClipRRectOp(RRect const& rrect,
+                       Canvas::ClipOp op = Canvas::ClipOp::kIntersect)
+      : RecordedOp(RecordedOpType::kClipRRect), rrect(rrect), op(op) {}
+  RRect rrect;
   Canvas::ClipOp op;
 };
 

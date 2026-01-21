@@ -176,6 +176,10 @@ void DisplayList::Draw(Canvas *canvas) {
         struct ClipRectOp *clipRectOp = static_cast<struct ClipRectOp *>(op);
         canvas->ClipRect(clipRectOp->rect, clipRectOp->op);
       } break;
+      case RecordedOpType::kClipRRect: {
+        struct ClipRRectOp *clipRRectOp = static_cast<struct ClipRRectOp *>(op);
+        canvas->ClipRRect(clipRRectOp->rrect, clipRRectOp->op);
+      } break;
       case RecordedOpType::kClipPath: {
         struct ClipPathOp *clipPathOp = static_cast<struct ClipPathOp *>(op);
         canvas->ClipPath(clipPathOp->path, clipPathOp->op);
