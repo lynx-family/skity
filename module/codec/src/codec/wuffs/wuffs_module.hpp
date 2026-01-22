@@ -9,7 +9,7 @@
 #include <skity/codec/codec.hpp>
 
 #define WUFFS_BASE__HAVE_UNIQUE_PTR  // use std::unique_ptr
-#include "wuffs-v0.4.c"
+#include "wuffs-v0.3.c"              // NOLINT
 
 namespace skity {
 
