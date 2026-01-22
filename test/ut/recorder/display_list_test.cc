@@ -27,6 +27,11 @@ class MockCanvas : public skity::Canvas {
   MOCK_METHOD(void, OnDrawRect,
               (skity::Rect const& rect, skity::Paint const& paint), (override));
 
+  MOCK_METHOD(void, OnDrawDRRect,
+              (skity::RRect const& outer, skity::RRect const& inner,
+               skity::Paint const& paint),
+              (override));
+
   MOCK_METHOD(void, OnDrawPath,
               (skity::Path const& path, skity::Paint const& paint), (override));
 
@@ -293,4 +298,25 @@ TEST(DisplayList, ClipRRect) {
         .Times(1);
     display_list->Draw(&mock_canvas);
   }
+}
+
+TEST(DisplayList, DrawDRRect) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording();
+  auto canvas = recorder.GetRecordingCanvas();
+  skity::Paint paint;
+  canvas->DrawDRRect(
+      skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(0, 0, 100, 100), 10, 10),
+      skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(10, 10, 90, 90), 5, 5),
+      paint);
+  auto display_list = recorder.FinishRecording();
+  MockCanvas mock_canvas;
+  EXPECT_CALL(mock_canvas,
+              OnDrawDRRect(skity::RRect::MakeRectXY(
+                               skity::Rect::MakeLTRB(0, 0, 100, 100), 10, 10),
+                           skity::RRect::MakeRectXY(
+                               skity::Rect::MakeLTRB(10, 10, 90, 90), 5, 5),
+                           paint))
+      .Times(1);
+  display_list->Draw(&mock_canvas);
 }

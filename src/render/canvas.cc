@@ -216,6 +216,24 @@ void Canvas::DrawRoundRect(Rect const &rect, float rx, float ry,
   this->OnDrawRoundRect(rect, rx, ry, paint);
 }
 
+void Canvas::DrawDRRect(RRect const &outer, RRect const &inner,
+                        Paint const &paint) {
+  if (outer.GetBounds().IsEmpty()) {
+    return;
+  }
+
+  if (inner.GetBounds().IsEmpty()) {
+    this->DrawRRect(outer, paint);
+    return;
+  }
+
+  if (!outer.GetBounds().Contains(inner.GetBounds())) {
+    return;
+  }
+
+  this->OnDrawDRRect(outer, inner, paint);
+}
+
 void Canvas::DrawPath(const Path &path, const Paint &paint) {
   this->OnDrawPath(path, paint);
 }
@@ -431,6 +449,15 @@ void Canvas::OnDrawRoundRect(Rect const &rect, float rx, float ry,
   } else {
     this->DrawRect(rect, paint);
   }
+}
+
+void Canvas::OnDrawDRRect(RRect const &outer, RRect const &inner,
+                          Paint const &paint) {
+  Path path;
+  path.AddRRect(outer);
+  path.AddRRect(inner);
+  path.SetFillType(Path::PathFillType::kEvenOdd);
+  this->DrawPath(path, paint);
 }
 
 bool Canvas::NeedGlyphPath(Paint const &paint) {
