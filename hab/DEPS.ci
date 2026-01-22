@@ -5,6 +5,9 @@ system = platform.system().lower()
 machine = platform.machine().lower()
 machine = "x86_64" if machine == "amd64" else machine
 
+cmake_win_url = "https://github.com/Kitware/CMake/releases/download/v4.1.0/cmake-4.1.0-windows-x86_64.zip"
+cmake_mac_url = "https://github.com/Kitware/CMake/releases/download/v4.1.0/cmake-4.1.0-macos-universal.tar.gz"
+
 deps = {
    'buildtools/llvm': {
         "type": "http",
@@ -15,10 +18,10 @@ deps = {
     },
     'buildtools/cmake': {
         "type": "http",
-        "url" : "https://github.com/Kitware/CMake/releases/download/v4.1.0/cmake-4.1.0-windows-x86_64.zip",
+        "url" : cmake_win_url if system == 'windows' else cmake_mac_url,
         "ignore_in_git": True,
         "decompress": True,
-        "condition": system in ['windows'],
+        "condition": system in ['windows', 'darwin'],
     },
     'buildtools/ninja': {
         "type": "http",
