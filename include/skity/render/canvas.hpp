@@ -238,6 +238,17 @@ class SKITY_API Canvas {
    */
   void DrawRoundRect(Rect const& rect, float rx, float ry, Paint const& paint);
 
+  /**
+   * Draws the difference between two RRects (outer minus inner) using clip,
+   * Matrix, and Paint paint. This creates a ring or frame shape with rounded
+   * corners.
+   *
+   * @param outer  outer RRect bounds of the ring to draw
+   * @param inner  inner RRect bounds that are subtracted (the hole)
+   * @param paint  Paint stroke or fill, blend, color, and so on, used to draw
+   */
+  void DrawDRRect(RRect const& outer, RRect const& inner, Paint const& paint);
+
   void DrawPath(Path const& path, Paint const& paint);
 
   /**
@@ -376,6 +387,9 @@ class SKITY_API Canvas {
   // default implement dispatch this to OnDrawPath
   virtual void OnDrawRoundRect(Rect const& rect, float rx, float ry,
                                Paint const& paint);
+  // default implement dispatch this to OnDrawPath
+  virtual void OnDrawDRRect(RRect const& outer, RRect const& inner,
+                            Paint const& paint);
 
   virtual void OnDrawPath(Path const& path, Paint const& paint) = 0;
 

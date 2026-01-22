@@ -413,3 +413,42 @@ TEST(SimpleShapeGolden, DrawYinAndYang) {
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400, 400,
                                                    context.ToPathList()));
 }
+
+TEST(SimpleShapeGolden, DrawDRRect) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(240.f, 240.f));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Clear(skity::Color_WHITE);
+  skity::RRect outer = skity::RRect::MakeRect({20, 40, 210, 200});
+  skity::RRect inner = skity::RRect::MakeOval({60, 70, 170, 160});
+  skity::Paint paint;
+  paint.SetColor(skity::Color_GREEN);
+  canvas->DrawDRRect(outer, inner, paint);
+  auto dl = recorder.FinishRecording();
+  PathListContext context("draw_drrect.png");
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 240, 240,
+                                                   context.ToPathList()));
+}
+
+TEST(SimpleShapeGolden, DrawDRRect2) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(240.f, 240.f));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Clear(skity::Color_WHITE);
+  skity::RRect outer = skity::RRect::MakeRect({20, 40, 210, 200});
+  skity::RRect inner = skity::RRect::MakeRectXY({60, 70, 170, 160}, 10, 10);
+  skity::Paint paint;
+  paint.SetColor(skity::Color_GREEN);
+  paint.SetStyle(skity::Paint::kStroke_Style);
+  paint.SetStrokeWidth(20);
+  paint.SetStrokeJoin(skity::Paint::Join::kRound_Join);
+  canvas->DrawDRRect(outer, inner, paint);
+  paint.SetStrokeWidth(3);
+  paint.SetColor(skity::Color_WHITE);
+  canvas->DrawDRRect(outer, inner, paint);
+
+  auto dl = recorder.FinishRecording();
+  PathListContext context("draw_drrect2.png");
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 240, 240,
+                                                   context.ToPathList()));
+}

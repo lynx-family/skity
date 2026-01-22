@@ -35,6 +35,8 @@ class SKITY_API RecordingCanvas : public Canvas {
   void OnClipPath(Path const& path, ClipOp op) override;
   void OnDrawRect(Rect const& rect, Paint const& paint) override;
   void OnDrawRRect(RRect const& rrect, Paint const& paint) override;
+  void OnDrawDRRect(RRect const& outer, RRect const& inner,
+                    Paint const& paint) override;
   void OnDrawPath(Path const& path, Paint const& paint) override;
   void OnSaveLayer(const Rect& bounds, const Paint& paint) override;
   void OnDrawBlob(const TextBlob* blob, float x, float y,

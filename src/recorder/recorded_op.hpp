@@ -38,6 +38,7 @@ namespace skity {
   V(DrawRect)                   \
   V(DrawRRect)                  \
   V(DrawRoundRect)              \
+  V(DrawDRRect)                 \
   V(DrawPath)                   \
   V(DrawPaint)                  \
   V(SaveLayer)                  \
@@ -226,6 +227,17 @@ struct DrawRoundRectOp : RecordedOp {
   Rect rect;
   float rx;
   float ry;
+  Paint paint;
+};
+
+struct DrawDRRectOp : RecordedOp {
+  DrawDRRectOp(RRect const& outer, RRect const& inner, Paint const& paint)
+      : RecordedOp(RecordedOpType::kDrawDRRect),
+        outer(outer),
+        inner(inner),
+        paint(paint) {}
+  RRect outer;
+  RRect inner;
   Paint paint;
 };
 

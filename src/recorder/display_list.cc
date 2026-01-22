@@ -219,6 +219,12 @@ void DisplayList::Draw(Canvas *canvas) {
         canvas->DrawRoundRect(drawRoundRectOp->rect, drawRoundRectOp->rx,
                               drawRoundRectOp->ry, drawRoundRectOp->paint);
       } break;
+      case RecordedOpType::kDrawDRRect: {
+        struct DrawDRRectOp *drawDRRectOp =
+            static_cast<struct DrawDRRectOp *>(op);
+        canvas->DrawDRRect(drawDRRectOp->outer, drawDRRectOp->inner,
+                           drawDRRectOp->paint);
+      } break;
       case RecordedOpType::kDrawPath: {
         struct DrawPathOp *drawPathOp = static_cast<struct DrawPathOp *>(op);
         canvas->DrawPath(drawPathOp->path, drawPathOp->paint);
