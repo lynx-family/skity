@@ -11,7 +11,6 @@
 #include <memory>
 
 #include "src/gpu/gpu_render_pass.hpp"
-#include "src/gpu/mtl/formats_mtl.h"
 #include "src/gpu/mtl/gpu_blit_pass_mtl.h"
 #include "src/gpu/mtl/gpu_render_pass_mtl.h"
 #include "src/logging.hpp"
@@ -20,9 +19,7 @@ namespace skity {
 
 std::shared_ptr<GPURenderPass> GPUCommandBufferMTL::BeginRenderPass(
     const GPURenderPassDescriptor& desc) {
-  id<MTLRenderCommandEncoder> encoder =
-      [mtl_command_buffer_ renderCommandEncoderWithDescriptor:ToMTLRenderPassDescriptor(desc)];
-  return std::make_shared<GPURenderPassMTL>(encoder, desc, /*auto_end_encoding=*/true);
+  return std::make_shared<GPURenderPassMTL>(mtl_command_buffer_, desc);
 }
 
 std::shared_ptr<GPUBlitPass> GPUCommandBufferMTL::BeginBlitPass() {
