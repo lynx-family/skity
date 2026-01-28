@@ -113,6 +113,8 @@ class ReadBuffer {
   std::shared_ptr<ImageFilter> ReadImageFilter();
   std::shared_ptr<ColorFilter> ReadColorFilter();
 
+  void SkipBlender();
+
   std::shared_ptr<Typeface> ReadTypeface();
 
   template <typename T>
