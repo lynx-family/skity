@@ -56,12 +56,9 @@ class GPURenderPassMTL : public GPURenderPass {
   };
 
  public:
-  GPURenderPassMTL(id<MTLRenderCommandEncoder> encoder,
-                   const GPURenderPassDescriptor& desc,
-                   bool auto_end_encoding = false)
-      : GPURenderPass(desc),
-        encoder_(encoder),
-        auto_end_encoding_(auto_end_encoding) {}
+  GPURenderPassMTL(id<MTLCommandBuffer> cmd,
+                   const GPURenderPassDescriptor& desc)
+      : GPURenderPass(desc), cmd_buffer_(cmd), encoder_() {}
 
   void EncodeCommands(std::optional<GPUViewport> viewport,
                       std::optional<GPUScissorRect> scissor) override;
@@ -84,8 +81,9 @@ class GPURenderPassMTL : public GPURenderPass {
   void SetSamplerBindings(BindingsCache& cache,
                           const ArrayList<SamplerBinding, 4>& bindings);
 
+ private:
+  id<MTLCommandBuffer> cmd_buffer_;
   id<MTLRenderCommandEncoder> encoder_;
-  bool auto_end_encoding_;
 };
 
 }  // namespace skity

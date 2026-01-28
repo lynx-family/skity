@@ -11,6 +11,7 @@
 #include "src/gpu/gpu_render_pass.hpp"
 #include "src/gpu/gpu_sampler.hpp"
 #include "src/gpu/gpu_shader_function.hpp"
+#include "src/gpu/mtl/formats_mtl.h"
 #include "src/gpu/mtl/gpu_buffer_mtl.h"
 #include "src/gpu/mtl/gpu_render_pipeline_mtl.h"
 #include "src/gpu/mtl/gpu_sampler_mtl.h"
@@ -109,6 +110,8 @@ void GPURenderPassMTL::BindingsCache::SetSampler(GPUShaderStage stage, uint64_t 
 
 void GPURenderPassMTL::EncodeCommands(std::optional<GPUViewport> viewport,
                                       std::optional<GPUScissorRect> scissor) {
+  encoder_ =
+      [cmd_buffer_ renderCommandEncoderWithDescriptor:ToMTLRenderPassDescriptor(GetDescriptor())];
   BindingsCache cache(encoder_);
   auto target_width = GetDescriptor().GetTargetWidth();
   auto target_height = GetDescriptor().GetTargetHeight();
@@ -188,9 +191,7 @@ void GPURenderPassMTL::EncodeCommands(std::optional<GPUViewport> viewport,
     }
   }
 
-  if (auto_end_encoding_) {
-    [encoder_ endEncoding];
-  }
+  [encoder_ endEncoding];
 }
 
 void GPURenderPassMTL::SetUniformBindings(BindingsCache& cache,
