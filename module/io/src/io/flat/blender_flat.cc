@@ -4,6 +4,7 @@
 
 #include "src/io/flat/blender_flat.hpp"
 
+#include "src/io/memory_read.hpp"
 #include "src/picture_priv.hpp"
 
 namespace skity {
@@ -45,6 +46,26 @@ void SkipRuntimeBlender(ReadBuffer& buffer) {
 }
 
 }  // namespace
+
+std::shared_ptr<Flattenable> SkipBlenderFromMemory(const std::string& factory,
+                                                   ReadBuffer& buffer) {
+  if (factory == "SkBlendModeBlender") {
+    SkipBlendModeBlender(buffer);
+  } else if (factory == "SkRuntimeBlender") {
+    SkipRuntimeBlender(buffer);
+  }
+
+  return {};
+}
+
+FactoryProc GetBlenderFactoryProc(const std::string& factory_name) {
+  if (factory_name == "SkBlendModeBlender" ||
+      factory_name == "SkRuntimeBlender") {
+    return SkipBlenderFromMemory;
+  }
+
+  return nullptr;
+}
 
 void BlenderModeFlattenable::SkipReadBlender(ReadBuffer& buffer) {
   auto factory_index = buffer.ReadInt();

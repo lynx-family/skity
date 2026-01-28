@@ -7,6 +7,7 @@
 #include <skity/codec/codec.hpp>
 #include <skity/io/picture.hpp>
 
+#include "src/io/flat/blender_flat.hpp"
 #include "src/io/memory_writer.hpp"
 #include "src/picture_priv.hpp"
 
@@ -17,6 +18,7 @@ FactoryProc GetPathEffectFactoryProc(const std::string& factory_name);
 FactoryProc GetMaskFilterFactoryProc(const std::string& factory_name);
 FactoryProc GetColorFilterFactoryProc(const std::string& factory_name);
 FactoryProc GetImageFilterFactoryProc(const std::string& factory_name);
+FactoryProc GetBlenderFactoryProc(const std::string& factory_name);
 
 namespace {
 FactoryProc factory_to_proc(const std::string& factory_name) {
@@ -39,6 +41,10 @@ FactoryProc factory_to_proc(const std::string& factory_name) {
   }
 
   if ((proc = GetImageFilterFactoryProc(factory_name)) != nullptr) {
+    return proc;
+  }
+
+  if ((proc = GetBlenderFactoryProc(factory_name)) != nullptr) {
     return proc;
   }
 
@@ -281,7 +287,7 @@ std::shared_ptr<Flattenable> ReadBuffer::ReadRawFlattenable() {
         return {};
       }
 
-      factory_name = GetFactoryName(index);
+      factory_name = GetFactoryName(index - 1);
     }
 
     if (factory_name.empty()) {
@@ -426,6 +432,10 @@ std::shared_ptr<ImageFilter> ReadBuffer::ReadImageFilter() {
 
 std::shared_ptr<ColorFilter> ReadBuffer::ReadColorFilter() {
   return ReadFlattenable<ColorFilter>();
+}
+
+void ReadBuffer::SkipBlender() {
+  (void)ReadFlattenable<BlenderModeFlattenable>();
 }
 
 std::shared_ptr<Typeface> ReadBuffer::ReadTypeface() {

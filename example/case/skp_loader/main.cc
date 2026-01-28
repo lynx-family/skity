@@ -47,8 +47,8 @@ class SKPLoaderExample : public example::WindowClient {
 
     auto origin = std::max(bounds.Width(), bounds.Height());
 
-    if (origin > 1200) {
-      scale_x_ = scale_y_ = 1200 / origin;
+    if (origin > 1100) {
+      scale_x_ = scale_y_ = 1100 / origin;
     }
 
     cull_rect_ = bounds;

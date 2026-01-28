@@ -179,7 +179,8 @@ std::optional<Paint> ReadFromMemory(ReadBuffer& buffer) {
     paint.SetColorFilter(buffer.ReadColorFilter());
     paint.SetImageFilter(buffer.ReadImageFilter());
 
-    BlenderModeFlattenable::SkipReadBlender(buffer);
+    // BlenderModeFlattenable::SkipReadBlender(buffer);
+    buffer.SkipBlender();
   }
 
   if (!buffer.IsValid()) {
