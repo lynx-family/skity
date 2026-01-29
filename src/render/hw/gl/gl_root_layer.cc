@@ -24,10 +24,10 @@ GLRootLayer::GLRootLayer(uint32_t width, uint32_t height, const Rect &bounds,
     : HWRootLayer(width, height, bounds, GPUTextureFormat::kRGBA8Unorm),
       vao_(vao) {}
 
-void GLRootLayer::Draw(GPURenderPass *render_pass) {
+void GLRootLayer::Draw(GPURenderPass *render_pass, GPUCommandBuffer *cmd) {
   BindVAO();
 
-  HWRootLayer::Draw(render_pass);
+  HWRootLayer::Draw(render_pass, cmd);
 }
 
 void GLRootLayer::OnPostDraw(GPURenderPass *render_pass,
@@ -215,7 +215,7 @@ std::shared_ptr<GPURenderPass> GLDrawTextureLayer::OnBeginRenderPass(
   return gpu_render_pass;
 }
 
-void GLDrawTextureLayer::OnPostDraw(GPURenderPass *, GPUCommandBuffer *) {
+void GLDrawTextureLayer::OnPostDraw(GPURenderPass *, GPUCommandBuffer *cmd) {
   if (!layer_back_draw_) {
     return;
   }
@@ -249,7 +249,7 @@ void GLDrawTextureLayer::OnPostDraw(GPURenderPass *, GPUCommandBuffer *) {
 
   GPURenderPassGL fake_render_pass(fake_desc, resolve_fbo_);
 
-  layer_back_draw_->Draw(&fake_render_pass);
+  layer_back_draw_->Draw(&fake_render_pass, cmd);
 
   fake_render_pass.EncodeCommands(
       GetViewport(), GPUScissorRect{0, 0, GetWidth(), GetHeight()});
@@ -310,8 +310,8 @@ HWDrawState GLPartialDrawTextureLayer::OnPrepare(
   return ret;
 }
 
-void GLPartialDrawTextureLayer::OnPostDraw(skity::GPURenderPass *render_pass,
-                                           skity::GPUCommandBuffer *cmd) {
+void GLPartialDrawTextureLayer::OnPostDraw(GPURenderPass *render_pass,
+                                           GPUCommandBuffer *cmd) {
   if (!layer_back_draw_) {
     return;
   }
@@ -347,7 +347,7 @@ void GLPartialDrawTextureLayer::OnPostDraw(skity::GPURenderPass *render_pass,
 
   GPURenderPassGL fake_render_pass(fake_desc, resolve_fbo_);
 
-  layer_back_draw_->Draw(&fake_render_pass);
+  layer_back_draw_->Draw(&fake_render_pass, cmd);
 
   GPUViewport viewport{0.f,
                        0.f,

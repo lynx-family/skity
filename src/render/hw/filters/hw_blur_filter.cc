@@ -10,10 +10,8 @@
 
 namespace skity {
 
-HWFilterOutput HWBlurFilter::DoFilter(const HWFilterContext &context,
-                                      GPUCommandBuffer *command_buffer) {
-  auto draw_context = context.draw_context;
-  auto child_output = GetChildOutput(0, context, command_buffer);
+HWFilterOutput HWBlurFilter::Prepare(const HWFilterContext &context) {
+  auto child_output = GetChildOutput(0, context);
 
   Vec2 input_texture_size = Vec2{child_output.texture->GetDescriptor().width,
                                  child_output.texture->GetDescriptor().height};
@@ -27,15 +25,18 @@ HWFilterOutput HWBlurFilter::DoFilter(const HWFilterContext &context,
   auto uv_scale = Vec2{1} / (Vec2{1} - 2.0f * alpha);
   // offset = -a / (1 - 2 * a)
   auto uv_offset = -alpha / (Vec2{1} - 2.0f * alpha);
-  Command *command = draw_context->arena_allocator->Make<Command>();
 
-  auto render_pass =
-      command_buffer->BeginRenderPass(CreateRenderPassDesc(output_texture));
   float radius =
       transformed_radius.x > 0 ? transformed_radius.x : transformed_radius.y;
 
-  PrepareWGXCMD(command, draw_context, input_texture, output_texture,
+  SetOutputTexture(output_texture);
+
+  auto cmd = context.draw_context->arena_allocator->Make<Command>();
+
+  PrepareWGXCMD(cmd, context.draw_context, input_texture, output_texture,
                 direction_, radius, uv_scale, uv_offset);
+
+  AddCommand(cmd);
 
   Vec2 expand = direction_ * radius_;
   auto layer_bounds =
@@ -43,9 +44,6 @@ HWFilterOutput HWBlurFilter::DoFilter(const HWFilterContext &context,
                      child_output.layer_bounds.Top() - expand.y,
                      child_output.layer_bounds.Right() + expand.x,
                      child_output.layer_bounds.Bottom() + expand.y);
-
-  render_pass->AddCommand(command);
-  render_pass->EncodeCommands();
 
   return HWFilterOutput{
       output_texture,

@@ -11,9 +11,27 @@
 #include "src/render/hw/draw/step/color_step.hpp"
 
 namespace skity {
-HWFilterOutput HWFilter::Filter(HWFilterContext& context) {
-  auto result = DoFilter(context, context.command_buffer.get());
-  return result;
+
+void HWFilter::Filter(GPUCommandBuffer* command_buffer) {
+  for (auto& child : inputs_) {
+    if (child) {
+      child->Filter(command_buffer);
+    }
+  }
+
+  if (!output_texture_ || commands_.empty()) {
+    return;
+  }
+
+  auto desc = CreateRenderPassDesc(output_texture_);
+
+  auto render_pass = command_buffer->BeginRenderPass(desc);
+
+  for (auto& command : commands_) {
+    render_pass->AddCommand(command);
+  }
+
+  render_pass->EncodeCommands();
 }
 
 std::shared_ptr<GPUTexture> HWFilter::CreateOutputTexture(
@@ -43,36 +61,36 @@ GPURenderPassDescriptor HWFilter::CreateRenderPassDesc(
 }
 
 HWFilterOutput HWFilter::GetChildOutput(size_t index,
-                                        const HWFilterContext& context,
-                                        GPUCommandBuffer* command_buffer) {
+                                        const HWFilterContext& context) {
   if (inputs_.size() <= index) {
     return context.source;
   }
 
   auto child_filter = inputs_[index];
   if (child_filter) {
-    return child_filter->DoFilter(context, command_buffer);
+    return child_filter->Prepare(context);
   }
   return context.source;
 }
 
 void HWFilter::DrawChildrenOutputs(
-    const HWFilterContext& context, GPURenderPass* render_pass,
+    const HWFilterContext& context, std::vector<Command*>& commands,
     Vec2 output_texture_size, GPUTextureFormat color_format,
     const Rect& layer_bounds,
     const std::vector<HWFilterOutput>& children_outputs) {
-  InternalDrawChildrenOutpusWGX(context, render_pass, output_texture_size,
+  InternalDrawChildrenOutpusWGX(context, commands, output_texture_size,
                                 color_format, layer_bounds, children_outputs);
 }
 
 void HWFilter::InternalDrawChildrenOutpusWGX(
-    const HWFilterContext& context, GPURenderPass* render_pass,
+    const HWFilterContext& context, std::vector<Command*>& commands,
     Vec2 output_texture_size, GPUTextureFormat color_format,
     const Rect& layer_bounds,
     const std::vector<HWFilterOutput>& children_outputs) {
   AutoSetMVP auto_mvp{context.draw_context, layer_bounds};
 
-  for (const auto& output : children_outputs) {
+  for (size_t i = 0; i < children_outputs.size(); i++) {
+    const auto& output = children_outputs[i];
     auto matrix = context.draw_context->mvp * output.matrix;
 
     std::array<Vec2, 4> vertex_pos = {
@@ -114,9 +132,7 @@ void HWFilter::InternalDrawChildrenOutpusWGX(
         context.scale,
     };
 
-    auto cmd = context.draw_context->arena_allocator->Make<Command>();
-    step.GenerateCommand(step_context, cmd, nullptr);
-    render_pass->AddCommand(cmd);
+    step.GenerateCommand(step_context, commands[i], nullptr);
   }
 }
 

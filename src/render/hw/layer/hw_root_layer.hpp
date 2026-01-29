@@ -6,7 +6,6 @@
 #define SRC_RENDER_HW_LAYER_HW_ROOT_LAYER_HPP
 
 #include "src/render/hw/hw_layer.hpp"
-#include "src/utils/arena_allocator.hpp"
 
 namespace skity {
 

@@ -6,9 +6,8 @@
 
 namespace skity {
 
-HWFilterOutput HWMatrixFilter::DoFilter(const HWFilterContext& context,
-                                        GPUCommandBuffer* command_buffer) {
-  auto child_output = GetChildOutput(0, context, command_buffer);
+HWFilterOutput HWMatrixFilter::Prepare(const HWFilterContext& context) {
+  auto child_output = GetChildOutput(0, context);
   Rect layer_bounds;
   matrix_.MapRect(&layer_bounds, child_output.layer_bounds);
 
@@ -17,14 +16,19 @@ HWFilterOutput HWMatrixFilter::DoFilter(const HWFilterContext& context,
   auto color_format = child_output.texture->GetDescriptor().format;
   auto output_texture =
       CreateOutputTexture(color_format, output_texture_size, context);
-  auto render_pass_desc = CreateRenderPassDesc(output_texture);
-  auto render_pass = command_buffer->BeginRenderPass(render_pass_desc);
+
+  SetOutputTexture(output_texture);
+
+  auto cmd = context.draw_context->arena_allocator->Make<Command>();
+
+  std::vector<Command*> commands = {cmd};
 
   child_output.matrix = matrix_;
-  DrawChildrenOutputs(context, render_pass.get(), output_texture_size,
-                      color_format, layer_bounds, std::vector{child_output});
+  DrawChildrenOutputs(context, commands, output_texture_size, color_format,
+                      layer_bounds, std::vector{child_output});
 
-  render_pass->EncodeCommands();
+  AddCommand(cmd);
+
   return HWFilterOutput{
       output_texture,
       layer_bounds,

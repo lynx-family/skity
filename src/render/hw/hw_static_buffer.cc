@@ -22,9 +22,9 @@ HWStaticBuffer::HWStaticBuffer(GPUDevice* device)
 
 HWStaticBuffer::~HWStaticBuffer() = default;
 
-void HWStaticBuffer::Flush() {
+void HWStaticBuffer::Flush(GPUCommandBuffer* command_buffer) {
   if (needs_flush_) {
-    stage_buffer_->Flush();
+    stage_buffer_->Flush(command_buffer);
   }
   needs_flush_ = false;
 }

@@ -10,11 +10,11 @@
 #include "src/render/hw/draw/wgx_filter.hpp"
 
 namespace skity {
-HWFilterOutput HWColorFilter::DoFilter(const HWFilterContext &context,
-                                       GPUCommandBuffer *command_buffer) {
+
+HWFilterOutput HWColorFilter::Prepare(const HWFilterContext &context) {
   auto draw_context = context.draw_context;
 
-  auto child_output = GetChildOutput(0, context, command_buffer);
+  auto child_output = GetChildOutput(0, context);
 
   Vec2 input_texture_size = Vec2{child_output.texture->GetDescriptor().width,
                                  child_output.texture->GetDescriptor().height};
@@ -24,15 +24,13 @@ HWFilterOutput HWColorFilter::DoFilter(const HWFilterContext &context,
   auto output_texture = CreateOutputTexture(
       input_texture->GetDescriptor().format, output_texture_size, context);
 
-  Command *command = context.draw_context->arena_allocator->Make<Command>();
+  SetOutputTexture(output_texture);
 
-  auto render_pass =
-      command_buffer->BeginRenderPass(CreateRenderPassDesc(output_texture));
+  auto cmd = context.draw_context->arena_allocator->Make<Command>();
 
-  PrepareCMD(draw_context, command, input_texture);
+  PrepareCMD(draw_context, cmd, input_texture);
 
-  render_pass->AddCommand(command);
-  render_pass->EncodeCommands();
+  AddCommand(cmd);
 
   return HWFilterOutput{
       output_texture,

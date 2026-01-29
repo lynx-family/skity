@@ -5,6 +5,7 @@
 #ifndef SRC_RENDER_HW_FILTERS_HW_MATRIX_FILTER_HPP
 #define SRC_RENDER_HW_FILTERS_HW_MATRIX_FILTER_HPP
 
+#include "src/gpu/gpu_render_pass.hpp"
 #include "src/render/hw/filters/hw_filter.hpp"
 
 namespace skity {
@@ -13,8 +14,7 @@ class HWMatrixFilter : public HWFilter {
   HWMatrixFilter(const Matrix& matrix, std::shared_ptr<HWFilter> inputs)
       : HWFilter({inputs}), matrix_(matrix) {}
 
-  HWFilterOutput DoFilter(const HWFilterContext& context,
-                          GPUCommandBuffer* command_buffer) override;
+  HWFilterOutput Prepare(const HWFilterContext& context) override;
 
  private:
   Matrix matrix_;

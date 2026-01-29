@@ -31,7 +31,6 @@ struct HWFilterContext {
   GPUContextImpl* gpu_context;
   HWDrawContext* draw_context;
   HWFilterOutput source;
-  std::shared_ptr<GPUCommandBuffer> command_buffer;
   Vec2 scale;
 };
 
@@ -54,9 +53,13 @@ class AutoSetMVP {
 class HWFilter {
  public:
   explicit HWFilter(std::vector<std::shared_ptr<HWFilter>> inputs)
-      : inputs_(std::move(inputs)) {}
+      : inputs_(std::move(inputs)) {
+    commands_.reserve(2);
+  }
 
-  HWFilterOutput Filter(HWFilterContext& context);
+  virtual HWFilterOutput Prepare(const HWFilterContext& context) = 0;
+
+  void Filter(GPUCommandBuffer* command_buffer);
 
   virtual ~HWFilter() = default;
 
@@ -69,28 +72,37 @@ class HWFilter {
       std::shared_ptr<GPUTexture> output_texture);
 
   void DrawChildrenOutputs(const HWFilterContext& context,
-                           GPURenderPass* render_pass, Vec2 output_texture_size,
+                           std::vector<Command*>& commands,
+                           Vec2 output_texture_size,
                            GPUTextureFormat color_format,
                            const Rect& layer_bounds,
                            const std::vector<HWFilterOutput>& children_outputs);
 
-  HWFilterOutput GetChildOutput(size_t index, const HWFilterContext& context,
-                                GPUCommandBuffer* command_buffer);
+  HWFilterOutput GetChildOutput(size_t index, const HWFilterContext& context);
 
   size_t GetChildCount() const { return inputs_.size(); }
 
-  virtual HWFilterOutput DoFilter(const HWFilterContext& context,
-                                  GPUCommandBuffer* command_buffer) = 0;
+  void SetOutputTexture(std::shared_ptr<GPUTexture> texture) {
+    output_texture_ = std::move(texture);
+  }
+
+  void AddCommand(Command* command) {
+    commands_.emplace_back(std::move(command));
+  }
 
  private:
   void InternalDrawChildrenOutpusWGX(
-      const HWFilterContext& context, GPURenderPass* render_pass,
+      const HWFilterContext& context, std::vector<Command*>& commands,
       Vec2 output_texture_size, GPUTextureFormat color_format,
       const Rect& layer_bounds,
       const std::vector<HWFilterOutput>& children_outputs);
 
  private:
   std::vector<std::shared_ptr<HWFilter>> inputs_;
+
+  std::shared_ptr<GPUTexture> output_texture_ = {};
+
+  std::vector<Command*> commands_ = {};
 };
 
 }  // namespace skity

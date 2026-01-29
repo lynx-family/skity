@@ -38,7 +38,7 @@ class HWLayer : public HWDraw {
 
   ~HWLayer() override = default;
 
-  void Draw(GPURenderPass* render_pass) override;
+  void Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) override;
 
   HWLayerState* GetState();
 
@@ -91,8 +91,6 @@ class HWLayer : public HWDraw {
 
   virtual void OnPostDraw(GPURenderPass* render_pass,
                           GPUCommandBuffer* cmd) = 0;
-
-  std::shared_ptr<GPUCommandBuffer> CreateCommandBuffer();
 
  protected:
   std::vector<HWDraw*>& GetDrawOps() { return draw_ops_; }

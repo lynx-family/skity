@@ -198,6 +198,37 @@ TEST(ImageFilterGolden, Matrix_translate_50_50) {
                                .gpu_tess_path = expected_image_path.c_str()}));
 }
 
+TEST(ImageFilterGolden, RotateMatrix_10_deg_50_50) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
+  skity::Paint paint;
+  paint.SetStyle(skity::Paint::kFill_Style);
+  paint.SetColor(skity::Color_RED);
+  paint.SetImageFilter(skity::ImageFilters::MatrixTransform(
+      skity::Matrix::RotateRad(skity::FloatDegreesToRadians(10), {100, 100})));
+
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->DrawRect(skity::Rect::MakeXYWH(50, 50, 100, 100), paint);
+
+  {
+    skity::Paint bound_paint;
+    bound_paint.SetStyle(skity::Paint::kStroke_Style);
+    bound_paint.SetColor(skity::Color_CYAN);
+    bound_paint.SetStrokeWidth(1);
+
+    canvas->DrawRect(skity::Rect::MakeXYWH(50, 50, 100, 100), bound_paint);
+  }
+
+  std::filesystem::path expected_image_path(kGoldenTestDir);
+  expected_image_path.append("rotate_matrix_10_deg_50_50.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 200, 200,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
+}
+
 TEST(ImageFilterGolden, ComposeBlurMatrix) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));

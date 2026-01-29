@@ -5,9 +5,6 @@
 #ifndef SRC_RENDER_HW_DRAW_HW_DYNAMIC_DRAW_HPP
 #define SRC_RENDER_HW_DRAW_HW_DYNAMIC_DRAW_HPP
 
-#include <memory>
-#include <vector>
-
 #include "src/render/hw/draw/hw_draw_step.hpp"
 #include "src/render/hw/hw_draw.hpp"
 
@@ -20,7 +17,7 @@ class HWDynamicDraw : public HWDraw {
 
   ~HWDynamicDraw() override = default;
 
-  void Draw(GPURenderPass* render_pass) override {
+  void Draw(GPURenderPass* render_pass, GPUCommandBuffer*) override {
     for (const auto& cmd : commands_) {
       render_pass->AddCommand(cmd);
     }

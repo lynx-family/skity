@@ -113,10 +113,8 @@ GPUBufferView HWStageBuffer::PushIndex(void* data, uint32_t size) {
   };
 }
 
-void HWStageBuffer::Flush() {
-  auto cmd_buffer = gpu_device_->CreateCommandBuffer();
-  cmd_buffer->SetLabel("StageBuffer CommandBuffer");
-  auto blit_pass = cmd_buffer->BeginBlitPass();
+void HWStageBuffer::Flush(GPUCommandBuffer* command_buffer) {
+  auto blit_pass = command_buffer->BeginBlitPass();
   blit_pass->UploadBufferData(gpu_buffer_.get(), stage_buffer_.data(),
                               stage_pos_);
 
@@ -128,7 +126,6 @@ void HWStageBuffer::Flush() {
   }
 
   blit_pass->End();
-  cmd_buffer->Submit();
 
   stage_pos_ = 0;
   stage_index_pos_ = 0;

@@ -5,7 +5,6 @@
 #ifndef SRC_RENDER_HW_DRAW_HW_DRAW_STEP_HPP
 #define SRC_RENDER_HW_DRAW_HW_DRAW_STEP_HPP
 
-#include <memory>
 #include <skity/graphic/blend_mode.hpp>
 
 #include "src/logging.hpp"

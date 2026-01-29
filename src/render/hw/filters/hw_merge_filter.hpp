@@ -15,8 +15,7 @@ class HWMergeFilter : public HWFilter {
   explicit HWMergeFilter(std::vector<std::shared_ptr<HWFilter>> inputs)
       : HWFilter(std::move(inputs)) {}
 
-  HWFilterOutput DoFilter(const HWFilterContext& context,
-                          GPUCommandBuffer* command_buffer) override;
+  HWFilterOutput Prepare(const HWFilterContext& context) override;
 };
 }  // namespace skity
 
