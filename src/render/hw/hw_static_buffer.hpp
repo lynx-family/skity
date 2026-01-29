@@ -22,7 +22,7 @@ class HWStaticBuffer final {
 
   ~HWStaticBuffer();
 
-  void Flush();
+  void Flush(GPUCommandBuffer* command_buffer);
 
   GPUBufferView GetTessPathFillVertexBufferView();
 

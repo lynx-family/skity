@@ -29,12 +29,10 @@ HWDrawState HWFilterLayer::OnPrepare(HWDrawContext* context) {
   };
 
   HWFilterContext filter_context{
-      device,        context->gpuContext, context,
-      filter_result, command_buffer,      GetScale(),
+      device, context->gpuContext, context, filter_result, GetScale(),
   };
 
-  filter_result = filter_->Filter(filter_context);
-  command_buffer_ = filter_context.command_buffer;
+  filter_result = filter_->Prepare(filter_context);
   filted_bounds_ = filter_result.layer_bounds;
   SetTextures(input_texture, filter_result.texture);
   auto state = HWSubLayer::OnPrepare(context);
@@ -48,7 +46,8 @@ void HWFilterLayer::OnGenerateCommand(HWDrawContext* context,
 
 void HWFilterLayer::OnPostDraw(GPURenderPass* render_pass,
                                GPUCommandBuffer* cmd) {
-  command_buffer_->Submit();
+  filter_->Filter(cmd);
+
   HWSubLayer::OnPostDraw(render_pass, cmd);
 }
 

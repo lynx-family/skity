@@ -16,11 +16,10 @@ HWDownSamplerFilter::HWDownSamplerFilter(std::shared_ptr<HWFilter> input,
                                          float scale)
     : HWFilter({input}), scale_(scale) {}
 
-HWFilterOutput HWDownSamplerFilter::DoFilter(const HWFilterContext &context,
-                                             GPUCommandBuffer *command_buffer) {
+HWFilterOutput HWDownSamplerFilter::Prepare(const HWFilterContext &context) {
   auto draw_context = context.draw_context;
 
-  auto child_output = GetChildOutput(0, context, command_buffer);
+  auto child_output = GetChildOutput(0, context);
 
   Vec2 input_texture_size = Vec2{child_output.texture->GetDescriptor().width,
                                  child_output.texture->GetDescriptor().height};
@@ -39,15 +38,13 @@ HWFilterOutput HWDownSamplerFilter::DoFilter(const HWFilterContext &context,
   auto output_texture = CreateOutputTexture(
       input_texture->GetDescriptor().format, output_texture_size, context);
 
-  auto render_pass =
-      command_buffer->BeginRenderPass(CreateRenderPassDesc(output_texture));
+  SetOutputTexture(output_texture);
 
-  Command *command = context.draw_context->arena_allocator->Make<Command>();
+  auto cmd = context.draw_context->arena_allocator->Make<Command>();
 
-  PrepareCMDWGX(draw_context, command, input_texture, output_texture_size);
+  PrepareCMDWGX(draw_context, cmd, input_texture, output_texture_size);
 
-  render_pass->AddCommand(command);
-  render_pass->EncodeCommands();
+  AddCommand(cmd);
 
   return HWFilterOutput{
       output_texture,

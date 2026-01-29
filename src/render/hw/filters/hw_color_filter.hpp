@@ -8,17 +8,18 @@
 #include <memory>
 #include <skity/effect/color_filter.hpp>
 
+#include "src/gpu/gpu_render_pass.hpp"
 #include "src/render/hw/filters/hw_filter.hpp"
 
 namespace skity {
+
 class HWColorFilter : public HWFilter {
  public:
   HWColorFilter(std::shared_ptr<ColorFilter> color_filter,
                 std::shared_ptr<HWFilter> inputs)
       : HWFilter({inputs}), color_filter_(color_filter) {}
 
-  HWFilterOutput DoFilter(const HWFilterContext &context,
-                          GPUCommandBuffer *command_buffer) override;
+  HWFilterOutput Prepare(const HWFilterContext &context) override;
 
   void PrepareCMD(HWDrawContext *context, Command *cmd,
                   const std::shared_ptr<GPUTexture> &input_texture);
@@ -30,6 +31,7 @@ class HWColorFilter : public HWFilter {
  private:
   std::shared_ptr<ColorFilter> color_filter_;
 };
+
 }  // namespace skity
 
 #endif  // SRC_RENDER_HW_FILTERS_HW_COLOR_FILTER_HPP

@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "src/gpu/gpu_render_pass.hpp"
 #include "src/render/hw/filters/hw_filter.hpp"
 
 namespace skity {
@@ -19,8 +20,7 @@ class HWBlurFilter : public HWFilter {
   float radius_;
   Vec2 direction_;
 
-  HWFilterOutput DoFilter(const HWFilterContext &context,
-                          GPUCommandBuffer *command_buffer) override;
+  HWFilterOutput Prepare(const HWFilterContext &context) override;
 
  private:
   void PrepareWGXCMD(Command *cmd, HWDrawContext *context,
