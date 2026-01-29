@@ -275,6 +275,7 @@ static const char* kFlutter01SKP = RESOURCES_DIR "/skp/flutter_01.skp";
 static const char* kFlutter02SKP = RESOURCES_DIR "/skp/flutter_02.skp";
 static const char* kFlutter03SKP = RESOURCES_DIR "/skp/flutter_03.skp";
 static const char* kFlutter04SKP = RESOURCES_DIR "/skp/flutter_04.skp";
+static const char* kPrivateDir = RESOURCES_DIR "/skp/private";
 
 static void RegisterTigerSKPBenchmark() {
   auto all_args = ArgsProduct({
@@ -310,6 +311,16 @@ static void RegisterTigerSKPBenchmark() {
   }
 }
 
+namespace {
+bool is_number(const std::string& s) {
+  if (s.empty()) return false;
+  for (char c : s) {
+    if (!isdigit(static_cast<unsigned char>(c))) return false;
+  }
+  return true;
+}
+}  // namespace
+
 static void RegisterGUIBenchmark() {
   auto all_args = ArgsProduct({
       // gpu backend type
@@ -342,6 +353,39 @@ static void RegisterGUIBenchmark() {
     auto flutter_04 = std::make_shared<skity::DrawSKPBenchmark>(
         "Flutter_04", kFlutter04SKP, 1080, 1920, skity::Matrix{});
     RegisterBenchmark(flutter_04, backend_type, aa);
+
+    // If private dir not exists, skip.
+    if (!fs::exists(kPrivateDir)) continue;
+
+    // Iterate private dir, find all skp files.
+    // Expected filename format: name_width_height.skp
+    // Example: MyBenchmark_1080_1920.skp
+    for (auto& entry : fs::directory_iterator(kPrivateDir)) {
+      if (entry.path().extension() == ".skp") {
+        std::string stem = entry.path().stem().string();
+
+        size_t last_underscore = stem.rfind('_');
+        if (last_underscore == std::string::npos) continue;
+
+        size_t second_last_underscore = stem.rfind('_', last_underscore - 1);
+        if (second_last_underscore == std::string::npos) continue;
+
+        std::string name = stem.substr(0, second_last_underscore);
+        std::string w_str =
+            stem.substr(second_last_underscore + 1,
+                        last_underscore - second_last_underscore - 1);
+        std::string h_str = stem.substr(last_underscore + 1);
+
+        if (!is_number(w_str) || !is_number(h_str)) continue;
+
+        int width = std::stoi(w_str);
+        int height = std::stoi(h_str);
+        auto benchmark = std::make_shared<skity::DrawSKPBenchmark>(
+            name, entry.path().string().c_str(), width, height,
+            skity::Matrix{});
+        RegisterBenchmark(benchmark, backend_type, aa);
+      }
+    }
   }
 }
 
