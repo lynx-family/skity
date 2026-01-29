@@ -24,6 +24,7 @@
 #include <unordered_map>
 
 #include "src/text/ports/freetype_face.hpp"
+#include "src/utils/once.hpp"
 
 namespace skity {
 class FreetypeFace;
@@ -102,6 +103,8 @@ class TypefaceFreeType : public Typeface {
   mutable std::unique_ptr<FreetypeFaceHolder> freetype_face_holder_;
   mutable std::mutex C2GCacheMutex_;
   mutable std::unordered_map<Unichar, GlyphID> C2GCache_;
+  mutable Once contain_color_table_once_;
+  mutable bool contain_color_table_;
 };
 
 class TypefaceFreeTypeData : public TypefaceFreeType {

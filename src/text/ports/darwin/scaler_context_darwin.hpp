@@ -25,18 +25,30 @@ class TypefaceDarwin;
 
 class OffScreenContext final {
  public:
-  OffScreenContext() = default;
+  OffScreenContext(Color foreground_color);
   ~OffScreenContext() = default;
 
   void ResizeContext(uint32_t width, uint32_t height, bool need_color);
 
   CGColorSpaceRef GetCGColorSpace() const;
 
+  CGColorRef GetCGColor() const;
+
   void *GetAddr() const;
 
  private:
   UniqueCFRef<CGColorSpaceRef> cg_color_space_;
+  UniqueCFRef<CGColorRef> foreground_color_;
   std::shared_ptr<Data> pixel_data_;
+
+  static CGColorRef ColorToCGColor(CGColorSpaceRef rgbcs, Color bgra) {
+    CGFloat components[4];
+    components[0] = (CGFloat)ColorGetR(bgra) * (1 / 255.0f);
+    components[1] = (CGFloat)ColorGetG(bgra) * (1 / 255.0f);
+    components[2] = (CGFloat)ColorGetB(bgra) * (1 / 255.0f);
+    components[3] = 1.0f;
+    return CGColorCreate(rgbcs, components);
+  }
 };
 
 class ScalerContextDarwin : public ScalerContext {

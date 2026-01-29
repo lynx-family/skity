@@ -10,6 +10,12 @@
 
 namespace skity {
 
+OffScreenContext::OffScreenContext(Color foreground_color) {
+  cg_color_space_.reset(CGColorSpaceCreateDeviceRGB());
+  foreground_color_.reset(
+      ColorToCGColor(cg_color_space_.get(), foreground_color));
+}
+
 void OffScreenContext::ResizeContext(uint32_t width, uint32_t height,
                                      bool need_color) {
   uint32_t row_bytes = width;
@@ -29,6 +35,10 @@ void OffScreenContext::ResizeContext(uint32_t width, uint32_t height,
 
 CGColorSpaceRef OffScreenContext::GetCGColorSpace() const {
   return cg_color_space_.get();
+}
+
+CGColorRef OffScreenContext::GetCGColor() const {
+  return foreground_color_.get();
 }
 
 void *OffScreenContext::GetAddr() const {
@@ -119,7 +129,7 @@ UniqueCTFontRef ct_font_copy_with_size(CTFontRef base, CGFloat text_size) {
 
 ScalerContextDarwin::ScalerContextDarwin(
     std::shared_ptr<TypefaceDarwin> typeface, const ScalerContextDesc *desc)
-    : ScalerContext(typeface, desc), os_context_() {
+    : ScalerContext(typeface, desc), os_context_(desc->foreground_color) {
   float scaled_size;
   Matrix22 transform;
   desc->DecomposeMatrix(PortScaleType::kVertical, &scaled_size, &scaled_size,
@@ -165,6 +175,9 @@ void ScalerContextDarwin::GenerateMetrics(GlyphData *glyph) {
   glyph->y_min_ = cg_bounds.origin.y;
   glyph->hori_bearing_x_ = cg_bounds.origin.x;
   glyph->hori_bearing_y_ = cg_bounds.origin.y + cg_bounds.size.height;
+
+  bool is_color = GetTypeface()->ContainsColorTable();
+  glyph->format_ = is_color ? GlyphFormat::BGRA32 : GlyphFormat::A8;
 }
 
 static CGLineCap ToCGCap(Paint::Cap cap) {
@@ -231,6 +244,12 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
 
   CGContextScaleCTM(cg_context.get(), context_scale_, context_scale_);
   CGContextSetTextMatrix(cg_context.get(), transform_);
+
+  if (GlyphFormat::A8 == glyph->GetFormat()) {
+    CGContextSetGrayFillColor(cg_context.get(), 0.0f, 1.0f);
+  } else {
+    CGContextSetFillColorWithColor(cg_context.get(), os_context_.GetCGColor());
+  }
 
   /**
    When Core Graphics draws non-emoji glyphs into a bitmap context, it will

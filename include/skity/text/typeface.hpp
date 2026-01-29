@@ -109,8 +109,9 @@ class SKITY_API Typeface : public std::enable_shared_from_this<Typeface> {
   uint32_t GetUnitsPerEm() const;
 
   /**
-   * Whether this font contains color table, usually this means it is a color
-   * emoji typeface
+   * Whether a color table is present varies across backends. For FreeType, this
+   * means the font contains a COLR table; for CoreText, it refers to the
+   * presence of an SBIX or COLR table.
    * @return true  If contains color table
    */
   bool ContainsColorTable() const;
