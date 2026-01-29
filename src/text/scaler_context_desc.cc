@@ -25,6 +25,7 @@ ScalerContextDesc ScalerContextDesc::MakeCanonicalized(const Font& font,
   desc.scale_x = font.GetScaleX();
   desc.skew_x = font.GetSkewX();
   desc.transform = Matrix22{};
+  desc.foreground_color = Color_TRANSPARENT;
   desc.stroke_width =
       paint.GetStyle() == Paint::kStroke_Style ? paint.GetStrokeWidth() : 0.f;
   desc.miter_limit = paint.GetStrokeMiter();
@@ -46,6 +47,13 @@ ScalerContextDesc ScalerContextDesc::MakeTransformed(
   desc.scale_x = font.GetScaleX();
   desc.skew_x = font.GetSkewX();
   desc.transform = transform;
+  if (font.GetTypeface()->ContainsColorTable()) {
+    desc.foreground_color = paint.GetStyle() == Paint::kStroke_Style
+                                ? Color4fToColor(paint.GetStrokeColor())
+                                : Color4fToColor(paint.GetFillColor());
+  } else {
+    desc.foreground_color = Color_TRANSPARENT;
+  }
 
   desc.stroke_width =
       paint.GetStyle() == Paint::kStroke_Style ? paint.GetStrokeWidth() : 0.f;

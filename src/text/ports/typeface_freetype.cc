@@ -224,12 +224,11 @@ std::shared_ptr<Data> TypefaceFreeType::OnGetData() {
 }
 
 bool TypefaceFreeType::OnContainsColorTable() const {
-  AutoFTAccess fta(this);
-  FT_Face face = fta.Face();
-  if (!face) {
-    return false;
-  }
-  return FT_HAS_COLOR(GetFTFace()->Face());
+  contain_color_table_once_([this] {
+    static constexpr FourByteTag COLRTag = SetFourByteTag('C', 'O', 'L', 'R');
+    contain_color_table_ = this->GetTableSize(COLRTag) > 0;
+  });
+  return contain_color_table_;
 }
 
 std::unique_ptr<ScalerContext> TypefaceFreeType::OnCreateScalerContext(

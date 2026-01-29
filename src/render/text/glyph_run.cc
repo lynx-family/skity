@@ -35,10 +35,10 @@ class DirectGlyphRun : public GlyphRun {
                  std::vector<GlyphRegionWithIndex> glyph_locs,
                  uint32_t group_index, Atlas* atlas, GlyphFormat glyph_format)
       : count_(count),
-        glyphs_(glyphs),
+        glyphs_(glyphs, glyphs + count),
         origin_(origin),
-        position_x_(position_x),
-        position_y_(position_y),
+        position_x_(position_x, position_x + count),
+        position_y_(position_y, position_y + count),
         font_(font),
         context_scale_(context_scale),
         transform_(transform),
@@ -64,16 +64,16 @@ class DirectGlyphRun : public GlyphRun {
   static GlyphRunList SubRunListByTexture(
       const uint32_t count, const GlyphID* glyphs, const Point& origin,
       const float* position_x, const float* position_y, const Font& font,
-      const Paint& paint, float context_scale, const Matrix& transform,
-      const bool is_stroke, AtlasManager* atlas_manager,
-      ArenaAllocator* arena_allocator);
+      const Paint& paint, AtlasFormat format, float context_scale,
+      const Matrix& transform, const bool is_stroke,
+      AtlasManager* atlas_manager, ArenaAllocator* arena_allocator);
 
  private:
   uint32_t count_;
-  const GlyphID* glyphs_;
+  std::vector<GlyphID> glyphs_;
   const Point origin_;
-  const float* position_x_;
-  const float* position_y_;
+  std::vector<float> position_x_;
+  std::vector<float> position_y_;
   const Font font_;
   float context_scale_;
   Matrix transform_;
@@ -100,12 +100,15 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
     metrics_paint.SetStrokeCap(paint_.GetStrokeCap());
     metrics_paint.SetStrokeJoin(paint_.GetStrokeJoin());
     metrics_paint.SetStrokeMiter(paint_.GetStrokeMiter());
+    metrics_paint.SetStrokeColor(paint_.GetStrokeColor());
   } else {
     metrics_paint.SetStyle(Paint::kFill_Style);
+    metrics_paint.SetFillColor(paint_.GetFillColor());
   }
-  font_.LoadGlyphMetrics(glyphs_, count_, glyph_info.data(), metrics_paint);
-  font_.LoadGlyphBitmapInfo(glyphs_, count_, glyph_info.data(), metrics_paint,
-                            context_scale_, transform_);
+  font_.LoadGlyphMetrics(glyphs_.data(), count_, glyph_info.data(),
+                         metrics_paint);
+  font_.LoadGlyphBitmapInfo(glyphs_.data(), count_, glyph_info.data(),
+                            metrics_paint, context_scale_, transform_);
 
   ArrayList<GlyphRect, 16> glyph_rects;
   glyph_rects.SetArenaAllocator(arena_allocator);
@@ -219,8 +222,8 @@ HWDraw* DirectGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
 GlyphRunList DirectGlyphRun::SubRunListByTexture(
     const uint32_t count, const GlyphID* glyphs, const Point& origin,
     const float* position_x, const float* position_y, const Font& font,
-    const Paint& paint, float context_scale, const Matrix& transform,
-    const bool is_stroke, AtlasManager* atlas_manager,
+    const Paint& paint, AtlasFormat format, float context_scale,
+    const Matrix& transform, const bool is_stroke, AtlasManager* atlas_manager,
     ArenaAllocator* arena_allocator) {
   GlyphRunList run_list;
   run_list.SetArenaAllocator(arena_allocator);
@@ -239,15 +242,9 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
     metrics_paint.SetStyle(Paint::kFill_Style);
   }
   font.LoadGlyphMetrics(glyphs, count, glyph_info.data(), metrics_paint);
-  GlyphFormat format =
-      font.GetTypeface()
-          ? (font.GetTypeface()->ContainsColorTable() ? GlyphFormat::BGRA32
-                                                      : GlyphFormat::A8)
-          : GlyphFormat::A8;
-  if (count > 0 && glyph_info[0]->GetFormat().has_value()) {
-    format = *glyph_info[0]->GetFormat();
-  }
-  Atlas* atlas = atlas_manager->GetAtlas(FromGlyphFormat(format));
+  GlyphFormat glyph_format = *glyph_info[0]->GetFormat();
+
+  Atlas* atlas = atlas_manager->GetAtlas(format);
   uint32_t k = 0;
   while (k < count) {
     auto info = *(glyph_info[k]);
@@ -273,7 +270,7 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
       run_list.push_back(arena_allocator->Make<DirectGlyphRun>(
           count, glyphs, origin, position_x, position_y, font, context_scale,
           transform, paint, is_stroke, std::move(glyph_regions),
-          static_cast<uint32_t>(0), atlas, format));
+          static_cast<uint32_t>(0), atlas, glyph_format));
     }
   } else {
     std::vector<std::vector<GlyphRegionWithIndex>> glyph_region_groups(
@@ -297,7 +294,7 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
           count, glyphs, origin, position_x, position_y, font, context_scale,
           transform, paint, is_stroke,
           std::move(glyph_region_groups[group_index]), group_index, atlas,
-          format));
+          glyph_format));
     }
   }
 
@@ -318,10 +315,10 @@ class SDFGlyphRun : public GlyphRun {
               std::vector<GlyphRegionWithIndex> glyph_locs,
               uint32_t group_index, Atlas* atlas)
       : count_(count),
-        glyphs_(glyphs),
+        glyphs_(glyphs, glyphs + count),
         origin_(origin),
-        position_x_(position_x),
-        position_y_(position_y),
+        position_x_(position_x, position_x + count),
+        position_y_(position_y, position_y + count),
         font_(font),
         paint_(paint),
         glyph_locs_(std::move(glyph_locs)),
@@ -342,10 +339,10 @@ class SDFGlyphRun : public GlyphRun {
 
  private:
   uint32_t count_;
-  const GlyphID* glyphs_;
+  std::vector<GlyphID> glyphs_;
   const Point origin_;
-  const float* position_x_;
-  const float* position_y_;
+  std::vector<float> position_x_;
+  std::vector<float> position_y_;
   const Font font_;
   const Paint paint_;
   std::vector<GlyphRegionWithIndex> glyph_locs_;
@@ -361,7 +358,7 @@ ArrayList<GlyphRect, 16> SDFGlyphRun::Raster(float canvas_scale,
   int16_t max_bearing_y = 0.f;
 
   std::vector<const GlyphData*> glyph_info(count_);
-  font_.LoadGlyphMetrics(glyphs_, count_, glyph_info.data(), paint_);
+  font_.LoadGlyphMetrics(glyphs_.data(), count_, glyph_info.data(), paint_);
 
   ArrayList<GlyphRect, 16> glyph_rects;
   glyph_rects.SetArenaAllocator(arena_allocator);
@@ -552,7 +549,60 @@ GlyphRunList GlyphRun::Make(const uint32_t count, const GlyphID* glyphs,
                             AtlasManager* atlas_manager,
                             ArenaAllocator* arena_allocator,
                             DrawPathFunc draw_path_func) {
-  SKITY_TRACE_EVENT(GlyphRun_Make);
+  std::vector<const GlyphData*> glyph_info(count);
+  Paint metrics_paint;
+  metrics_paint.SetStyle(Paint::kFill_Style);
+  font.LoadGlyphMetrics(glyphs, count, glyph_info.data(), metrics_paint);
+
+  // split by mask
+  std::vector<GlyphID> A8_glyph;
+  std::vector<float> A8_position_x;
+  std::vector<float> A8_position_y;
+  std::vector<GlyphID> RGBA_glyph;
+  std::vector<float> RGBA_position_x;
+  std::vector<float> RGBA_position_y;
+  for (size_t index = 0; index < count; index++) {
+    if (glyph_info[index]->GetFormat() == GlyphFormat::A8) {
+      A8_glyph.push_back(glyphs[index]);
+      A8_position_x.push_back(position_x[index]);
+      A8_position_y.push_back(position_y[index]);
+    } else {
+      RGBA_glyph.push_back(glyphs[index]);
+      RGBA_position_x.push_back(position_x[index]);
+      RGBA_position_y.push_back(position_y[index]);
+    }
+  }
+
+  GlyphRunList result;
+  if (!A8_glyph.empty()) {
+    GlyphRunList A8_list = MakeInternal(
+        A8_glyph.size(), A8_glyph.data(), origin, A8_position_x.data(),
+        A8_position_y.data(), font, paint, AtlasFormat::A8, context_scale,
+        transform, atlas_manager, arena_allocator, draw_path_func);
+    for (auto& item : A8_list) {
+      result.push_back(item);
+    }
+  }
+
+  if (!RGBA_glyph.empty()) {
+    GlyphRunList RGBA_list = MakeInternal(
+        RGBA_glyph.size(), RGBA_glyph.data(), origin, RGBA_position_x.data(),
+        RGBA_position_y.data(), font, paint, AtlasFormat::RGBA32, context_scale,
+        transform, atlas_manager, arena_allocator, draw_path_func);
+    for (auto& item : RGBA_list) {
+      result.push_back(item);
+    }
+  }
+  return result;
+}
+
+GlyphRunList GlyphRun::MakeInternal(
+    const uint32_t count, const GlyphID* glyphs, const Point& origin,
+    const float* position_x, const float* position_y, const Font& font,
+    const Paint& paint, AtlasFormat format, float context_scale,
+    const Matrix& transform, AtlasManager* atlas_manager,
+    ArenaAllocator* arena_allocator, DrawPathFunc draw_path_func) {
+  SKITY_TRACE_EVENT(GlyphRun_MakeInternal);
   TextRenderControl control{true};
   GlyphRunList run_list;
   run_list.SetArenaAllocator(arena_allocator);
@@ -565,11 +615,12 @@ GlyphRunList GlyphRun::Make(const uint32_t count, const GlyphID* glyphs,
                            paint, font.GetTypeface())) {
     // texture
     Paint working_paint = paint;
-    if (font.GetTypeface()->ContainsColorTable()) {
+    if (format == AtlasFormat::RGBA32) {
       working_paint.SetStyle(Paint::kFill_Style);
       GlyphRunList sub_run_list = DirectGlyphRun::SubRunListByTexture(
           count, glyphs, origin, position_x, position_y, font, working_paint,
-          context_scale, transform, false, atlas_manager, arena_allocator);
+          format, context_scale, transform, false, atlas_manager,
+          arena_allocator);
       for (auto& sub_run : sub_run_list) {
         run_list.push_back(sub_run);
       }
@@ -581,7 +632,7 @@ GlyphRunList GlyphRun::Make(const uint32_t count, const GlyphID* glyphs,
                                    : Paint::kFill_Style);
         GlyphRunList sub_run_list = DirectGlyphRun::SubRunListByTexture(
             count, glyphs, origin, position_x, position_y, font, working_paint,
-            context_scale, transform,
+            format, context_scale, transform,
             paint.GetStyle() == Paint::kStrokeThenFill_Style, atlas_manager,
             arena_allocator);
         for (auto& sub_run : sub_run_list) {
@@ -595,7 +646,7 @@ GlyphRunList GlyphRun::Make(const uint32_t count, const GlyphID* glyphs,
                                    : Paint::kStroke_Style);
         GlyphRunList sub_run_list = DirectGlyphRun::SubRunListByTexture(
             count, glyphs, origin, position_x, position_y, font, working_paint,
-            context_scale, transform,
+            format, context_scale, transform,
             paint.GetStyle() != Paint::kStrokeThenFill_Style, atlas_manager,
             arena_allocator);
         for (auto& sub_run : sub_run_list) {

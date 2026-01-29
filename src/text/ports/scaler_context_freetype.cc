@@ -33,6 +33,7 @@ static BitmapFormat ft_pixel_mode_to_fmt(FT_Pixel_Mode mode) {
     case FT_PIXEL_MODE_BGRA:
       return BitmapFormat::kBGRA8;
     default:
+      DEBUG_CHECK(false);
       return BitmapFormat::kUnknown;
   }
 }
@@ -67,6 +68,23 @@ static FT_Int ChooseBitmapStrike(FT_Face face, FT_F26Dot6 scaleY) {
     }
   }
   return chosenStrikeIndex;
+}
+
+static bool GetGlyphBounds(FT_GlyphSlot glyph, Rect* bounds) {
+  if (glyph->format != FT_GLYPH_FORMAT_OUTLINE) {
+    DEBUG_CHECK(false);
+    return false;
+  }
+  if (0 == glyph->outline.n_contours) {
+    return false;
+  }
+
+  FT_BBox bbox;
+  FT_Outline_Get_CBox(&glyph->outline, &bbox);
+  *bounds =
+      Rect::MakeLTRB(FixedDot6ToFloat(bbox.xMin), -FixedDot6ToFloat(bbox.yMax),
+                     FixedDot6ToFloat(bbox.xMax), -FixedDot6ToFloat(bbox.yMin));
+  return true;
 }
 
 ScalerContextFreetype::ScalerContextFreetype(
@@ -207,37 +225,75 @@ void ScalerContextFreetype::GenerateMetrics(GlyphData* glyph) {
   glyph->format_ = GlyphFormat::A8;
   FT_Bool have_layers = false;
   FT_OpaquePaint opaque_layer_paint{nullptr, 1};
-  if (FT_IS_SCALABLE(face_) &&
-      FT_Get_Color_Glyph_Paint(face_, glyph->Id(),
-                               FT_COLOR_INCLUDE_ROOT_TRANSFORM,
-                               &opaque_layer_paint)) {
-    have_layers = true;
-    Rect bounds;
-    FT_ClipBox clip_box;
-    if (FT_Get_Color_Glyph_ClipBox(face_, glyph->Id(), &clip_box)) {
-      FT_BBox bbox;
-      bbox.xMin = clip_box.bottom_left.x;
-      bbox.xMax = clip_box.bottom_left.x;
-      bbox.yMin = clip_box.bottom_left.y;
-      bbox.yMax = clip_box.bottom_left.y;
-      for (auto& corner :
-           {clip_box.top_left, clip_box.top_right, clip_box.bottom_right}) {
-        bbox.xMin = std::min(bbox.xMin, corner.x);
-        bbox.yMin = std::min(bbox.yMin, corner.y);
-        bbox.xMax = std::max(bbox.xMax, corner.x);
-        bbox.yMax = std::max(bbox.yMax, corner.y);
+  if (FT_IS_SCALABLE(face_)) {
+    if (FT_Get_Color_Glyph_Paint(face_, glyph->Id(),
+                                 FT_COLOR_INCLUDE_ROOT_TRANSFORM,
+                                 &opaque_layer_paint)) {
+      have_layers = true;
+      Rect bounds;
+      FT_ClipBox clip_box;
+      if (FT_Get_Color_Glyph_ClipBox(face_, glyph->Id(), &clip_box)) {
+        FT_BBox bbox;
+        bbox.xMin = clip_box.bottom_left.x;
+        bbox.xMax = clip_box.bottom_left.x;
+        bbox.yMin = clip_box.bottom_left.y;
+        bbox.yMax = clip_box.bottom_left.y;
+        for (auto& corner :
+             {clip_box.top_left, clip_box.top_right, clip_box.bottom_right}) {
+          bbox.xMin = std::min(bbox.xMin, corner.x);
+          bbox.yMin = std::min(bbox.yMin, corner.y);
+          bbox.xMax = std::max(bbox.xMax, corner.x);
+          bbox.yMax = std::max(bbox.yMax, corner.y);
+        }
+        bounds =
+            Rect(FixedDot6ToFloat(bbox.xMin), -FixedDot6ToFloat(bbox.yMax),
+                 FixedDot6ToFloat(bbox.xMax), -FixedDot6ToFloat(bbox.yMin));
+      } else {
+        color_utils_->ComputeColorV1Glyph(face_, *glyph, &bounds);
       }
-      bounds = Rect(FixedDot6ToFloat(bbox.xMin), -FixedDot6ToFloat(bbox.yMax),
-                    FixedDot6ToFloat(bbox.xMax), -FixedDot6ToFloat(bbox.yMin));
-    } else {
-      color_utils_->ComputeColorV1Glyph(face_, *glyph, &bounds);
+      glyph->width_ = bounds.Width();
+      glyph->height_ = bounds.Height();
+      glyph->hori_bearing_x_ = bounds.Left();
+      glyph->hori_bearing_y_ = -bounds.Top();
+      glyph->y_min_ = bounds.Top();
+      glyph->y_max_ = bounds.Bottom();
+      glyph->color_type_ = GlyphColorType::kColorV1;
     }
-    glyph->width_ = bounds.Width();
-    glyph->height_ = bounds.Height();
-    glyph->hori_bearing_x_ = bounds.Left();
-    glyph->hori_bearing_y_ = -bounds.Top();
-    glyph->y_min_ = bounds.Top();
-    glyph->y_max_ = bounds.Bottom();
+
+    if (!have_layers) {
+      // ColorV0
+      FT_LayerIterator layerIterator = {0, 0, nullptr};
+      FT_UInt layerGlyphIndex;
+      FT_UInt layerColorIndex;
+      FT_Int32 flags = load_glyph_flags_;
+      flags |= FT_LOAD_BITMAP_METRICS_ONLY;  // Don't decode any bitmaps.
+      flags |= FT_LOAD_NO_BITMAP;            // Ignore embedded bitmaps.
+      flags &= ~FT_LOAD_RENDER;              // Don't scan convert.
+      flags &= ~FT_LOAD_COLOR;               // Ignore SVG.
+      // For COLRv0 compute the glyph bounding box from the union of layer
+      // bounding boxes.
+      Rect bounds;
+      while (FT_Get_Color_Glyph_Layer(face_, glyph->Id(), &layerGlyphIndex,
+                                      &layerColorIndex, &layerIterator)) {
+        have_layers = true;
+        if (FT_Load_Glyph(face_, layerGlyphIndex, flags)) {
+          glyph->ZeroMetrics();
+          return;
+        }
+
+        Rect currentBounds;
+        if (GetGlyphBounds(face_->glyph, &currentBounds)) {
+          bounds.Join(currentBounds);
+        }
+      }
+      glyph->hori_bearing_x_ = bounds.Left();
+      glyph->hori_bearing_y_ = -bounds.Top();
+      glyph->width_ = bounds.Width();
+      glyph->height_ = bounds.Height();
+      glyph->y_min_ = bounds.Top();
+      glyph->y_max_ = bounds.Bottom();
+      glyph->color_type_ = GlyphColorType::kColorV0;
+    }
 
     if (have_layers) {
       glyph->format_ = GlyphFormat::RGBA32;
@@ -365,7 +421,7 @@ void ScalerContextFreetype::GenerateImage(GlyphData* glyph,
     return;
   }
 
-  if (FT_IS_SCALABLE(face_)) {
+  if (FT_IS_SCALABLE(face_) && glyph->color_type_ == GlyphColorType::kColorV1) {
     FT_OpaquePaint opaqueLayerPaint{nullptr, 1};
     if (FT_Get_Color_Glyph_Paint(face_, glyph->Id(),
                                  FT_COLOR_INCLUDE_ROOT_TRANSFORM,
@@ -413,39 +469,41 @@ void ScalerContextFreetype::GenerateImage(GlyphData* glyph,
       glyph->hori_bearing_y_ = bitmapGlyph->top;
       bitmap = bitmapGlyph->bitmap;
       // won't stroke bitmap glyph
-      uint8_t* copy_data = reinterpret_cast<uint8_t*>(
-          std::malloc(bitmap.width * bitmap.rows * sizeof(uint8_t)));
-      std::memcpy(copy_data, bitmap.buffer,
-                  bitmap.width * bitmap.rows * sizeof(uint8_t));
+      uint8_t* copy_data =
+          reinterpret_cast<uint8_t*>(std::malloc(bitmap.rows * bitmap.pitch));
+      std::memcpy(copy_data, bitmap.buffer, bitmap.rows * bitmap.pitch);
       info.buffer = copy_data;
       info.need_free = true;
       info.width = bitmap.width;
       info.height = bitmap.rows;
       info.origin_x = bitmapGlyph->left / desc_.context_scale;
       info.origin_y = bitmapGlyph->top / desc_.context_scale;
+      info.format =
+          ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
       FT_Done_Glyph(ft_glyph);
     } else {
       if (FT_Render_Glyph(face_->glyph, FT_RENDER_MODE_NORMAL)) {
         return;
       }
       bitmap = face_->glyph->bitmap;
-      uint8_t* copy_data = reinterpret_cast<uint8_t*>(
-          std::malloc(bitmap.width * bitmap.rows * sizeof(uint8_t)));
-      std::memcpy(copy_data, bitmap.buffer,
-                  bitmap.width * bitmap.rows * sizeof(uint8_t));
+      uint8_t* copy_data =
+          reinterpret_cast<uint8_t*>(std::malloc(bitmap.rows * bitmap.pitch));
+      std::memcpy(copy_data, bitmap.buffer, bitmap.rows * bitmap.pitch);
       info.buffer = copy_data;
       info.need_free = true;
       info.width = bitmap.width;
       info.height = bitmap.rows;
       info.origin_x = glyph->GetHoriBearingX() / desc_.context_scale;
       info.origin_y = glyph->GetHoriBearingY() / desc_.context_scale;
+      info.format =
+          ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
     }
   } else {
     if (transform_matrix_.IsIdentity()) {
       bitmap = face_->glyph->bitmap;
       // Not use slot memory directly as slot in ft is temporary before next
       // loading.
-      uint32_t bytes_count = bitmap.width * bitmap.rows * sizeof(uint32_t);
+      uint32_t bytes_count = bitmap.rows * bitmap.pitch;
       uint8_t* copy_data = reinterpret_cast<uint8_t*>(std::malloc(bytes_count));
       std::memcpy(copy_data, bitmap.buffer, bytes_count);
       info.buffer = copy_data;
@@ -454,6 +512,8 @@ void ScalerContextFreetype::GenerateImage(GlyphData* glyph,
       info.height = bitmap.rows;
       info.origin_x = glyph->GetHoriBearingX() / desc_.context_scale;
       info.origin_y = glyph->GetHoriBearingY() / desc_.context_scale;
+      info.format =
+          ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
     } else {
       // transform bitmap
       bitmap = face_->glyph->bitmap;
@@ -491,6 +551,8 @@ void ScalerContextFreetype::GenerateImage(GlyphData* glyph,
         info.height = dst_height;
         info.origin_x = glyph->GetHoriBearingX() / desc_.context_scale;
         info.origin_y = glyph->GetHoriBearingY() / desc_.context_scale;
+        info.format =
+            ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
       } else {
         // transformed bitmap is invisible
         info.buffer = nullptr;
@@ -498,12 +560,10 @@ void ScalerContextFreetype::GenerateImage(GlyphData* glyph,
         info.height = 0;
         info.origin_x = 0;
         info.origin_y = 0;
+        info.format = BitmapFormat::kGray8;
       }
     }
   }
-
-  info.format =
-      ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
 }
 
 void ScalerContextFreetype::GenerateImageInfo(GlyphData* glyph,

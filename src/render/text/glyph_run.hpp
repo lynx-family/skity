@@ -45,6 +45,16 @@ class GlyphRun {
   virtual Rect GetBounds() = 0;
 
   virtual bool IsStroke() = 0;
+
+ private:
+  static GlyphRunList MakeInternal(const uint32_t count, const GlyphID* glyphs,
+                                   const Point& origin, const float* position_x,
+                                   const float* position_y, const Font& font,
+                                   const Paint& paint, AtlasFormat format,
+                                   float context_scale, const Matrix& transform,
+                                   AtlasManager* atlas_manager,
+                                   ArenaAllocator* arena_allocator,
+                                   DrawPathFunc draw_path_func);
 };
 
 }  // namespace skity

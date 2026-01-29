@@ -29,6 +29,8 @@ struct ScalerContextDesc {
   // scale ratio applied to surface
   float context_scale = 1.0f;
 
+  Color foreground_color;
+
   float stroke_width;
   float miter_limit;
   Paint::Cap cap;
@@ -46,7 +48,7 @@ struct ScalerContextDesc {
            lhs.stroke_width == rhs.stroke_width &&
            lhs.miter_limit == rhs.miter_limit &&
            lhs.context_scale == rhs.context_scale && lhs.cap == rhs.cap &&
-           lhs.join == rhs.join;
+           lhs.join == rhs.join && lhs.foreground_color == rhs.foreground_color;
   }
 
   friend inline bool operator!=(const ScalerContextDesc& lhs,
