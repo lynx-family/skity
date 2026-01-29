@@ -5,6 +5,7 @@
 #ifndef SRC_RENDER_HW_FILTERS_HW_DOWN_SAMPLER_FILTER_HPP
 #define SRC_RENDER_HW_FILTERS_HW_DOWN_SAMPLER_FILTER_HPP
 
+#include "src/gpu/gpu_render_pass.hpp"
 #include "src/render/hw/filters/hw_filter.hpp"
 
 namespace skity {
@@ -15,8 +16,7 @@ class HWDownSamplerFilter : public HWFilter {
 
   ~HWDownSamplerFilter() override = default;
 
-  HWFilterOutput DoFilter(const HWFilterContext &context,
-                          GPUCommandBuffer *command_buffer) override;
+  HWFilterOutput Prepare(const HWFilterContext &context) override;
 
  private:
   void PrepareCMDWGX(HWDrawContext *context, Command *cmd,

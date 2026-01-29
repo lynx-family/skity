@@ -622,14 +622,18 @@ void HWCanvas::OnFlush() {
     root_layer_->SetScale(Vec2{ctx_scale_, ctx_scale_});
     draw_context.scale = root_layer_->GetScale();
 
+    auto cmd = surface_->GetGPUContext()->GetGPUDevice()->CreateCommandBuffer();
+
     auto state = root_layer_->Prepare(&draw_context);
 
     // currently root layer must contain stencil attachment
     root_layer_->GenerateCommand(&draw_context, state);
 
-    UploadMesh();
+    UploadMesh(cmd.get());
 
-    root_layer_->Draw(nullptr);
+    root_layer_->Draw(nullptr, cmd.get());
+
+    cmd->Submit();
   }
 
   layer_stack_.clear();
@@ -643,10 +647,10 @@ uint32_t HWCanvas::GetCanvasSampleCount() {
   return surface_->GetSampleCount();
 }
 
-void HWCanvas::UploadMesh() {
+void HWCanvas::UploadMesh(GPUCommandBuffer* command_buffer) {
   SKITY_TRACE_EVENT(HWCanvas_UploadMesh);
-  gpu_buffer_->Flush();
-  static_buffer_->Flush();
+  gpu_buffer_->Flush(command_buffer);
+  static_buffer_->Flush(command_buffer);
 }
 
 HWLayer* HWCanvas::CurrentLayer() {

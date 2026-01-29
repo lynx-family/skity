@@ -59,7 +59,7 @@ std::shared_ptr<GPURenderPass> HWSubLayer::OnBeginRenderPass(
 }
 
 void HWSubLayer::OnPostDraw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {
-  layer_back_draw_->Draw(render_pass);
+  layer_back_draw_->Draw(render_pass, cmd);
 }
 
 void HWSubLayer::InitTexture(GPUContextImpl* gpu_context,

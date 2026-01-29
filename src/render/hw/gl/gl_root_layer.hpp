@@ -20,7 +20,7 @@ class GLRootLayer : public HWRootLayer {
   ~GLRootLayer() override = default;
 
  protected:
-  void Draw(GPURenderPass *render_pass) override;
+  void Draw(GPURenderPass *render_pass, GPUCommandBuffer *cmd) override;
 
   void OnPostDraw(GPURenderPass *render_pass, GPUCommandBuffer *cmd) override;
 

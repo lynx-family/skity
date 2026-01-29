@@ -15,6 +15,7 @@
 namespace skity {
 
 class GPUDevice;
+class GPUCommandBuffer;
 
 struct HWBufferAllocation {
   void* addr = nullptr;
@@ -65,7 +66,7 @@ class HWStageBuffer final {
 
   GPUBufferView EndWritingInstance();
 
-  void Flush();
+  void Flush(GPUCommandBuffer* command_buffer);
 
   GPUBuffer* GetGPUBuffer() const { return gpu_buffer_.get(); }
 

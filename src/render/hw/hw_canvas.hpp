@@ -24,6 +24,7 @@
 namespace skity {
 
 class GPUSurfaceImpl;
+class GPUCommandBuffer;
 
 /**
  * @class HWCanvas
@@ -85,7 +86,7 @@ class HWCanvas : public Canvas {
 
   uint32_t GetCanvasSampleCount();
 
-  void UploadMesh();
+  void UploadMesh(GPUCommandBuffer* command_buffer);
 
   HWLayer* CurrentLayer();
 

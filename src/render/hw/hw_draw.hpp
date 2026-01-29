@@ -89,7 +89,7 @@ class HWDraw {
 
   void GenerateCommand(HWDrawContext* context, HWDrawState state);
 
-  virtual void Draw(GPURenderPass* render_pass) = 0;
+  virtual void Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) = 0;
 
   const Matrix& GetTransform() const { return transform_; }
 

@@ -27,19 +27,17 @@ HWLayer::HWLayer(Matrix matrix, int32_t depth, Rect bounds, uint32_t width,
   state_.SaveClipBounds(Rect::MakeWH(width_, height_), true);
 }
 
-void HWLayer::Draw(GPURenderPass* render_pass) {
+void HWLayer::Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {
   SKITY_TRACE_EVENT(HWLayer_Draw);
-  auto cmd = CreateCommandBuffer();
 
-  auto self_pass = OnBeginRenderPass(cmd.get());
+  auto self_pass = OnBeginRenderPass(cmd);
 
   self_pass->SetArenaAllocator(arena_allocator_);
   for (auto draw : draw_ops_) {
-    draw->Draw(self_pass.get());
+    draw->Draw(self_pass.get(), cmd);
   }
 
   self_pass->EncodeCommands(GetViewport());
-  cmd->Submit();
 
   /**
    * FIXME: avoid crash on VIVO Y77
@@ -49,7 +47,7 @@ void HWLayer::Draw(GPURenderPass* render_pass) {
    */
   self_pass = nullptr;
 
-  OnPostDraw(render_pass, cmd.get());
+  OnPostDraw(render_pass, cmd);
 
   draw_ops_.clear();
 }
@@ -121,14 +119,6 @@ void HWLayer::AddRectClip(const skity::Rect& local_rect, const Matrix& matrix) {
 void HWLayer::Restore() { state_.Restore(); }
 
 void HWLayer::RestoreToCount(int32_t count) { state_.RestoreToCount(count); }
-
-std::shared_ptr<GPUCommandBuffer> HWLayer::CreateCommandBuffer() {
-  auto cmd = gpu_device_->CreateCommandBuffer();
-
-  cmd->SetLabel("SubLayer CommandBuffer");
-
-  return cmd;
-}
 
 void HWLayer::FlushPendingClip() {
   draw_ops_.insert(draw_ops_.end(), pending_clip_.begin(), pending_clip_.end());

@@ -6,8 +6,7 @@
 
 namespace skity {
 
-HWFilterOutput HWMergeFilter::DoFilter(const HWFilterContext& context,
-                                       GPUCommandBuffer* command_buffer) {
+HWFilterOutput HWMergeFilter::Prepare(const HWFilterContext& context) {
   if (GetChildCount() == 0) {
     return context.source;
   }
@@ -15,7 +14,7 @@ HWFilterOutput HWMergeFilter::DoFilter(const HWFilterContext& context,
   Rect layer_bounds = Rect::MakeEmpty();
   std::vector<HWFilterOutput> children_outputs;
   for (size_t i = 0; i < GetChildCount(); i++) {
-    children_outputs.push_back(GetChildOutput(i, context, command_buffer));
+    children_outputs.push_back(GetChildOutput(i, context));
   }
   // Calculate layer bounds;
   for (auto child_output : children_outputs) {
@@ -27,11 +26,21 @@ HWFilterOutput HWMergeFilter::DoFilter(const HWFilterContext& context,
   auto color_format = children_outputs[0].texture->GetDescriptor().format;
   auto output_texture =
       CreateOutputTexture(color_format, output_texture_size, context);
-  auto render_pass_desc = CreateRenderPassDesc(output_texture);
-  auto render_pass = command_buffer->BeginRenderPass(render_pass_desc);
-  DrawChildrenOutputs(context, render_pass.get(), output_texture_size,
-                      color_format, layer_bounds, children_outputs);
-  render_pass->EncodeCommands();
+
+  SetOutputTexture(output_texture);
+
+  std::vector<Command*> commands;
+
+  for (size_t i = 0; i < children_outputs.size(); i++) {
+    commands.emplace_back(
+        context.draw_context->arena_allocator->Make<Command>());
+
+    AddCommand(commands.back());
+  }
+
+  DrawChildrenOutputs(context, commands, output_texture_size, color_format,
+                      layer_bounds, children_outputs);
+
   return HWFilterOutput{
       output_texture,
       layer_bounds,

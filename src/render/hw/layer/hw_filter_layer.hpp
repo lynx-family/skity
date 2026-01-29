@@ -28,7 +28,6 @@ class HWFilterLayer : public HWSubLayer {
 
  private:
   std::shared_ptr<HWFilter> filter_;
-  std::shared_ptr<GPUCommandBuffer> command_buffer_;
   Rect filted_bounds_;
 };
 
