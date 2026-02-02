@@ -7,6 +7,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -52,8 +53,9 @@ class AutoSetMVP {
 
 class HWFilter {
  public:
-  explicit HWFilter(std::vector<std::shared_ptr<HWFilter>> inputs)
-      : inputs_(std::move(inputs)) {
+  explicit HWFilter(std::vector<std::shared_ptr<HWFilter>> inputs,
+                    std::string label)
+      : inputs_(std::move(inputs)), label_(std::move(label)) {
     commands_.reserve(2);
   }
 
@@ -99,6 +101,7 @@ class HWFilter {
 
  private:
   std::vector<std::shared_ptr<HWFilter>> inputs_;
+  std::string label_ = {};
 
   std::shared_ptr<GPUTexture> output_texture_ = {};
 

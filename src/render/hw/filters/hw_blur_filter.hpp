@@ -15,7 +15,9 @@ namespace skity {
 class HWBlurFilter : public HWFilter {
  public:
   HWBlurFilter(float radius, Vec2 direction, std::shared_ptr<HWFilter> inputs)
-      : HWFilter({inputs}), radius_(radius), direction_(direction) {}
+      : HWFilter({inputs}, "HWBlurFilter"),
+        radius_(radius),
+        direction_(direction) {}
 
   float radius_;
   Vec2 direction_;

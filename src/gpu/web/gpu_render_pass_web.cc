@@ -261,7 +261,16 @@ WGPURenderPassEncoder GPURenderPassWEB::BeginRenderPass() {
     }
   }
 
-  return wgpuCommandEncoderBeginRenderPass(encoder_, &desc_web);
+  auto render_pass = wgpuCommandEncoderBeginRenderPass(encoder_, &desc_web);
+
+  if (!desc.label.empty()) {
+    wgpuRenderPassEncoderSetLabel(render_pass, WGPUStringView{
+                                                   desc.label.c_str(),
+                                                   desc.label.size(),
+                                               });
+  }
+
+  return render_pass;
 }
 
 void GPURenderPassWEB::SetupBindGroup(WGPURenderPassEncoder render_pass,

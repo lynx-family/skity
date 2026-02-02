@@ -17,7 +17,7 @@ class HWColorFilter : public HWFilter {
  public:
   HWColorFilter(std::shared_ptr<ColorFilter> color_filter,
                 std::shared_ptr<HWFilter> inputs)
-      : HWFilter({inputs}), color_filter_(color_filter) {}
+      : HWFilter({inputs}, "HWColorFilter"), color_filter_(color_filter) {}
 
   HWFilterOutput Prepare(const HWFilterContext &context) override;
 

@@ -8,7 +8,7 @@
 #include <memory>
 #include <optional>
 #include <skity/geometry/rect.hpp>
-#include <unordered_map>
+#include <string>
 #include <vector>
 
 #include "src/gpu/gpu_buffer.hpp"
@@ -61,6 +61,8 @@ struct GPURenderPassDescriptor {
   GPUColorAttachment color_attachment;
   GPUStencilAttachment stencil_attachment;
   GPUDepthAttachment depth_attachment;
+
+  std::string label;
 
   uint32_t GetTargetWidth() const {
     if (!color_attachment.texture) {

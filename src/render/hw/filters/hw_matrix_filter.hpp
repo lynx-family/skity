@@ -12,7 +12,7 @@ namespace skity {
 class HWMatrixFilter : public HWFilter {
  public:
   HWMatrixFilter(const Matrix& matrix, std::shared_ptr<HWFilter> inputs)
-      : HWFilter({inputs}), matrix_(matrix) {}
+      : HWFilter({inputs}, "HWMatrixFilter"), matrix_(matrix) {}
 
   HWFilterOutput Prepare(const HWFilterContext& context) override;
 
