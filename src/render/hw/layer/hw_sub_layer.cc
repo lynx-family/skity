@@ -80,6 +80,8 @@ void HWSubLayer::PrepareRenderPassDesc(HWDrawContext* context) {
   builder.SetSampleCount(GetSampleCount())
       .SetDrawState(GetLayerDrawState())
       .Build(render_pass_desc_);
+
+  render_pass_desc_.label = "HWSubLayer";
 }
 
 }  // namespace skity

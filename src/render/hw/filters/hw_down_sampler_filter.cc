@@ -14,7 +14,7 @@ namespace skity {
 
 HWDownSamplerFilter::HWDownSamplerFilter(std::shared_ptr<HWFilter> input,
                                          float scale)
-    : HWFilter({input}), scale_(scale) {}
+    : HWFilter({input}, "HWDownSamplerFilter"), scale_(scale) {}
 
 HWFilterOutput HWDownSamplerFilter::Prepare(const HWFilterContext &context) {
   auto draw_context = context.draw_context;

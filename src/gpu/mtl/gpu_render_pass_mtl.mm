@@ -110,8 +110,13 @@ void GPURenderPassMTL::BindingsCache::SetSampler(GPUShaderStage stage, uint64_t 
 
 void GPURenderPassMTL::EncodeCommands(std::optional<GPUViewport> viewport,
                                       std::optional<GPUScissorRect> scissor) {
-  encoder_ =
-      [cmd_buffer_ renderCommandEncoderWithDescriptor:ToMTLRenderPassDescriptor(GetDescriptor())];
+  const auto& desc = GetDescriptor();
+  encoder_ = [cmd_buffer_ renderCommandEncoderWithDescriptor:ToMTLRenderPassDescriptor(desc)];
+
+  if (!desc.label.empty()) {
+    encoder_.label = [NSString stringWithCString:desc.label.c_str() encoding:NSUTF8StringEncoding];
+  }
+
   BindingsCache cache(encoder_);
   auto target_width = GetDescriptor().GetTargetWidth();
   auto target_height = GetDescriptor().GetTargetHeight();

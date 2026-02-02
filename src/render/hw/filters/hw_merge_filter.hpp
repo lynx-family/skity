@@ -13,7 +13,7 @@ namespace skity {
 class HWMergeFilter : public HWFilter {
  public:
   explicit HWMergeFilter(std::vector<std::shared_ptr<HWFilter>> inputs)
-      : HWFilter(std::move(inputs)) {}
+      : HWFilter(std::move(inputs), "HWMergeFilter") {}
 
   HWFilterOutput Prepare(const HWFilterContext& context) override;
 };

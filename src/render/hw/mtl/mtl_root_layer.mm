@@ -44,6 +44,8 @@ void MTLRootLayer::PrepareRenderPassDesc(HWDrawContext *context) {
       .SetLoadOp(NeedClearSurface() ? GPULoadOp::kClear : GPULoadOp::kLoad)
       .SetStoreOp(GPUStoreOp::kStore)
       .Build(render_pass_desc_);
+
+  render_pass_desc_.label = "MTLRootLayer";
 }
 
 std::shared_ptr<GPURenderPass> MTLRootLayer::OnBeginRenderPass(GPUCommandBuffer *cmd) {
