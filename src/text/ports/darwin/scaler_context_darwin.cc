@@ -266,10 +266,8 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
 void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
                                             const StrokeDesc &stroke_desc) {
   CGGlyph cg_glyph = glyph->Id();
-  uint32_t width = glyph->GetWidth();
-  uint32_t height = glyph->GetHeight();
 
-  if (!cg_glyph || !width || !height) {
+  if (!cg_glyph) {
     return;
   }
 
@@ -287,8 +285,8 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
 
   // extends one pixel for the bitmap bounds
   // it is used for the AA pixel and it is important
-  width = std::ceil(cg_bounds.size.width * context_scale_) + 2;
-  height = std::ceil(cg_bounds.size.height * context_scale_) + 2;
+  uint32_t width = std::ceil(cg_bounds.size.width * context_scale_) + 2;
+  uint32_t height = std::ceil(cg_bounds.size.height * context_scale_) + 2;
 
   if (stroke_desc.is_stroke) {
     if (glyph->GetPath().IsEmpty()) {
