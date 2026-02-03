@@ -3,7 +3,7 @@ name: CI Test
 on:
     pull_request:
         branches:
-            - main
+            - v1.0.x
         paths:
             - '.github/workflows/ci.yml'
             - 'include/**'
@@ -16,7 +16,7 @@ on:
             - 'platform/**'
     push:
         branches:
-            - main
+            - v1.0.x
         paths:
             - '.github/workflows/ci.yml'
             - 'include/**'
