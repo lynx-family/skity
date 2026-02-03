@@ -2,6 +2,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <mutex>
 #include <skity/codec/codec.hpp>
 #include <skity/io/data.hpp>
 #include <vector>
@@ -14,6 +15,7 @@
 namespace skity {
 
 static std::vector<std::shared_ptr<Codec>> codec_list = {};
+static std::mutex codec_mutex = {};
 
 void Codec::SetupCodecs() {
   codec_list.clear();
@@ -25,6 +27,8 @@ void Codec::SetupCodecs() {
 }
 
 std::shared_ptr<Codec> Codec::MakeFromData(const std::shared_ptr<Data>& data) {
+  std::lock_guard<std::mutex> __lock(codec_mutex);
+
   if (codec_list.empty()) {
     SetupCodecs();
   }
