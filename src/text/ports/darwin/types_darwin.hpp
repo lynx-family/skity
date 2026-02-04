@@ -1,3 +1,10 @@
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 // Copyright 2021 The Lynx Authors. All rights reserved.
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
@@ -33,6 +40,9 @@ using UniqueCTFontRef = UniqueCFRef<CTFontRef>;
 using UniqueCTArrayRef = UniqueCFRef<CFArrayRef>;
 
 void ct_desc_to_font_style(CTFontDescriptorRef desc, FontStyle* style);
+
+void font_style_to_ct_trait(const FontStyle& style,
+                            CFMutableDictionaryRef cf_dict);
 
 }  // namespace skity
 
