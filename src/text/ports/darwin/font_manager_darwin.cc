@@ -35,11 +35,11 @@ bool find_desc_str(CTFontDescriptorRef desc, CFStringRef name,
     return false;
   }
 
-  *value = CFStringGetCStringPtr(name, kCFStringEncodingUTF8);
+  *value = CFStringGetCStringPtr(ref.get(), kCFStringEncodingUTF8);
   return true;
 }
 
-static const char* map_css_names(const char* name) {
+const char* map_css_names(const char* name) {
   static const struct {
     const char* fFrom;  // name the caller specified
     const char* fTo;    // "canonical" name we map to
@@ -47,6 +47,9 @@ static const char* map_css_names(const char* name) {
                 {"serif", "Times"},
                 {"monospace", "Courier"}};
 
+  if (name == nullptr) {
+    return nullptr;
+  }
   for (size_t i = 0; i < std::size(gPairs); i++) {
     if (strcmp(name, gPairs[i].fFrom) == 0) {
       return gPairs[i].fTo;
@@ -72,8 +75,7 @@ int32_t compute_metric(const FontStyle& a, const FontStyle& b) {
          (a.slant() != b.slant()) * 900 * 900;
 }
 
-static UniqueCFRef<CFDataRef> cfdata_from_skdata(
-    std::shared_ptr<Data> const& data) {
+UniqueCFRef<CFDataRef> cfdata_from_skdata(std::shared_ptr<Data> const& data) {
   size_t const size = data->Size();
 
   void* addr = std::malloc(size);
@@ -100,6 +102,52 @@ static UniqueCFRef<CFDataRef> cfdata_from_skdata(
       CFAllocatorCreate(kCFAllocatorDefault, &ctx));
   return UniqueCFRef<CFDataRef>(CFDataCreateWithBytesNoCopy(
       kCFAllocatorDefault, (const UInt8*)addr, size, alloc.get()));
+}
+
+UniqueCFRef<CTFontDescriptorRef> create_descriptor(CFStringRef cf_family_name,
+                                                   const FontStyle& style) {
+  UniqueCFRef<CFMutableDictionaryRef> cf_attributes(CFDictionaryCreateMutable(
+      kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+      &kCFTypeDictionaryValueCallBacks));
+
+  UniqueCFRef<CFMutableDictionaryRef> cf_traits(CFDictionaryCreateMutable(
+      kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+      &kCFTypeDictionaryValueCallBacks));
+
+  if (!cf_attributes || !cf_traits) {
+    return nullptr;
+  }
+
+  font_style_to_ct_trait(style, cf_traits.get());
+  // CTFontTraits
+  CFDictionaryAddValue(cf_attributes.get(), kCTFontTraitsAttribute,
+                       cf_traits.get());
+
+  // CTFontFamilyName
+  if (cf_family_name) {
+    CFDictionaryAddValue(cf_attributes.get(), kCTFontFamilyNameAttribute,
+                         cf_family_name);
+  }
+
+  return UniqueCFRef<CTFontDescriptorRef>(
+      CTFontDescriptorCreateWithAttributes(cf_attributes.get()));
+}
+
+UniqueCFRef<CTFontDescriptorRef> create_descriptor(const char* family_name,
+                                                   const FontStyle& style) {
+  UniqueCFRef<CFStringRef> cf_family_name;
+  if (family_name) {
+    cf_family_name.reset(
+        CFStringCreateWithCString(nullptr, family_name, kCFStringEncodingUTF8));
+  }
+  return create_descriptor(cf_family_name.get(), style);
+}
+
+UniqueCFRef<CFSetRef> name_required() {
+  CFStringRef set_values[] = {kCTFontFamilyNameAttribute};
+  return UniqueCFRef<CFSetRef>(CFSetCreate(
+      kCFAllocatorDefault, reinterpret_cast<const void**>(set_values),
+      std::size(set_values), &kCFTypeSetCallBacks));
 }
 
 }  // namespace
@@ -184,97 +232,101 @@ CTFontDescriptorRef FontStyleSetDarwin::GetCTFontDescriptor() const {
   return cf_desc.get();
 }
 
-FontManagerDarwin::FontManagerDarwin() { InitSystemFamily(); }
-
-void FontManagerDarwin::InitSystemFamily() {
-  cf_family_names_.reset(CTFontManagerCopyAvailableFontFamilyNames());
-
-  auto count = CFArrayGetCount(cf_family_names_.get());
-
-  for (uint32_t i = 0; i < count; i++) {
-    CFStringRef cf_string =
-        (CFStringRef)CFArrayGetValueAtIndex(cf_family_names_.get(), i);
-
-    CFIndex length = CFStringGetMaximumSizeForEncoding(
-                         CFStringGetLength(cf_string), kCFStringEncodingUTF8) +
-                     1;
-
-    std::vector<char> buffer(length);
-
-    CFStringGetCString(cf_string, buffer.data(), length, kCFStringEncodingUTF8);
-
-    if (strcmp("Helvetica", buffer.data()) == 0) {
-      default_name_index_ = i;
-    }
-
-    std::string name{buffer.data()};
-    std::transform(name.begin(), name.end(), name.begin(),
-                   [](char c) { return (c & 0x80) ? c : ::tolower(c); });
-    sys_family_names_.emplace_back(std::move(name));
+FontManagerDarwin::FontManagerDarwin()
+    : cf_family_names_(CTFontManagerCopyAvailableFontFamilyNames()), count_(0) {
+  if (cf_family_names_) {
+    count_ = static_cast<int>(CFArrayGetCount(cf_family_names_.get()));
   }
-  sys_family_names_.emplace_back("sans-serif");
-  sys_family_names_.emplace_back("serif");
-  sys_family_names_.emplace_back("monospace");
-
-  sys_style_sets_.resize(sys_family_names_.size());
-  DEBUG_CHECK(sys_family_names_.size() == count + 3);
-  DEBUG_CHECK(sys_style_sets_.size() == count + 3);
 }
 
-int FontManagerDarwin::OnCountFamilies() const {
-  return static_cast<int>(sys_family_names_.size());
+std::shared_ptr<FontStyleSetDarwin> FontManagerDarwin::CreateStyleSet(
+    CFStringRef cf_family_name) {
+  UniqueCFRef<CFMutableDictionaryRef> cf_attr(CFDictionaryCreateMutable(
+      kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+      &kCFTypeDictionaryValueCallBacks));
+
+  CFDictionaryAddValue(cf_attr.get(), kCTFontFamilyNameAttribute,
+                       cf_family_name);
+
+  UniqueCFRef<CTFontDescriptorRef> desc(
+      CTFontDescriptorCreateWithAttributes(cf_attr.get()));
+
+  return std::make_shared<FontStyleSetDarwin>(std::move(desc));
 }
+
+int FontManagerDarwin::OnCountFamilies() const { return count_; }
 
 std::string FontManagerDarwin::OnGetFamilyName(int index) const {
-  if (index >= static_cast<int32_t>(sys_family_names_.size())) {
+  if (index < 0 || index >= count_) {
     return "";
   }
 
-  return sys_family_names_[index];
+  CFStringRef cf_string =
+      (CFStringRef)CFArrayGetValueAtIndex(cf_family_names_.get(), index);
+
+  CFIndex length = CFStringGetMaximumSizeForEncoding(
+                       CFStringGetLength(cf_string), kCFStringEncodingUTF8) +
+                   1;
+
+  std::vector<char> buffer(length);
+
+  Boolean ok = CFStringGetCString(cf_string, buffer.data(), length,
+                                  kCFStringEncodingUTF8);
+  if (!ok) {
+    return std::string{};
+  }
+  return std::string{buffer.data()};
 }
 
 std::shared_ptr<FontStyleSet> FontManagerDarwin::OnCreateStyleSet(
     int index) const {
-  return nullptr;
+  if (index < 0 || index >= count_) {
+    return nullptr;
+  }
+  CFStringRef cf_family_name =
+      (CFStringRef)CFArrayGetValueAtIndex(cf_family_names_.get(), index);
+  return CreateStyleSet(cf_family_name);
 }
 
 std::shared_ptr<FontStyleSet> FontManagerDarwin::OnMatchFamily(
     const char* family_name) const {
-  auto index = GetIndexByFamilyName(family_name);
-
-  if (index < 0) {
+  if (!family_name) {
     return nullptr;
   }
-
-  return MatchFamilyByIndex(index);
+  family_name = map_css_names(family_name);
+  UniqueCFRef<CFStringRef> cf_family_name = UniqueCFRef<CFStringRef>(
+      CFStringCreateWithCString(nullptr, family_name, kCFStringEncodingUTF8));
+  return CreateStyleSet(cf_family_name.get());
 }
 
 std::shared_ptr<Typeface> FontManagerDarwin::OnMatchFamilyStyle(
     const char* family_name, const FontStyle& style) const {
-  auto index = GetIndexByFamilyName(family_name);
-
-  auto style_set = MatchFamilyByIndex(index);
-
-  if (style_set == nullptr) {
+  family_name = map_css_names(family_name);
+  UniqueCFRef<CTFontDescriptorRef> req_desc =
+      create_descriptor(family_name, style);
+  if (!req_desc) {
     return nullptr;
   }
-
-  return style_set->MatchStyle(style);
+  if (!family_name) {
+    return typeface_from_desc(req_desc.get());
+  }
+  UniqueCFRef<CTFontDescriptorRef> resolved_desc(
+      CTFontDescriptorCreateMatchingFontDescriptor(req_desc.get(),
+                                                   name_required().get()));
+  if (!resolved_desc) {
+    return nullptr;
+  }
+  return typeface_from_desc(resolved_desc.get());
 }
 
 std::shared_ptr<Typeface> FontManagerDarwin::OnMatchFamilyStyleCharacter(
     const char* family_name, const FontStyle& style, const char* bcp47[],
     int bcp47Count, Unichar character) const {
-  auto index = GetIndexByFamilyName(family_name);
-
-  auto style_set = MatchFamilyByIndex(index);
-
-  if (style_set == nullptr) {
+  UniqueCFRef<CTFontDescriptorRef> desc = create_descriptor(family_name, style);
+  if (!desc) {
     return nullptr;
   }
-
-  auto typeface =
-      std::static_pointer_cast<TypefaceDarwin>(style_set->MatchStyle(style));
+  auto typeface = typeface_from_desc(desc.get());
 
   UniqueCFRef<CFStringRef> cf_string(CFStringCreateWithBytes(
       kCFAllocatorDefault, reinterpret_cast<const UInt8*>(&character),
@@ -286,15 +338,14 @@ std::shared_ptr<Typeface> FontManagerDarwin::OnMatchFamilyStyleCharacter(
 
   CFRange cf_range = CFRangeMake(0, CFStringGetLength(cf_string.get()));
 
-  UniqueCFRef<CTFontRef> cf_font(
+  UniqueCFRef<CTFontRef> ct_font(
       CTFontCreateForString(typeface->GetCTFont(), cf_string.get(), cf_range));
 
-  if (typeface->GetCTFont() == cf_font.get()) {
+  if (typeface->GetCTFont() == ct_font.get()) {
     return typeface;
   }
 
-  // fallbacked by system
-  return SavedFallbackTypeface(std::move(cf_font), style);
+  return TypefaceDarwin::Make(style, std::move(ct_font));
 }
 
 std::shared_ptr<Typeface> FontManagerDarwin::OnMakeFromData(
@@ -333,72 +384,6 @@ std::shared_ptr<Typeface> FontManagerDarwin::OnGetDefaultTypeface(
   }
 
   return OnMatchFamilyStyle("Helvetica", font_style);
-}
-
-int32_t FontManagerDarwin::GetIndexByFamilyName(const char* family_name) const {
-  if (family_name == NULL) {
-    return default_name_index_;
-  }
-
-  std::string name(family_name);
-  std::transform(name.begin(), name.end(), name.begin(),
-                 [](char c) { return (c & 0x80) ? c : ::tolower(c); });
-  for (int32_t i = 0; i < static_cast<int32_t>(sys_family_names_.size()); i++) {
-    if (sys_family_names_[i] == name) {
-      return i;
-    }
-  }
-
-  return -1;
-}
-
-std::shared_ptr<FontStyleSetDarwin> FontManagerDarwin::MatchFamilyByIndex(
-    int32_t index) const {
-  if (index >= static_cast<int32_t>(sys_style_sets_.size()) || index < 0) {
-    return nullptr;
-  }
-
-  if (sys_style_sets_[index] == nullptr) {
-    UniqueCFRef<CFMutableDictionaryRef> cf_attr(CFDictionaryCreateMutable(
-        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
-        &kCFTypeDictionaryValueCallBacks));
-
-    if (index < CFArrayGetCount(cf_family_names_.get())) {
-      CFStringRef cf_family =
-          (CFStringRef)CFArrayGetValueAtIndex(cf_family_names_.get(), index);
-      CFDictionaryAddValue(cf_attr.get(), kCTFontFamilyNameAttribute,
-                           cf_family);
-    } else {
-      // css names
-      auto* family_name = map_css_names(sys_family_names_[index].c_str());
-      CFStringRef css_cf_nmame = CFStringCreateWithCString(
-          kCFAllocatorDefault, family_name, kCFStringEncodingUTF8);
-      CFDictionaryAddValue(cf_attr.get(), kCTFontFamilyNameAttribute,
-                           css_cf_nmame);
-      CFRelease(css_cf_nmame);
-    }
-
-    UniqueCFRef<CTFontDescriptorRef> desc(
-        CTFontDescriptorCreateWithAttributes(cf_attr.get()));
-
-    sys_style_sets_[index] =
-        std::make_shared<FontStyleSetDarwin>(std::move(desc));
-  }
-
-  return sys_style_sets_[index];
-}
-
-std::shared_ptr<TypefaceDarwin> FontManagerDarwin::SavedFallbackTypeface(
-    UniqueCFRef<CTFontRef> ct_font, FontStyle const& style) const {
-  for (auto const& tf : sys_fallbacked_) {
-    if (CFEqual(tf->GetCTFont(), ct_font.get())) {
-      return tf;
-    }
-  }
-
-  sys_fallbacked_.emplace_back(TypefaceDarwin::Make(style, std::move(ct_font)));
-
-  return sys_fallbacked_.back();
 }
 
 std::shared_ptr<FontManager> FontManager::RefDefault() {
