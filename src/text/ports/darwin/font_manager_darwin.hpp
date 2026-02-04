@@ -81,21 +81,12 @@ class FontManagerDarwin : public FontManager {
       FontStyle const& font_style) const override;
 
  private:
-  void InitSystemFamily();
-
-  int32_t GetIndexByFamilyName(const char* family_name) const;
-
-  std::shared_ptr<FontStyleSetDarwin> MatchFamilyByIndex(int32_t index) const;
-
-  std::shared_ptr<TypefaceDarwin> SavedFallbackTypeface(
-      UniqueCFRef<CTFontRef> ct_font, FontStyle const& style) const;
+  static std::shared_ptr<FontStyleSetDarwin> CreateStyleSet(
+      CFStringRef cf_family_name);
 
  private:
   UniqueCFRef<CFArrayRef> cf_family_names_;
-  std::vector<std::string> sys_family_names_;
-  int default_name_index_ = -1;
-  mutable std::vector<std::shared_ptr<FontStyleSetDarwin>> sys_style_sets_;
-  mutable std::vector<std::shared_ptr<TypefaceDarwin>> sys_fallbacked_;
+  int count_ = 0;
   std::shared_ptr<Typeface> default_typeface_ = nullptr;
 };
 
