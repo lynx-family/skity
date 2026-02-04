@@ -67,6 +67,13 @@ target_include_directories(wgsl-cross PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_compile_options(wgsl-cross PRIVATE -fno-rtti)
 set_property(TARGET wgsl-cross PROPERTY CXX_STANDARD 17)
 
+if (ANDROID)
+    if (${SKITY_USE_ASAN})
+       target_compile_options(wgsl-cross PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+       target_link_options(wgsl-cross PRIVATE -fsanitize=address)
+    endif()
+endif ()
+
 # no-exceptions
 if (MSVC)
     target_compile_options(wgsl-cross PRIVATE /EHsc)
