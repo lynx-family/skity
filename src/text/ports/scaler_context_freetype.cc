@@ -286,13 +286,15 @@ void ScalerContextFreetype::GenerateMetrics(GlyphData* glyph) {
           bounds.Join(currentBounds);
         }
       }
-      glyph->hori_bearing_x_ = bounds.Left();
-      glyph->hori_bearing_y_ = -bounds.Top();
-      glyph->width_ = bounds.Width();
-      glyph->height_ = bounds.Height();
-      glyph->y_min_ = bounds.Top();
-      glyph->y_max_ = bounds.Bottom();
-      glyph->color_type_ = GlyphColorType::kColorV0;
+      if (have_layers) {
+        glyph->hori_bearing_x_ = bounds.Left();
+        glyph->hori_bearing_y_ = -bounds.Top();
+        glyph->width_ = bounds.Width();
+        glyph->height_ = bounds.Height();
+        glyph->y_min_ = bounds.Top();
+        glyph->y_max_ = bounds.Bottom();
+        glyph->color_type_ = GlyphColorType::kColorV0;
+      }
     }
 
     if (have_layers) {
