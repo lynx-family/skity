@@ -129,8 +129,8 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
     Vec2 device_run_pos{0, 0};
     transform_.MapPoints(&device_run_pos, &run_pos, 1);
 
-    float rx = device_run_pos.x + origin_x;
-    float ry = device_run_pos.y - origin_y;
+    float rx = std::floor(device_run_pos.x + origin_x + 0.5f);
+    float ry = std::floor(device_run_pos.y - origin_y + 0.5f);
     float rw = (uv_rb.x - uv_lt.x) / canvas_scale;
     float rh = (uv_rb.y - uv_lt.y) / canvas_scale;
 
