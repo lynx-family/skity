@@ -496,6 +496,7 @@ Path& Path::MoveTo(float x, float y) {
 
   verbs_.emplace_back(Verb::kMove);
   points_.emplace_back(Point{x, y, 0, 1});
+  MarkBoundsDirty();
 
   return *this;
 }
@@ -506,6 +507,7 @@ Path& Path::LineTo(float x, float y) {
   verbs_.emplace_back(Verb::kLine);
   points_.emplace_back(Point{x, y, 0, 1});
   segment_masks_ |= SegmentMask::kLine;
+  MarkBoundsDirty();
 
   return *this;
 }
@@ -517,6 +519,7 @@ Path& Path::QuadTo(float x1, float y1, float x2, float y2) {
   points_.emplace_back(Point{x1, y1, 0, 1});
   points_.emplace_back(Point{x2, y2, 0, 1});
   segment_masks_ |= SegmentMask::kQuad;
+  MarkBoundsDirty();
 
   return *this;
 }
@@ -537,6 +540,7 @@ Path& Path::ConicTo(float x1, float y1, float x2, float y2, float weight) {
     points_.emplace_back(Point{x1, y1, 0, 1});
     points_.emplace_back(Point{x2, y2, 0, 1});
     segment_masks_ |= SegmentMask::kConic;
+    MarkBoundsDirty();
   }
   return *this;
 }
@@ -551,6 +555,7 @@ Path& Path::CubicTo(float x1, float y1, float x2, float y2, float x3,
   points_.emplace_back(Point{x2, y2, 0, 1});
   points_.emplace_back(Point{x3, y3, 0, 1});
   segment_masks_ |= SegmentMask::kCubic;
+  MarkBoundsDirty();
 
   return *this;
 }
@@ -915,6 +920,7 @@ Path& Path::AddRRect(RRect const& rrect, Direction dir, uint32_t start_index) {
 
 Path& Path::Reset() {
   *this = Path();
+  MarkBoundsDirty();
   return *this;
 }
 
@@ -1086,7 +1092,10 @@ Point Path::GetLastMovePt() const {
 }
 
 bool Path::IsFinite() const {
-  ComputeBounds();
+  if (bounds_dirty_) {
+    ComputeBounds();
+    bounds_dirty_ = false;
+  }
   return is_finite_;
 }
 
@@ -1126,6 +1135,8 @@ void Path::Swap(Path& that) {
     std::swap(conic_weights_, that.conic_weights_);
     std::swap(is_finite_, that.is_finite_);
     std::swap(segment_masks_, that.segment_masks_);
+    std::swap(bounds_, that.bounds_);
+    std::swap(bounds_dirty_, that.bounds_dirty_);
   }
 }
 
@@ -1167,6 +1178,7 @@ Path& Path::AddPath(const Path& src, const Matrix& matrix, AddMode mode) {
     for (const auto& p : src.points_) {
       points_.emplace_back(matrix * p);
     }
+    MarkBoundsDirty();
 
     return *this;
   }
@@ -1226,6 +1238,7 @@ void Path::SetLastPt(float x, float y) {
     MoveTo(x, y);
   } else {
     PointSet(points_.back(), x, y);
+    MarkBoundsDirty();
   }
 }
 
@@ -1247,7 +1260,7 @@ Path Path::CopyWithMatrix(const Matrix& matrix) const {
   ret.segment_masks_ = segment_masks_;
 
   ret.is_finite_ = is_finite_;
-  ret.bounds_ = bounds_;
+  ret.MarkBoundsDirty();
 
   return ret;
 }
@@ -1275,7 +1288,7 @@ Path Path::CopyWithScale(float scale) const {
   ret.segment_masks_ = segment_masks_;
 
   ret.is_finite_ = is_finite_;
-  ret.bounds_ = bounds_;
+  ret.MarkBoundsDirty();
 
   return ret;
 }

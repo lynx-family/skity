@@ -490,7 +490,10 @@ class SKITY_API Path {
   bool Contains(float x, float y) const;
 
   Rect GetBounds() const {
-    ComputeBounds();
+    if (bounds_dirty_) {
+      ComputeBounds();
+      bounds_dirty_ = false;
+    }
     return bounds_;
   }
   /**
@@ -546,6 +549,7 @@ class SKITY_API Path {
   int LeadingMoveToCount() const;
   inline const Point& AtPoint(int32_t index) const { return points_[index]; }
   bool HasOnlyMoveTos() const;
+  void MarkBoundsDirty() const { bounds_dirty_ = true; }
 
   bool IsZeroLengthSincePoint(int startPtIndex) const;
   static bool ComputePtBounds(Rect* bounds, Path const& ref);
@@ -564,6 +568,7 @@ class SKITY_API Path {
   std::vector<float> conic_weights_;
   mutable bool is_finite_ = true;
   mutable Rect bounds_;
+  mutable bool bounds_dirty_ = true;
   PathFillType fill_type_ = PathFillType::kWinding;
   uint32_t segment_masks_ = 0;
 };
