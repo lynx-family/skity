@@ -1435,3 +1435,237 @@ TEST(Path, SegmentMask) {
                                        skity::Path::SegmentMask::kCubic);
   }
 }
+
+TEST(Path, GetBounds_EmptyPath) {
+  skity::Path path;
+  auto bounds = path.GetBounds();
+  EXPECT_TRUE(bounds.IsEmpty());
+}
+
+TEST(Path, GetBounds_SinglePoint) {
+  skity::Path path;
+  path.MoveTo(10, 20);
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 10.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 20.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 10.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 20.f);
+}
+
+TEST(Path, GetBounds_Line) {
+  skity::Path path;
+  path.MoveTo(0, 0);
+  path.LineTo(100, 50);
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 50.f);
+}
+
+TEST(Path, GetBounds_Rectangle) {
+  skity::Path path;
+  path.AddRect(skity::Rect::MakeLTRB(10, 20, 100, 200));
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 10.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 20.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 200.f);
+}
+
+TEST(Path, GetBounds_QuadCurve) {
+  skity::Path path;
+  path.MoveTo(0, 0);
+  path.QuadTo(50, 100, 100, 0);
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 100.f);
+}
+
+TEST(Path, GetBounds_CubicCurve) {
+  skity::Path path;
+  path.MoveTo(0, 0);
+  path.CubicTo(25, 100, 75, 100, 100, 0);
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 100.f);
+}
+
+TEST(Path, GetBounds_NegativeCoordinates) {
+  skity::Path path;
+  path.MoveTo(-50, -100);
+  path.LineTo(-20, -50);
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), -50.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), -100.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), -20.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), -50.f);
+}
+
+TEST(Path, GetBounds_MixedContours) {
+  skity::Path path;
+  path.MoveTo(0, 0);
+  path.LineTo(50, 50);
+  path.Close();
+  path.MoveTo(100, 100);
+  path.LineTo(200, 150);
+  path.Close();
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 200.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 150.f);
+}
+
+TEST(Path, GetBounds_ComplexPath) {
+  skity::Path path;
+  path.MoveTo(10, 10);
+  path.LineTo(50, 10);
+  path.QuadTo(100, 100, 150, 50);
+  path.CubicTo(200, 0, 250, 100, 300, 50);
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 10.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 300.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 100.f);
+}
+
+TEST(Path, GetBounds_Reset) {
+  skity::Path path;
+  path.MoveTo(0, 0);
+  path.LineTo(100, 50);
+  path.Reset();
+  auto bounds = path.GetBounds();
+  EXPECT_TRUE(bounds.IsEmpty());
+}
+
+TEST(Path, GetBounds_CopyWithScale) {
+  skity::Path path;
+  path.MoveTo(100, 100);
+  path.LineTo(200, 200);
+  path.MoveTo(100, 200);
+  path.Close();
+  auto scaled_path = path.CopyWithScale(3);
+  auto bounds = scaled_path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 300.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 300.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 600.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 600.f);
+}
+
+TEST(Path, GetBounds_CopyWithTransform) {
+  skity::Path path;
+  path.MoveTo(100, 100);
+  path.LineTo(200, 200);
+  path.MoveTo(100, 200);
+  path.Close();
+  auto transform = skity::Matrix::Translate(50, 50);
+  auto path1 = path.CopyWithMatrix(transform);
+  auto bounds = path1.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 150.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 150.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 250.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 250.f);
+}
+
+TEST(Path, GetBounds_ModifyBounds) {
+  skity::Path path;
+  path.MoveTo(100, 100);
+  path.LineTo(200, 200);
+  path.MoveTo(100, 200);
+  path.Close();
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 200.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 200.f);
+
+  path.MoveTo(300, 300);
+  path.LineTo(400, 400);
+  path.Close();
+  bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 400.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 400.f);
+}
+
+TEST(Path, GetBounds_SetLastPoint) {
+  skity::Path path;
+  path.MoveTo(100, 100);
+  path.LineTo(200, 200);
+  path.LineTo(100, 200);
+  path.Close();
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 200.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 200.f);
+
+  path.SetLastPt(0, 1);
+  bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 1.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 200.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 200.f);
+}
+
+TEST(Path, GetBounds_Swap) {
+  skity::Path a;
+  a.MoveTo(0, 0);
+  a.LineTo(100, 200);
+  auto bounds_a = a.GetBounds();
+  EXPECT_FLOAT_EQ(bounds_a.Left(), 0.f);
+  EXPECT_FLOAT_EQ(bounds_a.Top(), 0.f);
+  EXPECT_FLOAT_EQ(bounds_a.Right(), 100.f);
+  EXPECT_FLOAT_EQ(bounds_a.Bottom(), 200.f);
+
+  skity::Path b;
+  b.MoveTo(-100, 50);
+  b.QuadTo(50, 50, 300, 100);
+  auto bounds_b = b.GetBounds();
+  EXPECT_FLOAT_EQ(bounds_b.Left(), -100.f);
+  EXPECT_FLOAT_EQ(bounds_b.Top(), 50.f);
+  EXPECT_FLOAT_EQ(bounds_b.Right(), 300.f);
+  EXPECT_FLOAT_EQ(bounds_b.Bottom(), 100.f);
+
+  a.Swap(b);
+  bounds_a = a.GetBounds();
+  EXPECT_FLOAT_EQ(bounds_a.Left(), -100.f);
+  EXPECT_FLOAT_EQ(bounds_a.Top(), 50.f);
+  EXPECT_FLOAT_EQ(bounds_a.Right(), 300.f);
+  EXPECT_FLOAT_EQ(bounds_a.Bottom(), 100.f);
+
+  bounds_b = b.GetBounds();
+  EXPECT_FLOAT_EQ(bounds_b.Left(), 0.f);
+  EXPECT_FLOAT_EQ(bounds_b.Top(), 0.f);
+  EXPECT_FLOAT_EQ(bounds_b.Right(), 100.f);
+  EXPECT_FLOAT_EQ(bounds_b.Bottom(), 200.f);
+}
+
+TEST(Path, GetBounds_AddPath) {
+  skity::Path a;
+  a.MoveTo(-1, -1);
+  a.LineTo(2, 2);
+
+  auto bounds = a.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), -1.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), -1.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 2.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 2.f);
+
+  skity::Path b;
+  b.MoveTo(0, 0);
+  b.QuadTo(1, 1, 3, 3);
+
+  a.AddPath(b);
+  bounds = a.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), -1.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), -1.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 3.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 3.f);
+}
