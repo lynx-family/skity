@@ -47,7 +47,16 @@ cmake_dependent_option(
 )
 
 option(SKITY_LOG "option for logging" OFF)
-option(SKITY_CT_FONT "option for open CoreText font backend on Darwin" OFF)
+
+cmake_dependent_option(
+  SKITY_CT_FONT
+  "option for open CoreText font backend on Darwin"
+  ON
+  [[APPLE]]
+  OFF
+)
+message("SKITY_CT_FONT")
+message(${SKITY_CT_FONT})
 
 option(SKITY_USE_SELF_LIBCXX "option to force skity use self libcxx" OFF)
 option(SKITY_TRACE "option for enable skity tracing" OFF)
