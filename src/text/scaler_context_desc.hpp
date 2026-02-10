@@ -48,7 +48,8 @@ struct ScalerContextDesc {
            lhs.stroke_width == rhs.stroke_width &&
            lhs.miter_limit == rhs.miter_limit &&
            lhs.context_scale == rhs.context_scale && lhs.cap == rhs.cap &&
-           lhs.join == rhs.join && lhs.foreground_color == rhs.foreground_color;
+           lhs.join == rhs.join && lhs.fake_bold == rhs.fake_bold &&
+           lhs.foreground_color == rhs.foreground_color;
   }
 
   friend inline bool operator!=(const ScalerContextDesc& lhs,
