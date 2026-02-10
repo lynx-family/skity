@@ -268,16 +268,10 @@ TEST(Path_RawIter, test_RawIter) {
   EXPECT_FLOAT_EQ(pts[0].y, 0);
   EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kDone);
 
-  // No matter how many moves we add, we should get them all back
+  // Only the last MoveTo is valid
   p.MoveTo(Float1 * 2, Float1);
   p.MoveTo(Float1 * 3, Float1 * 2);
   iter.SetPath(p);
-  EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kMove);
-  EXPECT_FLOAT_EQ(pts[0].x, Float1);
-  EXPECT_FLOAT_EQ(pts[0].y, 0);
-  EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kMove);
-  EXPECT_FLOAT_EQ(pts[0].x, Float1 * 2);
-  EXPECT_FLOAT_EQ(pts[0].y, Float1);
   EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kMove);
   EXPECT_FLOAT_EQ(pts[0].x, Float1 * 3);
   EXPECT_FLOAT_EQ(pts[0].y, Float1 * 2);
@@ -309,9 +303,6 @@ TEST(Path_RawIter, test_RawIter) {
   EXPECT_FLOAT_EQ(pts[0].y, Float1);
   EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kClose);
   EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kMove);
-  EXPECT_FLOAT_EQ(pts[0].x, Float1 * 3);
-  EXPECT_FLOAT_EQ(pts[0].y, Float1 * 2);
-  EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kMove);
   EXPECT_FLOAT_EQ(pts[0].x, Float1 * 4);
   EXPECT_FLOAT_EQ(pts[0].y, Float1 * 3);
   EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kClose);
@@ -338,6 +329,7 @@ TEST(Path_RawIter, test_RawIter) {
     p.Reset();
     bool lastWasClose = true;
     bool haveMoteTo = false;
+    bool lastWasMove = false;
     skity::Point lastMoveToPt = {0, 0, 0, 1};
     int numPoints = 0;
     std::random_device
@@ -350,7 +342,8 @@ TEST(Path_RawIter, test_RawIter) {
       do {
         nextVerb =
             verbs[std::uniform_int_distribution<int>(0, verbs.size() - 1)(gen)];
-      } while (lastWasClose && nextVerb == skity::Path::Verb::kClose);
+      } while ((lastWasClose && nextVerb == skity::Path::Verb::kClose) ||
+               (lastWasMove && nextVerb == skity::Path::Verb::kMove));
       switch (nextVerb) {
         case skity::Path::Verb::kMove:
           lastMoveToPt = expectedPts[numPoints] =
@@ -358,6 +351,7 @@ TEST(Path_RawIter, test_RawIter) {
           p.MoveTo(expectedPts[numPoints].x, expectedPts[numPoints].y);
           numPoints += 1;
           lastWasClose = false;
+          lastWasMove = true;
           haveMoteTo = true;
           break;
         case skity::Path::Verb::kLine:
@@ -371,6 +365,7 @@ TEST(Path_RawIter, test_RawIter) {
           p.LineTo(expectedPts[numPoints].x, expectedPts[numPoints].y);
           numPoints += 1;
           lastWasClose = false;
+          lastWasMove = false;
           break;
         case skity::Path::Verb::kQuad:
           if (!haveMoteTo) {
@@ -386,6 +381,7 @@ TEST(Path_RawIter, test_RawIter) {
                    expectedPts[numPoints + 1].x, expectedPts[numPoints + 1].y);
           numPoints += 2;
           lastWasClose = false;
+          lastWasMove = false;
           break;
         case skity::Path::Verb::kConic:
           if (!haveMoteTo) {
@@ -403,6 +399,7 @@ TEST(Path_RawIter, test_RawIter) {
               std::uniform_real_distribution<float>(0.f, 0.999f)(gen) * 4);
           numPoints += 2;
           lastWasClose = false;
+          lastWasMove = false;
           break;
         case skity::Path::Verb::kCubic:
           if (!haveMoteTo) {
@@ -421,11 +418,13 @@ TEST(Path_RawIter, test_RawIter) {
                     expectedPts[numPoints + 2].x, expectedPts[numPoints + 2].y);
           numPoints += 3;
           lastWasClose = false;
+          lastWasMove = false;
           break;
         case skity::Path::Verb::kClose:
           p.Close();
           haveMoteTo = false;
           lastWasClose = true;
+          lastWasMove = false;
           break;
         default:
           break;
@@ -538,8 +537,8 @@ TEST(path, test_range_iter) {
   }
   EXPECT_TRUE(iter == iterate.end());
 
-  path.MoveTo(Float1 * 2, Float1);
-  path.MoveTo(Float1 * 3, Float1 * 2);
+  path.LineTo(Float1 * 2, Float1);
+  path.LineTo(Float1 * 3, Float1 * 2);
   iterate = skity::PathPriv::Iterate(path);
   iter = iterate.begin();
   {
@@ -554,17 +553,17 @@ TEST(path, test_range_iter) {
     auto ret = *iter++;
     auto verb = std::get<0>(ret);
     auto pts = std::get<1>(ret);
-    EXPECT_EQ(verb, skity::Path::Verb::kMove);
-    EXPECT_EQ(pts[0].x, Float1 * 2);
-    EXPECT_EQ(pts[0].y, Float1);
+    EXPECT_EQ(verb, skity::Path::Verb::kLine);
+    EXPECT_EQ(pts[1].x, Float1 * 2);
+    EXPECT_EQ(pts[1].y, Float1);
   }
   {
     auto ret = *iter++;
     auto verb = std::get<0>(ret);
     auto pts = std::get<1>(ret);
-    EXPECT_EQ(verb, skity::Path::Verb::kMove);
-    EXPECT_EQ(pts[0].x, Float1 * 3);
-    EXPECT_EQ(pts[0].y, Float1 * 2);
+    EXPECT_EQ(verb, skity::Path::Verb::kLine);
+    EXPECT_EQ(pts[1].x, Float1 * 3);
+    EXPECT_EQ(pts[1].y, Float1 * 2);
   }
 
   EXPECT_TRUE(iter == iterate.end());
@@ -612,14 +611,6 @@ TEST(path, test_range_iter) {
     auto ret = *iter++;
     auto verb = std::get<0>(ret);
     EXPECT_EQ(verb, skity::Path::Verb::kClose);
-  }
-  {
-    auto ret = *iter++;
-    auto verb = std::get<0>(ret);
-    auto pts = std::get<1>(ret);
-    EXPECT_EQ(verb, skity::Path::Verb::kMove);
-    EXPECT_EQ(pts[0].x, Float1 * 3);
-    EXPECT_EQ(pts[0].y, Float1 * 2);
   }
   {
     auto ret = *iter++;
@@ -1668,4 +1659,28 @@ TEST(Path, GetBounds_AddPath) {
   EXPECT_FLOAT_EQ(bounds.Top(), -1.f);
   EXPECT_FLOAT_EQ(bounds.Right(), 3.f);
   EXPECT_FLOAT_EQ(bounds.Bottom(), 3.f);
+}
+
+TEST(Path, GetBounds_MoveTos) {
+  skity::Path path;
+  // The first MoveTo will be ignored
+  path.MoveTo(30, 30);
+  path.MoveTo(100, 100);
+  EXPECT_EQ(path.CountPoints(), 1);
+  EXPECT_EQ(path.CountVerbs(), 1);
+
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 100.f);
+
+  path.Reset();
+  path.MoveTo(10, 10);
+  path.LineTo(20, 20);
+  path.LineTo(10, 30);
+  path.MoveTo(50, 60);
+  path.MoveTo(60, 50);
+  EXPECT_EQ(path.CountPoints(), 4);
+  EXPECT_EQ(path.CountVerbs(), 4);
 }
