@@ -13,6 +13,9 @@ target_include_directories(skity PRIVATE third_party/glm)
 set(PUGIXML_INSTALL OFF CACHE BOOL "disable PUGIXML_INSTALL")
 set(PUGIXML_NO_EXCEPTIONS ON CACHE BOOL "enable PUGIXML_NO_EXCEPTIONS")
 add_subdirectory(third_party/pugixml)
+if (NOT MSVC)
+  target_compile_options(pugixml-static PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
+endif()
 target_link_libraries(skity PRIVATE pugixml::pugixml)
 
 # spdlog
@@ -60,8 +63,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "OHOS" OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR EM
   endif()
 
   if(TARGET jsoncpp_static)
+    target_compile_options(jsoncpp_static PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
     target_link_libraries(skity PUBLIC jsoncpp_static)
   elseif(TARGET jsoncpp_lib)
+    target_compile_options(jsoncpp_lib PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
     target_link_libraries(skity PUBLIC jsoncpp_lib)
   endif()
 
