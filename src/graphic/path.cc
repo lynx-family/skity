@@ -492,12 +492,15 @@ static int _pts_in_verb(Path::Verb verb) {
 }
 
 Path& Path::MoveTo(float x, float y) {
-  last_move_to_index_ = CountPoints();
-
-  verbs_.emplace_back(Verb::kMove);
-  points_.emplace_back(Point{x, y, 0, 1});
+  if (!verbs_.empty() && verbs_.back() == Verb::kMove) {
+    DEBUG_CHECK(!points_.empty());
+    points_.back() = {x, y, 0, 1};
+  } else {
+    last_move_to_index_ = CountPoints();
+    verbs_.emplace_back(Verb::kMove);
+    points_.emplace_back(Point{x, y, 0, 1});
+  }
   MarkBoundsDirty();
-
   return *this;
 }
 
