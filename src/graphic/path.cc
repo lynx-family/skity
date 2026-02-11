@@ -1317,7 +1317,18 @@ void Path::ComputeBounds() const {
 bool Path::HasOnlyMoveTos() const { return segment_masks_ == 0; }
 
 bool Path::ComputePtBounds(Rect* bounds, const Path& ref) {
-  return bounds->SetBoundsCheck(ref.points_.data(), ref.CountPoints());
+  uint32_t point_count = ref.CountPoints();
+  if (ref.verbs_.size() > 1 && ref.verbs_.back() == Verb::kMove) {
+    // While trailing moves do not contribute to the bounds, we still reject
+    // them.
+    if (!PointIsFinite(ref.points_.back())) {
+      bounds->SetEmpty();
+      return false;
+    }
+    // Exclude the last move to point if it is not the first move to point
+    point_count--;
+  }
+  return bounds->SetBoundsCheck(ref.points_.data(), point_count);
 }
 
 bool Path::IsZeroLengthSincePoint(int startPtIndex) const {
