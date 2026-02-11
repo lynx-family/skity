@@ -1684,3 +1684,27 @@ TEST(Path, GetBounds_MoveTos) {
   EXPECT_EQ(path.CountPoints(), 4);
   EXPECT_EQ(path.CountVerbs(), 4);
 }
+
+TEST(Path, GetBounds_IgnoreLastMoveTo) {
+  skity::Path path;
+  path.MoveTo(0, 0);
+  path.LineTo(100, 50);
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 50.f);
+  path.MoveTo(300, 300);
+  bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 100.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 50.f);
+  EXPECT_TRUE(path.IsFinite());
+
+  path.MoveTo(std::numeric_limits<float>::infinity(),
+              std::numeric_limits<float>::quiet_NaN());
+  bounds = path.GetBounds();
+  EXPECT_TRUE(bounds.IsEmpty());
+  EXPECT_FALSE(path.IsFinite());
+}
