@@ -66,6 +66,13 @@ class SKITY_API Path {
     kEvenOdd,
   };
 
+  enum class IsAType {
+    kGeneral,
+    kRect,
+    kOval,
+    kSimpleRRect,
+  };
+
   class Iter {
    public:
     /**
@@ -480,6 +487,23 @@ class SKITY_API Path {
               Direction* direction = nullptr) const;
 
   /**
+   * Returns true if Path is equivalent to simple RRect (round rect) when
+   * filled. If false: rrect are unchanged. If true: rrect are written to if not
+   * nullptr.
+   *
+   * @param rrect       storage for RRect; may be nullptr
+   * @return true       Path is equivalent to rrect
+   */
+  bool IsSimpleRRect(RRect* rrect) const;
+
+  /**
+   * Returns the IsAType of the Path.
+   *
+   * @return IsAType    the type of the Path
+   */
+  IsAType GetIsAType() const { return type_; }
+
+  /**
    * Returns true if point(x, y) is contained by Path. This taking PathFillType
    * into account.
    *
@@ -571,6 +595,9 @@ class SKITY_API Path {
   mutable bool bounds_dirty_ = true;
   PathFillType fill_type_ = PathFillType::kWinding;
   uint32_t segment_masks_ = 0;
+  IsAType type_ = IsAType::kGeneral;
+  // radii_ is only used when type_ is kSimpleRRect
+  Vec2 radii_ = Vec2{0.f, 0.f};
 };
 
 }  // namespace skity

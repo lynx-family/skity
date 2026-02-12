@@ -11,7 +11,6 @@
 #include <skity/text/font.hpp>
 #include <skity/text/text_blob.hpp>
 
-#include "skity/geometry/rrect.hpp"
 #include "src/effect/image_filter_base.hpp"
 #include "src/gpu/gpu_surface_impl.hpp"
 #include "src/render/canvas_state.hpp"
@@ -127,6 +126,19 @@ void HWCanvas::OnDrawLine(float x0, float y0, float x1, float y1,
 
 void HWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
   SKITY_TRACE_EVENT(HWCanvas_OnDrawPath);
+  if (surface_->GetGPUContext()->IsEnableSimpleShapePipeline() &&
+      path.GetIsAType() != Path::IsAType::kGeneral) {
+    RRect rrect;
+    if (path.GetIsAType() == Path::IsAType::kRect) {
+      rrect.SetRect(path.GetBounds());
+    } else if (path.GetIsAType() == Path::IsAType::kOval) {
+      rrect.SetOval(path.GetBounds());
+    } else if (path.GetIsAType() == Path::IsAType::kSimpleRRect) {
+      path.IsSimpleRRect(&rrect);
+    }
+    DrawShape(Shape(&rrect), paint);
+    return;
+  }
   DrawShape(Shape(&path), paint);
 }
 
