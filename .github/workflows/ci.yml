@@ -53,6 +53,7 @@ jobs:
                 cd out/cmake_host_build/test/ut/
                 ctest --output-junit test.xml --rerun-failed --output-on-failure
     unittest_coverage:
+        if: false # TODO: Enable coverage tests when required apt packages become available
         runs-on: lynx-ubuntu-22.04-medium
         timeout-minutes: 30
         permissions:
