@@ -53,7 +53,7 @@ jobs:
                 cd out/cmake_host_build/test/ut/
                 ctest --output-junit test.xml --rerun-failed --output-on-failure
     unittest_coverage:
-        runs-on: lynx-ubuntu-22.04-medium
+        runs-on: ubuntu-22.04
         timeout-minutes: 30
         permissions:
           issues: write
