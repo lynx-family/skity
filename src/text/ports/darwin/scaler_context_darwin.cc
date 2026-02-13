@@ -8,6 +8,64 @@
 
 #include "src/text/ports/darwin/typeface_darwin.hpp"
 
+namespace {
+
+float compute_fake_bold_scale(float text_size, float text_scale) {
+  static const std::array<float, 2> keys = {9.0f, 36.0f};
+  std::array<float, 2> values = {1.0f / 24.0f, 1.0f / 32.0f};
+  for (size_t i = 0; i < values.size(); i++) {
+    values[i] /= text_scale;
+  }
+
+  if (text_size <= keys.front()) {
+    return values.front();
+  }
+  if (text_size >= keys.back()) {
+    return values.back();
+  }
+
+  auto it = std::lower_bound(keys.begin(), keys.end(), text_size);
+  std::size_t right = std::distance(keys.begin(), it);
+
+  std::size_t left = right - 1;
+
+  float left_key = keys[left];
+  float right_key = keys[right];
+
+  float t = (text_size - left_key) / (right_key - left_key);
+
+  return values[left] + t * (values[right] - values[left]);
+}
+
+skity::StrokeDesc fake_bold_if_needed(const skity::StrokeDesc &stroke_desc,
+                                      const skity::ScalerContextDesc &desc,
+                                      float text_scale) {
+  if (desc.fake_bold) {
+    skity::StrokeDesc working_stroke_desc = stroke_desc;
+    if (stroke_desc.is_stroke) {
+      working_stroke_desc.is_stroke = true;
+      working_stroke_desc.stroke_width =
+          stroke_desc.stroke_width +
+          desc.text_size * compute_fake_bold_scale(desc.text_size, text_scale);
+      working_stroke_desc.cap = stroke_desc.cap;
+      working_stroke_desc.join = stroke_desc.join;
+      working_stroke_desc.miter_limit = stroke_desc.miter_limit;
+    } else {
+      working_stroke_desc.is_stroke = true;
+      working_stroke_desc.stroke_width =
+          desc.text_size * compute_fake_bold_scale(desc.text_size, text_scale);
+      working_stroke_desc.cap = skity::Paint::Cap::kDefault_Cap;
+      working_stroke_desc.join = skity::Paint::Join::kDefault_Join;
+      working_stroke_desc.miter_limit = skity::Paint::kDefaultMiterLimit;
+    }
+    return working_stroke_desc;
+  }
+
+  return stroke_desc;
+}
+
+}  // namespace
+
 namespace skity {
 
 OffScreenContext::OffScreenContext(Color foreground_color) {
@@ -266,17 +324,33 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
   CGPoint point = CGPointMake(glyph->image_.origin_x_for_raster,
                               glyph->image_.origin_y_for_raster);
 
-  if (stroke_desc.is_stroke) {
+  if (desc_.fake_bold) {
+    StrokeDesc working_stroke_desc =
+        fake_bold_if_needed(stroke_desc, desc_, text_scale_);
+
     CGContextSetTextDrawingMode(cg_context.get(), kCGTextStroke);
     CGContextSetLineWidth(cg_context.get(),
-                          stroke_desc.stroke_width * text_scale_);
-    CGContextSetLineCap(cg_context.get(), ToCGCap(stroke_desc.cap));
-    CGContextSetLineJoin(cg_context.get(), ToCGJoin(stroke_desc.join));
-    CGContextSetMiterLimit(cg_context.get(), stroke_desc.miter_limit);
+                          working_stroke_desc.stroke_width * text_scale_);
+    CGContextSetLineCap(cg_context.get(), ToCGCap(working_stroke_desc.cap));
+    CGContextSetLineJoin(cg_context.get(), ToCGJoin(working_stroke_desc.join));
+    CGContextSetMiterLimit(cg_context.get(), working_stroke_desc.miter_limit);
     CTFontDrawGlyphs(ct_font_.get(), &cg_glyph, &point, 1, cg_context.get());
-  } else {
+
     CGContextSetTextDrawingMode(cg_context.get(), kCGTextFill);
     CTFontDrawGlyphs(ct_font_.get(), &cg_glyph, &point, 1, cg_context.get());
+  } else {
+    if (stroke_desc.is_stroke) {
+      CGContextSetTextDrawingMode(cg_context.get(), kCGTextStroke);
+      CGContextSetLineWidth(cg_context.get(),
+                            stroke_desc.stroke_width * text_scale_);
+      CGContextSetLineCap(cg_context.get(), ToCGCap(stroke_desc.cap));
+      CGContextSetLineJoin(cg_context.get(), ToCGJoin(stroke_desc.join));
+      CGContextSetMiterLimit(cg_context.get(), stroke_desc.miter_limit);
+      CTFontDrawGlyphs(ct_font_.get(), &cg_glyph, &point, 1, cg_context.get());
+    } else {
+      CGContextSetTextDrawingMode(cg_context.get(), kCGTextFill);
+      CTFontDrawGlyphs(ct_font_.get(), &cg_glyph, &point, 1, cg_context.get());
+    }
   }
 
   glyph->image_.buffer = reinterpret_cast<uint8_t *>(os_context_.GetAddr());
@@ -284,6 +358,8 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
 
 void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
                                             const StrokeDesc &stroke_desc) {
+  StrokeDesc working_stroke_desc =
+      fake_bold_if_needed(stroke_desc, desc_, text_scale_);
   CGGlyph cg_glyph = glyph->Id();
 
   if (!cg_glyph) {
@@ -307,16 +383,16 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
   uint32_t width = std::ceil(cg_bounds.size.width * context_scale_) + 2;
   uint32_t height = std::ceil(cg_bounds.size.height * context_scale_) + 2;
 
-  if (stroke_desc.is_stroke) {
+  if (working_stroke_desc.is_stroke) {
     if (glyph->GetPath().IsEmpty()) {
       GeneratePath(glyph);
     }
     Paint paint;
     paint.SetStyle(Paint::kStroke_Style);
-    paint.SetStrokeWidth(stroke_desc.stroke_width * text_scale_);
-    paint.SetStrokeCap(stroke_desc.cap);
-    paint.SetStrokeJoin(stroke_desc.join);
-    paint.SetStrokeMiter(stroke_desc.miter_limit);
+    paint.SetStrokeWidth(working_stroke_desc.stroke_width * text_scale_);
+    paint.SetStrokeCap(working_stroke_desc.cap);
+    paint.SetStrokeJoin(working_stroke_desc.join);
+    paint.SetStrokeMiter(working_stroke_desc.miter_limit);
     Path quad_path;
     Path fill_path;
     Stroke stroke(paint);
