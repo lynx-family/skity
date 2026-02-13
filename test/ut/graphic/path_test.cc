@@ -1708,3 +1708,138 @@ TEST(Path, GetBounds_IgnoreLastMoveTo) {
   EXPECT_TRUE(bounds.IsEmpty());
   EXPECT_FALSE(path.IsFinite());
 }
+
+TEST(Path, GetType) {
+  skity::Path path;
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+
+  path.MoveTo(0, 0);
+  path.LineTo(10, 10);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+
+  path.Reset();
+  path.AddRect(skity::Rect::MakeLTRB(10, 20, 100, 200));
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kRect);
+
+  path.Reset();
+  path.AddOval(skity::Rect::MakeLTRB(10, 20, 100, 200));
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kOval);
+
+  path.Reset();
+  path.AddRoundRect(skity::Rect::MakeLTRB(10, 20, 100, 200), 10, 10);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kSimpleRRect);
+
+  path.SetLastPt(10, 5);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+}
+
+TEST(Path, Oval) {
+  skity::Path path;
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+
+  path.MoveTo(0, 0);
+  path.LineTo(10, 10);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+
+  path.Reset();
+  path.AddRect(skity::Rect::MakeLTRB(10, 20, 100, 200));
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kRect);
+
+  path.Reset();
+  path.AddOval(skity::Rect::MakeLTRB(10, 20, 100, 200));
+
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kOval);
+  skity::Rect oval_rect = path.GetBounds();
+  EXPECT_FLOAT_EQ(oval_rect.Left(), 10.f);
+  EXPECT_FLOAT_EQ(oval_rect.Top(), 20.f);
+  EXPECT_FLOAT_EQ(oval_rect.Right(), 100.f);
+  EXPECT_FLOAT_EQ(oval_rect.Bottom(), 200.f);
+
+  path.Reset();
+  path.AddCircle(50, 50, 30);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kOval);
+  skity::Rect circle_rect = path.GetBounds();
+  EXPECT_FLOAT_EQ(circle_rect.Left(), 20.f);
+  EXPECT_FLOAT_EQ(circle_rect.Top(), 20.f);
+  EXPECT_FLOAT_EQ(circle_rect.Right(), 80.f);
+  EXPECT_FLOAT_EQ(circle_rect.Bottom(), 80.f);
+
+  path.Reset();
+  path.MoveTo(0, 0);
+  path.LineTo(10, 10);
+  path.QuadTo(20, 20, 30, 30);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+}
+
+TEST(Path, IsSimpleRRect) {
+  skity::Path path;
+
+  // Empty path should not be RRect
+  EXPECT_FALSE(path.IsSimpleRRect(nullptr));
+
+  // Line path should not be RRect
+  path.MoveTo(0, 0);
+  path.LineTo(10, 10);
+  EXPECT_FALSE(path.IsSimpleRRect(nullptr));
+
+  // Rect path should not be RRect
+  path.Reset();
+  path.AddRect(skity::Rect::MakeLTRB(10, 20, 100, 200));
+  EXPECT_FALSE(path.IsSimpleRRect(nullptr));
+
+  // Oval path should not be RRect
+  path.Reset();
+  path.AddOval(skity::Rect::MakeLTRB(10, 20, 100, 200));
+  EXPECT_FALSE(path.IsSimpleRRect(nullptr));
+
+  // RoundRect path should be RRect
+  path.Reset();
+  path.AddRoundRect(skity::Rect::MakeLTRB(10, 20, 100, 200), 10, 10);
+  skity::RRect rrect;
+  EXPECT_TRUE(path.IsSimpleRRect(&rrect));
+  EXPECT_FLOAT_EQ(rrect.GetRect().Left(), 10.f);
+  EXPECT_FLOAT_EQ(rrect.GetRect().Top(), 20.f);
+  EXPECT_FLOAT_EQ(rrect.GetRect().Right(), 100.f);
+  EXPECT_FLOAT_EQ(rrect.GetRect().Bottom(), 200.f);
+  EXPECT_FLOAT_EQ(rrect.GetSimpleRadii().x, 10.f);
+  EXPECT_FLOAT_EQ(rrect.GetSimpleRadii().y, 10.f);
+
+  // Complex path should not be RRect
+  path.Reset();
+  path.MoveTo(0, 0);
+  path.LineTo(10, 10);
+  path.QuadTo(20, 20, 30, 30);
+  EXPECT_FALSE(path.IsSimpleRRect(nullptr));
+}
+
+TEST(Path, GetType_AfterModifications) {
+  skity::Path path;
+
+  // Start with rect
+  path.AddRect(skity::Rect::MakeLTRB(10, 20, 100, 200));
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kRect);
+
+  // Add more operations - should become general
+  path.LineTo(150, 250);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+
+  // Reset and create oval
+  path.Reset();
+  path.AddOval(skity::Rect::MakeLTRB(10, 20, 100, 200));
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kOval);
+
+  // Reset and create rrect
+  path.Reset();
+  path.AddRoundRect(skity::Rect::MakeLTRB(10, 20, 100, 200), 10, 10);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kSimpleRRect);
+
+  // After reset, should be general
+  path.Reset();
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+
+  path.MoveTo(5, 5);
+  path.LineTo(10, 10);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+  path.AddRoundRect(skity::Rect::MakeLTRB(10, 20, 100, 200), 10, 10);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+}

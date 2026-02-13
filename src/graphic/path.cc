@@ -499,6 +499,7 @@ Path& Path::MoveTo(float x, float y) {
     last_move_to_index_ = CountPoints();
     verbs_.emplace_back(Verb::kMove);
     points_.emplace_back(Point{x, y, 0, 1});
+    type_ = IsAType::kGeneral;
   }
   MarkBoundsDirty();
   return *this;
@@ -510,6 +511,7 @@ Path& Path::LineTo(float x, float y) {
   verbs_.emplace_back(Verb::kLine);
   points_.emplace_back(Point{x, y, 0, 1});
   segment_masks_ |= SegmentMask::kLine;
+  type_ = IsAType::kGeneral;
   MarkBoundsDirty();
 
   return *this;
@@ -522,6 +524,7 @@ Path& Path::QuadTo(float x1, float y1, float x2, float y2) {
   points_.emplace_back(Point{x1, y1, 0, 1});
   points_.emplace_back(Point{x2, y2, 0, 1});
   segment_masks_ |= SegmentMask::kQuad;
+  type_ = IsAType::kGeneral;
   MarkBoundsDirty();
 
   return *this;
@@ -543,6 +546,7 @@ Path& Path::ConicTo(float x1, float y1, float x2, float y2, float weight) {
     points_.emplace_back(Point{x1, y1, 0, 1});
     points_.emplace_back(Point{x2, y2, 0, 1});
     segment_masks_ |= SegmentMask::kConic;
+    type_ = IsAType::kGeneral;
     MarkBoundsDirty();
   }
   return *this;
@@ -558,6 +562,7 @@ Path& Path::CubicTo(float x1, float y1, float x2, float y2, float x3,
   points_.emplace_back(Point{x2, y2, 0, 1});
   points_.emplace_back(Point{x3, y3, 0, 1});
   segment_masks_ |= SegmentMask::kCubic;
+  type_ = IsAType::kGeneral;
   MarkBoundsDirty();
 
   return *this;
@@ -810,6 +815,8 @@ Path& Path::ArcTo(float rx, float ry, float xAxisRotate, ArcSize largeArc,
 Path& Path::AddRect(Rect const& rect, Direction dir, uint32_t start) {
   this->SetFirstDirection(this->HasOnlyMoveTos() ? dir : Direction::kUnknown);
 
+  bool was_empty = HasOnlyMoveTos();
+
   AutoDisableDirectionCheck addc{this};
   AutoPathBoundsUpdate adbu(this, rect);
 
@@ -820,6 +827,9 @@ Path& Path::AddRect(Rect const& rect, Direction dir, uint32_t start) {
   this->LineTo(iter.next());
   this->LineTo(iter.next());
   this->Close();
+  if (was_empty) {
+    type_ = IsAType::kRect;
+  }
 
   return *this;
 }
@@ -885,6 +895,8 @@ Path& Path::AddRRect(RRect const& rrect, Direction dir, uint32_t start_index) {
   } else {
     this->SetFirstDirection(this->HasOnlyMoveTos() ? dir : Direction::kUnknown);
 
+    bool was_empty = HasOnlyMoveTos();
+
     AutoPathBoundsUpdate apbu{this, bounds};
     AutoDisableDirectionCheck addc{this};
 
@@ -916,6 +928,11 @@ Path& Path::AddRRect(RRect const& rrect, Direction dir, uint32_t start_index) {
     }
 
     this->Close();
+
+    if (was_empty && rrect.IsSimple()) {
+      type_ = IsAType::kSimpleRRect;
+      radii_ = rrect.GetSimpleRadii();
+    }
   }
 
   return *this;
@@ -923,6 +940,8 @@ Path& Path::AddRRect(RRect const& rrect, Direction dir, uint32_t start_index) {
 
 Path& Path::Reset() {
   *this = Path();
+  type_ = IsAType::kGeneral;
+  radii_ = Vec2{0.f, 0.f};
   MarkBoundsDirty();
   return *this;
 }
@@ -1014,6 +1033,9 @@ Path& Path::AddOval(const Rect& oval, Direction dir, uint32_t start) {
     ConicTo(rect_iter.next(), oval_iter.next(), weight);
   }
   Close();
+  if (is_oval) {
+    type_ = IsAType::kOval;
+  }
   return *this;
 }
 
@@ -1140,6 +1162,8 @@ void Path::Swap(Path& that) {
     std::swap(segment_masks_, that.segment_masks_);
     std::swap(bounds_, that.bounds_);
     std::swap(bounds_dirty_, that.bounds_dirty_);
+    std::swap(type_, that.type_);
+    std::swap(radii_, that.radii_);
   }
 }
 
@@ -1182,6 +1206,7 @@ Path& Path::AddPath(const Path& src, const Matrix& matrix, AddMode mode) {
       points_.emplace_back(matrix * p);
     }
     MarkBoundsDirty();
+    type_ = IsAType::kGeneral;
 
     return *this;
   }
@@ -1242,6 +1267,7 @@ void Path::SetLastPt(float x, float y) {
   } else {
     PointSet(points_.back(), x, y);
     MarkBoundsDirty();
+    type_ = IsAType::kGeneral;
   }
 }
 
@@ -1264,6 +1290,7 @@ Path Path::CopyWithMatrix(const Matrix& matrix) const {
 
   ret.is_finite_ = is_finite_;
   ret.MarkBoundsDirty();
+  ret.type_ = IsAType::kGeneral;
 
   return ret;
 }
@@ -1292,6 +1319,7 @@ Path Path::CopyWithScale(float scale) const {
 
   ret.is_finite_ = is_finite_;
   ret.MarkBoundsDirty();
+  ret.type_ = IsAType::kGeneral;
 
   return ret;
 }
@@ -1511,6 +1539,16 @@ bool Path::IsRect(Rect* rect, bool* is_closed, Direction* direction) const {
                                                             : Direction::kCCW;
   }
 
+  return true;
+}
+
+bool Path::IsSimpleRRect(RRect* rrect) const {
+  if (type_ != IsAType::kSimpleRRect) {
+    return false;
+  }
+  if (rrect) {
+    rrect->SetRectXY(GetBounds(), radii_.x, radii_.y);
+  }
   return true;
 }
 
