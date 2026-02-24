@@ -2041,6 +2041,47 @@ Parser::Result<ast::Attribute*> Parser::Attribute() {
     return ReturnType{allocator_->Allocate<ast::LocationAttribute>(index)};
   }
 
+  if (Consume(TokenType::kIdentifier, "color")) {
+    if (!Consume(TokenType::kParenLeft)) {
+      diagnosis_.message = "Expected '(' after color attribute";
+      diagnosis_.line = Peek().line;
+      diagnosis_.column = Peek().column;
+      return ReturnType{State::kError};
+    }
+
+    auto exp = ConstLiteral();
+    if (exp.state != State::kSuccess) {
+      return ReturnType{State::kError};
+    }
+
+    if (!Consume(TokenType::kParenRight)) {
+      diagnosis_.message = "Expected ')' after color attribute";
+      diagnosis_.line = Peek().line;
+      diagnosis_.column = Peek().column;
+      return ReturnType{State::kError};
+    }
+
+    auto const_exp = exp.GetValue();
+    if (const_exp->GetType() != ast::ExpressionType::kIntLiteral) {
+      diagnosis_.message = "Expected integer literal after color attribute";
+      diagnosis_.line = Peek().line;
+      diagnosis_.column = Peek().column;
+      return ReturnType{State::kError};
+    }
+
+    auto index = static_cast<ast::IntLiteralExp*>(const_exp)->value;
+
+    if (index < 0) {
+      diagnosis_.message =
+          "Expected positive integer literal after color attribute";
+      diagnosis_.line = Peek().line;
+      diagnosis_.column = Peek().column;
+      return ReturnType{State::kError};
+    }
+
+    return ReturnType{allocator_->Allocate<ast::ColorAttribute>(index)};
+  }
+
   if (Consume(TokenType::kIdentifier, "interpolate")) {
     if (!Consume(TokenType::kParenLeft)) {
       diagnosis_.message = "Expected '(' after interpolate attribute";

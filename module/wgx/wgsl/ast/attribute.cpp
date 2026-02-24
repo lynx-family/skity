@@ -83,6 +83,10 @@ AttributeType LocationAttribute::GetType() const {
   return AttributeType::kLocation;
 }
 
+ColorAttribute::ColorAttribute(int64_t index) : index(index) {}
+std::string ColorAttribute::GetName() const { return "color"; }
+AttributeType ColorAttribute::GetType() const { return AttributeType::kColor; }
+
 InterpolateAttribute::InterpolateAttribute(InterpolateType type,
                                            InterpolateSampling sampling)
     : type(type), sampling(sampling) {}

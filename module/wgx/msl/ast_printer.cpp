@@ -247,7 +247,8 @@ void AstPrinter::Visit(ast::Function* function) {
 
       size_t attr_count = 0;
       ss_ << "[[";
-      if (param->GetAttribute(ast::AttributeType::kBuiltin) == nullptr) {
+      if (param->GetAttribute(ast::AttributeType::kBuiltin) == nullptr &&
+          param->GetAttribute(ast::AttributeType::kColor) == nullptr) {
         ss_ << "stage_in";
         attr_count++;
       }
@@ -886,6 +887,13 @@ std::vector<Attribute> AstPrinter::GetAttributes(
                 "color", static_cast<uint32_t>(location_attr->index)});
           }
         }
+      }
+    } else if (attr->GetType() == ast::AttributeType::kColor) {
+      if (entry_point_input && func_->GetFunction()->GetPipelineStage() ==
+                                   ast::PipelineStage::kFragment) {
+        auto color_attr = static_cast<ast::ColorAttribute*>(attr);
+        attrs.emplace_back(
+            Attribute{"color", static_cast<uint32_t>(color_attr->index)});
       }
     } else if (attr->GetType() == ast::AttributeType::kVertex ||
                attr->GetType() == ast::AttributeType::kFragment) {
