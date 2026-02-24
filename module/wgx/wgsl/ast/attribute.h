@@ -157,6 +157,17 @@ struct LocationAttribute : public Attribute {
   int64_t index;
 };
 
+struct ColorAttribute : public Attribute {
+  explicit ColorAttribute(int64_t index);
+  ~ColorAttribute() override = default;
+
+  std::string GetName() const override;
+
+  AttributeType GetType() const override;
+
+  int64_t index;
+};
+
 enum class InterpolateType {
   kUndefined,
   kFlat,

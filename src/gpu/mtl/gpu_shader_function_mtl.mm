@@ -21,7 +21,10 @@ GPUShaderFunctionMTL::GPUShaderFunctionMTL(GPULabel label, id<MTLDevice> device,
   NSString* shader_str = [NSString stringWithCString:source encoding:NSUTF8StringEncoding];
 
   MTLCompileOptions* compileOptions = [MTLCompileOptions new];
-  if (@available(macOS 10.13, iOS 11.0, *)) {
+  // Framebuffer fetch is supported in MSL 2.3 in MacOS 11+.
+  if (@available(macOS 11.0, iOS 14.0, *)) {
+    compileOptions.languageVersion = MTLLanguageVersion2_3;
+  } else if (@available(macOS 10.13, iOS 11.0, *)) {
     compileOptions.languageVersion = MTLLanguageVersion2_0;
   }
   id<MTLLibrary> lib = [device newLibraryWithSource:shader_str options:compileOptions error:&err];

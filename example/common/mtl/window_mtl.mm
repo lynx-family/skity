@@ -41,6 +41,7 @@ GLFWwindow* WindowMTL::CreateWindowHandler() {
   metal_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
   metal_layer.contentsScale = [[NSScreen mainScreen] backingScaleFactor];
   metal_layer.colorspace = CGColorSpaceCreateDeviceRGB();
+  metal_layer.framebufferOnly = NO;
 
   oc_window.contentView.layer = metal_layer;
   oc_window.contentView.wantsLayer = YES;
