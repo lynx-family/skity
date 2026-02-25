@@ -537,6 +537,22 @@ bool AstPrinter::Write() {
 
   ss_ << std::endl;
 
+  // Check if we need framebuffer fetch extension
+  needs_fb_fetch_ = false;
+  if (func_->GetFunction()->GetPipelineStage() ==
+      ast::PipelineStage::kFragment) {
+    for (auto& param : func_->GetFunction()->params) {
+      if (param->GetAttribute(ast::AttributeType::kColor)) {
+        needs_fb_fetch_ = true;
+        break;
+      }
+    }
+  }
+  if (needs_fb_fetch_) {
+    ss_ << "#extension GL_EXT_shader_framebuffer_fetch : require" << std::endl;
+    ss_ << std::endl;
+  }
+
   if (options_.standard == GlslOptions::Standard::kES &&
       func_->GetFunction()->GetPipelineStage() ==
           ast::PipelineStage::kFragment) {
@@ -887,8 +903,11 @@ void AstPrinter::WriteOutput() {
     }
 
     WriteLocation(attr, entry_point->GetPipelineStage(), false);
-
-    ss_ << " out ";
+    if (needs_fb_fetch_) {
+      ss_ << " inout ";
+    } else {
+      ss_ << " out ";
+    }
 
     WriteType(type);
 
@@ -950,13 +969,17 @@ void AstPrinter::WriteMainFunc() {
 
         WriteBuiltinVariable(param, builtin_attr);
       } else {
-        if (stage == ast::PipelineStage::kVertex) {
-          ss_ << "in_";
+        if (param->GetAttribute(ast::AttributeType::kColor) != nullptr) {
+          ss_ << "fragColor";
         } else {
-          ss_ << "vs_out_";
-        }
+          if (stage == ast::PipelineStage::kVertex) {
+            ss_ << "in_";
+          } else {
+            ss_ << "vs_out_";
+          }
 
-        param->name->Accept(this);
+          param->name->Accept(this);
+        }
       }
       ss_ << ";" << std::endl;
 

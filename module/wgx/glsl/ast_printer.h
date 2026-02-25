@@ -93,6 +93,7 @@ class AstPrinter : public ast::AstVisitor {
   bool has_error_ = false;
   uint32_t ubo_index_ = 0;
   uint32_t texture_index_ = 0;
+  bool needs_fb_fetch_ = false;
 };
 
 }  // namespace glsl
