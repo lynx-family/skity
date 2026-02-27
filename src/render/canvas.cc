@@ -387,10 +387,6 @@ void Canvas::DrawGlyphs(int count, const GlyphID *glyphs,
   this->OnDrawGlyphs(count, glyphs, position_x, position_y, font, paint);
 }
 
-void Canvas::UpdateViewport(uint32_t width, uint32_t height) {
-  this->OnUpdateViewport(width, height);
-}
-
 uint32_t Canvas::Width() const { return this->OnGetWidth(); }
 
 uint32_t Canvas::Height() const { return this->OnGetHeight(); }

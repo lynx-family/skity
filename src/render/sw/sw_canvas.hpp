@@ -103,8 +103,6 @@ class SWCanvas : public Canvas {
 
   uint32_t OnGetHeight() const override;
 
-  void OnUpdateViewport(uint32_t width, uint32_t height) override;
-
   CanvasState* GetCanvasState() const override {
     if (parent_canvas_) {
       return parent_canvas_->GetCanvasState();

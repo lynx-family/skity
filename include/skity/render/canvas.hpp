@@ -346,11 +346,7 @@ class SKITY_API Canvas {
   void DrawGlyphs(int count, const GlyphID glyphs[], const float positions_x[],
                   const float positions_y[], const Font& font,
                   const Paint& paint);
-  SKITY_EXPERIMENTAL
-  inline void DrawDebugLine(bool debug) { draw_debug_line_ = debug; }
 
-  SKITY_EXPERIMENTAL
-  void UpdateViewport(uint32_t width, uint32_t height);
   uint32_t Width() const;
   uint32_t Height() const;
 
@@ -425,9 +421,6 @@ class SKITY_API Canvas {
 
   virtual bool NeedGlyphPath(Paint const& paint);
 
-  virtual void OnUpdateViewport(uint32_t width, uint32_t height) = 0;
-  inline bool IsDrawDebugLine() const { return draw_debug_line_; }
-
   virtual CanvasState* GetCanvasState() const { return canvas_state_.get(); }
 
   void CalculateGlobalClipBounds(const Rect& local_clip_bounds, ClipOp op);
@@ -442,7 +435,6 @@ class SKITY_API Canvas {
 
  private:
   int32_t save_count_ = 1;
-  bool draw_debug_line_ = false;
   std::vector<Rect> global_clip_bounds_stack_;
   bool tracing_canvas_state_ = true;
   std::unique_ptr<CanvasState> canvas_state_;

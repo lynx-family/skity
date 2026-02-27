@@ -86,7 +86,6 @@ class RecordPlayback : public Canvas {
   void OnFlush() override {}
   uint32_t OnGetWidth() const override { return width_; }
   uint32_t OnGetHeight() const override { return height_; }
-  void OnUpdateViewport(uint32_t width, uint32_t height) override {}
 
  private:
   bool ParseStream(ReadStream& stream, TypefaceSet* typeface_set,

@@ -79,8 +79,6 @@ class HWCanvas : public Canvas {
 
   uint32_t OnGetHeight() const override;
 
-  void OnUpdateViewport(uint32_t width, uint32_t height) override;
-
  private:
   void Init();
 

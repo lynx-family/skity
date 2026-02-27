@@ -700,8 +700,6 @@ uint32_t SWCanvas::OnGetWidth() const { return bitmap_->Width(); }
 
 uint32_t SWCanvas::OnGetHeight() const { return bitmap_->Height(); }
 
-void SWCanvas::OnUpdateViewport(uint32_t, uint32_t) {}
-
 std::unique_ptr<SWSpanBrush> SWCanvas::GenerateBrush(
     std::vector<Span> const& spans, skity::Paint const& paint, bool stroke,
     Rect const& bounds) {
