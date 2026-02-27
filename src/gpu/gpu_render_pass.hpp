@@ -305,24 +305,6 @@ class GPURenderPass {
   ArrayList<Command*, 32> commands_;
 };
 
-class GPURenderPassProxy : public GPURenderPass {
- public:
-  explicit GPURenderPassProxy(const GPURenderPassDescriptor& desc)
-      : GPURenderPass(desc) {}
-
-  void EncodeCommands(
-      std::optional<GPUViewport> viewport = std::nullopt,
-      std::optional<GPUScissorRect> scissor = std::nullopt) override {
-    viewport_ = viewport;
-    scissor_ = scissor;
-  }
-
- private:
-  friend class GPUCommandBufferProxy;
-  std::optional<GPUViewport> viewport_;
-  std::optional<GPUScissorRect> scissor_;
-};
-
 }  // namespace skity
 
 #endif  // SRC_GPU_GPU_RENDER_PASS_HPP
