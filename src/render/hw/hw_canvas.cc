@@ -66,8 +66,6 @@ uint32_t HWCanvas::OnGetWidth() const { return surface_->GetWidth(); }
 
 uint32_t HWCanvas::OnGetHeight() const { return surface_->GetHeight(); }
 
-void HWCanvas::OnUpdateViewport(uint32_t width, uint32_t height) {}
-
 void HWCanvas::OnClipRect(const Rect& rect, ClipOp op) {
   SKITY_TRACE_EVENT(HWCanvas_OnClipRect);
 
