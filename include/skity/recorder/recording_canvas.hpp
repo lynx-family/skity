@@ -62,7 +62,6 @@ class SKITY_API RecordingCanvas : public Canvas {
   void OnFlush() override;
   uint32_t OnGetWidth() const override;
   uint32_t OnGetHeight() const override;
-  void OnUpdateViewport(uint32_t width, uint32_t height) override;
 
  private:
   void AccumulateOpBounds(const Rect& raw_bounds, const Paint* paint);

@@ -161,9 +161,6 @@ void RecordingCanvas::OnResetMatrix() { Push<ResetMatrixOp>(); }
 void RecordingCanvas::OnFlush() {}
 uint32_t RecordingCanvas::OnGetWidth() const { return 0; }
 uint32_t RecordingCanvas::OnGetHeight() const { return 0; }
-void RecordingCanvas::OnUpdateViewport(uint32_t width, uint32_t height) {
-  // Do nothing since 'Canvas::UpdateViewport' is deprecated.
-}
 
 void RecordingCanvas::AccumulateOpBounds(const Rect& raw_bounds,
                                          const Paint* paint) {

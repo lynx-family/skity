@@ -63,9 +63,6 @@ class MockCanvas : public skity::Canvas {
   MOCK_METHOD(uint32_t, OnGetWidth, (), (const, override));
 
   MOCK_METHOD(uint32_t, OnGetHeight, (), (const, override));
-
-  MOCK_METHOD(void, OnUpdateViewport, (uint32_t width, uint32_t height),
-              (override));
 };
 
 skity::Rect CalculateDisplayListBounds(
