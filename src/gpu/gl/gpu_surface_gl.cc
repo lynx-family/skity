@@ -84,23 +84,6 @@ HWRootLayer *DrawTextureSurfaceGL::OnBeginNextFrame(bool clear) {
   return root_layer;
 }
 
-HWRootLayer *PartialFBOSurfaceGL::OnBeginNextFrame(bool clear) {
-  auto root_layer = GetArenaAllocator()->Make<GLPartialDrawTextureLayer>(
-      color_attachment_, resolve_fbo_, Rect::MakeWH(GetWidth(), GetHeight()),
-      GetVertexArray());
-
-  root_layer->SetClearSurface(clear);
-  root_layer->SetSampleCount(GetSampleCount());
-  root_layer->SetArenaAllocator(GetArenaAllocator());
-
-  root_layer->SetFrameInfo(frame_info_.width, frame_info_.height,
-                           frame_info_.left, frame_info_.top, frame_info_.right,
-                           frame_info_.bottom);
-  root_layer->UpdateTranslate(translate_x_, translate_y_);
-
-  return root_layer;
-}
-
 BlitSurfaceGL::BlitSurfaceGL(const GPUSurfaceDescriptor &desc,
                              GPUContextImpl *ctx, uint32_t resolve_fbo,
                              bool can_blit_from_target_fbo)

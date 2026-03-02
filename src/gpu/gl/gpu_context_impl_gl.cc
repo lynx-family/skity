@@ -209,47 +209,4 @@ std::unique_ptr<GPUSurface> GPUContextImplGL::CreateDrawTextureSurface(
 
 #endif
 
-std::unique_ptr<GPUSurface> GLCreatePartialSurface(
-    GPUContext* context, const GPUSurfaceDescriptorGL& desc,
-    const PartialFrameInfo& frame_info) {
-  if (context->GetBackendType() != GPUBackendType::kOpenGL) {
-    return {};
-  }
-
-  if (desc.surface_type != GLSurfaceType::kFramebuffer) {
-    return {};
-  }
-
-  auto context_gl = static_cast<GPUContextImplGL*>(context);
-
-  GPUTextureDescriptor tex_desc{};
-  tex_desc.width = desc.width * desc.content_scale;
-  tex_desc.height = desc.height * desc.content_scale;
-  tex_desc.format = GPUTextureFormat::kRGBA8Unorm;
-  tex_desc.storage_mode = GPUTextureStorageMode::kPrivate;
-  tex_desc.usage =
-      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment);
-
-  auto color_attachment = context_gl->GetGPUDevice()->CreateTexture(tex_desc);
-
-  auto surface = std::make_unique<PartialFBOSurfaceGL>(
-      desc, context_gl, std::move(color_attachment), desc.gl_id);
-
-  surface->SetFrameInfo(frame_info);
-
-  surface->Init();
-
-  return surface;
-}
-
-void GLUpdateSurfaceTranslate(GPUSurface* surface, float dx, float dy) {
-  auto p_surface = static_cast<PartialFBOSurfaceGL*>(surface);
-
-  if (p_surface == nullptr) {
-    return;
-  }
-
-  p_surface->UpdateTranslate(dx, dy);
-}
-
 }  // namespace skity
