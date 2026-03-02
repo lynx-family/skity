@@ -84,65 +84,6 @@ struct GPUBackendTextureInfoGL : public GPUBackendTextureInfo {
  */
 std::unique_ptr<GPUContext> SKITY_API GLContextCreate(void* proc_loader);
 
-/**
- * Extra struct to pass information to support rendering content to part of the
- * target framebuffer. For now, it only used in Android for create GPUSurface
- * for FunctorView.
- */
-struct PartialFrameInfo {
-  /**
-   * The width in pixel of the target Framebuffer
-   */
-  uint32_t width = 0;
-
-  /**
-   * The height in pixel of the target Framebuffer
-   */
-  uint32_t height = 0;
-
-  /**
-   * The bounding rect of the target rendering area inside the Framebuffer.
-   * It is in OpenGL coordinate system, which means the origin point located in
-   * bottom-left.
-   *
-   * The value passed from Android system.
-   */
-  int left = 0;
-  int top = 0;
-  int right = 0;
-  int bottom = 0;
-};
-
-/**
- * Create A special GPUSurface instance for rendering content into part of the
- * framebuffer target. It is only used in Android system to support FunctorView.
- *
- * @note This function must be called in Android main-thread.
- *
- * @param context       The GPUContext create in Android main-thread.
- * @param desc          The Surface description, it must be
- * GLSurfaceType::kFramebuffer
- * @param frame_info    The description of the partial rendering
- * @return              GPUSurface instance for partial rendering
- */
-std::unique_ptr<GPUSurface> SKITY_API
-GLCreatePartialSurface(GPUContext* context, const GPUSurfaceDescriptorGL& desc,
-                       const PartialFrameInfo& frame_info);
-
-/**
- * Update translate information for a given GPUSurface instance. The GPUSurface
- * must be a PartialSurface create by **GLCreatePartialSurface**.
- *
- * @note This function does not check the GPUSurface type info. The caller must
- * ensure it is a PartialSurface instance.
- *
- * @param surface   The surface needs to be update translate.
- * @param dx        Translate value in x axis
- * @param dy        Translate value in y axis
- */
-void SKITY_API GLUpdateSurfaceTranslate(GPUSurface* surface, float dx,
-                                        float dy);
-
 }  // namespace skity
 
 #endif  // INCLUDE_SKITY_GPU_GPU_CONTEXT_GL_HPP

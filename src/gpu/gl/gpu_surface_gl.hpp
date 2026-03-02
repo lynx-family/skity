@@ -88,31 +88,6 @@ class DrawTextureSurfaceGL : public GPUSurfaceGL {
   bool can_blit_from_target_fbo_;
 };
 
-class PartialFBOSurfaceGL : public DrawTextureSurfaceGL {
- public:
-  PartialFBOSurfaceGL(const GPUSurfaceDescriptor& desc, GPUContextImpl* ctx,
-                      std::shared_ptr<GPUTexture> texture, uint32_t resolve_fbo)
-      : DrawTextureSurfaceGL(desc, ctx, std::move(texture), resolve_fbo,
-                             false) {}
-
-  ~PartialFBOSurfaceGL() override = default;
-
-  void SetFrameInfo(const PartialFrameInfo& info) { frame_info_ = info; }
-
-  void UpdateTranslate(float dx, float dy) {
-    translate_x_ = dx;
-    translate_y_ = dy;
-  }
-
- protected:
-  HWRootLayer* OnBeginNextFrame(bool clear) override;
-
- private:
-  PartialFrameInfo frame_info_ = {};
-  float translate_x_ = 0.f;
-  float translate_y_ = 0.f;
-};
-
 class BlitSurfaceGL : public GPUSurfaceGL {
  public:
   BlitSurfaceGL(const GPUSurfaceDescriptor& desc, GPUContextImpl* ctx,
