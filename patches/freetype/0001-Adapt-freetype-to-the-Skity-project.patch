@@ -233,7 +233,7 @@ index 000000000..8d3279a2d
 --- /dev/null
 +++ b/CMakeLists-Lynx.txt
 @@ -0,0 +1,50 @@
-+cmake_minimum_required(VERSION 3.4.1)
++cmake_minimum_required(VERSION 3.5)
 +
 +set(FREETYPE_SOURCE_DIR ${FREETYPE_DIR})
 +
@@ -289,7 +289,7 @@ index 000000000..fb9554d56
 --- /dev/null
 +++ b/CMakeLists-Skity.txt
 @@ -0,0 +1,59 @@
-+cmake_minimum_required(VERSION 3.4.1)
++cmake_minimum_required(VERSION 3.5)
 +
 +set(FREETYPE_SOURCE_DIR ${FREETYPE_DIR})
 +
