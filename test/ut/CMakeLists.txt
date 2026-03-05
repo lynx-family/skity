@@ -28,6 +28,7 @@ add_executable(skity_unit_test
     render/hw/hw_buffer_layout_test.cc
     render/hw/hw_pipeline_key_test.cc
     render/hw/draw/hw_wgsl_shader_writer_test.cc
+    wgx/wgx_resolver_test.cc
     render/resource_cache_test.cc
     render/shape_test.cc
     recorder/display_list_test.cc
@@ -52,6 +53,7 @@ endif()
 target_include_directories(skity_unit_test
     PUBLIC
     ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/module/wgx
 )
 
 target_link_libraries(skity_unit_test

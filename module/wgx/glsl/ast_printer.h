@@ -4,11 +4,12 @@
 
 #pragma once
 
+#include <wgsl_cross.h>
+
 #include <sstream>
 
 #include "wgsl/ast/visitor.h"
 #include "wgsl/function.h"
-#include "wgsl_cross.h"
 
 namespace wgx {
 namespace glsl {
