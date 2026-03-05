@@ -4,6 +4,7 @@
 
 #include <wgsl_cross.h>
 
+#include "semantic/resolver.h"
 #include "wgsl/ast/node.h"
 #include "wgsl/function.h"
 #include "wgsl/parser.h"
@@ -19,7 +20,7 @@
 
 namespace wgx {
 
-Result Program::WriteToGlsl(const char *entry_point, const GlslOptions &options,
+Result Program::WriteToGlsl(const char* entry_point, const GlslOptions& options,
                             std::optional<CompilerContext> ctx) const {
 #ifdef WGX_GLSL
   auto func = module_->GetFunction(entry_point);
@@ -53,7 +54,7 @@ Result Program::WriteToGlsl(const char *entry_point, const GlslOptions &options,
   return {};
 }
 
-Result Program::WriteToMsl(const char *entry_point, const MslOptions &options,
+Result Program::WriteToMsl(const char* entry_point, const MslOptions& options,
                            std::optional<CompilerContext> ctx) const {
 #ifdef WGX_MSL
   auto func = module_->GetFunction(entry_point);
@@ -88,7 +89,7 @@ Result Program::WriteToMsl(const char *entry_point, const MslOptions &options,
 }
 
 std::vector<BindGroup> Program::GetWGSLBindGroups(
-    const char *entry_point) const {
+    const char* entry_point) const {
   auto func = module_->GetFunction(entry_point);
 
   if (func == nullptr || !func->IsEntryPoint()) {
@@ -123,16 +124,26 @@ bool Program::Parse() {
   return BuildAST(tokens);
 }
 
-bool Program::BuildAST(const std::vector<Token> &toke_list) {
+bool Program::BuildAST(const std::vector<Token>& toke_list) {
   Parser parser{ast_allocator_, toke_list};
 
   module_ = parser.BuildModule();
 
   if (module_ == nullptr) {
     mDiagnosis = parser.GetDiagnosis();
+    return false;
   }
 
-  return module_ != nullptr;
+  semantic::Resolver resolver{module_};
+  auto bind_result = resolver.Resolve();
+
+  if (bind_result.HasError()) {
+    mDiagnosis = bind_result.diagnostics.front();
+    module_ = nullptr;
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace wgx

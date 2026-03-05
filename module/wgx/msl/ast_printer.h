@@ -4,13 +4,14 @@
 
 #pragma once
 
+#include <wgsl_cross.h>
+
 #include <sstream>
 #include <unordered_map>
 
 #include "msl/attribute.h"
 #include "wgsl/ast/visitor.h"
 #include "wgsl/function.h"
-#include "wgsl_cross.h"
 
 namespace wgx {
 namespace msl {

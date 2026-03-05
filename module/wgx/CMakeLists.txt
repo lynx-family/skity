@@ -28,6 +28,12 @@ add_library(wgsl-cross STATIC
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/variable.cpp
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/variable.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/visitor.h
+    ${CMAKE_CURRENT_LIST_DIR}/semantic/bind_result.h
+    ${CMAKE_CURRENT_LIST_DIR}/semantic/resolver.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/semantic/resolver.h
+    ${CMAKE_CURRENT_LIST_DIR}/semantic/scope.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/semantic/scope.h
+    ${CMAKE_CURRENT_LIST_DIR}/semantic/symbol.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/bind_group.cpp
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/function.cpp
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/function.h

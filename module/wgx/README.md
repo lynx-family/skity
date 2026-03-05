@@ -2,6 +2,10 @@
 
 A self implement [wgsl](https://www.w3.org/TR/WGSL/) parser and compiler.
 
+### Roadmap
+
+- [WGX Semantic + IR + SPIR-V Roadmap](docs/ROADMAP_IR_SPIRV.md)
+
 ### Different from other implementation
 
 1. Do not throw parser error message in details
