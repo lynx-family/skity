@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Unified coding style checker for C++/Obj-C++ and CMake files.
+Unified coding style checker for C++/Obj-C++ files.
 Works for both GitHub CI and local development.
 
 Features:
-- Checks C++/Obj-C++/CMake files using clang-format
+- Checks C++/Obj-C++ files using clang-format
 - Excludes third_party directories by default
 - Supports automatic fixing
 - Works with git changed files or merge request files
@@ -24,6 +24,9 @@ EXIT_CHECK_FAILED = 1
 EXIT_INFRA_ERROR = 2
 EXIT_USAGE_ERROR = 3
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_CLANG_FORMAT_STYLE_FILE = REPO_ROOT / '.clang-format'
+
 
 def log_debug(message, verbose=False):
     """Log debug message if verbose mode or CI_DEBUG environment variable is set."""
@@ -31,15 +34,14 @@ def log_debug(message, verbose=False):
         print(f"[DEBUG] {message}", file=sys.stderr)
 
 def is_code_file(filepath):
-    """Check if file is a C++/Obj-C++ or CMake file."""
+    """Check if file is a C++/Obj-C++ file."""
     code_extensions = {
         '.cpp', '.cc', '.cxx', '.c++', '.h', '.hpp', '.hxx', '.h++',
         '.m', '.mm',  # Objective-C/C++
-        '.cmake'
     }
 
     path = Path(filepath)
-    return path.suffix.lower() in code_extensions or path.name == 'CMakeLists.txt'
+    return path.suffix.lower() in code_extensions
 
 
 def should_ignore_file(filepath):
@@ -73,7 +75,14 @@ def check_clang_format_available(clang_format_path='clang-format'):
         return False
 
 
-def check_file_formatting_with_content(filepath, clang_format_path='clang-format'):
+def build_style_arg(style_file_path):
+    """Build clang-format style argument from a style file path."""
+    style_path = Path(style_file_path).resolve()
+    return f'-style=file:{style_path}'
+
+
+def check_file_formatting_with_content(filepath, clang_format_path='clang-format',
+                                       style_file_path=DEFAULT_CLANG_FORMAT_STYLE_FILE):
     """Check if file follows clang-format style by comparing content."""
     try:
         with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
@@ -82,9 +91,19 @@ def check_file_formatting_with_content(filepath, clang_format_path='clang-format
         if not original_content.strip():
             return True, "File is empty or only whitespace"
 
-        result = subprocess.run([clang_format_path], 
-                              input=original_content, 
-                              capture_output=True, text=True, check=True)
+        # Use file style resolution based on the target file path so .clang-format
+        # is applied consistently, even when content is piped via stdin.
+        result = subprocess.run(
+            [
+                clang_format_path,
+                build_style_arg(style_file_path),
+                f'-assume-filename={os.path.abspath(filepath)}',
+            ],
+            input=original_content,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
 
         formatted_content = result.stdout
 
@@ -98,7 +117,8 @@ def check_file_formatting_with_content(filepath, clang_format_path='clang-format
         return False, f"Error reading file: {e}"
 
 
-def fix_file_formatting(filepath, clang_format_path='clang-format'):
+def fix_file_formatting(filepath, clang_format_path='clang-format',
+                        style_file_path=DEFAULT_CLANG_FORMAT_STYLE_FILE):
     """Fix file formatting using clang-format."""
     try:
         if not os.path.exists(filepath):
@@ -107,7 +127,12 @@ def fix_file_formatting(filepath, clang_format_path='clang-format'):
         if not os.access(filepath, os.W_OK):
             return False, f"File is not writable: {filepath}"
 
-        subprocess.run([clang_format_path, '-i', filepath], check=True, capture_output=True, text=True)
+        subprocess.run(
+            [clang_format_path, build_style_arg(style_file_path), '-i', filepath],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         return True, f"Fixed {filepath}"
     except subprocess.CalledProcessError as e:
         return False, f"Error fixing {filepath}: {e}"
@@ -326,7 +351,9 @@ def run_ci_mode(args):
 
     for filepath in code_files:
         # Check formatting
-        is_formatted, message = check_file_formatting_with_content(filepath, args.clang_format_path)
+        is_formatted, message = check_file_formatting_with_content(
+            filepath, args.clang_format_path, args.clang_format_style_file
+        )
         check_item = {
             'file': filepath,
             'formatted': is_formatted,
@@ -345,7 +372,9 @@ def run_ci_mode(args):
 
         # Fix formatting if requested
         if args.fix and not is_formatted:
-            success, fix_message = fix_file_formatting(filepath, args.clang_format_path)
+            success, fix_message = fix_file_formatting(
+                filepath, args.clang_format_path, args.clang_format_style_file
+            )
             check_item['fixed'] = success
             if not success:
                 check_item['fix_error'] = fix_message
@@ -357,7 +386,7 @@ def run_ci_mode(args):
                     print(f"  Error: {fix_message}")
             if success:
                 is_formatted_after_fix, message_after_fix = check_file_formatting_with_content(
-                    filepath, args.clang_format_path
+                    filepath, args.clang_format_path, args.clang_format_style_file
                 )
                 check_item['formatted'] = is_formatted_after_fix
                 check_item['message'] = message_after_fix
@@ -463,7 +492,7 @@ def run_skill_mode(args):
 
     if not code_files:
         if not args.json:
-            print("No C++/Obj-C++/CMake files to check.")
+            print("No C++/Obj-C++ files to check.")
         maybe_print_json(
             args,
             {
@@ -489,7 +518,9 @@ def run_skill_mode(args):
         if not args.json:
             print(f"Checking {filepath}...", end=' ')
 
-        is_formatted, message = check_file_formatting_with_content(filepath, args.clang_format_path)
+        is_formatted, message = check_file_formatting_with_content(
+            filepath, args.clang_format_path, args.clang_format_style_file
+        )
         check_item = {
             'file': filepath,
             'formatted': is_formatted,
@@ -509,13 +540,15 @@ def run_skill_mode(args):
             if args.fix:
                 if not args.json:
                     print(f"  Fixing {filepath}...")
-                success, fix_message = fix_file_formatting(filepath, args.clang_format_path)
+                success, fix_message = fix_file_formatting(
+                    filepath, args.clang_format_path, args.clang_format_style_file
+                )
                 check_item['fixed'] = success
                 if success:
                     if not args.json:
                         print(f"  {fix_message}")
                     is_formatted_after_fix, message_after_fix = check_file_formatting_with_content(
-                        filepath, args.clang_format_path
+                        filepath, args.clang_format_path, args.clang_format_style_file
                     )
                     check_item['formatted'] = is_formatted_after_fix
                     check_item['message'] = message_after_fix
@@ -577,7 +610,7 @@ def run_skill_mode(args):
 def setup_arguments():
     """Setup command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Unified coding style checker for C++/Obj-C++ and CMake files',
+        description='Unified coding style checker for C++/Obj-C++ files',
         epilog='Examples:\n'
                '  # CI usage (merge request checking)\n'
                '  %(prog)s main --verbose\n'
@@ -599,6 +632,11 @@ def setup_arguments():
                        help='Show detailed output')
     parser.add_argument('--clang-format-path', default='clang-format',
                        help='Path to clang-format binary (default: clang-format)')
+    parser.add_argument(
+        '--clang-format-style-file',
+        default=str(DEFAULT_CLANG_FORMAT_STYLE_FILE),
+        help='Path to .clang-format style file (default: <repo>/.clang-format)',
+    )
     parser.add_argument('--json', action='store_true',
                        help='Output machine-readable JSON result')
     
@@ -616,6 +654,13 @@ def main():
     parser = setup_arguments()
     args = parser.parse_args()
     if args.target_branch == '':
+        return EXIT_USAGE_ERROR
+
+    if not os.path.exists(args.clang_format_style_file):
+        print(
+            f"Error: clang-format style file not found: {args.clang_format_style_file}",
+            file=sys.stderr,
+        )
         return EXIT_USAGE_ERROR
 
     # Handle target_branch in both formats: 'main' and 'target_branch=main'

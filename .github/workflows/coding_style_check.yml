@@ -26,4 +26,4 @@ jobs:
                 python tools/cpplint_check.py ${{ github.event.pull_request.base.sha }}
           - name: coding style check
             run: |
-                python tools/code_format_check.py ${{ github.event.pull_request.base.sha }}
+                python tools/code_format_check.py ${{ github.event.pull_request.base.sha }} --clang-format-path ./buildtools/llvm/bin/clang-format
