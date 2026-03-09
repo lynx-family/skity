@@ -225,9 +225,12 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_CT_FONT)
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/darwin/typeface_darwin.hpp
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/darwin/types_darwin.cc
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/darwin/types_darwin.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/text/ports/darwin/types_darwin_font_weights.mm
   )
 
   target_link_libraries(skity PRIVATE "-framework CoreText" "-framework CoreGraphics")
+  # only macOS in cmake building system
+  target_link_libraries(skity PRIVATE "-framework AppKit")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
   target_sources(
     skity
