@@ -7,10 +7,15 @@
 #include <skity/io/data.hpp>
 #include <vector>
 
+#if SKITY_ENABLE_CODEC_GIF
 #include "src/codec/gif_codec.hpp"
+#endif
 #include "src/codec/jpeg_codec.hpp"
 #include "src/codec/png_codec.hpp"
+
+#if SKITY_ENABLE_CODEC_WEBP
 #include "src/codec/webp_codec.hpp"
+#endif
 
 namespace skity {
 
@@ -22,8 +27,12 @@ void Codec::SetupCodecs() {
 
   codec_list.emplace_back(std::make_shared<PNGCodec>());
   codec_list.emplace_back(std::make_shared<JPEGCodec>());
+#if SKITY_ENABLE_CODEC_GIF
   codec_list.emplace_back(std::make_shared<GIFCodec>());
+#endif
+#if SKITY_ENABLE_CODEC_WEBP
   codec_list.emplace_back(std::make_shared<WEBPCodec>());
+#endif
 }
 
 std::shared_ptr<Codec> Codec::MakeFromData(const std::shared_ptr<Data>& data) {
@@ -57,11 +66,19 @@ std::shared_ptr<Codec> Codec::MakeJPEGCodec() {
 }
 
 std::shared_ptr<Codec> Codec::MakeGIFCodec() {
+#if SKITY_ENABLE_CODEC_GIF
   return std::make_shared<GIFCodec>();
+#else
+  return {};
+#endif
 }
 
 std::shared_ptr<Codec> Codec::MakeWebpCodec() {
+#if SKITY_ENABLE_CODEC_WEBP
   return std::make_shared<WEBPCodec>();
+#else
+  return {};
+#endif
 }
 
 }  // namespace skity

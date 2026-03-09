@@ -14,6 +14,9 @@ target_include_directories(skity-codec PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include
 target_include_directories(skity-codec PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_include_directories(skity-codec PRIVATE ${SKITY_ROOT}/include)
 
+option(SKITY_ENABLE_CODEC_WEBP "Enable WebP Codec" ON)
+option(SKITY_ENABLE_CODEC_GIF "Enable GIF Codec" ON)
+
 target_include_directories(
   skity-codec
   PUBLIC
@@ -32,29 +35,51 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/multi_frame_decoder.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/data_stream.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/data_stream.hpp
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/gif_codec.cc
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/gif_codec.hpp
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp_codec.cc
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp_codec.hpp
 )
+
+if (SKITY_ENABLE_CODEC_WEBP)
+  target_sources(
+    skity-codec
+    PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp_codec.cc
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp_codec.hpp
+  )
+
+  target_compile_definitions(skity-codec PRIVATE -DSKITY_ENABLE_CODEC_WEBP=1)
+endif()
+
+if (SKITY_ENABLE_CODEC_GIF)
+  target_sources(
+    skity-codec
+    PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/gif_codec.cc
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/gif_codec.hpp
+  )
+
+  target_compile_definitions(skity-codec PRIVATE -DSKITY_ENABLE_CODEC_GIF=1)
+endif()
 
 target_compile_definitions(skity-codec PRIVATE -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
 
-# wuffs
-target_include_directories(skity-codec PRIVATE ${SKITY_ROOT}/third_party/wuffs/release/c)
-
 target_link_libraries(skity-codec PUBLIC skity)
 
-target_sources(
-  skity-codec
-  PRIVATE
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec_frame.cc
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec_frame.hpp
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec.cc
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec.hpp
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_module.cc
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_module.hpp
-)
+if (SKITY_ENABLE_CODEC_GIF)
+
+  # wuffs
+  target_include_directories(skity-codec PRIVATE ${SKITY_ROOT}/third_party/wuffs/release/c)
+
+  target_sources(
+    skity-codec
+    PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec_frame.cc
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec_frame.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec.cc
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_codec.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_module.cc
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/wuffs/wuffs_module.hpp
+  )
+
+endif()
 
 set(SKITY_LIBJPEG_ARGS
   -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/libjpeg-turbo
@@ -81,40 +106,67 @@ ExternalProject_Add(libjpeg-turbo
   CMAKE_ARGS ${SKITY_LIBJPEG_ARGS}
 )
 
-set(SKITY_LIBWEBP_ARGS
-  -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/libwebp
-  -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-  -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
-  -DENABLE_SHARED=OFF
-  -DBUILD_SHARED_LIBS=OFF
-  # disable webp command line tools
-  -DWEBP_BUILD_CWEBP=OFF
-  -DWEBP_BUILD_DWEBP=OFF
-  -DWEBP_BUILD_GIF2WEBP=OFF
-  -DWEBP_BUILD_IMG2WEBP=OFF
-  -DWEBP_BUILD_VWEBP=OFF
-  -DWEBP_BUILD_WEBPINFO=OFF
-  -DWEBP_BUILD_WEBPMUX=OFF
-  -DWEBP_BUILD_ANIM_UTILS=OFF
-  -DCMAKE_INSTALL_MESSAGE=NEVER
-  -DCMAKE_MESSAGE_LOG_LEVEL=ERROR
-)
+if (SKITY_ENABLE_CODEC_WEBP)
 
-if (ANDROID)
-  list(APPEND SKITY_LIBWEBP_ARGS
-    -DANDROID_ABI=${ANDROID_ABI}
-    -DANDROID_PLATFORM=${ANDROID_PLATFORM}
-    -DANDROID_STL=${ANDROID_STL}
-    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+  set(SKITY_LIBWEBP_ARGS
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/third_party/libwebp
+    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
+    -DENABLE_SHARED=OFF
+    -DBUILD_SHARED_LIBS=OFF
+    # disable webp command line tools
+    -DWEBP_BUILD_CWEBP=OFF
+    -DWEBP_BUILD_DWEBP=OFF
+    -DWEBP_BUILD_GIF2WEBP=OFF
+    -DWEBP_BUILD_IMG2WEBP=OFF
+    -DWEBP_BUILD_VWEBP=OFF
+    -DWEBP_BUILD_WEBPINFO=OFF
+    -DWEBP_BUILD_WEBPMUX=OFF
+    -DWEBP_BUILD_ANIM_UTILS=OFF
+    -DCMAKE_INSTALL_MESSAGE=NEVER
+    -DCMAKE_MESSAGE_LOG_LEVEL=ERROR
   )
-endif()
 
-# libwebp
-ExternalProject_Add(libwebp
-  SOURCE_DIR ${SKITY_ROOT}/third_party/libwebp
-  PREFIX ${CMAKE_CURRENT_BINARY_DIR}/third_party/libwebp
-  CMAKE_ARGS ${SKITY_LIBWEBP_ARGS}
-)
+  if (ANDROID)
+    list(APPEND SKITY_LIBWEBP_ARGS
+      -DANDROID_ABI=${ANDROID_ABI}
+      -DANDROID_PLATFORM=${ANDROID_PLATFORM}
+      -DANDROID_STL=${ANDROID_STL}
+      -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+    )
+  endif()
+
+  # libwebp
+  ExternalProject_Add(libwebp
+    SOURCE_DIR ${SKITY_ROOT}/third_party/libwebp
+    PREFIX ${CMAKE_CURRENT_BINARY_DIR}/third_party/libwebp
+    CMAKE_ARGS ${SKITY_LIBWEBP_ARGS}
+  )
+
+  add_dependencies(skity-codec libwebp)
+
+  target_include_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libwebp/include)
+  target_link_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libwebp/lib)
+
+
+  target_sources(
+    skity-codec
+    PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_codec_frame.cc
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_codec_frame.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_decoder.cc
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_decoder.hpp
+  )
+
+  if (WIN32)
+    # This link config may not work if using llvm clang under minGW or msys2
+    # FIXME: use -llibwebp to solve name conflict with ExternalProject_Add(libwebp ...)
+    target_link_libraries(skity-codec PRIVATE libsharpyuv -llibwebp libwebpdecoder libwebpdemux libwebpmux)
+  else()
+    target_link_libraries(skity-codec PRIVATE sharpyuv webp webpdecoder webpdemux webpmux)
+  endif()
+
+endif()
 
 # codec backends
 target_sources(
@@ -157,28 +209,6 @@ else()
   target_link_libraries(skity-codec PRIVATE turbojpeg)
 endif()
 
-add_dependencies(skity-codec libwebp)
-
-target_include_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libwebp/include)
-target_link_directories(skity-codec PRIVATE ${CMAKE_BINARY_DIR}/third_party/libwebp/lib)
-
-
-target_sources(
-  skity-codec
-  PRIVATE
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_codec_frame.cc
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_codec_frame.hpp
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_decoder.cc
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_decoder.hpp
-)
-
-if (WIN32)
-  # This link config may not work if using llvm clang under minGW or msys2
-  # FIXME: use -llibwebp to solve name conflict with ExternalProject_Add(libwebp ...)
-  target_link_libraries(skity-codec PRIVATE libsharpyuv -llibwebp libwebpdecoder libwebpdemux libwebpmux)
-else()
-  target_link_libraries(skity-codec PRIVATE sharpyuv webp webpdecoder webpdemux webpmux)
-endif()
 
 if (${SKITY_BUILD_INSTALL})
 
