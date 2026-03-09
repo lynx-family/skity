@@ -11,13 +11,13 @@
 
 #include "src/text/ports/darwin/types_darwin.hpp"
 
-#include <dlfcn.h>
-
 #include <array>
 #include <mutex>
 #include <skity/macros.hpp>
 
 namespace skity {
+
+const CGFloat (&get_kit_font_weight_mapping())[11];  // NOLINT
 
 namespace {
 
@@ -69,48 +69,7 @@ struct CGFloatIdentity {
 using CTFontWeightMapping = const CGFloat[11];
 
 CTFontWeightMapping& get_font_weight_mapping() {
-  // In the event something goes wrong finding the real values, use this
-  // mapping.
-  static constexpr CGFloat defaultNSFontWeights[] = {
-      -1.00, -0.80, -0.60, -0.40, 0.00, 0.23, 0.30, 0.40, 0.56, 0.62, 1.00};
-
-#ifdef SKITY_MACOS
-#define SK_KIT_FONT_WEIGHT_PREFIX "NS"
-#endif
-#ifdef SKITY_IOS
-#define SK_KIT_FONT_WEIGHT_PREFIX "UI"
-#endif
-  static constexpr const char* nsFontWeightNames[] = {
-      SK_KIT_FONT_WEIGHT_PREFIX "FontWeightUltraLight",
-      SK_KIT_FONT_WEIGHT_PREFIX "FontWeightThin",
-      SK_KIT_FONT_WEIGHT_PREFIX "FontWeightLight",
-      SK_KIT_FONT_WEIGHT_PREFIX "FontWeightRegular",
-      SK_KIT_FONT_WEIGHT_PREFIX "FontWeightMedium",
-      SK_KIT_FONT_WEIGHT_PREFIX "FontWeightSemibold",
-      SK_KIT_FONT_WEIGHT_PREFIX "FontWeightBold",
-      SK_KIT_FONT_WEIGHT_PREFIX "FontWeightHeavy",
-      SK_KIT_FONT_WEIGHT_PREFIX "FontWeightBlack",
-  };
-  static_assert(std::size(nsFontWeightNames) == 9, "");
-
-  static CGFloat nsFontWeights[11];
-  static const CGFloat(*selectedNSFontWeights)[11] = &defaultNSFontWeights;
-  static std::once_flag flag;
-  std::call_once(flag, [&] {
-    size_t i = 0;
-    nsFontWeights[i++] = -1.00;
-    for (const char* nsFontWeightName : nsFontWeightNames) {
-      void* nsFontWeightValuePtr = dlsym(RTLD_DEFAULT, nsFontWeightName);
-      if (nsFontWeightValuePtr) {
-        nsFontWeights[i++] = *(static_cast<CGFloat*>(nsFontWeightValuePtr));
-      } else {
-        return;
-      }
-    }
-    nsFontWeights[i++] = 1.00;
-    selectedNSFontWeights = &nsFontWeights;
-  });
-  return *selectedNSFontWeights;
+  return ::skity::get_kit_font_weight_mapping();
 }
 
 bool find_dict_CGFloat(CFDictionaryRef dict, CFStringRef name, CGFloat* value) {
