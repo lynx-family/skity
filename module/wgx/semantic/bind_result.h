@@ -12,12 +12,14 @@
 
 #include "semantic/symbol.h"
 #include "wgsl/ast/expression.h"
+#include "wgsl/ast/identifier.h"
 
 namespace wgx {
 namespace semantic {
 
 struct BindResult {
   std::unordered_map<const ast::IdentifierExp*, Symbol*> ident_symbols = {};
+  std::unordered_map<const ast::Identifier*, Symbol*> decl_symbols = {};
   std::vector<std::unique_ptr<Symbol>> symbols = {};
   std::vector<Diagnosis> diagnostics = {};
 

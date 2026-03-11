@@ -10,6 +10,51 @@
 
 namespace wgx {
 
+namespace {
+
+bool IsReservedBuiltinTypeName(std::string_view name) {
+  static constexpr const char* kBuiltinTypeNames[] = {
+      "bool",
+      "i32",
+      "u32",
+      "f32",
+      "f16",
+      "vec2",
+      "vec3",
+      "vec4",
+      "mat2x2",
+      "mat2x3",
+      "mat2x4",
+      "mat3x2",
+      "mat3x3",
+      "mat3x4",
+      "mat4x2",
+      "mat4x3",
+      "mat4x4",
+      "texture_1d",
+      "texture_2d",
+      "texture_2d_array",
+      "texture_3d",
+      "texture_cube",
+      "texture_cube_array",
+      "sampler",
+      "sampler_comparison",
+      "array",
+      "atomic",
+      "ptr",
+  };
+
+  for (const char* builtin : kBuiltinTypeNames) {
+    if (name == builtin) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+}  // namespace
+
 ast::Module* Parser::BuildModule() {
   module_ = allocator_->Allocate<ast::Module>();
 
@@ -326,6 +371,16 @@ Parser::Result<ast::StructMember*> Parser::StructMemberDecl() {
   }
 
   auto& decl_info = decl.GetValue();
+
+  if (decl_info.name != nullptr &&
+      IsReservedBuiltinTypeName(decl_info.name->name)) {
+    diagnosis_.message =
+        "Struct member name cannot use reserved builtin type '" +
+        std::string(decl_info.name->name) + "'";
+    diagnosis_.line = Peek().line;
+    diagnosis_.column = Peek().column;
+    return ReturnType{State::kError};
+  }
 
   auto member = allocator_->Allocate<ast::StructMember>(
       decl_info.name, decl_info.type, std::move(attr_list));

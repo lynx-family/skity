@@ -18,6 +18,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace wgx {
@@ -27,9 +28,16 @@ struct Token;
 namespace ast {
 
 class NodeAllocator;
+struct Identifier;
+struct IdentifierExp;
 struct Module;
+struct Node;
 
 }  // namespace ast
+
+namespace semantic {
+struct Symbol;
+}
 
 struct WGX_API GlslOptions {
   enum class Standard {
@@ -346,6 +354,11 @@ class WGX_API Program {
   std::string mSource = {};
   ast::Module* module_ = nullptr;
   std::optional<Diagnosis> mDiagnosis = std::nullopt;
+  std::vector<std::unique_ptr<semantic::Symbol>> symbols_;
+  std::unordered_map<const ast::IdentifierExp*, semantic::Symbol*>
+      ident_symbols_ = {};
+  std::unordered_map<const ast::Identifier*, semantic::Symbol*> decl_symbols_ =
+      {};
 };
 
 }  // namespace wgx

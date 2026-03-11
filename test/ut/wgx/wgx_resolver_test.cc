@@ -242,6 +242,64 @@ fn vs_main() -> @builtin(position) vec4<f32> {
             wgx::semantic::SymbolKind::kBuiltinFunction);
 }
 
+TEST_F(ResolverTest,
+       RecordsDeclarationSymbolsForStructMembersParametersAndLocals) {
+  const std::string source = R"(
+struct Payload {
+  value: f32,
+}
+
+fn helper(param: f32) -> f32 {
+  let local: f32 = param;
+  return local;
+}
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var output: Payload;
+  output.value = helper(1.0);
+  return vec4<f32>(output.value, 0.0, 0.0, 1.0);
+}
+)";
+
+  wgx::Scanner scanner{source};
+  auto tokens = scanner.Scan();
+
+  wgx::ast::NodeAllocator allocator;
+  wgx::Parser parser{&allocator, tokens};
+  wgx::ast::Module* module = parser.BuildModule();
+  ASSERT_NE(module, nullptr) << parser.GetDiagnosis().message;
+
+  wgx::semantic::Resolver resolver{module};
+  auto result = resolver.Resolve();
+  ASSERT_TRUE(result.diagnostics.empty());
+
+  auto* payload =
+      static_cast<wgx::ast::StructDecl*>(module->GetGlobalTypeDecl("Payload"));
+  ASSERT_NE(payload, nullptr);
+  ASSERT_FALSE(payload->members.empty());
+  ASSERT_NE(payload->members[0]->name, nullptr);
+  EXPECT_NE(result.decl_symbols.find(payload->members[0]->name),
+            result.decl_symbols.end());
+
+  auto* helper = module->GetFunction("helper");
+  ASSERT_NE(helper, nullptr);
+  ASSERT_EQ(helper->params.size(), 1u);
+  ASSERT_NE(helper->params[0]->name, nullptr);
+  EXPECT_NE(result.decl_symbols.find(helper->params[0]->name),
+            result.decl_symbols.end());
+
+  ASSERT_NE(helper->body, nullptr);
+  ASSERT_FALSE(helper->body->statements.empty());
+  auto* local_decl_stmt =
+      static_cast<wgx::ast::VarDeclStatement*>(helper->body->statements[0]);
+  ASSERT_NE(local_decl_stmt, nullptr);
+  ASSERT_NE(local_decl_stmt->variable, nullptr);
+  ASSERT_NE(local_decl_stmt->variable->name, nullptr);
+  EXPECT_NE(result.decl_symbols.find(local_decl_stmt->variable->name),
+            result.decl_symbols.end());
+}
+
 TEST_F(ResolverTest, AcceptsBuiltinIdentifierReference) {
   auto result = Resolve(R"(
 @group(0) @binding(0) var tex: texture_2d<f32>;
@@ -450,8 +508,10 @@ fn vs_main() -> @builtin(position) vec4<f32> {
 TEST_F(ResolverTest,
        HandlesBuiltinTypeLikeStructMemberNameWithoutTypeConflict) {
   auto result = Resolve(R"(
+alias Scalar = f32;
+
 struct S {
-  f32: f32,
+  Scalar: Scalar,
 }
 
 @vertex
@@ -461,6 +521,50 @@ fn vs_main() -> @builtin(position) vec4<f32> {
 )");
 
   EXPECT_TRUE(result.diagnostics.empty());
+}
+
+TEST_F(ResolverTest,
+       ResolvesLaterStructMemberTypeWhenEarlierMemberShadowsName) {
+  auto result = Resolve(R"(
+alias Scalar = f32;
+
+struct S {
+  Scalar: i32,
+  x: Scalar,
+}
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  EXPECT_TRUE(result.diagnostics.empty());
+}
+
+TEST_F(ResolverTest, RejectsReservedBuiltinTypeNameAsStructMemberName) {
+  const std::string source = R"(
+struct S {
+  f32: f32,
+}
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)";
+
+  wgx::Scanner scanner{source};
+  auto tokens = scanner.Scan();
+
+  wgx::ast::NodeAllocator allocator;
+  wgx::Parser parser{&allocator, tokens};
+  wgx::ast::Module* module = parser.BuildModule();
+
+  EXPECT_EQ(module, nullptr);
+  EXPECT_NE(parser.GetDiagnosis().message.find(
+                "Struct member name cannot use reserved builtin type 'f32'"),
+            std::string::npos);
 }
 
 }  // namespace
