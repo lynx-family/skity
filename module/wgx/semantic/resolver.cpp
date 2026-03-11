@@ -274,6 +274,7 @@ BindResult Resolver::Resolve() {
     Symbol* symbol =
         NewSymbol(SymbolKind::kType, type_decl->name->name, type_decl);
     DeclareOrReport(symbol, "type");
+    RecordIdentifierSymbol(type_decl->name, symbol);
   }
 
   for (auto* variable : module_->global_declarations) {
@@ -284,6 +285,7 @@ BindResult Resolver::Resolve() {
     Symbol* symbol = NewSymbol(GetVariableSymbolKind(variable),
                                variable->name->name, variable);
     DeclareOrReport(symbol, SymbolKindName(symbol->kind));
+    RecordIdentifierSymbol(variable->name, symbol);
   }
 
   for (auto* function : module_->functions) {
@@ -294,6 +296,7 @@ BindResult Resolver::Resolve() {
     Symbol* symbol =
         NewSymbol(SymbolKind::kFunction, function->name->name, function);
     DeclareOrReport(symbol, "function");
+    RecordIdentifierSymbol(function->name, symbol);
   }
 
   Visit(module_);
@@ -408,6 +411,7 @@ void Resolver::Visit(ast::Function* function) {
     Symbol* symbol =
         NewSymbol(SymbolKind::kParameter, param->name->name, param);
     DeclareOrReport(symbol, "parameter");
+    RecordIdentifierSymbol(param->name, symbol);
 
     ResolveType(param->type);
   }
@@ -585,18 +589,26 @@ void Resolver::Visit(ast::TypeDecl* type_decl) {
     case ast::TypeDeclType::kStruct: {
       auto* struct_decl = static_cast<ast::StructDecl*>(type_decl);
       PushScope();
+
+      // Phase 1: resolve all member types before adding member names into
+      // scope, so member identifiers never participate in type lookup.
+      for (auto* member : struct_decl->members) {
+        if (member == nullptr || member->name == nullptr) {
+          continue;
+        }
+        Visit(member);
+      }
+
+      // Phase 2: declare member names for duplicate checking.
       for (auto* member : struct_decl->members) {
         if (member == nullptr || member->name == nullptr) {
           continue;
         }
 
-        // Resolve member type first so member identifiers do not affect type
-        // lookup in this pass.
-        Visit(member);
-
         Symbol* symbol =
             NewSymbol(SymbolKind::kStructMember, member->name->name, member);
         DeclareOrReport(symbol, "struct member");
+        RecordIdentifierSymbol(member->name, symbol);
       }
       PopScope();
       return;
@@ -627,6 +639,7 @@ void Resolver::Visit(ast::Variable* variable) {
 
   Symbol* symbol = NewSymbol(kind, variable->name->name, variable);
   DeclareOrReport(symbol, SymbolKindName(kind));
+  RecordIdentifierSymbol(variable->name, symbol);
 
   if (variable->GetType() == ast::VariableType::kVar) {
     auto* var = static_cast<ast::Var*>(variable);
@@ -725,6 +738,15 @@ bool Resolver::DeclareOrReport(Symbol* symbol, const char* kind_name) {
 
   Report(message);
   return false;
+}
+
+void Resolver::RecordIdentifierSymbol(ast::Identifier* identifier,
+                                      Symbol* symbol) {
+  if (result_ == nullptr || identifier == nullptr || symbol == nullptr) {
+    return;
+  }
+
+  result_->decl_symbols[identifier] = symbol;
 }
 
 void Resolver::Report(const std::string& message) {

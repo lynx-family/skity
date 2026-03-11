@@ -18,6 +18,103 @@ static std::string skip_glsl_keywords(const std::string_view& name) {
   }
 }
 
+std::string AstPrinter::GetOutputName(std::string_view name) const {
+  return skip_glsl_keywords(name);
+}
+
+std::string AstPrinter::GetOutputName(const semantic::Symbol* symbol,
+                                      std::string_view fallback_name) const {
+#ifdef WGX_OUTPUT_ORIGINAL_NAME
+  return GetOutputName(fallback_name);
+#else
+
+  if (symbol == nullptr) {
+    return GetOutputName(fallback_name);
+  }
+
+  if (symbol->kind == semantic::SymbolKind::kBuiltinType ||
+      symbol->kind == semantic::SymbolKind::kBuiltinFunction ||
+      symbol->kind == semantic::SymbolKind::kStructMember) {
+    return GetOutputName(symbol->original_name.empty() ? fallback_name
+                                                       : symbol->original_name);
+  }
+
+  auto it = symbol_names_.find(symbol);
+  if (it != symbol_names_.end()) {
+    return it->second;
+  }
+
+  std::string symbol_name = "wgx_symbol_";
+  symbol_name += std::to_string(symbol->id);
+
+  auto [inserted_it, _] = symbol_names_.emplace(symbol, symbol_name);
+  return inserted_it->second;
+
+#endif
+}
+
+std::string AstPrinter::GetInterfaceVariableName(
+    const ast::Identifier* identifier, ast::Attribute* location_attr,
+    bool input) const {
+  const auto stage = func_->GetFunction()->GetPipelineStage();
+  const bool is_stage_varying =
+      (stage == ast::PipelineStage::kVertex && !input) ||
+      (stage == ast::PipelineStage::kFragment && input);
+  if (is_stage_varying && location_attr != nullptr &&
+      location_attr->GetType() == ast::AttributeType::kLocation) {
+    auto* location = static_cast<ast::LocationAttribute*>(location_attr);
+    return "wgx_varying_" + std::to_string(location->index);
+  }
+
+  std::string name = input ? "wgx_in_" : "wgx_out_";
+  if (identifier == nullptr) {
+    return name + "unnamed";
+  }
+  const auto* symbol = FindDeclSymbol(identifier);
+  if (symbol != nullptr) {
+    name += std::to_string(symbol->id);
+    return name;
+  }
+  name += skip_glsl_keywords(identifier->name);
+  return name;
+}
+
+const semantic::Symbol* AstPrinter::FindSymbol(
+    const ast::IdentifierExp* identifier) const {
+  if (identifier == nullptr) {
+    return nullptr;
+  }
+
+  auto it = ident_symbols_.find(identifier);
+  return it == ident_symbols_.end() ? nullptr : it->second;
+}
+
+const semantic::Symbol* AstPrinter::FindSymbol(
+    const ast::Identifier* identifier) const {
+  if (identifier == nullptr) {
+    return nullptr;
+  }
+
+  if (!identifier_symbols_built_) {
+    for (const auto& [ident_exp, symbol] : ident_symbols_) {
+      if (ident_exp != nullptr && ident_exp->ident != nullptr &&
+          symbol != nullptr) {
+        identifier_symbols_.emplace(ident_exp->ident, symbol);
+      }
+    }
+    identifier_symbols_built_ = true;
+  }
+
+  auto it = identifier_symbols_.find(identifier);
+  return it == identifier_symbols_.end() ? nullptr : it->second;
+}
+
+const semantic::Symbol* AstPrinter::FindDeclSymbol(
+    const ast::Identifier* declaration) const {
+  auto it = declaration_symbols_.find(declaration);
+  return it == declaration_symbols_.end() ? nullptr : it->second;
+}
+
 void AstPrinter::Visit(ast::Attribute* attribute) {
   switch (attribute->GetType()) {
     case ast::AttributeType::kLocation: {
@@ -203,7 +300,7 @@ void AstPrinter::Visit(ast::Function* function) {
   WriteType(function->return_type);
 
   ss_ << " ";
-  function->name->Accept(this);
+  ss_ << GetOutputName(FindDeclSymbol(function->name), function->name->name);
   ss_ << "(";
 
   for (size_t i = 0; i < function->params.size(); ++i) {
@@ -222,7 +319,11 @@ void AstPrinter::Visit(ast::Function* function) {
 }
 
 void AstPrinter::Visit(ast::Identifier* identifier) {
-  ss_ << skip_glsl_keywords(identifier->name);
+  const auto* symbol = FindSymbol(identifier);
+  if (symbol == nullptr) {
+    symbol = FindDeclSymbol(identifier);
+  }
+  ss_ << GetOutputName(symbol, identifier->name);
 }
 
 void AstPrinter::Visit(ast::Statement* statement) {
@@ -422,7 +523,8 @@ void AstPrinter::Visit(ast::TypeDecl* type_decl) {
   if (type_decl->GetType() == ast::TypeDeclType::kStruct) {
     auto* struct_decl = static_cast<ast::StructDecl*>(type_decl);
     ss_ << "struct ";
-    struct_decl->name->Accept(this);
+    ss_ << GetOutputName(FindDeclSymbol(struct_decl->name),
+                         struct_decl->name->name);
     ss_ << " {" << std::endl;
 
     for (auto* member : struct_decl->members) {
@@ -433,8 +535,10 @@ void AstPrinter::Visit(ast::TypeDecl* type_decl) {
   } else if (type_decl->GetType() == ast::TypeDeclType::kAlias) {
     auto* alias = static_cast<ast::Alias*>(type_decl);
     ss_ << "typedef ";
-    alias->name->Accept(this);
-    ss_ << " (" << alias->type.expr->ident->name << ");" << std::endl;
+    WriteType(alias->type);
+    ss_ << " ";
+    ss_ << GetOutputName(FindDeclSymbol(alias->name), alias->name->name);
+    ss_ << ";" << std::endl;
   }
 }
 
@@ -442,7 +546,8 @@ void AstPrinter::Visit(ast::StructMember* struct_member) {
   ss_ << "\t";
   WriteType(struct_member->type);
   ss_ << " ";
-  struct_member->name->Accept(this);
+  ss_ << GetOutputName(FindDeclSymbol(struct_member->name),
+                       struct_member->name->name);
 
   if (struct_member->type.IsArray()) {
     auto array = struct_member->type.AsArray();
@@ -460,7 +565,7 @@ void AstPrinter::Visit(ast::Variable* variable) {
     WriteType(const_var->type);
 
     ss_ << " ";
-    variable->name->Accept(this);
+    ss_ << GetOutputName(FindDeclSymbol(variable->name), variable->name->name);
     ss_ << " = ";
 
     const_var->initializer->Accept(this);
@@ -489,7 +594,7 @@ void AstPrinter::Visit(ast::Variable* variable) {
 
       ss_ << " ";
 
-      var->name->Accept(this);
+      ss_ << GetOutputName(FindDeclSymbol(var->name), var->name->name);
 
       if (var->type.IsArray()) {
         auto array = var->type.AsArray();
@@ -508,12 +613,12 @@ void AstPrinter::Visit(ast::Variable* variable) {
     WriteType(variable->type);
 
     ss_ << " ";
-    variable->name->Accept(this);
+    ss_ << GetOutputName(FindDeclSymbol(variable->name), variable->name->name);
   } else if (variable->GetType() == ast::VariableType::kLet) {
     WriteType(variable->type);
 
     ss_ << " ";
-    variable->name->Accept(this);
+    ss_ << GetOutputName(FindDeclSymbol(variable->name), variable->name->name);
 
     if (variable->initializer) {
       ss_ << " = ";
@@ -703,7 +808,7 @@ void AstPrinter::WriteType(const ast::Type& type) {
 
     WriteType(inner_type);
   } else {
-    ss_ << name;
+    ss_ << GetOutputName(FindSymbol(type.expr), name);
   }
 }
 
@@ -731,14 +836,7 @@ void AstPrinter::WriteAttribute(ast::Variable* variable, bool input) {
   WriteType(variable->type);
 
   ss_ << " ";
-
-  if (input && pipeline_stage == ast::PipelineStage::kVertex) {
-    ss_ << "in_";
-  } else {
-    ss_ << "vs_out_";
-  }
-
-  variable->name->Accept(this);
+  ss_ << GetInterfaceVariableName(variable->name, attr, input);
   ss_ << ";" << std::endl;
 }
 
@@ -765,14 +863,7 @@ void AstPrinter::WriteAttribute(ast::StructMember* member, bool input) {
   WriteType(member->type);
 
   ss_ << " ";
-
-  if (input && pipeline_stage == ast::PipelineStage::kVertex) {
-    ss_ << "in_";
-  } else {
-    ss_ << "vs_out_";
-  }
-
-  member->name->Accept(this);
+  ss_ << GetInterfaceVariableName(member->name, attr, input);
   ss_ << ";" << std::endl;
 }
 
@@ -821,9 +912,7 @@ void AstPrinter::WriteUniformVariable(ast::Var* var) {
   }
 
   ss_ << "std140 ) uniform ";
-  var->name->Accept(this);
-  ss_ << "block_ubo"
-      << " {" << std::endl;
+  ss_ << var->name->name << " {" << std::endl;
 
   WriteType(var->type);
 
@@ -972,13 +1061,9 @@ void AstPrinter::WriteMainFunc() {
         if (param->GetAttribute(ast::AttributeType::kColor) != nullptr) {
           ss_ << "fragColor";
         } else {
-          if (stage == ast::PipelineStage::kVertex) {
-            ss_ << "in_";
-          } else {
-            ss_ << "vs_out_";
-          }
-
-          param->name->Accept(this);
+          ss_ << GetInterfaceVariableName(
+              param->name, param->GetAttribute(ast::AttributeType::kLocation),
+              true);
         }
       }
       ss_ << ";" << std::endl;
@@ -1020,12 +1105,9 @@ void AstPrinter::WriteMainFunc() {
         if (builtin_attr) {
           WriteBuiltinVariable(param, builtin_attr);
         } else {
-          if (stage == ast::PipelineStage::kVertex) {
-            ss_ << "in_";
-          } else {
-            ss_ << "vs_out_";
-          }
-          member->name->Accept(this);
+          ss_ << GetInterfaceVariableName(
+              member->name, member->GetAttribute(ast::AttributeType::kLocation),
+              true);
         }
         ss_ << ";" << std::endl;
       }
@@ -1096,12 +1178,7 @@ void AstPrinter::WriteMainFunc() {
         continue;
       }
 
-      if (stage == ast::PipelineStage::kVertex) {
-        ss_ << "vs_";
-      }
-
-      ss_ << "out_";
-      member->name->Accept(this);
+      ss_ << GetInterfaceVariableName(member->name, location, false);
       ss_ << " = entry_point_out.";
       member->name->Accept(this);
       ss_ << ";" << std::endl;
@@ -1161,10 +1238,11 @@ void AstPrinter::RegisterBindGroupEntry(ast::Var* var) {
 
   if (var->address_space) {
     // this is a uniform variable
+    // This is a uniform variable. We only update the binding index here.
+    // Reflection names (bind_entry->name) remain as the original WGSL/source
+    // so we can bind the uniform variable to the correct binding point in GPU
+    // HAL.
     bind_entry->index = ubo_index_;
-    // when convert to glsl, the compiler append a suffix to the name to prevent
-    // name conflict
-    bind_entry->name += "block_ubo";
   } else if (var->type.expr->ident->name == "texture_2d") {
     bind_entry->index = texture_index_;
   }
