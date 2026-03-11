@@ -36,7 +36,8 @@ Result Program::WriteToGlsl(const char* entry_point, const GlslOptions& options,
     return {};
   }
 
-  glsl::AstPrinter printer{options, entry_point_func.get(), ctx};
+  glsl::AstPrinter printer{options, entry_point_func.get(), ctx, ident_symbols_,
+                           decl_symbols_};
 
   if (printer.Write()) {
     return {
@@ -70,7 +71,8 @@ Result Program::WriteToMsl(const char* entry_point, const MslOptions& options,
     return {};
   }
 
-  msl::AstPrinter printer{options, entry_point_func.get(), ctx};
+  msl::AstPrinter printer{options, entry_point_func.get(), ctx, ident_symbols_,
+                          decl_symbols_};
 
   if (printer.Write()) {
     return {
@@ -142,6 +144,10 @@ bool Program::BuildAST(const std::vector<Token>& toke_list) {
     module_ = nullptr;
     return false;
   }
+
+  ident_symbols_ = std::move(bind_result.ident_symbols);
+  decl_symbols_ = std::move(bind_result.decl_symbols);
+  symbols_ = std::move(bind_result.symbols);
 
   return true;
 }

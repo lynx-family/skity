@@ -7,9 +7,11 @@
 #include <wgsl_cross.h>
 
 #include <sstream>
+#include <string_view>
 #include <unordered_map>
 
 #include "msl/attribute.h"
+#include "semantic/symbol.h"
 #include "wgsl/ast/visitor.h"
 #include "wgsl/function.h"
 
@@ -25,7 +27,11 @@ class AstPrinter : public ast::AstVisitor {
 
  public:
   AstPrinter(const MslOptions& options, Function* func,
-             const std::optional<CompilerContext>& ctx);
+             const std::optional<CompilerContext>& ctx,
+             const std::unordered_map<const ast::IdentifierExp*,
+                                      semantic::Symbol*>& ident_symbols,
+             const std::unordered_map<const ast::Identifier*,
+                                      semantic::Symbol*>& declaration_symbols);
 
   ~AstPrinter() override = default;
 
@@ -60,6 +66,19 @@ class AstPrinter : public ast::AstVisitor {
   uint32_t GetSamplerIndex() const { return sampler_index_; }
 
  private:
+  std::string GetOutputName(std::string_view name) const;
+
+  std::string GetOutputName(const semantic::Symbol* symbol,
+                            std::string_view fallback_name) const;
+
+  const semantic::Symbol* FindSymbol(
+      const ast::IdentifierExp* identifier) const;
+
+  const semantic::Symbol* FindSymbol(const ast::Identifier* identifier) const;
+
+  const semantic::Symbol* FindDeclSymbol(
+      const ast::Identifier* declaration) const;
+
   void WriteType(const ast::Type& type);
 
   void WriteAttributes(const std::vector<ast::Attribute*>& attributes,
@@ -83,6 +102,15 @@ class AstPrinter : public ast::AstVisitor {
  private:
   MslOptions options_;
   Function* func_;
+  const std::unordered_map<const ast::IdentifierExp*, semantic::Symbol*>&
+      ident_symbols_;
+  mutable std::unordered_map<const ast::Identifier*, semantic::Symbol*>
+      identifier_symbols_;
+  mutable bool identifier_symbols_built_ = false;
+  const std::unordered_map<const ast::Identifier*, semantic::Symbol*>&
+      declaration_symbols_;
+  mutable std::unordered_map<const semantic::Symbol*, std::string>
+      symbol_names_{};
   std::stringstream ss_;
   bool has_error_;
   uint32_t buffer_index_;
