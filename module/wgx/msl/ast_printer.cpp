@@ -9,10 +9,17 @@
 namespace wgx {
 namespace msl {
 
-AstPrinter::AstPrinter(const MslOptions& options, Function* func,
-                       const std::optional<CompilerContext>& ctx)
+AstPrinter::AstPrinter(
+    const MslOptions& options, Function* func,
+    const std::optional<CompilerContext>& ctx,
+    const std::unordered_map<const ast::IdentifierExp*, semantic::Symbol*>&
+        ident_symbols,
+    const std::unordered_map<const ast::Identifier*, semantic::Symbol*>&
+        declaration_symbols)
     : options_(options),
       func_(func),
+      ident_symbols_(ident_symbols),
+      declaration_symbols_(declaration_symbols),
       ss_(),
       has_error_(false),
       buffer_index_(options.buffer_base_index),
@@ -32,6 +39,79 @@ AstPrinter::AstPrinter(const MslOptions& options, Function* func,
       sampler_index_ = ctx->last_sampler_binding;
     }
   }
+}
+
+std::string AstPrinter::GetOutputName(std::string_view name) const {
+  std::string output{name};
+  if (name == "vertex" || name == "fragment") {
+    output += "_1";
+  }
+  return output;
+}
+
+std::string AstPrinter::GetOutputName(const semantic::Symbol* symbol,
+                                      std::string_view fallback_name) const {
+  if (symbol == nullptr) {
+    return GetOutputName(fallback_name);
+  }
+
+  if (symbol->kind == semantic::SymbolKind::kBuiltinType ||
+      symbol->kind == semantic::SymbolKind::kBuiltinFunction ||
+      symbol->kind == semantic::SymbolKind::kStructMember) {
+    return GetOutputName(symbol->original_name.empty() ? fallback_name
+                                                       : symbol->original_name);
+  }
+
+  auto it = symbol_names_.find(symbol);
+  if (it != symbol_names_.end()) {
+    return it->second;
+  }
+
+  std::string symbol_name = "wgx_symbol_";
+  symbol_name += std::to_string(symbol->id);
+
+  auto [inserted_it, _] = symbol_names_.emplace(symbol, symbol_name);
+  return inserted_it->second;
+}
+
+const semantic::Symbol* AstPrinter::FindSymbol(
+    const ast::IdentifierExp* identifier) const {
+  if (identifier == nullptr) {
+    return nullptr;
+  }
+
+  auto it = ident_symbols_.find(identifier);
+  return it == ident_symbols_.end() ? nullptr : it->second;
+}
+
+const semantic::Symbol* AstPrinter::FindSymbol(
+    const ast::Identifier* identifier) const {
+  if (identifier == nullptr) {
+    return nullptr;
+  }
+
+  if (!identifier_symbols_built_) {
+    for (const auto& [ident_exp, symbol] : ident_symbols_) {
+      if (ident_exp != nullptr && ident_exp->ident != nullptr &&
+          symbol != nullptr) {
+        identifier_symbols_.emplace(ident_exp->ident, symbol);
+      }
+    }
+    identifier_symbols_built_ = true;
+  }
+
+  auto it = identifier_symbols_.find(identifier);
+  return it == identifier_symbols_.end() ? nullptr : it->second;
+}
+
+const semantic::Symbol* AstPrinter::FindDeclSymbol(
+    const ast::Identifier* declaration) const {
+  auto it = declaration_symbols_.find(declaration);
+  if (it != declaration_symbols_.end()) {
+    return it->second;
+  }
+
+  return nullptr;
 }
 
 void AstPrinter::Visit(ast::Attribute* attribute) {}
@@ -228,7 +308,12 @@ void AstPrinter::Visit(ast::Function* function) {
   WriteType(function->return_type);
   ss_ << " ";
 
-  ss_ << function->name->name << "(";
+  if (function->IsEntryPoint()) {
+    ss_ << function->name->name << "(";
+  } else {
+    ss_ << GetOutputName(FindDeclSymbol(function->name), function->name->name)
+        << "(";
+  }
 
   uint32_t param_index = 0;
   for (auto& param : function->params) {
@@ -349,12 +434,12 @@ void AstPrinter::Visit(ast::Function* function) {
 }
 
 void AstPrinter::Visit(ast::Identifier* identifier) {
-  ss_ << identifier->name;
-  // prevent confict with the MSL keywords
-
-  if (identifier->name == "vertex" || identifier->name == "fragment") {
-    ss_ << "_1";
+  const auto* symbol = FindSymbol(identifier);
+  if (symbol == nullptr) {
+    symbol = FindDeclSymbol(identifier);
   }
+
+  ss_ << GetOutputName(symbol, identifier->name);
 }
 
 void AstPrinter::Visit(ast::Statement* statement) {
@@ -800,7 +885,7 @@ void AstPrinter::WriteType(const ast::Type& type) {
   } else if (name == "atan") {
     ss_ << "precise::atan2";
   } else {
-    ss_ << name;
+    ss_ << GetOutputName(FindSymbol(type.expr), name);
   }
 }
 

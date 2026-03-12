@@ -44,6 +44,8 @@ class Resolver : public ast::AstVisitor {
 
   bool DeclareOrReport(Symbol* symbol, const char* kind_name);
 
+  void RecordIdentifierSymbol(ast::Identifier* identifier, Symbol* symbol);
+
   void Report(const std::string& message);
 
   void ResolveType(ast::Type type);

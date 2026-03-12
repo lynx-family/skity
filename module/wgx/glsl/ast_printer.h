@@ -7,7 +7,11 @@
 #include <wgsl_cross.h>
 
 #include <sstream>
+#include <string_view>
+#include <unordered_map>
 
+#include "semantic/symbol.h"
+#include "wgsl/ast/node.h"
 #include "wgsl/ast/visitor.h"
 #include "wgsl/function.h"
 
@@ -17,8 +21,16 @@ namespace glsl {
 class AstPrinter : public ast::AstVisitor {
  public:
   AstPrinter(const GlslOptions& options, Function* func,
-             const std::optional<CompilerContext>& ctx)
-      : options_(options), func_(func), ss_() {
+             const std::optional<CompilerContext>& ctx,
+             const std::unordered_map<const ast::IdentifierExp*,
+                                      semantic::Symbol*>& ident_symbols,
+             const std::unordered_map<const ast::Identifier*,
+                                      semantic::Symbol*>& declaration_symbols)
+      : options_(options),
+        func_(func),
+        ident_symbols_(ident_symbols),
+        declaration_symbols_(declaration_symbols),
+        ss_() {
     if (ctx) {
       ubo_index_ = ctx->last_ubo_binding;
       texture_index_ = ctx->last_texture_binding;
@@ -56,6 +68,23 @@ class AstPrinter : public ast::AstVisitor {
   uint32_t GetTextureIndex() const { return texture_index_; }
 
  private:
+  std::string GetOutputName(std::string_view name) const;
+
+  std::string GetOutputName(const semantic::Symbol* symbol,
+                            std::string_view fallback_name) const;
+
+  std::string GetInterfaceVariableName(const ast::Identifier* identifier,
+                                       ast::Attribute* location_attr,
+                                       bool input) const;
+
+  const semantic::Symbol* FindSymbol(
+      const ast::IdentifierExp* identifier) const;
+
+  const semantic::Symbol* FindSymbol(const ast::Identifier* identifier) const;
+
+  const semantic::Symbol* FindDeclSymbol(
+      const ast::Identifier* declaration) const;
+
   void WriteType(const ast::Type& type);
 
   void WriteAttribute(ast::Variable* variable, bool input);
@@ -90,6 +119,15 @@ class AstPrinter : public ast::AstVisitor {
  private:
   GlslOptions options_;
   Function* func_;
+  const std::unordered_map<const ast::IdentifierExp*, semantic::Symbol*>&
+      ident_symbols_;
+  mutable std::unordered_map<const ast::Identifier*, semantic::Symbol*>
+      identifier_symbols_;
+  mutable bool identifier_symbols_built_ = false;
+  const std::unordered_map<const ast::Identifier*, semantic::Symbol*>&
+      declaration_symbols_;
+  mutable std::unordered_map<const semantic::Symbol*, std::string>
+      symbol_names_{};
   std::stringstream ss_;
   bool has_error_ = false;
   uint32_t ubo_index_ = 0;
