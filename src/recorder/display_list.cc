@@ -11,11 +11,13 @@ namespace skity {
 DisplayList::DisplayList() {}
 
 DisplayList::DisplayList(DisplayListStorage &&storage, size_t byte_count,
-                         uint32_t op_count, const Rect &bounds)
+                         uint32_t op_count, const Rect &bounds,
+                         uint32_t properties)
     : storage_(std::move(storage)),
       byte_count_(byte_count),
       op_count_(op_count),
-      bounds_(bounds) {}
+      bounds_(bounds),
+      properties_(properties) {}
 
 DisplayList::~DisplayList() {
   uint8_t *ptr = storage_.get();
