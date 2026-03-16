@@ -5,6 +5,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <skity/effect/color_filter.hpp>
+#include <skity/effect/image_filter.hpp>
+#include <skity/effect/mask_filter.hpp>
+#include <skity/effect/shader.hpp>
 #include <skity/recorder/picture_recorder.hpp>
 #include <skity/skity.hpp>
 
@@ -316,4 +320,89 @@ TEST(DisplayList, DrawDRRect) {
                            paint))
       .Times(1);
   display_list->Draw(&mock_canvas);
+}
+
+TEST(DisplayList, CheckProperties) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  skity::Paint paint;
+  canvas->DrawRect(skity::Rect::MakeWH(10, 10), paint);
+
+  auto display_list = recorder.FinishRecording();
+  EXPECT_FALSE(display_list->HasSaveLayer());
+  EXPECT_FALSE(display_list->HasShader());
+  EXPECT_FALSE(display_list->HasColorFilter());
+  EXPECT_FALSE(display_list->HasMaskFilter());
+  EXPECT_FALSE(display_list->HasImageFilter());
+
+  // Test SaveLayer
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  canvas = recorder.GetRecordingCanvas();
+  canvas->SaveLayer(skity::Rect::MakeWH(100, 100), paint);
+  canvas->Restore();
+  display_list = recorder.FinishRecording();
+  EXPECT_TRUE(display_list->HasSaveLayer());
+
+  // Test Shader
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  canvas = recorder.GetRecordingCanvas();
+  skity::Point pts[] = {skity::Point(0.f, 0.f, 0.f, 1.f),
+                        skity::Point(100.f, 100.f, 0.f, 1.f)};
+  skity::Vec4 colors[] = {skity::Vec4(1.f, 0.f, 0.f, 1.f),
+                          skity::Vec4(0.f, 0.f, 1.f, 1.f)};
+  paint.SetShader(skity::Shader::MakeLinear(pts, colors, nullptr, 2));
+  canvas->DrawRect(skity::Rect::MakeWH(10, 10), paint);
+  display_list = recorder.FinishRecording();
+  EXPECT_TRUE(display_list->HasShader());
+  paint.SetShader(nullptr);
+
+  // Test ColorFilter
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  canvas = recorder.GetRecordingCanvas();
+  paint.SetColorFilter(
+      skity::ColorFilters::Blend(skity::Color_RED, skity::BlendMode::kSrc));
+  canvas->DrawRect(skity::Rect::MakeWH(10, 10), paint);
+  display_list = recorder.FinishRecording();
+  EXPECT_TRUE(display_list->HasColorFilter());
+  paint.SetColorFilter(nullptr);
+
+  // Test MaskFilter
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  canvas = recorder.GetRecordingCanvas();
+  // Using MakeBlur with enum value for Normal style
+  paint.SetMaskFilter(
+      skity::MaskFilter::MakeBlur(skity::BlurStyle::kNormal, 10));
+  canvas->DrawRect(skity::Rect::MakeWH(10, 10), paint);
+  display_list = recorder.FinishRecording();
+  EXPECT_TRUE(display_list->HasMaskFilter());
+  paint.SetMaskFilter(nullptr);
+
+  // Test ImageFilter
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  canvas = recorder.GetRecordingCanvas();
+  paint.SetImageFilter(skity::ImageFilters::Blur(10, 10));
+  canvas->DrawRect(skity::Rect::MakeWH(10, 10), paint);
+  display_list = recorder.FinishRecording();
+  EXPECT_TRUE(display_list->HasImageFilter());
+  paint.SetImageFilter(nullptr);
+}
+
+TEST(DisplayList, CheckPropertiesWithDrawPaint) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  skity::Paint paint;
+  skity::Point pts[] = {skity::Point(0.f, 0.f, 0.f, 1.f),
+                        skity::Point(100.f, 100.f, 0.f, 1.f)};
+  skity::Vec4 colors[] = {skity::Vec4(1.f, 0.f, 0.f, 1.f),
+                          skity::Vec4(0.f, 0.f, 1.f, 1.f)};
+  paint.SetShader(skity::Shader::MakeLinear(pts, colors, nullptr, 2));
+
+  canvas->DrawPaint(paint);
+
+  auto display_list = recorder.FinishRecording();
+  EXPECT_TRUE(display_list->HasShader());
 }

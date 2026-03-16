@@ -87,27 +87,36 @@ void RecordingCanvas::OnClipPath(Path const& path, ClipOp op) {
 
 void RecordingCanvas::OnDrawRect(Rect const& rect, Paint const& paint) {
   Push<DrawRectOp>(rect, paint);
+  UpdateProperties(paint);
   AccumulateOpBounds(rect, &paint);
 }
 
 void RecordingCanvas::OnDrawRRect(RRect const& rrect, Paint const& paint) {
   Push<DrawRRectOp>(rrect, paint);
+  UpdateProperties(paint);
   AccumulateOpBounds(rrect.GetBounds(), &paint);
 }
 
 void RecordingCanvas::OnDrawDRRect(RRect const& outer, RRect const& inner,
                                    Paint const& paint) {
   Push<DrawDRRectOp>(outer, inner, paint);
+  UpdateProperties(paint);
   AccumulateOpBounds(outer.GetBounds(), &paint);
 }
 
 void RecordingCanvas::OnDrawPath(Path const& path, Paint const& paint) {
   Push<DrawPathOp>(path, paint);
+  UpdateProperties(paint);
   AccumulateOpBounds(path.GetBounds(), &paint);
 }
 
 void RecordingCanvas::OnSaveLayer(const Rect& bounds, const Paint& paint) {
   Push<SaveLayerOp>(bounds, paint);
+  if (dp_builder_) {
+    dp_builder_->properties_ |=
+        static_cast<uint32_t>(DisplayList::Property::kSaveLayer);
+    UpdateProperties(paint);
+  }
 }
 
 void RecordingCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
@@ -116,6 +125,7 @@ void RecordingCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
   auto bounds = blob->GetBoundsRect().MakeOffset(x, y);
   // Expand outward a little to prevent incomplete display of text content
   bounds = bounds.MakeOutset(1, 1);
+  UpdateProperties(paint);
   AccumulateOpBounds(bounds, &paint);
 }
 
@@ -124,6 +134,9 @@ void RecordingCanvas::OnDrawImageRect(std::shared_ptr<Image> image,
                                       const SamplingOptions& sampling,
                                       Paint const* paint) {
   Push<DrawImageOp>(std::move(image), src, dst, sampling, paint);
+  if (paint) {
+    UpdateProperties(*paint);
+  }
   AccumulateOpBounds(dst, paint);
 }
 void RecordingCanvas::OnDrawGlyphs(uint32_t count, const GlyphID glyphs[],
@@ -133,10 +146,12 @@ void RecordingCanvas::OnDrawGlyphs(uint32_t count, const GlyphID glyphs[],
   Push<DrawGlyphsOp>(count, glyphs, position_x, position_y, font, paint);
   // Since we only receive glyphs IDs, we cannot quickly calculate the bounds of
   // the drawing area.
+  UpdateProperties(paint);
   AccumulateOpBounds(GetGlobalClipBounds(), nullptr);
 }
 void RecordingCanvas::OnDrawPaint(Paint const& paint) {
   Push<DrawPaintOp>(paint);
+  UpdateProperties(paint);
   AccumulateOpBounds(GetGlobalClipBounds(), nullptr);
 }
 void RecordingCanvas::OnSave() { Push<SaveOp>(); }
@@ -172,6 +187,27 @@ void RecordingCanvas::AccumulateOpBounds(const Rect& raw_bounds,
     return;
   }
   dp_builder_->bounds_.Join(mapped_bounds);
+}
+
+void RecordingCanvas::UpdateProperties(const Paint& paint) {
+  if (dp_builder_) {
+    if (paint.GetShader()) {
+      dp_builder_->properties_ |=
+          static_cast<uint32_t>(DisplayList::Property::kShader);
+    }
+    if (paint.GetColorFilter()) {
+      dp_builder_->properties_ |=
+          static_cast<uint32_t>(DisplayList::Property::kColorFilter);
+    }
+    if (paint.GetMaskFilter()) {
+      dp_builder_->properties_ |=
+          static_cast<uint32_t>(DisplayList::Property::kMaskFilter);
+    }
+    if (paint.GetImageFilter()) {
+      dp_builder_->properties_ |=
+          static_cast<uint32_t>(DisplayList::Property::kImageFilter);
+    }
+  }
 }
 
 }  // namespace skity

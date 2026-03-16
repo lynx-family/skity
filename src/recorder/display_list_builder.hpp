@@ -23,11 +23,12 @@ struct DisplayListBuilder {
   int32_t last_op_offset_ = -1;
 
   std::unique_ptr<DisplayList> GetDisplayList() {
-    return std::make_unique<DisplayList>(std::move(storage_), used_,
-                                         render_op_count_, bounds_);
+    return std::make_unique<DisplayList>(
+        std::move(storage_), used_, render_op_count_, bounds_, properties_);
   }
 
   uint32_t render_op_count_ = 0u;
+  uint32_t properties_ = 0u;
 };
 
 }  // namespace skity

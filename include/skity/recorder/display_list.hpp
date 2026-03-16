@@ -48,9 +48,18 @@ class SKITY_API DisplayList {
   friend class RecordingCanvas;
 
  public:
+  enum class Property : uint32_t {
+    kNone = 0,
+    kSaveLayer = 1 << 0,
+    kShader = 1 << 1,
+    kColorFilter = 1 << 2,
+    kMaskFilter = 1 << 3,
+    kImageFilter = 1 << 4,
+  };
+
   DisplayList();
   DisplayList(DisplayListStorage&& storage, size_t byte_count,
-              uint32_t op_count, const Rect& bounds);
+              uint32_t op_count, const Rect& bounds, uint32_t properties);
   ~DisplayList();
 
   bool Empty() const { return byte_count_ == 0; }
@@ -60,6 +69,26 @@ class SKITY_API DisplayList {
 
   const Rect& GetBounds() const { return bounds_; }
 
+  bool HasSaveLayer() const {
+    return (properties_ & static_cast<uint32_t>(Property::kSaveLayer)) != 0;
+  }
+
+  bool HasShader() const {
+    return (properties_ & static_cast<uint32_t>(Property::kShader)) != 0;
+  }
+
+  bool HasColorFilter() const {
+    return (properties_ & static_cast<uint32_t>(Property::kColorFilter)) != 0;
+  }
+
+  bool HasMaskFilter() const {
+    return (properties_ & static_cast<uint32_t>(Property::kMaskFilter)) != 0;
+  }
+
+  bool HasImageFilter() const {
+    return (properties_ & static_cast<uint32_t>(Property::kImageFilter)) != 0;
+  }
+
   Paint* GetOpPaintByOffset(RecordedOpOffset offset);
 
  private:
@@ -67,6 +96,7 @@ class SKITY_API DisplayList {
   size_t byte_count_ = 0;
   uint32_t op_count_ = 0u;
   Rect bounds_;
+  uint32_t properties_ = 0;
 };
 
 }  // namespace skity
