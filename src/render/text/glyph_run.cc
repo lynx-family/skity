@@ -565,45 +565,68 @@ GlyphRunList GlyphRun::Make(const uint32_t count, const GlyphID* glyphs,
   metrics_paint.SetStyle(Paint::kFill_Style);
   font.LoadGlyphMetrics(glyphs, count, glyph_info.data(), metrics_paint);
 
-  // split by mask
-  std::vector<GlyphID> A8_glyph;
-  std::vector<float> A8_position_x;
-  std::vector<float> A8_position_y;
-  std::vector<GlyphID> RGBA_glyph;
-  std::vector<float> RGBA_position_x;
-  std::vector<float> RGBA_position_y;
-  for (size_t index = 0; index < count; index++) {
+  uint32_t a8_count = 0;
+  for (uint32_t index = 0; index < count; index++) {
     if (glyph_info[index]->GetFormat() == GlyphFormat::A8) {
-      A8_glyph.push_back(glyphs[index]);
-      A8_position_x.push_back(position_x[index]);
-      A8_position_y.push_back(position_y[index]);
+      a8_count++;
+    }
+  }
+
+  if (a8_count == count) {
+    return MakeInternal(count, glyphs, origin, position_x, position_y, font,
+                        paint, AtlasFormat::A8, context_scale, transform,
+                        atlas_manager, arena_allocator, draw_path_func);
+  }
+
+  if (a8_count == 0) {
+    return MakeInternal(count, glyphs, origin, position_x, position_y, font,
+                        paint, AtlasFormat::RGBA32, context_scale, transform,
+                        atlas_manager, arena_allocator, draw_path_func);
+  }
+
+  const uint32_t rgba_count = count - a8_count;
+  std::vector<GlyphID> A8_glyph(a8_count);
+  std::vector<float> A8_position_x(a8_count);
+  std::vector<float> A8_position_y(a8_count);
+  std::vector<GlyphID> RGBA_glyph(rgba_count);
+  std::vector<float> RGBA_position_x(rgba_count);
+  std::vector<float> RGBA_position_y(rgba_count);
+
+  uint32_t a8_index = 0;
+  uint32_t rgba_index = 0;
+  for (uint32_t index = 0; index < count; index++) {
+    if (glyph_info[index]->GetFormat() == GlyphFormat::A8) {
+      A8_glyph[a8_index] = glyphs[index];
+      A8_position_x[a8_index] = position_x[index];
+      A8_position_y[a8_index] = position_y[index];
+      a8_index++;
     } else {
-      RGBA_glyph.push_back(glyphs[index]);
-      RGBA_position_x.push_back(position_x[index]);
-      RGBA_position_y.push_back(position_y[index]);
+      RGBA_glyph[rgba_index] = glyphs[index];
+      RGBA_position_x[rgba_index] = position_x[index];
+      RGBA_position_y[rgba_index] = position_y[index];
+      rgba_index++;
     }
   }
 
   GlyphRunList result;
-  if (!A8_glyph.empty()) {
-    GlyphRunList A8_list = MakeInternal(
-        A8_glyph.size(), A8_glyph.data(), origin, A8_position_x.data(),
-        A8_position_y.data(), font, paint, AtlasFormat::A8, context_scale,
-        transform, atlas_manager, arena_allocator, draw_path_func);
-    for (auto& item : A8_list) {
-      result.push_back(item);
-    }
+  result.SetArenaAllocator(arena_allocator);
+
+  GlyphRunList A8_list = MakeInternal(
+      a8_count, A8_glyph.data(), origin, A8_position_x.data(),
+      A8_position_y.data(), font, paint, AtlasFormat::A8, context_scale,
+      transform, atlas_manager, arena_allocator, draw_path_func);
+  for (auto& item : A8_list) {
+    result.push_back(item);
   }
 
-  if (!RGBA_glyph.empty()) {
-    GlyphRunList RGBA_list = MakeInternal(
-        RGBA_glyph.size(), RGBA_glyph.data(), origin, RGBA_position_x.data(),
-        RGBA_position_y.data(), font, paint, AtlasFormat::RGBA32, context_scale,
-        transform, atlas_manager, arena_allocator, draw_path_func);
-    for (auto& item : RGBA_list) {
-      result.push_back(item);
-    }
+  GlyphRunList RGBA_list = MakeInternal(
+      rgba_count, RGBA_glyph.data(), origin, RGBA_position_x.data(),
+      RGBA_position_y.data(), font, paint, AtlasFormat::RGBA32, context_scale,
+      transform, atlas_manager, arena_allocator, draw_path_func);
+  for (auto& item : RGBA_list) {
+    result.push_back(item);
   }
+
   return result;
 }
 
