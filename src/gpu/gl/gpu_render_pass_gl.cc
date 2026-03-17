@@ -4,11 +4,14 @@
 
 #include "src/gpu/gl/gpu_render_pass_gl.hpp"
 
+#include <cstdint>
+
 #include "src/gpu/gl/formats_gl.h"
 #include "src/gpu/gl/gpu_buffer_gl.hpp"
 #include "src/gpu/gl/gpu_render_pipeline_gl.hpp"
 #include "src/gpu/gl/gpu_sampler_gl.hpp"
 #include "src/gpu/gl/gpu_texture_gl.hpp"
+#include "src/logging.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -17,6 +20,18 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
                                      std::optional<GPUScissorRect> scissor) {
   SKITY_TRACE_EVENT(GPURenderPassGL_EncodeCommands);
   GL_CALL(BindFramebuffer, GL_FRAMEBUFFER, target_fbo_);
+
+  // Skity does not use more than 8 texture units in a render pass, so a
+  // uint8_t bitmask is enough to track the units touched by this pass.
+  uint8_t touched_texture_units = 0;
+  auto track_texture_unit = [&touched_texture_units](uint32_t unit) {
+    DEBUG_CHECK(unit < 8);
+    if (unit >= 8) {
+      return;
+    }
+
+    touched_texture_units |= static_cast<uint8_t>(1u << unit);
+  };
 
   auto target_width = GetDescriptor().GetTargetWidth();
   auto target_height = GetDescriptor().GetTargetHeight();
@@ -153,6 +168,7 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
       auto sampler = static_cast<GPUSamplerGL*>(binding.sampler.get());
 
       GL_CALL(ActiveTexture, GL_TEXTURE0 + texture_index);
+      track_texture_unit(texture_index);
       texture->Bind();
 
       GL_CALL(Uniform1i,
@@ -168,6 +184,7 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
       auto texture = static_cast<GPUTextureGL*>(binding.texture.get());
 
       GL_CALL(ActiveTexture, GL_TEXTURE0 + binding.index);
+      track_texture_unit(binding.index);
       texture->Bind();
 
       GL_CALL(Uniform1i,
@@ -182,9 +199,11 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
         const auto& units = *binding.uints;
 
         for (auto unit : units) {
+          track_texture_unit(unit);
           GL_CALL(BindSampler, unit, sampler->GetSamplerID());
         }
       } else {
+        track_texture_unit(binding.index);
         GL_CALL(BindSampler, binding.index, sampler->GetSamplerID());
       }
     }
@@ -236,6 +255,17 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
 
 #endif
   }
+
+  for (uint32_t unit = 0; unit < 8; ++unit) {
+    if ((touched_texture_units & static_cast<uint8_t>(1u << unit)) == 0) {
+      continue;
+    }
+
+    GL_CALL(ActiveTexture, GL_TEXTURE0 + unit);
+    GL_CALL(BindSampler, unit, 0);
+    GL_CALL(BindTexture, GL_TEXTURE_2D, 0);
+  }
+  GL_CALL(ActiveTexture, GL_TEXTURE0);
   GL_CALL(BindFramebuffer, GL_FRAMEBUFFER, 0);
 }
 
