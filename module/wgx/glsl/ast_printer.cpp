@@ -1245,6 +1245,12 @@ void AstPrinter::RegisterBindGroupEntry(ast::Var* var) {
     bind_entry->index = ubo_index_;
   } else if (var->type.expr->ident->name == "texture_2d") {
     bind_entry->index = texture_index_;
+    // If target GLSL version not support binding slot in shader, we need to use
+    // reflection name to query the uniform location at runtime. So we needs to
+    // replace the binding name with resolved symbol name.
+    // Only GL backend needs to do this.
+    bind_entry->name =
+        GetOutputName(FindDeclSymbol(var->name), var->name->name);
   }
 }
 
