@@ -5,6 +5,7 @@ solutions = [{
         'dev': 'hab/DEPS.dev',
         'ci': 'hab/DEPS.ci',
         'module': 'hab/DEPS.module',
+        'vk': 'hab/DEPS.vk',
     },
     'url': 'git@github.com:lynx-family/skity.git'
 }]

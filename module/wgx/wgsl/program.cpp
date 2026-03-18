@@ -10,6 +10,11 @@
 #include "wgsl/parser.h"
 #include "wgsl/scanner.h"
 
+#ifdef WGX_VULKAN
+#include "lower/lower_to_ir.h"
+#include "spirv/emitter.h"
+#endif
+
 #ifdef WGX_GLSL
 #include "glsl/ast_printer.h"
 #endif
@@ -85,6 +90,38 @@ Result Program::WriteToMsl(const char* entry_point, const MslOptions& options,
         },
     };
   }
+#endif
+
+  return {};
+}
+
+Result Program::WriteToSpirv(const char* entry_point,
+                             const SpirvOptions& options,
+                             std::optional<CompilerContext> ctx) const {
+  (void)options;
+  (void)ctx;
+#ifdef WGX_VULKAN
+  auto func = module_->GetFunction(entry_point);
+
+  if (func == nullptr || !func->IsEntryPoint()) {
+    return {};
+  }
+
+  auto ir_module = lower::LowerToIR(module_, func);
+  if (ir_module == nullptr) {
+    return {};
+  }
+
+  spirv::Emitter emitter;
+  if (!emitter.Emit(*ir_module)) {
+    return {};
+  }
+
+  return {
+      emitter.GetResult(),
+      {},
+      {},
+  };
 #endif
 
   return {};
