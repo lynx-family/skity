@@ -61,6 +61,8 @@ struct WGX_API MslOptions {
   uint32_t sampler_base_index = 0;
 };
 
+struct WGX_API SpirvOptions {};
+
 enum class BindingType {
   kUndefined,
   kUniformBuffer,
@@ -331,6 +333,19 @@ class WGX_API Program {
    */
   Result WriteToMsl(const char* entry_point, const MslOptions& options,
                     std::optional<CompilerContext> ctx = std::nullopt) const;
+
+  /**
+   * Write the AST to SPIR-V (Vulkan backend pipeline).
+   *
+   * @param entry_point The entry point function name. In the WGSL source
+   * code.
+   * @param options     The options for SPIR-V generation.
+   * @param ctx         The compiler context. It is reserved for future use.
+   *
+   * @return            The result of the compilation.
+   */
+  Result WriteToSpirv(const char* entry_point, const SpirvOptions& options,
+                      std::optional<CompilerContext> ctx = std::nullopt) const;
 
   /**
    * Get the bind groups of the entry point function from original WGSL source
