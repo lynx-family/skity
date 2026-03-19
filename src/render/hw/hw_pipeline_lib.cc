@@ -219,7 +219,7 @@ std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
 
   desc.label = module_desc.label;
   desc.stage = stage;
-  desc.error_callback = desc.error_callback;
+  desc.error_callback = error_callback;
   desc.source_type = GPUShaderSourceType::kWGX;
 
   GPUShaderSourceWGX source{};
