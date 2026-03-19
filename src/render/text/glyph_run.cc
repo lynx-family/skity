@@ -117,13 +117,6 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
     return glyph_rects;
   }
 
-  uint32_t anchor_index = glyph_locs_[0].index;
-  const Vec2 anchor_run_pos{position_x_[anchor_index],
-                            position_y_[anchor_index]};
-  Vec2 anchor_device_run_pos{0, 0};
-  transform_.MapPoints(&anchor_device_run_pos, &anchor_run_pos, 1);
-  float snap_x =
-      std::floor(anchor_device_run_pos.x + 0.5f) - anchor_device_run_pos.x;
   for (uint32_t k = 0; k < glyph_locs_.size(); k++) {
     auto info = *(glyph_info[glyph_locs_[k].index]);
 
@@ -143,8 +136,10 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
     Vec2 device_run_pos{0, 0};
     transform_.MapPoints(&device_run_pos, &run_pos, 1);
 
-    float rx = device_run_pos.x + origin_x + snap_x;
-    float ry = std::floor(device_run_pos.y + 0.5f - origin_y);
+    float rounded_x = std::floor(device_run_pos.x + 0.5f);
+    float rounded_y = std::floor(device_run_pos.y + 0.5f);
+    float rx = rounded_x + origin_x;
+    float ry = rounded_y - origin_y;
     float rw = (uv_rb.x - uv_lt.x) / canvas_scale;
     float rh = (uv_rb.y - uv_lt.y) / canvas_scale;
 
