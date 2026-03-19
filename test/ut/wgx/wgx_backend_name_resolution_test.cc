@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 #include <wgsl_cross.h>
 
+#include <algorithm>
+
 namespace {
 
 TEST(WgxBackendNameResolutionTest, RewritesGlslConflictingVariableNames) {
@@ -242,6 +244,85 @@ fn fs_main(@location(0) value: vec2<f32>) -> @location(0) vec4<f32> {
   auto fs_glsl = program->WriteToGlsl("fs_main", glsl_options);
   ASSERT_TRUE(fs_glsl.success);
   EXPECT_NE(fs_glsl.content.find("in vec2 wgx_varying_0;"), std::string::npos);
+}
+
+TEST(WgxBackendNameResolutionTest, UsesTextureSlotBindingInGlsl420) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(1) var tex: texture_2d<f32>;
+@group(0) @binding(2) var samp: sampler;
+
+@fragment
+fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+  return textureSample(tex, samp, uv);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  glsl_options.major_version = 4;
+  glsl_options.minor_version = 2;
+
+  auto glsl_result = program->WriteToGlsl("fs_main", glsl_options);
+  ASSERT_TRUE(glsl_result.success);
+  EXPECT_NE(glsl_result.content.find("layout ( binding = 0) uniform sampler2D"),
+            std::string::npos);
+
+  ASSERT_EQ(glsl_result.bind_groups.size(), 1u);
+  auto* group = &glsl_result.bind_groups[0];
+  auto* texture_entry = group->GetEntry(1);
+  auto* sampler_entry = group->GetEntry(2);
+  ASSERT_NE(texture_entry, nullptr);
+  ASSERT_NE(sampler_entry, nullptr);
+  EXPECT_EQ(texture_entry->index, 0u);
+  ASSERT_TRUE(sampler_entry->units.has_value());
+  ASSERT_EQ(sampler_entry->units->size(), 1u);
+  EXPECT_EQ((*sampler_entry->units)[0], 0u);
+}
+
+TEST(WgxBackendNameResolutionTest,
+     CollectsSamplerUnitsWithoutTextureSlotBinding) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(1) var tex_a: texture_2d<f32>;
+@group(0) @binding(3) var tex_b: texture_2d<f32>;
+@group(0) @binding(2) var samp: sampler;
+
+@fragment
+fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+  return textureSample(tex_a, samp, uv) + textureSample(tex_b, samp, uv);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  glsl_options.major_version = 3;
+  glsl_options.minor_version = 3;
+
+  auto glsl_result = program->WriteToGlsl("fs_main", glsl_options);
+  ASSERT_TRUE(glsl_result.success);
+  EXPECT_EQ(glsl_result.content.find("layout ( binding = "), std::string::npos);
+
+  ASSERT_EQ(glsl_result.bind_groups.size(), 1u);
+  auto* group = &glsl_result.bind_groups[0];
+  auto* tex_a_entry = group->GetEntry(1);
+  auto* tex_b_entry = group->GetEntry(3);
+  auto* sampler_entry = group->GetEntry(2);
+  ASSERT_NE(tex_a_entry, nullptr);
+  ASSERT_NE(tex_b_entry, nullptr);
+  ASSERT_NE(sampler_entry, nullptr);
+  EXPECT_EQ(tex_a_entry->index, 0u);
+  EXPECT_EQ(tex_b_entry->index, 1u);
+
+  ASSERT_TRUE(sampler_entry->units.has_value());
+  const auto& units = *sampler_entry->units;
+  EXPECT_EQ(units.size(), 2u);
+  EXPECT_NE(std::find(units.begin(), units.end(), 0u), units.end());
+  EXPECT_NE(std::find(units.begin(), units.end(), 1u), units.end());
 }
 
 }  // namespace

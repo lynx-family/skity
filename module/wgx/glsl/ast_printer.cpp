@@ -586,8 +586,13 @@ void AstPrinter::Visit(ast::Variable* variable) {
 
       if (var->type.expr->ident->name == "texture_2d") {
         RegisterBindGroupEntry(var);
-        texture_index_++;
+
+        if (CanUseSlotBinding()) {
+          // if GLSL supports slot binding for texture, write the layout binding
+          ss_ << "layout ( binding = " << texture_index_ << ") ";
+        }
         ss_ << "uniform ";
+        texture_index_++;
       }
 
       WriteType(var->type);
@@ -905,7 +910,7 @@ void AstPrinter::WriteUniformVariable(ast::Var* var) {
   }
 
   ss_ << "layout ( ";
-  if (CanUseUboSlotBinding()) {
+  if (CanUseSlotBinding()) {
     ss_ << "binding = " << ubo_index_++ << ", ";
   } else {
     ubo_index_++;  // for reflaction
@@ -1188,7 +1193,7 @@ void AstPrinter::WriteMainFunc() {
   ss_ << "}" << std::endl;
 }
 
-bool AstPrinter::CanUseUboSlotBinding() const {
+bool AstPrinter::CanUseSlotBinding() const {
   if (options_.standard == GlslOptions::Standard::kDesktop) {
     return options_.major_version >= 4 && options_.minor_version >= 2;
   } else {

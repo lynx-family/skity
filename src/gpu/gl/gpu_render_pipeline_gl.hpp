@@ -16,7 +16,7 @@ namespace skity {
 class GLProgram {
  public:
   explicit GLProgram(GLuint program, bool ubo_slot_in_shader)
-      : program_(program), support_ubo_slot_in_shader_(ubo_slot_in_shader) {}
+      : program_(program), support_slot_in_shader_(ubo_slot_in_shader) {}
 
   ~GLProgram();
 
@@ -26,13 +26,13 @@ class GLProgram {
 
   GLuint GetUniformBlockIndex(const std::string name);
 
-  bool SupportUBOSlotInShader() const { return support_ubo_slot_in_shader_; }
+  bool SupportBindingSlotInShader() const { return support_slot_in_shader_; }
 
  private:
   std::unordered_map<std::string, GLuint> uniform_block_indices_;
   std::unordered_map<std::string, GLint> uniform_locations_;
   GLuint program_;
-  bool support_ubo_slot_in_shader_ = false;
+  bool support_slot_in_shader_ = false;
 };
 
 class GPURenderPipelineGL : public GPURenderPipeline {
@@ -52,12 +52,12 @@ class GPURenderPipelineGL : public GPURenderPipeline {
     return GPURenderPipeline::IsValid() && program_->GetProgram() != 0;
   }
 
-  bool SupportUBOSlotInShader() const {
+  bool SupportBindingSlotInShader() const {
     if (program_ == nullptr) {
       return false;
     }
 
-    return program_->SupportUBOSlotInShader();
+    return program_->SupportBindingSlotInShader();
   }
 
  private:
