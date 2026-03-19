@@ -39,8 +39,8 @@ float compute_fake_bold_scale(float text_size, float text_scale) {
 
 skity::StrokeDesc fake_bold_if_needed(const skity::StrokeDesc &stroke_desc,
                                       const skity::ScalerContextDesc &desc,
-                                      float text_scale) {
-  if (desc.fake_bold) {
+                                      float text_scale, bool is_color) {
+  if (desc.fake_bold && !is_color) {
     skity::StrokeDesc working_stroke_desc = stroke_desc;
     if (stroke_desc.is_stroke) {
       working_stroke_desc.is_stroke = true;
@@ -324,9 +324,9 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
   CGPoint point = CGPointMake(glyph->image_.origin_x_for_raster,
                               glyph->image_.origin_y_for_raster);
 
-  if (desc_.fake_bold) {
+  if (desc_.fake_bold && !is_color) {
     StrokeDesc working_stroke_desc =
-        fake_bold_if_needed(stroke_desc, desc_, text_scale_);
+        fake_bold_if_needed(stroke_desc, desc_, text_scale_, is_color);
 
     CGContextSetTextDrawingMode(cg_context.get(), kCGTextStroke);
     CGContextSetLineWidth(cg_context.get(),
@@ -358,8 +358,6 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
 
 void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
                                             const StrokeDesc &stroke_desc) {
-  StrokeDesc working_stroke_desc =
-      fake_bold_if_needed(stroke_desc, desc_, text_scale_);
   CGGlyph cg_glyph = glyph->Id();
 
   if (!cg_glyph) {
@@ -367,6 +365,9 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
   }
 
   bool is_color = GetTypeface()->ContainsColorTable();
+
+  StrokeDesc working_stroke_desc =
+      fake_bold_if_needed(stroke_desc, desc_, text_scale_, is_color);
 
   CGRect cg_bounds;
 
