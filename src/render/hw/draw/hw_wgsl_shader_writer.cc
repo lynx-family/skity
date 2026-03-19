@@ -1,4 +1,6 @@
-
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
 
 #include "src/render/hw/draw/hw_wgsl_shader_writer.hpp"
 
@@ -95,6 +97,9 @@ void HWWGSLShaderWriter::WriteFSFunctionsAndStructs(
   if (fragment_->GetFilter()) {
     ss << fragment_->GetFilter()->GenSourceWGSL();
   }
+  if (fragment_->GetProgrammableBlending()) {
+    ss << fragment_->GetProgrammableBlending()->GenSourceWGSL();
+  }
 }
 
 void HWWGSLShaderWriter::WriteFSUniforms(std::stringstream& ss) const {
@@ -118,19 +123,23 @@ struct FSInput {
 
 void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
   DEBUG_CHECK(fragment_);
+  ss << "@fragment\n";
+  ss << "fn fs_main(";
+  std::vector<std::string> fs_params;
   if (HasVarings()) {
-    ss << R"(
-@fragment
-fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
-  var color : vec4<f32>;
-)";
-  } else {
-    ss << R"(
-@fragment
-fn fs_main() -> @location(0) vec4<f32> {
-  var color : vec4<f32>;
-)";
+    fs_params.push_back("input: FSInput");
   }
+  if (NeedsFramebufferFetch()) {
+    fs_params.push_back("@color(0) dst_color: vec4<f32>");
+  }
+  if (!fs_params.empty()) {
+    ss << fs_params[0];
+    for (size_t i = 1; i < fs_params.size(); i++) {
+      ss << ", " << fs_params[i];
+    }
+  }
+  ss << ") -> @location(0) vec4<f32> {\n";
+  ss << "  var color : vec4<f32>;\n";
 
   fragment_->WriteFSMain(ss);
   if (fragment_->GetFilter()) {
@@ -146,6 +155,12 @@ fn fs_main() -> @location(0) vec4<f32> {
     geometry_->WriteFSAlphaMask(ss);
     ss << R"(
   color = color * mask_alpha;
+)";
+  }
+
+  if (NeedsFramebufferFetch()) {
+    ss << R"(
+  color = blending(color, dst_color);
 )";
   }
 

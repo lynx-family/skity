@@ -42,12 +42,36 @@ static bool SupportsMemoryless(id<MTLDevice> device) {
   }
 }
 
+static bool SupportsFramebufferFetch(id<MTLDevice> device) {
+#if defined(SKITY_IOS) && TARGET_OS_SIMULATOR
+  return false;
+#else
+  if (@available(ios 13.0, tvos 13.0, macos 10.15, *)) {
+    // When running the golden test remotely, a paravirtualized Mac device is used. It supports
+    // framebuffer fetch, but it cannot be determined via [device
+    // supportsFamily:MTLGPUFamilyApple2].
+    return
+        [device supportsFamily:MTLGPUFamilyApple2] || [device.name containsString:@"Paravirtual"];
+  } else {
+#if defined(SKITY_IOS)
+    return [device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily2_v1];
+#else
+    return false;
+#endif
+  }
+#endif
+}
+
 GPUDeviceMTL::GPUDeviceMTL(id<MTLDevice> device, id<MTLCommandQueue> queue)
     : GPUDevice(),
       mtl_device_(device),
       mtl_command_queue_(queue),
       supports_memoryless_(SupportsMemoryless(device)),
-      max_texture_size_(0) {}
+      max_texture_size_(0) {
+  auto gpu_caps = std::make_unique<GPUCaps>();
+  gpu_caps->supports_framebuffer_fetch = SupportsFramebufferFetch(device);
+  InitCaps(std::move(gpu_caps));
+}
 
 GPUDeviceMTL::~GPUDeviceMTL() = default;
 

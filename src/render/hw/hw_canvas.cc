@@ -13,6 +13,7 @@
 
 #include "src/effect/image_filter_base.hpp"
 #include "src/gpu/gpu_surface_impl.hpp"
+#include "src/graphic/blend_mode_priv.hpp"
 #include "src/render/canvas_state.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_clip.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
@@ -400,6 +401,7 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
     auto bounds = use_stroke ? paint.ComputeFastBounds(path.GetBounds())
                              : path.GetBounds();
     SetupLayerSpaceBoundsForDraw(draw, bounds);
+    SetupDstReadStrategyForDraw(draw, paint.GetBlendMode());
     CurrentLayer()->AddDraw(draw);
   };
 
@@ -513,6 +515,7 @@ void HWCanvas::DrawRRectInternal(const RRect& rrect, const Paint& paint,
     auto bounds = use_stroke ? paint.ComputeFastBounds(rrect.GetBounds())
                              : rrect.GetBounds();
     SetupLayerSpaceBoundsForDraw(draw, bounds);
+    SetupDstReadStrategyForDraw(draw, paint.GetBlendMode());
     CurrentLayer()->AddDraw(draw);
   };
 
@@ -786,6 +789,7 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
   layer->SetLayerSpaceBounds(transformed_bounds);
   layer->SetEnableMergingDrawCall(
       surface_->GetGPUContext()->IsEnableMergingDrawCall());
+  SetupDstReadStrategyForDraw(layer, paint.GetBlendMode());
 
   return layer;
 }
@@ -806,6 +810,20 @@ bool HWCanvas::NeesOffScreenLayer(const Paint& paint) const {
   }
 
   return false;
+}
+
+void HWCanvas::SetupDstReadStrategyForDraw(HWDraw* draw, BlendMode blend_mode) {
+  if (IsAdvancedBlendMode(blend_mode)) {
+    bool supports_framebuffer_fetch = surface_->GetGPUContext()
+                                          ->GetGPUDevice()
+                                          ->GetCaps()
+                                          .supports_framebuffer_fetch;
+    draw->SetDstReadStrategy(supports_framebuffer_fetch
+                                 ? DstReadStrategy::kFramebufferFetch
+                                 : DstReadStrategy::kTextureCopy);
+  } else {
+    draw->SetDstReadStrategy(DstReadStrategy::kNonRequired);
+  }
 }
 
 }  // namespace skity

@@ -2,8 +2,8 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef SRC_RENDER_HW_DRAW_HW_HW_PIPELINE_KEY_HPP
-#define SRC_RENDER_HW_DRAW_HW_HW_PIPELINE_KEY_HPP
+#ifndef SRC_RENDER_HW_HW_PIPELINE_KEY_HPP
+#define SRC_RENDER_HW_HW_PIPELINE_KEY_HPP
 
 #include <optional>
 #include <sstream>
@@ -116,9 +116,11 @@ using HWFunctionKey = HWPipelineKey;
 struct HWPipelineKey {
   uint64_t base_key;
   std::optional<std::vector<uint32_t>> compose_keys;
+  uint32_t programmable_blending = 0;
 
   bool operator==(const HWPipelineKey& other) const {
-    return base_key == other.base_key && compose_keys == other.compose_keys;
+    return base_key == other.base_key && compose_keys == other.compose_keys &&
+           programmable_blending == other.programmable_blending;
   }
 
   bool operator!=(const HWPipelineKey& other) const {
@@ -142,6 +144,7 @@ struct HWPipelineKey {
       case GPUShaderStage::kFragment:
         key.base_key = GetFragmentBaseKey();
         key.compose_keys = compose_keys;
+        key.programmable_blending = programmable_blending;
         break;
     }
     // Add stage to base key to make sure vertex and fragment key are
@@ -160,6 +163,7 @@ struct HWPipelineKeyHash {
         res += std::hash<uint32_t>()(value);
       }
     }
+    res += std::hash<uint32_t>()(key.programmable_blending);
     return res;
   }
 };
@@ -184,4 +188,4 @@ std::string FragmentKeyToShaderName(
 
 }  // namespace skity
 
-#endif  // SRC_RENDER_HW_DRAW_HW_HW_PIPELINE_KEY_HPP
+#endif  // SRC_RENDER_HW_HW_PIPELINE_KEY_HPP

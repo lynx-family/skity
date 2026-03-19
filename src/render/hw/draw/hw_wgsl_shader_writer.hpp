@@ -34,6 +34,10 @@ class HWWGSLShaderWriter {
     HWPipelineKey key;
     key.base_key = MakePipelineBaseKey(GetVSKey(), GetFSKey());
     key.compose_keys = GetComposeKeys(key.base_key);
+    key.programmable_blending =
+        fragment_->GetProgrammableBlending()
+            ? fragment_->GetProgrammableBlending()->GetProgrammableBlendingKey()
+            : 0;
     return key;
   }
 
@@ -60,6 +64,11 @@ class HWWGSLShaderWriter {
 
   void WriteVaryings(std::stringstream& ss) const;
   bool HasVarings() const;
+
+  bool NeedsFramebufferFetch() const {
+    return fragment_ && fragment_->GetProgrammableBlending() != nullptr &&
+           fragment_->GetProgrammableBlending()->SupportsFramebufferFetch();
+  }
 
  private:
   const HWWGSLGeometry* geometry_ = nullptr;

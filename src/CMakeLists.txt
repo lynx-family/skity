@@ -397,6 +397,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/step/stencil_step.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/wgx_filter.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/wgx_filter.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/wgx_programmable_blending.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/wgx_programmable_blending.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/wgx_utils.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/wgx_utils.hpp
   )

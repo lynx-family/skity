@@ -229,6 +229,10 @@ bool GLInterface::LoadExtensions(GLADloadfunc loader) {
         "glEGLImageTargetTexture2DOES");
   }
 
+  // GL_EXT_shader_framebuffer_fetch
+  ext_shader_framebuffer_fetch =
+      extensions.Contains("GL_EXT_shader_framebuffer_fetch");
+
   return true;
 }
 
