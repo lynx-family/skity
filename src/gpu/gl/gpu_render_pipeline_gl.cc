@@ -69,19 +69,19 @@ GPURenderPipelineGL::GPURenderPipelineGL(
       static_cast<GPUShaderFunctionGL*>(desc.vertex_function.get())
           ->GetGLVersionMinor();
 
-  bool ubo_slot_in_shader = false;
+  bool slot_in_shader = false;
 
   // In OpenGL 4.2 the shader can specify the binding point for the uniform
   // buffer in shader
   // In OpenGL 3.1 the shader can specify the binding point for the
   // uniform buffer in shader
   if (is_gles) {
-    ubo_slot_in_shader = gl_version_major == 3 && gl_version_minor >= 1;
+    slot_in_shader = gl_version_major == 3 && gl_version_minor >= 1;
   } else {
-    ubo_slot_in_shader = gl_version_major == 4 && gl_version_minor >= 2;
+    slot_in_shader = gl_version_major == 4 && gl_version_minor >= 2;
   }
 
-  program_ = std::make_shared<GLProgram>(program, ubo_slot_in_shader);
+  program_ = std::make_shared<GLProgram>(program, slot_in_shader);
 }
 
 GPURenderPipelineGL::GPURenderPipelineGL(

@@ -146,7 +146,7 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
 
     // Bind uniforms
     for (auto& binding : command->uniform_bindings) {
-      if (!pipeline->SupportUBOSlotInShader()) {
+      if (!pipeline->SupportBindingSlotInShader()) {
         GL_CALL(UniformBlockBinding, pipeline->GetProgramId(),
                 pipeline->GetProgram()->GetUniformBlockIndex(binding.name),
                 binding.index);
@@ -187,9 +187,12 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
       track_texture_unit(binding.index);
       texture->Bind();
 
-      GL_CALL(Uniform1i,
-              pipeline->GetProgram()->GetUniformLocation(binding.name),
-              binding.index);
+      if (!pipeline->SupportBindingSlotInShader()) {
+        // only query uniform location if ubo slot binding is not supported
+        GL_CALL(Uniform1i,
+                pipeline->GetProgram()->GetUniformLocation(binding.name),
+                binding.index);
+      }
     }
 
     for (auto& binding : command->sampler_bindings) {

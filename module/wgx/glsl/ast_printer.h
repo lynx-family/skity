@@ -102,7 +102,7 @@ class AstPrinter : public ast::AstVisitor {
 
   void WriteMainFunc();
 
-  bool CanUseUboSlotBinding() const;
+  bool CanUseSlotBinding() const;
 
   ast::BuiltinAttribute* GetBuiltinAttribute(
       const std::vector<ast::Attribute*>& attrs, const std::string_view& name);
