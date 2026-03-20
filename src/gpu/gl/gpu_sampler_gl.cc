@@ -77,8 +77,14 @@ GPUSamplerGL::GPUSamplerGL(const GPUSamplerDescriptor& descriptor)
     : GPUSampler(descriptor) {
   GL_CALL(GenSamplers, 1, &sampler_id_);
 
+  std::optional<GPUMipmapMode> mipmap_filter = std::nullopt;
+  if (descriptor.mipmap_filter != GPUMipmapMode::kNone) {
+    mipmap_filter = descriptor.mipmap_filter;
+  }
+
   GL_CALL(SamplerParameteri, sampler_id_, GL_TEXTURE_MIN_FILTER,
-          ToGLParam(descriptor.min_filter));
+          ToGLParam(descriptor.min_filter, mipmap_filter));
+
   GL_CALL(SamplerParameteri, sampler_id_, GL_TEXTURE_MAG_FILTER,
           ToGLParam(descriptor.mag_filter));
   GL_CALL(SamplerParameteri, sampler_id_, GL_TEXTURE_WRAP_S,

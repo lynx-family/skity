@@ -59,6 +59,34 @@ void GPUTextureGL::UploadData(uint32_t offset_x, uint32_t offset_y,
   Unbind();
 }
 
+void GPUTextureGL::GenerateMipmaps() {
+  if (texture_target_ != GL_TEXTURE_2D) {
+    return;
+  }
+
+  if (desc_.format == GPUTextureFormat::kStencil8 ||
+      desc_.format == GPUTextureFormat::kDepth24Stencil8) {
+    LOGW("Skip generating mipmaps for depth/stencil texture.");
+    return;
+  }
+
+  Bind();
+
+  // Clamp mipmap generation and sampling to the descriptor's mip_level_count
+  // so that glGenerateMipmap does not create or expose more levels than
+  // requested. This also makes sampling behavior consistent with the
+  // descriptor.
+  if (desc_.mip_level_count > 0) {
+    GLint base_level = 0;
+    GLint max_level = static_cast<GLint>(desc_.mip_level_count - 1);
+    GL_CALL(TexParameteri, texture_target_, GL_TEXTURE_BASE_LEVEL, base_level);
+    GL_CALL(TexParameteri, texture_target_, GL_TEXTURE_MAX_LEVEL, max_level);
+  }
+
+  GL_CALL(GenerateMipmap, texture_target_);
+  Unbind();
+}
+
 void GPUTextureGL::Initialize() {
   GL_CALL(GenTextures, 1, &texture_id_);
 

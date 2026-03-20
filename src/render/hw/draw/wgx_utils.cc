@@ -735,8 +735,17 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
             ToGPUFilterMode(pixmap_shader->GetSamplingOptions()->filter);
         descriptor.min_filter =
             ToGPUFilterMode(pixmap_shader->GetSamplingOptions()->filter);
-        descriptor.mipmap_filter =
-            ToGPUMipmapMode(pixmap_shader->GetSamplingOptions()->mipmap);
+
+        if (texture->GetDescriptor().mip_level_count == 1) {
+          // If the texture does not contain mipmap data, but the sampler uses
+          // a mipmap filter, it may generate GPU validation errors in some
+          // backends
+          descriptor.mipmap_filter = GPUMipmapMode::kNone;
+        } else {
+          descriptor.mipmap_filter =
+              ToGPUMipmapMode(pixmap_shader->GetSamplingOptions()->mipmap);
+        }
+
         auto sampler =
             context->gpuContext->GetGPUDevice()->CreateSampler(descriptor);
 

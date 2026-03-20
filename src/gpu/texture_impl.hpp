@@ -31,6 +31,9 @@ class TextureImpl : public Texture {
   TextureImpl(std::weak_ptr<TextureImplDelegate> delegate, TextureFormat format,
               size_t width, size_t height, AlphaType alpha_type);
 
+  TextureImpl(std::weak_ptr<TextureImplDelegate> delegate,
+              const TextureDescriptor* desc);
+
   ~TextureImpl() override;
 
   void UploadImage(std::shared_ptr<Pixmap> pixmap) override;
@@ -50,6 +53,10 @@ class TextureImpl : public Texture {
 
   size_t GetTextureSize() override;
 
+  bool MipmapEnabled() const { return mipmapped_; }
+
+  uint32_t GetMipmapLevelCount() const { return mipmap_level_count_; }
+
  private:
   std::weak_ptr<TextureImplDelegate> delegate_;
   UniqueID handler_;
@@ -58,6 +65,9 @@ class TextureImpl : public Texture {
   size_t width_ = 0;
   size_t height_ = 0;
   AlphaType alpha_type_ = AlphaType::kUnknown_AlphaType;
+
+  bool mipmapped_ = false;
+  uint32_t mipmap_level_count_ = 0;
 
   std::shared_ptr<Pixmap> pending_pixmap_;
 };

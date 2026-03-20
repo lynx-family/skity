@@ -27,4 +27,11 @@ void GPUBlitPassGL::UploadBufferData(GPUBuffer* buffer, void* data,
   gl_buffer->UploadData(data, size);
 }
 
+void GPUBlitPassGL::GenerateMipmaps(
+    const std::shared_ptr<GPUTexture>& texture) {
+  auto gl_texture = static_cast<GPUTextureGL*>(texture.get());
+
+  gl_texture->GenerateMipmaps();
+}
+
 }  // namespace skity

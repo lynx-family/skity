@@ -19,6 +19,8 @@ class GPUBlitPassGL : public GPUBlitPass {
 
   void UploadBufferData(GPUBuffer* buffer, void* data, size_t size) override;
 
+  void GenerateMipmaps(const std::shared_ptr<GPUTexture>& texture) override;
+
   void End() override {}
 };
 
