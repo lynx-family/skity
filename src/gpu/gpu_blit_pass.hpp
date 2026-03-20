@@ -21,6 +21,8 @@ class GPUBlitPass {
 
   virtual void UploadBufferData(GPUBuffer* buffer, void* data, size_t size) = 0;
 
+  virtual void GenerateMipmaps(const std::shared_ptr<GPUTexture>& texture) = 0;
+
   virtual void End() = 0;
 };
 

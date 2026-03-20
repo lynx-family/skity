@@ -49,7 +49,9 @@ WGPUTextureDescriptor ConvertToWGPUTextureDescriptor(
   wgpu_desc.size.depthOrArrayLayers = 1;
 
   wgpu_desc.format = ToWGPUTextureFormat(desc.format);
-  wgpu_desc.mipLevelCount = desc.mip_level_count;
+  // hardcode mipLevelCount to 1
+  // TODO: support generate mipmap in the future
+  wgpu_desc.mipLevelCount = 1;
   wgpu_desc.sampleCount = desc.sample_count;
 
   wgpu_desc.viewFormatCount = 1;
@@ -125,7 +127,19 @@ std::shared_ptr<GPUTexture> GPUTextureWEB::Create(
     return nullptr;
   }
 
-  return std::make_shared<GPUTextureWEB>(desc, device, texture);
+  // hardcode mip_level_count = 1, will handle generaet mipmap texture in the
+  // future
+  GPUTextureDescriptor copy_desc{};
+  copy_desc.width = desc.width;
+  copy_desc.height = desc.height;
+  copy_desc.sample_count = desc.sample_count;
+  copy_desc.format = desc.format;
+  copy_desc.usage = desc.usage;
+  copy_desc.storage_mode = desc.storage_mode;
+
+  copy_desc.mip_level_count = 1;
+
+  return std::make_shared<GPUTextureWEB>(copy_desc, device, texture);
 }
 
 }  // namespace skity

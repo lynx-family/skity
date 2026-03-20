@@ -60,6 +60,12 @@ void GPUBlitPassMTL::UploadBufferData(GPUBuffer* buffer, void* data, size_t size
                            size:size];
 }
 
+void GPUBlitPassMTL::GenerateMipmaps(const std::shared_ptr<GPUTexture>& texture) {
+  id<MTLTexture> mtl_texture = static_cast<GPUTextureMTL*>(texture.get())->GetMTLTexture();
+
+  [blit_encoder_ generateMipmapsForTexture:mtl_texture];
+}
+
 void GPUBlitPassMTL::End() { [blit_encoder_ endEncoding]; }
 
 }  // namespace skity

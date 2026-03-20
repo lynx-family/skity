@@ -107,6 +107,9 @@ class TextureManager : public TextureImplDelegate,
       TextureFormat format, size_t width, size_t height, AlphaType alpha_type,
       std::shared_ptr<GPUTexture> hw_texture);
 
+  std::shared_ptr<Texture> RegisterTexture(
+      const TextureDescriptor* desc, std::shared_ptr<GPUTexture> hw_texture);
+
   TextureState QueryState(const UniqueID& handler);
 
   void SaveGPUTexture(const UniqueID& handler,

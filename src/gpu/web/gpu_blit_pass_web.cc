@@ -145,6 +145,11 @@ void GPUBlitPassWEB::UploadBufferData(GPUBuffer* buffer, void* data,
   command_buffer_->RecordStageBuffer(stage_buffer);
 }
 
+void GPUBlitPassWEB::GenerateMipmaps(
+    const std::shared_ptr<GPUTexture>& texture) {
+  // TODO: generate mipmaps manually
+}
+
 void GPUBlitPassWEB::End() {}
 
 }  // namespace skity

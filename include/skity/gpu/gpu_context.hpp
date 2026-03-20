@@ -80,9 +80,13 @@ class SKITY_API GPUContext {
 
   /**
    * Create a Texture instance associated with current GPU context.
-   * The underline GPUTexture is owned by this GPUContext
-   * The upload logical must happened inside the same thread the GPUContext is
+   * The underlying GPUTexture is owned by this GPUContext
+   * The upload logical must happen inside the same thread the GPUContext is
    * created.
+   *
+   * Note:
+   *   This overload only supports basic texture attributes. For advanced
+   *   options (for example mipmap configuration), use CreateTextureWithDesc().
    *
    * @param format      Pixel format for this texture
    * @param width       width of this texture
@@ -94,6 +98,21 @@ class SKITY_API GPUContext {
                                                  uint32_t width,
                                                  uint32_t height,
                                                  AlphaType alpha_type) = 0;
+
+  /**
+   * Create a Texture instance from TextureDescriptor.
+   * The underlying GPUTexture is owned by this GPUContext
+   * The upload logical must happened inside the same thread the GPUContext is
+   * created.
+   *
+   * This is the preferred creation API when caller needs advanced texture
+   * options such as mipmap enablement or explicit mipmap level count.
+   *
+   * @param desc descriptor that controls texture creation behavior
+   * @return     texture instance or null if creation failed
+   */
+  virtual std::shared_ptr<Texture> CreateTextureWithDesc(
+      const TextureDescriptor* desc) = 0;
 
   /**
    * Create a Texture from pre created GPUTexture.
