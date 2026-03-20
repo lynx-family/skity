@@ -31,6 +31,15 @@ std::shared_ptr<Texture> GPUContextImpl::CreateTexture(TextureFormat format,
                                            nullptr);
 }
 
+std::shared_ptr<Texture> GPUContextImpl::CreateTextureWithDesc(
+    const TextureDescriptor* desc) {
+  if (desc == nullptr) {
+    return nullptr;
+  }
+
+  return texture_manager_->RegisterTexture(desc, {});
+}
+
 std::shared_ptr<Texture> GPUContextImpl::WrapTexture(
     GPUBackendTextureInfo* info, ReleaseCallback callback,
     ReleaseUserData user_data) {

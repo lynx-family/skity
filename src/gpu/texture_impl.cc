@@ -19,6 +19,16 @@ TextureImpl::TextureImpl(std::weak_ptr<TextureImplDelegate> delegate,
       height_(height),
       alpha_type_(alpha_type) {}
 
+TextureImpl::TextureImpl(std::weak_ptr<TextureImplDelegate> delegate,
+                         const TextureDescriptor* desc)
+    : delegate_(std::move(delegate)),
+      format_(desc->format),
+      width_(desc->width),
+      height_(desc->height),
+      alpha_type_(desc->alpha_type),
+      mipmapped_(desc->mipmapped),
+      mipmap_level_count_(desc->mipmap_level_count) {}
+
 TextureImpl::~TextureImpl() {
   if (auto delegate = delegate_.lock()) {
     delegate->DropTexture(handler_);

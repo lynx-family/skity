@@ -28,6 +28,9 @@ class GPUContextImpl : public GPUContext {
                                          uint32_t height,
                                          skity::AlphaType alpha_type) override;
 
+  std::shared_ptr<Texture> CreateTextureWithDesc(
+      const TextureDescriptor* desc) override;
+
   std::shared_ptr<Texture> WrapTexture(GPUBackendTextureInfo* info,
                                        ReleaseCallback release_callback,
                                        ReleaseUserData release_data) override;
