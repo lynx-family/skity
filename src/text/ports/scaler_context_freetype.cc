@@ -512,8 +512,8 @@ void ScalerContextFreetype::GenerateImage(GlyphData* glyph,
       info.need_free = true;
       info.width = bitmap.width;
       info.height = bitmap.rows;
-      info.origin_x = face_->glyph->bitmap_left / desc_.context_scale;
-      info.origin_y = face_->glyph->bitmap_top / desc_.context_scale;
+      info.origin_x = glyph->GetHoriBearingX() / desc_.context_scale;
+      info.origin_y = glyph->GetHoriBearingY() / desc_.context_scale;
       info.format =
           ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
     } else {
@@ -551,8 +551,8 @@ void ScalerContextFreetype::GenerateImage(GlyphData* glyph,
 
         info.width = dst_width;
         info.height = dst_height;
-        info.origin_x = face_->glyph->bitmap_left / desc_.context_scale;
-        info.origin_y = face_->glyph->bitmap_top / desc_.context_scale;
+        info.origin_x = glyph->GetHoriBearingX() / desc_.context_scale;
+        info.origin_y = glyph->GetHoriBearingY() / desc_.context_scale;
         info.format =
             ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
       } else {
