@@ -9,12 +9,14 @@
 #include <vector>
 
 #include "src/gpu/gpu_buffer.hpp"
+#include "src/gpu/gpu_caps.hpp"
 #include "src/gpu/gpu_command_buffer.hpp"
 #include "src/gpu/gpu_render_pipeline.hpp"
 #include "src/gpu/gpu_sampler.hpp"
 #include "src/gpu/gpu_shader_function.hpp"
 #include "src/gpu/gpu_shader_module.hpp"
 #include "src/gpu/gpu_texture.hpp"
+#include "src/logging.hpp"
 
 namespace skity {
 
@@ -67,6 +69,17 @@ class GPUDevice {
 
   virtual std::shared_ptr<GPUShaderModule> CreateShaderModule(
       const GPUShaderModuleDescriptor& desc);
+
+  const GPUCaps& GetCaps() const {
+    DEBUG_CHECK(caps_);
+    return *caps_;
+  }
+
+ protected:
+  void InitCaps(std::unique_ptr<GPUCaps> caps) { caps_ = std::move(caps); }
+
+ private:
+  std::unique_ptr<GPUCaps> caps_;
 };
 
 }  // namespace skity

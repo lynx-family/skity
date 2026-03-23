@@ -528,6 +528,41 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
 )";
 }
 
+std::string GetSolidColorWithProgrammableBlendingFS() {
+  return R"(
+fn blend_overlay_component(s: vec2<f32>, d: vec2<f32>) -> f32 {
+  if 2.0 * d.x <= d.y {
+    return 2.0 * s.x * d.x;
+  } else {
+    return s.y * d.y - 2.0 * (d.y - d.x) * (s.y - s.x);
+  }
+}
+fn blending(src: vec4<f32>, dst: vec4<f32>) -> vec4<f32> {
+var result: vec4<f32>;
+
+  result = vec4<f32>(blend_overlay_component(src.ra, dst.ra),
+                     blend_overlay_component(src.ga, dst.ga),
+                     blend_overlay_component(src.ba, dst.ba),
+                     src.a + (1.0 - src.a) * dst.a);
+
+  var extra: vec4<f32> = dst * (1.0 - src.a) + src * (1.0 - dst.a);
+  extra.a = 0.0;
+  result += extra;
+      return result;
+}
+
+@group(1) @binding(0) var<uniform> uColor: vec4<f32>;
+
+@fragment
+fn fs_main(@color(0) dst_color: vec4<f32>) -> @location(0) vec4<f32> {
+  var color : vec4<f32>;
+  color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
+  color = blending(color, dst_color);
+  return color;
+}
+)";
+}
+
 std::string GetLinearGradientFS() {
   return R"(
 struct GradientInfo {
@@ -1962,6 +1997,32 @@ TEST(ShaderWriter, PathAAWithSolidColorAndColorFilter) {
                                        skity::HWColorFilterKeyType::kMatrix));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAWithCFFS()));
+}
+
+TEST(ShaderWriter, PathWithSolidColorAndProgrammableBlending) {
+  auto path = MakePath();
+  skity::Paint paint;
+  paint.SetColor(0xff00ff00);
+  skity::Color4f color = paint.GetColor4f();
+  skity::WGSLPathGeometry geometry{path, paint, false};
+  skity::WGSLSolidColor fragment{color};
+  fragment.SetProgrammableBlending(skity::WGXProgrammableBlending::Make(
+      skity::BlendMode::kOverlay, skity::DstReadStrategy::kFramebufferFetch));
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+  std::string vs = shader_writer.GenVSSourceWGSL();
+  std::string fs = shader_writer.GenFSSourceWGSL();
+  ASSERT_TRUE(geometry.IsSnippet());
+  ASSERT_TRUE(fragment.IsSnippet());
+  ASSERT_FALSE(geometry.AffectsFragment());
+  ASSERT_FALSE(fragment.AffectsVertex());
+  ASSERT_EQ(shader_writer.GetVSShaderName(), "VS_Path");
+  ASSERT_EQ(shader_writer.GetVSKey(),
+            skity::MakeFunctionBaseKey(skity::HWGeometryKeyType::kPath));
+  ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor");
+  ASSERT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid));
+  ASSERT_TRUE(CompareShader(vs, GetPathGeometryVS()));
+  ASSERT_TRUE(CompareShader(fs, GetSolidColorWithProgrammableBlendingFS()));
 }
 
 TEST(ShaderWriter, RRectWithSolidColor) {

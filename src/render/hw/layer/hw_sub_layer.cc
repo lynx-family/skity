@@ -5,6 +5,7 @@
 #include "src/render/hw/layer/hw_sub_layer.hpp"
 
 #include "src/gpu/gpu_context_impl.hpp"
+#include "src/graphic/blend_mode_priv.hpp"
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/hw_render_pass_builder.hpp"
@@ -35,6 +36,15 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
   layer_back_draw_->SetSampleCount(GetSampleCount());
   layer_back_draw_->SetColorFormat(GetColorFormat());
   layer_back_draw_->SetScissorBox(GetScissorBox());
+
+  if (IsAdvancedBlendMode(blend_mode_)) {
+    bool supports_framebuffer_fetch = context->gpuContext->GetGPUDevice()
+                                          ->GetCaps()
+                                          .supports_framebuffer_fetch;
+    layer_back_draw_->SetDstReadStrategy(
+        supports_framebuffer_fetch ? DstReadStrategy::kFramebufferFetch
+                                   : DstReadStrategy::kTextureCopy);
+  }
 
   auto state = layer_back_draw_->Prepare(context);
 

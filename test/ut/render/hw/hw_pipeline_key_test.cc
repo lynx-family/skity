@@ -27,6 +27,7 @@
 #include "src/render/hw/draw/hw_wgsl_fragment.hpp"
 #include "src/render/hw/draw/hw_wgsl_geometry.hpp"
 #include "src/render/hw/draw/step/color_step.hpp"
+#include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/utils/arena_allocator.hpp"
 
 using namespace skity;
@@ -590,6 +591,33 @@ TEST(HWPipelineKey, RRect_SolidVertex_Compose) {
   HWPipelineKeyHash pipeline_key_hash;
   EXPECT_EQ(pipeline_key_hash(pipeline_key),
             pipeline_key_hash(expected_pipeline_key));
+}
+
+TEST(HWPipelineKey, ProgrammableBlendingHash) {
+  HWPipelineKey key1;
+  key1.base_key = 1;
+  key1.programmable_blending =
+      skity::WGXProgrammableBlending::Make(
+          skity::BlendMode::kOverlay, skity::DstReadStrategy::kFramebufferFetch)
+          ->GetProgrammableBlendingKey();
+
+  HWPipelineKey key2;
+  key2.base_key = 1;
+  key2.programmable_blending =
+      skity::WGXProgrammableBlending::Make(
+          skity::BlendMode::kOverlay, skity::DstReadStrategy::kFramebufferFetch)
+          ->GetProgrammableBlendingKey();
+
+  HWPipelineKey key3;
+  key3.base_key = 1;
+  key3.programmable_blending = skity::WGXProgrammableBlending::Make(
+                                   skity::BlendMode::kColorDodge,
+                                   skity::DstReadStrategy::kFramebufferFetch)
+                                   ->GetProgrammableBlendingKey();
+
+  HWPipelineKeyHash hasher;
+  EXPECT_EQ(hasher(key1), hasher(key2));
+  EXPECT_NE(hasher(key1), hasher(key3));
 }
 
 TEST(HWPipelineKey, Text) {

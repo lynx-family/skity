@@ -17,7 +17,12 @@
 
 namespace skity {
 
-GPUDeviceGL::GPUDeviceGL() = default;
+GPUDeviceGL::GPUDeviceGL() {
+  auto gpu_caps = std::make_unique<GPUCaps>();
+  gpu_caps->supports_framebuffer_fetch =
+      GLInterface::GlobalInterface()->ext_shader_framebuffer_fetch;
+  InitCaps(std::move(gpu_caps));
+}
 
 GPUDeviceGL::~GPUDeviceGL() = default;
 

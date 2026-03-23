@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/render/hw/hw_render_target_cache.hpp"
 #include "src/render/hw/hw_static_buffer.hpp"
 #include "src/utils/arena_allocator.hpp"
@@ -137,6 +138,12 @@ class HWDraw {
 
   void SetClipDepth(uint32_t clip_depth) { clip_depth_ = clip_depth; }
 
+  DstReadStrategy GetDstReadStrategy() const { return dst_read_strategy_; }
+
+  void SetDstReadStrategy(DstReadStrategy strategy) {
+    dst_read_strategy_ = strategy;
+  }
+
  protected:
   virtual HWDrawState OnPrepare(HWDrawContext* context) = 0;
 
@@ -159,6 +166,7 @@ class HWDraw {
   Rect scissor_rect_ = {};
   Rect layer_space_bounds_ = Rect::MakeLTRB(-1E9F, -1E9F, 1E9F, 1E9F);
   HWDraw* clip_draw_;
+  DstReadStrategy dst_read_strategy_ = DstReadStrategy::kNonRequired;
 };
 
 }  // namespace skity

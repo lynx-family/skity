@@ -17,6 +17,9 @@ namespace skity {
 GPUDeviceWEB::GPUDeviceWEB(WGPUDevice device, WGPUQueue queue)
     : device_(device), queue_(queue), limits_() {
   wgpuDeviceGetLimits(device_, &limits_);
+  auto gpu_caps = std::make_unique<GPUCaps>();
+  gpu_caps->supports_framebuffer_fetch = false;
+  InitCaps(std::move(gpu_caps));
 }
 
 std::unique_ptr<GPUBuffer> GPUDeviceWEB::CreateBuffer(
