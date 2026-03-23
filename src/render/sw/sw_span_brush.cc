@@ -258,6 +258,10 @@ Color4f GradientColorBrush::LerpColor(float current) {
 
   float step = 1.f / (color_count - 1);
 
+  if (stop_count > 0 && current <= info_.color_offsets[0]) {
+    return info_.colors[0];
+  }
+
   int32_t i = 0;
   float start = 0.f;
   float end = 0.f;
