@@ -23,8 +23,6 @@ class GPUSamplerGL : public GPUSampler {
   static std::shared_ptr<GPUSamplerGL> Create(
       const GPUSamplerDescriptor& descriptor);
 
-  void ConfigureTexture(GPUTextureGL* texture) const;
-
   uint32_t GetSamplerID() const { return sampler_id_; }
 
   SKT_BACKEND_CAST(GPUSamplerGL, GPUSampler)

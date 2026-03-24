@@ -141,16 +141,6 @@ void GPUTextureGL::Destroy() {
   texture_id_ = 0;
 }
 
-void GPUTextureGL::CombineSampler(skity::GPUSamplerGL* sampler) {
-  if (combined_sampler_ == sampler) {
-    return;
-  }
-
-  combined_sampler_ = sampler;
-
-  combined_sampler_->ConfigureTexture(this);
-}
-
 size_t GPUTextureGL::GetBytes() const {
   auto& desc = GetDescriptor();
   return desc.width * desc.height * GetTextureFormatBytesPerPixel(desc.format) *

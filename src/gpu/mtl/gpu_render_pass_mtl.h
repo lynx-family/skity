@@ -71,10 +71,6 @@ class GPURenderPassMTL : public GPURenderPass {
   void SetUniformBindings(BindingsCache& cache,
                           const ArrayList<UniformBinding, 4>& uniform_bindings);
 
-  void SetTextureBindings(
-      BindingsCache& cache,
-      const ArrayList<TextureSamplerBinding, 4>& texture_bindings);
-
   void SetTextureBindings(BindingsCache& cache,
                           const ArrayList<TextureBinding, 4>& bindings);
 
