@@ -58,11 +58,6 @@ std::unique_ptr<GPUSurface> GPUContextImplGL::CreateSurface(
   return CreateDirectSurface(*desc, gl_desc->gl_id, false);
 }
 
-std::unique_ptr<GPUSurface> GPUContextImplGL::CreateFxaaSurface(
-    GPUSurfaceDescriptor* desc) {
-  return std::unique_ptr<GPUSurface>();
-}
-
 std::unique_ptr<GPURenderTarget> GPUContextImplGL::OnCreateRenderTarget(
     const GPURenderTargetDescriptor& desc, std::shared_ptr<Texture> texture) {
   auto gl_texture = static_cast<GPUTextureGL*>(texture->GetGPUTexture().get());

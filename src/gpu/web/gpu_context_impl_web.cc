@@ -37,12 +37,12 @@ GPUContextImplWEB::~GPUContextImplWEB() {
 }
 
 std::unique_ptr<GPUSurface> GPUContextImplWEB::CreateSurface(
-    GPUSurfaceDescriptor *desc) {
+    GPUSurfaceDescriptor* desc) {
   if (desc == nullptr || desc->backend != GPUBackendType::kWebGPU) {
     return {};
   }
 
-  auto desc_web = static_cast<GPUSurfaceDescriptorWEB *>(desc);
+  auto desc_web = static_cast<GPUSurfaceDescriptorWEB*>(desc);
 
   if (!desc_web->texture) {
     return {};
@@ -51,23 +51,18 @@ std::unique_ptr<GPUSurface> GPUContextImplWEB::CreateSurface(
   return std::make_unique<GPUSurfaceImplWEB>(*desc, this, desc_web->texture);
 }
 
-std::unique_ptr<GPUSurface> GPUContextImplWEB::CreateFxaaSurface(
-    GPUSurfaceDescriptor *desc) {
-  return {};
-}
-
 std::unique_ptr<GPUDevice> GPUContextImplWEB::CreateGPUDevice() {
   return std::make_unique<GPUDeviceWEB>(device_, queue_);
 }
 
 std::shared_ptr<GPUTexture> GPUContextImplWEB::OnWrapTexture(
-    GPUBackendTextureInfo *info, ReleaseCallback callback,
+    GPUBackendTextureInfo* info, ReleaseCallback callback,
     ReleaseUserData user_data) {
   if (info == nullptr || info->backend != GPUBackendType::kWebGPU) {
     return {};
   }
 
-  auto web_info = static_cast<GPUBackendTextureInfoWEB *>(info);
+  auto web_info = static_cast<GPUBackendTextureInfoWEB*>(info);
 
   if (!web_info->texture) {
     return {};
@@ -85,7 +80,7 @@ std::shared_ptr<GPUTexture> GPUContextImplWEB::OnWrapTexture(
   wgpuTextureAddRef(web_info->texture);
 
   auto texture = std::make_shared<GPUTextureWEB>(
-      descriptor, dynamic_cast<GPUDeviceWEB *>(this->GetGPUDevice()),
+      descriptor, dynamic_cast<GPUDeviceWEB*>(this->GetGPUDevice()),
       web_info->texture);
 
   texture->SetRelease(callback, user_data);
@@ -94,12 +89,12 @@ std::shared_ptr<GPUTexture> GPUContextImplWEB::OnWrapTexture(
 }
 
 std::unique_ptr<GPURenderTarget> GPUContextImplWEB::OnCreateRenderTarget(
-    const GPURenderTargetDescriptor &desc, std::shared_ptr<Texture> texture) {
+    const GPURenderTargetDescriptor& desc, std::shared_ptr<Texture> texture) {
   return {};
 }
 
 std::shared_ptr<Data> GPUContextImplWEB::OnReadPixels(
-    const std::shared_ptr<GPUTexture> &texture) const {
+    const std::shared_ptr<GPUTexture>& texture) const {
   return {};
 }
 

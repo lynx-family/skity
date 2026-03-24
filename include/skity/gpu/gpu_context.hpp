@@ -64,21 +64,6 @@ class SKITY_API GPUContext {
       GPUSurfaceDescriptor* desc) = 0;
 
   /**
-   * Create a GPU backend surface that embeds a Fast Approximate Anti-Aliasing
-   * implementation that for rendering
-   *
-   * Note:
-   *   This function is deprecated, and always return null.
-   *
-   * @param desc describe the information to create the surface
-   *             different backends may have different descriptor structures
-   * @return GPUSurface instance or null if init failed
-   */
-  SKITY_EXPERIMENTAL
-  virtual std::unique_ptr<GPUSurface> CreateFxaaSurface(
-      GPUSurfaceDescriptor* desc) = 0;
-
-  /**
    * Create a Texture instance associated with current GPU context.
    * The underlying GPUTexture is owned by this GPUContext
    * The upload logical must happen inside the same thread the GPUContext is
