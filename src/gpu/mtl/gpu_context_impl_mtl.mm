@@ -88,10 +88,6 @@ std::unique_ptr<GPUSurface> GPUContextImplMTL::CreateSurface(GPUSurfaceDescripto
   return {};
 }
 
-std::unique_ptr<GPUSurface> GPUContextImplMTL::CreateFxaaSurface(GPUSurfaceDescriptor *desc) {
-  return nullptr;
-}
-
 std::unique_ptr<GPURenderTarget> GPUContextImplMTL::OnCreateRenderTarget(
     const GPURenderTargetDescriptor &desc, std::shared_ptr<Texture> texture) {
   if (texture == nullptr) {

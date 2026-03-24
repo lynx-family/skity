@@ -17,24 +17,21 @@ class GPUContextImplWEB : public GPUContextImpl {
   ~GPUContextImplWEB() override;
 
   std::unique_ptr<GPUSurface> CreateSurface(
-      GPUSurfaceDescriptor *desc) override;
-
-  std::unique_ptr<GPUSurface> CreateFxaaSurface(
-      GPUSurfaceDescriptor *desc) override;
+      GPUSurfaceDescriptor* desc) override;
 
  protected:
   std::unique_ptr<GPUDevice> CreateGPUDevice() override;
 
-  std::shared_ptr<GPUTexture> OnWrapTexture(GPUBackendTextureInfo *info,
+  std::shared_ptr<GPUTexture> OnWrapTexture(GPUBackendTextureInfo* info,
                                             ReleaseCallback callback,
                                             ReleaseUserData user_data) override;
 
   std::unique_ptr<GPURenderTarget> OnCreateRenderTarget(
-      const GPURenderTargetDescriptor &desc,
+      const GPURenderTargetDescriptor& desc,
       std::shared_ptr<Texture> texture) override;
 
   std::shared_ptr<Data> OnReadPixels(
-      const std::shared_ptr<GPUTexture> &texture) const override;
+      const std::shared_ptr<GPUTexture>& texture) const override;
 
  private:
   WGPUDevice device_ = {};
