@@ -145,6 +145,10 @@ class SKITY_API Texture {
 
   virtual size_t GetTextureSize() = 0;
 
+  virtual bool IsMipmapped() const = 0;
+
+  virtual uint32_t GetMipmapLevelCount() const = 0;
+
   /**
    * Store image for deferred upload.
    *

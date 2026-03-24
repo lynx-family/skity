@@ -714,11 +714,23 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
         texture = texture_image->GetGPUTexture();
       } else if (image->GetPixmap()) {
         const auto& pixmap_image = *(image->GetPixmap());
+
+        bool mipmapped = image->IsMipmapped();
+        uint32_t mipmap_level_count = image->GetMipmapLevelCount();
+
+        TextureKey texture_key{
+            Texture::FormatFromColorType(pixmap_image->GetColorType()),
+            pixmap_image->Width(),
+            pixmap_image->Height(),
+            pixmap_image->GetAlphaType(),
+            mipmapped,
+            mipmap_level_count,
+            reinterpret_cast<intptr_t>(pixmap_image.get()),
+        };
+
         auto texture_handler =
             context->gpuContext->GetTextureManager()->FindOrCreateTexture(
-                Texture::FormatFromColorType(pixmap_image->GetColorType()),
-                pixmap_image->Width(), pixmap_image->Height(),
-                pixmap_image->GetAlphaType(), pixmap_image);
+                texture_key);
         texture_handler->UploadImage(pixmap_image);
         texture = texture_handler->GetGPUTexture();
       } else {

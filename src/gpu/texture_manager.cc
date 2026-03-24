@@ -44,15 +44,21 @@ std::shared_ptr<Texture> TextureManager::CreateTexture(TextureFormat format,
 }
 
 std::shared_ptr<Texture> TextureManager::FindOrCreateTexture(
-    TextureFormat format, size_t width, size_t height, AlphaType alpha_type,
-    std::shared_ptr<Pixmap> pixmap) {
-  TextureKey key{format, width, height, alpha_type,
-                 reinterpret_cast<intptr_t>(pixmap.get())};
+    const TextureKey& key) {
   UniqueLock lock(shared_mutex_);
   auto find = texture_cache_.find(key);
+
   if (find == texture_cache_.end()) {
-    auto texture = std::make_shared<TextureImpl>(shared_from_this(), format,
-                                                 width, height, alpha_type);
+    TextureDescriptor desc{
+        key.format_,
+        static_cast<uint32_t>(key.width_),
+        static_cast<uint32_t>(key.height_),
+        key.alpha_type_,
+        key.mipmapped_,
+        key.mipmap_level_count_,
+    };
+
+    auto texture = std::make_shared<TextureImpl>(shared_from_this(), &desc);
     handler_to_texture_.emplace(texture->GetHandler(), nullptr);
     texture_cache_.emplace(key, texture);
     return texture;
@@ -118,7 +124,7 @@ void TextureManager::UploadTextureImage(const TextureImpl& texture,
   auto device = gpu_device_;
 
   uint32_t mipmap_level_count = 1;
-  if (texture.MipmapEnabled()) {
+  if (texture.IsMipmapped()) {
     auto max_size = std::max(pixmap->Width(), pixmap->Height());
     auto max_level_count = max_mipmap_level(max_size);
     auto requested_level_count = texture.GetMipmapLevelCount();

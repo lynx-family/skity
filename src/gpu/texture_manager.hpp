@@ -27,8 +27,23 @@ class GPUDevice;
 
 class TextureKey {
  public:
-  TextureKey(TextureFormat f, size_t w, size_t h, AlphaType at, intptr_t ptr)
-      : format_(f), width_(w), height_(h), alpha_type_(at), pixmap_ptr_(ptr) {
+  TextureFormat format_;
+  size_t width_;
+  size_t height_;
+  AlphaType alpha_type_;
+  bool mipmapped_;
+  uint32_t mipmap_level_count_;
+  intptr_t pixmap_ptr_;
+
+  TextureKey(TextureFormat f, size_t w, size_t h, AlphaType at, bool mipmapped,
+             uint32_t mipmap_level_count, intptr_t ptr)
+      : format_(f),
+        width_(w),
+        height_(h),
+        alpha_type_(at),
+        mipmapped_(mipmapped),
+        mipmap_level_count_(mipmap_level_count),
+        pixmap_ptr_(ptr) {
     hash_ = ComputeHash();
   }
 
@@ -44,6 +59,8 @@ class TextureKey {
     bool operator()(const TextureKey& lhs, const TextureKey& rhs) const {
       return lhs.format_ == rhs.format_ && lhs.width_ == rhs.width_ &&
              lhs.height_ == rhs.height_ && lhs.alpha_type_ == rhs.alpha_type_ &&
+             lhs.mipmapped_ == rhs.mipmapped_ &&
+             lhs.mipmap_level_count_ == rhs.mipmap_level_count_ &&
              lhs.pixmap_ptr_ == rhs.pixmap_ptr_;
     }
   };
@@ -55,6 +72,8 @@ class TextureKey {
     hash = mix(hash, std::hash<size_t>{}(width_));
     hash = mix(hash, std::hash<size_t>{}(height_));
     hash = mix(hash, std::hash<uint32_t>{}(alpha_type_));
+    hash = mix(hash, std::hash<bool>{}(mipmapped_));
+    hash = mix(hash, std::hash<uint32_t>{}(mipmap_level_count_));
     hash = mix(hash, std::hash<intptr_t>{}(pixmap_ptr_));
 
     hash += (hash << 3);
@@ -70,11 +89,6 @@ class TextureKey {
     return hash;
   }
 
-  TextureFormat format_;
-  size_t width_;
-  size_t height_;
-  AlphaType alpha_type_;
-  intptr_t pixmap_ptr_;
   uint32_t hash_;
 };
 
@@ -92,10 +106,7 @@ class TextureManager : public TextureImplDelegate,
   // hardware rendering. Note that it is currently used temporarily within a
   // single frame, so no cache limit is set. In the future, we plan to change it
   // to support reuse across frames.
-  std::shared_ptr<Texture> FindOrCreateTexture(TextureFormat format,
-                                               size_t width, size_t height,
-                                               AlphaType alpha_type,
-                                               std::shared_ptr<Pixmap> pixmap);
+  std::shared_ptr<Texture> FindOrCreateTexture(const TextureKey& key);
 
   // TextureImplDelegate
   void UploadTextureImage(const TextureImpl& texture,

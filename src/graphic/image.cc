@@ -109,6 +109,12 @@ class TextureImage : public Image {
 
   AlphaType GetAlphaType() const override { return texture_->GetAlphaType(); }
 
+  bool IsMipmapped() const override { return texture_->IsMipmapped(); }
+
+  uint32_t GetMipmapLevelCount() const override {
+    return texture_->GetMipmapLevelCount();
+  }
+
   std::shared_ptr<Pixmap> ReadPixels(GPUContext* context) const override {
     if (context == nullptr || Width() == 0 || Height() == 0) {
       return nullptr;
@@ -164,8 +170,19 @@ class PixmapImage : public Image {
 
   ImageType GetImageType() const override { return ImageType::kPixmap; }
 
+  void SetMipmapInfo(bool mipmapped, uint32_t mipmap_level_count) {
+    mipmapped_ = mipmapped;
+    mipmap_level_count_ = mipmap_level_count;
+  }
+
+  bool IsMipmapped() const override { return mipmapped_; }
+
+  uint32_t GetMipmapLevelCount() const override { return mipmap_level_count_; }
+
  private:
   std::shared_ptr<Pixmap> pixmap_;
+  bool mipmapped_ = false;
+  uint32_t mipmap_level_count_ = 0;
 };
 
 std::shared_ptr<Image> Image::MakeHWImage(std::shared_ptr<Texture> texture) {
@@ -182,6 +199,39 @@ std::shared_ptr<Image> Image::MakeImage(std::shared_ptr<Pixmap> pixmap,
     return std::shared_ptr<Image>(new TextureImage(texture));
   } else {
     return std::shared_ptr<Image>(new PixmapImage(pixmap));
+  }
+}
+
+std::shared_ptr<Image> Image::MakeImage(std::shared_ptr<Pixmap> pixmap,
+                                        GPUContext* context,
+                                        const TextureDescriptor* descriptor) {
+  if (!pixmap) {
+    return nullptr;
+  }
+
+  if (context) {
+    std::shared_ptr<Texture> texture{};
+
+    if (descriptor) {
+      texture = context->CreateTextureWithDesc(descriptor);
+    } else {
+      texture = context->CreateTexture(
+          Texture::FormatFromColorType(pixmap->GetColorType()), pixmap->Width(),
+          pixmap->Height(), pixmap->GetAlphaType());
+    }
+
+    texture->DeferredUploadImage(std::move(pixmap));
+
+    return std::shared_ptr<Image>(new TextureImage(texture));
+  } else {
+    auto pixmap_image = new PixmapImage(pixmap);
+
+    if (descriptor) {
+      pixmap_image->SetMipmapInfo(descriptor->mipmapped,
+                                  descriptor->mipmap_level_count);
+    }
+
+    return std::shared_ptr<Image>(pixmap_image);
   }
 }
 

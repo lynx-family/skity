@@ -53,9 +53,9 @@ class TextureImpl : public Texture {
 
   size_t GetTextureSize() override;
 
-  bool MipmapEnabled() const { return mipmapped_; }
+  bool IsMipmapped() const override { return mipmapped_; }
 
-  uint32_t GetMipmapLevelCount() const { return mipmap_level_count_; }
+  uint32_t GetMipmapLevelCount() const override { return mipmap_level_count_; }
 
  private:
   std::weak_ptr<TextureImplDelegate> delegate_;
@@ -83,6 +83,14 @@ class InternalTexture : public Texture {
   size_t Height() override { return texture_->GetDescriptor().height; }
 
   AlphaType GetAlphaType() override { return alpha_type_; }
+
+  bool IsMipmapped() const override {
+    return texture_->GetDescriptor().mip_level_count > 1;
+  }
+
+  uint32_t GetMipmapLevelCount() const override {
+    return texture_->GetDescriptor().mip_level_count;
+  }
 
   TextureFormat GetFormat() const override;
 

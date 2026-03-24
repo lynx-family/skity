@@ -39,6 +39,10 @@ class SKITY_API Image {
   static std::shared_ptr<Image> MakeImage(std::shared_ptr<Pixmap> pixmap,
                                           GPUContext* context = nullptr);
 
+  static std::shared_ptr<Image> MakeImage(std::shared_ptr<Pixmap> pixmap,
+                                          GPUContext* context,
+                                          const TextureDescriptor* descriptor);
+
   static std::shared_ptr<DeferredTextureImage> MakeDeferredTextureImage(
       TextureFormat format, size_t width, size_t height, AlphaType alpha_type);
 
@@ -72,6 +76,10 @@ class SKITY_API Image {
   virtual size_t Height() const = 0;
 
   virtual AlphaType GetAlphaType() const = 0;
+
+  virtual bool IsMipmapped() const { return false; }
+
+  virtual uint32_t GetMipmapLevelCount() const { return 0; }
 
   virtual std::shared_ptr<Pixmap> ReadPixels(GPUContext* context) const {
     return nullptr;
