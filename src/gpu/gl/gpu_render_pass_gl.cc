@@ -161,24 +161,6 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
               binding.buffer.offset, binding.buffer.range);
     }
 
-    // Bind textures
-    uint32_t texture_index = 0;
-    for (auto& binding : command->texture_sampler_bindings) {
-      auto texture = static_cast<GPUTextureGL*>(binding.texture.get());
-      auto sampler = static_cast<GPUSamplerGL*>(binding.sampler.get());
-
-      GL_CALL(ActiveTexture, GL_TEXTURE0 + texture_index);
-      track_texture_unit(texture_index);
-      texture->Bind();
-
-      GL_CALL(Uniform1i,
-              pipeline->GetProgram()->GetUniformLocation(binding.name),
-              texture_index);
-      texture->CombineSampler(sampler);
-
-      texture_index++;
-    }
-
     // Bind textures and samplers separately
     for (auto& binding : command->texture_bindings) {
       auto texture = static_cast<GPUTextureGL*>(binding.texture.get());

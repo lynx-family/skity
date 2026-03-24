@@ -104,20 +104,4 @@ GPUSamplerGL::~GPUSamplerGL() {
   }
 }
 
-void GPUSamplerGL::ConfigureTexture(GPUTextureGL* texture) const {
-  std::optional<GPUMipmapMode> mip_filter = std::nullopt;
-  if (texture->GetDescriptor().mip_level_count > 1) {
-    mip_filter = desc_.mipmap_filter;
-  }
-
-  GL_CALL(TexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-          ToGLParam(desc_.min_filter, mip_filter));
-  GL_CALL(TexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-          ToGLParam(desc_.mag_filter));
-  GL_CALL(TexParameteri, GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-          ToGLParam(desc_.address_mode_u));
-  GL_CALL(TexParameteri, GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-          ToGLParam(desc_.address_mode_v));
-}
-
 }  // namespace skity

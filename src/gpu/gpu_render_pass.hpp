@@ -223,7 +223,6 @@ struct Command {
   GPUBufferView vertex_buffer;
   GPUBufferView instance_buffer;
   ArrayList<UniformBinding, 4> uniform_bindings;
-  ArrayList<TextureSamplerBinding, 4> texture_sampler_bindings;
   ArrayList<TextureBinding, 4> texture_bindings;
   ArrayList<SamplerBinding, 4> sampler_bindings;
   uint32_t stencil_reference = 0u;
@@ -255,12 +254,6 @@ struct Command {
 
     for (const auto& uniform : uniform_bindings) {
       if (uniform.buffer.buffer == nullptr) {
-        return false;
-      }
-    }
-
-    for (const auto& texture : texture_sampler_bindings) {
-      if (texture.texture == nullptr) {
         return false;
       }
     }

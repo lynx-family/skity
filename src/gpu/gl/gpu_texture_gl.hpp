@@ -63,8 +63,6 @@ class GPUTextureGL : public GPUTexture {
   virtual void Unbind() const;
   void Destroy();
 
-  void CombineSampler(GPUSamplerGL* sampler);
-
   size_t GetBytes() const override;
 
   void SetFramebuffer(uint32_t fbo_id, bool need_free);

@@ -164,7 +164,6 @@ void GPURenderPassMTL::EncodeCommands(std::optional<GPUViewport> viewport,
     SetStencilReference(command->stencil_reference);
     SetPipeline(cache, command->pipeline);
     SetUniformBindings(cache, command->uniform_bindings);
-    SetTextureBindings(cache, command->texture_sampler_bindings);
 
     // handle texture and sampler bindings separately
     SetTextureBindings(cache, command->texture_bindings);
@@ -209,24 +208,6 @@ void GPURenderPassMTL::SetUniformBindings(BindingsCache& cache,
     if (binding.stages & static_cast<GPUShaderStageMask>(GPUShaderStage::kFragment)) {
       cache.SetBuffer(GPUShaderStage::kFragment, binding.index, binding.buffer.offset,
                       static_cast<GPUBufferMTL*>(binding.buffer.buffer)->GetMTLBuffer());
-    }
-  }
-}
-
-void GPURenderPassMTL::SetTextureBindings(
-    BindingsCache& cache, const ArrayList<TextureSamplerBinding, 4>& texture_bindings) {
-  for (auto& binding : texture_bindings) {
-    if (binding.stages & static_cast<GPUShaderStageMask>(GPUShaderStage::kVertex)) {
-      cache.SetTexture(GPUShaderStage::kVertex, binding.index,
-                       static_cast<GPUTextureMTL*>(binding.texture.get())->GetMTLTexture());
-      cache.SetSampler(GPUShaderStage::kVertex, binding.index,
-                       static_cast<GPUSamplerMTL*>(binding.sampler.get())->GetMTLSampler());
-    }
-    if (binding.stages & static_cast<GPUShaderStageMask>(GPUShaderStage::kFragment)) {
-      cache.SetTexture(GPUShaderStage::kFragment, binding.index,
-                       static_cast<GPUTextureMTL*>(binding.texture.get())->GetMTLTexture());
-      cache.SetSampler(GPUShaderStage::kFragment, binding.index,
-                       static_cast<GPUSamplerMTL*>(binding.sampler.get())->GetMTLSampler());
     }
   }
 }
