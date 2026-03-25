@@ -32,7 +32,6 @@ HWCanvas::HWCanvas(GPUSurfaceImpl* surface)
       surface_(surface),
       ctx_scale_(surface->ContentScale()),
       enable_msaa_(surface->GetSampleCount() > 1),
-      enable_fxaa_(surface->UseFxaa()),
       gpu_buffer_(surface->GetStageBuffer()),
       arena_allocator_(surface_->GetArenaAllocator()),
       static_buffer_(surface_->GetStaticBuffer()) {
@@ -55,7 +54,6 @@ void HWCanvas::Init() {
   SKITY_TRACE_EVENT(HWCanvas_Init);
 
   enable_msaa_ = surface_->GetSampleCount() > 1;
-  enable_fxaa_ = surface_->UseFxaa();
   pipeline_lib_ = surface_->GetGPUContext()->GetPipelineLib();
 
   vertex_vector_cache_ = std::make_unique<VectorCache<float>>();
@@ -382,7 +380,7 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
   bool need_contour_aa = false;
   if (surface_->GetGPUContext()->IsEnableContourAA()) {
     // Fall back to Contour AA while surface disables MSAA and paint enables AA
-    need_contour_aa = !enable_msaa_ && !enable_fxaa_ && paint.IsAntiAlias();
+    need_contour_aa = !enable_msaa_ && paint.IsAntiAlias();
   }
   bool enable_gpu_tessellation =
       surface_->GetGPUContext()->IsEnableGPUTessellation();

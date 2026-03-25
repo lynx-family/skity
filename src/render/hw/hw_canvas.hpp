@@ -126,7 +126,6 @@ class HWCanvas : public Canvas {
   GPUSurfaceImpl* surface_ = nullptr;
   float ctx_scale_ = 1.f;
   bool enable_msaa_ = false;
-  bool enable_fxaa_ = false;
   HWStageBuffer* gpu_buffer_ = {};
 
   HWPipelineLib* pipeline_lib_ = {};

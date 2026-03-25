@@ -45,8 +45,6 @@ class GPUSurfaceImpl : public GPUSurface {
 
   virtual GPUTextureFormat GetGPUFormat() const = 0;
 
-  virtual bool UseFxaa() const { return false; }
-
  protected:
   virtual HWRootLayer* OnBeginNextFrame(bool clear) = 0;
 
