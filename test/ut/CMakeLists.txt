@@ -122,5 +122,10 @@ endif()
 target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
 target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
 
+if (${SKITY_VK_BACKEND})
+    target_compile_definitions(skity_unit_test PRIVATE -DWGX_VULKAN=1)
+    target_link_libraries(skity_unit_test PRIVATE SPIRV-Headers::SPIRV-Headers)
+endif()
+
 
 gtest_add_tests(skity_unit_test "" AUTO)
