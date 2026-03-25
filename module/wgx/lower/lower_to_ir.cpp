@@ -74,6 +74,18 @@ std::unique_ptr<ir::Module> LowerToIR(const ast::Module* module,
     }
   }
 
+  const bool is_void_return = entry_point->return_type.expr == nullptr;
+  const bool has_terminator =
+      !ir_function.entry_block.instructions.empty() &&
+      ir_function.entry_block.instructions.back().kind == ir::InstKind::kReturn;
+
+  if (is_void_return && !has_terminator) {
+    ir::Instruction implicit_return;
+    implicit_return.kind = ir::InstKind::kReturn;
+    implicit_return.has_return_value = false;
+    ir_function.entry_block.instructions.emplace_back(implicit_return);
+  }
+
   ir_module->functions.emplace_back(std::move(ir_function));
   return ir_module;
 }
