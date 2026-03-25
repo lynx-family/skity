@@ -192,8 +192,8 @@ class SKITY_API GPUContext {
   bool IsEnableMergingDrawCall() const { return enable_merging_draw_call_; }
 
   /**
-   * Used to specify whether to use contour aa for anti-aliasing when msaa and
-   * fxaa are both disabled.
+   * Used to specify whether to use contour aa for anti-aliasing when msaa
+   * disabled.
    */
   void SetEnableContourAA(bool enable_contour_aa) {
     enable_contour_aa_ = enable_contour_aa;
