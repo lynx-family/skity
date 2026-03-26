@@ -14,6 +14,9 @@ namespace skity {
 class ScopedTraceEvent {
  public:
   ScopedTraceEvent(const char* name, int64_t trace_id);
+  ScopedTraceEvent(const char* name, const char* arg1_name,
+                   const char* arg1_val, const char* arg2_name = nullptr,
+                   const char* arg2_val = nullptr);
   ~ScopedTraceEvent();
 
  private:
@@ -21,7 +24,10 @@ class ScopedTraceEvent {
   int64_t trace_id_;
 };
 
-#define SKITY_TRACE_EVENT(name) ScopedTraceEvent name(#name, -1)
+#define SKITY_TRACE_EVENT(name) ScopedTraceEvent name##_trace(#name, -1)
+
+#define SKITY_TRACE_EVENT_ARGS(name, arg1_n, arg1_v, ...) \
+  ScopedTraceEvent name##_trace(#name, arg1_n, arg1_v, ##__VA_ARGS__)
 
 #else
 

@@ -10,6 +10,7 @@
 #include "src/logging.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_shader_generator.hpp"
+#include "src/tracing.hpp"
 
 namespace skity {
 
@@ -110,6 +111,16 @@ bool HWPipeline::PipelineMatch(GPURenderPipeline *pipeline,
 
 GPURenderPipeline *HWPipelineLib::GetPipeline(
     const HWPipelineKey &key, const HWPipelineDescriptor &desc) {
+#ifdef SKITY_ENABLE_TRACING
+  uint64_t vs_key = (static_cast<uint64_t>(GPUShaderStage::kVertex) << 32) |
+                    key.GetVertexBaseKey();
+  uint64_t fs_key = (static_cast<uint64_t>(GPUShaderStage::kFragment) << 32) |
+                    key.GetFragmentBaseKey();
+  std::string vs_name = FunctionBaseKeyToShaderName(vs_key);
+  std::string fs_name = FunctionBaseKeyToShaderName(fs_key);
+  SKITY_TRACE_EVENT_ARGS(HWPipelineLib_GetPipeline, "vs", vs_name.c_str(), "fs",
+                         fs_name.c_str());
+#endif
   auto it = pipelines_.find(key);
 
   if (it != pipelines_.end()) {
