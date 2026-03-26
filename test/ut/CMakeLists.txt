@@ -124,6 +124,7 @@ target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
 
 if (${SKITY_VK_BACKEND})
     target_compile_definitions(skity_unit_test PRIVATE -DWGX_VULKAN=1)
+    target_compile_definitions(skity_unit_test PRIVATE -DWGX_SPIRV_DUMP_DEFAULT_DIR="${CMAKE_BINARY_DIR}")
     target_link_libraries(skity_unit_test PRIVATE SPIRV-Headers::SPIRV-Headers)
 endif()
 

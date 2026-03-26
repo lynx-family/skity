@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -20,9 +21,16 @@ enum class InstKind {
   kReturn,
 };
 
+enum class ReturnValueKind {
+  kNone,
+  kConstVec4F32,
+};
+
 struct Instruction {
   InstKind kind = InstKind::kReturn;
   bool has_return_value = false;
+  ReturnValueKind return_value_kind = ReturnValueKind::kNone;
+  std::array<float, 4> const_vec4_f32 = {0.f, 0.f, 0.f, 0.f};
 };
 
 struct Block {
@@ -32,6 +40,7 @@ struct Block {
 struct Function {
   std::string name = {};
   PipelineStage stage = PipelineStage::kUnknown;
+  bool return_builtin_position = false;
   Block entry_block = {};
 };
 
