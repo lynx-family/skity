@@ -147,3 +147,83 @@ Rationale:
 1. Unblocks real graphics stage output.
 2. Forces implementation of key missing type/value/decorate pieces without
    requiring full language coverage first.
+
+## 2026-03-26
+
+### Completed
+
+1. Vertex `@builtin(position) vec4<f32>` return path is now supported end-to-end.
+   - Files:
+     - `module/wgx/ir/module.h`
+     - `module/wgx/lower/lower_to_ir.cpp`
+     - `module/wgx/spirv/emitter.cpp`
+     - `test/ut/wgx/wgx_spirv_smoke_test.cc`
+   - Status:
+     - IR instruction model now carries minimal return-value payload for
+       `const vec4<f32>`.
+     - Lowering now accepts the focused shader slice:
+       - vertex entry point
+       - return type `@builtin(position) vec4<f32>`
+       - return expression `vec4<f32>(float,float,float,float)`
+     - SPIR-V emission now writes output interface variable +
+       `BuiltIn Position` decoration and stores the return value before
+       `OpReturn`.
+
+2. SPIR-V emitter id management refactored from hardcoded ids to dynamic
+   allocation.
+   - File: `module/wgx/spirv/emitter.cpp`
+   - Status:
+     - Added minimal `IdAllocator`.
+     - Header id bound is backfilled from allocator state.
+     - Added minimal type/constant dedup cache for current supported path:
+       - `void`, function-void type
+       - `f32`, `vec4<f32>`, `ptr<Output, vec4<f32>>`
+       - `f32` constants by bit-pattern
+
+3. SPIR-V dump support added in UT for local inspection.
+   - Files:
+     - `test/ut/wgx/wgx_spirv_smoke_test.cc`
+     - `test/ut/CMakeLists.txt`
+   - Status:
+     - Smoke tests now dump generated `.spv` binaries.
+     - Output directory priority:
+       1. `WGX_SPIRV_DUMP_DIR` env var (if set)
+       2. `WGX_SPIRV_DUMP_DEFAULT_DIR` compile macro
+       3. fallback path
+     - `WGX_SPIRV_DUMP_DEFAULT_DIR` is wired from `CMAKE_BINARY_DIR`.
+
+4. SPIR-V layout fixes for validator compliance.
+   - File: `module/wgx/spirv/emitter.cpp`
+   - Status:
+     - Removed `OpModuleProcessed` emission for now (to avoid section-order
+       ambiguity in current minimal emitter).
+     - Ensured function-local composite construction is emitted in block scope.
+     - Ensured entry-point declaration section ordering is valid for Vulkan
+       validator semantics.
+
+### Validation runs on 2026-03-26
+
+1. Unit test command:
+   - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.*'`
+2. Unit test result:
+   - pass (`3/3`)
+3. Validator command:
+   - `spirv-val --target-env vulkan1.1 out/spv_check/*.spv`
+4. Validator result:
+   - pass for all three generated binaries:
+     - `wgx_vs_main_minimal.spv`
+     - `wgx_fs_main_minimal.spv`
+     - `wgx_vs_main_position.spv`
+
+### Current capability boundary (updated)
+
+1. Works:
+   - vertex/fragment entry mapping.
+   - fragment `OriginUpperLeft` execution mode.
+   - void return path.
+   - vertex `@builtin(position) vec4<f32>` return with constant vec4
+     constructor.
+2. Not yet supported:
+   - non-constant return expressions.
+   - general expressions, variables, control flow, resources, and broader IO
+     decoration coverage.

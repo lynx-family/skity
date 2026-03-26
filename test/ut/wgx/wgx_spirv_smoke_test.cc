@@ -6,6 +6,10 @@
 #include <wgsl_cross.h>
 
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
 #include <vector>
 
 #include "spirv/unified1/spirv.h"
@@ -79,6 +83,61 @@ bool ContainsExecutionMode(const std::vector<uint32_t>& words,
   return false;
 }
 
+bool ContainsBuiltInDecoration(const std::vector<uint32_t>& words,
+                               SpvBuiltIn builtin) {
+  size_t offset = 5u;
+  while (offset < words.size()) {
+    const uint32_t inst = words[offset];
+    const uint16_t word_count =
+        static_cast<uint16_t>(inst >> SpvWordCountShift);
+    const auto opcode = static_cast<SpvOp>(inst & SpvOpCodeMask);
+
+    if (word_count == 0u) {
+      return false;
+    }
+
+    if (opcode == SpvOpDecorate && word_count >= 4u &&
+        words[offset + 2u] == static_cast<uint32_t>(SpvDecorationBuiltIn) &&
+        words[offset + 3u] == static_cast<uint32_t>(builtin)) {
+      return true;
+    }
+
+    offset += word_count;
+  }
+
+  return false;
+}
+
+void DumpSpirvBinary(const std::string& filename, const std::string& binary) {
+  if (binary.empty()) {
+    return;
+  }
+
+  namespace fs = std::filesystem;
+  const char* env_dir = std::getenv("WGX_SPIRV_DUMP_DIR");
+  fs::path dir;
+  if (env_dir != nullptr && env_dir[0] != '\0') {
+    dir = fs::path(env_dir);
+  } else {
+#if defined(WGX_SPIRV_DUMP_DEFAULT_DIR)
+    dir = fs::path(WGX_SPIRV_DUMP_DEFAULT_DIR);
+#else
+    dir = fs::current_path() / "out" / "cmake_host_build";
+#endif
+  }
+  std::error_code ec;
+  fs::create_directories(dir, ec);
+
+  const fs::path path = dir / filename;
+
+  std::ofstream output(path, std::ios::binary);
+  if (!output.is_open()) {
+    return;
+  }
+
+  output.write(binary.data(), static_cast<std::streamsize>(binary.size()));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsMinimalVertexSpirvBinaryForValidEntryPoint) {
   auto program = wgx::Program::Parse(R"(
 @vertex
@@ -94,6 +153,7 @@ fn vs_main() {
   auto result = program->WriteToSpirv("vs_main", options);
 
   ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_minimal.spv", result.content);
   auto words = DecodeWords(result.content);
 
   ASSERT_GE(words.size(), 5u);
@@ -101,7 +161,6 @@ fn vs_main() {
   EXPECT_EQ(words[1], 0x00010300u);
   EXPECT_EQ(words[3], 5u);
   EXPECT_TRUE(ContainsInstruction(words, SpvOpEntryPoint));
-  EXPECT_TRUE(ContainsInstruction(words, SpvOpModuleProcessed));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpFunction));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
   EXPECT_FALSE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
@@ -122,6 +181,7 @@ fn fs_main() {
   auto result = program->WriteToSpirv("fs_main", options);
 
   ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_minimal.spv", result.content);
   auto words = DecodeWords(result.content);
 
   ASSERT_GE(words.size(), 5u);
@@ -130,7 +190,7 @@ fn fs_main() {
 }
 
 TEST(WgxSpirvSmokeTest,
-     RejectsVertexEntryPointWithBuiltinPositionReturnForNow) {
+     EmitsVertexSpirvBinaryForBuiltinPositionVec4Return) {
   auto program = wgx::Program::Parse(R"(
 @vertex
 fn vs_main() -> @builtin(position) vec4<f32> {
@@ -144,8 +204,20 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   wgx::SpirvOptions options;
   auto result = program->WriteToSpirv("vs_main", options);
 
-  EXPECT_FALSE(result.success);
-  EXPECT_TRUE(result.content.empty());
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_position.spv", result.content);
+  auto words = DecodeWords(result.content);
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpEntryPoint));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeVector));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypePointer));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstant));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 #endif
 
