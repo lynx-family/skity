@@ -78,6 +78,8 @@ if (WGX_VULKAN_BACKEND)
     target_compile_definitions(wgsl-cross PRIVATE -DWGX_VULKAN=1)
     target_sources(wgsl-cross PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/ir/module.h
+        ${CMAKE_CURRENT_LIST_DIR}/ir/type.h
+        ${CMAKE_CURRENT_LIST_DIR}/ir/type.cpp
         ${CMAKE_CURRENT_LIST_DIR}/lower/lower_to_ir.cpp
         ${CMAKE_CURRENT_LIST_DIR}/lower/lower_to_ir.h
         ${CMAKE_CURRENT_LIST_DIR}/spirv/emitter.cpp
