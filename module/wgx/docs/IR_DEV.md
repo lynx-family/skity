@@ -201,14 +201,12 @@ Rationale:
      - Ensured entry-point declaration section ordering is valid for Vulkan
        validator semantics.
 
-### Validation runs on 2026-03-26
+5. SPIR-V emitter refactor for better code organization.
+   - File: `module/wgx/spirv/emitter.cpp`
+   - Status:
+     - Extract `ModuleBuilder` class to handle module-level SPIR-V emission.
+     - Added `EmitContext` class to hold emitter state like type and id allocation.
 
-1. Unit test command:
-   - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.*'`
-2. Unit test result:
-   - pass (`3/3`)
-3. Validator command:
-   - `spirv-val --target-env vulkan1.1 out/spv_check/*.spv`
 4. Validator result:
    - pass for all three generated binaries:
      - `wgx_vs_main_minimal.spv`
