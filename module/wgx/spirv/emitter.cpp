@@ -4,6 +4,7 @@
 
 #include "spirv/emitter.h"
 
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <string_view>
@@ -75,6 +76,14 @@ void AppendName(std::vector<uint32_t>* words, uint32_t target_id,
   words->insert(words->end(), name_words.begin(), name_words.end());
 }
 
+void AppendSection(std::vector<uint32_t>* dst, const std::vector<uint32_t>& src) {
+  if (dst == nullptr || src.empty()) {
+    return;
+  }
+
+  dst->insert(dst->end(), src.begin(), src.end());
+}
+
 SpvExecutionModel ToExecutionModel(ir::PipelineStage stage) {
   switch (stage) {
     case ir::PipelineStage::kVertex:
@@ -113,6 +122,20 @@ uint32_t FloatToBits(float value) {
   return bits;
 }
 
+std::string PackBinaryModule(const std::vector<uint32_t>& words) {
+  std::string result(words.size() * sizeof(uint32_t), '\0');
+
+  for (size_t i = 0; i < words.size(); ++i) {
+    const auto word = words[i];
+    result[i * 4u + 0u] = static_cast<char>(word & 0xffu);
+    result[i * 4u + 1u] = static_cast<char>((word >> 8u) & 0xffu);
+    result[i * 4u + 2u] = static_cast<char>((word >> 16u) & 0xffu);
+    result[i * 4u + 3u] = static_cast<char>((word >> 24u) & 0xffu);
+  }
+
+  return result;
+}
+
 class IdAllocator {
  public:
   uint32_t Allocate() { return next_id_++; }
@@ -131,144 +154,315 @@ struct TypeCache {
   uint32_t ptr_output_vec4_f32 = 0u;
 };
 
-uint32_t GetOrCreateVoidType(IdAllocator* ids, TypeCache* types,
-                             std::vector<uint32_t>* words) {
-  if (ids == nullptr || types == nullptr || words == nullptr) {
-    return 0u;
+struct SectionBuffers {
+  std::vector<uint32_t> capabilities;
+  std::vector<uint32_t> memory_model;
+  std::vector<uint32_t> entry_points;
+  std::vector<uint32_t> execution_modes;
+  std::vector<uint32_t> debug;
+  std::vector<uint32_t> annotations;
+  std::vector<uint32_t> types_consts_globals;
+  std::vector<uint32_t> functions;
+};
+
+class EmitContext {
+ public:
+  uint32_t AllocateId() { return ids_.Allocate(); }
+
+  uint32_t Bound() const { return ids_.Bound(); }
+
+  SectionBuffers& Sections() { return sections_; }
+
+  uint32_t GetOrCreateVoidType() {
+    if (types_.void_type != 0u) {
+      return types_.void_type;
+    }
+
+    types_.void_type = AllocateId();
+    AppendInstruction(&sections_.types_consts_globals, SpvOpTypeVoid,
+                      {types_.void_type});
+    return types_.void_type;
   }
 
-  if (types->void_type != 0u) {
-    return types->void_type;
+  uint32_t GetOrCreateFunctionTypeVoid() {
+    if (types_.function_void != 0u) {
+      return types_.function_void;
+    }
+
+    const auto void_type = GetOrCreateVoidType();
+    if (void_type == 0u) {
+      return 0u;
+    }
+
+    types_.function_void = AllocateId();
+    AppendInstruction(&sections_.types_consts_globals, SpvOpTypeFunction,
+                      {types_.function_void, void_type});
+    return types_.function_void;
   }
 
-  types->void_type = ids->Allocate();
-  AppendInstruction(words, SpvOpTypeVoid, {types->void_type});
-  return types->void_type;
+  uint32_t GetOrCreateF32Type() {
+    if (types_.f32 != 0u) {
+      return types_.f32;
+    }
+
+    types_.f32 = AllocateId();
+    AppendInstruction(&sections_.types_consts_globals, SpvOpTypeFloat,
+                      {types_.f32, 32u});
+    return types_.f32;
+  }
+
+  uint32_t GetOrCreateVec4F32Type() {
+    if (types_.vec4_f32 != 0u) {
+      return types_.vec4_f32;
+    }
+
+    const auto f32_type = GetOrCreateF32Type();
+    if (f32_type == 0u) {
+      return 0u;
+    }
+
+    types_.vec4_f32 = AllocateId();
+    AppendInstruction(&sections_.types_consts_globals, SpvOpTypeVector,
+                      {types_.vec4_f32, f32_type, 4u});
+    return types_.vec4_f32;
+  }
+
+  uint32_t GetOrCreatePtrOutputVec4F32Type() {
+    if (types_.ptr_output_vec4_f32 != 0u) {
+      return types_.ptr_output_vec4_f32;
+    }
+
+    const auto vec4_type = GetOrCreateVec4F32Type();
+    if (vec4_type == 0u) {
+      return 0u;
+    }
+
+    types_.ptr_output_vec4_f32 = AllocateId();
+    AppendInstruction(&sections_.types_consts_globals, SpvOpTypePointer,
+                      {types_.ptr_output_vec4_f32,
+                       static_cast<uint32_t>(SpvStorageClassOutput),
+                       vec4_type});
+    return types_.ptr_output_vec4_f32;
+  }
+
+  uint32_t GetOrCreateF32Constant(float value) {
+    const uint32_t bits = FloatToBits(value);
+    auto iter = f32_constants_.find(bits);
+    if (iter != f32_constants_.end()) {
+      return iter->second;
+    }
+
+    const auto f32_type = GetOrCreateF32Type();
+    if (f32_type == 0u) {
+      return 0u;
+    }
+
+    const auto const_id = AllocateId();
+    AppendInstruction(&sections_.types_consts_globals, SpvOpConstant,
+                      {f32_type, const_id, bits});
+    f32_constants_.emplace(bits, const_id);
+    return const_id;
+  }
+
+ private:
+  IdAllocator ids_;
+  TypeCache types_;
+  std::unordered_map<uint32_t, uint32_t> f32_constants_;
+  SectionBuffers sections_;
+};
+
+const ir::Function* FindEntryFunction(const ir::Module& module) {
+  for (const auto& function : module.functions) {
+    if (function.name == module.entry_point) {
+      return &function;
+    }
+  }
+
+  return nullptr;
 }
 
-uint32_t GetOrCreateFunctionTypeVoid(IdAllocator* ids, TypeCache* types,
-                                     std::vector<uint32_t>* words) {
-  if (ids == nullptr || types == nullptr || words == nullptr) {
-    return 0u;
+class ModuleBuilder {
+ public:
+  ModuleBuilder(const ir::Module& module, const ir::Function& entry,
+                SpvExecutionModel execution_model)
+      : module_(module), entry_(entry), execution_model_(execution_model) {}
+
+  bool Build(EmitContext* ctx) {
+    if (ctx == nullptr) {
+      return false;
+    }
+
+    const auto& return_inst = entry_.entry_block.instructions.front();
+    has_position_return_ = return_inst.has_return_value;
+
+    if (!AllocateCoreIds(ctx)) {
+      return false;
+    }
+
+    WriteCapabilityMemoryModel(ctx);
+    WriteEntryPointSection(ctx);
+    WriteExecutionModeSection(ctx);
+    WriteDebugSection(ctx);
+    WriteAnnotationSection(ctx);
+
+    if (!WriteTypeConstGlobalSection(ctx)) {
+      return false;
+    }
+
+    if (!WriteFunctionSection(ctx)) {
+      return false;
+    }
+
+    return true;
   }
 
-  if (types->function_void != 0u) {
-    return types->function_void;
+ private:
+  bool AllocateCoreIds(EmitContext* ctx) {
+    function_id_ = ctx->AllocateId();
+    label_id_ = ctx->AllocateId();
+
+    if (has_position_return_) {
+      position_output_var_id_ = ctx->AllocateId();
+    }
+
+    return function_id_ != 0u && label_id_ != 0u;
   }
 
-  const auto void_type = GetOrCreateVoidType(ids, types, words);
-  if (void_type == 0u) {
-    return 0u;
+  void WriteCapabilityMemoryModel(EmitContext* ctx) {
+    auto& sections = ctx->Sections();
+    AppendInstruction(&sections.capabilities, SpvOpCapability,
+                      {static_cast<uint32_t>(SpvCapabilityShader)});
+    AppendInstruction(&sections.memory_model, SpvOpMemoryModel,
+                      {static_cast<uint32_t>(SpvAddressingModelLogical),
+                       static_cast<uint32_t>(SpvMemoryModelGLSL450)});
   }
 
-  types->function_void = ids->Allocate();
-  AppendInstruction(words, SpvOpTypeFunction, {types->function_void, void_type});
-  return types->function_void;
-}
-
-uint32_t GetOrCreateF32Type(IdAllocator* ids, TypeCache* types,
-                            std::vector<uint32_t>* words) {
-  if (ids == nullptr || types == nullptr || words == nullptr) {
-    return 0u;
+  void WriteEntryPointSection(EmitContext* ctx) {
+    auto& sections = ctx->Sections();
+    if (has_position_return_) {
+      AppendEntryPoint(&sections.entry_points, execution_model_, function_id_,
+                       module_.entry_point, {position_output_var_id_});
+    } else {
+      AppendEntryPoint(&sections.entry_points, execution_model_, function_id_,
+                       module_.entry_point);
+    }
   }
 
-  if (types->f32 != 0u) {
-    return types->f32;
+  void WriteExecutionModeSection(EmitContext* ctx) {
+    if (module_.stage != ir::PipelineStage::kFragment) {
+      return;
+    }
+
+    auto& sections = ctx->Sections();
+    AppendInstruction(
+        &sections.execution_modes, SpvOpExecutionMode,
+        {function_id_, static_cast<uint32_t>(SpvExecutionModeOriginUpperLeft)});
   }
 
-  types->f32 = ids->Allocate();
-  AppendInstruction(words, SpvOpTypeFloat, {types->f32, 32u});
-  return types->f32;
-}
-
-uint32_t GetOrCreateVec4F32Type(IdAllocator* ids, TypeCache* types,
-                                std::vector<uint32_t>* words) {
-  if (ids == nullptr || types == nullptr || words == nullptr) {
-    return 0u;
+  void WriteDebugSection(EmitContext* ctx) {
+    auto& sections = ctx->Sections();
+    AppendName(&sections.debug, function_id_, module_.entry_point);
+    if (has_position_return_) {
+      AppendName(&sections.debug, position_output_var_id_, "position_output");
+    }
   }
 
-  if (types->vec4_f32 != 0u) {
-    return types->vec4_f32;
+  void WriteAnnotationSection(EmitContext* ctx) {
+    if (!has_position_return_) {
+      return;
+    }
+
+    auto& sections = ctx->Sections();
+    AppendInstruction(&sections.annotations, SpvOpDecorate,
+                      {position_output_var_id_,
+                       static_cast<uint32_t>(SpvDecorationBuiltIn),
+                       static_cast<uint32_t>(SpvBuiltInPosition)});
   }
 
-  const auto f32_type = GetOrCreateF32Type(ids, types, words);
-  if (f32_type == 0u) {
-    return 0u;
+  bool WriteTypeConstGlobalSection(EmitContext* ctx) {
+    void_type_id_ = ctx->GetOrCreateVoidType();
+    function_type_id_ = ctx->GetOrCreateFunctionTypeVoid();
+    if (void_type_id_ == 0u || function_type_id_ == 0u) {
+      return false;
+    }
+
+    if (!has_position_return_) {
+      return true;
+    }
+
+    const auto output_ptr_type_id = ctx->GetOrCreatePtrOutputVec4F32Type();
+    vec4_type_id_ = ctx->GetOrCreateVec4F32Type();
+    if (output_ptr_type_id == 0u || vec4_type_id_ == 0u) {
+      return false;
+    }
+
+    auto& sections = ctx->Sections();
+    AppendInstruction(&sections.types_consts_globals, SpvOpVariable,
+                      {output_ptr_type_id, position_output_var_id_,
+                       static_cast<uint32_t>(SpvStorageClassOutput)});
+
+    const auto& return_value =
+        entry_.entry_block.instructions.front().const_vec4_f32;
+    for (size_t i = 0; i < position_const_ids_.size(); ++i) {
+      const auto const_id = ctx->GetOrCreateF32Constant(return_value[i]);
+      if (const_id == 0u) {
+        return false;
+      }
+      position_const_ids_[i] = const_id;
+    }
+
+    return true;
   }
 
-  types->vec4_f32 = ids->Allocate();
-  AppendInstruction(words, SpvOpTypeVector, {types->vec4_f32, f32_type, 4u});
-  return types->vec4_f32;
-}
+  bool WriteFunctionSection(EmitContext* ctx) {
+    auto& section = ctx->Sections().functions;
 
-uint32_t GetOrCreatePtrOutputVec4F32Type(IdAllocator* ids, TypeCache* types,
-                                         std::vector<uint32_t>* words) {
-  if (ids == nullptr || types == nullptr || words == nullptr) {
-    return 0u;
+    AppendInstruction(
+        &section, SpvOpFunction,
+        {void_type_id_, function_id_,
+         static_cast<uint32_t>(SpvFunctionControlMaskNone), function_type_id_});
+    AppendInstruction(&section, SpvOpLabel, {label_id_});
+
+    if (has_position_return_) {
+      composite_return_id_ = ctx->AllocateId();
+      AppendInstruction(
+          &section, SpvOpCompositeConstruct,
+          {vec4_type_id_, composite_return_id_, position_const_ids_[0],
+           position_const_ids_[1], position_const_ids_[2],
+           position_const_ids_[3]});
+      AppendInstruction(&section, SpvOpStore,
+                        {position_output_var_id_, composite_return_id_});
+    }
+
+    AppendInstruction(&section, SpvOpReturn, {});
+    AppendInstruction(&section, SpvOpFunctionEnd, {});
+
+    return true;
   }
 
-  if (types->ptr_output_vec4_f32 != 0u) {
-    return types->ptr_output_vec4_f32;
-  }
+ private:
+  const ir::Module& module_;
+  const ir::Function& entry_;
+  SpvExecutionModel execution_model_;
 
-  const auto vec4_type = GetOrCreateVec4F32Type(ids, types, words);
-  if (vec4_type == 0u) {
-    return 0u;
-  }
+  bool has_position_return_ = false;
 
-  types->ptr_output_vec4_f32 = ids->Allocate();
-  AppendInstruction(
-      words, SpvOpTypePointer,
-      {types->ptr_output_vec4_f32, static_cast<uint32_t>(SpvStorageClassOutput),
-       vec4_type});
-  return types->ptr_output_vec4_f32;
-}
-
-uint32_t GetOrCreateF32Constant(IdAllocator* ids, TypeCache* types,
-                                std::unordered_map<uint32_t, uint32_t>* cache,
-                                std::vector<uint32_t>* words, float value) {
-  if (ids == nullptr || types == nullptr || cache == nullptr || words == nullptr) {
-    return 0u;
-  }
-
-  const uint32_t bits = FloatToBits(value);
-  auto iter = cache->find(bits);
-  if (iter != cache->end()) {
-    return iter->second;
-  }
-
-  const auto f32_type = GetOrCreateF32Type(ids, types, words);
-  if (f32_type == 0u) {
-    return 0u;
-  }
-
-  const auto const_id = ids->Allocate();
-  AppendInstruction(words, SpvOpConstant, {f32_type, const_id, bits});
-  cache->emplace(bits, const_id);
-  return const_id;
-}
-
-std::string PackBinaryModule(const std::vector<uint32_t>& words) {
-  std::string result(words.size() * sizeof(uint32_t), '\0');
-
-  for (size_t i = 0; i < words.size(); ++i) {
-    const auto word = words[i];
-    result[i * 4u + 0u] = static_cast<char>(word & 0xffu);
-    result[i * 4u + 1u] = static_cast<char>((word >> 8u) & 0xffu);
-    result[i * 4u + 2u] = static_cast<char>((word >> 16u) & 0xffu);
-    result[i * 4u + 3u] = static_cast<char>((word >> 24u) & 0xffu);
-  }
-
-  return result;
-}
+  uint32_t function_id_ = 0u;
+  uint32_t label_id_ = 0u;
+  uint32_t position_output_var_id_ = 0u;
+  uint32_t composite_return_id_ = 0u;
+  uint32_t void_type_id_ = 0u;
+  uint32_t function_type_id_ = 0u;
+  uint32_t vec4_type_id_ = 0u;
+  std::array<uint32_t, 4> position_const_ids_ = {0u, 0u, 0u, 0u};
+};
 
 }  // namespace
 
 bool Emitter::Emit(const ir::Module& module) {
   result_.clear();
 
-  if (module.entry_point.empty() ||
-      module.stage == ir::PipelineStage::kUnknown) {
+  if (module.entry_point.empty() || module.stage == ir::PipelineStage::kUnknown) {
     return false;
   }
 
@@ -276,14 +470,7 @@ bool Emitter::Emit(const ir::Module& module) {
     return false;
   }
 
-  const ir::Function* entry_function = nullptr;
-  for (const auto& function : module.functions) {
-    if (function.name == module.entry_point) {
-      entry_function = &function;
-      break;
-    }
-  }
-
+  const ir::Function* entry_function = FindEntryFunction(module);
   if (entry_function == nullptr || entry_function->stage != module.stage) {
     return false;
   }
@@ -297,124 +484,31 @@ bool Emitter::Emit(const ir::Module& module) {
     return false;
   }
 
-  const auto& return_inst = entry_function->entry_block.instructions.front();
-  const bool has_position_return =
-      return_inst.has_return_value &&
-      return_inst.return_value_kind == ir::ReturnValueKind::kConstVec4F32 &&
-      module.stage == ir::PipelineStage::kVertex &&
-      entry_function->return_builtin_position;
-
-  if (return_inst.has_return_value && !has_position_return) {
+  EmitContext context;
+  ModuleBuilder builder(module, *entry_function, execution_model);
+  if (!builder.Build(&context)) {
     return false;
   }
 
-  IdAllocator ids;
-  TypeCache types;
-  std::unordered_map<uint32_t, uint32_t> f32_constants;
-
-  const uint32_t function_id = ids.Allocate();
-  const uint32_t label_id = ids.Allocate();
-  uint32_t position_output_var_id = 0u;
-  uint32_t composite_return_id = 0u;
-
   std::vector<uint32_t> words;
-  words.reserve(64u);
-
+  words.reserve(128u);
   words.push_back(SpvMagicNumber);
   words.push_back(kSpirvVersion13);
   words.push_back(0u);
   words.push_back(0u);  // id bound; backfilled after all ids are allocated
   words.push_back(0u);
 
-  AppendInstruction(&words, SpvOpCapability,
-                    {static_cast<uint32_t>(SpvCapabilityShader)});
-  AppendInstruction(&words, SpvOpMemoryModel,
-                    {static_cast<uint32_t>(SpvAddressingModelLogical),
-                     static_cast<uint32_t>(SpvMemoryModelGLSL450)});
-  if (has_position_return) {
-    position_output_var_id = ids.Allocate();
+  const auto& sections = context.Sections();
+  AppendSection(&words, sections.capabilities);
+  AppendSection(&words, sections.memory_model);
+  AppendSection(&words, sections.entry_points);
+  AppendSection(&words, sections.execution_modes);
+  AppendSection(&words, sections.debug);
+  AppendSection(&words, sections.annotations);
+  AppendSection(&words, sections.types_consts_globals);
+  AppendSection(&words, sections.functions);
 
-    AppendEntryPoint(&words, execution_model, function_id, module.entry_point,
-                     {position_output_var_id});
-  } else {
-    AppendEntryPoint(&words, execution_model, function_id, module.entry_point);
-  }
-
-  if (module.stage == ir::PipelineStage::kFragment) {
-    AppendInstruction(
-        &words, SpvOpExecutionMode,
-        {function_id, static_cast<uint32_t>(SpvExecutionModeOriginUpperLeft)});
-  }
-
-  AppendName(&words, function_id, module.entry_point);
-  if (has_position_return) {
-    AppendName(&words, position_output_var_id, "position_output");
-    AppendInstruction(
-        &words, SpvOpDecorate,
-        {position_output_var_id, static_cast<uint32_t>(SpvDecorationBuiltIn),
-         static_cast<uint32_t>(SpvBuiltInPosition)});
-  }
-  const auto void_type_id = GetOrCreateVoidType(&ids, &types, &words);
-  const auto function_type_id = GetOrCreateFunctionTypeVoid(&ids, &types, &words);
-  if (void_type_id == 0u || function_type_id == 0u) {
-    return false;
-  }
-
-  if (has_position_return) {
-    const auto output_ptr_type_id =
-        GetOrCreatePtrOutputVec4F32Type(&ids, &types, &words);
-    if (output_ptr_type_id == 0u) {
-      return false;
-    }
-
-    AppendInstruction(
-        &words, SpvOpVariable,
-        {output_ptr_type_id, position_output_var_id,
-         static_cast<uint32_t>(SpvStorageClassOutput)});
-
-    std::vector<uint32_t> constant_ids;
-    constant_ids.reserve(4u);
-    for (float value : return_inst.const_vec4_f32) {
-      const auto const_id = GetOrCreateF32Constant(&ids, &types, &f32_constants,
-                                                   &words, value);
-      if (const_id == 0u) {
-        return false;
-      }
-      constant_ids.push_back(const_id);
-    }
-  }
-  AppendInstruction(
-      &words, SpvOpFunction,
-      {void_type_id, function_id, static_cast<uint32_t>(SpvFunctionControlMaskNone),
-       function_type_id});
-  AppendInstruction(&words, SpvOpLabel, {label_id});
-  if (has_position_return) {
-    const auto vec4_type_id = GetOrCreateVec4F32Type(&ids, &types, &words);
-    if (vec4_type_id == 0u) {
-      return false;
-    }
-
-    std::vector<uint32_t> constant_ids;
-    constant_ids.reserve(4u);
-    for (float value : return_inst.const_vec4_f32) {
-      const auto const_id = GetOrCreateF32Constant(&ids, &types, &f32_constants,
-                                                   &words, value);
-      if (const_id == 0u) {
-        return false;
-      }
-      constant_ids.push_back(const_id);
-    }
-
-    composite_return_id = ids.Allocate();
-    AppendInstruction(&words, SpvOpCompositeConstruct,
-                      {vec4_type_id, composite_return_id, constant_ids[0],
-                       constant_ids[1], constant_ids[2], constant_ids[3]});
-    AppendInstruction(&words, SpvOpStore, {position_output_var_id, composite_return_id});
-  }
-  AppendInstruction(&words, SpvOpReturn, {});
-  AppendInstruction(&words, SpvOpFunctionEnd, {});
-
-  words[3] = ids.Bound();
+  words[3] = context.Bound();
 
   result_ = PackBinaryModule(words);
   return true;
