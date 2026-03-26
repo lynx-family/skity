@@ -5,8 +5,11 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
+
+#include "ir/type.h"
 
 namespace wgx {
 namespace ir {
@@ -19,18 +22,66 @@ enum class PipelineStage {
 
 enum class InstKind {
   kReturn,
+  kVariable,   // var declaration: result_id, type
+  kLoad,       // load from variable: result_id, type, var_id
+  kStore,      // store to variable: var_id, value_id
 };
 
 enum class ReturnValueKind {
   kNone,
   kConstVec4F32,
+  kVariableRef,  // return a variable reference (loaded)
+};
+
+// Operand for IR instructions
+struct Operand {
+  enum class Kind {
+    kNone,
+    kId,       // SSA value id
+    kConstF32, // float constant
+  };
+
+  Kind kind = Kind::kNone;
+  uint32_t id = 0;           // for kId
+  float const_f32 = 0.0f;    // for kConstF32
+
+  static Operand Id(uint32_t id) {
+    Operand op;
+    op.kind = Kind::kId;
+    op.id = id;
+    return op;
+  }
+
+  static Operand ConstF32(float value) {
+    Operand op;
+    op.kind = Kind::kConstF32;
+    op.const_f32 = value;
+    return op;
+  }
 };
 
 struct Instruction {
   InstKind kind = InstKind::kReturn;
+
+  // Result value id (if instruction produces a value)
+  uint32_t result_id = 0;
+
+  // Type of the result value (TypeId from TypeTable)
+  TypeId result_type = kInvalidTypeId;
+
+  // For return instruction
   bool has_return_value = false;
   ReturnValueKind return_value_kind = ReturnValueKind::kNone;
   std::array<float, 4> const_vec4_f32 = {0.f, 0.f, 0.f, 0.f};
+
+  // Variable reference for kVariable/kLoad return value
+  uint32_t var_id = 0;
+
+  // Operands for variable/load/store instructions
+  std::vector<Operand> operands = {};
+
+  // Variable name (for debugging)
+  std::string var_name;
 };
 
 struct Block {
@@ -42,12 +93,20 @@ struct Function {
   PipelineStage stage = PipelineStage::kUnknown;
   bool return_builtin_position = false;
   Block entry_block = {};
+
+  // Variable id allocator for this function
+  uint32_t next_var_id = 1;
+
+  uint32_t AllocateVarId() { return next_var_id++; }
 };
 
 struct Module {
   std::string entry_point = {};
   PipelineStage stage = PipelineStage::kUnknown;
   std::vector<Function> functions = {};
+
+  // Module-level type table (shared across functions)
+  std::unique_ptr<TypeTable> type_table;
 };
 
 }  // namespace ir

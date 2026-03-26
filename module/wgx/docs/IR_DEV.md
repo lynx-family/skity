@@ -4,6 +4,124 @@ This file records incremental development progress for the
 `WGSL -> AST -> Semantic Resolve -> IR -> SPIR-V` pipeline and the next
 implementation steps.
 
+## 2026-03-26
+
+### Summary
+
+Completed Phase A foundation work: implemented extensible type system (TypeTable),
+OOP-style Lowerer refactoring, and variable declaration/load/store support.
+
+### Completed
+
+1. **Implemented TypeTable for extensible type system (Phase A).**
+   - **Files**: `module/wgx/ir/type.h`, `module/wgx/ir/type.cpp`
+   - **Design**:
+     - Replaced `ValueType` enum with `TypeId` (uint32_t) + `TypeTable` design
+     - Module-level TypeTable: Types are shared across all functions in a module
+     - Type deduplication via hash map (`unordered_map<Type, TypeId>`)
+     - 1-based TypeId (0 reserved for `kInvalidTypeId`)
+   - **Supported types**:
+     - Scalar: `void`, `bool`, `i32`, `u32`, `f32`
+     - Vector: `vec2/3/4<T>` (parametric)
+     - Matrix: `matRxC<T>` (parametric)
+     - Array: `array<T, N>`
+     - Struct: user-defined with named members
+     - Pointer: `ptr<storage_class, T>`
+   - **Storage classes**: Function, Private, Uniform, Storage, Input, Output, Workgroup, Handle
+   - **SPIR-V integration**: Added `TypeEmitter` class for IR-to-SPIR-V type emission
+   - **Build**: Added to `module/wgx/CMakeLists.txt`
+
+2. **Lowerer refactored to OOP design.**
+   - **File**: `module/wgx/lower/lower_to_ir.cpp`
+   - **Changes**:
+     - Converted from C-style free functions to `Lowerer` class
+     - Encapsulates AST module, entry point, IR function as member variables
+     - Private methods: `LowerStatement()`, `LowerExpression()`, `LowerVarDecl()`, etc.
+     - Variable tracking via `var_ids_` member (replaced `LowerContext`)
+     - Public interface unchanged: `LowerToIR()` creates `Lowerer` and calls `Run()`
+   - **Benefits**: Better encapsulation, easier to extend, follows C++ best practices
+
+3. **IR instruction set extended with variable support.**
+   - **File**: `module/wgx/ir/module.h`
+   - **Added instructions**:
+     - `InstKind::kVariable` - variable declaration
+     - `InstKind::kLoad` - load from variable
+     - `InstKind::kStore` - store to variable
+   - **Added structures**:
+     - `Operand` - instruction operands (ID or constant)
+     - `ReturnValueKind::kVariableRef` - return via variable reference
+   - **Changes**: `Instruction::result_type` changed from `ValueType` enum to `TypeId`
+
+4. **Lowering extended for variable support.**
+   - **File**: `module/wgx/lower/lower_to_ir.cpp`
+   - **Added**:
+     - `ResolveType()` - converts AST Type to IR TypeId via TypeTable
+     - `LowerVarDecl()` - handles `var` statements with initializer
+     - `LowerVarInitializer()` - emits store for variable initialization
+     - `LowerIdentifierExpression()` - resolves variable references
+   - **Current capability**: `var pos: vec4<f32> = vec4<f32>(...); return pos;`
+
+5. **SPIR-V emitter extended for variable support.**
+   - **File**: `module/wgx/spirv/emitter.cpp`
+   - **Added**:
+     - `TypeEmitter` class - emits SPIR-V type instructions from TypeTable
+     - `LocalVarInfo` - tracks IR variable -> SPIR-V ID mapping
+     - `OpVariable` emission for function-scope variables
+     - `OpStore` for variable initialization
+     - `OpLoad` for returning variable references
+     - `OpCompositeConstruct` for vector construction
+   - **Changed**: Uses `module_.type_table` (Module-level) instead of per-Function
+
+6. **Added validation test for local variable return.**
+   - **File**: `test/ut/wgx/wgx_spirv_smoke_test.cc`
+   - **Test**: `EmitsVertexSpirvBinaryForLocalVariableReturn`
+   - **Validates**:
+     ```wgsl
+     @vertex
+     fn main() -> @builtin(position) vec4<f32> {
+       var pos: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+       return pos;
+     }
+     ```
+   - **Checks**: `OpVariable`, `OpStore`, `OpLoad`, `OpCompositeConstruct` present
+
+### Validation
+
+- All 13 WGX tests pass
+- All 4 generated SPIR-V binaries pass `spirv-val` (Vulkan 1.1)
+
+### Files Modified
+
+```
+module/wgx/ir/type.h                      (new)
+module/wgx/ir/type.cpp                    (new)
+module/wgx/ir/module.h                    (modified)
+module/wgx/lower/lower_to_ir.cpp          (modified)
+module/wgx/spirv/emitter.cpp              (modified)
+module/wgx/CMakeLists.txt                 (modified)
+test/ut/wgx/wgx_spirv_smoke_test.cc       (modified)
+module/wgx/docs/IR_DEV.md                 (this file)
+```
+
+### Current Capability Boundary
+
+1. **Works**:
+   - vertex/fragment entry mapping
+   - fragment `OriginUpperLeft` execution mode
+   - void return path
+   - vertex `@builtin(position) vec4<f32>` return with constant vec4 constructor
+   - local variable declaration (`var pos: vec4<f32>`) with initializer
+   - returning local variable reference (`return pos`)
+   - Module-level TypeTable for type management
+
+2. **Not yet supported**:
+   - non-constant variable initialization
+   - arithmetic operations
+   - general expressions, control flow, resources
+   - broader IO decoration coverage
+
+---
+
 ## 2026-03-25
 
 ### Completed
@@ -18,7 +136,6 @@ implementation steps.
      - `OpEntryPoint`
      - Fragment-only `OpExecutionMode OriginUpperLeft`
      - `OpName`
-     - `OpModuleProcessed "skity-wgx-dev"`
      - `OpTypeVoid`, `OpTypeFunction`, `OpFunction`, `OpLabel`, `OpReturn`,
        `OpFunctionEnd`
    - Generator word remains `0` (unknown/unregistered tool id).
@@ -62,28 +179,9 @@ implementation steps.
    - general expressions, variables, control flow, resources, and IO decoration
      beyond the current minimal path.
 
+---
+
 ## Next Plan
-
-### Phase A: Expand IR model (foundation)
-
-1. Split/extend IR types beyond current single-header minimal structs.
-2. Add explicit type system:
-   - scalar (`bool`, `i32`, `u32`, `f32`)
-   - vector/matrix
-   - pointer/storage class metadata where needed
-3. Add value/instruction coverage:
-   - constants, local/global vars, load/store
-   - arithmetic and compare
-   - call
-   - control flow terminators (`branch`, `cond_branch`, `return value`)
-4. Add light IR verifier utilities:
-   - each block has valid terminator
-   - function return consistency
-   - type consistency for core instructions
-
-Acceptance:
-1. IR can represent current WGSL subset used in tests without loss.
-2. Invalid IR patterns fail fast before SPIR-V emission.
 
 ### Phase B: Lowering coverage (AST/Semantic -> IR)
 
@@ -136,6 +234,8 @@ Acceptance:
 1. Regressions in emitted SPIR-V structure are caught by tests.
 2. CI enforces SPIR-V validity for supported cases.
 
+---
+
 ## Immediate next task recommendation
 
 Implement the shortest meaningful feature slice:
@@ -147,81 +247,3 @@ Rationale:
 1. Unblocks real graphics stage output.
 2. Forces implementation of key missing type/value/decorate pieces without
    requiring full language coverage first.
-
-## 2026-03-26
-
-### Completed
-
-1. Vertex `@builtin(position) vec4<f32>` return path is now supported end-to-end.
-   - Files:
-     - `module/wgx/ir/module.h`
-     - `module/wgx/lower/lower_to_ir.cpp`
-     - `module/wgx/spirv/emitter.cpp`
-     - `test/ut/wgx/wgx_spirv_smoke_test.cc`
-   - Status:
-     - IR instruction model now carries minimal return-value payload for
-       `const vec4<f32>`.
-     - Lowering now accepts the focused shader slice:
-       - vertex entry point
-       - return type `@builtin(position) vec4<f32>`
-       - return expression `vec4<f32>(float,float,float,float)`
-     - SPIR-V emission now writes output interface variable +
-       `BuiltIn Position` decoration and stores the return value before
-       `OpReturn`.
-
-2. SPIR-V emitter id management refactored from hardcoded ids to dynamic
-   allocation.
-   - File: `module/wgx/spirv/emitter.cpp`
-   - Status:
-     - Added minimal `IdAllocator`.
-     - Header id bound is backfilled from allocator state.
-     - Added minimal type/constant dedup cache for current supported path:
-       - `void`, function-void type
-       - `f32`, `vec4<f32>`, `ptr<Output, vec4<f32>>`
-       - `f32` constants by bit-pattern
-
-3. SPIR-V dump support added in UT for local inspection.
-   - Files:
-     - `test/ut/wgx/wgx_spirv_smoke_test.cc`
-     - `test/ut/CMakeLists.txt`
-   - Status:
-     - Smoke tests now dump generated `.spv` binaries.
-     - Output directory priority:
-       1. `WGX_SPIRV_DUMP_DIR` env var (if set)
-       2. `WGX_SPIRV_DUMP_DEFAULT_DIR` compile macro
-       3. fallback path
-     - `WGX_SPIRV_DUMP_DEFAULT_DIR` is wired from `CMAKE_BINARY_DIR`.
-
-4. SPIR-V layout fixes for validator compliance.
-   - File: `module/wgx/spirv/emitter.cpp`
-   - Status:
-     - Removed `OpModuleProcessed` emission for now (to avoid section-order
-       ambiguity in current minimal emitter).
-     - Ensured function-local composite construction is emitted in block scope.
-     - Ensured entry-point declaration section ordering is valid for Vulkan
-       validator semantics.
-
-5. SPIR-V emitter refactor for better code organization.
-   - File: `module/wgx/spirv/emitter.cpp`
-   - Status:
-     - Extract `ModuleBuilder` class to handle module-level SPIR-V emission.
-     - Added `EmitContext` class to hold emitter state like type and id allocation.
-
-4. Validator result:
-   - pass for all three generated binaries:
-     - `wgx_vs_main_minimal.spv`
-     - `wgx_fs_main_minimal.spv`
-     - `wgx_vs_main_position.spv`
-
-### Current capability boundary (updated)
-
-1. Works:
-   - vertex/fragment entry mapping.
-   - fragment `OriginUpperLeft` execution mode.
-   - void return path.
-   - vertex `@builtin(position) vec4<f32>` return with constant vec4
-     constructor.
-2. Not yet supported:
-   - non-constant return expressions.
-   - general expressions, variables, control flow, resources, and broader IO
-     decoration coverage.
