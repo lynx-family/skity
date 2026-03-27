@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include <string>
+#include <cstdint>
+#include <vector>
 
 #include "ir/module.h"
 
@@ -18,10 +19,10 @@ class Emitter {
 
   bool Emit(const ir::Module& module);
 
-  std::string GetResult() const { return result_; }
+  const std::vector<uint32_t>& GetResult() const { return result_; }
 
  private:
-  std::string result_ = {};
+  std::vector<uint32_t> result_ = {};
 };
 
 }  // namespace spirv

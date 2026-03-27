@@ -75,7 +75,8 @@ void AppendName(std::vector<uint32_t>* words, uint32_t target_id,
   words->insert(words->end(), name_words.begin(), name_words.end());
 }
 
-void AppendSection(std::vector<uint32_t>* dst, const std::vector<uint32_t>& src) {
+void AppendSection(std::vector<uint32_t>* dst,
+                   const std::vector<uint32_t>& src) {
   if (dst == nullptr || src.empty()) return;
   dst->insert(dst->end(), src.begin(), src.end());
 }
@@ -151,22 +152,11 @@ uint32_t FloatToBits(float value) {
   return bits;
 }
 
-std::string PackBinaryModule(const std::vector<uint32_t>& words) {
-  std::string result(words.size() * sizeof(uint32_t), '\0');
-  for (size_t i = 0; i < words.size(); ++i) {
-    const auto word = words[i];
-    result[i * 4u + 0u] = static_cast<char>(word & 0xffu);
-    result[i * 4u + 1u] = static_cast<char>((word >> 8u) & 0xffu);
-    result[i * 4u + 2u] = static_cast<char>((word >> 16u) & 0xffu);
-    result[i * 4u + 3u] = static_cast<char>((word >> 24u) & 0xffu);
-  }
-  return result;
-}
-
 class IdAllocator {
  public:
   uint32_t Allocate() { return next_id_++; }
   uint32_t Bound() const { return next_id_; }
+
  private:
   uint32_t next_id_ = 1u;
 };
@@ -193,7 +183,7 @@ class TypeEmitter {
 
   uint32_t EmitType(ir::TypeId type_id) {
     if (type_id == ir::kInvalidTypeId) return 0;
-    
+
     auto it = emitted_types_.find(type_id);
     if (it != emitted_types_.end()) {
       return it->second;
@@ -248,10 +238,10 @@ class TypeEmitter {
 
   uint32_t GetFunctionTypeVoid() {
     if (function_void_type_ != 0) return function_void_type_;
-    
+
     uint32_t void_type = EmitType(type_table_->GetVoidType());
     if (void_type == 0) return 0;
-    
+
     function_void_type_ = ids_->Allocate();
     AppendInstruction(&sections_->types_consts_globals, SpvOpTypeFunction,
                       {function_void_type_, void_type});
@@ -333,10 +323,11 @@ class TypeEmitter {
   void EmitPointerType(const ir::Type* type, uint32_t spirv_id) {
     uint32_t pointee_id = EmitType(type->element_type);
     if (pointee_id == 0) return;
-    AppendInstruction(&sections_->types_consts_globals, SpvOpTypePointer,
-                      {spirv_id, static_cast<uint32_t>(ToSpvStorageClass(
-                                     type->storage_class)),
-                       pointee_id});
+    AppendInstruction(
+        &sections_->types_consts_globals, SpvOpTypePointer,
+        {spirv_id,
+         static_cast<uint32_t>(ToSpvStorageClass(type->storage_class)),
+         pointee_id});
   }
 
   struct PairHash {
@@ -351,8 +342,8 @@ class TypeEmitter {
   ir::TypeTable* type_table_;
   std::unordered_map<ir::TypeId, uint32_t> emitted_types_;
   std::unordered_map<uint32_t, uint32_t> f32_constants_;
-  std::unordered_map<std::pair<ir::TypeId, SpvStorageClass>, uint32_t,
-                     PairHash> pointer_types_;
+  std::unordered_map<std::pair<ir::TypeId, SpvStorageClass>, uint32_t, PairHash>
+      pointer_types_;
   uint32_t function_void_type_ = 0;
 };
 
@@ -379,9 +370,9 @@ class ModuleBuilder {
 
   bool Build(SectionBuffers* sections, std::vector<uint32_t>* output_words) {
     if (sections == nullptr || output_words == nullptr) return false;
-    
+
     sections_ = sections;
-    
+
     ir::TypeTable* type_table = module_.type_table.get();
     if (type_table == nullptr) return false;
 
@@ -406,10 +397,10 @@ class ModuleBuilder {
   bool AnalyzeEntryBlock() {
     const auto& instructions = entry_.entry_block.instructions;
     if (instructions.empty()) return false;
-    
+
     const auto& last_inst = instructions.back();
     if (last_inst.kind != ir::InstKind::kReturn) return false;
-    
+
     has_position_return_ = last_inst.has_return_value;
 
     for (const auto& inst : instructions) {
@@ -455,9 +446,9 @@ class ModuleBuilder {
 
   void WriteExecutionModeSection() {
     if (module_.stage != ir::PipelineStage::kFragment) return;
-    AppendInstruction(&sections_->execution_modes, SpvOpExecutionMode,
-                      {function_id_,
-                       static_cast<uint32_t>(SpvExecutionModeOriginUpperLeft)});
+    AppendInstruction(
+        &sections_->execution_modes, SpvOpExecutionMode,
+        {function_id_, static_cast<uint32_t>(SpvExecutionModeOriginUpperLeft)});
   }
 
   void WriteDebugSection() {
@@ -477,16 +468,17 @@ class ModuleBuilder {
 
   void WriteAnnotationSection() {
     if (!has_position_return_) return;
-    AppendInstruction(&sections_->annotations, SpvOpDecorate,
-                      {position_output_var_id_,
-                       static_cast<uint32_t>(SpvDecorationBuiltIn),
-                       static_cast<uint32_t>(SpvBuiltInPosition)});
+    AppendInstruction(
+        &sections_->annotations, SpvOpDecorate,
+        {position_output_var_id_, static_cast<uint32_t>(SpvDecorationBuiltIn),
+         static_cast<uint32_t>(SpvBuiltInPosition)});
   }
 
   bool WriteTypeConstGlobalSection() {
-    uint32_t void_type = type_emitter_->EmitType(type_emitter_->GetTypeTable()->GetVoidType());
+    uint32_t void_type =
+        type_emitter_->EmitType(type_emitter_->GetTypeTable()->GetVoidType());
     if (void_type == 0) return false;
-    
+
     function_type_id_ = type_emitter_->GetFunctionTypeVoid();
     if (function_type_id_ == 0) return false;
 
@@ -495,12 +487,12 @@ class ModuleBuilder {
     ir::TypeId vec4_type = type_emitter_->GetTypeTable()->GetVectorType(
         type_emitter_->GetTypeTable()->GetF32Type(), 4);
     if (vec4_type == ir::kInvalidTypeId) return false;
-    
+
     vec4_type_id_ = type_emitter_->EmitType(vec4_type);
     if (vec4_type_id_ == 0) return false;
 
-    uint32_t output_ptr_type = type_emitter_->GetPointerType(
-        vec4_type, SpvStorageClassOutput);
+    uint32_t output_ptr_type =
+        type_emitter_->GetPointerType(vec4_type, SpvStorageClassOutput);
     if (output_ptr_type == 0) return false;
 
     AppendInstruction(&sections_->types_consts_globals, SpvOpVariable,
@@ -510,8 +502,8 @@ class ModuleBuilder {
     const auto& return_inst = entry_.entry_block.instructions.back();
     if (return_inst.return_value_kind == ir::ReturnValueKind::kConstVec4F32) {
       for (size_t i = 0; i < position_const_ids_.size(); ++i) {
-        position_const_ids_[i] = type_emitter_->EmitF32Constant(
-            return_inst.const_vec4_f32[i]);
+        position_const_ids_[i] =
+            type_emitter_->EmitF32Constant(return_inst.const_vec4_f32[i]);
         if (position_const_ids_[i] == 0) return false;
       }
     }
@@ -520,17 +512,18 @@ class ModuleBuilder {
   }
 
   bool WriteFunctionSection() {
-    uint32_t void_type = type_emitter_->EmitType(type_emitter_->GetTypeTable()->GetVoidType());
-    
-    AppendInstruction(&sections_->functions, SpvOpFunction,
-                      {void_type, function_id_,
-                       static_cast<uint32_t>(SpvFunctionControlMaskNone),
-                       function_type_id_});
+    uint32_t void_type =
+        type_emitter_->EmitType(type_emitter_->GetTypeTable()->GetVoidType());
+
+    AppendInstruction(
+        &sections_->functions, SpvOpFunction,
+        {void_type, function_id_,
+         static_cast<uint32_t>(SpvFunctionControlMaskNone), function_type_id_});
     AppendInstruction(&sections_->functions, SpvOpLabel, {label_id_});
 
     for (auto& var : local_vars_) {
-      uint32_t ptr_type = type_emitter_->GetPointerType(
-          var.var_type, SpvStorageClassFunction);
+      uint32_t ptr_type =
+          type_emitter_->GetPointerType(var.var_type, SpvStorageClassFunction);
       if (ptr_type == 0) return false;
       AppendInstruction(&sections_->functions, SpvOpVariable,
                         {ptr_type, var.spirv_var_id,
@@ -567,7 +560,8 @@ class ModuleBuilder {
 
     std::array<uint32_t, 4> const_ids;
     for (size_t i = 0; i < 4; ++i) {
-      const_ids[i] = type_emitter_->EmitF32Constant(inst.operands[i + 1].const_f32);
+      const_ids[i] =
+          type_emitter_->EmitF32Constant(inst.operands[i + 1].const_f32);
       if (const_ids[i] == 0) return false;
     }
 
@@ -642,11 +636,11 @@ class ModuleBuilder {
   const ir::Module& module_;
   const ir::Function& entry_;
   SpvExecutionModel execution_model_;
-  
+
   IdAllocator ids_;
   SectionBuffers* sections_ = nullptr;
   std::unique_ptr<TypeEmitter> type_emitter_;
-  
+
   bool has_position_return_ = false;
   uint32_t function_id_ = 0;
   uint32_t label_id_ = 0;
@@ -662,7 +656,8 @@ class ModuleBuilder {
 bool Emitter::Emit(const ir::Module& module) {
   result_.clear();
 
-  if (module.entry_point.empty() || module.stage == ir::PipelineStage::kUnknown) {
+  if (module.entry_point.empty() ||
+      module.stage == ir::PipelineStage::kUnknown) {
     return false;
   }
   if (module.functions.empty()) return false;
@@ -681,7 +676,7 @@ bool Emitter::Emit(const ir::Module& module) {
   ModuleBuilder builder(module, *entry_function, execution_model);
   if (!builder.Build(&sections, &words)) return false;
 
-  result_ = PackBinaryModule(words);
+  result_ = std::move(words);
   return true;
 }
 

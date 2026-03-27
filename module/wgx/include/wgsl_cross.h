@@ -249,6 +249,8 @@ struct WGX_API CompilerContext {
 struct WGX_API Result {
   std::string content = {};
 
+  std::vector<uint32_t> spirv = {};
+
   std::vector<BindGroup> bind_groups = {};
 
   bool success = false;
@@ -264,6 +266,13 @@ struct WGX_API Result {
   Result(std::string content, std::vector<BindGroup> groups,
          CompilerContext context)
       : content(std::move(content)),
+        bind_groups(std::move(groups)),
+        success(true),
+        context(std::move(context)) {}
+
+  Result(std::vector<uint32_t> spirv, std::vector<BindGroup> groups,
+         CompilerContext context)
+      : spirv(std::move(spirv)),
         bind_groups(std::move(groups)),
         success(true),
         context(std::move(context)) {}
