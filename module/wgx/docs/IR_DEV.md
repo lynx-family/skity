@@ -4,6 +4,100 @@ This file records incremental development progress for the
 `WGSL -> AST -> Semantic Resolve -> IR -> SPIR-V` pipeline and the next
 implementation steps.
 
+## 2026-03-27
+
+### Summary
+
+Completed the next Phase B slice for local variable mutation: assignment
+statements now lower to IR and emit valid SPIR-V for the currently supported
+`vec4<f32>` vertex-position path.
+
+### Completed
+
+1. **Lowering extended to support simple assignment statements.**
+   - **File**: `module/wgx/lower/lower_to_ir.cpp`
+   - **Added**:
+     - `LowerAssignStatement()` for `identifier = expression`
+     - `LowerStoreValue()` helper shared by variable initialization and later
+       assignment
+   - **Current supported subset**:
+     - plain assignment only (`=`)
+     - lhs must be a local identifier
+     - rhs may be a supported `vec4<f32>` constant or local variable reference
+   - **Still excluded**:
+     - compound assignment (`+=`, `-=`, ...)
+     - member/index/access-chain lhs forms
+
+2. **IR store path generalized for assignment reuse.**
+   - **Files**: `module/wgx/lower/lower_to_ir.cpp`,
+     `module/wgx/ir/module.h`
+   - **Design update**:
+     - `kStore` continues to represent writes to variables
+     - store operands may now carry either:
+       - destination variable id + four `f32` constants, or
+       - destination variable id + source variable id
+   - **Effect**:
+     - variable initialization and assignment now share the same IR write form
+     - prepares the pipeline for future variable-to-variable copies and richer
+       rhs expression support
+
+3. **SPIR-V emitter extended for assignment-driven stores.**
+   - **File**: `module/wgx/spirv/emitter.cpp`
+   - **Added/changed**:
+     - `EmitStore()` now accepts two store shapes:
+       - constant vector write: `OpCompositeConstruct` + `OpStore`
+       - variable copy write: `OpLoad` + `OpStore`
+   - **Current effect**:
+     - WGSL local assignment updates can reuse the existing local variable
+       storage path without adding new IR instructions
+
+4. **Added smoke coverage for assigned local variable return.**
+   - **File**: `test/ut/wgx/wgx_spirv_smoke_test.cc`
+   - **Test**: `EmitsVertexSpirvBinaryForAssignedLocalVariableReturn`
+   - **Validates**:
+     ```wgsl
+     @vertex
+     fn main() -> @builtin(position) vec4<f32> {
+       var pos: vec4<f32>;
+       pos = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+       return pos;
+     }
+     ```
+   - **Checks**: `OpVariable`, `OpStore`, `OpLoad`,
+     `OpCompositeConstruct`, builtin position decoration
+
+### Validation
+
+1. Rebuilt unit test target:
+   - `cmake --build out/cmake_host_build --target skity_unit_test`
+2. Ran targeted new smoke test:
+   - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.EmitsVertexSpirvBinaryForAssignedLocalVariableReturn'`
+   - result: pass (`1/1`)
+3. Ran WGX SPIR-V smoke suite:
+   - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.*'`
+   - result: pass (`5/5`)
+
+### Current Capability Boundary
+
+1. **Works**:
+   - vertex/fragment entry mapping
+   - fragment `OriginUpperLeft` execution mode
+   - void return path
+   - vertex `@builtin(position) vec4<f32>` return with constant vec4 constructor
+   - local variable declaration with or without initializer for `vec4<f32>`
+   - local variable assignment using `=` for supported `vec4<f32>` values
+   - returning local variable reference (`return pos`)
+   - module-level `TypeTable` for type management
+
+2. **Not yet supported**:
+   - compound assignment (`+=`, `-=`, ...)
+   - non-identifier assignment lhs (member/index/access chain)
+   - arithmetic operations
+   - general expressions, control flow, resources
+   - broader IO decoration coverage
+
+---
+
 ## 2026-03-26
 
 ### Summary
@@ -186,7 +280,7 @@ module/wgx/docs/IR_DEV.md                 (this file)
 ### Phase B: Lowering coverage (AST/Semantic -> IR)
 
 1. Lower return value path and common expressions.
-2. Lower local declarations and assignment.
+2. Lower local declarations and assignment. (done for simple local `=` path)
 3. Lower if/else and basic loop forms in structured-friendly form.
 4. Preserve entry IO metadata from attributes (`@location`, `@builtin`).
 
@@ -238,12 +332,15 @@ Acceptance:
 
 ## Immediate next task recommendation
 
-Implement the shortest meaningful feature slice:
-1. Vertex entry point with `@builtin(position) -> vec4<f32>`
-2. IR return-value representation for vector constant
-3. Emitter support for output variable + builtin decoration + return-value path
+Implement the next shortest meaningful feature slice:
+1. Add explicit coverage for variable-to-variable assignment
+   - example: `var a = vec4<f32>(...); var b: vec4<f32>; b = a; return b;`
+2. Extend lowering/emitter support for simple arithmetic on supported vector values
+   - start with `vec4<f32>` add/sub where both operands are already representable
+3. Keep assignment support intentionally narrow until arithmetic/value modeling is stable
 
 Rationale:
-1. Unblocks real graphics stage output.
-2. Forces implementation of key missing type/value/decorate pieces without
-   requiring full language coverage first.
+1. Variable-copy assignment is already structurally supported by the current store path
+   and should be locked in with tests before broader expression work.
+2. Simple arithmetic is the next feature that materially expands shader usefulness
+   without requiring control flow or resource support first.

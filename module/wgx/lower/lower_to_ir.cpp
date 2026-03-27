@@ -191,6 +191,9 @@ class Lowerer {
       case ast::StatementType::kVarDecl:
         return LowerVarDecl(
             static_cast<const ast::VarDeclStatement*>(statement), block);
+      case ast::StatementType::kAssign:
+        return LowerAssignStatement(
+            static_cast<const ast::AssignStatement*>(statement), block);
       default:
         return false;
     }
@@ -287,21 +290,64 @@ class Lowerer {
     if (!LowerExpression(initializer, &init_inst)) {
       return false;
     }
+    return LowerStoreValue(init_inst, var_id, block);
+  }
 
-    ir::TypeId vec4_type = type_table_->GetVectorType(
-        type_table_->GetF32Type(), 4);
-    if (init_inst.result_type != vec4_type) {
+  // Lowers an assignment statement.
+  bool LowerAssignStatement(const ast::AssignStatement* assign,
+                            ir::Block* block) {
+    if (assign == nullptr || block == nullptr || assign->lhs == nullptr ||
+        assign->rhs == nullptr || assign->op.has_value()) {
       return false;
     }
 
-    // Create a store instruction
+    if (assign->lhs->GetType() != ast::ExpressionType::kIdentifier) {
+      return false;
+    }
+
+    auto* ident = static_cast<ast::IdentifierExp*>(assign->lhs);
+    if (ident->ident == nullptr) {
+      return false;
+    }
+
+    const uint32_t var_id = LookupVar(std::string(ident->ident->name));
+    if (var_id == 0) {
+      return false;
+    }
+
+    ir::Instruction value_inst;
+    if (!LowerExpression(assign->rhs, &value_inst)) {
+      return false;
+    }
+
+    return LowerStoreValue(value_inst, var_id, block);
+  }
+
+  bool LowerStoreValue(const ir::Instruction& value_inst, uint32_t var_id,
+                       ir::Block* block) {
+    if (block == nullptr || var_id == 0) {
+      return false;
+    }
+
+    ir::TypeId vec4_type = type_table_->GetVectorType(
+        type_table_->GetF32Type(), 4);
+    if (value_inst.result_type != vec4_type) {
+      return false;
+    }
+
     ir::Instruction store_inst;
     store_inst.kind = ir::InstKind::kStore;
     store_inst.operands.push_back(ir::Operand::Id(var_id));
-    for (size_t i = 0; i < 4; ++i) {
-      store_inst.operands.push_back(
-          ir::Operand::ConstF32(init_inst.const_vec4_f32[i]));
+
+    if (value_inst.var_id != 0) {
+      store_inst.operands.push_back(ir::Operand::Id(value_inst.var_id));
+    } else {
+      for (size_t i = 0; i < 4; ++i) {
+        store_inst.operands.push_back(
+            ir::Operand::ConstF32(value_inst.const_vec4_f32[i]));
+      }
     }
+
     block->instructions.emplace_back(store_inst);
     return true;
   }

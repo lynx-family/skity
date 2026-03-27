@@ -232,6 +232,39 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForAssignedLocalVariableReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32>;
+  pos = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_var_assign_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpEntryPoint));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeVector));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypePointer));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstant));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
 #endif
 
 }  // namespace

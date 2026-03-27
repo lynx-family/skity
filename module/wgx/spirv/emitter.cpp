@@ -552,26 +552,42 @@ class ModuleBuilder {
   }
 
   bool EmitStore(const ir::Instruction& inst) {
-    if (inst.operands.size() < 5) return false;
+    if (inst.operands.size() < 2) return false;
+    if (inst.operands[0].kind != ir::Operand::Kind::kId) return false;
 
     uint32_t ir_var_id = inst.operands[0].id;
     auto var_it = FindLocalVar(ir_var_id);
     if (var_it == local_vars_.end()) return false;
 
-    std::array<uint32_t, 4> const_ids;
-    for (size_t i = 0; i < 4; ++i) {
-      const_ids[i] =
-          type_emitter_->EmitF32Constant(inst.operands[i + 1].const_f32);
-      if (const_ids[i] == 0) return false;
+    uint32_t value_id = 0;
+    if (inst.operands.size() == 2 &&
+        inst.operands[1].kind == ir::Operand::Kind::kId) {
+      auto src_it = FindLocalVar(inst.operands[1].id);
+      if (src_it == local_vars_.end()) return false;
+      value_id = ids_.Allocate();
+      AppendInstruction(&sections_->functions, SpvOpLoad,
+                        {vec4_type_id_, value_id, src_it->spirv_var_id});
+    } else if (inst.operands.size() == 5) {
+      std::array<uint32_t, 4> const_ids;
+      for (size_t i = 0; i < 4; ++i) {
+        if (inst.operands[i + 1].kind != ir::Operand::Kind::kConstF32) {
+          return false;
+        }
+        const_ids[i] =
+            type_emitter_->EmitF32Constant(inst.operands[i + 1].const_f32);
+        if (const_ids[i] == 0) return false;
+      }
+
+      value_id = ids_.Allocate();
+      AppendInstruction(&sections_->functions, SpvOpCompositeConstruct,
+                        {vec4_type_id_, value_id, const_ids[0], const_ids[1],
+                         const_ids[2], const_ids[3]});
+    } else {
+      return false;
     }
 
-    uint32_t composite_id = ids_.Allocate();
-    AppendInstruction(&sections_->functions, SpvOpCompositeConstruct,
-                      {vec4_type_id_, composite_id, const_ids[0], const_ids[1],
-                       const_ids[2], const_ids[3]});
-
     AppendInstruction(&sections_->functions, SpvOpStore,
-                      {var_it->spirv_var_id, composite_id});
+                      {var_it->spirv_var_id, value_id});
     return true;
   }
 
