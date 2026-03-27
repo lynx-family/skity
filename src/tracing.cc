@@ -46,6 +46,16 @@ ScopedTraceEvent::ScopedTraceEvent(const char* name, int64_t trace_id)
   }
 }
 
+ScopedTraceEvent::ScopedTraceEvent(const char* name, const char* arg1_name,
+                                   const char* arg1_val, const char* arg2_name,
+                                   const char* arg2_val)
+    : name_(name), trace_id_(-1) {
+  if (g_trace_handler.begin_section) {
+    g_trace_handler.begin_section(SKITY_TRACE_CATEGORY, name_, trace_id_,
+                                  arg1_name, arg1_val, arg2_name, arg2_val);
+  }
+}
+
 ScopedTraceEvent::~ScopedTraceEvent() {
   if (g_trace_handler.end_section) {
     g_trace_handler.end_section(SKITY_TRACE_CATEGORY, name_, trace_id_);

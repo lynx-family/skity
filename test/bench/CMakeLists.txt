@@ -79,3 +79,14 @@ target_link_libraries(skity_hw_render_bench
             "-framework AppKit")
 
 target_link_libraries(skity_hw_render_bench PRIVATE glm::glm-header-only)
+
+if (SKITY_BENCH_ENABLE_PERFETTO)
+    set(PERFETTO_SDK_DIR "${CMAKE_SOURCE_DIR}/third_party/perfetto")
+    add_library(perfetto STATIC "${PERFETTO_SDK_DIR}/perfetto.cc")
+    target_compile_definitions(perfetto PRIVATE PERFETTO_SDK_IMPLEMENTATION)
+    target_include_directories(perfetto PUBLIC "${PERFETTO_SDK_DIR}")
+    target_compile_features(perfetto PRIVATE cxx_std_17)
+
+    target_compile_definitions(skity_hw_render_bench PRIVATE SKITY_BENCH_ENABLE_PERFETTO=1)
+    target_link_libraries(skity_hw_render_bench PRIVATE perfetto)
+endif()

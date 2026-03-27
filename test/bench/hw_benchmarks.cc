@@ -15,13 +15,133 @@
 #include <sstream>
 #include <vector>
 
+namespace fs = std::filesystem;
+
+#ifdef SKITY_BENCH_ENABLE_PERFETTO
+#include <skity/utils/trace_event.hpp>
+
+#include "perfetto.h"
+
+PERFETTO_DEFINE_CATEGORIES(
+    perfetto::Category("skity2d").SetDescription("Skity Events"));
+
+PERFETTO_TRACK_EVENT_STATIC_STORAGE();
+
+#define SKITY_TRACE_EVENT(name) TRACE_EVENT("skity2d", name)
+
+static void PerfettoTraceBegin(const char* category_group,
+                               const char* section_name, int64_t trace_id,
+                               const char* arg1_name, const char* arg1_val,
+                               const char* arg2_name, const char* arg2_val) {
+  if (section_name) {
+    if (arg1_name && arg2_name) {
+      TRACE_EVENT_BEGIN("skity2d", perfetto::DynamicString(section_name),
+                        perfetto::DynamicString(arg1_name),
+                        perfetto::DynamicString(arg1_val ? arg1_val : ""),
+                        perfetto::DynamicString(arg2_name),
+                        perfetto::DynamicString(arg2_val ? arg2_val : ""));
+    } else if (arg1_name) {
+      TRACE_EVENT_BEGIN("skity2d", perfetto::DynamicString(section_name),
+                        perfetto::DynamicString(arg1_name),
+                        perfetto::DynamicString(arg1_val ? arg1_val : ""));
+    } else if (arg2_name) {
+      TRACE_EVENT_BEGIN("skity2d", perfetto::DynamicString(section_name),
+                        perfetto::DynamicString(arg2_name),
+                        perfetto::DynamicString(arg2_val ? arg2_val : ""));
+    } else {
+      TRACE_EVENT_BEGIN("skity2d", perfetto::DynamicString(section_name));
+    }
+  }
+}
+
+static void PerfettoTraceEnd(const char* category_group,
+                             const char* section_name, int64_t trace_id) {
+  TRACE_EVENT_END("skity2d");
+}
+
+static void PerfettoTraceCounter(const char* category, const char* name,
+                                 uint64_t counter, bool incremental) {
+  if (name) {
+    TRACE_COUNTER("skity2d",
+                  perfetto::CounterTrack{perfetto::DynamicString{name}},
+                  counter);
+  }
+}
+
+static void RegisterSkityPerfettoHandler() {
+  skity::SkityTraceHandler handler;
+  handler.begin_section = PerfettoTraceBegin;
+  handler.end_section = PerfettoTraceEnd;
+  handler.counter = PerfettoTraceCounter;
+  if (skity::InjectTraceHandler(handler)) {
+    std::cout << "Successfully injected Skity Trace Handler" << std::endl;
+  }
+}
+
+static std::unique_ptr<perfetto::TracingSession> StartPerfettoSession() {
+  perfetto::TracingInitArgs args;
+  args.backends |= perfetto::kInProcessBackend;
+  // Handle high-frequency events by increasing SMB size
+  args.shmem_size_hint_kb = 64 * 1024;  // 64MB SMB
+  args.shmem_page_size_hint_kb = 32;    // 32KB Pages
+  perfetto::Tracing::Initialize(args);
+  perfetto::TrackEvent::Register();
+
+  perfetto::protos::gen::TrackEventConfig track_event_cfg;
+  track_event_cfg.add_disabled_categories("*");
+  track_event_cfg.add_enabled_categories("skity2d");
+
+  perfetto::TraceConfig cfg;
+  auto* buffer_config = cfg.add_buffers();
+  buffer_config->set_size_kb(1024 * 1024);  // 1GB Buffer
+  buffer_config->set_fill_policy(
+      perfetto::protos::gen::TraceConfig_BufferConfig_FillPolicy_DISCARD);
+
+  auto* ds_cfg = cfg.add_data_sources()->mutable_config();
+  ds_cfg->set_name("track_event");
+  ds_cfg->set_track_event_config_raw(track_event_cfg.SerializeAsString());
+
+  auto tracing_session = perfetto::Tracing::NewTrace();
+  tracing_session->Setup(cfg);
+  tracing_session->StartBlocking();
+
+  // Set process metadata
+  auto process_track = perfetto::ProcessTrack::Current();
+  auto desc = process_track.Serialize();
+  desc.mutable_process()->set_process_name("skity_hw_bench");
+  perfetto::TrackEvent::SetTrackDescriptor(process_track, desc);
+
+  // Set thread metadata for the current thread
+  auto thread_track = perfetto::ThreadTrack::Current();
+  auto thread_desc = thread_track.Serialize();
+  thread_desc.mutable_thread()->set_thread_name("main_bench_thread");
+  perfetto::TrackEvent::SetTrackDescriptor(thread_track, thread_desc);
+
+  RegisterSkityPerfettoHandler();
+  return tracing_session;
+}
+
+static void StopPerfettoSession(perfetto::TracingSession* session,
+                                const fs::path& output_path) {
+  session->FlushBlocking();
+  session->StopBlocking();
+  std::vector<char> trace_data(session->ReadTraceBlocking());
+
+  std::ofstream output(output_path.string(), std::ios::out | std::ios::binary);
+  output.write(trace_data.data(), trace_data.size());
+  output.close();
+  std::cout << "Trace saved to: " << output_path.string() << std::endl;
+}
+
+#else
+#define SKITY_TRACE_EVENT(name)
+#endif
+
 #include "test/bench/case/draw_circle.hpp"
 #include "test/bench/case/draw_skp.hpp"
 #include "test/bench/common/bench_context.hpp"
 #include "test/bench/common/bench_gpu_time_tracer.hpp"
 #include "test/bench/common/bench_target.hpp"
-
-namespace fs = std::filesystem;
 
 #define SKITY_BENCH_ALL_GPU_TYPES 1
 #define SKITY_BENCH_ALL_AA_TYPES 1
@@ -149,6 +269,14 @@ std::vector<std::vector<int64_t>> ArgsProduct(
   return output_args;
 }
 
+bool IsNumber(const std::string& s) {
+  if (s.empty()) return false;
+  for (char c : s) {
+    if (!isdigit(static_cast<unsigned char>(c))) return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 static void RunBenchmark(benchmark::State& state,
@@ -171,19 +299,39 @@ static void RunBenchmark(benchmark::State& state,
   options.aa = aa;
   auto target = context->CreateTarget(options);
 
+#ifdef SKITY_BENCH_ENABLE_PERFETTO
+  // Trace the entire benchmark session
+  std::string bench_label =
+      benchmark->GetName() + "_" + GetLabel(backend_type, aa);
+  SKITY_TRACE_EVENT(perfetto::DynamicString(bench_label));
+#endif
+
   skity::BenchGPUTimeTracer::Instance().SetEnable(
       backend_type == skity::GPUBackendType::kMetal);
   skity::BenchGPUTimeTracer::Instance().ClearFrame();
 
+#ifdef SKITY_BENCH_ENABLE_PERFETTO
+  int iteration = 0;
+#endif
   for (auto _ : state) {
+#ifdef SKITY_BENCH_ENABLE_PERFETTO
+    SKITY_TRACE_EVENT(
+        perfetto::DynamicString("Iteration_" + std::to_string(iteration++)));
+#endif
     state.PauseTiming();
     skity::BenchGPUTimeTracer::Instance().StartTracing();
     skity::BenchGPUTimeTracer::Instance().StartFrame();
     state.ResumeTiming();
 
     auto canvas = target->LockCanvas();
-    benchmark->Draw(canvas, 0);
-    target->Flush();
+    {
+      SKITY_TRACE_EVENT("Benchmark_Draw");
+      benchmark->Draw(canvas, 0);
+    }
+    {
+      SKITY_TRACE_EVENT("Target_Flush");
+      target->Flush();
+    }
 
     state.PauseTiming();
     skity::BenchGPUTimeTracer::Instance().EndFrame();
@@ -311,16 +459,6 @@ static void RegisterTigerSKPBenchmark() {
   }
 }
 
-namespace {
-bool is_number(const std::string& s) {
-  if (s.empty()) return false;
-  for (char c : s) {
-    if (!isdigit(static_cast<unsigned char>(c))) return false;
-  }
-  return true;
-}
-}  // namespace
-
 static void RegisterGUIBenchmark() {
   auto all_args = ArgsProduct({
       // gpu backend type
@@ -376,7 +514,7 @@ static void RegisterGUIBenchmark() {
                         last_underscore - second_last_underscore - 1);
         std::string h_str = stem.substr(last_underscore + 1);
 
-        if (!is_number(w_str) || !is_number(h_str)) continue;
+        if (!IsNumber(w_str) || !IsNumber(h_str)) continue;
 
         int width = std::stoi(w_str);
         int height = std::stoi(h_str);
@@ -407,8 +545,20 @@ int main(int argc, char** argv) {
     fs::create_directory(kOutputDir);
   }
 
+#ifdef SKITY_BENCH_ENABLE_PERFETTO
+  auto tracing_session = StartPerfettoSession();
+  std::cout << "Perfetto Tracing is ENABLED. Trace file will be saved to: "
+            << (kOutputDir / "hw_benchmarks.pftrace").string() << std::endl;
+#endif
+
   RegisterAllBenchmarks();
 
   benchmark::RunSpecifiedBenchmarks();
+
+#ifdef SKITY_BENCH_ENABLE_PERFETTO
+  StopPerfettoSession(tracing_session.get(),
+                      kOutputDir / "hw_benchmarks.pftrace");
+#endif
+
   benchmark::Shutdown();
 }
