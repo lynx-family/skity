@@ -17,26 +17,6 @@
 namespace {
 
 #if defined(WGX_VULKAN)
-std::vector<uint32_t> DecodeWords(const std::string& binary) {
-  if (binary.size() % sizeof(uint32_t) != 0u) {
-    return {};
-  }
-
-  std::vector<uint32_t> words(binary.size() / sizeof(uint32_t), 0u);
-  for (size_t i = 0; i < words.size(); ++i) {
-    words[i] =
-        static_cast<uint32_t>(static_cast<uint8_t>(binary[i * 4u + 0u])) |
-        (static_cast<uint32_t>(static_cast<uint8_t>(binary[i * 4u + 1u]))
-         << 8u) |
-        (static_cast<uint32_t>(static_cast<uint8_t>(binary[i * 4u + 2u]))
-         << 16u) |
-        (static_cast<uint32_t>(static_cast<uint8_t>(binary[i * 4u + 3u]))
-         << 24u);
-  }
-
-  return words;
-}
-
 bool ContainsInstruction(const std::vector<uint32_t>& words, SpvOp opcode) {
   size_t offset = 5u;
   while (offset < words.size()) {
@@ -108,8 +88,9 @@ bool ContainsBuiltInDecoration(const std::vector<uint32_t>& words,
   return false;
 }
 
-void DumpSpirvBinary(const std::string& filename, const std::string& binary) {
-  if (binary.empty()) {
+void DumpSpirvBinary(const std::string& filename,
+                     const std::vector<uint32_t>& words) {
+  if (words.empty()) {
     return;
   }
 
@@ -135,7 +116,8 @@ void DumpSpirvBinary(const std::string& filename, const std::string& binary) {
     return;
   }
 
-  output.write(binary.data(), static_cast<std::streamsize>(binary.size()));
+  output.write(reinterpret_cast<const char*>(words.data()),
+               static_cast<std::streamsize>(words.size() * sizeof(uint32_t)));
 }
 
 TEST(WgxSpirvSmokeTest, EmitsMinimalVertexSpirvBinaryForValidEntryPoint) {
@@ -153,8 +135,8 @@ fn vs_main() {
   auto result = program->WriteToSpirv("vs_main", options);
 
   ASSERT_TRUE(result.success);
-  DumpSpirvBinary("wgx_vs_main_minimal.spv", result.content);
-  auto words = DecodeWords(result.content);
+  DumpSpirvBinary("wgx_vs_main_minimal.spv", result.spirv);
+  auto words = result.spirv;
 
   ASSERT_GE(words.size(), 5u);
   EXPECT_EQ(words[0], SpvMagicNumber);
@@ -181,16 +163,15 @@ fn fs_main() {
   auto result = program->WriteToSpirv("fs_main", options);
 
   ASSERT_TRUE(result.success);
-  DumpSpirvBinary("wgx_fs_main_minimal.spv", result.content);
-  auto words = DecodeWords(result.content);
+  DumpSpirvBinary("wgx_fs_main_minimal.spv", result.spirv);
+  auto words = result.spirv;
 
   ASSERT_GE(words.size(), 5u);
   EXPECT_TRUE(ContainsInstruction(words, SpvOpEntryPoint));
   EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
 }
 
-TEST(WgxSpirvSmokeTest,
-     EmitsVertexSpirvBinaryForBuiltinPositionVec4Return) {
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForBuiltinPositionVec4Return) {
   auto program = wgx::Program::Parse(R"(
 @vertex
 fn vs_main() -> @builtin(position) vec4<f32> {
@@ -205,8 +186,8 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   auto result = program->WriteToSpirv("vs_main", options);
 
   ASSERT_TRUE(result.success);
-  DumpSpirvBinary("wgx_vs_main_position.spv", result.content);
-  auto words = DecodeWords(result.content);
+  DumpSpirvBinary("wgx_vs_main_position.spv", result.spirv);
+  auto words = result.spirv;
 
   ASSERT_GE(words.size(), 5u);
   EXPECT_EQ(words[0], SpvMagicNumber);
@@ -220,8 +201,7 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
-TEST(WgxSpirvSmokeTest,
-     EmitsVertexSpirvBinaryForLocalVariableReturn) {
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForLocalVariableReturn) {
   auto program = wgx::Program::Parse(R"(
 @vertex
 fn vs_main() -> @builtin(position) vec4<f32> {
@@ -237,8 +217,8 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   auto result = program->WriteToSpirv("vs_main", options);
 
   ASSERT_TRUE(result.success);
-  DumpSpirvBinary("wgx_vs_main_var_return.spv", result.content);
-  auto words = DecodeWords(result.content);
+  DumpSpirvBinary("wgx_vs_main_var_return.spv", result.spirv);
+  auto words = result.spirv;
 
   ASSERT_GE(words.size(), 5u);
   EXPECT_EQ(words[0], SpvMagicNumber);
