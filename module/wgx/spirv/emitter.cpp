@@ -129,7 +129,8 @@ bool SupportsCurrentIR(const ir::Function& function) {
       return false;
     }
     if (last_inst.return_value_kind != ir::ReturnValueKind::kConstVec4F32 &&
-        last_inst.return_value_kind != ir::ReturnValueKind::kVariableRef) {
+        last_inst.return_value_kind != ir::ReturnValueKind::kVariableRef &&
+        last_inst.return_value_kind != ir::ReturnValueKind::kValueRef) {
       return false;
     }
   }
@@ -138,6 +139,7 @@ bool SupportsCurrentIR(const ir::Function& function) {
       case ir::InstKind::kReturn:
       case ir::InstKind::kVariable:
       case ir::InstKind::kStore:
+      case ir::InstKind::kBinary:
         break;
       default:
         return false;
@@ -362,6 +364,12 @@ struct LocalVarInfo {
   uint32_t spirv_var_id = 0;
 };
 
+struct ValueInfo {
+  uint32_t ir_value_id = 0;
+  ir::TypeId value_type = ir::kInvalidTypeId;
+  uint32_t spirv_value_id = 0;
+};
+
 class ModuleBuilder {
  public:
   ModuleBuilder(const ir::Module& module, const ir::Function& entry,
@@ -409,6 +417,11 @@ class ModuleBuilder {
         info.ir_var_id = inst.result_id;
         info.var_type = inst.result_type;
         local_vars_.push_back(info);
+      } else if (inst.kind == ir::InstKind::kBinary) {
+        ValueInfo info;
+        info.ir_value_id = inst.result_id;
+        info.value_type = inst.result_type;
+        values_.push_back(info);
       }
     }
     return true;
@@ -422,6 +435,9 @@ class ModuleBuilder {
     }
     for (auto& var : local_vars_) {
       var.spirv_var_id = ids_.Allocate();
+    }
+    for (auto& value : values_) {
+      value.spirv_value_id = ids_.Allocate();
     }
     return function_id_ != 0 && label_id_ != 0;
   }
@@ -544,6 +560,8 @@ class ModuleBuilder {
         return true;
       case ir::InstKind::kStore:
         return EmitStore(inst);
+      case ir::InstKind::kBinary:
+        return EmitBinary(inst);
       case ir::InstKind::kReturn:
         return EmitReturn(inst);
       default:
@@ -591,6 +609,59 @@ class ModuleBuilder {
     return true;
   }
 
+
+  bool EmitBinary(const ir::Instruction& inst) {
+    auto value_it = FindValue(inst.result_id);
+    if (value_it == values_.end()) return false;
+    if (inst.operands.size() != 2) return false;
+
+    uint32_t lhs_id = 0;
+    if (!MaterializeValueOperand(inst.operands[0], &lhs_id)) return false;
+    uint32_t rhs_id = 0;
+    if (!MaterializeValueOperand(inst.operands[1], &rhs_id)) return false;
+
+    SpvOp op = SpvOpNop;
+    switch (inst.binary_op) {
+      case ir::BinaryOpKind::kAdd:
+        op = SpvOpFAdd;
+        break;
+      case ir::BinaryOpKind::kSubtract:
+        op = SpvOpFSub;
+        break;
+    }
+
+    AppendInstruction(&sections_->functions, op,
+                      {vec4_type_id_, value_it->spirv_value_id, lhs_id, rhs_id});
+    return true;
+  }
+
+  bool MaterializeValueOperand(const ir::Operand& operand, uint32_t* value_id) {
+    if (value_id == nullptr) return false;
+
+    if (operand.kind == ir::Operand::Kind::kConstF32) {
+      return false;
+    }
+    if (operand.kind != ir::Operand::Kind::kId) {
+      return false;
+    }
+
+    auto value_it = FindValue(operand.id);
+    if (value_it != values_.end()) {
+      *value_id = value_it->spirv_value_id;
+      return true;
+    }
+
+    auto var_it = FindLocalVar(operand.id);
+    if (var_it != local_vars_.end()) {
+      *value_id = ids_.Allocate();
+      AppendInstruction(&sections_->functions, SpvOpLoad,
+                        {vec4_type_id_, *value_id, var_it->spirv_var_id});
+      return true;
+    }
+
+    return false;
+  }
+
   bool EmitReturn(const ir::Instruction& inst) {
     if (!inst.has_return_value) {
       AppendInstruction(&sections_->functions, SpvOpReturn, {});
@@ -611,6 +682,10 @@ class ModuleBuilder {
       value_to_store = ids_.Allocate();
       AppendInstruction(&sections_->functions, SpvOpLoad,
                         {vec4_type_id_, value_to_store, var_it->spirv_var_id});
+    } else if (inst.return_value_kind == ir::ReturnValueKind::kValueRef) {
+      auto value_it = FindValue(inst.value_id);
+      if (value_it == values_.end()) return false;
+      value_to_store = value_it->spirv_value_id;
     } else {
       return false;
     }
@@ -648,6 +723,13 @@ class ModuleBuilder {
     return local_vars_.end();
   }
 
+  std::vector<ValueInfo>::iterator FindValue(uint32_t ir_value_id) {
+    for (auto it = values_.begin(); it != values_.end(); ++it) {
+      if (it->ir_value_id == ir_value_id) return it;
+    }
+    return values_.end();
+  }
+
  private:
   const ir::Module& module_;
   const ir::Function& entry_;
@@ -665,6 +747,7 @@ class ModuleBuilder {
   uint32_t vec4_type_id_ = 0;
   std::array<uint32_t, 4> position_const_ids_ = {0, 0, 0, 0};
   std::vector<LocalVarInfo> local_vars_;
+  std::vector<ValueInfo> values_;
 };
 
 }  // namespace
