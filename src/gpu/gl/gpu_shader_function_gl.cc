@@ -28,26 +28,11 @@ GPUShaderFunctionGL::~GPUShaderFunctionGL() {
 
 GPUShaderFunctionGL::GPUShaderFunctionGL(
     GPULabel label, GPUShaderStage stage, const char* source,
-    const std::vector<int32_t>& constant_values,
     GPUShaderFunctionErrorCallback error_callback)
     : GPUShaderFunction(std::move(label)) {
   GLenum type = GetShaderType(stage);
   GLuint shader = GL_CALL(CreateShader, type);
-  if (constant_values.empty()) {
-    GL_CALL(ShaderSource, shader, 1, &source, nullptr);
-  } else {
-    std::string source_str = source;
-    auto index = source_str.find('\n');
-    std::stringstream ss;
-    int i = 0;
-    for (int32_t value : constant_values) {
-      ss << "#define SPIRV_CROSS_CONSTANT_ID_" << i << " " << value << '\n';
-      i++;
-    }
-    source_str.insert(index + 1, ss.str());
-    source = source_str.c_str();
-    GL_CALL(ShaderSource, shader, 1, &source, nullptr);
-  }
+  GL_CALL(ShaderSource, shader, 1, &source, nullptr);
   GL_CALL(CompileShader, shader);
   GLint success;
   GL_CALL(GetShaderiv, shader, GL_COMPILE_STATUS, &success);

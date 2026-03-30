@@ -88,9 +88,9 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceMTL::CreateShaderFunction(
   const GPUShaderSourceRaw* source =
       reinterpret_cast<const GPUShaderSourceRaw*>(desc.shader_source);
 
-  auto function = std::make_shared<GPUShaderFunctionMTL>(desc.label, mtl_device_, desc.stage,
-                                                         source->source, source->entry_point,
-                                                         desc.constant_values, desc.error_callback);
+  auto function =
+      std::make_shared<GPUShaderFunctionMTL>(desc.label, mtl_device_, desc.stage, source->source,
+                                             source->entry_point, desc.error_callback);
   if (!function->IsValid()) {
     return nullptr;
   }
@@ -245,9 +245,9 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceMTL::CreateShaderFunctionFromModule(
   LOGD("WGX shader_module ( {} ) translate function ( {} ) result: {}", source->module->GetLabel(),
        source->entry_point, wgx_result.content);
 
-  auto function = std::make_shared<GPUShaderFunctionMTL>(
-      desc.label, mtl_device_, desc.stage, wgx_result.content.c_str(), source->entry_point,
-      std::vector<int32_t>{}, desc.error_callback);
+  auto function = std::make_shared<GPUShaderFunctionMTL>(desc.label, mtl_device_, desc.stage,
+                                                         wgx_result.content.c_str(),
+                                                         source->entry_point, desc.error_callback);
 
   if (!function->IsValid()) {
     return {};

@@ -44,8 +44,7 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunction(
       reinterpret_cast<const GPUShaderSourceRaw*>(desc.shader_source);
 
   auto function = std::make_shared<GPUShaderFunctionGL>(
-      desc.label, desc.stage, source->source, desc.constant_values,
-      desc.error_callback);
+      desc.label, desc.stage, source->source, desc.error_callback);
 
   if (!function->IsValid()) {
     return nullptr;
@@ -195,8 +194,7 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunctionFromModule(
        source->module->GetLabel(), source->entry_point, wgx_result.content);
 
   auto function = std::make_shared<GPUShaderFunctionGL>(
-      desc.label, desc.stage, wgx_result.content.c_str(),
-      std::vector<int32_t>{}, desc.error_callback);
+      desc.label, desc.stage, wgx_result.content.c_str(), desc.error_callback);
 
   if (!function->IsValid()) {
     return {};

@@ -57,7 +57,6 @@ struct GPULabel {
 struct GPUShaderFunctionDescriptor {
   GPULabel label;
   GPUShaderStage stage = GPUShaderStage::kVertex;
-  std::vector<int32_t> constant_values = {};
   GPUShaderFunctionErrorCallback error_callback = {};
 
   GPUShaderSourceType source_type = GPUShaderSourceType::kRaw;

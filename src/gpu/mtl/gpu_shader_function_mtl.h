@@ -17,7 +17,6 @@ class GPUShaderFunctionMTL : public GPUShaderFunction {
   GPUShaderFunctionMTL(GPULabel label, id<MTLDevice> device,
                        GPUShaderStage stage, const char* source,
                        const char* entry_point,
-                       const std::vector<int32_t>& constant_values,
                        GPUShaderFunctionErrorCallback error_callback);
 
   id<MTLFunction> GetMTLFunction() const { return mtl_function_; }
