@@ -1,12 +1,15 @@
-// Copyright 2021 The Lynx Authors. All rights reserved.
-// Licensed under the Apache License Version 2.0 that can be found in the
-// LICENSE file in the root directory of this source tree.
+/*
+ * Copyright 2021 The Lynx Authors. All rights reserved.
+ * Licensed under the Apache License Version 2.0 that can be found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 #include "lower/lower_to_ir.h"
 
 #include <array>
 #include <unordered_map>
 
+#include "ir/value.h"
 #include "wgsl/ast/attribute.h"
 #include "wgsl/ast/identifier.h"
 #include "wgsl/ast/statement.h"
@@ -48,7 +51,9 @@ bool IsVec4F32Identifier(const ast::IdentifierExp* ident) {
 
 }  // namespace
 
-// Lowerer class: converts AST to IR using object-oriented design
+/**
+ * Lowerer class: converts AST to IR using unified Value model
+ */
 class Lowerer {
  public:
   Lowerer(const ast::Module* module, const ast::Function* entry_point)
@@ -67,7 +72,7 @@ class Lowerer {
       return nullptr;
     }
 
-    // Create module-level type table (shared across all functions)
+    /** Create module-level type table (shared across all functions) */
     ir_module->type_table = std::make_unique<ir::TypeTable>();
     type_table_ = ir_module->type_table.get();
 
@@ -91,7 +96,7 @@ class Lowerer {
   }
 
  private:
-  // Lowers the function body statements
+  /** Lowers the function body statements */
   bool LowerFunctionBody() {
     if (ast_entry_point_->body == nullptr) {
       return true;
@@ -104,7 +109,7 @@ class Lowerer {
     return true;
   }
 
-  // Inserts implicit return for void functions if needed
+  /** Inserts implicit return for void functions if needed */
   bool InsertImplicitReturn() {
     const bool is_void_return = ast_entry_point_->return_type.expr == nullptr;
     const bool is_vec4_f32_return = IsVec4F32Type(ast_entry_point_->return_type);
@@ -134,7 +139,7 @@ class Lowerer {
     return true;
   }
 
-  // Checks if return type has @builtin(position)
+  /** Checks if return type has @builtin(position) */
   bool HasBuiltinPositionReturn() const {
     for (auto* attr : ast_entry_point_->return_type_attrs) {
       if (attr == nullptr || attr->GetType() != ast::AttributeType::kBuiltin) {
@@ -148,7 +153,7 @@ class Lowerer {
     return false;
   }
 
-  // Checks if type is vec4<f32>
+  /** Checks if type is vec4<f32> */
   bool IsVec4F32Type(const ast::Type& type) const {
     if (type.expr == nullptr ||
         type.expr->GetType() != ast::ExpressionType::kIdentifier) {
@@ -158,13 +163,13 @@ class Lowerer {
         static_cast<const ast::IdentifierExp*>(type.expr));
   }
 
-  // Converts AST type to IR TypeId
+  /** Converts AST type to IR TypeId */
   ir::TypeId ResolveType(const ast::Type& type) {
     if (type.expr == nullptr) {
       return ir::kInvalidTypeId;
     }
 
-    // For now, only support vec4<f32>
+    /** For now, only support vec4<f32> */
     if (type.expr->GetType() == ast::ExpressionType::kIdentifier) {
       auto* ident = static_cast<const ast::IdentifierExp*>(type.expr);
       if (IsVec4F32Identifier(ident)) {
@@ -175,7 +180,12 @@ class Lowerer {
     return ir::kInvalidTypeId;
   }
 
-  // Lowers a statement to IR
+  /** Gets the vec4<f32> type */
+  ir::TypeId GetVec4F32Type() {
+    return type_table_->GetVectorType(type_table_->GetF32Type(), 4);
+  }
+
+  /** Lowers a statement to IR */
   bool LowerStatement(const ast::Statement* statement, ir::Block* block) {
     if (statement == nullptr || block == nullptr) {
       return false;
@@ -199,43 +209,77 @@ class Lowerer {
     }
   }
 
-  // Lowers a return statement
+  /**
+   * Ensures expr is a value (not an address).
+   * If expr is an address (variable reference), emits a load instruction
+   * and returns the resulting SSA value.
+   */
+  ir::Value EnsureValue(const ir::ExprResult& expr, ir::Block* block) {
+    if (!expr.IsAddress()) {
+      return expr.value;
+    }
+    /**
+     * Emit explicit load: address -> value
+     * Note: This creates a kLoad instruction in the IR
+     */
+    uint32_t load_id = AllocateSSAId();
+    ir::Instruction load_inst;
+    load_inst.kind = ir::InstKind::kLoad;
+    load_inst.result_id = load_id;
+    load_inst.result_type = expr.GetType();
+    load_inst.operands.push_back(ir::Operand::Id(expr.value.GetVarId().value()));
+    block->instructions.emplace_back(load_inst);
+    return ir::Value::SSA(expr.GetType(), load_id);
+  }
+
+  /** Lowers a return statement */
   bool LowerReturnStatement(const ast::ReturnStatement* ret, ir::Block* block) {
     ir::Instruction inst;
     inst.kind = ir::InstKind::kReturn;
-    inst.has_return_value = ret->value != nullptr;
 
-    if (ret->value != nullptr) {
-      ir::Instruction value_inst;
-      if (!LowerExpression(ret->value, &value_inst)) {
-        return false;
-      }
+    if (ret->value == nullptr) {
+      /** Void return */
+      inst.has_return_value = false;
+      block->instructions.emplace_back(inst);
+      return true;
+    }
 
-      ir::TypeId vec4_type = type_table_->GetVectorType(
-          type_table_->GetF32Type(), 4);
-      if (value_inst.result_type != vec4_type) {
-        return false;
-      }
+    /** Lower the return value expression */
+    ir::ExprResult expr_result = LowerExpression(ret->value);
+    if (!expr_result.IsValid()) {
+      return false;
+    }
 
-      if (value_inst.value_id != 0) {
-        inst.return_value_kind = ir::ReturnValueKind::kValueRef;
-        inst.value_id = value_inst.value_id;
-      } else if (value_inst.var_id != 0) {
-        // Variable reference - need to load
-        inst.return_value_kind = ir::ReturnValueKind::kVariableRef;
-        inst.var_id = value_inst.var_id;
-      } else {
-        // Constant
-        inst.const_vec4_f32 = value_inst.const_vec4_f32;
-        inst.return_value_kind = ir::ReturnValueKind::kConstVec4F32;
-      }
+    /** Ensure we have a value (emit load if needed) */
+    ir::Value return_value = EnsureValue(expr_result, block);
+    
+    /** Verify type */
+    if (return_value.type != GetVec4F32Type()) {
+      return false;
+    }
+
+    /** Set up return instruction with unified Value model */
+    inst.has_return_value = true;
+    if (return_value.IsConstant()) {
+      /** Constant return - use const_vec4_f32 for backward compatibility */
+      inst.return_value_kind = ir::ReturnValueKind::kConstVec4F32;
+      auto vec4 = return_value.GetVec4F32();
+      inst.const_vec4_f32 = vec4;
+    } else if (return_value.IsSSA()) {
+      /** SSA value return */
+      inst.return_value_kind = ir::ReturnValueKind::kValueRef;
+      inst.value_id = return_value.GetSSAId().value();
+    } else if (return_value.IsVariable()) {
+      /** Variable return - should have been loaded by EnsureValue */
+      /** This path shouldn't be reached if EnsureValue works correctly */
+      return false;
     }
 
     block->instructions.emplace_back(inst);
     return true;
   }
 
-  // Lowers a block statement
+  /** Lowers a block statement */
   bool LowerBlockStatement(const ast::BlockStatement* nested,
                            ir::Block* block) {
     for (auto* nested_stmt : nested->statements) {
@@ -246,7 +290,7 @@ class Lowerer {
     return true;
   }
 
-  // Lowers a variable declaration
+  /** Lowers a variable declaration */
   bool LowerVarDecl(const ast::VarDeclStatement* var_decl, ir::Block* block) {
     if (var_decl == nullptr || var_decl->variable == nullptr ||
         var_decl->variable->name == nullptr) {
@@ -256,7 +300,7 @@ class Lowerer {
     auto* var = var_decl->variable;
     const std::string var_name = std::string(var->name->name);
 
-    // Resolve variable type
+    /** Resolve variable type */
     ir::TypeId var_type = ResolveType(var->type);
     if (var_type == ir::kInvalidTypeId) {
       return false;
@@ -268,7 +312,7 @@ class Lowerer {
     }
     RegisterVar(var_name, var_id);
 
-    // Emit kVariable instruction
+    /** Emit kVariable instruction */
     ir::Instruction var_inst;
     var_inst.kind = ir::InstKind::kVariable;
     var_inst.result_id = var_id;
@@ -276,9 +320,13 @@ class Lowerer {
     var_inst.var_name = var_name;
     block->instructions.emplace_back(var_inst);
 
-    // If there's an initializer, emit a store
+    /** If there's an initializer, emit a store */
     if (var->initializer != nullptr) {
-      if (!LowerVarInitializer(var->initializer, var_id, block)) {
+      ir::ExprResult init_expr = LowerExpression(var->initializer);
+      if (!init_expr.IsValid()) {
+        return false;
+      }
+      if (!EmitStore(init_expr, var_id, block)) {
         return false;
       }
     }
@@ -286,17 +334,7 @@ class Lowerer {
     return true;
   }
 
-  // Lowers a variable initializer expression
-  bool LowerVarInitializer(ast::Expression* initializer, uint32_t var_id,
-                           ir::Block* block) {
-    ir::Instruction init_inst;
-    if (!LowerExpression(initializer, &init_inst)) {
-      return false;
-    }
-    return LowerStoreValue(init_inst, var_id, block);
-  }
-
-  // Lowers an assignment statement.
+  /** Lowers an assignment statement */
   bool LowerAssignStatement(const ast::AssignStatement* assign,
                             ir::Block* block) {
     if (assign == nullptr || block == nullptr || assign->lhs == nullptr ||
@@ -318,83 +356,102 @@ class Lowerer {
       return false;
     }
 
-    ir::Instruction value_inst;
-    if (!LowerExpression(assign->rhs, &value_inst)) {
+    /** Lower the RHS expression */
+    ir::ExprResult rhs_expr = LowerExpression(assign->rhs);
+    if (!rhs_expr.IsValid()) {
       return false;
     }
 
-    return LowerStoreValue(value_inst, var_id, block);
+    return EmitStore(rhs_expr, var_id, block);
   }
 
-  bool LowerStoreValue(const ir::Instruction& value_inst, uint32_t var_id,
-                       ir::Block* block) {
-    if (block == nullptr || var_id == 0) {
+  /**
+   * Emits a store instruction.
+   * Converts the source expression to a value (with load if needed) and stores
+   * it to the target variable.
+   */
+  bool EmitStore(const ir::ExprResult& source_expr, uint32_t target_var_id,
+                 ir::Block* block) {
+    if (block == nullptr || target_var_id == 0) {
       return false;
     }
 
-    ir::TypeId vec4_type = type_table_->GetVectorType(
-        type_table_->GetF32Type(), 4);
-    if (value_inst.result_type != vec4_type) {
+    /** Ensure source is a value (emit load if it's an address) */
+    ir::Value source_value = EnsureValue(source_expr, block);
+    
+    /** Verify type */
+    if (source_value.type != GetVec4F32Type()) {
       return false;
     }
 
+    /** Emit store instruction with unified Value model */
     ir::Instruction store_inst;
     store_inst.kind = ir::InstKind::kStore;
-    store_inst.operands.push_back(ir::Operand::Id(var_id));
+    store_inst.operands.push_back(ir::Operand::Id(target_var_id));
 
-    if (value_inst.value_id != 0) {
-      store_inst.operands.push_back(ir::Operand::Id(value_inst.value_id));
-    } else if (value_inst.var_id != 0) {
-      store_inst.operands.push_back(ir::Operand::Id(value_inst.var_id));
-    } else {
+    /**
+     * Convert Value to Operand representation.
+     * Note: This bridges new Value model to existing Instruction::operands format.
+     * When Instruction fully migrates to Value, this will become simpler.
+     */
+    if (source_value.IsSSA()) {
+      store_inst.operands.push_back(
+          ir::Operand::Id(source_value.GetSSAId().value()));
+    } else if (source_value.IsConstant()) {
+      /** Expand vec4<f32> constant to 4 operands */
+      auto vec4 = source_value.GetVec4F32();
       for (size_t i = 0; i < 4; ++i) {
-        store_inst.operands.push_back(
-            ir::Operand::ConstF32(value_inst.const_vec4_f32[i]));
+        store_inst.operands.push_back(ir::Operand::ConstF32(vec4[i]));
       }
+    } else {
+      /** Should not happen - EnsureValue should have converted Variable to SSA */
+      return false;
     }
 
     block->instructions.emplace_back(store_inst);
     return true;
   }
 
-  // Lowers an expression to an IR instruction
-  bool LowerExpression(ast::Expression* expression, ir::Instruction* out_inst) {
-    if (expression == nullptr || out_inst == nullptr) {
-      return false;
+  /**
+   * Lowers an expression to an ExprResult.
+   * Returns an invalid ExprResult on failure.
+   */
+  ir::ExprResult LowerExpression(ast::Expression* expression) {
+    if (expression == nullptr) {
+      return ir::ExprResult();
     }
 
-    // Try to lower as vec4<f32> constant
+    ir::TypeId vec4_type = GetVec4F32Type();
+
+    /** Try to lower as vec4<f32> constant */
     std::array<float, 4> values;
     if (LowerVec4F32Const(expression, &values)) {
-      out_inst->result_type = type_table_->GetVectorType(
-          type_table_->GetF32Type(), 4);
-      out_inst->const_vec4_f32 = values;
-      return true;
+      return ir::ExprResult::ValueResult(
+          ir::Value::ConstantVec4F32(vec4_type, values));
     }
 
-    // Try to lower as variable reference (identifier)
+    /** Try to lower as variable reference (identifier) */
     if (expression->GetType() == ast::ExpressionType::kIdentifier) {
       return LowerIdentifierExpression(
-          static_cast<ast::IdentifierExp*>(expression), out_inst);
+          static_cast<ast::IdentifierExp*>(expression));
     }
 
+    /** Try to lower as binary expression */
     if (expression->GetType() == ast::ExpressionType::kBinaryExp) {
-      return LowerBinaryExpression(static_cast<ast::BinaryExp*>(expression),
-                                   out_inst, true);
+      return LowerBinaryExpression(
+          static_cast<ast::BinaryExp*>(expression));
     }
 
-    return false;
+    return ir::ExprResult();
   }
 
-
-  bool LowerBinaryOperand(ast::Expression* expression, ir::Instruction* out_inst) {
-    return LowerExpression(expression, out_inst);
-  }
-
-  bool LowerBinaryExpression(ast::BinaryExp* binary, ir::Instruction* out_inst,
-                             bool emit_inst) {
-    if (binary == nullptr || out_inst == nullptr) {
-      return false;
+  /**
+   * Lowers a binary expression.
+   * Returns the result as an ExprResult with an SSA Value.
+   */
+  ir::ExprResult LowerBinaryExpression(ast::BinaryExp* binary) {
+    if (binary == nullptr) {
+      return ir::ExprResult();
     }
 
     ir::BinaryOpKind op_kind = ir::BinaryOpKind::kAdd;
@@ -406,89 +463,125 @@ class Lowerer {
         op_kind = ir::BinaryOpKind::kSubtract;
         break;
       default:
-        return false;
+        return ir::ExprResult();
     }
 
-    ir::Instruction lhs_inst;
-    if (!LowerBinaryOperand(binary->lhs, &lhs_inst)) {
-      return false;
+    /** Lower operands */
+    ir::ExprResult lhs_expr = LowerExpression(binary->lhs);
+    if (!lhs_expr.IsValid()) {
+      return ir::ExprResult();
     }
 
-    ir::Instruction rhs_inst;
-    if (!LowerBinaryOperand(binary->rhs, &rhs_inst)) {
-      return false;
+    ir::ExprResult rhs_expr = LowerExpression(binary->rhs);
+    if (!rhs_expr.IsValid()) {
+      return ir::ExprResult();
     }
 
-    ir::TypeId vec4_type = type_table_->GetVectorType(
-        type_table_->GetF32Type(), 4);
-    if (lhs_inst.result_type != vec4_type || rhs_inst.result_type != vec4_type) {
-      return false;
+    ir::TypeId vec4_type = GetVec4F32Type();
+
+    /** Ensure both operands are values (emit loads if needed) */
+    ir::Value lhs_value = EnsureValue(lhs_expr, &ir_function_->entry_block);
+    ir::Value rhs_value = EnsureValue(rhs_expr, &ir_function_->entry_block);
+
+    /** Type check */
+    if (lhs_value.type != vec4_type || rhs_value.type != vec4_type) {
+      return ir::ExprResult();
     }
 
+    /** Allocate result SSA id */
+    uint32_t result_id = AllocateSSAId();
+    if (result_id == 0) {
+      return ir::ExprResult();
+    }
+
+    /** Emit binary instruction */
     ir::Instruction binary_inst;
     binary_inst.kind = ir::InstKind::kBinary;
     binary_inst.binary_op = op_kind;
     binary_inst.result_type = vec4_type;
-    binary_inst.result_id = AllocateValueId();
-    if (binary_inst.result_id == 0) {
-      return false;
-    }
-    binary_inst.value_id = binary_inst.result_id;
+    binary_inst.result_id = result_id;
+    binary_inst.value_id = result_id;
 
-    if (!AppendValueOperand(lhs_inst, &binary_inst.operands)) {
-      return false;
+    /** Convert Values to Operands */
+    if (!AppendValueAsOperand(lhs_value, &binary_inst.operands)) {
+      return ir::ExprResult();
     }
-    if (!AppendValueOperand(rhs_inst, &binary_inst.operands)) {
-      return false;
+    if (!AppendValueAsOperand(rhs_value, &binary_inst.operands)) {
+      return ir::ExprResult();
     }
 
-    if (emit_inst) {
-      ir_function_->entry_block.instructions.emplace_back(binary_inst);
-    }
+    ir_function_->entry_block.instructions.emplace_back(binary_inst);
 
-    *out_inst = binary_inst;
-    return true;
+    /** Return as SSA Value */
+    return ir::ExprResult::ValueResult(ir::Value::SSA(vec4_type, result_id));
   }
 
-  bool AppendValueOperand(const ir::Instruction& value_inst,
-                          std::vector<ir::Operand>* operands) {
+  /**
+   * Appends a Value as Instruction Operand.
+   * Bridges new Value model to existing Instruction::operands format.
+   */
+  bool AppendValueAsOperand(const ir::Value& value,
+                            std::vector<ir::Operand>* operands) {
     if (operands == nullptr) {
       return false;
     }
 
-    if (value_inst.value_id != 0) {
-      operands->push_back(ir::Operand::Id(value_inst.value_id));
+    if (value.IsSSA()) {
+      operands->push_back(ir::Operand::Id(value.GetSSAId().value()));
       return true;
     }
-    if (value_inst.var_id != 0) {
-      operands->push_back(ir::Operand::Id(value_inst.var_id));
+    if (value.IsVariable()) {
+      /**
+       * Note: In the new model, this case should be rare.
+       * EnsureValue should convert variables to SSA via load.
+       * Keeping for compatibility during migration.
+       */
+      operands->push_back(ir::Operand::Id(value.GetVarId().value()));
       return true;
     }
-    for (size_t i = 0; i < 4; ++i) {
-      operands->push_back(ir::Operand::ConstF32(value_inst.const_vec4_f32[i]));
+    if (value.IsConstant() && value.IsInlineConstant()) {
+      /** Expand vec4<f32> constant to 4 operands */
+      if (value.const_kind == ir::InlineConstKind::kVec4F32) {
+        auto vec4 = value.GetVec4F32();
+        for (size_t i = 0; i < 4; ++i) {
+          operands->push_back(ir::Operand::ConstF32(vec4[i]));
+        }
+        return true;
+      }
+      /** TODO: Handle other inline constant types */
+      return false;
     }
-    return true;
+    return false;
   }
 
-  // Lowers an identifier expression (variable reference)
-  bool LowerIdentifierExpression(ast::IdentifierExp* ident,
-                                 ir::Instruction* out_inst) {
+  /**
+   * Lowers an identifier expression (variable reference).
+   * Returns an address ExprResult (lvalue).
+   */
+  ir::ExprResult LowerIdentifierExpression(ast::IdentifierExp* ident) {
     if (ident->ident == nullptr) {
-      return false;
+      return ir::ExprResult();
     }
     const std::string var_name = std::string(ident->ident->name);
     const uint32_t var_id = LookupVar(var_name);
     if (var_id == 0) {
-      return false;
+      return ir::ExprResult();
     }
 
-    out_inst->result_type = type_table_->GetVectorType(
-        type_table_->GetF32Type(), 4);
-    out_inst->var_id = var_id;
-    return true;
+    ir::TypeId vec4_type = GetVec4F32Type();
+
+    /**
+     * Variable reference is an address (lvalue), not a value.
+     * The caller must use EnsureValue() to convert to a value if needed.
+     */
+    return ir::ExprResult::AddressResult(
+        ir::Value::Variable(vec4_type, var_id));
   }
 
-  // Extracts vec4<f32> constant from expression
+  /**
+   * Extracts vec4<f32> constant from expression.
+   * Returns true and fills values on success.
+   */
   bool LowerVec4F32Const(ast::Expression* expression,
                          std::array<float, 4>* values) {
     if (expression == nullptr || values == nullptr ||
@@ -520,12 +613,12 @@ class Lowerer {
     return true;
   }
 
-  // Variable management
+  /** Variable management */
   uint32_t AllocateVarId() {
     return ir_function_ ? ir_function_->AllocateVarId() : 0;
   }
 
-  uint32_t AllocateValueId() {
+  uint32_t AllocateSSAId() {
     return ir_function_ ? ir_function_->AllocateValueId() : 0;
   }
 

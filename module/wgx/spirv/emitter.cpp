@@ -138,6 +138,7 @@ bool SupportsCurrentIR(const ir::Function& function) {
     switch (inst.kind) {
       case ir::InstKind::kReturn:
       case ir::InstKind::kVariable:
+      case ir::InstKind::kLoad:
       case ir::InstKind::kStore:
       case ir::InstKind::kBinary:
         break;
@@ -554,6 +555,8 @@ class ModuleBuilder {
     switch (inst.kind) {
       case ir::InstKind::kVariable:
         return true;
+      case ir::InstKind::kLoad:
+        return EmitLoad(inst);
       case ir::InstKind::kStore:
         return EmitStore(inst);
       case ir::InstKind::kBinary:
@@ -563,6 +566,36 @@ class ModuleBuilder {
       default:
         return false;
     }
+  }
+
+  /**
+   * Emit explicit load instruction (new Value model).
+   * kLoad in IR translates to SpvOpLoad in SPIR-V.
+   */
+  bool EmitLoad(const ir::Instruction& inst) {
+    /**
+     * kLoad instruction format:
+     * - result_id: SSA id for the loaded value
+     * - result_type: type of the loaded value
+     * - operands[0]: variable id to load from (as Operand::Id)
+     */
+    if (inst.operands.empty()) return false;
+    if (inst.operands[0].kind != ir::Operand::Kind::kId) return false;
+
+    uint32_t ir_var_id = inst.operands[0].id;
+    auto var_it = FindLocalVar(ir_var_id);
+    if (var_it == local_vars_.end()) return false;
+
+    uint32_t spirv_result_id = ids_.Allocate();
+    AppendInstruction(&sections_->functions, SpvOpLoad,
+                      {vec4_type_id_, spirv_result_id, var_it->spirv_var_id});
+    
+    /**
+     * Map the IR SSA id to SPIR-V id.
+     * This allows subsequent instructions to reference this loaded value.
+     */
+    value_map_[inst.result_id] = spirv_result_id;
+    return true;
   }
 
   bool EmitStore(const ir::Instruction& inst) {
