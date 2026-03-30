@@ -4,6 +4,39 @@ This file records incremental development progress for the
 `WGSL -> AST -> Semantic Resolve -> IR -> SPIR-V` pipeline and the next
 implementation steps.
 
+## Recommended Local Validation Workflow
+
+For WGX SPIR-V work, use the following local verification order:
+
+1. Rebuild and run the smallest relevant smoke tests first.
+2. Validate dumped `.spv` outputs with `spirv-val --target-env vulkan1.1`.
+3. Spot-check the generated disassembly with `spirv-dis` when adding a new
+   emitter/lowering slice or when debugging validator failures.
+
+Suggested commands:
+
+```bash
+./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build
+```
+
+Equivalent manual steps:
+
+```bash
+./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.*'
+for f in out/cmake_host_build/*.spv; do
+  /usr/local/bin/spirv-val --target-env vulkan1.1 "$f"
+done
+for f in out/cmake_host_build/*.spv; do
+  /usr/local/bin/spirv-dis "$f" -o "${f%.spv}.spvasm"
+done
+```
+
+Notes:
+- `spirv-val` is the required legality check.
+- `spirv-dis` is the recommended structure/inspection check; it is especially
+  useful for verifying opcode shape, id use order, and decorations.
+
+
 ## 2026-03-30
 
 ### Summary
@@ -68,10 +101,14 @@ covered by smoke tests.
      - `EmitBinary()` for:
        - `OpFAdd`
        - `OpFSub`
-     - return emission extended to support direct SSA arithmetic values
+     - unified `MaterializeValue*()` helpers now handle return/store operand
+       materialization consistently
+     - binary result ids are now allocated at actual emission time instead of
+       being pre-reserved during analysis
    - **Effect**:
      - `return a + b;` and `c = a - b; return c;` now emit valid SPIR-V in the
        current subset
+     - generated arithmetic SPIR-V now also passes `spirv-val` validation
 
 5. **Added smoke coverage for arithmetic return/store paths.**
    - **File**: `test/ut/wgx/wgx_spirv_smoke_test.cc`
@@ -99,6 +136,13 @@ covered by smoke tests.
 4. Ran WGX SPIR-V smoke suite:
    - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.*'`
    - result: pass (`8/8`)
+5. Ran `spirv-val` on all generated smoke-test SPIR-V binaries:
+   - command: `for f in out/cmake_host_build/*.spv; do /usr/local/bin/spirv-val --target-env vulkan1.1 "$f"; done`
+   - result: pass (all generated `.spv` files validated)
+6. Spot-checked disassembly for generated smoke-test SPIR-V binaries with `spirv-dis`:
+   - recommended script: `./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build`
+   - manual disassembly command: `for f in out/cmake_host_build/*.spv; do /usr/local/bin/spirv-dis "$f" -o "${f%.spv}.spvasm"; done`
+   - purpose: inspect emitted instructions, ids, entry-point/interface decorations, and arithmetic/load/store structure alongside `spirv-val`
 
 ### Current Capability Boundary
 
@@ -122,6 +166,17 @@ covered by smoke tests.
    - constants used directly as binary operands without prior materialization
    - general expressions, control flow, resources
    - broader IO decoration coverage
+
+### Next Development Plan
+
+1. Extend binary operand materialization beyond identifiers/SSA values so
+   constant vec constructors and other already-supported expression forms can
+   participate directly in arithmetic.
+2. Broaden arithmetic coverage incrementally from `add/sub` to `mul/div`, while
+   keeping SPIR-V validation (`spirv-val`) plus disassembly spot checks
+   (`spirv-dis`) in the default smoke-test workflow for each new slice.
+3. Start shaping a more general lvalue/address path for assignment targets
+   before adding member/index writes or compound assignment.
 
 ---
 
