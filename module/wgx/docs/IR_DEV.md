@@ -4,6 +4,127 @@ This file records incremental development progress for the
 `WGSL -> AST -> Semantic Resolve -> IR -> SPIR-V` pipeline and the next
 implementation steps.
 
+## 2026-03-30
+
+### Summary
+
+Completed the first arithmetic slice after assignment stabilization: the IR and
+SPIR-V pipeline now supports minimal `vec4<f32>` binary add/sub expressions for
+currently representable local values, and variable-to-variable assignment is now
+covered by smoke tests.
+
+### Completed
+
+1. **Locked in variable-copy assignment coverage.**
+   - **File**: `test/ut/wgx/wgx_spirv_smoke_test.cc`
+   - **Added test**: `EmitsVertexSpirvBinaryForVariableCopyAssignmentReturn`
+   - **Validates**:
+     ```wgsl
+     @vertex
+     fn vs_main() -> @builtin(position) vec4<f32> {
+       var a: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+       var b: vec4<f32>;
+       b = a;
+       return b;
+     }
+     ```
+   - **Effect**:
+     - confirms the existing `{dst_var_id, src_var_id}` store path lowers and
+       emits as expected
+
+2. **Extended IR to model minimal binary arithmetic results.**
+   - **File**: `module/wgx/ir/module.h`
+   - **Added**:
+     - `InstKind::kBinary`
+     - `BinaryOpKind::{kAdd, kSubtract}`
+     - `ReturnValueKind::kValueRef`
+     - function-local SSA-style value id allocation for arithmetic results
+   - **Effect**:
+     - arithmetic can now produce explicit IR values without forcing an
+       immediate store to a local variable
+
+3. **Lowering now supports narrow `vec4<f32>` add/sub expressions.**
+   - **File**: `module/wgx/lower/lower_to_ir.cpp`
+   - **Added/changed**:
+     - `LowerBinaryExpression()`
+     - binary operand collection through existing expression lowering
+     - `LowerStoreValue()` and return lowering updated to accept arithmetic
+       value results
+   - **Current supported subset**:
+     - `+` and `-` only
+     - operands must lower to supported `vec4<f32>` values
+     - currently practical operand shapes are local variables and previously
+       produced arithmetic values
+   - **Still excluded**:
+     - multiply/divide/modulo
+     - scalar-vector mixing
+     - member/index/access-chain arithmetic operands
+     - compound assignment (`+=`, `-=`)
+
+4. **SPIR-V emitter now emits minimal vector arithmetic.**
+   - **File**: `module/wgx/spirv/emitter.cpp`
+   - **Added/changed**:
+     - arithmetic value tracking for IR `kBinary` results
+     - `EmitBinary()` for:
+       - `OpFAdd`
+       - `OpFSub`
+     - return emission extended to support direct SSA arithmetic values
+   - **Effect**:
+     - `return a + b;` and `c = a - b; return c;` now emit valid SPIR-V in the
+       current subset
+
+5. **Added smoke coverage for arithmetic return/store paths.**
+   - **File**: `test/ut/wgx/wgx_spirv_smoke_test.cc`
+   - **Added tests**:
+     - `EmitsVertexSpirvBinaryForVectorAddReturn`
+     - `EmitsVertexSpirvBinaryForVectorSubAssignmentReturn`
+   - **Checks**:
+     - `OpFAdd` / `OpFSub`
+     - `OpLoad`
+     - `OpStore`
+     - builtin position decoration
+
+### Validation
+
+1. Rebuilt unit test target:
+   - `cmake --build out/cmake_host_build --target skity_unit_test`
+2. Ran targeted variable-copy assignment test:
+   - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.EmitsVertexSpirvBinaryForVariableCopyAssignmentReturn'`
+   - result: pass (`1/1`)
+3. Ran targeted arithmetic tests:
+   - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.EmitsVertexSpirvBinaryForVectorAddReturn'`
+   - result: pass (`1/1`)
+   - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.EmitsVertexSpirvBinaryForVectorSubAssignmentReturn'`
+   - result: pass (`1/1`)
+4. Ran WGX SPIR-V smoke suite:
+   - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.*'`
+   - result: pass (`8/8`)
+
+### Current Capability Boundary
+
+1. **Works**:
+   - vertex/fragment entry mapping
+   - fragment `OriginUpperLeft` execution mode
+   - void return path
+   - vertex `@builtin(position) vec4<f32>` return with constant vec4 constructor
+   - local variable declaration with or without initializer for `vec4<f32>`
+   - local variable assignment using `=` for supported `vec4<f32>` values
+   - variable-to-variable assignment (`b = a`)
+   - `vec4<f32>` binary add/sub for supported local values
+   - returning local variable reference (`return pos`)
+   - returning direct arithmetic value (`return a + b`)
+   - module-level `TypeTable` for type management
+
+2. **Not yet supported**:
+   - compound assignment (`+=`, `-=`, ...)
+   - non-identifier assignment lhs (member/index/access chain)
+   - multiply/divide/modulo and broader arithmetic
+   - constants used directly as binary operands without prior materialization
+   - general expressions, control flow, resources
+   - broader IO decoration coverage
+
+---
+
 ## 2026-03-27
 
 ### Summary
@@ -335,6 +456,8 @@ Acceptance:
 Implement the next shortest meaningful feature slice:
 1. Add explicit coverage for variable-to-variable assignment
    - example: `var a = vec4<f32>(...); var b: vec4<f32>; b = a; return b;`
+   - status: emitter/lowering path appears structurally ready; lock it in with
+     a smoke test before expanding expression support
 2. Extend lowering/emitter support for simple arithmetic on supported vector values
    - start with `vec4<f32>` add/sub where both operands are already representable
 3. Keep assignment support intentionally narrow until arithmetic/value modeling is stable
@@ -344,3 +467,97 @@ Rationale:
    and should be locked in with tests before broader expression work.
 2. Simple arithmetic is the next feature that materially expands shader usefulness
    without requiring control flow or resource support first.
+
+---
+
+## Actionable TODO (refined on 2026-03-30)
+
+### Current code reality check
+
+1. **Variable-to-variable assignment is likely already implemented end-to-end.**
+   - `LowerAssignStatement()` already lowers plain `identifier = expression`
+   - `LowerExpression()` already accepts identifier rhs and returns a variable ref
+   - `LowerStoreValue()` already emits a store shape `{dst_var_id, src_var_id}`
+   - `EmitStore()` already translates that store shape into `OpLoad + OpStore`
+2. **The main missing piece is coverage, not core plumbing.**
+   - there is currently a smoke test for assigning a constant vector to a local,
+     but no dedicated smoke test that proves `b = a` works
+3. **Arithmetic is the next real implementation gap.**
+   - parser and AST already expose `BinaryExp` and additive operators
+   - lowering currently only accepts:
+     - vec4<f32> constructor constants
+     - identifier expressions
+   - emitter currently only accepts:
+     - variable declarations
+     - stores
+     - returns
+
+### Recommended next implementation order
+
+1. **Variable-copy assignment coverage is done. Keep it as a regression check.**
+   - Add a smoke test for:
+     ```wgsl
+     @vertex
+     fn vs_main() -> @builtin(position) vec4<f32> {
+       var a: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+       var b: vec4<f32>;
+       b = a;
+       return b;
+     }
+     ```
+   - Validate presence of:
+     - `OpVariable`
+     - `OpStore`
+     - `OpLoad`
+     - builtin position decoration
+   - Prefer also checking that more than one store/load appears if test helpers
+     are extended later
+
+2. **Minimal IR for binary vector arithmetic is done for add/sub. Extend carefully.**
+   - Add an IR instruction for binary arithmetic on supported value kinds
+   - Keep the first slice intentionally narrow:
+     - `vec4<f32> + vec4<f32>`
+     - `vec4<f32> - vec4<f32>`
+     - operands limited to currently representable values (constants or locals)
+
+3. **Lowering support for narrow `BinaryExp` add/sub is done. Next expand incrementally.**
+   - Add `LowerBinaryExpression()` in `module/wgx/lower/lower_to_ir.cpp`
+   - Accept only `ast::BinaryOp::kAdd` and `ast::BinaryOp::kSubtract`
+   - Reject all other ops for now
+   - Reuse current `vec4<f32>` type checks so unsupported shapes fail clearly
+
+4. **SPIR-V emission for minimal arithmetic results is done. Next expand instruction coverage.**
+   - Map the new IR arithmetic instruction to:
+     - `OpFAdd`
+     - `OpFSub`
+   - Ensure arithmetic results can feed:
+     - `kStore`
+     - return-with-value path
+   - Decide whether to model arithmetic as SSA values directly before adding
+     more expression forms
+
+5. **Only after arithmetic is stable, widen assignment/value modeling.**
+   - compound assignment (`+=`, `-=`)
+   - more lhs forms (member/index/access chain)
+   - richer mixed expression trees
+
+### Suggested file-level entry points
+
+1. `test/ut/wgx/wgx_spirv_smoke_test.cc`
+   - add the variable-copy assignment smoke test first
+2. `module/wgx/ir/module.h`
+   - add the minimal arithmetic IR shape if proceeding to binary expressions
+3. `module/wgx/lower/lower_to_ir.cpp`
+   - add binary expression lowering after the test-only assignment slice
+4. `module/wgx/spirv/emitter.cpp`
+   - add arithmetic instruction emission once the IR shape is settled
+
+### Validation plan for the next slice
+
+1. Build unit tests:
+   - `cmake --build out/cmake_host_build --target skity_unit_test`
+2. Run the new targeted smoke test first:
+   - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.EmitsVertexSpirvBinaryForVariableCopyAssignmentReturn'`
+3. Run the full WGX SPIR-V smoke suite:
+   - `./out/cmake_host_build/test/ut/skity_unit_test --gtest_filter='WgxSpirvSmokeTest.*'`
+4. If arithmetic lands, add a matching targeted arithmetic smoke test before rerunning the suite

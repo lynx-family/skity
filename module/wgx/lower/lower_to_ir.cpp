@@ -217,7 +217,10 @@ class Lowerer {
         return false;
       }
 
-      if (value_inst.var_id != 0) {
+      if (value_inst.value_id != 0) {
+        inst.return_value_kind = ir::ReturnValueKind::kValueRef;
+        inst.value_id = value_inst.value_id;
+      } else if (value_inst.var_id != 0) {
         // Variable reference - need to load
         inst.return_value_kind = ir::ReturnValueKind::kVariableRef;
         inst.var_id = value_inst.var_id;
@@ -339,7 +342,9 @@ class Lowerer {
     store_inst.kind = ir::InstKind::kStore;
     store_inst.operands.push_back(ir::Operand::Id(var_id));
 
-    if (value_inst.var_id != 0) {
+    if (value_inst.value_id != 0) {
+      store_inst.operands.push_back(ir::Operand::Id(value_inst.value_id));
+    } else if (value_inst.var_id != 0) {
       store_inst.operands.push_back(ir::Operand::Id(value_inst.var_id));
     } else {
       for (size_t i = 0; i < 4; ++i) {
@@ -373,7 +378,96 @@ class Lowerer {
           static_cast<ast::IdentifierExp*>(expression), out_inst);
     }
 
+    if (expression->GetType() == ast::ExpressionType::kBinaryExp) {
+      return LowerBinaryExpression(static_cast<ast::BinaryExp*>(expression),
+                                   out_inst, true);
+    }
+
     return false;
+  }
+
+
+  bool LowerBinaryOperand(ast::Expression* expression, ir::Instruction* out_inst) {
+    return LowerExpression(expression, out_inst);
+  }
+
+  bool LowerBinaryExpression(ast::BinaryExp* binary, ir::Instruction* out_inst,
+                             bool emit_inst) {
+    if (binary == nullptr || out_inst == nullptr) {
+      return false;
+    }
+
+    ir::BinaryOpKind op_kind = ir::BinaryOpKind::kAdd;
+    switch (binary->op) {
+      case ast::BinaryOp::kAdd:
+        op_kind = ir::BinaryOpKind::kAdd;
+        break;
+      case ast::BinaryOp::kSubtract:
+        op_kind = ir::BinaryOpKind::kSubtract;
+        break;
+      default:
+        return false;
+    }
+
+    ir::Instruction lhs_inst;
+    if (!LowerBinaryOperand(binary->lhs, &lhs_inst)) {
+      return false;
+    }
+
+    ir::Instruction rhs_inst;
+    if (!LowerBinaryOperand(binary->rhs, &rhs_inst)) {
+      return false;
+    }
+
+    ir::TypeId vec4_type = type_table_->GetVectorType(
+        type_table_->GetF32Type(), 4);
+    if (lhs_inst.result_type != vec4_type || rhs_inst.result_type != vec4_type) {
+      return false;
+    }
+
+    ir::Instruction binary_inst;
+    binary_inst.kind = ir::InstKind::kBinary;
+    binary_inst.binary_op = op_kind;
+    binary_inst.result_type = vec4_type;
+    binary_inst.result_id = AllocateValueId();
+    if (binary_inst.result_id == 0) {
+      return false;
+    }
+    binary_inst.value_id = binary_inst.result_id;
+
+    if (!AppendValueOperand(lhs_inst, &binary_inst.operands)) {
+      return false;
+    }
+    if (!AppendValueOperand(rhs_inst, &binary_inst.operands)) {
+      return false;
+    }
+
+    if (emit_inst) {
+      ir_function_->entry_block.instructions.emplace_back(binary_inst);
+    }
+
+    *out_inst = binary_inst;
+    return true;
+  }
+
+  bool AppendValueOperand(const ir::Instruction& value_inst,
+                          std::vector<ir::Operand>* operands) {
+    if (operands == nullptr) {
+      return false;
+    }
+
+    if (value_inst.value_id != 0) {
+      operands->push_back(ir::Operand::Id(value_inst.value_id));
+      return true;
+    }
+    if (value_inst.var_id != 0) {
+      operands->push_back(ir::Operand::Id(value_inst.var_id));
+      return true;
+    }
+    for (size_t i = 0; i < 4; ++i) {
+      operands->push_back(ir::Operand::ConstF32(value_inst.const_vec4_f32[i]));
+    }
+    return true;
   }
 
   // Lowers an identifier expression (variable reference)
@@ -429,6 +523,10 @@ class Lowerer {
   // Variable management
   uint32_t AllocateVarId() {
     return ir_function_ ? ir_function_->AllocateVarId() : 0;
+  }
+
+  uint32_t AllocateValueId() {
+    return ir_function_ ? ir_function_->AllocateValueId() : 0;
   }
 
   void RegisterVar(const std::string& name, uint32_t id) {

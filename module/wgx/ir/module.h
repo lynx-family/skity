@@ -25,12 +25,20 @@ enum class InstKind {
   kVariable,   // var declaration: result_id, type
   kLoad,       // load from variable: result_id, type, var_id
   kStore,      // store to variable: var_id, value_id
+  kBinary,     // binary arithmetic producing an SSA value
 };
 
 enum class ReturnValueKind {
   kNone,
   kConstVec4F32,
-  kVariableRef,  // return a variable reference (loaded)
+  kVariableRef,   // return a variable reference (loaded)
+  kValueRef,      // return an SSA value directly
+};
+
+// Supported binary operations in the current IR subset.
+enum class BinaryOpKind {
+  kAdd,
+  kSubtract,
 };
 
 // Operand for IR instructions
@@ -77,7 +85,13 @@ struct Instruction {
   // Variable reference for kVariable/kLoad return value
   uint32_t var_id = 0;
 
-  // Operands for variable/load/store instructions
+  // SSA value reference for return / value-producing instructions
+  uint32_t value_id = 0;
+
+  // Binary op kind for kBinary instructions
+  BinaryOpKind binary_op = BinaryOpKind::kAdd;
+
+  // Operands for variable/load/store/binary instructions
   std::vector<Operand> operands = {};
 
   // Variable name (for debugging)
@@ -94,10 +108,12 @@ struct Function {
   bool return_builtin_position = false;
   Block entry_block = {};
 
-  // Variable id allocator for this function
+  // Variable/value id allocator for this function
   uint32_t next_var_id = 1;
+  uint32_t next_value_id = 1;
 
   uint32_t AllocateVarId() { return next_var_id++; }
+  uint32_t AllocateValueId() { return next_value_id++; }
 };
 
 struct Module {
