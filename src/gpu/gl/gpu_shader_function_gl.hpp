@@ -13,7 +13,6 @@ namespace skity {
 class GPUShaderFunctionGL : public GPUShaderFunction {
  public:
   GPUShaderFunctionGL(GPULabel label, GPUShaderStage stage, const char* source,
-                      const std::vector<int32_t>& constant_values,
                       GPUShaderFunctionErrorCallback error_callback);
 
   ~GPUShaderFunctionGL() override;
