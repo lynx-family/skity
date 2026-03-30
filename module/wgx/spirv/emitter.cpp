@@ -367,7 +367,6 @@ struct LocalVarInfo {
 struct ValueInfo {
   uint32_t ir_value_id = 0;
   ir::TypeId value_type = ir::kInvalidTypeId;
-  uint32_t spirv_value_id = 0;
 };
 
 class ModuleBuilder {
@@ -435,9 +434,6 @@ class ModuleBuilder {
     }
     for (auto& var : local_vars_) {
       var.spirv_var_id = ids_.Allocate();
-    }
-    for (auto& value : values_) {
-      value.spirv_value_id = ids_.Allocate();
     }
     return function_id_ != 0 && label_id_ != 0;
   }
@@ -578,29 +574,7 @@ class ModuleBuilder {
     if (var_it == local_vars_.end()) return false;
 
     uint32_t value_id = 0;
-    if (inst.operands.size() == 2 &&
-        inst.operands[1].kind == ir::Operand::Kind::kId) {
-      auto src_it = FindLocalVar(inst.operands[1].id);
-      if (src_it == local_vars_.end()) return false;
-      value_id = ids_.Allocate();
-      AppendInstruction(&sections_->functions, SpvOpLoad,
-                        {vec4_type_id_, value_id, src_it->spirv_var_id});
-    } else if (inst.operands.size() == 5) {
-      std::array<uint32_t, 4> const_ids;
-      for (size_t i = 0; i < 4; ++i) {
-        if (inst.operands[i + 1].kind != ir::Operand::Kind::kConstF32) {
-          return false;
-        }
-        const_ids[i] =
-            type_emitter_->EmitF32Constant(inst.operands[i + 1].const_f32);
-        if (const_ids[i] == 0) return false;
-      }
-
-      value_id = ids_.Allocate();
-      AppendInstruction(&sections_->functions, SpvOpCompositeConstruct,
-                        {vec4_type_id_, value_id, const_ids[0], const_ids[1],
-                         const_ids[2], const_ids[3]});
-    } else {
+    if (!MaterializeValueFromOperands(inst.operands, 1, &value_id)) {
       return false;
     }
 
@@ -611,8 +585,7 @@ class ModuleBuilder {
 
 
   bool EmitBinary(const ir::Instruction& inst) {
-    auto value_it = FindValue(inst.result_id);
-    if (value_it == values_.end()) return false;
+    if (FindValue(inst.result_id) == values_.end()) return false;
     if (inst.operands.size() != 2) return false;
 
     uint32_t lhs_id = 0;
@@ -630,24 +603,23 @@ class ModuleBuilder {
         break;
     }
 
+    uint32_t result_id = ids_.Allocate();
     AppendInstruction(&sections_->functions, op,
-                      {vec4_type_id_, value_it->spirv_value_id, lhs_id, rhs_id});
+                      {vec4_type_id_, result_id, lhs_id, rhs_id});
+    value_map_[inst.result_id] = result_id;
     return true;
   }
 
   bool MaterializeValueOperand(const ir::Operand& operand, uint32_t* value_id) {
     if (value_id == nullptr) return false;
 
-    if (operand.kind == ir::Operand::Kind::kConstF32) {
-      return false;
-    }
     if (operand.kind != ir::Operand::Kind::kId) {
       return false;
     }
 
-    auto value_it = FindValue(operand.id);
-    if (value_it != values_.end()) {
-      *value_id = value_it->spirv_value_id;
+    auto value_map_it = value_map_.find(operand.id);
+    if (value_map_it != value_map_.end()) {
+      *value_id = value_map_it->second;
       return true;
     }
 
@@ -662,6 +634,65 @@ class ModuleBuilder {
     return false;
   }
 
+  bool MaterializeConstVec4(const std::array<float, 4>& values,
+                            uint32_t* value_id) {
+    if (value_id == nullptr) return false;
+
+    std::array<uint32_t, 4> const_ids;
+    for (size_t i = 0; i < 4; ++i) {
+      const_ids[i] = type_emitter_->EmitF32Constant(values[i]);
+      if (const_ids[i] == 0) return false;
+    }
+
+    *value_id = ids_.Allocate();
+    AppendInstruction(&sections_->functions, SpvOpCompositeConstruct,
+                      {vec4_type_id_, *value_id, const_ids[0], const_ids[1],
+                       const_ids[2], const_ids[3]});
+    return true;
+  }
+
+  bool MaterializeValueFromOperands(const std::vector<ir::Operand>& operands,
+                                    size_t start_index, uint32_t* value_id) {
+    if (value_id == nullptr || start_index >= operands.size()) {
+      return false;
+    }
+
+    const size_t value_operand_count = operands.size() - start_index;
+    if (value_operand_count == 1) {
+      return MaterializeValueOperand(operands[start_index], value_id);
+    }
+
+    if (value_operand_count != 4) {
+      return false;
+    }
+
+    std::array<float, 4> values = {0.f, 0.f, 0.f, 0.f};
+    for (size_t i = 0; i < 4; ++i) {
+      if (operands[start_index + i].kind != ir::Operand::Kind::kConstF32) {
+        return false;
+      }
+      values[i] = operands[start_index + i].const_f32;
+    }
+
+    return MaterializeConstVec4(values, value_id);
+  }
+
+  bool MaterializeValue(const ir::Instruction& inst, uint32_t* value_id) {
+    if (value_id == nullptr) return false;
+
+    switch (inst.return_value_kind) {
+      case ir::ReturnValueKind::kConstVec4F32:
+        return MaterializeConstVec4(inst.const_vec4_f32, value_id);
+      case ir::ReturnValueKind::kVariableRef:
+        return MaterializeValueOperand(ir::Operand::Id(inst.var_id), value_id);
+      case ir::ReturnValueKind::kValueRef:
+        return MaterializeValueOperand(ir::Operand::Id(inst.value_id), value_id);
+      case ir::ReturnValueKind::kNone:
+        break;
+    }
+    return false;
+  }
+
   bool EmitReturn(const ir::Instruction& inst) {
     if (!inst.has_return_value) {
       AppendInstruction(&sections_->functions, SpvOpReturn, {});
@@ -669,24 +700,7 @@ class ModuleBuilder {
     }
 
     uint32_t value_to_store = 0;
-
-    if (inst.return_value_kind == ir::ReturnValueKind::kConstVec4F32) {
-      value_to_store = ids_.Allocate();
-      AppendInstruction(&sections_->functions, SpvOpCompositeConstruct,
-                        {vec4_type_id_, value_to_store, position_const_ids_[0],
-                         position_const_ids_[1], position_const_ids_[2],
-                         position_const_ids_[3]});
-    } else if (inst.return_value_kind == ir::ReturnValueKind::kVariableRef) {
-      auto var_it = FindLocalVar(inst.var_id);
-      if (var_it == local_vars_.end()) return false;
-      value_to_store = ids_.Allocate();
-      AppendInstruction(&sections_->functions, SpvOpLoad,
-                        {vec4_type_id_, value_to_store, var_it->spirv_var_id});
-    } else if (inst.return_value_kind == ir::ReturnValueKind::kValueRef) {
-      auto value_it = FindValue(inst.value_id);
-      if (value_it == values_.end()) return false;
-      value_to_store = value_it->spirv_value_id;
-    } else {
+    if (!MaterializeValue(inst, &value_to_store)) {
       return false;
     }
 
@@ -748,6 +762,7 @@ class ModuleBuilder {
   std::array<uint32_t, 4> position_const_ids_ = {0, 0, 0, 0};
   std::vector<LocalVarInfo> local_vars_;
   std::vector<ValueInfo> values_;
+  std::unordered_map<uint32_t, uint32_t> value_map_;
 };
 
 }  // namespace
