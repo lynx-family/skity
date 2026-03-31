@@ -132,7 +132,7 @@ class SKITY_API Font {
 
   uint8_t flags_{};
   uint8_t edging_{};
-  uint8_t hinting_{};
+  uint8_t hinting_ = static_cast<uint8_t>(Font::FontHinting::kNormal);
 
   enum PrivFlags {
     kForceAutoHinting_PrivFlag = 1 << 0,

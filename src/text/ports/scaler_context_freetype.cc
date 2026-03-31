@@ -100,6 +100,24 @@ ScalerContextFreetype::ScalerContextFreetype(
   }
   FT_Int32 load_flags = FT_LOAD_DEFAULT;
 
+  switch (desc->GetHinting()) {
+    case Font::FontHinting::kNone:
+      load_flags = FT_LOAD_NO_HINTING;
+      linear_metrics_ = true;
+      break;
+    case Font::FontHinting::kSlight:
+      load_flags = FT_LOAD_TARGET_LIGHT;
+      linear_metrics_ = true;
+      break;
+    case Font::FontHinting::kNormal:
+    case Font::FontHinting::kFull:
+      load_flags = FT_LOAD_TARGET_NORMAL;
+      break;
+    default:
+      DEBUG_CHECK(false);
+      break;
+  }
+
   load_flags |= FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH;
   load_flags |= FT_LOAD_COLOR;
 
@@ -162,6 +180,8 @@ ScalerContextFreetype::ScalerContextFreetype(
         Matrix22(text_scale_.x / ft_face_->Face()->size->metrics.x_ppem, 0, 0,
                  text_scale_.y / ft_face_->Face()->size->metrics.y_ppem);
     load_glyph_flags_ &= ~FT_LOAD_NO_BITMAP;
+    // FreeType does not provide linear metrics for bitmap fonts.
+    linear_metrics_ = false;
   } else {
     return;
   }
@@ -385,11 +405,25 @@ void ScalerContextFreetype::GenerateMetrics(GlyphData* glyph) {
   }
 
   if (this->IsVertical()) {
-    glyph->advance_x_ = -FixedDot6ToFloat(face_->glyph->advance.x);
-    glyph->advance_y_ = FixedDot6ToFloat(face_->glyph->advance.y);
+    if (linear_metrics_) {
+      const float advance_scalar =
+          FixedDot16ToFloat(face_->glyph->linearVertAdvance);
+      glyph->advance_x_ = transform_matrix_.GetSkewX() * advance_scalar;
+      glyph->advance_y_ = transform_matrix_.GetScaleY() * advance_scalar;
+    } else {
+      glyph->advance_x_ = -FixedDot6ToFloat(face_->glyph->advance.x);
+      glyph->advance_y_ = FixedDot6ToFloat(face_->glyph->advance.y);
+    }
   } else {
-    glyph->advance_x_ = FixedDot6ToFloat(face_->glyph->advance.x);
-    glyph->advance_y_ = -FixedDot6ToFloat(face_->glyph->advance.y);
+    if (linear_metrics_) {
+      const float advance_scalar =
+          FixedDot16ToFloat(face_->glyph->linearHoriAdvance);
+      glyph->advance_x_ = transform_matrix_.GetScaleX() * advance_scalar;
+      glyph->advance_y_ = transform_matrix_.GetSkewY() * advance_scalar;
+    } else {
+      glyph->advance_x_ = FixedDot6ToFloat(face_->glyph->advance.x);
+      glyph->advance_y_ = -FixedDot6ToFloat(face_->glyph->advance.y);
+    }
   }
 }
 

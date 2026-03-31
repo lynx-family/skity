@@ -49,7 +49,7 @@ class ScalerContextFreetype : public ScalerContext {
   Matrix22 transform_matrix_;
   FT_Matrix ft_transform_matrix_;
   uint32_t load_glyph_flags_;
-  //  bool fDoLinearMetrics = false;
+  bool linear_metrics_ = false;
 
   std::unique_ptr<PathFreeType> path_utils_;
   std::unique_ptr<ColorFreeType> color_utils_;
