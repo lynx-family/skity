@@ -61,6 +61,7 @@ void GPUSurfaceImpl::Flush() {
   if (arena_allocator_ != nullptr) {
     arena_allocator_->Reset();
   }
+  ctx_->GetPipelineLib()->ResetCompileFailedPipelines();
 }
 
 }  // namespace skity
