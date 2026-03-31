@@ -147,11 +147,15 @@ class Lowerer {
     if (ast_entry_point_->body == nullptr) {
       return true;
     }
+    // Push function-level scope for parameter and local variable declarations
+    PushScope();
     for (auto* statement : ast_entry_point_->body->statements) {
       if (!LowerStatement(statement, &ir_function_->entry_block)) {
+        PopScope();
         return false;
       }
     }
+    PopScope();
     return true;
   }
 
@@ -339,14 +343,18 @@ class Lowerer {
     return true;
   }
 
-  /** Lowers a block statement */
+  /** Lowers a block statement (with its own scope) */
   bool LowerBlockStatement(const ast::BlockStatement* nested,
                            ir::Block* block) {
+    // Block statement introduces a new lexical scope
+    PushScope();
     for (auto* nested_stmt : nested->statements) {
       if (!LowerStatement(nested_stmt, block)) {
+        PopScope();
         return false;
       }
     }
+    PopScope();
     return true;
   }
 
@@ -370,7 +378,10 @@ class Lowerer {
     if (var_id == 0) {
       return false;
     }
-    RegisterVar(var_name, var_id, var_type);
+    if (!RegisterVar(var_name, var_id, var_type)) {
+      // Redeclaration in the same scope
+      return false;
+    }
 
     /** Emit kVariable instruction */
     ir::Instruction var_inst;
@@ -687,6 +698,62 @@ class Lowerer {
     ir::TypeId type = ir::kInvalidTypeId;
   };
 
+  /** Scope stack for nested lexical scoping */
+  class ScopeStack {
+   public:
+    /** Push a new scope onto the stack */
+    void PushScope() {
+      scopes_.emplace_back();
+    }
+
+    /** Pop the current scope from the stack */
+    void PopScope() {
+      if (!scopes_.empty()) {
+        scopes_.pop_back();
+      }
+    }
+
+    /** Register a variable in the current (innermost) scope */
+    bool RegisterVar(const std::string& name, uint32_t id, ir::TypeId type) {
+      if (scopes_.empty()) {
+        return false;
+      }
+      // Check for redeclaration in current scope
+      auto& current_scope = scopes_.back();
+      if (current_scope.find(name) != current_scope.end()) {
+        return false;  // Redeclaration in same scope
+      }
+      current_scope[name] = {id, type};
+      return true;
+    }
+
+    /** Lookup a variable from innermost to outermost scope */
+    VarInfo LookupVar(const std::string& name) const {
+      // Search from innermost to outermost
+      for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it) {
+        auto var_it = it->find(name);
+        if (var_it != it->end()) {
+          return var_it->second;
+        }
+      }
+      return VarInfo{0, ir::kInvalidTypeId};
+    }
+
+    /** Check if currently in a scope */
+    bool InScope() const {
+      return !scopes_.empty();
+    }
+
+    /** Get current scope depth (0 = no scope, 1 = function scope, etc.) */
+    size_t ScopeDepth() const {
+      return scopes_.size();
+    }
+
+   private:
+    // Each scope is a map from variable name to VarInfo
+    std::vector<std::unordered_map<std::string, VarInfo>> scopes_;
+  };
+
   /** Variable management */
   uint32_t AllocateVarId() {
     return ir_function_ ? ir_function_->AllocateVarId() : 0;
@@ -696,23 +763,31 @@ class Lowerer {
     return ir_function_ ? ir_function_->AllocateSSAId() : 0;
   }
 
-  void RegisterVar(const std::string& name, uint32_t id, ir::TypeId type) {
-    var_map_[name] = {id, type};
+  /** Register variable in current scope */
+  bool RegisterVar(const std::string& name, uint32_t id, ir::TypeId type) {
+    return scope_stack_.RegisterVar(name, id, type);
   }
 
+  /** Lookup variable from current scope outward */
   VarInfo LookupVar(const std::string& name) const {
-    auto it = var_map_.find(name);
-    if (it != var_map_.end()) {
-      return it->second;
-    }
-    return VarInfo{0, ir::kInvalidTypeId};
+    return scope_stack_.LookupVar(name);
+  }
+
+  /** Push a new scope for block-level declarations */
+  void PushScope() {
+    scope_stack_.PushScope();
+  }
+
+  /** Pop current scope when exiting block */
+  void PopScope() {
+    scope_stack_.PopScope();
   }
 
   const ast::Module* ast_module_;
   const ast::Function* ast_entry_point_;
   ir::Function* ir_function_ = nullptr;
   ir::TypeTable* type_table_ = nullptr;
-  std::unordered_map<std::string, VarInfo> var_map_;
+  ScopeStack scope_stack_;
 };
 
 std::unique_ptr<ir::Module> LowerToIR(const ast::Module* module,
