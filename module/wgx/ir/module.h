@@ -20,6 +20,67 @@ enum class PipelineStage {
   kFragment,
 };
 
+// Output variable decoration types
+enum class OutputDecorationKind {
+  kNone,     // No decoration (void)
+  kBuiltin,  // @builtin(...)
+  kLocation, // @location(...)
+};
+
+// Backend-agnostic builtin types
+// These map to backend-specific values (e.g., SpvBuiltInPosition in SPIR-V)
+enum class BuiltinType {
+  kNone,
+  kPosition,
+  // Future: kFragDepth, kSampleMask, kVertexIndex, etc.
+};
+
+// Description of a single output variable
+// For struct returns, each member becomes one OutputVariable
+struct OutputVariable {
+  // Member name in the struct (or empty for simple returns)
+  std::string name;
+
+  // Type of this output variable
+  TypeId type = kInvalidTypeId;
+
+  // Decoration kind
+  OutputDecorationKind decoration_kind = OutputDecorationKind::kNone;
+
+  // Decoration value:
+  // - For kBuiltin: BuiltinType enum value
+  // - For kLocation: location index (0, 1, 2, ...)
+  uint32_t decoration_value = 0;
+
+  // Helper to set builtin decoration
+  void SetBuiltin(BuiltinType builtin) {
+    decoration_kind = OutputDecorationKind::kBuiltin;
+    decoration_value = static_cast<uint32_t>(builtin);
+  }
+
+  // Helper to get builtin type
+  BuiltinType GetBuiltin() const {
+    if (decoration_kind == OutputDecorationKind::kBuiltin) {
+      return static_cast<BuiltinType>(decoration_value);
+    }
+    return BuiltinType::kNone;
+  }
+
+  // Helper to set location decoration
+  void SetLocation(uint32_t loc) {
+    decoration_kind = OutputDecorationKind::kLocation;
+    decoration_value = loc;
+  }
+
+  // Helper to get location index
+  uint32_t GetLocation() const {
+    if (decoration_kind == OutputDecorationKind::kLocation) {
+      return decoration_value;
+    }
+    return 0;
+  }
+};
+
 enum class InstKind {
   kReturn,
   kVariable,
@@ -73,7 +134,17 @@ struct Block {
 struct Function {
   std::string name = {};
   PipelineStage stage = PipelineStage::kUnknown;
-  bool return_builtin_position = false;
+
+  // Return type (kInvalidTypeId = void)
+  // For struct returns, this is the struct type
+  TypeId return_type = kInvalidTypeId;
+
+  // Output variables for entry point interface
+  // - Empty for void returns
+  // - One entry for simple scalar/vector returns
+  // - Multiple entries for struct returns (one per decorated member)
+  std::vector<OutputVariable> output_vars = {};
+
   Block entry_block = {};
 
   // Variable/value id allocator for this function

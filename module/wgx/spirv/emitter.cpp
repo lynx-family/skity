@@ -52,7 +52,7 @@ void AppendInstruction(std::vector<uint32_t>* words, SpvOp opcode,
 
 void AppendEntryPoint(std::vector<uint32_t>* words, SpvExecutionModel model,
                       uint32_t function_id, std::string_view entry_point,
-                      std::initializer_list<uint32_t> interfaces = {}) {
+                      const std::vector<uint32_t>& interfaces = {}) {
   if (words == nullptr) return;
   auto name_words = EncodeStringLiteral(entry_point);
   const auto word_count =
@@ -130,11 +130,20 @@ bool SupportsCurrentIR(const ir::Function& function) {
   }
 
   // Backend-specific capability checks
-  const auto& last_inst = function.entry_block.instructions.back();
-  if (!last_inst.operands.empty()) {
-    if (function.stage != ir::PipelineStage::kVertex ||
-        !function.return_builtin_position) {
-      return false;
+  // Currently only support:
+  // - void returns (empty output_vars)
+  // - single @builtin(position) in vertex shaders
+  if (!function.output_vars.empty()) {
+    if (function.stage != ir::PipelineStage::kVertex) {
+      return false;  // Only vertex shaders supported for returns
+    }
+    if (function.output_vars.size() != 1) {
+      return false;  // Only single output supported currently
+    }
+    const auto& output = function.output_vars[0];
+    if (output.decoration_kind != ir::OutputDecorationKind::kBuiltin ||
+        output.GetBuiltin() != ir::BuiltinType::kPosition) {
+      return false;  // Only @builtin(position) supported
     }
   }
   return true;
@@ -400,7 +409,15 @@ class ModuleBuilder {
     const auto& last_inst = instructions.back();
     if (last_inst.kind != ir::InstKind::kReturn) return false;
 
-    has_position_return_ = !last_inst.operands.empty();
+    // Initialize output variables from IR
+    for (const auto& ir_output : entry_.output_vars) {
+      OutputVarInfo info;
+      info.name = ir_output.name;
+      info.ir_type = ir_output.type;
+      info.decoration_kind = ir_output.decoration_kind;
+      info.decoration_value = ir_output.decoration_value;
+      output_vars_.push_back(std::move(info));
+    }
 
     for (const auto& inst : instructions) {
       if (inst.kind == ir::InstKind::kVariable) {
@@ -421,8 +438,8 @@ class ModuleBuilder {
   bool AllocateCoreIds() {
     function_id_ = ids_.Allocate();
     label_id_ = ids_.Allocate();
-    if (has_position_return_) {
-      position_output_var_id_ = ids_.Allocate();
+    for (auto& output : output_vars_) {
+      output.spirv_var_id = ids_.Allocate();
     }
     for (auto& var : local_vars_) {
       var.spirv_var_id = ids_.Allocate();
@@ -439,13 +456,12 @@ class ModuleBuilder {
   }
 
   void WriteEntryPointSection() {
-    if (has_position_return_) {
-      AppendEntryPoint(&sections_->entry_points, execution_model_, function_id_,
-                       module_.entry_point, {position_output_var_id_});
-    } else {
-      AppendEntryPoint(&sections_->entry_points, execution_model_, function_id_,
-                       module_.entry_point);
+    std::vector<uint32_t> interface_ids;
+    for (const auto& output : output_vars_) {
+      interface_ids.push_back(output.spirv_var_id);
     }
+    AppendEntryPoint(&sections_->entry_points, execution_model_, function_id_,
+                     module_.entry_point, interface_ids);
   }
 
   void WriteExecutionModeSection() {
@@ -457,8 +473,8 @@ class ModuleBuilder {
 
   void WriteDebugSection() {
     AppendName(&sections_->debug, function_id_, module_.entry_point);
-    if (has_position_return_) {
-      AppendName(&sections_->debug, position_output_var_id_, "position_output");
+    for (const auto& output : output_vars_) {
+      AppendName(&sections_->debug, output.spirv_var_id, output.name);
     }
     for (const auto& inst : entry_.entry_block.instructions) {
       if (inst.kind == ir::InstKind::kVariable && !inst.var_name.empty()) {
@@ -470,12 +486,34 @@ class ModuleBuilder {
     }
   }
 
+  /**
+   * Maps IR builtin type to SPIR-V SpvBuiltIn value.
+   */
+  static SpvBuiltIn ConvertBuiltin(ir::BuiltinType builtin) {
+    switch (builtin) {
+      case ir::BuiltinType::kPosition:
+        return SpvBuiltInPosition;
+      case ir::BuiltinType::kNone:
+      default:
+        return SpvBuiltInMax;
+    }
+  }
+
   void WriteAnnotationSection() {
-    if (!has_position_return_) return;
-    AppendInstruction(
-        &sections_->annotations, SpvOpDecorate,
-        {position_output_var_id_, static_cast<uint32_t>(SpvDecorationBuiltIn),
-         static_cast<uint32_t>(SpvBuiltInPosition)});
+    for (const auto& output : output_vars_) {
+      if (output.decoration_kind == ir::OutputDecorationKind::kBuiltin) {
+        SpvBuiltIn spirv_builtin = ConvertBuiltin(output.GetBuiltin());
+        AppendInstruction(
+            &sections_->annotations, SpvOpDecorate,
+            {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationBuiltIn),
+             static_cast<uint32_t>(spirv_builtin)});
+      } else if (output.decoration_kind == ir::OutputDecorationKind::kLocation) {
+        AppendInstruction(
+            &sections_->annotations, SpvOpDecorate,
+            {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationLocation),
+             output.decoration_value});
+      }
+    }
   }
 
   bool WriteTypeConstGlobalSection() {
@@ -486,28 +524,21 @@ class ModuleBuilder {
     function_type_id_ = type_emitter_->GetFunctionTypeVoid();
     if (function_type_id_ == 0) return false;
 
-    if (!has_position_return_) return true;
+    // Create OpVariable for each output
+    for (auto& output : output_vars_) {
+      // For now, get type from the output variable's type
+      // Future: handle struct member extraction
+      uint32_t spirv_type = type_emitter_->EmitType(output.ir_type);
+      if (spirv_type == 0) return false;
 
-    // Get the return value's type from the return instruction
-    const auto& return_inst = entry_.entry_block.instructions.back();
-    if (return_inst.operands.empty()) return false;
+      uint32_t output_ptr_type =
+          type_emitter_->GetPointerType(output.ir_type, SpvStorageClassOutput);
+      if (output_ptr_type == 0) return false;
 
-    ir::TypeId return_type = return_inst.operands[0].type;
-    const ir::Type* return_type_info = type_emitter_->GetTypeTable()->GetType(return_type);
-    if (return_type_info == nullptr || return_type_info->kind != ir::TypeKind::kVector) {
-      return false;
+      AppendInstruction(&sections_->types_consts_globals, SpvOpVariable,
+                        {output_ptr_type, output.spirv_var_id,
+                         static_cast<uint32_t>(SpvStorageClassOutput)});
     }
-
-    uint32_t spirv_return_type = type_emitter_->EmitType(return_type);
-    if (spirv_return_type == 0) return false;
-
-    uint32_t output_ptr_type =
-        type_emitter_->GetPointerType(return_type, SpvStorageClassOutput);
-    if (output_ptr_type == 0) return false;
-
-    AppendInstruction(&sections_->types_consts_globals, SpvOpVariable,
-                      {output_ptr_type, position_output_var_id_,
-                       static_cast<uint32_t>(SpvStorageClassOutput)});
 
     return true;
   }
@@ -733,8 +764,13 @@ class ModuleBuilder {
       return false;
     }
 
-    AppendInstruction(&sections_->functions, SpvOpStore,
-                      {position_output_var_id_, value_to_store});
+    // Store to each output variable
+    // For now, we only support single output (simple scalar/vector returns)
+    // Future: struct returns will need member extraction and multiple stores
+    for (const auto& output : output_vars_) {
+      AppendInstruction(&sections_->functions, SpvOpStore,
+                        {output.spirv_var_id, value_to_store});
+    }
     AppendInstruction(&sections_->functions, SpvOpReturn, {});
     return true;
   }
@@ -773,6 +809,29 @@ class ModuleBuilder {
     return values_.end();
   }
 
+  // Information about an output variable (mirrors ir::OutputVariable with SPIR-V ids)
+  struct OutputVarInfo {
+    std::string name;
+    ir::TypeId ir_type = ir::kInvalidTypeId;
+    ir::OutputDecorationKind decoration_kind = ir::OutputDecorationKind::kNone;
+    uint32_t decoration_value = 0;
+    uint32_t spirv_var_id = 0;  // SPIR-V id for the OpVariable
+
+    ir::BuiltinType GetBuiltin() const {
+      if (decoration_kind == ir::OutputDecorationKind::kBuiltin) {
+        return static_cast<ir::BuiltinType>(decoration_value);
+      }
+      return ir::BuiltinType::kNone;
+    }
+
+    uint32_t GetLocation() const {
+      if (decoration_kind == ir::OutputDecorationKind::kLocation) {
+        return decoration_value;
+      }
+      return 0;
+    }
+  };
+
  private:
   const ir::Module& module_;
   const ir::Function& entry_;
@@ -782,11 +841,13 @@ class ModuleBuilder {
   SectionBuffers* sections_ = nullptr;
   std::unique_ptr<TypeEmitter> type_emitter_;
 
-  bool has_position_return_ = false;
   uint32_t function_id_ = 0;
   uint32_t label_id_ = 0;
-  uint32_t position_output_var_id_ = 0;
   uint32_t function_type_id_ = 0;
+
+  // Output variables for entry point interface
+  std::vector<OutputVarInfo> output_vars_;
+
   std::vector<LocalVarInfo> local_vars_;
   std::vector<ValueInfo> values_;
   std::unordered_map<uint32_t, uint32_t> value_map_;
