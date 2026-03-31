@@ -32,14 +32,42 @@ GPUShaderFunctionGL::GPUShaderFunctionGL(
     : GPUShaderFunction(std::move(label)) {
   GLenum type = GetShaderType(stage);
   GLuint shader = GL_CALL(CreateShader, type);
+  if (shader == 0) {
+    LOGE("OpenGL CreateShader failed.");
+    if (error_callback) {
+      error_callback("OpenGL CreateShader failed.");
+    }
+    shader_ = shader;
+    return;
+  }
   GL_CALL(ShaderSource, shader, 1, &source, nullptr);
   GL_CALL(CompileShader, shader);
-  GLint success;
+
+  GLint success = 0;
   GL_CALL(GetShaderiv, shader, GL_COMPILE_STATUS, &success);
   if (!success) {
-    GLchar info_log[1024];
-    GL_CALL(GetShaderInfoLog, shader, 1024, nullptr, info_log);
-    LOGE("OpenGL shader compile error : {}", info_log);
+    GLint log_length = 0;
+    GL_CALL(GetShaderiv, shader, GL_INFO_LOG_LENGTH, &log_length);
+    std::string info_log_str;
+    if (log_length > 0) {
+      GLsizei max_length = std::min(log_length + 1, 4096);
+      std::vector<GLchar> log_buffer(max_length, 0);
+      GL_CALL(GetShaderInfoLog, shader, max_length, nullptr, log_buffer.data());
+      info_log_str = log_buffer.data();
+    }
+    const char* info_log = !info_log_str.empty()
+                               ? info_log_str.c_str()
+                               : "Unknown shader compile error.";
+
+    LOGE("OpenGL shader {} compile error : {}", GetLabel(), info_log);
+    auto version = GL_CALL(GetString, GL_VERSION);
+    auto vendor = GL_CALL(GetString, GL_VENDOR);
+    auto renderer = GL_CALL(GetString, GL_RENDERER);
+    LOGE("OpenGL version:{}  vendor:{}  renderer:{}",
+         version ? reinterpret_cast<const char*>(version) : "N/A",   // version
+         vendor ? reinterpret_cast<const char*>(vendor) : "N/A",     // vendor
+         renderer ? reinterpret_cast<const char*>(renderer) : "N/A"  // renderer
+    );
     if (error_callback) {
       error_callback(info_log);
     }
