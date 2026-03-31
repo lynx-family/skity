@@ -358,6 +358,72 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+
+/**
+ * Test scope stack: nested block with variable shadowing
+ * Verifies that inner block's variable doesn't leak to outer scope
+ */
+TEST(WgxSpirvSmokeTest, HandlesNestedBlockScope) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  {
+    var inner: vec4<f32> = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+    pos = inner;
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_nested_scope.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  // Should have 2 local variables (pos and inner)
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+/**
+ * Test scope stack: variable shadowing in nested block
+ * Inner variable shadows outer variable with same name
+ */
+TEST(WgxSpirvSmokeTest, HandlesVariableShadowingInNestedBlock) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var x: vec4<f32> = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  {
+    var x: vec4<f32> = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+  }
+  return x;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_shadowing.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
 #endif
 
 }  // namespace
