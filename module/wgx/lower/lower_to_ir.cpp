@@ -118,7 +118,8 @@ class Lowerer {
 
     ir_function->name = ir_module->entry_point;
     ir_function->stage = ir_module->stage;
-    ir_function->return_builtin_position = HasBuiltinPositionReturn();
+    ir_function->return_type = ResolveType(ast_entry_point_->return_type);
+    ir_function->output_vars = ResolveOutputVars();
 
     if (!LowerFunctionBody()) {
       return nullptr;
@@ -177,18 +178,52 @@ class Lowerer {
     return true;
   }
 
-  /** Checks if return type has @builtin(position) */
-  bool HasBuiltinPositionReturn() const {
+  /**
+   * Resolves output variables from return type attributes.
+   * For simple returns: creates a single output variable.
+   * For struct returns: would create one per decorated member (future).
+   */
+  std::vector<ir::OutputVariable> ResolveOutputVars() {
+    std::vector<ir::OutputVariable> outputs;
+
+    // Void return - no output variables
+    if (IsVoidType(ast_entry_point_->return_type)) {
+      return outputs;
+    }
+
+    ir::OutputVariable output;
+    output.type = ResolveType(ast_entry_point_->return_type);
+
+    // Check for builtin decoration
     for (auto* attr : ast_entry_point_->return_type_attrs) {
-      if (attr == nullptr || attr->GetType() != ast::AttributeType::kBuiltin) {
-        continue;
-      }
-      auto* builtin = static_cast<const ast::BuiltinAttribute*>(attr);
-      if (builtin->name == "position") {
-        return true;
+      if (attr == nullptr) continue;
+
+      if (attr->GetType() == ast::AttributeType::kBuiltin) {
+        auto* builtin = static_cast<const ast::BuiltinAttribute*>(attr);
+        if (builtin->name == "position") {
+          output.name = "position_output";
+          output.SetBuiltin(ir::BuiltinType::kPosition);
+          break;
+        }
+        // Future: handle other builtins (frag_depth, sample_mask, etc.)
+      } else if (attr->GetType() == ast::AttributeType::kLocation) {
+        auto* loc = static_cast<const ast::LocationAttribute*>(attr);
+        output.name = "location_output_" + std::to_string(loc->index);
+        output.decoration_kind = ir::OutputDecorationKind::kLocation;
+        output.decoration_value = static_cast<uint32_t>(loc->index);
+        break;
       }
     }
-    return false;
+
+    // If no decoration found, it's an error for entry point returns
+    // (WGSL requires decoration on entry point outputs)
+    if (output.decoration_kind == ir::OutputDecorationKind::kNone) {
+      // For now, default to no output (will fail backend validation)
+      // Future: could generate error here
+    }
+
+    outputs.push_back(std::move(output));
+    return outputs;
   }
 
   /** Converts AST type to IR TypeId */
