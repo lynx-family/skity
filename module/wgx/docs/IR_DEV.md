@@ -120,8 +120,10 @@ The backend currently still has these important limitations:
    - checks operand/result shapes, use-def chains, and basic type validity
    - dominance checking and richer type verification are future enhancements
 
-3. **Emitter logic is still too specialized around the current `vec4<f32>` path**
-   - especially for constant materialization and arithmetic emission
+3. ~~**Emitter logic is still too specialized around the current `vec4<f32>` path**~~ ✓ Completed
+   - `MaterializeConstVector` now supports arbitrary vector dimensions (vec2, vec3, vec4)
+   - removed hardcoded `vec4_type_id_` and `entry_vec4_type_` special cases
+   - SPIR-V type ids are now derived from each instruction's `result_type` dynamically
 
 4. **Function structure is still effectively single-block / straight-line only**
    - no real control-flow-capable IR structure yet
@@ -144,11 +146,10 @@ The current recommendation for the next steps is:
      instruction data
    - avoid growing new kind-specific ad hoc fields in `ir::Instruction`
 
-3. **Make emission more type-driven**
-   - derive SPIR-V type ids from each instruction/value type instead of relying
-     on the current `vec4<f32>`-centric path
-   - extend constant materialization beyond the current narrow inline subset as
-     needed
+3. ~~**Make emission more type-driven**~~ ✓ Completed
+   - SPIR-V type ids are derived from each instruction/value type dynamically
+   - constant materialization supports vec2/vec3/vec4 through `MaterializeConstVector`
+   - emitter no longer assumes all values are position-style `vec4<f32>`
 
 4. **Only resume broader feature work after the above cleanup is stable**
    - especially before introducing more expression forms or broader type support

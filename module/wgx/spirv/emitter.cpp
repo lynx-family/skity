@@ -488,22 +488,27 @@ class ModuleBuilder {
 
     if (!has_position_return_) return true;
 
-    ir::TypeId vec4_type = type_emitter_->GetTypeTable()->GetVectorType(
-        type_emitter_->GetTypeTable()->GetF32Type(), 4);
-    if (vec4_type == ir::kInvalidTypeId) return false;
+    // Get the return value's type from the return instruction
+    const auto& return_inst = entry_.entry_block.instructions.back();
+    if (return_inst.operands.empty()) return false;
 
-    vec4_type_id_ = type_emitter_->EmitType(vec4_type);
-    if (vec4_type_id_ == 0) return false;
+    ir::TypeId return_type = return_inst.operands[0].type;
+    const ir::Type* return_type_info = type_emitter_->GetTypeTable()->GetType(return_type);
+    if (return_type_info == nullptr || return_type_info->kind != ir::TypeKind::kVector) {
+      return false;
+    }
+
+    uint32_t spirv_return_type = type_emitter_->EmitType(return_type);
+    if (spirv_return_type == 0) return false;
 
     uint32_t output_ptr_type =
-        type_emitter_->GetPointerType(vec4_type, SpvStorageClassOutput);
+        type_emitter_->GetPointerType(return_type, SpvStorageClassOutput);
     if (output_ptr_type == 0) return false;
 
     AppendInstruction(&sections_->types_consts_globals, SpvOpVariable,
                       {output_ptr_type, position_output_var_id_,
                        static_cast<uint32_t>(SpvStorageClassOutput)});
 
-    entry_vec4_type_ = vec4_type;
     return true;
   }
 
@@ -629,20 +634,62 @@ class ModuleBuilder {
     return true;
   }
 
-  bool MaterializeConstVec4(const std::array<float, 4>& values,
-                            uint32_t* value_id) {
+  /**
+   * Materialize a vector constant with arbitrary component count.
+   * Supports vec2, vec3, vec4 based on the value's type.
+   */
+  bool MaterializeConstVector(const ir::Value& value, uint32_t* value_id) {
     if (value_id == nullptr) return false;
 
-    std::array<uint32_t, 4> const_ids;
-    for (size_t i = 0; i < 4; ++i) {
-      const_ids[i] = type_emitter_->EmitF32Constant(values[i]);
-      if (const_ids[i] == 0) return false;
+    // Get the vector dimension from the type
+    ir::TypeId vector_type_id = value.type;
+    const ir::Type* vector_type = type_emitter_->GetTypeTable()->GetType(vector_type_id);
+    if (vector_type == nullptr || vector_type->kind != ir::TypeKind::kVector) {
+      return false;
     }
 
+    uint32_t component_count = vector_type->count;
+    if (component_count < 2 || component_count > 4) {
+      return false;  // Only support vec2, vec3, vec4
+    }
+
+    // Get component values from the Value
+    std::array<float, 4> values = {0.0f, 0.0f, 0.0f, 0.0f};
+    switch (value.const_kind) {
+      case ir::InlineConstKind::kVec2F32:
+        values = {value.GetVec4Unchecked()[0], value.GetVec4Unchecked()[1], 0.0f, 0.0f};
+        break;
+      case ir::InlineConstKind::kVec3F32:
+        values = {value.GetVec4Unchecked()[0], value.GetVec4Unchecked()[1],
+                  value.GetVec4Unchecked()[2], 0.0f};
+        break;
+      case ir::InlineConstKind::kVec4F32:
+        values = value.GetVec4Unchecked();
+        break;
+      default:
+        return false;
+    }
+
+    // Emit component constants
+    std::vector<uint32_t> const_ids;
+    const_ids.reserve(component_count);
+    for (uint32_t i = 0; i < component_count; ++i) {
+      uint32_t component_id = type_emitter_->EmitF32Constant(values[i]);
+      if (component_id == 0) return false;
+      const_ids.push_back(component_id);
+    }
+
+    // Emit the composite construct
+    uint32_t spirv_vector_type = type_emitter_->EmitType(vector_type_id);
+    if (spirv_vector_type == 0) return false;
+
+    std::vector<uint32_t> operands;
+    operands.push_back(spirv_vector_type);
     *value_id = ids_.Allocate();
-    AppendInstruction(&sections_->functions, SpvOpCompositeConstruct,
-                      {vec4_type_id_, *value_id, const_ids[0], const_ids[1],
-                       const_ids[2], const_ids[3]});
+    operands.push_back(*value_id);
+    operands.insert(operands.end(), const_ids.begin(), const_ids.end());
+
+    AppendInstruction(&sections_->functions, SpvOpCompositeConstruct, operands);
     return true;
   }
 
@@ -656,16 +703,20 @@ class ModuleBuilder {
       return true;
     }
 
-    if (value.IsConstant() && value.const_kind == ir::InlineConstKind::kVec4F32) {
-      return MaterializeConstVec4(value.GetVec4F32(), value_id);
+    if (value.IsConstant()) {
+      // Handle vector constants (vec2, vec3, vec4)
+      if (value.const_kind == ir::InlineConstKind::kVec2F32 ||
+          value.const_kind == ir::InlineConstKind::kVec3F32 ||
+          value.const_kind == ir::InlineConstKind::kVec4F32) {
+        return MaterializeConstVector(value, value_id);
+      }
+      // TODO: Handle scalar constants (f32, i32, u32, bool)
     }
 
     return false;
   }
 
   uint32_t GetSpirvTypeId(ir::TypeId type_id) {
-    if (type_id == ir::kInvalidTypeId) return 0;
-    if (type_id == entry_vec4_type_) return vec4_type_id_;
     return type_emitter_->EmitType(type_id);
   }
 
@@ -736,8 +787,6 @@ class ModuleBuilder {
   uint32_t label_id_ = 0;
   uint32_t position_output_var_id_ = 0;
   uint32_t function_type_id_ = 0;
-  uint32_t vec4_type_id_ = 0;
-  ir::TypeId entry_vec4_type_ = ir::kInvalidTypeId;
   std::vector<LocalVarInfo> local_vars_;
   std::vector<ValueInfo> values_;
   std::unordered_map<uint32_t, uint32_t> value_map_;
