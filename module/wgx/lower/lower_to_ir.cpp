@@ -34,20 +34,56 @@ ir::PipelineStage ToIRStage(ast::PipelineStage stage) {
   return ir::PipelineStage::kUnknown;
 }
 
-bool IsVec4F32Identifier(const ast::IdentifierExp* ident) {
+/**
+ * Extracts the scalar type identifier from a vector type identifier.
+ * e.g., "vec4<f32>" -> "f32"
+ * Returns nullptr if not a valid vector type.
+ */
+const ast::IdentifierExp* GetVectorScalarType(const ast::IdentifierExp* ident) {
   if (ident == nullptr || ident->ident == nullptr) {
-    return false;
+    return nullptr;
   }
-  if (ident->ident->name != "vec4") {
-    return false;
+  const auto& name = ident->ident->name;
+  if (name != "vec2" && name != "vec3" && name != "vec4") {
+    return nullptr;
   }
   const auto& args = ident->ident->args;
   if (args.size() != 1u || args[0] == nullptr ||
       args[0]->GetType() != ast::ExpressionType::kIdentifier) {
-    return false;
+    return nullptr;
   }
-  auto* scalar_type = static_cast<ast::IdentifierExp*>(args[0]);
-  return scalar_type->ident != nullptr && scalar_type->ident->name == "f32";
+  return static_cast<ast::IdentifierExp*>(args[0]);
+}
+
+/**
+ * Gets the vector component count from identifier name.
+ * e.g., "vec4" -> 4
+ */
+uint32_t GetVectorComponentCount(const ast::IdentifierExp* ident) {
+  if (ident == nullptr || ident->ident == nullptr) {
+    return 0;
+  }
+  const auto& name = ident->ident->name;
+  if (name == "vec2") return 2;
+  if (name == "vec3") return 3;
+  if (name == "vec4") return 4;
+  return 0;
+}
+
+/**
+ * Resolves scalar type identifier to IR type.
+ */
+ir::TypeId ResolveScalarType(const ast::IdentifierExp* ident,
+                              ir::TypeTable* type_table) {
+  if (ident == nullptr || ident->ident == nullptr) {
+    return ir::kInvalidTypeId;
+  }
+  const auto& name = ident->ident->name;
+  if (name == "f32") return type_table->GetF32Type();
+  if (name == "i32") return type_table->GetI32Type();
+  if (name == "u32") return type_table->GetU32Type();
+  if (name == "bool") return type_table->GetBoolType();
+  return ir::kInvalidTypeId;
 }
 
 }  // namespace
@@ -120,27 +156,21 @@ class Lowerer {
 
   /** Inserts implicit return for void functions if needed */
   bool InsertImplicitReturn() {
-    const bool is_void_return = ast_entry_point_->return_type.expr == nullptr;
-    const bool is_vec4_f32_return = IsVec4F32Type(ast_entry_point_->return_type);
+    const bool is_void_return = IsVoidType(ast_entry_point_->return_type);
     const bool has_terminator =
         !ir_function_->entry_block.instructions.empty() &&
         ir_function_->entry_block.instructions.back().kind == ir::InstKind::kReturn;
 
+    // Void functions need a return statement
     if (is_void_return && !has_terminator) {
       ir::Instruction implicit_return;
       implicit_return.kind = ir::InstKind::kReturn;
       ir_function_->entry_block.instructions.emplace_back(implicit_return);
-    } else if (!is_void_return && !is_vec4_f32_return) {
-      return false;
     }
 
-    if (has_terminator &&
-        !ir_function_->entry_block.instructions.back().operands.empty() &&
-        !is_vec4_f32_return) {
-      return false;
-    }
-
-    if (is_vec4_f32_return && !ir_function_->return_builtin_position) {
+    // Non-void functions must have a return statement
+    // (this is a structural requirement, not a backend capability check)
+    if (!is_void_return && !has_terminator) {
       return false;
     }
 
@@ -161,36 +191,40 @@ class Lowerer {
     return false;
   }
 
-  /** Checks if type is vec4<f32> */
-  bool IsVec4F32Type(const ast::Type& type) const {
-    if (type.expr == nullptr ||
-        type.expr->GetType() != ast::ExpressionType::kIdentifier) {
-      return false;
-    }
-    return IsVec4F32Identifier(
-        static_cast<const ast::IdentifierExp*>(type.expr));
-  }
-
   /** Converts AST type to IR TypeId */
   ir::TypeId ResolveType(const ast::Type& type) {
     if (type.expr == nullptr) {
       return ir::kInvalidTypeId;
     }
 
-    /** For now, only support vec4<f32> */
     if (type.expr->GetType() == ast::ExpressionType::kIdentifier) {
       auto* ident = static_cast<const ast::IdentifierExp*>(type.expr);
-      if (IsVec4F32Identifier(ident)) {
-        return type_table_->GetVectorType(type_table_->GetF32Type(), 4);
+      
+      // Try scalar types first
+      ir::TypeId scalar_type = ResolveScalarType(ident, type_table_);
+      if (scalar_type != ir::kInvalidTypeId) {
+        return scalar_type;
+      }
+      
+      // Try vector types
+      const ast::IdentifierExp* scalar_ident = GetVectorScalarType(ident);
+      if (scalar_ident != nullptr) {
+        ir::TypeId component_type = ResolveScalarType(scalar_ident, type_table_);
+        if (component_type != ir::kInvalidTypeId) {
+          uint32_t count = GetVectorComponentCount(ident);
+          if (count >= 2 && count <= 4) {
+            return type_table_->GetVectorType(component_type, count);
+          }
+        }
       }
     }
 
     return ir::kInvalidTypeId;
   }
 
-  /** Gets the vec4<f32> type */
-  ir::TypeId GetVec4F32Type() {
-    return type_table_->GetVectorType(type_table_->GetF32Type(), 4);
+  /** Checks if return type is void */
+  bool IsVoidType(const ast::Type& type) const {
+    return type.expr == nullptr;
   }
 
   /** Lowers a statement to IR */
@@ -260,12 +294,7 @@ class Lowerer {
     /** Ensure we have a value (emit load if needed) */
     ir::Value return_value = EnsureValue(expr_result, block);
     
-    /** Verify type */
-    if (return_value.type != GetVec4F32Type()) {
-      return false;
-    }
-
-    /** Set up return instruction with unified Value model */
+    /** Verify we have a valid value (structural check, not backend capability) */
     if (!return_value.IsValue()) {
       return false;
     }
@@ -306,7 +335,7 @@ class Lowerer {
     if (var_id == 0) {
       return false;
     }
-    RegisterVar(var_name, var_id);
+    RegisterVar(var_name, var_id, var_type);
 
     /** Emit kVariable instruction */
     ir::Instruction var_inst;
@@ -347,8 +376,8 @@ class Lowerer {
       return false;
     }
 
-    const uint32_t var_id = LookupVar(std::string(ident->ident->name));
-    if (var_id == 0) {
+    auto var_info = LookupVar(std::string(ident->ident->name));
+    if (var_info.id == 0) {
       return false;
     }
 
@@ -358,7 +387,7 @@ class Lowerer {
       return false;
     }
 
-    return EmitStore(rhs_expr, var_id, block);
+    return EmitStore(rhs_expr, var_info.id, block);
   }
 
   /**
@@ -375,8 +404,8 @@ class Lowerer {
     /** Ensure source is a value (emit load if it's an address) */
     ir::Value source_value = EnsureValue(source_expr, block);
     
-    /** Verify type */
-    if (source_value.type != GetVec4F32Type()) {
+    /** Verify we have a valid value (structural check) */
+    if (!source_value.IsValue()) {
       return false;
     }
 
@@ -399,13 +428,10 @@ class Lowerer {
       return ir::ExprResult();
     }
 
-    ir::TypeId vec4_type = GetVec4F32Type();
-
-    /** Try to lower as vec4<f32> constant */
-    std::array<float, 4> values;
-    if (LowerVec4F32Const(expression, &values)) {
-      return ir::ExprResult::ValueResult(
-          ir::Value::ConstantVec4F32(vec4_type, values));
+    /** Try to lower as constant */
+    ir::ExprResult const_result = LowerConstant(expression);
+    if (const_result.IsValid()) {
+      return const_result;
     }
 
     /** Try to lower as variable reference (identifier) */
@@ -421,6 +447,118 @@ class Lowerer {
     }
 
     return ir::ExprResult();
+  }
+
+  /**
+   * Lowers a constant expression.
+   * Returns an invalid ExprResult if not a constant.
+   */
+  ir::ExprResult LowerConstant(ast::Expression* expression) {
+    if (expression == nullptr) {
+      return ir::ExprResult();
+    }
+
+    // Try float literal
+    if (expression->GetType() == ast::ExpressionType::kFloatLiteral) {
+      auto* lit = static_cast<ast::FloatLiteralExp*>(expression);
+      ir::TypeId f32_type = type_table_->GetF32Type();
+      return ir::ExprResult::ValueResult(
+          ir::Value::ConstantF32(f32_type, static_cast<float>(lit->value)));
+    }
+
+    // Try int literal
+    if (expression->GetType() == ast::ExpressionType::kIntLiteral) {
+      auto* lit = static_cast<ast::IntLiteralExp*>(expression);
+      ir::TypeId i32_type = type_table_->GetI32Type();
+      return ir::ExprResult::ValueResult(
+          ir::Value::ConstantI32(i32_type, static_cast<int32_t>(lit->value)));
+    }
+
+    // Try bool literal
+    if (expression->GetType() == ast::ExpressionType::kBoolLiteral) {
+      auto* lit = static_cast<ast::BoolLiteralExp*>(expression);
+      ir::TypeId bool_type = type_table_->GetBoolType();
+      return ir::ExprResult::ValueResult(
+          ir::Value::ConstantBool(bool_type, lit->value));
+    }
+
+    // Try vector constructor
+    if (expression->GetType() == ast::ExpressionType::kFuncCall) {
+      return LowerVectorConstructor(expression);
+    }
+
+    return ir::ExprResult();
+  }
+
+  /**
+   * Lowers a vector constructor expression (e.g., vec4<f32>(1.0, 2.0, 3.0, 4.0)).
+   */
+  ir::ExprResult LowerVectorConstructor(ast::Expression* expression) {
+    if (expression == nullptr ||
+        expression->GetType() != ast::ExpressionType::kFuncCall) {
+      return ir::ExprResult();
+    }
+
+    auto* call = static_cast<ast::FunctionCallExp*>(expression);
+    if (call->ident == nullptr) {
+      return ir::ExprResult();
+    }
+
+    // Check if it's a vector type constructor
+    uint32_t count = GetVectorComponentCount(call->ident);
+    if (count < 2 || count > 4) {
+      return ir::ExprResult();
+    }
+
+    const ast::IdentifierExp* scalar_ident = GetVectorScalarType(call->ident);
+    if (scalar_ident == nullptr) {
+      return ir::ExprResult();
+    }
+
+    ir::TypeId component_type = ResolveScalarType(scalar_ident, type_table_);
+    if (component_type == ir::kInvalidTypeId) {
+      return ir::ExprResult();
+    }
+
+    ir::TypeId vector_type = type_table_->GetVectorType(component_type, count);
+
+    // Currently only support f32 components for vector constants
+    if (component_type != type_table_->GetF32Type()) {
+      return ir::ExprResult();
+    }
+
+    if (call->args.size() != count) {
+      return ir::ExprResult();
+    }
+
+    std::array<float, 4> values = {0.f, 0.f, 0.f, 0.f};
+    for (size_t i = 0; i < count; ++i) {
+      auto* arg = call->args[i];
+      if (arg == nullptr ||
+          arg->GetType() != ast::ExpressionType::kFloatLiteral) {
+        return ir::ExprResult();
+      }
+      values[i] =
+          static_cast<float>(static_cast<ast::FloatLiteralExp*>(arg)->value);
+    }
+
+    // Create appropriate constant based on count
+    ir::Value result_value;
+    switch (count) {
+      case 2:
+        result_value = ir::Value::ConstantVec2F32(vector_type, values[0], values[1]);
+        break;
+      case 3:
+        result_value = ir::Value::ConstantVec3F32(vector_type, values[0], values[1], values[2]);
+        break;
+      case 4:
+        result_value = ir::Value::ConstantVec4F32(vector_type, values[0], values[1], values[2], values[3]);
+        break;
+      default:
+        return ir::ExprResult();
+    }
+
+    return ir::ExprResult::ValueResult(result_value);
   }
 
   /**
@@ -455,16 +593,16 @@ class Lowerer {
       return ir::ExprResult();
     }
 
-    ir::TypeId vec4_type = GetVec4F32Type();
-
     /** Ensure both operands are values (emit loads if needed) */
     ir::Value lhs_value = EnsureValue(lhs_expr, &ir_function_->entry_block);
     ir::Value rhs_value = EnsureValue(rhs_expr, &ir_function_->entry_block);
 
-    /** Type check */
-    if (lhs_value.type != vec4_type || rhs_value.type != vec4_type) {
+    /** Type check - both operands must have the same type */
+    if (lhs_value.type != rhs_value.type) {
       return ir::ExprResult();
     }
+
+    ir::TypeId result_type = lhs_value.type;
 
     /** Allocate result SSA id */
     uint32_t result_id = AllocateSSAId();
@@ -476,7 +614,7 @@ class Lowerer {
     ir::Instruction binary_inst;
     binary_inst.kind = ir::InstKind::kBinary;
     binary_inst.binary_op = op_kind;
-    binary_inst.result_type = vec4_type;
+    binary_inst.result_type = result_type;
     binary_inst.result_id = result_id;
     binary_inst.operands.push_back(lhs_value);
     binary_inst.operands.push_back(rhs_value);
@@ -484,7 +622,7 @@ class Lowerer {
     ir_function_->entry_block.instructions.emplace_back(binary_inst);
 
     /** Return as SSA Value */
-    return ir::ExprResult::ValueResult(ir::Value::SSA(vec4_type, result_id));
+    return ir::ExprResult::ValueResult(ir::Value::SSA(result_type, result_id));
   }
 
   /**
@@ -496,55 +634,23 @@ class Lowerer {
       return ir::ExprResult();
     }
     const std::string var_name = std::string(ident->ident->name);
-    const uint32_t var_id = LookupVar(var_name);
-    if (var_id == 0) {
+    auto var_info = LookupVar(var_name);
+    if (var_info.id == 0) {
       return ir::ExprResult();
     }
-
-    ir::TypeId vec4_type = GetVec4F32Type();
 
     /**
      * Variable reference is an address (lvalue), not a value.
      * The caller must use EnsureValue() to convert to a value if needed.
      */
     return ir::ExprResult::AddressResult(
-        ir::Value::Variable(vec4_type, var_id));
+        ir::Value::Variable(var_info.type, var_info.id));
   }
 
-  /**
-   * Extracts vec4<f32> constant from expression.
-   * Returns true and fills values on success.
-   */
-  bool LowerVec4F32Const(ast::Expression* expression,
-                         std::array<float, 4>* values) {
-    if (expression == nullptr || values == nullptr ||
-        expression->GetType() != ast::ExpressionType::kFuncCall) {
-      return false;
-    }
-
-    auto* call = static_cast<ast::FunctionCallExp*>(expression);
-    if (call->ident == nullptr || !IsVec4F32Identifier(call->ident)) {
-      return false;
-    }
-
-    if (call->args.size() != 4u) {
-      return false;
-    }
-
-    std::array<float, 4> output = {0.f, 0.f, 0.f, 0.f};
-    for (size_t i = 0; i < call->args.size(); ++i) {
-      auto* arg = call->args[i];
-      if (arg == nullptr ||
-          arg->GetType() != ast::ExpressionType::kFloatLiteral) {
-        return false;
-      }
-      output[i] =
-          static_cast<float>(static_cast<ast::FloatLiteralExp*>(arg)->value);
-    }
-
-    *values = output;
-    return true;
-  }
+  struct VarInfo {
+    uint32_t id = 0;
+    ir::TypeId type = ir::kInvalidTypeId;
+  };
 
   /** Variable management */
   uint32_t AllocateVarId() {
@@ -555,21 +661,23 @@ class Lowerer {
     return ir_function_ ? ir_function_->AllocateSSAId() : 0;
   }
 
-  void RegisterVar(const std::string& name, uint32_t id) {
-    var_ids_[name] = id;
+  void RegisterVar(const std::string& name, uint32_t id, ir::TypeId type) {
+    var_map_[name] = {id, type};
   }
 
-  uint32_t LookupVar(const std::string& name) const {
-    auto it = var_ids_.find(name);
-    return (it != var_ids_.end()) ? it->second : 0;
+  VarInfo LookupVar(const std::string& name) const {
+    auto it = var_map_.find(name);
+    if (it != var_map_.end()) {
+      return it->second;
+    }
+    return VarInfo{0, ir::kInvalidTypeId};
   }
 
- private:
   const ast::Module* ast_module_;
   const ast::Function* ast_entry_point_;
   ir::Function* ir_function_ = nullptr;
   ir::TypeTable* type_table_ = nullptr;
-  std::unordered_map<std::string, uint32_t> var_ids_;
+  std::unordered_map<std::string, VarInfo> var_map_;
 };
 
 std::unique_ptr<ir::Module> LowerToIR(const ast::Module* module,

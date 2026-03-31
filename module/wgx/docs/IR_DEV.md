@@ -141,10 +141,11 @@ The current recommendation for the next steps is:
    - `ir::Verify()` convenience functions for one-shot verification
    - emitter now delegates to verifier instead of inline checks
 
-2. **Continue reducing shared-struct instruction ambiguity**
-   - consider structured payloads or a tagged-union / variant direction for
-     instruction data
-   - avoid growing new kind-specific ad hoc fields in `ir::Instruction`
+2. ~~**Decouple lowering from emitter-specific shapes**~~ ✓ Completed
+   - lowering no longer checks backend capabilities (e.g., "is this type supported?")
+   - lowering generates IR for any valid WGSL type (f32, i32, vec2/3/4, etc.)
+   - emitter's `SupportsCurrentIR()` rejects unsupported types/shapes
+   - variable types are now tracked per-variable instead of assuming vec4<f32>
 
 3. ~~**Make emission more type-driven**~~ ✓ Completed
    - SPIR-V type ids are derived from each instruction/value type dynamically

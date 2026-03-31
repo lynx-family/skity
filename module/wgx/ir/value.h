@@ -90,6 +90,12 @@ struct Value {
   /** Create an inline bool constant */
   static Value ConstantBool(TypeId type, bool value);
 
+  /** Create an inline vec2<f32> constant */
+  static Value ConstantVec2F32(TypeId type, float x, float y);
+
+  /** Create an inline vec3<f32> constant */
+  static Value ConstantVec3F32(TypeId type, float x, float y, float z);
+
   /** Create an inline vec4<f32> constant */
   static Value ConstantVec4F32(TypeId type, float x, float y, float z, float w);
 
