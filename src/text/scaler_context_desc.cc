@@ -32,8 +32,8 @@ ScalerContextDesc ScalerContextDesc::MakeCanonicalized(const Font& font,
   desc.cap = paint.GetStrokeCap();
   desc.join = paint.GetStrokeJoin();
   desc.fake_bold = font.IsEmbolden() ? 1 : 0;
-
   desc.context_scale = 1.0f;
+  desc.hinting = static_cast<uint8_t>(font.GetHinting());
 
   return desc;
 }
@@ -65,8 +65,8 @@ ScalerContextDesc ScalerContextDesc::MakeTransformed(
   desc.join = paint.GetStyle() == Paint::kStroke_Style ? paint.GetStrokeJoin()
                                                        : Paint::kDefault_Join;
   desc.fake_bold = font.IsEmbolden() ? 1 : 0;
-
   desc.context_scale = context_scale;
+  desc.hinting = static_cast<uint8_t>(font.GetHinting());
 
   return desc;
 }

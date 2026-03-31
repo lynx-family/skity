@@ -37,7 +37,7 @@ struct ScalerContextDesc {
   Paint::Join join;
 
   uint8_t fake_bold;
-  const uint8_t reserved_align1{0};
+  uint8_t hinting;
   // hash end
 
   friend inline bool operator==(const ScalerContextDesc& lhs,
@@ -49,7 +49,8 @@ struct ScalerContextDesc {
            lhs.miter_limit == rhs.miter_limit &&
            lhs.context_scale == rhs.context_scale && lhs.cap == rhs.cap &&
            lhs.join == rhs.join && lhs.fake_bold == rhs.fake_bold &&
-           lhs.foreground_color == rhs.foreground_color;
+           lhs.foreground_color == rhs.foreground_color &&
+           lhs.hinting == rhs.hinting;
   }
 
   friend inline bool operator!=(const ScalerContextDesc& lhs,
@@ -70,6 +71,10 @@ struct ScalerContextDesc {
   Matrix22 GetLocalMatrix() const;
   void DecomposeMatrix(PortScaleType type, float* scale_x, float* scale_y,
                        Matrix22* transform) const;
+
+  Font::FontHinting GetHinting() const {
+    return static_cast<Font::FontHinting>(hinting);
+  }
 };
 
 }  // namespace skity

@@ -120,6 +120,7 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font, GlyphID glyph_id,
                                  ? paint.GetStrokeJoin()
                                  : Paint::kDefault_Join;
   scaler_context_desc.fake_bold = font.IsEmbolden() ? 1 : 0;
+  scaler_context_desc.hinting = static_cast<uint8_t>(font.GetHinting());
   GlyphKey key(glyph_id, scaler_context_desc);
 
   for (uint32_t index = 0; index < atlas_bitmap_.size(); index++) {

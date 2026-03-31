@@ -14,9 +14,6 @@ namespace {
 
 static constexpr uint32_t kDefaultFontFalgs = 1 << 5;  // kBaselineSnap_PrivFlag
 static constexpr uint32_t kDefaultEdging = 1;          // kAntiAlias_Edging
-static constexpr uint32_t kDefaultHinting =
-    2;  // FontHinting::kNormal | glyph outlines
-
 enum {
   kSize_Is_Byte_Bit = 1 << 31,
   kHas_ScaleX_Bit = 1 << 30,
@@ -48,7 +45,7 @@ void FlatIntoMemory<Font>(Font const& font, WriteBuffer& buffer) {
   uint32_t packed = 0;
   packed |= kDefaultFontFalgs << kShift_For_Flags;
   packed |= kDefaultEdging << kShift_For_Edging;
-  packed |= kDefaultHinting << kShift_For_Hinting;
+  packed |= static_cast<uint32_t>(font.GetHinting()) << kShift_For_Hinting;
 
   if (scalar_is_byte(font.GetSize())) {
     packed |= kSize_Is_Byte_Bit;
