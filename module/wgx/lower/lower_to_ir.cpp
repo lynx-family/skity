@@ -9,6 +9,7 @@
 #include <array>
 #include <unordered_map>
 
+#include "ir/verifier.h"
 #include "ir/value.h"
 #include "wgsl/ast/attribute.h"
 #include "wgsl/ast/identifier.h"
@@ -90,6 +91,14 @@ class Lowerer {
     if (!InsertImplicitReturn()) {
       return nullptr;
     }
+
+#ifndef SKITY_RELEASE
+    /** Verify generated IR in debug builds for early error detection */
+    auto verify_result = ir::Verify(*ir_function_);
+    if (!verify_result.valid) {
+      return nullptr;
+    }
+#endif
 
     ir_module->functions.emplace_back(std::move(*ir_function));
     return ir_module;
