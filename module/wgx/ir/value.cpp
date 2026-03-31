@@ -53,6 +53,30 @@ Value Value::ConstantBool(TypeId type, bool value) {
   return v;
 }
 
+Value Value::ConstantVec2F32(TypeId type, float x, float y) {
+  Value v;
+  v.kind = ValueKind::kConstant;
+  v.type = type;
+  v.const_kind = InlineConstKind::kVec2F32;
+  v.const_data.vec4[0] = x;
+  v.const_data.vec4[1] = y;
+  v.const_data.vec4[2] = 0.0f;
+  v.const_data.vec4[3] = 0.0f;
+  return v;
+}
+
+Value Value::ConstantVec3F32(TypeId type, float x, float y, float z) {
+  Value v;
+  v.kind = ValueKind::kConstant;
+  v.type = type;
+  v.const_kind = InlineConstKind::kVec3F32;
+  v.const_data.vec4[0] = x;
+  v.const_data.vec4[1] = y;
+  v.const_data.vec4[2] = z;
+  v.const_data.vec4[3] = 0.0f;
+  return v;
+}
+
 Value Value::ConstantVec4F32(TypeId type, float x, float y, float z, float w) {
   Value v;
   v.kind = ValueKind::kConstant;
