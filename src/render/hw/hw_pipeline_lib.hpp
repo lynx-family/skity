@@ -12,6 +12,7 @@
 #include <skity/graphic/blend_mode.hpp>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "src/gpu/gpu_render_pipeline.hpp"
@@ -76,6 +77,8 @@ class HWPipelineLib final {
   GPURenderPipeline* GetPipeline(const HWPipelineKey& key,
                                  const HWPipelineDescriptor& desc);
 
+  void ResetCompileFailedPipelines() { compile_failed_pipelines_.clear(); }
+
  private:
   std::unique_ptr<HWPipeline> CreatePipeline(const HWPipelineKey& key,
                                              const HWPipelineDescriptor& desc);
@@ -96,6 +99,8 @@ class HWPipelineLib final {
   GPUDevice* gpu_device_;
   PipelineMap pipelines_ = {};
   ShaderFunctionCache shader_functions_ = {};
+  std::unordered_set<HWPipelineKey, HWPipelineKeyHash>
+      compile_failed_pipelines_;
 };
 
 }  // namespace skity

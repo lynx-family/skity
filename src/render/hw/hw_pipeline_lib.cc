@@ -127,9 +127,19 @@ GPURenderPipeline *HWPipelineLib::GetPipeline(
     return it->second->GetPipeline(desc);
   }
 
+  // If the pipeline has previously failed to compile, don't retry in the
+  // current frame.
+  if (compile_failed_pipelines_.find(key) != compile_failed_pipelines_.end()) {
+    return nullptr;
+  }
+
   auto pipeline = CreatePipeline(key, desc);
 
   if (!pipeline) {
+    LOGE("CreatePipeline failed, vs: {} fs: {}",
+         VertexKeyToShaderName(key.GetVertexBaseKey()),
+         FragmentKeyToShaderName(key.GetFragmentBaseKey(), key.compose_keys));
+    compile_failed_pipelines_.insert(key);
     return nullptr;
   }
 
