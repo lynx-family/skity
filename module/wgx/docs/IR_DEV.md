@@ -13,31 +13,65 @@ Before continuing SPIR-V backend development, read:
 
 - `module/wgx/docs/IR_REFACTOR_PLAN.md`
 
-That document is now the primary guide for follow-up implementation work.
-The current recommendation is to prioritize structural refactoring before adding
-more language/backend features.
+That document remains the primary guide for follow-up implementation work.
+The current recommendation is still to prioritize structural refactoring before
+adding broader language/backend features.
 
 ## Current Direction
 
 The current assessment is:
 
-- the SPIR-V backend is already good enough for validating small vertical slices
-- but the IR/lowering/emitter structure still carries several early-stage
-  shortcuts
-- continuing to add features without cleanup would likely increase coupling
-  between lowering and emission, and make later refactors more expensive
+- the SPIR-V backend is good enough for validating small vertical slices
+- the active IR path has now been migrated to a Value-based representation for
+  return / load / store / binary operations
+- lowering no longer re-encodes those operations through legacy
+  `ReturnValueKind` / `Operand` special cases
+- the SPIR-V emitter now consumes explicit `Value` operands directly instead of
+  reconstructing as much backend-side meaning from bare ids
+- a minimal structural verifier now exists, but the IR is still in an early
+  architecture-hardening stage
 
 Because of that, the near-term focus should be:
 
-1. refactor the IR value/address model
-2. reduce backend-side semantic reconstruction
+1. keep tightening the IR structure instead of resuming broad feature work
+2. split generic IR verification from backend capability checks more cleanly
 3. make the emitter more type-driven and less `vec4<f32>`-specialized
-4. only resume broader feature work after the main P0/P1 refactor items are in
-   place
+4. only resume larger feature expansion after the main P0/P1 refactor items are
+   stably in place
+
+## Current IR State
+
+The active function-body IR now has these properties:
+
+1. **Unified value flow through `ir::Value`**
+   - constants are represented as `Value`
+   - SSA results are represented as `Value::SSA(...)`
+   - local variable references are represented as `Value::Variable(...)`
+
+2. **Explicit address vs value modeling in lowering**
+   - expression lowering returns `ExprResult`
+   - identifier expressions lower to address/lvalue form
+   - `EnsureValue()` inserts explicit `kLoad` when an address is used as a
+     value
+
+3. **Explicit load/store/return operands**
+   - `kReturn`: zero or one `Value` operand
+   - `kLoad`: one variable `Value` operand
+   - `kStore`: target variable `Value` + source value `Value`
+   - `kBinary`: lhs `Value` + rhs `Value`
+
+4. **Separated variable id vs SSA id allocation**
+   - `var_id` is allocated independently from SSA ids
+   - `result_id` is now used for SSA-producing instructions only
+   - `kVariable` declarations carry their own `var_id`
+
+5. **Initial structural verification exists**
+   - instruction operand shapes are checked before backend support checks run
+   - verifier coverage is still intentionally minimal and should be expanded
 
 ## Current Backend Capability Boundary
 
-The current SPIR-V backend supports a deliberately narrow subset.
+The current SPIR-V backend still supports a deliberately narrow subset.
 
 ### Supported today
 
@@ -76,33 +110,57 @@ The current SPIR-V backend supports a deliberately narrow subset.
 
 The backend currently still has these important limitations:
 
-1. **IR value modeling is not yet unified**
-   - return values, store values, constants, variable refs, and SSA refs are not
-     represented in one uniform way
+1. **Instruction storage is still a shared struct**
+   - `ir::Instruction` still contains fields that are only meaningful for some
+     instruction kinds
+   - this is better than the old encoding, but still not the final ideal shape
 
-2. **`kLoad` is not yet a real first-class IR flow primitive**
-   - variable reads are still partly materialized implicitly in the emitter
+2. **The verifier is functional but still evolving**
+   - `ir::Verifier` provides structural validation separate from backend checks
+   - checks operand/result shapes, use-def chains, and basic type validity
+   - dominance checking and richer type verification are future enhancements
 
 3. **Emitter logic is still too specialized around the current `vec4<f32>` path**
-   - especially for value materialization and arithmetic emission
+   - especially for constant materialization and arithmetic emission
 
-4. **Lowering is still too aware of emitter-consumable shapes**
-   - this weakens the separation between IR generation and backend translation
-
-5. **Function structure is still effectively single-block / straight-line only**
+4. **Function structure is still effectively single-block / straight-line only**
    - no real control-flow-capable IR structure yet
 
-6. **Validation is strong at the static SPIR-V level, but not yet Vulkan-runtime-integrated**
+5. **Validation is strong at the static SPIR-V level, but not yet Vulkan-runtime-integrated**
    - current confidence is based on smoke tests + `spirv-val` + `spirv-dis`
+
+## Next Planned Refactor Steps
+
+The current recommendation for the next steps is:
+
+1. ~~**Move IR verification into a dedicated module/pass**~~ ✓ Completed
+   - `ir::Verifier` class in `module/wgx/ir/verifier.h`
+   - structural validity checks are now independent from backend support checks
+   - `ir::Verify()` convenience functions for one-shot verification
+   - emitter now delegates to verifier instead of inline checks
+
+2. **Continue reducing shared-struct instruction ambiguity**
+   - consider structured payloads or a tagged-union / variant direction for
+     instruction data
+   - avoid growing new kind-specific ad hoc fields in `ir::Instruction`
+
+3. **Make emission more type-driven**
+   - derive SPIR-V type ids from each instruction/value type instead of relying
+     on the current `vec4<f32>`-centric path
+   - extend constant materialization beyond the current narrow inline subset as
+     needed
+
+4. **Only resume broader feature work after the above cleanup is stable**
+   - especially before introducing more expression forms or broader type support
 
 ## Practical Rule For Future Agents
 
 If you are continuing work in this area:
 
 1. read `module/wgx/docs/IR_REFACTOR_PLAN.md` first
-2. prefer refactoring work over adding new SPIR-V features immediately
-3. avoid adding more special-case encoding paths for return/store/materialized
-   values unless they clearly align with the refactor plan
+2. prefer structural cleanup over immediate feature expansion
+3. avoid reintroducing special-case return/store/materialization encodings that
+   bypass `ir::Value`
 4. keep using the current local validation workflow:
 
 ```bash
@@ -111,7 +169,7 @@ If you are continuing work in this area:
 
 ## Validation Baseline
 
-At the time this document was last rewritten, the current supported smoke-test
+At the time this document was last rewritten, the actively supported smoke-test
 outputs were verified through:
 
 - `WgxSpirvSmokeTest.*`
