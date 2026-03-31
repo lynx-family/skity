@@ -120,14 +120,13 @@ class Lowerer {
     if (is_void_return && !has_terminator) {
       ir::Instruction implicit_return;
       implicit_return.kind = ir::InstKind::kReturn;
-      implicit_return.has_return_value = false;
       ir_function_->entry_block.instructions.emplace_back(implicit_return);
     } else if (!is_void_return && !is_vec4_f32_return) {
       return false;
     }
 
     if (has_terminator &&
-        ir_function_->entry_block.instructions.back().has_return_value &&
+        !ir_function_->entry_block.instructions.back().operands.empty() &&
         !is_vec4_f32_return) {
       return false;
     }
@@ -227,7 +226,7 @@ class Lowerer {
     load_inst.kind = ir::InstKind::kLoad;
     load_inst.result_id = load_id;
     load_inst.result_type = expr.GetType();
-    load_inst.operands.push_back(ir::Operand::Id(expr.value.GetVarId().value()));
+    load_inst.operands.push_back(expr.value);
     block->instructions.emplace_back(load_inst);
     return ir::Value::SSA(expr.GetType(), load_id);
   }
@@ -239,7 +238,6 @@ class Lowerer {
 
     if (ret->value == nullptr) {
       /** Void return */
-      inst.has_return_value = false;
       block->instructions.emplace_back(inst);
       return true;
     }
@@ -259,21 +257,10 @@ class Lowerer {
     }
 
     /** Set up return instruction with unified Value model */
-    inst.has_return_value = true;
-    if (return_value.IsConstant()) {
-      /** Constant return - use const_vec4_f32 for backward compatibility */
-      inst.return_value_kind = ir::ReturnValueKind::kConstVec4F32;
-      auto vec4 = return_value.GetVec4F32();
-      inst.const_vec4_f32 = vec4;
-    } else if (return_value.IsSSA()) {
-      /** SSA value return */
-      inst.return_value_kind = ir::ReturnValueKind::kValueRef;
-      inst.value_id = return_value.GetSSAId().value();
-    } else if (return_value.IsVariable()) {
-      /** Variable return - should have been loaded by EnsureValue */
-      /** This path shouldn't be reached if EnsureValue works correctly */
+    if (!return_value.IsValue()) {
       return false;
     }
+    inst.operands.push_back(return_value);
 
     block->instructions.emplace_back(inst);
     return true;
@@ -315,7 +302,7 @@ class Lowerer {
     /** Emit kVariable instruction */
     ir::Instruction var_inst;
     var_inst.kind = ir::InstKind::kVariable;
-    var_inst.result_id = var_id;
+    var_inst.var_id = var_id;
     var_inst.result_type = var_type;
     var_inst.var_name = var_name;
     block->instructions.emplace_back(var_inst);
@@ -387,26 +374,8 @@ class Lowerer {
     /** Emit store instruction with unified Value model */
     ir::Instruction store_inst;
     store_inst.kind = ir::InstKind::kStore;
-    store_inst.operands.push_back(ir::Operand::Id(target_var_id));
-
-    /**
-     * Convert Value to Operand representation.
-     * Note: This bridges new Value model to existing Instruction::operands format.
-     * When Instruction fully migrates to Value, this will become simpler.
-     */
-    if (source_value.IsSSA()) {
-      store_inst.operands.push_back(
-          ir::Operand::Id(source_value.GetSSAId().value()));
-    } else if (source_value.IsConstant()) {
-      /** Expand vec4<f32> constant to 4 operands */
-      auto vec4 = source_value.GetVec4F32();
-      for (size_t i = 0; i < 4; ++i) {
-        store_inst.operands.push_back(ir::Operand::ConstF32(vec4[i]));
-      }
-    } else {
-      /** Should not happen - EnsureValue should have converted Variable to SSA */
-      return false;
-    }
+    store_inst.operands.push_back(ir::Value::Variable(source_value.type, target_var_id));
+    store_inst.operands.push_back(source_value);
 
     block->instructions.emplace_back(store_inst);
     return true;
@@ -500,58 +469,13 @@ class Lowerer {
     binary_inst.binary_op = op_kind;
     binary_inst.result_type = vec4_type;
     binary_inst.result_id = result_id;
-    binary_inst.value_id = result_id;
-
-    /** Convert Values to Operands */
-    if (!AppendValueAsOperand(lhs_value, &binary_inst.operands)) {
-      return ir::ExprResult();
-    }
-    if (!AppendValueAsOperand(rhs_value, &binary_inst.operands)) {
-      return ir::ExprResult();
-    }
+    binary_inst.operands.push_back(lhs_value);
+    binary_inst.operands.push_back(rhs_value);
 
     ir_function_->entry_block.instructions.emplace_back(binary_inst);
 
     /** Return as SSA Value */
     return ir::ExprResult::ValueResult(ir::Value::SSA(vec4_type, result_id));
-  }
-
-  /**
-   * Appends a Value as Instruction Operand.
-   * Bridges new Value model to existing Instruction::operands format.
-   */
-  bool AppendValueAsOperand(const ir::Value& value,
-                            std::vector<ir::Operand>* operands) {
-    if (operands == nullptr) {
-      return false;
-    }
-
-    if (value.IsSSA()) {
-      operands->push_back(ir::Operand::Id(value.GetSSAId().value()));
-      return true;
-    }
-    if (value.IsVariable()) {
-      /**
-       * Note: In the new model, this case should be rare.
-       * EnsureValue should convert variables to SSA via load.
-       * Keeping for compatibility during migration.
-       */
-      operands->push_back(ir::Operand::Id(value.GetVarId().value()));
-      return true;
-    }
-    if (value.IsConstant() && value.IsInlineConstant()) {
-      /** Expand vec4<f32> constant to 4 operands */
-      if (value.const_kind == ir::InlineConstKind::kVec4F32) {
-        auto vec4 = value.GetVec4F32();
-        for (size_t i = 0; i < 4; ++i) {
-          operands->push_back(ir::Operand::ConstF32(vec4[i]));
-        }
-        return true;
-      }
-      /** TODO: Handle other inline constant types */
-      return false;
-    }
-    return false;
   }
 
   /**
@@ -619,7 +543,7 @@ class Lowerer {
   }
 
   uint32_t AllocateSSAId() {
-    return ir_function_ ? ir_function_->AllocateValueId() : 0;
+    return ir_function_ ? ir_function_->AllocateSSAId() : 0;
   }
 
   void RegisterVar(const std::string& name, uint32_t id) {

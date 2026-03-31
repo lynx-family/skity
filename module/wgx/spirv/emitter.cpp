@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ir/verifier.h"
 #include "spirv/unified1/spirv.h"
 
 namespace wgx {
@@ -115,35 +116,25 @@ SpvStorageClass ToSpvStorageClass(ir::StorageClass storage) {
   return SpvStorageClassMax;
 }
 
+/**
+ * Check if the backend supports the given IR function.
+ *
+ * This performs backend-specific capability checks on top of structural
+ * validation. Structural validation is done via ir::Verifier.
+ */
 bool SupportsCurrentIR(const ir::Function& function) {
-  if (function.entry_block.instructions.empty()) {
+  // First, run structural validation
+  auto result = ir::Verify(function);
+  if (!result.valid) {
     return false;
   }
+
+  // Backend-specific capability checks
   const auto& last_inst = function.entry_block.instructions.back();
-  if (last_inst.kind != ir::InstKind::kReturn) {
-    return false;
-  }
-  if (last_inst.has_return_value) {
+  if (!last_inst.operands.empty()) {
     if (function.stage != ir::PipelineStage::kVertex ||
         !function.return_builtin_position) {
       return false;
-    }
-    if (last_inst.return_value_kind != ir::ReturnValueKind::kConstVec4F32 &&
-        last_inst.return_value_kind != ir::ReturnValueKind::kVariableRef &&
-        last_inst.return_value_kind != ir::ReturnValueKind::kValueRef) {
-      return false;
-    }
-  }
-  for (const auto& inst : function.entry_block.instructions) {
-    switch (inst.kind) {
-      case ir::InstKind::kReturn:
-      case ir::InstKind::kVariable:
-      case ir::InstKind::kLoad:
-      case ir::InstKind::kStore:
-      case ir::InstKind::kBinary:
-        break;
-      default:
-        return false;
     }
   }
   return true;
@@ -409,12 +400,12 @@ class ModuleBuilder {
     const auto& last_inst = instructions.back();
     if (last_inst.kind != ir::InstKind::kReturn) return false;
 
-    has_position_return_ = last_inst.has_return_value;
+    has_position_return_ = !last_inst.operands.empty();
 
     for (const auto& inst : instructions) {
       if (inst.kind == ir::InstKind::kVariable) {
         LocalVarInfo info;
-        info.ir_var_id = inst.result_id;
+        info.ir_var_id = inst.var_id;
         info.var_type = inst.result_type;
         local_vars_.push_back(info);
       } else if (inst.kind == ir::InstKind::kBinary) {
@@ -471,7 +462,7 @@ class ModuleBuilder {
     }
     for (const auto& inst : entry_.entry_block.instructions) {
       if (inst.kind == ir::InstKind::kVariable && !inst.var_name.empty()) {
-        auto it = FindLocalVar(inst.result_id);
+        auto it = FindLocalVar(inst.var_id);
         if (it != local_vars_.end()) {
           AppendName(&sections_->debug, it->spirv_var_id, inst.var_name);
         }
@@ -512,15 +503,7 @@ class ModuleBuilder {
                       {output_ptr_type, position_output_var_id_,
                        static_cast<uint32_t>(SpvStorageClassOutput)});
 
-    const auto& return_inst = entry_.entry_block.instructions.back();
-    if (return_inst.return_value_kind == ir::ReturnValueKind::kConstVec4F32) {
-      for (size_t i = 0; i < position_const_ids_.size(); ++i) {
-        position_const_ids_[i] =
-            type_emitter_->EmitF32Constant(return_inst.const_vec4_f32[i]);
-        if (position_const_ids_[i] == 0) return false;
-      }
-    }
-
+    entry_vec4_type_ = vec4_type;
     return true;
   }
 
@@ -577,18 +560,19 @@ class ModuleBuilder {
      * kLoad instruction format:
      * - result_id: SSA id for the loaded value
      * - result_type: type of the loaded value
-     * - operands[0]: variable id to load from (as Operand::Id)
+     * - operands[0]: variable value to load from
      */
-    if (inst.operands.empty()) return false;
-    if (inst.operands[0].kind != ir::Operand::Kind::kId) return false;
+    if (inst.operands.size() != 1) return false;
+    const ir::Value& source = inst.operands[0];
+    if (!source.IsVariable()) return false;
 
-    uint32_t ir_var_id = inst.operands[0].id;
+    uint32_t ir_var_id = source.GetVarId().value();
     auto var_it = FindLocalVar(ir_var_id);
     if (var_it == local_vars_.end()) return false;
 
     uint32_t spirv_result_id = ids_.Allocate();
     AppendInstruction(&sections_->functions, SpvOpLoad,
-                      {vec4_type_id_, spirv_result_id, var_it->spirv_var_id});
+                      {GetSpirvTypeId(inst.result_type), spirv_result_id, var_it->spirv_var_id});
     
     /**
      * Map the IR SSA id to SPIR-V id.
@@ -599,15 +583,17 @@ class ModuleBuilder {
   }
 
   bool EmitStore(const ir::Instruction& inst) {
-    if (inst.operands.size() < 2) return false;
-    if (inst.operands[0].kind != ir::Operand::Kind::kId) return false;
+    if (inst.operands.size() != 2) return false;
+    const ir::Value& target = inst.operands[0];
+    const ir::Value& source = inst.operands[1];
+    if (!target.IsVariable() || !source.IsValue()) return false;
 
-    uint32_t ir_var_id = inst.operands[0].id;
+    uint32_t ir_var_id = target.GetVarId().value();
     auto var_it = FindLocalVar(ir_var_id);
     if (var_it == local_vars_.end()) return false;
 
     uint32_t value_id = 0;
-    if (!MaterializeValueFromOperands(inst.operands, 1, &value_id)) {
+    if (!MaterializeValue(source, &value_id)) {
       return false;
     }
 
@@ -622,9 +608,9 @@ class ModuleBuilder {
     if (inst.operands.size() != 2) return false;
 
     uint32_t lhs_id = 0;
-    if (!MaterializeValueOperand(inst.operands[0], &lhs_id)) return false;
+    if (!MaterializeValue(inst.operands[0], &lhs_id)) return false;
     uint32_t rhs_id = 0;
-    if (!MaterializeValueOperand(inst.operands[1], &rhs_id)) return false;
+    if (!MaterializeValue(inst.operands[1], &rhs_id)) return false;
 
     SpvOp op = SpvOpNop;
     switch (inst.binary_op) {
@@ -638,33 +624,9 @@ class ModuleBuilder {
 
     uint32_t result_id = ids_.Allocate();
     AppendInstruction(&sections_->functions, op,
-                      {vec4_type_id_, result_id, lhs_id, rhs_id});
+                      {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
     value_map_[inst.result_id] = result_id;
     return true;
-  }
-
-  bool MaterializeValueOperand(const ir::Operand& operand, uint32_t* value_id) {
-    if (value_id == nullptr) return false;
-
-    if (operand.kind != ir::Operand::Kind::kId) {
-      return false;
-    }
-
-    auto value_map_it = value_map_.find(operand.id);
-    if (value_map_it != value_map_.end()) {
-      *value_id = value_map_it->second;
-      return true;
-    }
-
-    auto var_it = FindLocalVar(operand.id);
-    if (var_it != local_vars_.end()) {
-      *value_id = ids_.Allocate();
-      AppendInstruction(&sections_->functions, SpvOpLoad,
-                        {vec4_type_id_, *value_id, var_it->spirv_var_id});
-      return true;
-    }
-
-    return false;
   }
 
   bool MaterializeConstVec4(const std::array<float, 4>& values,
@@ -684,56 +646,39 @@ class ModuleBuilder {
     return true;
   }
 
-  bool MaterializeValueFromOperands(const std::vector<ir::Operand>& operands,
-                                    size_t start_index, uint32_t* value_id) {
-    if (value_id == nullptr || start_index >= operands.size()) {
-      return false;
+  bool MaterializeValue(const ir::Value& value, uint32_t* value_id) {
+    if (value_id == nullptr || !value.IsValue()) return false;
+
+    if (value.IsSSA()) {
+      auto value_map_it = value_map_.find(value.GetSSAId().value());
+      if (value_map_it == value_map_.end()) return false;
+      *value_id = value_map_it->second;
+      return true;
     }
 
-    const size_t value_operand_count = operands.size() - start_index;
-    if (value_operand_count == 1) {
-      return MaterializeValueOperand(operands[start_index], value_id);
+    if (value.IsConstant() && value.const_kind == ir::InlineConstKind::kVec4F32) {
+      return MaterializeConstVec4(value.GetVec4F32(), value_id);
     }
 
-    if (value_operand_count != 4) {
-      return false;
-    }
-
-    std::array<float, 4> values = {0.f, 0.f, 0.f, 0.f};
-    for (size_t i = 0; i < 4; ++i) {
-      if (operands[start_index + i].kind != ir::Operand::Kind::kConstF32) {
-        return false;
-      }
-      values[i] = operands[start_index + i].const_f32;
-    }
-
-    return MaterializeConstVec4(values, value_id);
-  }
-
-  bool MaterializeValue(const ir::Instruction& inst, uint32_t* value_id) {
-    if (value_id == nullptr) return false;
-
-    switch (inst.return_value_kind) {
-      case ir::ReturnValueKind::kConstVec4F32:
-        return MaterializeConstVec4(inst.const_vec4_f32, value_id);
-      case ir::ReturnValueKind::kVariableRef:
-        return MaterializeValueOperand(ir::Operand::Id(inst.var_id), value_id);
-      case ir::ReturnValueKind::kValueRef:
-        return MaterializeValueOperand(ir::Operand::Id(inst.value_id), value_id);
-      case ir::ReturnValueKind::kNone:
-        break;
-    }
     return false;
   }
 
+  uint32_t GetSpirvTypeId(ir::TypeId type_id) {
+    if (type_id == ir::kInvalidTypeId) return 0;
+    if (type_id == entry_vec4_type_) return vec4_type_id_;
+    return type_emitter_->EmitType(type_id);
+  }
+
   bool EmitReturn(const ir::Instruction& inst) {
-    if (!inst.has_return_value) {
+    if (inst.operands.empty()) {
       AppendInstruction(&sections_->functions, SpvOpReturn, {});
       return true;
     }
 
+    if (inst.operands.size() != 1 || !inst.operands[0].IsValue()) return false;
+
     uint32_t value_to_store = 0;
-    if (!MaterializeValue(inst, &value_to_store)) {
+    if (!MaterializeValue(inst.operands[0], &value_to_store)) {
       return false;
     }
 
@@ -792,7 +737,7 @@ class ModuleBuilder {
   uint32_t position_output_var_id_ = 0;
   uint32_t function_type_id_ = 0;
   uint32_t vec4_type_id_ = 0;
-  std::array<uint32_t, 4> position_const_ids_ = {0, 0, 0, 0};
+  ir::TypeId entry_vec4_type_ = ir::kInvalidTypeId;
   std::vector<LocalVarInfo> local_vars_;
   std::vector<ValueInfo> values_;
   std::unordered_map<uint32_t, uint32_t> value_map_;

@@ -4,12 +4,12 @@
 
 #pragma once
 
-#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 #include "ir/type.h"
+#include "ir/value.h"
 
 namespace wgx {
 namespace ir {
@@ -22,17 +22,10 @@ enum class PipelineStage {
 
 enum class InstKind {
   kReturn,
-  kVariable,   // var declaration: result_id, type
-  kLoad,       // load from variable: result_id, type, var_id
-  kStore,      // store to variable: var_id, value_id
-  kBinary,     // binary arithmetic producing an SSA value
-};
-
-enum class ReturnValueKind {
-  kNone,
-  kConstVec4F32,
-  kVariableRef,   // return a variable reference (loaded)
-  kValueRef,      // return an SSA value directly
+  kVariable,
+  kLoad,
+  kStore,
+  kBinary,
 };
 
 // Supported binary operations in the current IR subset.
@@ -41,61 +34,36 @@ enum class BinaryOpKind {
   kSubtract,
 };
 
-// Operand for IR instructions
-struct Operand {
-  enum class Kind {
-    kNone,
-    kId,       // SSA value id
-    kConstF32, // float constant
-  };
-
-  Kind kind = Kind::kNone;
-  uint32_t id = 0;           // for kId
-  float const_f32 = 0.0f;    // for kConstF32
-
-  static Operand Id(uint32_t id) {
-    Operand op;
-    op.kind = Kind::kId;
-    op.id = id;
-    return op;
-  }
-
-  static Operand ConstF32(float value) {
-    Operand op;
-    op.kind = Kind::kConstF32;
-    op.const_f32 = value;
-    return op;
-  }
-};
-
 struct Instruction {
   InstKind kind = InstKind::kReturn;
 
-  // Result value id (if instruction produces a value)
+  // Result SSA id for instructions that produce a value.
   uint32_t result_id = 0;
 
-  // Type of the result value (TypeId from TypeTable)
+  // Result type for value-producing instructions, or declared type for
+  // kVariable.
   TypeId result_type = kInvalidTypeId;
 
-  // For return instruction
-  bool has_return_value = false;
-  ReturnValueKind return_value_kind = ReturnValueKind::kNone;
-  std::array<float, 4> const_vec4_f32 = {0.f, 0.f, 0.f, 0.f};
-
-  // Variable reference for kVariable/kLoad return value
+  // Variable id for kVariable declarations.
   uint32_t var_id = 0;
 
-  // SSA value reference for return / value-producing instructions
-  uint32_t value_id = 0;
+  // Variable name (for debugging)
+  std::string var_name;
 
   // Binary op kind for kBinary instructions
   BinaryOpKind binary_op = BinaryOpKind::kAdd;
 
-  // Operands for variable/load/store/binary instructions
-  std::vector<Operand> operands = {};
+  // Unified operands expressed via Value.
+  // - kReturn: 0 or 1 operand (return value)
+  // - kVariable: 0 operands today (initializer lowered as a following kStore)
+  // - kLoad: 1 operand (source variable address)
+  // - kStore: 2 operands (target variable address, source value)
+  // - kBinary: 2 operands (lhs value, rhs value)
+  std::vector<Value> operands = {};
 
-  // Variable name (for debugging)
-  std::string var_name;
+  bool HasResult() const {
+    return kind == InstKind::kLoad || kind == InstKind::kBinary;
+  }
 };
 
 struct Block {
@@ -110,10 +78,10 @@ struct Function {
 
   // Variable/value id allocator for this function
   uint32_t next_var_id = 1;
-  uint32_t next_value_id = 1;
+  uint32_t next_ssa_id = 1;
 
   uint32_t AllocateVarId() { return next_var_id++; }
-  uint32_t AllocateValueId() { return next_value_id++; }
+  uint32_t AllocateSSAId() { return next_ssa_id++; }
 };
 
 struct Module {
@@ -123,6 +91,7 @@ struct Module {
 
   // Module-level type table (shared across functions)
   std::unique_ptr<TypeTable> type_table;
+  std::unique_ptr<ConstantPool> constant_pool;
 };
 
 }  // namespace ir
