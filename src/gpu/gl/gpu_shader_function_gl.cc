@@ -60,14 +60,15 @@ GPUShaderFunctionGL::GPUShaderFunctionGL(
                                : "Unknown shader compile error.";
 
     LOGE("OpenGL shader {} compile error : {}", GetLabel(), info_log);
+#ifdef SKITY_LOG
     auto version = GL_CALL(GetString, GL_VERSION);
     auto vendor = GL_CALL(GetString, GL_VENDOR);
     auto renderer = GL_CALL(GetString, GL_RENDERER);
     LOGE("OpenGL version:{}  vendor:{}  renderer:{}",
-         version ? reinterpret_cast<const char*>(version) : "N/A",   // version
-         vendor ? reinterpret_cast<const char*>(vendor) : "N/A",     // vendor
-         renderer ? reinterpret_cast<const char*>(renderer) : "N/A"  // renderer
-    );
+         version ? reinterpret_cast<const char*>(version) : "N/A",
+         vendor ? reinterpret_cast<const char*>(vendor) : "N/A",
+         renderer ? reinterpret_cast<const char*>(renderer) : "N/A");
+#endif  // SKITY_LOG
     if (error_callback) {
       error_callback(info_log);
     }
