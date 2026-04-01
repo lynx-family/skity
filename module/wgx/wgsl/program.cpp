@@ -107,7 +107,8 @@ Result Program::WriteToSpirv(const char* entry_point,
     return {};
   }
 
-  auto ir_module = lower::LowerToIR(module_, func);
+  auto ir_module =
+      lower::LowerToIR(module_, func, ident_symbols_, decl_symbols_);
   if (ir_module == nullptr) {
     return {};
   }

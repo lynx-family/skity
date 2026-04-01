@@ -9,8 +9,9 @@
 #include <array>
 #include <unordered_map>
 
-#include "ir/verifier.h"
 #include "ir/value.h"
+#include "ir/verifier.h"
+#include "semantic/symbol.h"
 #include "wgsl/ast/attribute.h"
 #include "wgsl/ast/identifier.h"
 #include "wgsl/ast/statement.h"
@@ -74,7 +75,7 @@ uint32_t GetVectorComponentCount(const ast::IdentifierExp* ident) {
  * Resolves scalar type identifier to IR type.
  */
 ir::TypeId ResolveScalarType(const ast::IdentifierExp* ident,
-                              ir::TypeTable* type_table) {
+                             ir::TypeTable* type_table) {
   if (ident == nullptr || ident->ident == nullptr) {
     return ir::kInvalidTypeId;
   }
@@ -93,8 +94,15 @@ ir::TypeId ResolveScalarType(const ast::IdentifierExp* ident,
  */
 class Lowerer {
  public:
-  Lowerer(const ast::Module* module, const ast::Function* entry_point)
-      : ast_module_(module), ast_entry_point_(entry_point) {}
+  Lowerer(const ast::Module* module, const ast::Function* entry_point,
+          const std::unordered_map<const ast::IdentifierExp*,
+                                   semantic::Symbol*>& ident_symbols,
+          const std::unordered_map<const ast::Identifier*, semantic::Symbol*>&
+              decl_symbols)
+      : ast_module_(module),
+        ast_entry_point_(entry_point),
+        ident_symbols_(ident_symbols),
+        decl_symbols_(decl_symbols) {}
 
   std::unique_ptr<ir::Module> Run() {
     if (ast_module_ == nullptr || ast_entry_point_ == nullptr) {
@@ -121,6 +129,11 @@ class Lowerer {
     ir_function->return_type = ResolveType(ast_entry_point_->return_type);
     ir_function->output_vars = ResolveOutputVars();
 
+    /** Register function parameters before lowering body */
+    if (!RegisterFunctionParameters()) {
+      return nullptr;
+    }
+
     if (!LowerFunctionBody()) {
       return nullptr;
     }
@@ -142,20 +155,50 @@ class Lowerer {
   }
 
  private:
+  /**
+   * Registers function parameters as variables before body lowering.
+   * Parameters are treated as pre-declared variables in the function scope.
+   */
+  bool RegisterFunctionParameters() {
+    for (auto* param : ast_entry_point_->params) {
+      if (param == nullptr || param->name == nullptr) {
+        continue;
+      }
+
+      const semantic::Symbol* param_symbol = FindDeclSymbol(param->name);
+      if (param_symbol == nullptr) {
+        // Parameter not found in semantic binding - this is an error
+        return false;
+      }
+
+      ir::TypeId param_type = ResolveType(param->type);
+      if (param_type == ir::kInvalidTypeId) {
+        return false;
+      }
+
+      const uint32_t var_id = AllocateVarId();
+      if (var_id == 0) {
+        return false;
+      }
+
+      if (!RegisterVar(param_symbol, var_id, param_type)) {
+        // Duplicate parameter (should not happen if semantic passed)
+        return false;
+      }
+    }
+    return true;
+  }
+
   /** Lowers the function body statements */
   bool LowerFunctionBody() {
     if (ast_entry_point_->body == nullptr) {
       return true;
     }
-    // Push function-level scope for parameter and local variable declarations
-    PushScope();
     for (auto* statement : ast_entry_point_->body->statements) {
       if (!LowerStatement(statement, &ir_function_->entry_block)) {
-        PopScope();
         return false;
       }
     }
-    PopScope();
     return true;
   }
 
@@ -164,7 +207,8 @@ class Lowerer {
     const bool is_void_return = IsVoidType(ast_entry_point_->return_type);
     const bool has_terminator =
         !ir_function_->entry_block.instructions.empty() &&
-        ir_function_->entry_block.instructions.back().kind == ir::InstKind::kReturn;
+        ir_function_->entry_block.instructions.back().kind ==
+            ir::InstKind::kReturn;
 
     // Void functions need a return statement
     if (is_void_return && !has_terminator) {
@@ -238,17 +282,18 @@ class Lowerer {
 
     if (type.expr->GetType() == ast::ExpressionType::kIdentifier) {
       auto* ident = static_cast<const ast::IdentifierExp*>(type.expr);
-      
+
       // Try scalar types first
       ir::TypeId scalar_type = ResolveScalarType(ident, type_table_);
       if (scalar_type != ir::kInvalidTypeId) {
         return scalar_type;
       }
-      
+
       // Try vector types
       const ast::IdentifierExp* scalar_ident = GetVectorScalarType(ident);
       if (scalar_ident != nullptr) {
-        ir::TypeId component_type = ResolveScalarType(scalar_ident, type_table_);
+        ir::TypeId component_type =
+            ResolveScalarType(scalar_ident, type_table_);
         if (component_type != ir::kInvalidTypeId) {
           uint32_t count = GetVectorComponentCount(ident);
           if (count >= 2 && count <= 4) {
@@ -262,9 +307,7 @@ class Lowerer {
   }
 
   /** Checks if return type is void */
-  bool IsVoidType(const ast::Type& type) const {
-    return type.expr == nullptr;
-  }
+  bool IsVoidType(const ast::Type& type) const { return type.expr == nullptr; }
 
   /** Lowers a statement to IR */
   bool LowerStatement(const ast::Statement* statement, ir::Block* block) {
@@ -332,8 +375,9 @@ class Lowerer {
 
     /** Ensure we have a value (emit load if needed) */
     ir::Value return_value = EnsureValue(expr_result, block);
-    
-    /** Verify we have a valid value (structural check, not backend capability) */
+
+    /** Verify we have a valid value (structural check, not backend capability)
+     */
     if (!return_value.IsValue()) {
       return false;
     }
@@ -343,18 +387,15 @@ class Lowerer {
     return true;
   }
 
-  /** Lowers a block statement (with its own scope) */
+  /** Lowers a block statement. Lexical resolution is provided by semantic
+   * binding. */
   bool LowerBlockStatement(const ast::BlockStatement* nested,
                            ir::Block* block) {
-    // Block statement introduces a new lexical scope
-    PushScope();
     for (auto* nested_stmt : nested->statements) {
       if (!LowerStatement(nested_stmt, block)) {
-        PopScope();
         return false;
       }
     }
-    PopScope();
     return true;
   }
 
@@ -368,6 +409,11 @@ class Lowerer {
     auto* var = var_decl->variable;
     const std::string var_name = std::string(var->name->name);
 
+    const semantic::Symbol* decl_symbol = FindDeclSymbol(var->name);
+    if (decl_symbol == nullptr) {
+      return false;
+    }
+
     /** Resolve variable type */
     ir::TypeId var_type = ResolveType(var->type);
     if (var_type == ir::kInvalidTypeId) {
@@ -378,8 +424,7 @@ class Lowerer {
     if (var_id == 0) {
       return false;
     }
-    if (!RegisterVar(var_name, var_id, var_type)) {
-      // Redeclaration in the same scope
+    if (!RegisterVar(decl_symbol, var_id, var_type)) {
       return false;
     }
 
@@ -422,7 +467,12 @@ class Lowerer {
       return false;
     }
 
-    auto var_info = LookupVar(std::string(ident->ident->name));
+    const semantic::Symbol* target_symbol = FindResolvedSymbol(ident);
+    if (target_symbol == nullptr) {
+      return false;
+    }
+
+    auto var_info = LookupVar(target_symbol);
     if (var_info.id == 0) {
       return false;
     }
@@ -449,7 +499,7 @@ class Lowerer {
 
     /** Ensure source is a value (emit load if it's an address) */
     ir::Value source_value = EnsureValue(source_expr, block);
-    
+
     /** Verify we have a valid value (structural check) */
     if (!source_value.IsValue()) {
       return false;
@@ -458,7 +508,8 @@ class Lowerer {
     /** Emit store instruction with unified Value model */
     ir::Instruction store_inst;
     store_inst.kind = ir::InstKind::kStore;
-    store_inst.operands.push_back(ir::Value::Variable(source_value.type, target_var_id));
+    store_inst.operands.push_back(
+        ir::Value::Variable(source_value.type, target_var_id));
     store_inst.operands.push_back(source_value);
 
     block->instructions.emplace_back(store_inst);
@@ -488,8 +539,7 @@ class Lowerer {
 
     /** Try to lower as binary expression */
     if (expression->GetType() == ast::ExpressionType::kBinaryExp) {
-      return LowerBinaryExpression(
-          static_cast<ast::BinaryExp*>(expression));
+      return LowerBinaryExpression(static_cast<ast::BinaryExp*>(expression));
     }
 
     return ir::ExprResult();
@@ -537,7 +587,8 @@ class Lowerer {
   }
 
   /**
-   * Lowers a vector constructor expression (e.g., vec4<f32>(1.0, 2.0, 3.0, 4.0)).
+   * Lowers a vector constructor expression (e.g.,
+   * vec4<f32>(1.0, 2.0, 3.0, 4.0)).
    */
   ir::ExprResult LowerVectorConstructor(ast::Expression* expression) {
     if (expression == nullptr ||
@@ -592,13 +643,16 @@ class Lowerer {
     ir::Value result_value;
     switch (count) {
       case 2:
-        result_value = ir::Value::ConstantVec2F32(vector_type, values[0], values[1]);
+        result_value =
+            ir::Value::ConstantVec2F32(vector_type, values[0], values[1]);
         break;
       case 3:
-        result_value = ir::Value::ConstantVec3F32(vector_type, values[0], values[1], values[2]);
+        result_value = ir::Value::ConstantVec3F32(vector_type, values[0],
+                                                  values[1], values[2]);
         break;
       case 4:
-        result_value = ir::Value::ConstantVec4F32(vector_type, values[0], values[1], values[2], values[3]);
+        result_value = ir::Value::ConstantVec4F32(
+            vector_type, values[0], values[1], values[2], values[3]);
         break;
       default:
         return ir::ExprResult();
@@ -674,15 +728,24 @@ class Lowerer {
   /**
    * Lowers an identifier expression (variable reference).
    * Returns an address ExprResult (lvalue).
+   * Supports local variables, parameters, and global variables.
    */
   ir::ExprResult LowerIdentifierExpression(ast::IdentifierExp* ident) {
     if (ident->ident == nullptr) {
       return ir::ExprResult();
     }
-    const std::string var_name = std::string(ident->ident->name);
-    auto var_info = LookupVar(var_name);
-    if (var_info.id == 0) {
+    const semantic::Symbol* symbol = FindResolvedSymbol(ident);
+    if (symbol == nullptr) {
       return ir::ExprResult();
+    }
+
+    auto var_info = LookupVar(symbol);
+    if (var_info.id == 0) {
+      // Not a local variable or parameter - try global variable
+      var_info = LookupOrRegisterGlobalVar(symbol);
+      if (var_info.id == 0) {
+        return ir::ExprResult();
+      }
     }
 
     /**
@@ -698,62 +761,6 @@ class Lowerer {
     ir::TypeId type = ir::kInvalidTypeId;
   };
 
-  /** Scope stack for nested lexical scoping */
-  class ScopeStack {
-   public:
-    /** Push a new scope onto the stack */
-    void PushScope() {
-      scopes_.emplace_back();
-    }
-
-    /** Pop the current scope from the stack */
-    void PopScope() {
-      if (!scopes_.empty()) {
-        scopes_.pop_back();
-      }
-    }
-
-    /** Register a variable in the current (innermost) scope */
-    bool RegisterVar(const std::string& name, uint32_t id, ir::TypeId type) {
-      if (scopes_.empty()) {
-        return false;
-      }
-      // Check for redeclaration in current scope
-      auto& current_scope = scopes_.back();
-      if (current_scope.find(name) != current_scope.end()) {
-        return false;  // Redeclaration in same scope
-      }
-      current_scope[name] = {id, type};
-      return true;
-    }
-
-    /** Lookup a variable from innermost to outermost scope */
-    VarInfo LookupVar(const std::string& name) const {
-      // Search from innermost to outermost
-      for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it) {
-        auto var_it = it->find(name);
-        if (var_it != it->end()) {
-          return var_it->second;
-        }
-      }
-      return VarInfo{0, ir::kInvalidTypeId};
-    }
-
-    /** Check if currently in a scope */
-    bool InScope() const {
-      return !scopes_.empty();
-    }
-
-    /** Get current scope depth (0 = no scope, 1 = function scope, etc.) */
-    size_t ScopeDepth() const {
-      return scopes_.size();
-    }
-
-   private:
-    // Each scope is a map from variable name to VarInfo
-    std::vector<std::unordered_map<std::string, VarInfo>> scopes_;
-  };
-
   /** Variable management */
   uint32_t AllocateVarId() {
     return ir_function_ ? ir_function_->AllocateVarId() : 0;
@@ -763,36 +770,104 @@ class Lowerer {
     return ir_function_ ? ir_function_->AllocateSSAId() : 0;
   }
 
-  /** Register variable in current scope */
-  bool RegisterVar(const std::string& name, uint32_t id, ir::TypeId type) {
-    return scope_stack_.RegisterVar(name, id, type);
+  bool RegisterVar(const semantic::Symbol* symbol, uint32_t id,
+                   ir::TypeId type) {
+    if (symbol == nullptr) {
+      return false;
+    }
+    auto [it, inserted] = var_map_.emplace(symbol, VarInfo{id, type});
+    return inserted;
   }
 
-  /** Lookup variable from current scope outward */
-  VarInfo LookupVar(const std::string& name) const {
-    return scope_stack_.LookupVar(name);
+  VarInfo LookupVar(const semantic::Symbol* symbol) const {
+    if (symbol == nullptr) {
+      return VarInfo{};
+    }
+    auto it = var_map_.find(symbol);
+    return it == var_map_.end() ? VarInfo{} : it->second;
   }
 
-  /** Push a new scope for block-level declarations */
-  void PushScope() {
-    scope_stack_.PushScope();
+  /**
+   * Looks up or registers a global variable.
+   * Global variables are registered on first reference (lazy registration).
+   */
+  VarInfo LookupOrRegisterGlobalVar(const semantic::Symbol* symbol) {
+    if (symbol == nullptr || symbol->declaration == nullptr) {
+      return VarInfo{};
+    }
+
+    // Check if this symbol corresponds to a global variable declaration
+    const ast::Node* decl = symbol->declaration;
+    ast::Variable* global_var = nullptr;
+
+    for (auto* var : ast_module_->global_declarations) {
+      if (var == decl) {
+        global_var = var;
+        break;
+      }
+    }
+
+    if (global_var == nullptr) {
+      // Not a global variable
+      return VarInfo{};
+    }
+
+    // Check if already registered (e.g., multiple references to same global)
+    auto it = var_map_.find(symbol);
+    if (it != var_map_.end()) {
+      return it->second;
+    }
+
+    // First reference to this global - register it
+    ir::TypeId var_type = ResolveType(global_var->type);
+    if (var_type == ir::kInvalidTypeId) {
+      return VarInfo{};
+    }
+
+    const uint32_t var_id = AllocateVarId();
+    if (var_id == 0) {
+      return VarInfo{};
+    }
+
+    if (!RegisterVar(symbol, var_id, var_type)) {
+      return VarInfo{};
+    }
+
+    // Note: Global variables are not emitted as kVariable instructions
+    // They are handled by the backend (SPIR-V emitter) as module-level
+    // variables
+    return VarInfo{var_id, var_type};
   }
 
-  /** Pop current scope when exiting block */
-  void PopScope() {
-    scope_stack_.PopScope();
+  const semantic::Symbol* FindResolvedSymbol(
+      const ast::IdentifierExp* ident) const {
+    auto it = ident_symbols_.find(ident);
+    return it == ident_symbols_.end() ? nullptr : it->second;
+  }
+
+  const semantic::Symbol* FindDeclSymbol(const ast::Identifier* ident) const {
+    auto it = decl_symbols_.find(ident);
+    return it == decl_symbols_.end() ? nullptr : it->second;
   }
 
   const ast::Module* ast_module_;
   const ast::Function* ast_entry_point_;
+  const std::unordered_map<const ast::IdentifierExp*, semantic::Symbol*>&
+      ident_symbols_;
+  const std::unordered_map<const ast::Identifier*, semantic::Symbol*>&
+      decl_symbols_;
   ir::Function* ir_function_ = nullptr;
   ir::TypeTable* type_table_ = nullptr;
-  ScopeStack scope_stack_;
+  std::unordered_map<const semantic::Symbol*, VarInfo> var_map_;
 };
 
-std::unique_ptr<ir::Module> LowerToIR(const ast::Module* module,
-                                      const ast::Function* entry_point) {
-  Lowerer lowerer(module, entry_point);
+std::unique_ptr<ir::Module> LowerToIR(
+    const ast::Module* module, const ast::Function* entry_point,
+    const std::unordered_map<const ast::IdentifierExp*, semantic::Symbol*>&
+        ident_symbols,
+    const std::unordered_map<const ast::Identifier*, semantic::Symbol*>&
+        decl_symbols) {
+  Lowerer lowerer(module, entry_point, ident_symbols, decl_symbols);
   return lowerer.Run();
 }
 
