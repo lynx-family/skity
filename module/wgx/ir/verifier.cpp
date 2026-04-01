@@ -52,16 +52,15 @@ VerificationResult Verifier::VerifyFunction(const Function& function) {
   if (last_inst.kind != InstKind::kReturn) {
     return VerificationResult::Failure(
         "Entry block does not end with return instruction",
-        block.instructions.size() - 1,
-        last_inst.kind);
+        block.instructions.size() - 1, last_inst.kind);
   }
 
   return VerificationResult::Success();
 }
 
 VerificationResult Verifier::VerifyInstruction(const Instruction& inst,
-                                                size_t index,
-                                                const Function& function) {
+                                               size_t index,
+                                               const Function& function) {
   (void)function;  // Reserved for future use (e.g., dominator checks)
 
   switch (inst.kind) {
@@ -76,8 +75,8 @@ VerificationResult Verifier::VerifyInstruction(const Instruction& inst,
     case InstKind::kBinary:
       return VerifyBinary(inst, index);
     default:
-      return VerificationResult::Failure(
-          "Unknown instruction kind", index, inst.kind);
+      return VerificationResult::Failure("Unknown instruction kind", index,
+                                         inst.kind);
   }
 }
 
@@ -104,18 +103,39 @@ void Verifier::TrackVariableDefinition(uint32_t var_id) {
 
 bool Verifier::IsSSADefined(uint32_t ssa_id) const {
   if (ssa_id == 0) return false;
-  return std::find(defined_ssa_ids_.begin(), defined_ssa_ids_.end(),
-                   ssa_id) != defined_ssa_ids_.end();
+  return std::find(defined_ssa_ids_.begin(), defined_ssa_ids_.end(), ssa_id) !=
+         defined_ssa_ids_.end();
 }
 
 bool Verifier::IsVariableDefined(uint32_t var_id) const {
   if (var_id == 0) return false;
-  return std::find(defined_var_ids_.begin(), defined_var_ids_.end(),
-                   var_id) != defined_var_ids_.end();
+  return std::find(defined_var_ids_.begin(), defined_var_ids_.end(), var_id) !=
+         defined_var_ids_.end();
 }
 
-bool Verifier::IsValidValue(const Value& value,
-                            const std::string& context) const {
+bool Verifier::IsVariableTracked(uint32_t var_id) const {
+  // A variable is "tracked" if it's either:
+  // 1. Defined locally via kVariable instruction, OR
+  // 2. Already seen in this function (for global variables)
+  if (IsVariableDefined(var_id)) {
+    return true;
+  }
+  // For global variables or parameters that don't have kVariable instructions,
+  // we track them when we first see them used
+  if (std::find(referenced_var_ids_.begin(), referenced_var_ids_.end(),
+                var_id) != referenced_var_ids_.end()) {
+    return true;
+  }
+  return false;
+}
+
+void Verifier::TrackVariableReference(uint32_t var_id) {
+  if (var_id != 0 && !IsVariableTracked(var_id)) {
+    referenced_var_ids_.push_back(var_id);
+  }
+}
+
+bool Verifier::IsValidValue(const Value& value, const std::string& context) {
   if (!value.IsValid()) {
     return false;
   }
@@ -131,14 +151,19 @@ bool Verifier::IsValidValue(const Value& value,
     }
   }
 
-  // For variable references, check they've been defined
+  // For variable references, check they've been defined or referenced before
+  // (allows global variables and parameters that don't have kVariable
+  // instructions)
   if (value.IsVariable()) {
     auto var_id = value.GetVarId();
     if (!var_id.has_value()) {
       return false;
     }
-    if (!IsVariableDefined(var_id.value())) {
-      return false;
+    uint32_t id = var_id.value();
+    if (!IsVariableTracked(id)) {
+      // First time seeing this variable - track it as a referenced variable
+      // (likely a global variable or parameter)
+      TrackVariableReference(id);
     }
   }
 
@@ -150,7 +175,7 @@ bool Verifier::IsValidValue(const Value& value,
 // =============================================================================
 
 VerificationResult Verifier::VerifyReturn(const Instruction& inst,
-                                           size_t index) {
+                                          size_t index) {
   // Return should have 0 or 1 operands
   if (inst.operands.size() > 1) {
     return VerificationResult::Failure(
@@ -162,13 +187,14 @@ VerificationResult Verifier::VerifyReturn(const Instruction& inst,
     const Value& ret_val = inst.operands[0];
     if (!ret_val.IsValue()) {
       return VerificationResult::Failure(
-          "Return value must be a value (constant or SSA), not a variable reference",
+          "Return value must be a value (constant or SSA), not a variable "
+          "reference",
           index, inst.kind);
     }
     if (!IsValidValue(ret_val, "return")) {
       return VerificationResult::Failure(
-          "Return value is invalid or references undefined SSA/variable",
-          index, inst.kind);
+          "Return value is invalid or references undefined SSA/variable", index,
+          inst.kind);
     }
   }
 
@@ -182,30 +208,33 @@ VerificationResult Verifier::VerifyReturn(const Instruction& inst,
 }
 
 VerificationResult Verifier::VerifyVariable(const Instruction& inst,
-                                             size_t index) {
-  // Variable declaration should have no operands (initializer is a separate store)
+                                            size_t index) {
+  // Variable declaration should have no operands (initializer is a separate
+  // store)
   if (!inst.operands.empty()) {
     return VerificationResult::Failure(
-        "Variable declaration should have no operands (use separate store for initializer)",
+        "Variable declaration should have no operands (use separate store for "
+        "initializer)",
         index, inst.kind);
   }
 
   // Must have a valid variable id
   if (inst.var_id == 0) {
-    return VerificationResult::Failure(
-        "Variable declaration has no var_id", index, inst.kind);
+    return VerificationResult::Failure("Variable declaration has no var_id",
+                                       index, inst.kind);
   }
 
   // Must have a valid type
   if (inst.result_type == kInvalidTypeId) {
-    return VerificationResult::Failure(
-        "Variable declaration has invalid type", index, inst.kind);
+    return VerificationResult::Failure("Variable declaration has invalid type",
+                                       index, inst.kind);
   }
 
   // Variable should not have a result_id (it has var_id instead)
   if (inst.result_id != 0) {
     return VerificationResult::Failure(
-        "Variable declaration should use var_id, not result_id", index, inst.kind);
+        "Variable declaration should use var_id, not result_id", index,
+        inst.kind);
   }
 
   // Track this variable definition
@@ -214,8 +243,7 @@ VerificationResult Verifier::VerifyVariable(const Instruction& inst,
   return VerificationResult::Success();
 }
 
-VerificationResult Verifier::VerifyLoad(const Instruction& inst,
-                                         size_t index) {
+VerificationResult Verifier::VerifyLoad(const Instruction& inst, size_t index) {
   // Load must have exactly 1 operand (source variable)
   if (inst.operands.size() != 1) {
     return VerificationResult::Failure(
@@ -252,11 +280,12 @@ VerificationResult Verifier::VerifyLoad(const Instruction& inst,
 }
 
 VerificationResult Verifier::VerifyStore(const Instruction& inst,
-                                          size_t index) {
+                                         size_t index) {
   // Store must have exactly 2 operands: target (variable), source (value)
   if (inst.operands.size() != 2) {
     return VerificationResult::Failure(
-        "Store instruction must have exactly 2 operands (target variable, source value)",
+        "Store instruction must have exactly 2 operands (target variable, "
+        "source value)",
         index, inst.kind);
   }
 
@@ -276,13 +305,15 @@ VerificationResult Verifier::VerifyStore(const Instruction& inst,
   const Value& source = inst.operands[1];
   if (!source.IsValue()) {
     return VerificationResult::Failure(
-        "Store source must be a value (constant or SSA), not a variable reference",
+        "Store source must be a value (constant or SSA), not a variable "
+        "reference",
         index, inst.kind);
   }
 
   if (!IsValidValue(source, "store source")) {
     return VerificationResult::Failure(
-        "Store source is invalid or references undefined SSA", index, inst.kind);
+        "Store source is invalid or references undefined SSA", index,
+        inst.kind);
   }
 
   // Store should not produce a result
@@ -295,7 +326,7 @@ VerificationResult Verifier::VerifyStore(const Instruction& inst,
 }
 
 VerificationResult Verifier::VerifyBinary(const Instruction& inst,
-                                           size_t index) {
+                                          size_t index) {
   // Binary must have exactly 2 operands (lhs, rhs)
   if (inst.operands.size() != 2) {
     return VerificationResult::Failure(

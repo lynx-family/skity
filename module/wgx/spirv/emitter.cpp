@@ -10,6 +10,7 @@
 #include <memory>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "ir/verifier.h"
@@ -365,6 +366,13 @@ struct LocalVarInfo {
   uint32_t spirv_var_id = 0;
 };
 
+struct GlobalVarInfo {
+  uint32_t ir_var_id = 0;
+  ir::TypeId var_type = ir::kInvalidTypeId;
+  uint32_t spirv_var_id = 0;
+  SpvStorageClass storage_class = SpvStorageClassPrivate;
+};
+
 struct ValueInfo {
   uint32_t ir_value_id = 0;
   ir::TypeId value_type = ir::kInvalidTypeId;
@@ -419,6 +427,7 @@ class ModuleBuilder {
       output_vars_.push_back(std::move(info));
     }
 
+    // Collect local variables from kVariable instructions
     for (const auto& inst : instructions) {
       if (inst.kind == ir::InstKind::kVariable) {
         LocalVarInfo info;
@@ -432,7 +441,61 @@ class ModuleBuilder {
         values_.push_back(info);
       }
     }
+
+    // Collect global variable references (variables used but not declared
+    // locally)
+    CollectGlobalVarReferences(instructions);
+
     return true;
+  }
+
+  /**
+   * Collects global variable references from instructions.
+   * Global variables are referenced by Load/Store but not declared by
+   * kVariable.
+   */
+  void CollectGlobalVarReferences(
+      const std::vector<ir::Instruction>& instructions) {
+    // Build set of local var ids for quick lookup
+    std::unordered_set<uint32_t> local_var_ids;
+    for (const auto& var : local_vars_) {
+      local_var_ids.insert(var.ir_var_id);
+    }
+
+    // Scan all instructions for variable references
+    for (const auto& inst : instructions) {
+      for (const auto& operand : inst.operands) {
+        if (operand.IsVariable()) {
+          uint32_t var_id = operand.GetVarId().value_or(0);
+          ir::TypeId var_type = operand.type;
+
+          // Skip if it's a local variable
+          if (local_var_ids.count(var_id) > 0) {
+            continue;
+          }
+
+          // Skip if already tracked as global
+          bool already_tracked = false;
+          for (const auto& global : global_vars_) {
+            if (global.ir_var_id == var_id) {
+              already_tracked = true;
+              break;
+            }
+          }
+
+          if (!already_tracked && var_id != 0 &&
+              var_type != ir::kInvalidTypeId) {
+            GlobalVarInfo info;
+            info.ir_var_id = var_id;
+            info.var_type = var_type;
+            // For now, assume all globals are Private storage class
+            // TODO: Support other storage classes (Uniform, Storage, etc.)
+            info.storage_class = SpvStorageClassPrivate;
+            global_vars_.push_back(info);
+          }
+        }
+      }
+    }
   }
 
   bool AllocateCoreIds() {
@@ -443,6 +506,9 @@ class ModuleBuilder {
     }
     for (auto& var : local_vars_) {
       var.spirv_var_id = ids_.Allocate();
+    }
+    for (auto& global : global_vars_) {
+      global.spirv_var_id = ids_.Allocate();
     }
     return function_id_ != 0 && label_id_ != 0;
   }
@@ -507,7 +573,8 @@ class ModuleBuilder {
             &sections_->annotations, SpvOpDecorate,
             {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationBuiltIn),
              static_cast<uint32_t>(spirv_builtin)});
-      } else if (output.decoration_kind == ir::OutputDecorationKind::kLocation) {
+      } else if (output.decoration_kind ==
+                 ir::OutputDecorationKind::kLocation) {
         AppendInstruction(
             &sections_->annotations, SpvOpDecorate,
             {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationLocation),
@@ -538,6 +605,20 @@ class ModuleBuilder {
       AppendInstruction(&sections_->types_consts_globals, SpvOpVariable,
                         {output_ptr_type, output.spirv_var_id,
                          static_cast<uint32_t>(SpvStorageClassOutput)});
+    }
+
+    // Create OpVariable for each global variable
+    for (auto& global : global_vars_) {
+      uint32_t spirv_type = type_emitter_->EmitType(global.var_type);
+      if (spirv_type == 0) return false;
+
+      uint32_t global_ptr_type =
+          type_emitter_->GetPointerType(global.var_type, global.storage_class);
+      if (global_ptr_type == 0) return false;
+
+      AppendInstruction(&sections_->types_consts_globals, SpvOpVariable,
+                        {global_ptr_type, global.spirv_var_id,
+                         static_cast<uint32_t>(global.storage_class)});
     }
 
     return true;
@@ -588,6 +669,27 @@ class ModuleBuilder {
   }
 
   /**
+   * Finds a variable (local or global) by IR var id.
+   * Returns the SPIR-V variable id, or 0 if not found.
+   */
+  uint32_t FindVariableSpirvId(uint32_t ir_var_id) {
+    // Try local variables first
+    auto local_it = FindLocalVar(ir_var_id);
+    if (local_it != local_vars_.end()) {
+      return local_it->spirv_var_id;
+    }
+
+    // Try global variables
+    for (const auto& global : global_vars_) {
+      if (global.ir_var_id == ir_var_id) {
+        return global.spirv_var_id;
+      }
+    }
+
+    return 0;
+  }
+
+  /**
    * Emit explicit load instruction (new Value model).
    * kLoad in IR translates to SpvOpLoad in SPIR-V.
    */
@@ -603,13 +705,14 @@ class ModuleBuilder {
     if (!source.IsVariable()) return false;
 
     uint32_t ir_var_id = source.GetVarId().value();
-    auto var_it = FindLocalVar(ir_var_id);
-    if (var_it == local_vars_.end()) return false;
+    uint32_t spirv_var_id = FindVariableSpirvId(ir_var_id);
+    if (spirv_var_id == 0) return false;
 
     uint32_t spirv_result_id = ids_.Allocate();
-    AppendInstruction(&sections_->functions, SpvOpLoad,
-                      {GetSpirvTypeId(inst.result_type), spirv_result_id, var_it->spirv_var_id});
-    
+    AppendInstruction(
+        &sections_->functions, SpvOpLoad,
+        {GetSpirvTypeId(inst.result_type), spirv_result_id, spirv_var_id});
+
     /**
      * Map the IR SSA id to SPIR-V id.
      * This allows subsequent instructions to reference this loaded value.
@@ -625,8 +728,8 @@ class ModuleBuilder {
     if (!target.IsVariable() || !source.IsValue()) return false;
 
     uint32_t ir_var_id = target.GetVarId().value();
-    auto var_it = FindLocalVar(ir_var_id);
-    if (var_it == local_vars_.end()) return false;
+    uint32_t spirv_var_id = FindVariableSpirvId(ir_var_id);
+    if (spirv_var_id == 0) return false;
 
     uint32_t value_id = 0;
     if (!MaterializeValue(source, &value_id)) {
@@ -634,10 +737,9 @@ class ModuleBuilder {
     }
 
     AppendInstruction(&sections_->functions, SpvOpStore,
-                      {var_it->spirv_var_id, value_id});
+                      {spirv_var_id, value_id});
     return true;
   }
-
 
   bool EmitBinary(const ir::Instruction& inst) {
     if (FindValue(inst.result_id) == values_.end()) return false;
@@ -659,8 +761,9 @@ class ModuleBuilder {
     }
 
     uint32_t result_id = ids_.Allocate();
-    AppendInstruction(&sections_->functions, op,
-                      {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
+    AppendInstruction(
+        &sections_->functions, op,
+        {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
     value_map_[inst.result_id] = result_id;
     return true;
   }
@@ -674,7 +777,8 @@ class ModuleBuilder {
 
     // Get the vector dimension from the type
     ir::TypeId vector_type_id = value.type;
-    const ir::Type* vector_type = type_emitter_->GetTypeTable()->GetType(vector_type_id);
+    const ir::Type* vector_type =
+        type_emitter_->GetTypeTable()->GetType(vector_type_id);
     if (vector_type == nullptr || vector_type->kind != ir::TypeKind::kVector) {
       return false;
     }
@@ -688,7 +792,8 @@ class ModuleBuilder {
     std::array<float, 4> values = {0.0f, 0.0f, 0.0f, 0.0f};
     switch (value.const_kind) {
       case ir::InlineConstKind::kVec2F32:
-        values = {value.GetVec4Unchecked()[0], value.GetVec4Unchecked()[1], 0.0f, 0.0f};
+        values = {value.GetVec4Unchecked()[0], value.GetVec4Unchecked()[1],
+                  0.0f, 0.0f};
         break;
       case ir::InlineConstKind::kVec3F32:
         values = {value.GetVec4Unchecked()[0], value.GetVec4Unchecked()[1],
@@ -809,7 +914,8 @@ class ModuleBuilder {
     return values_.end();
   }
 
-  // Information about an output variable (mirrors ir::OutputVariable with SPIR-V ids)
+  // Information about an output variable (mirrors ir::OutputVariable with
+  // SPIR-V ids)
   struct OutputVarInfo {
     std::string name;
     ir::TypeId ir_type = ir::kInvalidTypeId;
@@ -849,6 +955,7 @@ class ModuleBuilder {
   std::vector<OutputVarInfo> output_vars_;
 
   std::vector<LocalVarInfo> local_vars_;
+  std::vector<GlobalVarInfo> global_vars_;
   std::vector<ValueInfo> values_;
   std::unordered_map<uint32_t, uint32_t> value_map_;
 };

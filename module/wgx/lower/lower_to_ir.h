@@ -5,16 +5,22 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 
 #include "ir/module.h"
+#include "semantic/symbol.h"
 #include "wgsl/ast/function.h"
 #include "wgsl/ast/module.h"
 
 namespace wgx {
 namespace lower {
 
-std::unique_ptr<ir::Module> LowerToIR(const ast::Module* module,
-                                      const ast::Function* entry_point);
+std::unique_ptr<ir::Module> LowerToIR(
+    const ast::Module* module, const ast::Function* entry_point,
+    const std::unordered_map<const ast::IdentifierExp*, semantic::Symbol*>&
+        ident_symbols,
+    const std::unordered_map<const ast::Identifier*, semantic::Symbol*>&
+        decl_symbols);
 
 }  // namespace lower
 }  // namespace wgx

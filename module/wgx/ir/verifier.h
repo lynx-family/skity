@@ -75,25 +75,29 @@ class Verifier {
   /**
    * Verify a single instruction (within function context)
    */
-  VerificationResult VerifyInstruction(const Instruction& inst,
-                                       size_t index,
+  VerificationResult VerifyInstruction(const Instruction& inst, size_t index,
                                        const Function& function);
 
  private:
   // Per-function verification state
   std::vector<uint32_t> defined_ssa_ids_;
   std::vector<uint32_t> defined_var_ids_;
+  std::vector<uint32_t>
+      referenced_var_ids_;  // For global variables/params without kVariable
 
   void ResetState();
 
   // Track definitions
   void TrackSSADefinition(uint32_t ssa_id);
   void TrackVariableDefinition(uint32_t var_id);
+  void TrackVariableReference(uint32_t var_id);
 
   // Check if value is valid (type is valid, SSA ids are defined, etc.)
-  bool IsValidValue(const Value& value, const std::string& context) const;
+  // Non-const because it may track new variable references
+  bool IsValidValue(const Value& value, const std::string& context);
   bool IsSSADefined(uint32_t ssa_id) const;
   bool IsVariableDefined(uint32_t var_id) const;
+  bool IsVariableTracked(uint32_t var_id) const;
 
   // Specific instruction verifiers
   VerificationResult VerifyReturn(const Instruction& inst, size_t index);
