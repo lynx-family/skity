@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "ir/type.h"
@@ -22,9 +23,9 @@ enum class PipelineStage {
 
 // Output variable decoration types
 enum class OutputDecorationKind {
-  kNone,     // No decoration (void)
-  kBuiltin,  // @builtin(...)
-  kLocation, // @location(...)
+  kNone,      // No decoration (void)
+  kBuiltin,   // @builtin(...)
+  kLocation,  // @location(...)
 };
 
 // Backend-agnostic builtin types
@@ -163,6 +164,16 @@ struct Module {
   // Module-level type table (shared across functions)
   std::unique_ptr<TypeTable> type_table;
   std::unique_ptr<ConstantPool> constant_pool;
+
+  /**
+   * Global variable initializers.
+   * Key: variable id (as used in Value::Variable)
+   * Value: constant initializer value
+   *
+   * Global variables are referenced by Load/Store instructions but not declared
+   * as kVariable instructions. Their initializers must be constant expressions.
+   */
+  std::unordered_map<uint32_t, Value> global_initializers;
 };
 
 }  // namespace ir

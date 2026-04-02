@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -286,6 +287,55 @@ class TypeEmitter {
     return const_id;
   }
 
+  uint32_t EmitI32Constant(int32_t value) {
+    auto it = i32_constants_.find(value);
+    if (it != i32_constants_.end()) {
+      return it->second;
+    }
+
+    uint32_t i32_type = EmitType(type_table_->GetI32Type());
+    if (i32_type == 0) return 0;
+
+    uint32_t const_id = ids_->Allocate();
+    AppendInstruction(&sections_->types_consts_globals, SpvOpConstant,
+                      {i32_type, const_id, static_cast<uint32_t>(value)});
+    i32_constants_[value] = const_id;
+    return const_id;
+  }
+
+  uint32_t EmitU32Constant(uint32_t value) {
+    auto it = u32_constants_.find(value);
+    if (it != u32_constants_.end()) {
+      return it->second;
+    }
+
+    uint32_t u32_type = EmitType(type_table_->GetU32Type());
+    if (u32_type == 0) return 0;
+
+    uint32_t const_id = ids_->Allocate();
+    AppendInstruction(&sections_->types_consts_globals, SpvOpConstant,
+                      {u32_type, const_id, value});
+    u32_constants_[value] = const_id;
+    return const_id;
+  }
+
+  uint32_t EmitBoolConstant(bool value) {
+    auto it = bool_constants_.find(value);
+    if (it != bool_constants_.end()) {
+      return it->second;
+    }
+
+    uint32_t bool_type = EmitType(type_table_->GetBoolType());
+    if (bool_type == 0) return 0;
+
+    uint32_t const_id = ids_->Allocate();
+    auto opcode = value ? SpvOpConstantTrue : SpvOpConstantFalse;
+    AppendInstruction(&sections_->types_consts_globals, opcode,
+                      {bool_type, const_id});
+    bool_constants_[value] = const_id;
+    return const_id;
+  }
+
  private:
   void EmitVectorType(const ir::Type* type, uint32_t spirv_id) {
     uint32_t component_id = EmitType(type->element_type);
@@ -346,6 +396,9 @@ class TypeEmitter {
   ir::TypeTable* type_table_;
   std::unordered_map<ir::TypeId, uint32_t> emitted_types_;
   std::unordered_map<uint32_t, uint32_t> f32_constants_;
+  std::unordered_map<int32_t, uint32_t> i32_constants_;
+  std::unordered_map<uint32_t, uint32_t> u32_constants_;
+  std::unordered_map<bool, uint32_t> bool_constants_;
   std::unordered_map<std::pair<ir::TypeId, SpvStorageClass>, uint32_t, PairHash>
       pointer_types_;
   uint32_t function_void_type_ = 0;
@@ -371,6 +424,7 @@ struct GlobalVarInfo {
   ir::TypeId var_type = ir::kInvalidTypeId;
   uint32_t spirv_var_id = 0;
   SpvStorageClass storage_class = SpvStorageClassPrivate;
+  std::optional<ir::Value> initializer;  // Constant initializer, if any
 };
 
 struct ValueInfo {
@@ -491,6 +545,11 @@ class ModuleBuilder {
             // For now, assume all globals are Private storage class
             // TODO: Support other storage classes (Uniform, Storage, etc.)
             info.storage_class = SpvStorageClassPrivate;
+            // Look up initializer from module
+            auto init_it = module_.global_initializers.find(var_id);
+            if (init_it != module_.global_initializers.end()) {
+              info.initializer = init_it->second;
+            }
             global_vars_.push_back(info);
           }
         }
@@ -616,9 +675,20 @@ class ModuleBuilder {
           type_emitter_->GetPointerType(global.var_type, global.storage_class);
       if (global_ptr_type == 0) return false;
 
+      std::vector<uint32_t> operands = {
+          global_ptr_type, global.spirv_var_id,
+          static_cast<uint32_t>(global.storage_class)};
+
+      // Add initializer if present
+      if (global.initializer.has_value()) {
+        uint32_t init_id = EmitConstant(global.initializer.value());
+        if (init_id != 0) {
+          operands.push_back(init_id);
+        }
+      }
+
       AppendInstruction(&sections_->types_consts_globals, SpvOpVariable,
-                        {global_ptr_type, global.spirv_var_id,
-                         static_cast<uint32_t>(global.storage_class)});
+                        operands);
     }
 
     return true;
@@ -854,6 +924,113 @@ class ModuleBuilder {
 
   uint32_t GetSpirvTypeId(ir::TypeId type_id) {
     return type_emitter_->EmitType(type_id);
+  }
+
+  /**
+   * Emits a constant value to the types_consts_globals section.
+   * Returns the SPIR-V id of the constant, or 0 on failure.
+   */
+  uint32_t EmitConstant(const ir::Value& value) {
+    if (!value.IsConstant()) return 0;
+
+    switch (value.const_kind) {
+      case ir::InlineConstKind::kF32:
+        return type_emitter_->EmitF32Constant(value.GetF32Unchecked());
+      case ir::InlineConstKind::kI32:
+        return type_emitter_->EmitI32Constant(value.GetI32Unchecked());
+      case ir::InlineConstKind::kU32:
+        return type_emitter_->EmitU32Constant(value.GetU32Unchecked());
+      case ir::InlineConstKind::kBool:
+        return type_emitter_->EmitBoolConstant(value.GetBoolUnchecked());
+      case ir::InlineConstKind::kVec2F32:
+      case ir::InlineConstKind::kVec3F32:
+      case ir::InlineConstKind::kVec4F32:
+        return EmitConstantComposite(value);
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Emits a vector constant using OpConstantComposite.
+   * This is suitable for global variable initializers.
+   */
+  uint32_t EmitConstantComposite(const ir::Value& value) {
+    // Get the vector dimension from the type
+    ir::TypeId vector_type_id = value.type;
+    const ir::Type* vector_type =
+        type_emitter_->GetTypeTable()->GetType(vector_type_id);
+    if (vector_type == nullptr || vector_type->kind != ir::TypeKind::kVector) {
+      return 0;
+    }
+
+    uint32_t component_count = vector_type->count;
+    if (component_count < 2 || component_count > 4) {
+      return 0;
+    }
+
+    ir::TypeId element_type_id = vector_type->element_type;
+    const ir::Type* element_type =
+        type_emitter_->GetTypeTable()->GetType(element_type_id);
+    if (element_type == nullptr) return 0;
+
+    // Get component values from the Value (stored as raw float array)
+    std::array<float, 4> raw_values = {0.0f, 0.0f, 0.0f, 0.0f};
+    switch (value.const_kind) {
+      case ir::InlineConstKind::kVec2F32:
+        raw_values = {value.GetVec4Unchecked()[0], value.GetVec4Unchecked()[1],
+                      0.0f, 0.0f};
+        break;
+      case ir::InlineConstKind::kVec3F32:
+        raw_values = {value.GetVec4Unchecked()[0], value.GetVec4Unchecked()[1],
+                      value.GetVec4Unchecked()[2], 0.0f};
+        break;
+      case ir::InlineConstKind::kVec4F32:
+        raw_values = value.GetVec4Unchecked();
+        break;
+      default:
+        return 0;
+    }
+
+    // Emit component constants based on element type
+    std::vector<uint32_t> const_ids;
+    const_ids.reserve(component_count);
+    for (uint32_t i = 0; i < component_count; ++i) {
+      uint32_t component_id = 0;
+      if (element_type->kind == ir::TypeKind::kF32) {
+        component_id = type_emitter_->EmitF32Constant(raw_values[i]);
+      } else if (element_type->kind == ir::TypeKind::kI32) {
+        int32_t iv = 0;
+        std::memcpy(&iv, &raw_values[i], sizeof(iv));
+        component_id = type_emitter_->EmitI32Constant(iv);
+      } else if (element_type->kind == ir::TypeKind::kU32) {
+        uint32_t uv = 0;
+        std::memcpy(&uv, &raw_values[i], sizeof(uv));
+        component_id = type_emitter_->EmitU32Constant(uv);
+      } else if (element_type->kind == ir::TypeKind::kBool) {
+        bool bv = false;
+        std::memcpy(&bv, &raw_values[i], sizeof(bv));
+        component_id = type_emitter_->EmitBoolConstant(bv);
+      } else {
+        return 0;
+      }
+      if (component_id == 0) return 0;
+      const_ids.push_back(component_id);
+    }
+
+    // Emit OpConstantComposite to types_consts_globals
+    uint32_t spirv_vector_type = type_emitter_->EmitType(vector_type_id);
+    if (spirv_vector_type == 0) return 0;
+
+    uint32_t result_id = ids_.Allocate();
+    std::vector<uint32_t> operands;
+    operands.push_back(spirv_vector_type);
+    operands.push_back(result_id);
+    operands.insert(operands.end(), const_ids.begin(), const_ids.end());
+
+    AppendInstruction(&sections_->types_consts_globals, SpvOpConstantComposite,
+                      operands);
+    return result_id;
   }
 
   bool EmitReturn(const ir::Instruction& inst) {

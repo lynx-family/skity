@@ -455,8 +455,6 @@ fn vs_main() -> @builtin(position) vec4<f32> {
  * Global variables should be resolvable from entry point.
  */
 TEST(WgxSpirvSmokeTest, EmitsSpirvWithGlobalVariableReference) {
-  // Note: Global variable without initializer (initializer not yet supported in
-  // lower)
   auto program = wgx::Program::Parse(R"(
 var<private> global_pos: vec4<f32>;
 
@@ -480,6 +478,150 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_EQ(words[0], SpvMagicNumber);
   EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+/**
+ * Test global variable with constant initializer.
+ * The initializer should be emitted as OpVariable's initializer operand.
+ */
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithGlobalVariableInitializer) {
+  auto program = wgx::Program::Parse(R"(
+var<private> global_pos: vec4<f32> = vec4<f32>(1.0, 2.0, 3.0, 4.0);
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  return global_pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_global_init.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  // Should have OpConstantComposite for the vector initializer
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstantComposite));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+/**
+ * Test global i32 variable with constant initializer.
+ */
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithGlobalI32Initializer) {
+  auto program = wgx::Program::Parse(R"(
+var<private> global_i: i32 = 42;
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var x: i32 = global_i;
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstant));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
+}
+
+/**
+ * Test global u32 variable with constant initializer.
+ */
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithGlobalU32Initializer) {
+  auto program = wgx::Program::Parse(R"(
+var<private> global_u: u32 = 7;
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var x: u32 = global_u;
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstant));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
+}
+
+/**
+ * Test global bool variable with constant initializer.
+ */
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithGlobalBoolInitializer) {
+  auto program = wgx::Program::Parse(R"(
+var<private> global_b: bool = true;
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var b: bool = global_b;
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstantTrue));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
+}
+
+/**
+ * Test global vec2<i32> variable with constant initializer.
+ */
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithGlobalVec2I32Initializer) {
+  auto program = wgx::Program::Parse(R"(
+var<private> global_v2i: vec2<i32> = vec2<i32>(1, 2);
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var x: vec2<i32> = global_v2i;
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstantComposite));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
 }
 
 /**
