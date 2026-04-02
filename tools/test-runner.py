@@ -157,7 +157,7 @@ class TestRunner:
             if os.path.exists(gtest_json_path):
                 return self._parse_gtest_json(gtest_json_path, result.returncode, result.stdout)
             else:
-                return self._create_infra_error("missing_executable", "Tests ran but gtest_report.json was not generated.")
+                return self._create_infra_error("missing_gtest_report", "Tests ran but gtest_report.json was not generated.")
 
         except Exception as e:
             return self._create_infra_error("infra_error", f"Failed to execute tests: {e}")
