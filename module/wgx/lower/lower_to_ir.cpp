@@ -7,6 +7,7 @@
 #include "lower/lower_to_ir.h"
 
 #include <array>
+#include <cstring>
 #include <unordered_map>
 
 #include "ir/value.h"
@@ -110,6 +111,7 @@ class Lowerer {
     }
 
     auto ir_module = std::make_unique<ir::Module>();
+    ir_module_ = ir_module.get();
     ir_module->entry_point = std::string{ast_entry_point_->name->name};
     ir_module->stage = ToIRStage(ast_entry_point_->GetPipelineStage());
 
@@ -619,11 +621,6 @@ class Lowerer {
 
     ir::TypeId vector_type = type_table_->GetVectorType(component_type, count);
 
-    // Currently only support f32 components for vector constants
-    if (component_type != type_table_->GetF32Type()) {
-      return ir::ExprResult();
-    }
-
     if (call->args.size() != count) {
       return ir::ExprResult();
     }
@@ -631,12 +628,39 @@ class Lowerer {
     std::array<float, 4> values = {0.f, 0.f, 0.f, 0.f};
     for (size_t i = 0; i < count; ++i) {
       auto* arg = call->args[i];
-      if (arg == nullptr ||
-          arg->GetType() != ast::ExpressionType::kFloatLiteral) {
+      if (arg == nullptr) {
         return ir::ExprResult();
       }
-      values[i] =
-          static_cast<float>(static_cast<ast::FloatLiteralExp*>(arg)->value);
+
+      if (component_type == type_table_->GetF32Type()) {
+        if (arg->GetType() != ast::ExpressionType::kFloatLiteral) {
+          return ir::ExprResult();
+        }
+        values[i] =
+            static_cast<float>(static_cast<ast::FloatLiteralExp*>(arg)->value);
+      } else if (component_type == type_table_->GetI32Type()) {
+        if (arg->GetType() != ast::ExpressionType::kIntLiteral) {
+          return ir::ExprResult();
+        }
+        int32_t iv =
+            static_cast<int32_t>(static_cast<ast::IntLiteralExp*>(arg)->value);
+        std::memcpy(&values[i], &iv, sizeof(iv));
+      } else if (component_type == type_table_->GetU32Type()) {
+        if (arg->GetType() != ast::ExpressionType::kIntLiteral) {
+          return ir::ExprResult();
+        }
+        uint32_t uv =
+            static_cast<uint32_t>(static_cast<ast::IntLiteralExp*>(arg)->value);
+        std::memcpy(&values[i], &uv, sizeof(uv));
+      } else if (component_type == type_table_->GetBoolType()) {
+        if (arg->GetType() != ast::ExpressionType::kBoolLiteral) {
+          return ir::ExprResult();
+        }
+        bool bv = static_cast<ast::BoolLiteralExp*>(arg)->value;
+        std::memcpy(&values[i], &bv, sizeof(bv));
+      } else {
+        return ir::ExprResult();
+      }
     }
 
     // Create appropriate constant based on count
@@ -790,6 +814,8 @@ class Lowerer {
   /**
    * Looks up or registers a global variable.
    * Global variables are registered on first reference (lazy registration).
+   * If the global variable has a constant initializer, it is stored in
+   * ir_module_->global_initializers for the backend to use.
    */
   VarInfo LookupOrRegisterGlobalVar(const semantic::Symbol* symbol) {
     if (symbol == nullptr || symbol->declaration == nullptr) {
@@ -833,6 +859,16 @@ class Lowerer {
       return VarInfo{};
     }
 
+    // Handle global variable initializer (must be constant)
+    if (global_var->initializer != nullptr) {
+      ir::ExprResult init_expr = LowerExpression(global_var->initializer);
+      if (init_expr.IsValid() && init_expr.value.IsConstant()) {
+        ir_module_->global_initializers[var_id] = init_expr.value;
+      }
+      // If initializer is not a constant, we silently ignore it.
+      // A proper implementation should report an error here.
+    }
+
     // Note: Global variables are not emitted as kVariable instructions
     // They are handled by the backend (SPIR-V emitter) as module-level
     // variables
@@ -856,6 +892,7 @@ class Lowerer {
       ident_symbols_;
   const std::unordered_map<const ast::Identifier*, semantic::Symbol*>&
       decl_symbols_;
+  ir::Module* ir_module_ = nullptr;
   ir::Function* ir_function_ = nullptr;
   ir::TypeTable* type_table_ = nullptr;
   std::unordered_map<const semantic::Symbol*, VarInfo> var_map_;
