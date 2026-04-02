@@ -194,7 +194,7 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpTypePointer));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpConstant));
-  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstantComposite));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
@@ -225,9 +225,85 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpTypePointer));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpConstant));
-  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstantComposite));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForScalarConstantStore) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var x: f32 = 1.0;
+  var y: f32 = x;
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstant));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForI32ConstantStore) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var x: i32 = 42;
+  var y: i32 = x;
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstant));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForBoolConstantStore) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var b: bool = true;
+  var c: bool = b;
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstantTrue));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
@@ -287,7 +363,7 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpTypePointer));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpConstant));
-  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstantComposite));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
@@ -321,7 +397,7 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpTypePointer));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpVariable));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpConstant));
-  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConstantComposite));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));

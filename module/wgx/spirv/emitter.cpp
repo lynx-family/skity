@@ -838,67 +838,6 @@ class ModuleBuilder {
     return true;
   }
 
-  /**
-   * Materialize a vector constant with arbitrary component count.
-   * Supports vec2, vec3, vec4 based on the value's type.
-   */
-  bool MaterializeConstVector(const ir::Value& value, uint32_t* value_id) {
-    if (value_id == nullptr) return false;
-
-    // Get the vector dimension from the type
-    ir::TypeId vector_type_id = value.type;
-    const ir::Type* vector_type =
-        type_emitter_->GetTypeTable()->GetType(vector_type_id);
-    if (vector_type == nullptr || vector_type->kind != ir::TypeKind::kVector) {
-      return false;
-    }
-
-    uint32_t component_count = vector_type->count;
-    if (component_count < 2 || component_count > 4) {
-      return false;  // Only support vec2, vec3, vec4
-    }
-
-    // Get component values from the Value
-    std::array<float, 4> values = {0.0f, 0.0f, 0.0f, 0.0f};
-    switch (value.const_kind) {
-      case ir::InlineConstKind::kVec2F32:
-        values = {value.GetVec4Unchecked()[0], value.GetVec4Unchecked()[1],
-                  0.0f, 0.0f};
-        break;
-      case ir::InlineConstKind::kVec3F32:
-        values = {value.GetVec4Unchecked()[0], value.GetVec4Unchecked()[1],
-                  value.GetVec4Unchecked()[2], 0.0f};
-        break;
-      case ir::InlineConstKind::kVec4F32:
-        values = value.GetVec4Unchecked();
-        break;
-      default:
-        return false;
-    }
-
-    // Emit component constants
-    std::vector<uint32_t> const_ids;
-    const_ids.reserve(component_count);
-    for (uint32_t i = 0; i < component_count; ++i) {
-      uint32_t component_id = type_emitter_->EmitF32Constant(values[i]);
-      if (component_id == 0) return false;
-      const_ids.push_back(component_id);
-    }
-
-    // Emit the composite construct
-    uint32_t spirv_vector_type = type_emitter_->EmitType(vector_type_id);
-    if (spirv_vector_type == 0) return false;
-
-    std::vector<uint32_t> operands;
-    operands.push_back(spirv_vector_type);
-    *value_id = ids_.Allocate();
-    operands.push_back(*value_id);
-    operands.insert(operands.end(), const_ids.begin(), const_ids.end());
-
-    AppendInstruction(&sections_->functions, SpvOpCompositeConstruct, operands);
-    return true;
-  }
-
   bool MaterializeValue(const ir::Value& value, uint32_t* value_id) {
     if (value_id == nullptr || !value.IsValue()) return false;
 
@@ -910,13 +849,11 @@ class ModuleBuilder {
     }
 
     if (value.IsConstant()) {
-      // Handle vector constants (vec2, vec3, vec4)
-      if (value.const_kind == ir::InlineConstKind::kVec2F32 ||
-          value.const_kind == ir::InlineConstKind::kVec3F32 ||
-          value.const_kind == ir::InlineConstKind::kVec4F32) {
-        return MaterializeConstVector(value, value_id);
+      uint32_t const_id = EmitConstant(value);
+      if (const_id != 0) {
+        *value_id = const_id;
+        return true;
       }
-      // TODO: Handle scalar constants (f32, i32, u32, bool)
     }
 
     return false;
