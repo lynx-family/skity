@@ -6,8 +6,12 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <skity/codec/codec.hpp>
+#include <sstream>
 
 #include "common/golden_test_env.hpp"
 
@@ -16,6 +20,33 @@
 #endif
 
 namespace skity {
+
+static std::string EscapeJSONString(const std::string& input) {
+  std::ostringstream ss;
+  for (char c : input) {
+    if (c == '"') {
+      ss << "\\\"";
+    } else if (c == '\\') {
+      ss << "\\\\";
+    } else if (c == '\b') {
+      ss << "\\b";
+    } else if (c == '\f') {
+      ss << "\\f";
+    } else if (c == '\n') {
+      ss << "\\n";
+    } else if (c == '\r') {
+      ss << "\\r";
+    } else if (c == '\t') {
+      ss << "\\t";
+    } else if (static_cast<unsigned char>(c) <= 0x1f) {
+      ss << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+         << static_cast<int>(c);
+    } else {
+      ss << c;
+    }
+  }
+  return ss.str();
+}
 namespace testing {
 
 struct GoldenTestEnvConfig {
@@ -115,6 +146,80 @@ static bool CompareGoldenTextureImpl(DisplayList* dl, uint32_t width,
 
   auto result = ComparePixels(source, target);
 
+  if (!result.Passed()) {
+    std::string actual_path;
+    std::string diff_pixels_path;
+
+    const char* out_dir = std::getenv("AGENT_OUT_DIR");
+    if (path && out_dir) {
+      std::string p(path);
+      auto slash_pos = p.find_last_of("/\\");
+      std::string basename =
+          (slash_pos != std::string::npos) ? p.substr(slash_pos + 1) : p;
+      auto dot_pos = basename.find_last_of('.');
+      std::string name = (dot_pos != std::string::npos)
+                             ? basename.substr(0, dot_pos)
+                             : basename;
+      std::string ext =
+          (dot_pos != std::string::npos) ? basename.substr(dot_pos) : ".png";
+
+      std::string dir = std::string(out_dir) + "/";
+
+      actual_path = dir + name + "_actual" + ext;
+      diff_pixels_path = dir + name + "_diff_pixels.json";
+
+      env->SaveGoldenImage(source, actual_path.c_str());
+
+      // Write pixel differences to JSON file
+      if (!result.diff_pixels.empty()) {
+        std::ofstream ofs(diff_pixels_path);
+        if (ofs.is_open()) {
+          ofs << "[\n";
+          for (size_t i = 0; i < result.diff_pixels.size(); ++i) {
+            auto& pd = result.diff_pixels[i];
+            ofs << "  {\"x\":" << pd.x << ",\"y\":" << pd.y << ",\"src\":["
+                << (int)pd.src[0] << "," << (int)pd.src[1] << ","
+                << (int)pd.src[2] << "," << (int)pd.src[3] << "]"
+                << ",\"dst\":[" << (int)pd.dst[0] << "," << (int)pd.dst[1]
+                << "," << (int)pd.dst[2] << "," << (int)pd.dst[3] << "]}";
+            if (i + 1 < result.diff_pixels.size()) ofs << ",";
+            ofs << "\n";
+          }
+          ofs << "]\n";
+          ofs.close();
+        }
+      }
+    }
+
+    std::cout << "[[GOLDEN_TEST_FAILED_METRICS]]" << std::endl;
+    std::cout << "{" << std::endl;
+    std::cout << "  \"diff_percent\": " << result.diff_percent << ","
+              << std::endl;
+    std::cout << "  \"max_diff_percent\": " << result.max_diff_percent << ","
+              << std::endl;
+    std::cout << "  \"diff_pixel_count\": " << result.diff_pixel_count << ","
+              << std::endl;
+    if (result.min_x <= result.max_x && result.min_y <= result.max_y) {
+      std::cout << "  \"diff_bbox\": [" << std::dec << result.min_x << ", "
+                << result.min_y << ", " << (result.max_x - result.min_x + 1)
+                << ", " << (result.max_y - result.min_y + 1) << "],"
+                << std::endl;
+    }
+    std::cout << "  \"expected_image\": \""
+              << EscapeJSONString(path ? path : "") << "\"";
+    if (!actual_path.empty()) {
+      std::cout << "," << std::endl
+                << "  \"actual_image\": \"" << EscapeJSONString(actual_path)
+                << "\"";
+    }
+    if (!diff_pixels_path.empty()) {
+      std::cout << "," << std::endl
+                << "  \"diff_pixels_file\": \""
+                << EscapeJSONString(diff_pixels_path) << "\"";
+    }
+    std::cout << std::endl << "}" << std::endl;
+  }
+
 #ifdef SKITY_GOLDEN_GUI
   return OpenPlayground(result.Passed(), texture, target, path,
                         auto_restore_config.GetNameSuffix());
@@ -195,10 +300,17 @@ DiffResult ComparePixels(const std::shared_ptr<Pixmap>& source,
     auto src_data = reinterpret_cast<const uint8_t*>(source->Addr());
     auto dst_data = reinterpret_cast<const uint8_t*>(target->Addr());
 
+    result.min_x = width;
+    result.min_y = height;
+    result.max_x = -1;
+    result.max_y = -1;
+
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         auto src = src_data + (y * width + x) * 4;
         auto dst = dst_data + (y * width + x) * 4;
+
+        bool pixel_diff = false;
 
         for (int i = 0; i < 4; ++i) {
           uint8_t src_channel = src[i];
@@ -219,7 +331,26 @@ DiffResult ComparePixels(const std::shared_ptr<Pixmap>& source,
             result.diff_percent += 1.f / float(width * height * 4);
             result.max_diff_percent =
                 std::max(result.max_diff_percent, diff / float(255));
-            result.diff_pixel_count += 1;
+            pixel_diff = true;
+          }
+        }
+
+        if (pixel_diff) {
+          result.diff_pixel_count += 1;
+          result.min_x = std::min(result.min_x, x);
+          result.min_y = std::min(result.min_y, y);
+          result.max_x = std::max(result.max_x, x);
+          result.max_y = std::max(result.max_y, y);
+
+          if (result.diff_pixels.size() < 1000) {
+            PixelDiff pd;
+            pd.x = x;
+            pd.y = y;
+            for (int i = 0; i < 4; ++i) {
+              pd.src[i] = src[i];
+              pd.dst[i] = dst[i];
+            }
+            result.diff_pixels.push_back(pd);
           }
         }
       }
