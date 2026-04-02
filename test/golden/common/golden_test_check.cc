@@ -6,12 +6,12 @@
 
 #include <gtest/gtest.h>
 
-#include <iostream>
-#include <fstream>
 #include <cstdlib>
-#include <sstream>
+#include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <skity/codec/codec.hpp>
+#include <sstream>
 
 #include "common/golden_test_env.hpp"
 
@@ -149,7 +149,9 @@ static bool CompareGoldenTextureImpl(DisplayList* dl, uint32_t width,
   if (!result.Passed()) {
     std::string actual_path;
     std::string diff_pixels_path;
-    if (path) {
+
+    const char* out_dir = std::getenv("AGENT_OUT_DIR");
+    if (path && out_dir) {
       std::string p(path);
       auto slash_pos = p.find_last_of("/\\");
       std::string basename =
@@ -161,8 +163,7 @@ static bool CompareGoldenTextureImpl(DisplayList* dl, uint32_t width,
       std::string ext =
           (dot_pos != std::string::npos) ? basename.substr(dot_pos) : ".png";
 
-      const char* out_dir = std::getenv("AGENT_OUT_DIR");
-      std::string dir = out_dir ? std::string(out_dir) + "/" : "";
+      std::string dir = std::string(out_dir) + "/";
 
       actual_path = dir + name + "_actual" + ext;
       diff_pixels_path = dir + name + "_diff_pixels.json";
@@ -199,16 +200,22 @@ static bool CompareGoldenTextureImpl(DisplayList* dl, uint32_t width,
     std::cout << "  \"diff_pixel_count\": " << result.diff_pixel_count << ","
               << std::endl;
     if (result.min_x <= result.max_x && result.min_y <= result.max_y) {
-      std::cout << "  \"diff_bbox\": [" << std::dec << result.min_x << ", " << result.min_y
-                << ", " << (result.max_x - result.min_x + 1) << ", "
-                << (result.max_y - result.min_y + 1) << "]," << std::endl;
+      std::cout << "  \"diff_bbox\": [" << std::dec << result.min_x << ", "
+                << result.min_y << ", " << (result.max_x - result.min_x + 1)
+                << ", " << (result.max_y - result.min_y + 1) << "],"
+                << std::endl;
     }
-    std::cout << "  \"expected_image\": \"" << EscapeJSONString(path ? path : "") << "\","
-              << std::endl;
-    std::cout << "  \"actual_image\": \"" << EscapeJSONString(actual_path) << "\"";
+    std::cout << "  \"expected_image\": \""
+              << EscapeJSONString(path ? path : "") << "\"";
+    if (!actual_path.empty()) {
+      std::cout << "," << std::endl
+                << "  \"actual_image\": \"" << EscapeJSONString(actual_path)
+                << "\"";
+    }
     if (!diff_pixels_path.empty()) {
       std::cout << "," << std::endl
-                << "  \"diff_pixels_file\": \"" << EscapeJSONString(diff_pixels_path) << "\"";
+                << "  \"diff_pixels_file\": \""
+                << EscapeJSONString(diff_pixels_path) << "\"";
     }
     std::cout << std::endl << "}" << std::endl;
   }
@@ -324,12 +331,12 @@ DiffResult ComparePixels(const std::shared_ptr<Pixmap>& source,
             result.diff_percent += 1.f / float(width * height * 4);
             result.max_diff_percent =
                 std::max(result.max_diff_percent, diff / float(255));
-            result.diff_pixel_count += 1;
             pixel_diff = true;
           }
         }
 
         if (pixel_diff) {
+          result.diff_pixel_count += 1;
           result.min_x = std::min(result.min_x, x);
           result.min_y = std::min(result.min_y, y);
           result.max_x = std::max(result.max_x, x);

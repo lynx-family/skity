@@ -181,6 +181,7 @@ class TestRunner:
                 line = lines[i].strip()
                 if line.startswith("test suite name: "):
                     suite_name = line.replace("test suite name: ", "")
+                    current_test = f"{suite_name}.{test_name}"
                 elif line.startswith("test name: "):
                     test_name = line.replace("test name: ", "")
                     current_test = f"{suite_name}.{test_name}"
@@ -280,7 +281,7 @@ class TestRunner:
 
         return report
 
-    def _create_infra_error(self, reason_code: str, error_msg: str) -> Dict[str, Any]:
+    def _create_infra_error(self, reason_code: str, error_msg: str, exit_code: int = EXIT_INFRA_ERROR) -> Dict[str, Any]:
         return {
             "summary": {
                 "total": 0,
@@ -293,7 +294,7 @@ class TestRunner:
                     "suite": self.suite,
                     "case_name": "Infrastructure",
                     "status": "FAIL",
-                    "exit_code": EXIT_INFRA_ERROR,
+                    "exit_code": exit_code,
                     "stage": "Layer 0: Infrastructure",
                     "reason_code": reason_code,
                     "backend": "none",
@@ -348,7 +349,7 @@ class TestRunner:
         if self.suite in ("unit", "golden-shape", "golden-text"):
             report = self.run_gtest_suite()
         else:
-            report = self._create_infra_error("usage_error", f"Suite '{self.suite}' is not implemented yet.")
+            report = self._create_infra_error("usage_error", f"Suite '{self.suite}' is not implemented yet.", EXIT_USAGE_ERROR)
             self.print_agent_report(report)
             return EXIT_USAGE_ERROR
 
