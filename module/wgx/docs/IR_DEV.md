@@ -30,14 +30,16 @@ The current assessment is:
   reconstructing as much backend-side meaning from bare ids
 - a minimal structural verifier now exists, but the IR is still in an early
   architecture-hardening stage
+- scalar and vector constants (f32, i32, u32, bool, vec2/3/4 of those types)
+  are now supported in both global initializers and function bodies
 
 Because of that, the near-term focus should be:
 
-1. keep tightening the IR structure instead of resuming broad feature work
+1. ~~keep tightening the IR structure instead of resuming broad feature work~~ ✓ Core structure is now stable
 2. split generic IR verification from backend capability checks more cleanly
-3. make the emitter more type-driven and less `vec4<f32>`-specialized
-4. only resume larger feature expansion after the main P0/P1 refactor items are
-   stably in place
+3. ~~make the emitter more type-driven and less `vec4<f32>`-specialized~~ ✓ Completed
+4. complete the remaining structural gaps (global storage classes, control flow)
+   before resuming larger feature expansion
 
 ## Current IR State
 
@@ -69,6 +71,11 @@ The active function-body IR now has these properties:
    - instruction operand shapes are checked before backend support checks run
    - verifier coverage is still intentionally minimal and should be expanded
 
+6. **Global variable initializers**
+   - `ir::Module` carries a `global_initializers` map (variable id -> constant `Value`)
+   - lowering stores constant initializers for globals
+   - SPIR-V emitter emits them as `OpVariable` initializer operands
+
 ## Current Backend Capability Boundary
 
 The current SPIR-V backend still supports a deliberately narrow subset.
@@ -87,19 +94,25 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - vertex `@builtin(position) vec4<f32>` return
 
 3. **Current local-value subset**
-   - local `var` declaration for supported `vec4<f32>` values
-   - local variable initialization with supported `vec4<f32>` constructor values
+   - local `var` declaration for scalar and vector values (f32, i32, u32, bool,
+     vec2/3/4 of those types)
+   - local variable initialization with constructor constants
    - plain local assignment (`=`) for supported values
    - variable-to-variable assignment (`b = a`)
    - return of a local variable
 
 4. **Current arithmetic subset**
-   - minimal `vec4<f32>` binary arithmetic
+   - scalar and vector binary arithmetic for the supported types
    - supported ops: `add`, `sub`
    - direct return of arithmetic result
    - store of arithmetic result to a local variable before return
 
-5. **Validation workflow already available**
+5. **Global variables**
+   - global variable reference, load, and store
+   - constant initializers for scalar and vector types
+   - **limitation:** all globals are currently emitted with `Private` storage class
+
+6. **Validation workflow already available**
    - WGX SPIR-V smoke tests
    - `spirv-val --target-env vulkan1.1`
    - `spirv-dis` spot-check / disassembly generation
@@ -125,10 +138,15 @@ The backend currently still has these important limitations:
    - removed hardcoded `vec4_type_id_` and `entry_vec4_type_` special cases
    - SPIR-V type ids are now derived from each instruction's `result_type` dynamically
 
-4. **Function structure is still effectively single-block / straight-line only**
+4. **Global variable storage class is not yet mapped from WGSL address spaces**
+   - all globals currently default to `SpvStorageClassPrivate`
+   - `uniform`, `storage`, `workgroup`, etc. are not yet wired through lowering
+     and emission
+
+5. **Function structure is still effectively single-block / straight-line only**
    - no real control-flow-capable IR structure yet
 
-5. **Validation is strong at the static SPIR-V level, but not yet Vulkan-runtime-integrated**
+6. **Validation is strong at the static SPIR-V level, but not yet Vulkan-runtime-integrated**
    - current confidence is based on smoke tests + `spirv-val` + `spirv-dis`
 
 ## Next Planned Refactor Steps
@@ -149,11 +167,22 @@ The current recommendation for the next steps is:
 
 3. ~~**Make emission more type-driven**~~ ✓ Completed
    - SPIR-V type ids are derived from each instruction/value type dynamically
-   - constant materialization supports vec2/vec3/vec4 through `MaterializeConstVector`
+   - constant materialization supports vec2/vec3/vec4 through `EmitConstantComposite`
    - emitter no longer assumes all values are position-style `vec4<f32>`
 
-4. **Only resume broader feature work after the above cleanup is stable**
-   - especially before introducing more expression forms or broader type support
+4. **Map WGSL address spaces to IR/SPIR-V storage classes**
+   - propagate `uniform` / `storage` / `workgroup` / `private` through lowering
+   - emit correct `SpvStorageClass` on `OpVariable`
+   - add necessary resource decorations (DescriptorSet, Binding)
+
+5. **Introduce multi-block IR and structured control flow**
+   - evolve `Function` from single `entry_block` to a block graph
+   - add terminators (`kBranch`, `kCondBranch`) and merge hints
+   - lower `if`, `loop`, `switch`, `break`, `continue`
+
+6. **Only resume broader feature work after the above cleanup is stable**
+   - especially before introducing function calls, texture/sampler ops, or
+     matrix/struct heavy features
 
 ## Practical Rule For Future Agents
 
