@@ -6,6 +6,7 @@
 
 #include <skity/recorder/display_list.hpp>
 #include <skity/skity.hpp>
+#include <vector>
 
 namespace skity {
 namespace testing {
@@ -54,6 +55,13 @@ bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
                           PathList path_list);
 
+struct PixelDiff {
+  int32_t x = 0;
+  int32_t y = 0;
+  uint8_t src[4] = {0};
+  uint8_t dst[4] = {0};
+};
+
 struct DiffResult {
   // whether the test passed.
   bool passed = false;
@@ -63,6 +71,15 @@ struct DiffResult {
   float max_diff_percent = 0.f;
   // the diff pixel count between the two images.
   uint32_t diff_pixel_count = 0;
+
+  // bounding box of the differences
+  int32_t min_x = -1;
+  int32_t min_y = -1;
+  int32_t max_x = -1;
+  int32_t max_y = -1;
+
+  // store up to 1000 diff pixels for agent analysis
+  std::vector<PixelDiff> diff_pixels;
 
   bool Passed() const;
 };

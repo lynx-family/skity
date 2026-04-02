@@ -39,9 +39,18 @@ Skills are under `skills/`; structure guidance is in `skills/README.md`; skill b
 
 ## Validation Workflow
 
-- If code or tests are added/changed, prefer using the `test-runner` skill to validate relevant test cases before finishing.
+- If code or tests are added/changed, you **MUST** validate relevant test cases before finishing.
+- **MANDATORY**: Use the unified Python Test Runner `tools/test-runner.py` for ALL validations. 
+  - To run unit tests: `python3 tools/test-runner.py --suite=unit`
+  - To run golden shape tests: `python3 tools/test-runner.py --suite=golden-shape`
+  - To run golden text tests: `python3 tools/test-runner.py --suite=golden-text`
+  - You can run specific tests using the filter flag: `--filter="<TestName>"`
+- **Test Failure Analysis**: 
+  - The runner will output a `<agent-test-report>` JSON block in the terminal, and also write it to `build/agent_test_report.json` (or the corresponding build directory).
+  - You MUST read this structured JSON to understand failures.
+  - If a golden test fails (`pixel_mismatch`), the JSON will contain paths to `expected_image`, `actual_image`, and a `diff_pixels_file` containing exact pixel differences and the `diff_bbox`.
+  - ALWAYS read the `diff_pixels_file` using the `Read` tool to analyze the exact mismatch location and channel differences before modifying rendering logic.
 - Validate the smallest relevant test set first; expand only if needed.
-- If `test-runner` is unavailable in the current session, run the repository standard test commands documented in `docs/BUILD_AND_RUN.md`.
 
 ## Done Criteria
 
