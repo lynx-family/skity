@@ -127,6 +127,12 @@ class Lowerer {
     ir_function_ = ir_function.get();
 
     ir_function->name = ir_module->entry_point;
+    ir::Block entry_block;
+    entry_block.id = ir_function->AllocateBlockId();
+    entry_block.name = "entry";
+    ir_function->entry_block_id = entry_block.id;
+    ir_function->blocks.push_back(std::move(entry_block));
+    current_block_id_ = ir_function->entry_block_id;
     ir_function->stage = ir_module->stage;
     ir_function->return_type = ResolveType(ast_entry_point_->return_type);
     ir_function->output_vars = ResolveOutputVars();
@@ -197,7 +203,11 @@ class Lowerer {
       return true;
     }
     for (auto* statement : ast_entry_point_->body->statements) {
-      if (!LowerStatement(statement, &ir_function_->entry_block)) {
+      ir::Block* current = CurrentBlock();
+      if (current == nullptr) {
+        return false;
+      }
+      if (!LowerStatement(statement, current)) {
         return false;
       }
     }
@@ -208,15 +218,14 @@ class Lowerer {
   bool InsertImplicitReturn() {
     const bool is_void_return = IsVoidType(ast_entry_point_->return_type);
     const bool has_terminator =
-        !ir_function_->entry_block.instructions.empty() &&
-        ir_function_->entry_block.instructions.back().kind ==
-            ir::InstKind::kReturn;
+        CurrentBlock() != nullptr && !CurrentBlock()->instructions.empty() &&
+        CurrentBlock()->instructions.back().IsTerminator();
 
     // Void functions need a return statement
     if (is_void_return && !has_terminator) {
       ir::Instruction implicit_return;
       implicit_return.kind = ir::InstKind::kReturn;
-      ir_function_->entry_block.instructions.emplace_back(implicit_return);
+      CurrentBlock()->instructions.emplace_back(implicit_return);
     }
 
     // Non-void functions must have a return statement
@@ -330,6 +339,9 @@ class Lowerer {
       case ast::StatementType::kAssign:
         return LowerAssignStatement(
             static_cast<const ast::AssignStatement*>(statement), block);
+      case ast::StatementType::kIf:
+        return LowerIfStatement(static_cast<const ast::IfStatement*>(statement),
+                                block);
       default:
         return false;
     }
@@ -389,16 +401,134 @@ class Lowerer {
     return true;
   }
 
+  ir::Block* CurrentBlock() {
+    return current_block_id_ == ir::kInvalidBlockId
+               ? nullptr
+               : ir_function_->GetBlock(current_block_id_);
+  }
+
+  ir::BlockId CreateBlock(const std::string& name) {
+    ir::Block block;
+    block.id = ir_function_->AllocateBlockId();
+    block.name = name;
+    const ir::BlockId id = block.id;
+    ir_function_->blocks.push_back(std::move(block));
+    return id;
+  }
+
+  bool SwitchToBlock(ir::BlockId id) {
+    if (ir_function_->GetBlock(id) == nullptr) {
+      return false;
+    }
+    current_block_id_ = id;
+    return true;
+  }
+
   /** Lowers a block statement. Lexical resolution is provided by semantic
    * binding. */
   bool LowerBlockStatement(const ast::BlockStatement* nested,
                            ir::Block* block) {
+    if (nested == nullptr || block == nullptr) {
+      return false;
+    }
+    if (!SwitchToBlock(block->id)) {
+      return false;
+    }
     for (auto* nested_stmt : nested->statements) {
-      if (!LowerStatement(nested_stmt, block)) {
+      ir::Block* current_block = CurrentBlock();
+      if (current_block == nullptr) {
+        return false;
+      }
+      if (!LowerStatement(nested_stmt, current_block)) {
         return false;
       }
     }
     return true;
+  }
+
+  bool LowerIfStatement(const ast::IfStatement* if_stmt, ir::Block* block) {
+    if (if_stmt == nullptr || block == nullptr ||
+        if_stmt->condition == nullptr || if_stmt->body == nullptr) {
+      return false;
+    }
+
+    ir::ExprResult cond_expr = LowerExpression(if_stmt->condition);
+    if (!cond_expr.IsValid()) {
+      return false;
+    }
+
+    ir::Value cond_value = EnsureValue(cond_expr, block);
+    if (!cond_value.IsValue() ||
+        cond_value.type != type_table_->GetBoolType()) {
+      return false;
+    }
+
+    // Save the current block id before creating new blocks (which may invalidate pointers)
+    const ir::BlockId current_block_id = block->id;
+
+    const ir::BlockId then_block_id = CreateBlock("if.then");
+    const ir::BlockId merge_block_id = CreateBlock("if.merge");
+    if (then_block_id == ir::kInvalidBlockId ||
+        merge_block_id == ir::kInvalidBlockId) {
+      fprintf(stderr, "DEBUG LowerIfStatement: CreateBlock failed\n");
+      return false;
+    }
+
+    ir::BlockId else_block_id = merge_block_id;
+    if (if_stmt->else_stmt != nullptr) {
+      else_block_id = CreateBlock("if.else");
+      if (else_block_id == ir::kInvalidBlockId) {
+        return false;
+      }
+    }
+
+    // Re-get the current block pointer (it may have been invalidated by CreateBlock)
+    ir::Block* current_block = ir_function_->GetBlock(current_block_id);
+    if (current_block == nullptr) {
+      return false;
+    }
+
+    ir::Instruction branch_inst;
+    branch_inst.kind = ir::InstKind::kCondBranch;
+    branch_inst.operands.push_back(cond_value);
+    branch_inst.true_block = then_block_id;
+    branch_inst.false_block = else_block_id;
+    branch_inst.merge_block = merge_block_id;
+    current_block->instructions.emplace_back(branch_inst);
+
+    ir::Block* then_block = ir_function_->GetBlock(then_block_id);
+    if (then_block == nullptr || !SwitchToBlock(then_block_id)) {
+      return false;
+    }
+    if (!LowerBlockStatement(if_stmt->body, then_block)) {
+      return false;
+    }
+    if (CurrentBlock() != nullptr && !CurrentBlock()->instructions.empty() &&
+        !CurrentBlock()->instructions.back().IsTerminator()) {
+      ir::Instruction then_jump;
+      then_jump.kind = ir::InstKind::kBranch;
+      then_jump.target_block = merge_block_id;
+      CurrentBlock()->instructions.emplace_back(then_jump);
+    }
+
+    if (if_stmt->else_stmt != nullptr) {
+      ir::Block* else_block = ir_function_->GetBlock(else_block_id);
+      if (else_block == nullptr || !SwitchToBlock(else_block_id)) {
+        return false;
+      }
+      if (!LowerStatement(if_stmt->else_stmt, else_block)) {
+        return false;
+      }
+      if (CurrentBlock() != nullptr && !CurrentBlock()->instructions.empty() &&
+          !CurrentBlock()->instructions.back().IsTerminator()) {
+        ir::Instruction else_jump;
+        else_jump.kind = ir::InstKind::kBranch;
+        else_jump.target_block = merge_block_id;
+        CurrentBlock()->instructions.emplace_back(else_jump);
+      }
+    }
+
+    return SwitchToBlock(merge_block_id);
   }
 
   /** Lowers a variable declaration */
@@ -542,6 +672,16 @@ class Lowerer {
     /** Try to lower as binary expression */
     if (expression->GetType() == ast::ExpressionType::kBinaryExp) {
       return LowerBinaryExpression(static_cast<ast::BinaryExp*>(expression));
+    }
+
+    /** Handle parenthesized expression - unwrap and lower inner expression */
+    if (expression->GetType() == ast::ExpressionType::kParenExp) {
+      auto* paren_exp = static_cast<ast::ParenExp*>(expression);
+      if (paren_exp->exps.empty()) {
+        return ir::ExprResult();
+      }
+      // Lower the first (and typically only) expression inside parentheses
+      return LowerExpression(paren_exp->exps[0]);
     }
 
     return ir::ExprResult();
@@ -718,8 +858,12 @@ class Lowerer {
     }
 
     /** Ensure both operands are values (emit loads if needed) */
-    ir::Value lhs_value = EnsureValue(lhs_expr, &ir_function_->entry_block);
-    ir::Value rhs_value = EnsureValue(rhs_expr, &ir_function_->entry_block);
+    ir::Block* current_block = CurrentBlock();
+    if (current_block == nullptr) {
+      return ir::ExprResult();
+    }
+    ir::Value lhs_value = EnsureValue(lhs_expr, current_block);
+    ir::Value rhs_value = EnsureValue(rhs_expr, current_block);
 
     /** Type check - both operands must have the same type */
     if (lhs_value.type != rhs_value.type) {
@@ -743,7 +887,7 @@ class Lowerer {
     binary_inst.operands.push_back(lhs_value);
     binary_inst.operands.push_back(rhs_value);
 
-    ir_function_->entry_block.instructions.emplace_back(binary_inst);
+    current_block->instructions.emplace_back(binary_inst);
 
     /** Return as SSA Value */
     return ir::ExprResult::ValueResult(ir::Value::SSA(result_type, result_id));
@@ -964,6 +1108,7 @@ class Lowerer {
   ir::Module* ir_module_ = nullptr;
   ir::Function* ir_function_ = nullptr;
   ir::TypeTable* type_table_ = nullptr;
+  ir::BlockId current_block_id_ = ir::kInvalidBlockId;
   std::unordered_map<const semantic::Symbol*, VarInfo> var_map_;
 };
 

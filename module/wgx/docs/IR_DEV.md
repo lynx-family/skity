@@ -36,10 +36,12 @@ The current assessment is:
 Because of that, the near-term focus should be:
 
 1. ~~keep tightening the IR structure instead of resuming broad feature work~~ ✓ Core structure is now stable
-2. split generic IR verification from backend capability checks more cleanly
+2. ~~split generic IR verification from backend capability checks more cleanly~~ ✓ Completed
 3. ~~make the emitter more type-driven and less `vec4<f32>`-specialized~~ ✓ Completed
-4. complete the remaining structural gaps (global storage classes, control flow)
-   before resuming larger feature expansion
+4. ~~complete the remaining structural gaps around global storage classes~~ ✓ Completed
+5. ~~introduce multi-block IR and structured control flow (if/if-else)~~ ✓ Completed
+6. expand to loops, switch statements, break/continue as the next priority
+   before resuming larger feature expansion (texture/sampler, function calls)
 
 ## Current IR State
 
@@ -115,7 +117,14 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - resource binding attributes (`@group`, `@binding`) with proper SPIR-V decorations
    - automatic struct wrapping for non-struct uniform/storage types (Vulkan compliance)
 
-6. **Validation workflow already available**
+6. **Structured control flow (if / if-else)**
+   - `if` statement with boolean constant condition
+   - `if` statement with boolean variable condition
+   - `if-else` statement support
+   - proper block graph structure (entry, then, else, merge)
+   - valid SPIR-V structured control flow (`OpSelectionMerge`, `OpBranchConditional`)
+
+7. **Validation workflow already available**
    - WGX SPIR-V smoke tests
    - `spirv-val --target-env vulkan1.1`
    - `spirv-dis` spot-check / disassembly generation
@@ -147,8 +156,10 @@ The backend currently still has these important limitations:
    - lowering extracts `@group` and `@binding` attributes
    - SPIR-V emitter uses correct `SpvStorageClass` and emits resource decorations
 
-5. **Function structure is still effectively single-block / straight-line only**
-   - no real control-flow-capable IR structure yet
+5. ~~**Function structure is still effectively single-block / straight-line only**~~ ✓ Completed
+   - `Function` now has a `blocks` vector and `entry_block_id` for multi-block IR
+   - `Block` has `id` and `name` for identification
+   - terminator instructions (`kBranch`, `kCondBranch`, `kReturn`) end each block
 
 6. **Validation is strong at the static SPIR-V level, but not yet Vulkan-runtime-integrated**
    - current confidence is based on smoke tests + `spirv-val` + `spirv-dis`
@@ -174,15 +185,22 @@ The current recommendation for the next steps is:
    - constant materialization supports vec2/vec3/vec4 through `EmitConstantComposite`
    - emitter no longer assumes all values are position-style `vec4<f32>`
 
-4. **Map WGSL address spaces to IR/SPIR-V storage classes**
-   - propagate `uniform` / `storage` / `workgroup` / `private` through lowering
-   - emit correct `SpvStorageClass` on `OpVariable`
-   - add necessary resource decorations (DescriptorSet, Binding)
+4. ~~**Map WGSL address spaces to IR/SPIR-V storage classes**~~ ✓ Completed
+   - `uniform` / `storage` / `workgroup` / `private` are propagated through lowering
+   - SPIR-V emission now uses the correct `SpvStorageClass` on `OpVariable`
+   - resource globals now emit DescriptorSet / Binding decorations
+   - non-struct uniform/storage values are wrapped for Vulkan-compatible Block layout
 
-5. **Introduce multi-block IR and structured control flow**
-   - evolve `Function` from single `entry_block` to a block graph
-   - add terminators (`kBranch`, `kCondBranch`) and merge hints
-   - lower `if`, `loop`, `switch`, `break`, `continue`
+5. ~~**Introduce multi-block IR and structured control flow**~~ ✓ Completed
+   - `Function` now uses `blocks` vector with `entry_block_id` instead of single `entry_block`
+   - `Block` has `id` and `name` fields for identification
+   - New instruction kinds: `kBranch` (unconditional) and `kCondBranch` (conditional)
+   - `Instruction` has `target_block`, `true_block`, `false_block`, `merge_block` fields
+   - `IsTerminator()` method identifies block-ending instructions
+   - Lowering creates proper block graph with entry, then, else, and merge blocks
+   - SPIR-V emitter generates `OpSelectionMerge`, `OpBranchConditional`, `OpBranch`
+   - Basic if/if-else supported with boolean constants and boolean variables as conditions
+   - Future: expand to `loop`, `switch`, `break`, `continue`, comparison expressions
 
 6. **Only resume broader feature work after the above cleanup is stable**
    - especially before introducing function calls, texture/sampler ops, or
@@ -194,9 +212,10 @@ If you are continuing work in this area:
 
 1. read `module/wgx/docs/IR_REFACTOR_PLAN.md` first
 2. prefer structural cleanup over immediate feature expansion
-3. avoid reintroducing special-case return/store/materialization encodings that
+3. prioritize multi-block IR / control-flow work before texture-sampler or broader feature expansion
+4. avoid reintroducing special-case return/store/materialization encodings that
    bypass `ir::Value`
-4. keep using the current local validation workflow:
+5. keep using the current local validation workflow:
 
 ```bash
 ./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build

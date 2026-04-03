@@ -22,6 +22,9 @@ enum class PipelineStage {
   kFragment,
 };
 
+using BlockId = uint32_t;
+constexpr BlockId kInvalidBlockId = 0;
+
 // Output variable decoration types
 enum class OutputDecorationKind {
   kNone,      // No decoration (void)
@@ -89,6 +92,8 @@ enum class InstKind {
   kLoad,
   kStore,
   kBinary,
+  kBranch,
+  kCondBranch,
 };
 
 // Supported binary operations in the current IR subset.
@@ -116,20 +121,34 @@ struct Instruction {
   // Binary op kind for kBinary instructions
   BinaryOpKind binary_op = BinaryOpKind::kAdd;
 
+  // Branch targets for control-flow terminators.
+  BlockId target_block = kInvalidBlockId;
+  BlockId true_block = kInvalidBlockId;
+  BlockId false_block = kInvalidBlockId;
+  BlockId merge_block = kInvalidBlockId;
+
   // Unified operands expressed via Value.
   // - kReturn: 0 or 1 operand (return value)
   // - kVariable: 0 operands today (initializer lowered as a following kStore)
   // - kLoad: 1 operand (source variable address)
   // - kStore: 2 operands (target variable address, source value)
   // - kBinary: 2 operands (lhs value, rhs value)
+  // - kCondBranch: 1 operand (boolean condition value)
   std::vector<Value> operands = {};
 
   bool HasResult() const {
     return kind == InstKind::kLoad || kind == InstKind::kBinary;
   }
+
+  bool IsTerminator() const {
+    return kind == InstKind::kReturn || kind == InstKind::kBranch ||
+           kind == InstKind::kCondBranch;
+  }
 };
 
 struct Block {
+  BlockId id = kInvalidBlockId;
+  std::string name = {};
   std::vector<Instruction> instructions = {};
 };
 
@@ -147,14 +166,35 @@ struct Function {
   // - Multiple entries for struct returns (one per decorated member)
   std::vector<OutputVariable> output_vars = {};
 
-  Block entry_block = {};
+  BlockId entry_block_id = kInvalidBlockId;
+  std::vector<Block> blocks = {};
 
   // Variable/value id allocator for this function
   uint32_t next_var_id = 1;
   uint32_t next_ssa_id = 1;
+  BlockId next_block_id = 1;
 
   uint32_t AllocateVarId() { return next_var_id++; }
   uint32_t AllocateSSAId() { return next_ssa_id++; }
+  BlockId AllocateBlockId() { return next_block_id++; }
+
+  Block* GetBlock(BlockId id) {
+    for (auto& block : blocks) {
+      if (block.id == id) {
+        return &block;
+      }
+    }
+    return nullptr;
+  }
+
+  const Block* GetBlock(BlockId id) const {
+    for (const auto& block : blocks) {
+      if (block.id == id) {
+        return &block;
+      }
+    }
+    return nullptr;
+  }
 };
 
 struct Module {
@@ -183,7 +223,8 @@ struct Module {
     /**
      * For uniform/storage buffers that need struct wrapping.
      * In Vulkan SPIR-V, Uniform/StorageBuffer storage class must be structs.
-     * If this is set, the actual value type is different from the declared type.
+     * If this is set, the actual value type is different from the declared
+     * type.
      */
     TypeId inner_type = kInvalidTypeId;
   };

@@ -135,6 +135,7 @@ bool SupportsCurrentIR(const ir::Function& function) {
   // Currently only support:
   // - void returns (empty output_vars)
   // - single @builtin(position) in vertex shaders
+  // - straight-line code plus selection control flow for if/if-else
   if (!function.output_vars.empty()) {
     if (function.stage != ir::PipelineStage::kVertex) {
       return false;  // Only vertex shaders supported for returns
@@ -421,8 +422,10 @@ struct LocalVarInfo {
 
 struct GlobalVarInfo {
   uint32_t ir_var_id = 0;
-  ir::TypeId var_type = ir::kInvalidTypeId;      // SPIR-V variable type (may be struct)
-  ir::TypeId inner_type = ir::kInvalidTypeId;     // Original inner type for buffer access
+  ir::TypeId var_type =
+      ir::kInvalidTypeId;  // SPIR-V variable type (may be struct)
+  ir::TypeId inner_type =
+      ir::kInvalidTypeId;  // Original inner type for buffer access
   uint32_t spirv_var_id = 0;
   SpvStorageClass storage_class = SpvStorageClassPrivate;
   std::optional<ir::Value> initializer;  // Constant initializer, if any
@@ -469,11 +472,8 @@ class ModuleBuilder {
 
  private:
   bool AnalyzeEntryBlock() {
-    const auto& instructions = entry_.entry_block.instructions;
-    if (instructions.empty()) return false;
-
-    const auto& last_inst = instructions.back();
-    if (last_inst.kind != ir::InstKind::kReturn) return false;
+    const ir::Block* entry_block = entry_.GetBlock(entry_.entry_block_id);
+    if (entry_block == nullptr || entry_.blocks.empty()) return false;
 
     // Initialize output variables from IR
     for (const auto& ir_output : entry_.output_vars) {
@@ -485,24 +485,25 @@ class ModuleBuilder {
       output_vars_.push_back(std::move(info));
     }
 
-    // Collect local variables from kVariable instructions
-    for (const auto& inst : instructions) {
-      if (inst.kind == ir::InstKind::kVariable) {
-        LocalVarInfo info;
-        info.ir_var_id = inst.var_id;
-        info.var_type = inst.result_type;
-        local_vars_.push_back(info);
-      } else if (inst.kind == ir::InstKind::kBinary) {
-        ValueInfo info;
-        info.ir_value_id = inst.result_id;
-        info.value_type = inst.result_type;
-        values_.push_back(info);
+    // Collect local variables and SSA values from all blocks
+    for (const auto& block : entry_.blocks) {
+      for (const auto& inst : block.instructions) {
+        if (inst.kind == ir::InstKind::kVariable) {
+          LocalVarInfo info;
+          info.ir_var_id = inst.var_id;
+          info.var_type = inst.result_type;
+          local_vars_.push_back(info);
+        } else if (inst.kind == ir::InstKind::kBinary ||
+                   inst.kind == ir::InstKind::kLoad) {
+          ValueInfo info;
+          info.ir_value_id = inst.result_id;
+          info.value_type = inst.result_type;
+          values_.push_back(info);
+        }
       }
     }
 
-    // Collect global variable references (variables used but not declared
-    // locally)
-    CollectGlobalVarReferences(instructions);
+    CollectGlobalVarReferences(entry_.blocks);
 
     return true;
   }
@@ -512,27 +513,28 @@ class ModuleBuilder {
    * Global variables are referenced by Load/Store but not declared by
    * kVariable.
    */
-  void CollectGlobalVarReferences(
-      const std::vector<ir::Instruction>& instructions) {
-    // Build set of local var ids for quick lookup
+  void CollectGlobalVarReferences(const std::vector<ir::Block>& blocks) {
     std::unordered_set<uint32_t> local_var_ids;
     for (const auto& var : local_vars_) {
       local_var_ids.insert(var.ir_var_id);
     }
 
-    // Scan all instructions for variable references
-    for (const auto& inst : instructions) {
-      for (const auto& operand : inst.operands) {
-        if (operand.IsVariable()) {
+    for (const auto& block : blocks) {
+      for (const auto& inst : block.instructions) {
+        for (const auto& operand : inst.operands) {
+          if (!operand.IsVariable()) {
+            continue;
+          }
+
           uint32_t var_id = operand.GetVarId().value_or(0);
           ir::TypeId var_type = operand.type;
-
-          // Skip if it's a local variable
+          if (var_id == 0 || var_type == ir::kInvalidTypeId) {
+            continue;
+          }
           if (local_var_ids.count(var_id) > 0) {
             continue;
           }
 
-          // Skip if already tracked as global
           bool already_tracked = false;
           for (const auto& global : global_vars_) {
             if (global.ir_var_id == var_id) {
@@ -540,32 +542,31 @@ class ModuleBuilder {
               break;
             }
           }
-
-          if (!already_tracked && var_id != 0 &&
-              var_type != ir::kInvalidTypeId) {
-            GlobalVarInfo info;
-            info.ir_var_id = var_id;
-            info.var_type = var_type;
-            // Look up global variable metadata from module
-            auto global_it = module_.global_variables.find(var_id);
-            if (global_it != module_.global_variables.end()) {
-              info.storage_class =
-                  ToSpvStorageClass(global_it->second.storage_class);
-              info.initializer = global_it->second.initializer;
-              info.group = global_it->second.group;
-              info.binding = global_it->second.binding;
-              // Check if this is a wrapped buffer (non-struct type wrapped in struct)
-              if (global_it->second.inner_type != ir::kInvalidTypeId) {
-                info.inner_type = global_it->second.inner_type;
-                info.is_wrapped_buffer = true;
-                // Use the wrapper struct type as the variable type
-                info.var_type = global_it->second.type;
-              }
-            } else {
-              info.storage_class = SpvStorageClassPrivate;
-            }
-            global_vars_.push_back(info);
+          if (already_tracked) {
+            continue;
           }
+
+          GlobalVarInfo info;
+          info.ir_var_id = var_id;
+          info.var_type = var_type;
+
+          auto global_it = module_.global_variables.find(var_id);
+          if (global_it != module_.global_variables.end()) {
+            info.storage_class =
+                ToSpvStorageClass(global_it->second.storage_class);
+            info.initializer = global_it->second.initializer;
+            info.group = global_it->second.group;
+            info.binding = global_it->second.binding;
+            if (global_it->second.inner_type != ir::kInvalidTypeId) {
+              info.inner_type = global_it->second.inner_type;
+              info.is_wrapped_buffer = true;
+              info.var_type = global_it->second.type;
+            }
+          } else {
+            info.storage_class = SpvStorageClassPrivate;
+          }
+
+          global_vars_.push_back(info);
         }
       }
     }
@@ -573,7 +574,6 @@ class ModuleBuilder {
 
   bool AllocateCoreIds() {
     function_id_ = ids_.Allocate();
-    label_id_ = ids_.Allocate();
     for (auto& output : output_vars_) {
       output.spirv_var_id = ids_.Allocate();
     }
@@ -583,7 +583,10 @@ class ModuleBuilder {
     for (auto& global : global_vars_) {
       global.spirv_var_id = ids_.Allocate();
     }
-    return function_id_ != 0 && label_id_ != 0;
+    for (const auto& block : entry_.blocks) {
+      block_label_map_[block.id] = ids_.Allocate();
+    }
+    return function_id_ != 0;
   }
 
   void WriteCapabilityMemoryModel() {
@@ -615,11 +618,13 @@ class ModuleBuilder {
     for (const auto& output : output_vars_) {
       AppendName(&sections_->debug, output.spirv_var_id, output.name);
     }
-    for (const auto& inst : entry_.entry_block.instructions) {
-      if (inst.kind == ir::InstKind::kVariable && !inst.var_name.empty()) {
-        auto it = FindLocalVar(inst.var_id);
-        if (it != local_vars_.end()) {
-          AppendName(&sections_->debug, it->spirv_var_id, inst.var_name);
+    for (const auto& block : entry_.blocks) {
+      for (const auto& inst : block.instructions) {
+        if (inst.kind == ir::InstKind::kVariable && !inst.var_name.empty()) {
+          auto it = FindLocalVar(inst.var_id);
+          if (it != local_vars_.end()) {
+            AppendName(&sections_->debug, it->spirv_var_id, inst.var_name);
+          }
         }
       }
     }
@@ -656,17 +661,15 @@ class ModuleBuilder {
     }
     for (const auto& global : global_vars_) {
       if (global.group.has_value()) {
-        AppendInstruction(
-            &sections_->annotations, SpvOpDecorate,
-            {global.spirv_var_id,
-             static_cast<uint32_t>(SpvDecorationDescriptorSet),
-             global.group.value()});
+        AppendInstruction(&sections_->annotations, SpvOpDecorate,
+                          {global.spirv_var_id,
+                           static_cast<uint32_t>(SpvDecorationDescriptorSet),
+                           global.group.value()});
       }
       if (global.binding.has_value()) {
         AppendInstruction(
             &sections_->annotations, SpvOpDecorate,
-            {global.spirv_var_id,
-             static_cast<uint32_t>(SpvDecorationBinding),
+            {global.spirv_var_id, static_cast<uint32_t>(SpvDecorationBinding),
              global.binding.value()});
       }
       // For wrapped buffers, add Block and Offset decorations
@@ -684,10 +687,10 @@ class ModuleBuilder {
         if (struct_type != nullptr && !struct_type->members.empty()) {
           member_offset = struct_type->members[0].offset;
         }
-        AppendInstruction(&sections_->annotations, SpvOpMemberDecorate,
-                          {struct_type_id, 0,
-                           static_cast<uint32_t>(SpvDecorationOffset),
-                           member_offset});
+        AppendInstruction(
+            &sections_->annotations, SpvOpMemberDecorate,
+            {struct_type_id, 0, static_cast<uint32_t>(SpvDecorationOffset),
+             member_offset});
       }
     }
   }
@@ -734,8 +737,8 @@ class ModuleBuilder {
         uint32_t init_id = 0;
         if (global.is_wrapped_buffer) {
           // For wrapped buffers, wrap the initializer in a struct
-          init_id = EmitWrappedConstant(global.initializer.value(),
-                                        global.var_type);
+          init_id =
+              EmitWrappedConstant(global.initializer.value(), global.var_type);
         } else {
           init_id = EmitConstant(global.initializer.value());
         }
@@ -759,19 +762,26 @@ class ModuleBuilder {
         &sections_->functions, SpvOpFunction,
         {void_type, function_id_,
          static_cast<uint32_t>(SpvFunctionControlMaskNone), function_type_id_});
-    AppendInstruction(&sections_->functions, SpvOpLabel, {label_id_});
 
-    for (auto& var : local_vars_) {
-      uint32_t ptr_type =
-          type_emitter_->GetPointerType(var.var_type, SpvStorageClassFunction);
-      if (ptr_type == 0) return false;
-      AppendInstruction(&sections_->functions, SpvOpVariable,
-                        {ptr_type, var.spirv_var_id,
-                         static_cast<uint32_t>(SpvStorageClassFunction)});
-    }
+    for (const auto& block : entry_.blocks) {
+      uint32_t block_label_id = GetOrCreateBlockLabel(block.id);
+      AppendInstruction(&sections_->functions, SpvOpLabel, {block_label_id});
 
-    for (const auto& inst : entry_.entry_block.instructions) {
-      if (!EmitInstruction(inst)) return false;
+      // Emit local variable declarations at the start of the entry block
+      if (block.id == entry_.entry_block_id) {
+        for (auto& var : local_vars_) {
+          uint32_t ptr_type =
+              type_emitter_->GetPointerType(var.var_type, SpvStorageClassFunction);
+          if (ptr_type == 0) return false;
+          AppendInstruction(&sections_->functions, SpvOpVariable,
+                            {ptr_type, var.spirv_var_id,
+                             static_cast<uint32_t>(SpvStorageClassFunction)});
+        }
+      }
+
+      for (const auto& inst : block.instructions) {
+        if (!EmitInstruction(inst)) return false;
+      }
     }
 
     AppendInstruction(&sections_->functions, SpvOpFunctionEnd, {});
@@ -788,6 +798,10 @@ class ModuleBuilder {
         return EmitStore(inst);
       case ir::InstKind::kBinary:
         return EmitBinary(inst);
+      case ir::InstKind::kBranch:
+        return EmitBranch(inst);
+      case ir::InstKind::kCondBranch:
+        return EmitCondBranch(inst);
       case ir::InstKind::kReturn:
         return EmitReturn(inst);
       default:
@@ -852,16 +866,16 @@ class ModuleBuilder {
 
     // Wrapped buffer - need to access struct member
     // Get pointer type for the inner type
-    uint32_t inner_ptr_type = type_emitter_->GetPointerType(
-        inner_type, global_info->storage_class);
+    uint32_t inner_ptr_type =
+        type_emitter_->GetPointerType(inner_type, global_info->storage_class);
     if (inner_ptr_type == 0) return 0;
 
     // Emit OpAccessChain with index 0 to access the first (and only) member
     uint32_t access_id = ids_.Allocate();
     uint32_t zero_id = type_emitter_->EmitI32Constant(0);
-    AppendInstruction(&sections_->functions, SpvOpAccessChain,
-                      {inner_ptr_type, access_id, global_info->spirv_var_id,
-                       zero_id});
+    AppendInstruction(
+        &sections_->functions, SpvOpAccessChain,
+        {inner_ptr_type, access_id, global_info->spirv_var_id, zero_id});
 
     *out_ptr_id = access_id;
     return access_id;
@@ -891,9 +905,9 @@ class ModuleBuilder {
     }
 
     uint32_t spirv_result_id = ids_.Allocate();
-    AppendInstruction(&sections_->functions, SpvOpLoad,
-                      {GetSpirvTypeId(inst.result_type), spirv_result_id,
-                       ptr_id});
+    AppendInstruction(
+        &sections_->functions, SpvOpLoad,
+        {GetSpirvTypeId(inst.result_type), spirv_result_id, ptr_id});
 
     /**
      * Map the IR SSA id to SPIR-V id.
@@ -922,8 +936,7 @@ class ModuleBuilder {
       return false;
     }
 
-    AppendInstruction(&sections_->functions, SpvOpStore,
-                      {ptr_id, value_id});
+    AppendInstruction(&sections_->functions, SpvOpStore, {ptr_id, value_id});
     return true;
   }
 
@@ -1107,6 +1120,30 @@ class ModuleBuilder {
     return result_id;
   }
 
+  bool EmitBranch(const ir::Instruction& inst) {
+    if (inst.target_block == ir::kInvalidBlockId) return false;
+    AppendInstruction(&sections_->functions, SpvOpBranch,
+                      {GetOrCreateBlockLabel(inst.target_block)});
+    return true;
+  }
+
+  bool EmitCondBranch(const ir::Instruction& inst) {
+    if (inst.operands.size() != 1 || !inst.operands[0].IsValue()) return false;
+
+    uint32_t cond_id = 0;
+    if (!MaterializeValue(inst.operands[0], &cond_id)) {
+      return false;
+    }
+
+    AppendInstruction(&sections_->functions, SpvOpSelectionMerge,
+                      {GetOrCreateBlockLabel(inst.merge_block),
+                       static_cast<uint32_t>(SpvSelectionControlMaskNone)});
+    AppendInstruction(&sections_->functions, SpvOpBranchConditional,
+                      {cond_id, GetOrCreateBlockLabel(inst.true_block),
+                       GetOrCreateBlockLabel(inst.false_block)});
+    return true;
+  }
+
   bool EmitReturn(const ir::Instruction& inst) {
     if (inst.operands.empty()) {
       AppendInstruction(&sections_->functions, SpvOpReturn, {});
@@ -1199,8 +1236,8 @@ class ModuleBuilder {
   std::unique_ptr<TypeEmitter> type_emitter_;
 
   uint32_t function_id_ = 0;
-  uint32_t label_id_ = 0;
   uint32_t function_type_id_ = 0;
+  std::unordered_map<ir::BlockId, uint32_t> block_label_map_;
 
   // Output variables for entry point interface
   std::vector<OutputVarInfo> output_vars_;
@@ -1209,6 +1246,16 @@ class ModuleBuilder {
   std::vector<GlobalVarInfo> global_vars_;
   std::vector<ValueInfo> values_;
   std::unordered_map<uint32_t, uint32_t> value_map_;
+
+  uint32_t GetOrCreateBlockLabel(ir::BlockId block_id) {
+    auto it = block_label_map_.find(block_id);
+    if (it != block_label_map_.end()) {
+      return it->second;
+    }
+    uint32_t label_id = ids_.Allocate();
+    block_label_map_[block_id] = label_id;
+    return label_id;
+  }
 };
 
 }  // namespace
