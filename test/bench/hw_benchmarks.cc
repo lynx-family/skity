@@ -420,7 +420,6 @@ static void RegisterStrokeCircleBenchmark() {
 
 static const char* kTigerSKP = RESOURCES_DIR "/skp/tiger.skp";
 static const char* kFlutter01SKP = RESOURCES_DIR "/skp/flutter_01.skp";
-static const char* kFlutter02SKP = RESOURCES_DIR "/skp/flutter_02.skp";
 static const char* kFlutter03SKP = RESOURCES_DIR "/skp/flutter_03.skp";
 static const char* kFlutter04SKP = RESOURCES_DIR "/skp/flutter_04.skp";
 static const char* kPrivateDir = RESOURCES_DIR "/skp/private";
@@ -479,10 +478,6 @@ static void RegisterGUIBenchmark() {
     auto flutter_01 = std::make_shared<skity::DrawSKPBenchmark>(
         "Flutter_01", kFlutter01SKP, 1080, 1920, skity::Matrix{});
     RegisterBenchmark(flutter_01, backend_type, aa);
-
-    auto flutter_02 = std::make_shared<skity::DrawSKPBenchmark>(
-        "Flutter_02", kFlutter02SKP, 1080, 1920, skity::Matrix{});
-    RegisterBenchmark(flutter_02, backend_type, aa);
 
     auto flutter_03 = std::make_shared<skity::DrawSKPBenchmark>(
         "Flutter_03", kFlutter03SKP, 1080, 1920, skity::Matrix{});
