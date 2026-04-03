@@ -20,3 +20,4 @@ clion_compile.sh
 **/__pycache__
 *.gni
 AGENTS.local.md
+local/*
