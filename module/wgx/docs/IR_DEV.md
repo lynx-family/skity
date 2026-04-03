@@ -71,10 +71,11 @@ The active function-body IR now has these properties:
    - instruction operand shapes are checked before backend support checks run
    - verifier coverage is still intentionally minimal and should be expanded
 
-6. **Global variable initializers**
-   - `ir::Module` carries a `global_initializers` map (variable id -> constant `Value`)
-   - lowering stores constant initializers for globals
-   - SPIR-V emitter emits them as `OpVariable` initializer operands
+6. **Global variable metadata**
+   - `ir::Module` carries a `global_variables` map (variable id -> `GlobalVariable`)
+   - `GlobalVariable` holds `type`, `storage_class`, `initializer`, `group`, `binding`
+   - lowering extracts address space, binding attributes, and constant initializers
+   - SPIR-V emitter uses storage class and emits `OpVariable` with initializers and decorations
 
 ## Current Backend Capability Boundary
 
@@ -110,7 +111,9 @@ The current SPIR-V backend still supports a deliberately narrow subset.
 5. **Global variables**
    - global variable reference, load, and store
    - constant initializers for scalar and vector types
-   - **limitation:** all globals are currently emitted with `Private` storage class
+   - WGSL address space mapping (`private`, `uniform`, `storage`, `workgroup`)
+   - resource binding attributes (`@group`, `@binding`) with proper SPIR-V decorations
+   - automatic struct wrapping for non-struct uniform/storage types (Vulkan compliance)
 
 6. **Validation workflow already available**
    - WGX SPIR-V smoke tests
@@ -138,10 +141,11 @@ The backend currently still has these important limitations:
    - removed hardcoded `vec4_type_id_` and `entry_vec4_type_` special cases
    - SPIR-V type ids are now derived from each instruction's `result_type` dynamically
 
-4. **Global variable storage class is not yet mapped from WGSL address spaces**
-   - all globals currently default to `SpvStorageClassPrivate`
-   - `uniform`, `storage`, `workgroup`, etc. are not yet wired through lowering
-     and emission
+4. ~~**Global variable storage class is not yet mapped from WGSL address spaces**~~ ✓ Completed
+   - `ir::Module::GlobalVariable` struct carries `storage_class`, `group`, `binding`
+   - lowering extracts address space from WGSL `var<...>` and maps to `ir::StorageClass`
+   - lowering extracts `@group` and `@binding` attributes
+   - SPIR-V emitter uses correct `SpvStorageClass` and emits resource decorations
 
 5. **Function structure is still effectively single-block / straight-line only**
    - no real control-flow-capable IR structure yet
