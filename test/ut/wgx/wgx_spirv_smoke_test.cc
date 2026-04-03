@@ -757,9 +757,10 @@ fn vs_main() -> @builtin(position) vec4<f32> {
 /**
  * Test uniform global variable with resource binding.
  * Uniform variables should have DescriptorSet and Binding decorations.
- * 
+ *
  * Non-struct uniform types are automatically wrapped in a struct with Block
- * decoration and proper offset layout to comply with Vulkan SPIR-V requirements.
+ * decoration and proper offset layout to comply with Vulkan SPIR-V
+ * requirements.
  */
 TEST(WgxSpirvSmokeTest, EmitsSpirvWithUniformGlobalAndBinding) {
   auto program = wgx::Program::Parse(R"(
@@ -794,7 +795,8 @@ fn vs_main() -> @builtin(position) vec4<f32> {
  * Storage variables should have DescriptorSet and Binding decorations.
  *
  * Non-struct storage types are automatically wrapped in a struct with Block
- * decoration and proper offset layout to comply with Vulkan SPIR-V requirements.
+ * decoration and proper offset layout to comply with Vulkan SPIR-V
+ * requirements.
  */
 TEST(WgxSpirvSmokeTest, EmitsSpirvWithStorageGlobalAndBinding) {
   auto program = wgx::Program::Parse(R"(
@@ -862,6 +864,77 @@ fn vs_main() -> @builtin(position) vec4<f32> {
  * In std140, vec3 has 16-byte alignment and 16-byte size (rounded up from 12).
  * The generated SPIR-V should have Offset 0 and valid Block decoration.
  */
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForIfElseControlFlow) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32>;
+  if (true) {
+    pos = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  } else {
+    pos = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_if_else.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelectionMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranch));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+/**
+ * Test if-else control flow with boolean variable as condition.
+ * The condition should be properly loaded from the variable.
+ */
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForIfElseWithVariableCondition) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32>;
+  var use_red: bool = true;
+  if (use_red) {
+    pos = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  } else {
+    pos = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_if_else_var_cond.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelectionMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));  // Should load the bool variable
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
 /**
  * Test function parameter usage.
  * Entry point parameters should be usable in function body.

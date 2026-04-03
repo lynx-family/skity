@@ -24,6 +24,7 @@ struct VerificationResult {
   std::string error_message;
 
   // Location info for debugging
+  size_t block_index = 0;
   size_t instruction_index = 0;
   InstKind instruction_kind = InstKind::kReturn;
 
@@ -31,10 +32,12 @@ struct VerificationResult {
 
   static VerificationResult Failure(const std::string& msg,
                                     size_t inst_index = 0,
-                                    InstKind inst_kind = InstKind::kReturn) {
+                                    InstKind inst_kind = InstKind::kReturn,
+                                    size_t in_block_index = 0) {
     VerificationResult result;
     result.valid = false;
     result.error_message = msg;
+    result.block_index = in_block_index;
     result.instruction_index = inst_index;
     result.instruction_kind = inst_kind;
     return result;
@@ -76,6 +79,7 @@ class Verifier {
    * Verify a single instruction (within function context)
    */
   VerificationResult VerifyInstruction(const Instruction& inst, size_t index,
+                                       size_t block_index,
                                        const Function& function);
 
  private:
@@ -105,6 +109,10 @@ class Verifier {
   VerificationResult VerifyLoad(const Instruction& inst, size_t index);
   VerificationResult VerifyStore(const Instruction& inst, size_t index);
   VerificationResult VerifyBinary(const Instruction& inst, size_t index);
+  VerificationResult VerifyBranch(const Instruction& inst, size_t index,
+                                  const Function& function);
+  VerificationResult VerifyCondBranch(const Instruction& inst, size_t index,
+                                      const Function& function);
 };
 
 /**
