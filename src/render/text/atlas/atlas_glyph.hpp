@@ -60,10 +60,11 @@ struct GlyphRegion {
 
 struct GlyphKey {
   const GlyphID glyph_id;
+  const uint16_t reserved_padding{0};
   const ScalerContextDesc scaler_context_desc;
 
   GlyphKey(GlyphID id, const ScalerContextDesc& desc)
-      : glyph_id(id), scaler_context_desc(desc) {}
+      : glyph_id(id), reserved_padding(0), scaler_context_desc(desc) {}
 
   struct Hash {
     std::size_t operator()(const GlyphKey& key) const {
@@ -78,6 +79,11 @@ struct GlyphKey {
     }
   };
 };
+
+static_assert(sizeof(GlyphKey) == sizeof(GlyphKey::glyph_id) +
+                                      sizeof(GlyphKey::reserved_padding) +
+                                      sizeof(GlyphKey::scaler_context_desc),
+              "GlyphKey must have no padding");
 
 }  // namespace skity
 

@@ -77,6 +77,22 @@ struct ScalerContextDesc {
   }
 };
 
+static_assert(sizeof(ScalerContextDesc) ==
+                  sizeof(ScalerContextDesc::typeface_id) +
+                      sizeof(ScalerContextDesc::text_size) +
+                      sizeof(ScalerContextDesc::scale_x) +
+                      sizeof(ScalerContextDesc::skew_x) +
+                      sizeof(ScalerContextDesc::transform) +
+                      sizeof(ScalerContextDesc::context_scale) +
+                      sizeof(ScalerContextDesc::foreground_color) +
+                      sizeof(ScalerContextDesc::stroke_width) +
+                      sizeof(ScalerContextDesc::miter_limit) +
+                      sizeof(ScalerContextDesc::cap) +
+                      sizeof(ScalerContextDesc::join) +
+                      sizeof(ScalerContextDesc::fake_bold) +
+                      sizeof(ScalerContextDesc::hinting),
+              "ScalerContextDesc must have no padding");
+
 }  // namespace skity
 
 #endif  // SRC_TEXT_SCALER_CONTEXT_DESC_HPP
