@@ -213,5 +213,108 @@ TypeId TypeTable::GetComponentType(TypeId id) const {
   return kInvalidTypeId;
 }
 
+uint32_t TypeTable::AlignOffset(uint32_t offset, uint32_t alignment) {
+  return (offset + alignment - 1) & ~(alignment - 1);
+}
+
+TypeTable::LayoutInfo TypeTable::GetLayoutInfo(TypeId id,
+                                               LayoutRule rule) const {
+  const Type* type = GetType(id);
+  if (type == nullptr) {
+    return LayoutInfo{0, 1};
+  }
+
+  switch (type->kind) {
+    case TypeKind::kBool:
+    case TypeKind::kI32:
+    case TypeKind::kU32:
+    case TypeKind::kF32:
+      // 4-byte scalar
+      return LayoutInfo{4, 4};
+
+    case TypeKind::kVector: {
+      uint32_t component_size = 4;  // All supported components are 4 bytes
+      uint32_t num_components = type->count;
+
+      if (rule == LayoutRule::kStd140) {
+        // std140: vec2 = 8 bytes, align 8; vec3/vec4 = 16 bytes, align 16
+        if (num_components == 2) {
+          return LayoutInfo{8, 8};
+        } else {
+          // vec3 and vec4 both use 16 bytes in std140
+          return LayoutInfo{16, 16};
+        }
+      } else {
+        // std430: vec2 = 8 bytes, align 8; vec3 = 12 bytes, align 16; vec4 = 16
+        // bytes, align 16
+        if (num_components == 2) {
+          return LayoutInfo{8, 8};
+        } else if (num_components == 3) {
+          return LayoutInfo{12, 16};
+        } else {
+          return LayoutInfo{16, 16};
+        }
+      }
+    }
+
+    case TypeKind::kMatrix: {
+      // Matrix is treated as array of column vectors
+      uint32_t rows = type->count;
+      uint32_t cols = type->count2;
+      uint32_t vec_align = (rule == LayoutRule::kStd140 || cols >= 3) ? 16 : 8;
+      uint32_t vec_size = cols * 4;
+      if (rule == LayoutRule::kStd140 && cols == 3) {
+        vec_size = 16;  // vec3 takes 16 bytes in std140
+      }
+
+      // Array stride is rounded up to alignment
+      uint32_t stride = AlignOffset(vec_size, vec_align);
+      uint32_t total_size = stride * rows;
+      return LayoutInfo{total_size, vec_align};
+    }
+
+    case TypeKind::kArray: {
+      auto elem_info = GetLayoutInfo(type->element_type, rule);
+      uint32_t elem_align = elem_info.alignment;
+      uint32_t elem_size = elem_info.size;
+
+      // Array stride is rounded up to alignment
+      uint32_t stride = AlignOffset(elem_size, elem_align);
+      if (rule == LayoutRule::kStd140) {
+        // std140: array stride must be multiple of 16
+        stride = AlignOffset(stride, 16);
+      }
+
+      uint32_t total_size = stride * type->count;
+      return LayoutInfo{total_size, elem_align};
+    }
+
+    case TypeKind::kStruct: {
+      // Struct alignment is max of member alignments
+      // Struct size is aligned to struct alignment
+      uint32_t max_align = 1;
+      uint32_t offset = 0;
+
+      for (const auto& member : type->members) {
+        auto member_info = GetLayoutInfo(member.type, rule);
+        max_align = std::max(max_align, member_info.alignment);
+        // Member offset should already be set, but calculate if not
+        uint32_t member_offset =
+            (member.offset == 0 && &member != &type->members.front())
+                ? AlignOffset(offset, member_info.alignment)
+                : member.offset;
+        offset = member_offset + member_info.size;
+      }
+
+      // Round up struct size to its alignment
+      uint32_t struct_size = AlignOffset(offset, max_align);
+      return LayoutInfo{struct_size, max_align};
+    }
+
+    default:
+      return LayoutInfo{0, 1};
+  }
+}
+
 }  // namespace ir
 }  // namespace wgx

@@ -47,10 +47,12 @@ enum class StorageClass {
 struct StructMember {
   TypeId type = kInvalidTypeId;
   std::string name;
-  // TODO: decorations (offset, matrix layout, etc.)
+  // Layout offset for uniform/storage buffer layout
+  uint32_t offset = 0;
 
   bool operator==(const StructMember& other) const {
-    return type == other.type && name == other.name;
+    return type == other.type && name == other.name &&
+           offset == other.offset;
   }
 };
 
@@ -136,6 +138,23 @@ class TypeTable {
 
   // Get component type for vectors/matrices
   TypeId GetComponentType(TypeId id) const;
+
+  // Layout calculation for uniform/storage buffers
+  // std140 is used for uniform buffers, std430 for storage buffers
+  enum class LayoutRule {
+    kStd140,  // Uniform buffer layout
+    kStd430,  // Storage buffer layout
+  };
+
+  // Calculate size and alignment of a type
+  struct LayoutInfo {
+    uint32_t size = 0;
+    uint32_t alignment = 1;
+  };
+  LayoutInfo GetLayoutInfo(TypeId id, LayoutRule rule) const;
+
+  // Align an offset to a given alignment
+  static uint32_t AlignOffset(uint32_t offset, uint32_t alignment);
 
  private:
   TypeId RegisterType(Type type);

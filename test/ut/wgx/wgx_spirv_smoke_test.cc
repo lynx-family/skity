@@ -88,6 +88,30 @@ bool ContainsBuiltInDecoration(const std::vector<uint32_t>& words,
   return false;
 }
 
+bool ContainsDecoration(const std::vector<uint32_t>& words,
+                        SpvDecoration decoration) {
+  size_t offset = 5u;
+  while (offset < words.size()) {
+    const uint32_t inst = words[offset];
+    const uint16_t word_count =
+        static_cast<uint16_t>(inst >> SpvWordCountShift);
+    const auto opcode = static_cast<SpvOp>(inst & SpvOpCodeMask);
+
+    if (word_count == 0u) {
+      return false;
+    }
+
+    if (opcode == SpvOpDecorate && word_count >= 3u &&
+        words[offset + 2u] == static_cast<uint32_t>(decoration)) {
+      return true;
+    }
+
+    offset += word_count;
+  }
+
+  return false;
+}
+
 void DumpSpirvBinary(const std::string& filename,
                      const std::vector<uint32_t>& words) {
   if (words.empty()) {
@@ -730,6 +754,114 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+/**
+ * Test uniform global variable with resource binding.
+ * Uniform variables should have DescriptorSet and Binding decorations.
+ * 
+ * Non-struct uniform types are automatically wrapped in a struct with Block
+ * decoration and proper offset layout to comply with Vulkan SPIR-V requirements.
+ */
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithUniformGlobalAndBinding) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(1)
+var<uniform> u_data: vec4<f32>;
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  return u_data;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_uniform_binding.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+/**
+ * Test storage buffer global variable with resource binding.
+ * Storage variables should have DescriptorSet and Binding decorations.
+ *
+ * Non-struct storage types are automatically wrapped in a struct with Block
+ * decoration and proper offset layout to comply with Vulkan SPIR-V requirements.
+ */
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithStorageGlobalAndBinding) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(0)
+var<storage> s_data: vec4<f32>;
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  return s_data;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_storage_binding.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+/**
+ * Test workgroup global variable.
+ * Workgroup variables are shared within workgroup and don't need binding.
+ *
+ * Note: Workgroup storage class is only valid in compute shaders (or mesh/task
+ * shaders). This is a vertex shader test to verify storage class propagation.
+ * Real-world usage would be in a compute shader.
+ */
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithWorkgroupGlobal) {
+  auto program = wgx::Program::Parse(R"(
+var<workgroup> w_data: vec4<f32>;
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  return w_data;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_workgroup.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+/**
+ * Test uniform vec3<f32> with std140 layout.
+ * In std140, vec3 has 16-byte alignment and 16-byte size (rounded up from 12).
+ * The generated SPIR-V should have Offset 0 and valid Block decoration.
+ */
 /**
  * Test function parameter usage.
  * Entry point parameters should be usable in function body.

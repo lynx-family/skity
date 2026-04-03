@@ -421,10 +421,14 @@ struct LocalVarInfo {
 
 struct GlobalVarInfo {
   uint32_t ir_var_id = 0;
-  ir::TypeId var_type = ir::kInvalidTypeId;
+  ir::TypeId var_type = ir::kInvalidTypeId;      // SPIR-V variable type (may be struct)
+  ir::TypeId inner_type = ir::kInvalidTypeId;     // Original inner type for buffer access
   uint32_t spirv_var_id = 0;
   SpvStorageClass storage_class = SpvStorageClassPrivate;
   std::optional<ir::Value> initializer;  // Constant initializer, if any
+  std::optional<uint32_t> group;
+  std::optional<uint32_t> binding;
+  bool is_wrapped_buffer = false;  // True if var_type is a wrapper struct
 };
 
 struct ValueInfo {
@@ -542,13 +546,23 @@ class ModuleBuilder {
             GlobalVarInfo info;
             info.ir_var_id = var_id;
             info.var_type = var_type;
-            // For now, assume all globals are Private storage class
-            // TODO: Support other storage classes (Uniform, Storage, etc.)
-            info.storage_class = SpvStorageClassPrivate;
-            // Look up initializer from module
-            auto init_it = module_.global_initializers.find(var_id);
-            if (init_it != module_.global_initializers.end()) {
-              info.initializer = init_it->second;
+            // Look up global variable metadata from module
+            auto global_it = module_.global_variables.find(var_id);
+            if (global_it != module_.global_variables.end()) {
+              info.storage_class =
+                  ToSpvStorageClass(global_it->second.storage_class);
+              info.initializer = global_it->second.initializer;
+              info.group = global_it->second.group;
+              info.binding = global_it->second.binding;
+              // Check if this is a wrapped buffer (non-struct type wrapped in struct)
+              if (global_it->second.inner_type != ir::kInvalidTypeId) {
+                info.inner_type = global_it->second.inner_type;
+                info.is_wrapped_buffer = true;
+                // Use the wrapper struct type as the variable type
+                info.var_type = global_it->second.type;
+              }
+            } else {
+              info.storage_class = SpvStorageClassPrivate;
             }
             global_vars_.push_back(info);
           }
@@ -640,6 +654,42 @@ class ModuleBuilder {
              output.decoration_value});
       }
     }
+    for (const auto& global : global_vars_) {
+      if (global.group.has_value()) {
+        AppendInstruction(
+            &sections_->annotations, SpvOpDecorate,
+            {global.spirv_var_id,
+             static_cast<uint32_t>(SpvDecorationDescriptorSet),
+             global.group.value()});
+      }
+      if (global.binding.has_value()) {
+        AppendInstruction(
+            &sections_->annotations, SpvOpDecorate,
+            {global.spirv_var_id,
+             static_cast<uint32_t>(SpvDecorationBinding),
+             global.binding.value()});
+      }
+      // For wrapped buffers, add Block and Offset decorations
+      if (global.is_wrapped_buffer) {
+        uint32_t struct_type_id = type_emitter_->EmitType(global.var_type);
+        if (struct_type_id != 0) {
+          AppendInstruction(
+              &sections_->annotations, SpvOpDecorate,
+              {struct_type_id, static_cast<uint32_t>(SpvDecorationBlock)});
+        }
+        // Get the member offset from the struct type
+        const ir::Type* struct_type =
+            type_emitter_->GetTypeTable()->GetType(global.var_type);
+        uint32_t member_offset = 0;
+        if (struct_type != nullptr && !struct_type->members.empty()) {
+          member_offset = struct_type->members[0].offset;
+        }
+        AppendInstruction(&sections_->annotations, SpvOpMemberDecorate,
+                          {struct_type_id, 0,
+                           static_cast<uint32_t>(SpvDecorationOffset),
+                           member_offset});
+      }
+    }
   }
 
   bool WriteTypeConstGlobalSection() {
@@ -681,7 +731,14 @@ class ModuleBuilder {
 
       // Add initializer if present
       if (global.initializer.has_value()) {
-        uint32_t init_id = EmitConstant(global.initializer.value());
+        uint32_t init_id = 0;
+        if (global.is_wrapped_buffer) {
+          // For wrapped buffers, wrap the initializer in a struct
+          init_id = EmitWrappedConstant(global.initializer.value(),
+                                        global.var_type);
+        } else {
+          init_id = EmitConstant(global.initializer.value());
+        }
         if (init_id != 0) {
           operands.push_back(init_id);
         }
@@ -760,6 +817,57 @@ class ModuleBuilder {
   }
 
   /**
+   * Finds global variable info by IR var id.
+   * Returns pointer to GlobalVarInfo, or nullptr if not found.
+   */
+  const GlobalVarInfo* FindGlobalVarInfo(uint32_t ir_var_id) const {
+    for (const auto& global : global_vars_) {
+      if (global.ir_var_id == ir_var_id) {
+        return &global;
+      }
+    }
+    return nullptr;
+  }
+
+  /**
+   * Gets the pointer to use for load/store operations.
+   * For wrapped buffers (uniform/storage with non-struct type),
+   * emits OpAccessChain to access the struct member.
+   * Returns the pointer id to use, or 0 on failure.
+   */
+  uint32_t GetAccessPointer(uint32_t ir_var_id, ir::TypeId inner_type,
+                            uint32_t* out_ptr_id) {
+    const GlobalVarInfo* global_info = FindGlobalVarInfo(ir_var_id);
+    if (global_info == nullptr) {
+      // Local variable - no access chain needed
+      *out_ptr_id = FindVariableSpirvId(ir_var_id);
+      return *out_ptr_id != 0 ? 1 : 0;  // Return non-zero to indicate success
+    }
+
+    if (!global_info->is_wrapped_buffer) {
+      // Not a wrapped buffer - use variable directly
+      *out_ptr_id = global_info->spirv_var_id;
+      return 1;
+    }
+
+    // Wrapped buffer - need to access struct member
+    // Get pointer type for the inner type
+    uint32_t inner_ptr_type = type_emitter_->GetPointerType(
+        inner_type, global_info->storage_class);
+    if (inner_ptr_type == 0) return 0;
+
+    // Emit OpAccessChain with index 0 to access the first (and only) member
+    uint32_t access_id = ids_.Allocate();
+    uint32_t zero_id = type_emitter_->EmitI32Constant(0);
+    AppendInstruction(&sections_->functions, SpvOpAccessChain,
+                      {inner_ptr_type, access_id, global_info->spirv_var_id,
+                       zero_id});
+
+    *out_ptr_id = access_id;
+    return access_id;
+  }
+
+  /**
    * Emit explicit load instruction (new Value model).
    * kLoad in IR translates to SpvOpLoad in SPIR-V.
    */
@@ -775,13 +883,17 @@ class ModuleBuilder {
     if (!source.IsVariable()) return false;
 
     uint32_t ir_var_id = source.GetVarId().value();
-    uint32_t spirv_var_id = FindVariableSpirvId(ir_var_id);
-    if (spirv_var_id == 0) return false;
+
+    // For wrapped buffers, get access pointer to struct member
+    uint32_t ptr_id = 0;
+    if (GetAccessPointer(ir_var_id, inst.result_type, &ptr_id) == 0) {
+      return false;
+    }
 
     uint32_t spirv_result_id = ids_.Allocate();
-    AppendInstruction(
-        &sections_->functions, SpvOpLoad,
-        {GetSpirvTypeId(inst.result_type), spirv_result_id, spirv_var_id});
+    AppendInstruction(&sections_->functions, SpvOpLoad,
+                      {GetSpirvTypeId(inst.result_type), spirv_result_id,
+                       ptr_id});
 
     /**
      * Map the IR SSA id to SPIR-V id.
@@ -798,8 +910,12 @@ class ModuleBuilder {
     if (!target.IsVariable() || !source.IsValue()) return false;
 
     uint32_t ir_var_id = target.GetVarId().value();
-    uint32_t spirv_var_id = FindVariableSpirvId(ir_var_id);
-    if (spirv_var_id == 0) return false;
+
+    // For wrapped buffers, get access pointer to struct member
+    uint32_t ptr_id = 0;
+    if (GetAccessPointer(ir_var_id, source.type, &ptr_id) == 0) {
+      return false;
+    }
 
     uint32_t value_id = 0;
     if (!MaterializeValue(source, &value_id)) {
@@ -807,7 +923,7 @@ class ModuleBuilder {
     }
 
     AppendInstruction(&sections_->functions, SpvOpStore,
-                      {spirv_var_id, value_id});
+                      {ptr_id, value_id});
     return true;
   }
 
@@ -967,6 +1083,27 @@ class ModuleBuilder {
 
     AppendInstruction(&sections_->types_consts_globals, SpvOpConstantComposite,
                       operands);
+    return result_id;
+  }
+
+  /**
+   * Emits a wrapped struct constant for buffer initializers.
+   * The inner value is wrapped in a single-member struct.
+   */
+  uint32_t EmitWrappedConstant(const ir::Value& inner_value,
+                               ir::TypeId struct_type_id) {
+    // Emit the inner constant
+    uint32_t inner_id = EmitConstant(inner_value);
+    if (inner_id == 0) return 0;
+
+    // Emit the struct type
+    uint32_t spirv_struct_type = type_emitter_->EmitType(struct_type_id);
+    if (spirv_struct_type == 0) return 0;
+
+    // Emit OpConstantComposite for the struct
+    uint32_t result_id = ids_.Allocate();
+    AppendInstruction(&sections_->types_consts_globals, SpvOpConstantComposite,
+                      {spirv_struct_type, result_id, inner_id});
     return result_id;
   }
 

@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -166,14 +167,27 @@ struct Module {
   std::unique_ptr<ConstantPool> constant_pool;
 
   /**
-   * Global variable initializers.
+   * Global variable metadata.
    * Key: variable id (as used in Value::Variable)
-   * Value: constant initializer value
    *
    * Global variables are referenced by Load/Store instructions but not declared
    * as kVariable instructions. Their initializers must be constant expressions.
    */
-  std::unordered_map<uint32_t, Value> global_initializers;
+  struct GlobalVariable {
+    TypeId type = kInvalidTypeId;
+    StorageClass storage_class = StorageClass::kPrivate;
+    std::optional<Value> initializer;
+    std::optional<uint32_t> group;
+    std::optional<uint32_t> binding;
+
+    /**
+     * For uniform/storage buffers that need struct wrapping.
+     * In Vulkan SPIR-V, Uniform/StorageBuffer storage class must be structs.
+     * If this is set, the actual value type is different from the declared type.
+     */
+    TypeId inner_type = kInvalidTypeId;
+  };
+  std::unordered_map<uint32_t, GlobalVariable> global_variables;
 };
 
 }  // namespace ir

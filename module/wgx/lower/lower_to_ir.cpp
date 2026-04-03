@@ -859,15 +859,84 @@ class Lowerer {
       return VarInfo{};
     }
 
+    // Build global variable metadata
+    ir::Module::GlobalVariable global_var_info;
+    global_var_info.type = var_type;
+    global_var_info.storage_class = ir::StorageClass::kPrivate;
+
+    // Extract address space from var<...> qualifier
+    if (global_var->GetType() == ast::VariableType::kVar) {
+      auto* var_node = static_cast<ast::Var*>(global_var);
+      if (var_node->address_space != nullptr &&
+          var_node->address_space->GetType() ==
+              ast::ExpressionType::kIdentifier) {
+        auto* as_ident =
+            static_cast<ast::IdentifierExp*>(var_node->address_space);
+        if (as_ident->ident != nullptr) {
+          std::string_view space = as_ident->ident->name;
+          if (space == "uniform") {
+            global_var_info.storage_class = ir::StorageClass::kUniform;
+          } else if (space == "storage") {
+            global_var_info.storage_class = ir::StorageClass::kStorage;
+          } else if (space == "workgroup") {
+            global_var_info.storage_class = ir::StorageClass::kWorkgroup;
+          } else if (space == "private") {
+            global_var_info.storage_class = ir::StorageClass::kPrivate;
+          }
+        }
+      }
+    }
+
+    // For Vulkan SPIR-V compliance: Uniform/StorageBuffer must be structs
+    // If the type is not a struct, wrap it in a struct with proper layout
+    if (global_var_info.storage_class == ir::StorageClass::kUniform ||
+        global_var_info.storage_class == ir::StorageClass::kStorage) {
+      const ir::Type* type = type_table_->GetType(var_type);
+      if (type != nullptr && type->kind != ir::TypeKind::kStruct) {
+        // Create a wrapper struct type with proper layout
+        global_var_info.inner_type = var_type;
+
+        // Determine layout rule: uniform uses std140, storage uses std430
+        ir::TypeTable::LayoutRule layout_rule =
+            (global_var_info.storage_class == ir::StorageClass::kUniform)
+                ? ir::TypeTable::LayoutRule::kStd140
+                : ir::TypeTable::LayoutRule::kStd430;
+
+        // Calculate member offset based on layout rules
+        auto member_layout = type_table_->GetLayoutInfo(var_type, layout_rule);
+        uint32_t member_offset =
+            ir::TypeTable::AlignOffset(0, member_layout.alignment);
+
+        std::vector<ir::StructMember> members;
+        members.push_back(ir::StructMember{var_type, "value", member_offset});
+        ir::TypeId struct_type = type_table_->GetStructType(members);
+        global_var_info.type = struct_type;
+      }
+    }
+
+    // Extract resource binding attributes (@group, @binding)
+    for (auto* attr : global_var->attributes) {
+      if (attr == nullptr) continue;
+      if (attr->GetType() == ast::AttributeType::kGroup) {
+        auto* group_attr = static_cast<ast::GroupAttribute*>(attr);
+        global_var_info.group = static_cast<uint32_t>(group_attr->index);
+      } else if (attr->GetType() == ast::AttributeType::kBinding) {
+        auto* binding_attr = static_cast<ast::BindingAttribute*>(attr);
+        global_var_info.binding = static_cast<uint32_t>(binding_attr->index);
+      }
+    }
+
     // Handle global variable initializer (must be constant)
     if (global_var->initializer != nullptr) {
       ir::ExprResult init_expr = LowerExpression(global_var->initializer);
       if (init_expr.IsValid() && init_expr.value.IsConstant()) {
-        ir_module_->global_initializers[var_id] = init_expr.value;
+        global_var_info.initializer = init_expr.value;
       }
       // If initializer is not a constant, we silently ignore it.
       // A proper implementation should report an error here.
     }
+
+    ir_module_->global_variables[var_id] = std::move(global_var_info);
 
     // Note: Global variables are not emitted as kVariable instructions
     // They are handled by the backend (SPIR-V emitter) as module-level
