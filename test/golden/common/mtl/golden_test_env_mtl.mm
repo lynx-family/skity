@@ -25,9 +25,8 @@ std::unique_ptr<skity::GPUContext> GoldenTestEnvMTL::CreateGPUContext() {
   return skity::MTLContextCreate(device_, command_queue_);
 }
 
-std::shared_ptr<GoldenTexture> GoldenTestEnvMTL::DisplayListToTexture(DisplayList* dl,
-                                                                      uint32_t width,
-                                                                      uint32_t height) {
+std::shared_ptr<GoldenTexture> GoldenTestEnvMTL::RenderToTexture(
+    uint32_t width, uint32_t height, const std::function<void(Canvas*)>& render) {
   // create a Metal texture
   MTLTextureDescriptor* texture_descriptor =
       [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
@@ -59,7 +58,7 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvMTL::DisplayListToTexture(DisplayLis
 
   auto canvas = surface->LockCanvas();
 
-  dl->Draw(canvas);
+  render(canvas);
 
   canvas->Flush();
   surface->Flush();

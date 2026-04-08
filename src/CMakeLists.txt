@@ -76,6 +76,10 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/tracing.hpp
   ${CMAKE_CURRENT_LIST_DIR}/recorder/display_list_builder.hpp
   ${CMAKE_CURRENT_LIST_DIR}/recorder/display_list.cc
+  ${CMAKE_CURRENT_LIST_DIR}/recorder/display_list_region.cc
+  ${CMAKE_CURRENT_LIST_DIR}/recorder/display_list_region.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/recorder/display_list_rtree.cc
+  ${CMAKE_CURRENT_LIST_DIR}/recorder/display_list_rtree.hpp
   ${CMAKE_CURRENT_LIST_DIR}/recorder/picture_recorder.cc
   ${CMAKE_CURRENT_LIST_DIR}/recorder/recorded_op.hpp
   ${CMAKE_CURRENT_LIST_DIR}/recorder/recording_canvas.cc

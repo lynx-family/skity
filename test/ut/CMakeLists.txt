@@ -33,6 +33,8 @@ add_executable(skity_unit_test
     render/resource_cache_test.cc
     render/shape_test.cc
     recorder/display_list_test.cc
+    recorder/display_list_region_test.cc
+    recorder/display_list_rtree_test.cc
     text/atlas_glyph_test.cc
     text/scaler_context_cache_test.cc
     text/text_run_test.cc

@@ -12,6 +12,11 @@
 namespace skity {
 
 class RecordingCanvas;
+struct DisplayListBuilder;
+
+struct SKITY_API DisplayListBuildOptions {
+  bool build_rtree = false;
+};
 
 class SKITY_API PictureRecorder {
  public:
@@ -22,6 +27,8 @@ class SKITY_API PictureRecorder {
   bool Empty();
   void BeginRecording();
   void BeginRecording(const Rect& bounds);
+  void BeginRecording(const Rect& bounds,
+                      const DisplayListBuildOptions& options);
   std::unique_ptr<DisplayList> FinishRecording();
 
  private:

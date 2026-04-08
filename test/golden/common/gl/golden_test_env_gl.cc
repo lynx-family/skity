@@ -64,8 +64,9 @@ void GoldenTestEnvGL::TearDown() {
   eglDestroyContext(display_, context_);
 }
 
-std::shared_ptr<GoldenTexture> GoldenTestEnvGL::DisplayListToTexture(
-    DisplayList* dl, uint32_t width, uint32_t height) {
+std::shared_ptr<GoldenTexture> GoldenTestEnvGL::RenderToTexture(
+    uint32_t width, uint32_t height,
+    const std::function<void(Canvas*)>& render) {
   eglMakeCurrent(display_, surface_, surface_, context_);
   // create off screen fbo and texture
   GLuint fbo = 0;
@@ -122,7 +123,7 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvGL::DisplayListToTexture(
 
   auto canvas = surface->LockCanvas();
 
-  dl->Draw(canvas);
+  render(canvas);
 
   canvas->Flush();
   surface->Flush();
