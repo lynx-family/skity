@@ -237,7 +237,7 @@ std::string WGXProgrammableBlending::GenSourceWGSL() const {
     case BlendMode::kDifference: {
       ss << R"(
   result = vec4<f32>(src.rgb + dst.rgb - 2.0 * min(src.rgb * dst.a, dst.rgb * src.a),
-                     src.a + (1 - src.a) * dst.a);
+                     src.a + (1.0 - src.a) * dst.a);
 )";
       break;
     }
