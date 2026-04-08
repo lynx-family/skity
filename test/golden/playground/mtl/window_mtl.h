@@ -35,7 +35,9 @@ class WindowMTL : public Window {
   void DrawImageInCenter(skity::Canvas* canvas,
                          const std::shared_ptr<Image>& image, Rect rect);
 
- private:
+  id<MTLTexture> GetTextureFromGolden(
+      const std::shared_ptr<GoldenTexture>& texture);
+
   CAMetalLayer* metal_layer_ = nil;
 
   id<MTLDevice> device_ = nil;

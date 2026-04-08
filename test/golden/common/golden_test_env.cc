@@ -4,24 +4,59 @@
 
 #include "common/golden_test_env.hpp"
 
+#ifdef SKITY_GOLDEN_GUI
+
+#include <GLFW/glfw3.h>
+
+#endif
+
 namespace skity {
 namespace testing {
 
 GoldenTestEnv* CreateGoldenTestEnvMTL();
+GoldenTestEnv* CreateGoldenTestEnvGL();
 
 GoldenTestEnv* g_golden_test_env = nullptr;
 
-GoldenTestEnv* GoldenTestEnv::GetInstance() {
-  if (g_golden_test_env == nullptr) {
-    g_golden_test_env = CreateGoldenTestEnvMTL();
+GoldenTestEnv* GoldenTestEnv::CreateInstance(Backend backend) {
+  switch (backend) {
+    case Backend::kGL:
+      g_golden_test_env = CreateGoldenTestEnvGL();
+      break;
+    case Backend::kVulkan:
+      break;
+    case Backend::kMetal:
+      g_golden_test_env = CreateGoldenTestEnvMTL();
+      break;
+    default:
+      return nullptr;
   }
 
   return g_golden_test_env;
 }
 
-void GoldenTestEnv::SetUp() { gpu_context_ = CreateGPUContext(); }
+GoldenTestEnv* GoldenTestEnv::GetInstance() { return g_golden_test_env; }
 
-void GoldenTestEnv::TearDown() { gpu_context_.reset(); }
+void GoldenTestEnv::SetUp() {
+#ifdef SKITY_GOLDEN_GUI
+  // Init glfw for all testing case
+  glfwInit();
+  // Metal does not needs GL client api
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+#endif
+
+  gpu_context_ = CreateGPUContext();
+}
+
+void GoldenTestEnv::TearDown() {
+  gpu_context_.reset();
+
+#ifdef SKITY_GOLDEN_GUI
+
+  glfwTerminate();
+
+#endif
+}
 
 }  // namespace testing
 }  // namespace skity

@@ -27,11 +27,26 @@ add_library(skity_golden_test OBJECT
   ${CMAKE_CURRENT_LIST_DIR}/common/mtl/golden_test_env_mtl.mm
   ${CMAKE_CURRENT_LIST_DIR}/common/mtl/golden_texture_mtl.h
   ${CMAKE_CURRENT_LIST_DIR}/common/mtl/golden_texture_mtl.mm
+
+  # GL backend code
+  ${CMAKE_CURRENT_LIST_DIR}/common/gl/golden_test_env_gl.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/common/gl/golden_test_env_gl.cc
+  ${CMAKE_CURRENT_LIST_DIR}/common/gl/golden_texture_gl.hpp
 )
 
 target_include_directories(skity_golden_test
   PUBLIC
   ${CMAKE_CURRENT_LIST_DIR}
+)
+
+target_include_directories(skity_golden_test
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/third_party/libSwAngle/include
+)
+
+target_link_directories(skity_golden_test
+  PUBLIC
+  ${CMAKE_SOURCE_DIR}/third_party/libSwAngle/lib
 )
 
 target_link_libraries(skity_golden_test
@@ -43,6 +58,8 @@ target_link_libraries(skity_golden_test
   "-framework CoreGraphics"
   "-framework ImageIO"
   "-framework CoreServices"
+  EGL
+  GLESv2
 )
 
 target_compile_definitions(skity_golden_test PUBLIC -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)

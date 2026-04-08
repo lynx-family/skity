@@ -28,10 +28,34 @@ The window provides the following features:
 
 If you want to disable the GUI, you can pass `-DSKITY_GOLDEN_GUI=OFF` to cmake.
 
-After compile, you can run the golden test code by the following command:
+The recommended way to run golden tests is via `tools/test-runner.py`.
+For golden suites, the runner will automatically:
+- set `ANGLE_DEFAULT_PLATFORM=swiftshader`
+- append `<source directory>/third_party/libSwAngle/lib` to `DYLD_LIBRARY_PATH`
+- pass `--backend gl` to the golden executable when `--backend=gl` is specified
+
+```bash
+python3 tools/test-runner.py --suite=golden-shape --build-dir <build directory>
+python3 tools/test-runner.py --suite=golden-text --build-dir <build directory>
+
+# Run the shape golden test with OpenGLES backend
+python3 tools/test-runner.py --suite=golden-shape --backend=gl --build-dir <build directory>
+```
+
+If you want to run the golden executables directly, you still need to set the environment variable `DYLD_LIBRARY_PATH` to the path of the libSwAngle library and the environment variable `ANGLE_DEFAULT_PLATFORM` to `swiftshader` for Angle backend even if running the test case with Metal backend.
+
+```bash
+export ANGLE_DEFAULT_PLATFORM=swiftshader
+export DYLD_LIBRARY_PATH=<source directory>/third_party/libSwAngle/lib
+```
+
+After compile, you can run the golden test executable directly by the following command:
 
 ```bash
 ./<build directory>/test/golden/skity_golden_test_shape
+
+# Run the test case with GL backend
+./<build directory>/test/golden/skity_golden_test_shape --backend gl
 ```
 or
 ```bash

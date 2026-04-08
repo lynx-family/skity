@@ -25,6 +25,7 @@ class Colors:
 
 class TestRunner:
     def __init__(self, args):
+        self.repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
         self.build_dir = args.build_dir
         self.parallel_jobs = args.parallel
         self.test_filter = args.filter
@@ -34,6 +35,7 @@ class TestRunner:
         self.skip_configure = args.no_configure or args.run_only
         self.skip_build = args.no_build or args.run_only
         self.suite = args.suite
+        self.backend = args.backend
         self.started = time.time()
         
         os.makedirs(self.build_dir, exist_ok=True)
@@ -61,6 +63,32 @@ class TestRunner:
             return result.returncode, result.stdout, result.stderr
         except Exception as e:
             return 1, "", str(e)
+
+    def _prepend_env_path(self, env: Dict[str, str], name: str, path: str):
+        current = env.get(name, "")
+        entries = [entry for entry in current.split(os.pathsep) if entry]
+        if path in entries:
+            return
+
+        env[name] = path if not current else f"{path}{os.pathsep}{current}"
+
+    def prepare_test_environment(self) -> Tuple[Optional[Dict[str, str]], Optional[str]]:
+        env = os.environ.copy()
+        env["AGENT_OUT_DIR"] = os.path.abspath(self.golden_failures_dir)
+
+        if not self.suite.startswith("golden"):
+            return env, None
+
+        env.setdefault("ANGLE_DEFAULT_PLATFORM", "swiftshader")
+
+        angle_lib_dir = os.path.join(self.repo_root, "third_party", "libSwAngle", "lib")
+        if not os.path.isdir(angle_lib_dir):
+            return None, f"Angle runtime library directory not found: {angle_lib_dir}"
+
+        if sys.platform == "darwin":
+            self._prepend_env_path(env, "DYLD_LIBRARY_PATH", angle_lib_dir)
+
+        return env, None
 
     def clean_build_directory(self):
         if self.clean_build and os.path.exists(self.build_dir):
@@ -136,8 +164,12 @@ class TestRunner:
             os.remove(gtest_json_path)
 
         cmd = [test_executable, f"--gtest_output=json:{gtest_json_path}"]
-        env = os.environ.copy()
-        env["AGENT_OUT_DIR"] = os.path.abspath(self.golden_failures_dir)
+        env, env_error = self.prepare_test_environment()
+        if env_error:
+            return self._create_infra_error("missing_runtime_dependency", env_error)
+
+        if self.suite.startswith("golden") and self.backend != "metal":
+            cmd.extend(["--backend", self.backend])
         
         if self.test_filter:
             cmd.append(f"--gtest_filter={self.test_filter}")
@@ -242,7 +274,7 @@ class TestRunner:
                             stage = "Layer 3: Visual Regression"
                             reason_code = "pixel_mismatch"
                             oracle = "golden"
-                            backend = "metal"
+                            backend = self.backend
 
                         failure_record = {
                             "suite": self.suite,
@@ -371,6 +403,7 @@ def main():
     parser = argparse.ArgumentParser(description='Skity Test Runner with AI Agent feedback loop')
     parser.add_argument('--suite', default='unit', choices=['unit', 'golden-shape', 'golden-text'], help='Test suite to run')
     parser.add_argument('--build-dir', default='build', help='Build directory (default: build)')
+    parser.add_argument('--backend', default='metal', choices=['metal', 'gl', 'vulkan'], help='Golden test backend to run (default: metal)')
     parser.add_argument('--filter', default='', help='Run only tests matching pattern (e.g. for gtest)')
     parser.add_argument('--parallel', type=int, default=multiprocessing.cpu_count(), help='Number of parallel build jobs')
     parser.add_argument('--verbose', action='store_true', help='Verbose output')

@@ -13,6 +13,7 @@
 
 #include "common/mtl/golden_test_env_mtl.h"
 #include "common/mtl/golden_texture_mtl.h"
+#include "playground/mtl/diff_env_mtl.h"
 
 namespace skity {
 namespace testing {
@@ -36,8 +37,10 @@ GLFWwindow* WindowMTL::InitWindow() {
 
   CAMetalLayer* metal_layer = [CAMetalLayer layer];
 
-  device_ = static_cast<GoldenTestEnvMTL*>(GoldenTestEnv::GetInstance())->GetDevice();
-  command_queue_ = static_cast<GoldenTestEnvMTL*>(GoldenTestEnv::GetInstance())->GetCommandQueue();
+  auto diff_env = DiffEnvMtlTest::GetInstance();
+
+  device_ = diff_env->GetDevice();
+  command_queue_ = diff_env->GetCommandQueue();
 
   metal_layer.device = device_;
   metal_layer.opaque = YES;
@@ -50,7 +53,11 @@ GLFWwindow* WindowMTL::InitWindow() {
 
   metal_layer_ = metal_layer;
 
-  gpu_context_ = GoldenTestEnv::GetInstance()->GetGPUContext();
+  if (GoldenTestEnv::GetInstance()->GetBackend() == Backend::kMetal) {
+    gpu_context_ = GoldenTestEnv::GetInstance()->GetGPUContext();
+  } else {
+    gpu_context_ = DiffEnvMtlTest::GetInstance()->GetGPUContext();
+  }
 
   return window;
 }
@@ -191,7 +198,7 @@ bool WindowMTL::InitTextures(bool passed, std::shared_ptr<GoldenTexture> source,
     }
 
     id<MTLComputePipelineState> pipeline_state =
-        static_cast<GoldenTestEnvMTL*>(GoldenTestEnv::GetInstance())->GetComputePipelineState();
+        DiffEnvMtlTest::GetInstance()->GetComputePipelineState();
 
     id<MTLCommandBuffer> command_buffer = [command_queue_ commandBuffer];
 
@@ -199,9 +206,7 @@ bool WindowMTL::InitTextures(bool passed, std::shared_ptr<GoldenTexture> source,
 
     [compute_command_encoder setComputePipelineState:pipeline_state];
 
-    [compute_command_encoder
-        setTexture:static_cast<GoldenTextureMTL*>(source.get())->GetMTLTexture()
-           atIndex:0];
+    [compute_command_encoder setTexture:GetTextureFromGolden(source) atIndex:0];
     [compute_command_encoder setTexture:target_texture atIndex:1];
     [compute_command_encoder setTexture:isolate_diff_texture atIndex:2];
     [compute_command_encoder setTexture:diff_texture atIndex:3];
@@ -256,6 +261,48 @@ void WindowMTL::DrawImageInCenter(skity::Canvas* canvas, const std::shared_ptr<I
   skity::SamplingOptions options{};
   options.filter = skity::FilterMode::kLinear;
   canvas->DrawImage(image, Rect::MakeXYWH(x, y, image_width, image_height), options);
+}
+
+id<MTLTexture> WindowMTL::GetTextureFromGolden(const std::shared_ptr<GoldenTexture>& texture) {
+  if (GoldenTestEnv::GetInstance()->GetBackend() == Backend::kMetal) {
+    return static_cast<GoldenTextureMTL*>(texture.get())->GetMTLTexture();
+  } else {
+    auto pixmap = texture->ReadPixels();
+
+    MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+    desc.width = pixmap->Width();
+    desc.height = pixmap->Height();
+    desc.pixelFormat = MTLPixelFormatRGBA8Unorm;
+    desc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+    desc.storageMode = MTLStorageModePrivate;
+
+    id<MTLTexture> texture = [device_ newTextureWithDescriptor:desc];
+    [desc release];
+
+    // upload pixmap to texture
+    id<MTLBuffer> buffer = [device_ newBufferWithBytes:pixmap->Addr()
+                                                length:pixmap->Width() * pixmap->Height() * 4
+                                               options:MTLResourceStorageModeShared];
+
+    id<MTLCommandBuffer> command_buffer = [command_queue_ commandBuffer];
+
+    id<MTLBlitCommandEncoder> blit_command_encoder = [command_buffer blitCommandEncoder];
+    [blit_command_encoder copyFromBuffer:buffer
+                            sourceOffset:0
+                       sourceBytesPerRow:pixmap->Width() * 4
+                     sourceBytesPerImage:pixmap->Width() * pixmap->Height() * 4
+                              sourceSize:MTLSizeMake(pixmap->Width(), pixmap->Height(), 1)
+                               toTexture:texture
+                        destinationSlice:0
+                        destinationLevel:0
+                       destinationOrigin:MTLOriginMake(0, 0, 0)
+                                 options:MTLBlitOptionNone];
+
+    [blit_command_encoder endEncoding];
+    [command_buffer commit];
+
+    return texture;
+  }
 }
 
 }  // namespace testing
