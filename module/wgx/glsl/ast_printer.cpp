@@ -917,7 +917,12 @@ void AstPrinter::WriteUniformVariable(ast::Var* var) {
   }
 
   ss_ << "std140 ) uniform ";
+#ifdef WGX_OUTPUT_ORIGINAL_NAME
+  ss_ << var->name->name << "block_ubo"
+      << " {" << std::endl;
+#else
   ss_ << var->name->name << " {" << std::endl;
+#endif
 
   WriteType(var->type);
 
