@@ -17,7 +17,7 @@ class GoldenTexture {
 
   const std::shared_ptr<Image>& GetImage() const { return image_; }
 
-  std::shared_ptr<skity::Pixmap> ReadPixels();
+  virtual std::shared_ptr<skity::Pixmap> ReadPixels();
 
  private:
   std::shared_ptr<Image> image_;

@@ -4,35 +4,36 @@
 
 #pragma once
 
-#include <Metal/Metal.h>
+#include <EGL/egl.h>
 
 #include "common/golden_test_env.hpp"
 
 namespace skity {
 namespace testing {
 
-class GoldenTestEnvMTL : public GoldenTestEnv {
+class GoldenTestEnvGL : public GoldenTestEnv {
  public:
-  GoldenTestEnvMTL();
+  GoldenTestEnvGL();
 
-  ~GoldenTestEnvMTL() override = default;
+  ~GoldenTestEnvGL() override = default;
 
-  Backend GetBackend() const override { return Backend::kMetal; }
+  Backend GetBackend() const override { return Backend::kGL; }
+
+  void SetUp() override;
+
+  void TearDown() override;
 
   std::shared_ptr<GoldenTexture> DisplayListToTexture(DisplayList* dl,
                                                       uint32_t width,
                                                       uint32_t height) override;
 
-  id<MTLDevice> GetDevice() const { return device_; }
-
-  id<MTLCommandQueue> GetCommandQueue() const { return command_queue_; }
-
  protected:
   std::unique_ptr<skity::GPUContext> CreateGPUContext() override;
 
  private:
-  id<MTLDevice> device_ = nullptr;
-  id<MTLCommandQueue> command_queue_ = nullptr;
+  EGLDisplay display_ = EGL_NO_DISPLAY;
+  EGLSurface surface_ = EGL_NO_SURFACE;
+  EGLContext context_ = EGL_NO_CONTEXT;
 };
 
 }  // namespace testing

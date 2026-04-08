@@ -175,6 +175,8 @@ jobs:
     osx_metal_golden_test:
         runs-on: lynx-darwin-14-medium
         timeout-minutes: 30
+        env:
+          ANGLE_DEFAULT_PLATFORM: "swiftshader"
         steps:
           - name: Download Source
             uses: actions/checkout@v4.2.2
@@ -182,6 +184,14 @@ jobs:
             uses: ./.github/actions/sync-deps
             with:
               cache-backend: 'lynx-infra'
+          - name: Set Up Environment
+            run: |
+              if [ -z "$DYLD_LIBRARY_PATH" ]; then
+                NEW_DYLD="$GITHUB_WORKSPACE/third_party/libSwAngle/lib"
+              else
+                NEW_DYLD="$DYLD_LIBRARY_PATH:$GITHUB_WORKSPACE/third_party/libSwAngle/lib"
+              fi
+              echo "DYLD_LIBRARY_PATH=$NEW_DYLD" >> $GITHUB_ENV
           - name: Build And Test
             run: |
                 export PATH=$PATH:$PWD/buildtools/cmake/CMake.app/Contents/bin
@@ -191,10 +201,16 @@ jobs:
                 export METAL_DEBUG_ERROR_MODE=1
                 ./out/cmake_golden_test/test/golden/skity_golden_test_shape
                 ./out/cmake_golden_test/test/golden/skity_golden_test_text
+          - name: Run Experimental GL Golden Test
+            continue-on-error: true
+            run: |
+                ./out/cmake_golden_test/test/golden/skity_golden_test_shape --backend gl
 
     osx_metal_golden_test_ct:
         runs-on: lynx-darwin-14-medium
         timeout-minutes: 30
+        env:
+          ANGLE_DEFAULT_PLATFORM: "swiftshader"
         steps:
           - name: Download Source
             uses: actions/checkout@v4.2.2
@@ -202,6 +218,14 @@ jobs:
             uses: ./.github/actions/sync-deps
             with:
               cache-backend: 'lynx-infra'
+          - name: Set Up Environment
+            run: |
+              if [ -z "$DYLD_LIBRARY_PATH" ]; then
+                NEW_DYLD="$GITHUB_WORKSPACE/third_party/libSwAngle/lib"
+              else
+                NEW_DYLD="$DYLD_LIBRARY_PATH:$GITHUB_WORKSPACE/third_party/libSwAngle/lib"
+              fi
+              echo "DYLD_LIBRARY_PATH=$NEW_DYLD" >> $GITHUB_ENV
           - name: Build And Test
             run: |
                 export PATH=$PATH:$PWD/buildtools/cmake/CMake.app/Contents/bin

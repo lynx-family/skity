@@ -1,3 +1,7 @@
+import platform
+system = platform.system().lower()
+
+
 deps = {
     "third_party/google_benchmark": {
         "type": "git",
@@ -29,4 +33,11 @@ deps = {
         "ignore_in_git": True,
         "decompress": True,
     },
+    'third_party/libSwAngle': {
+        "type": "http",
+        "url": "https://lf-lynx.tiktok-cdns.com/obj/lynx-artifacts-oss-sg/skity/libSwAngle_90fb0a.zip",
+        "ignore_in_git": True,
+        "decompress": True,
+        "condition": system in ["darwin"]
+    }
 }

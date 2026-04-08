@@ -15,6 +15,12 @@
 namespace skity {
 namespace testing {
 
+enum class Backend {
+  kGL,
+  kVulkan,
+  kMetal,
+};
+
 class GoldenTestEnv : public ::testing::Environment {
  public:
   ~GoldenTestEnv() override = default;
@@ -23,11 +29,14 @@ class GoldenTestEnv : public ::testing::Environment {
 
   void TearDown() override;
 
+  virtual Backend GetBackend() const = 0;
+
   virtual std::shared_ptr<GoldenTexture> DisplayListToTexture(
       DisplayList* dl, uint32_t width, uint32_t height) = 0;
 
-  virtual bool SaveGoldenImage(std::shared_ptr<Pixmap> image,
-                               const char* path) = 0;
+  bool SaveGoldenImage(std::shared_ptr<Pixmap> image, const char* path);
+
+  static GoldenTestEnv* CreateInstance(Backend backend);
 
   static GoldenTestEnv* GetInstance();
 

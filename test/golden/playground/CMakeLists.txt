@@ -16,6 +16,8 @@ target_sources(skity_golden_test
   ${CMAKE_CURRENT_LIST_DIR}/window.hpp
 
   # Metal backend
+  ${CMAKE_CURRENT_LIST_DIR}/mtl/diff_env_mtl.h
+  ${CMAKE_CURRENT_LIST_DIR}/mtl/diff_env_mtl.mm
   ${CMAKE_CURRENT_LIST_DIR}/mtl/window_mtl.h
   ${CMAKE_CURRENT_LIST_DIR}/mtl/window_mtl.mm
 )
