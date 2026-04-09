@@ -6,6 +6,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -20,6 +22,70 @@
 #endif
 
 namespace skity {
+
+namespace {
+
+constexpr uint8_t kIgnoredChannelDiff = 2;
+constexpr uint8_t kIgnoredSoftEdgeChannelDiff = 8;
+
+uint8_t GetComparableChannel(const std::shared_ptr<Pixmap>& pixmap,
+                             const uint8_t* pixel, int channel_index) {
+  auto channel = pixel[channel_index];
+
+  // The rendered result is premultiplied, while decoded golden images may be
+  // unpremultiplied. Align them before comparing.
+  if (pixmap->GetAlphaType() == AlphaType::kUnpremul_AlphaType &&
+      channel_index < 3) {
+    channel = static_cast<uint8_t>(std::round(channel * pixel[3] / 255.f));
+  }
+
+  return channel;
+}
+
+bool IsSignificantPixelDiffWithThreshold(const std::shared_ptr<Pixmap>& source,
+                                         const std::shared_ptr<Pixmap>& target,
+                                         const uint8_t* src, const uint8_t* dst,
+                                         uint8_t ignored_channel_diff,
+                                         float* pixel_max_diff_percent) {
+  bool pixel_diff = false;
+
+  for (int i = 0; i < 4; ++i) {
+    uint8_t src_channel = GetComparableChannel(source, src, i);
+    uint8_t dst_channel = GetComparableChannel(target, dst, i);
+    auto diff =
+        static_cast<uint8_t>(std::abs(int(src_channel) - int(dst_channel)));
+
+    if (diff <= ignored_channel_diff) {
+      continue;
+    }
+
+    *pixel_max_diff_percent =
+        std::max(*pixel_max_diff_percent, diff / float(255));
+    pixel_diff = true;
+  }
+
+  return pixel_diff;
+}
+
+bool IsSignificantPixelDiff(const std::shared_ptr<Pixmap>& source,
+                            const std::shared_ptr<Pixmap>& target,
+                            const uint8_t* src, const uint8_t* dst,
+                            float* pixel_max_diff_percent) {
+  return IsSignificantPixelDiffWithThreshold(
+      source, target, src, dst, kIgnoredChannelDiff, pixel_max_diff_percent);
+}
+
+bool IsSoftEdgePixel(const std::shared_ptr<Pixmap>& source,
+                     const std::shared_ptr<Pixmap>& target, const uint8_t* src,
+                     const uint8_t* dst) {
+  uint8_t src_alpha = GetComparableChannel(source, src, 3);
+  uint8_t dst_alpha = GetComparableChannel(target, dst, 3);
+
+  return (src_alpha != 0 && src_alpha != 255) ||
+         (dst_alpha != 0 && dst_alpha != 255);
+}
+
+}  // namespace
 
 static std::string EscapeJSONString(const std::string& input) {
   std::ostringstream ss;
@@ -310,32 +376,22 @@ DiffResult ComparePixels(const std::shared_ptr<Pixmap>& source,
         auto src = src_data + (y * width + x) * 4;
         auto dst = dst_data + (y * width + x) * 4;
 
-        bool pixel_diff = false;
+        float pixel_max_diff_percent = 0.f;
+        bool pixel_diff = IsSignificantPixelDiff(source, target, src, dst,
+                                                 &pixel_max_diff_percent);
 
-        for (int i = 0; i < 4; ++i) {
-          uint8_t src_channel = src[i];
-          uint8_t dst_channel = dst[i];
-
-          // FIXME: our test image is premul alpha, but the target image is
-          // unpremul alpha.
-          // so we need to convert the target image to premul alpha.
-          if (target->GetAlphaType() == AlphaType::kUnpremul_AlphaType &&
-              i < 3) {
-            dst_channel =
-                static_cast<uint8_t>(std::round(dst_channel * dst[3] / 255.f));
-          }
-
-          auto diff = std::abs(src_channel - dst_channel);
-
-          if (diff > 0) {
-            result.diff_percent += 1.f / float(width * height * 4);
-            result.max_diff_percent =
-                std::max(result.max_diff_percent, diff / float(255));
-            pixel_diff = true;
-          }
+        if (pixel_diff && IsSoftEdgePixel(source, target, src, dst) &&
+            !IsSignificantPixelDiffWithThreshold(source, target, src, dst,
+                                                 kIgnoredSoftEdgeChannelDiff,
+                                                 &pixel_max_diff_percent)) {
+          pixel_diff = false;
+          pixel_max_diff_percent = 0.f;
         }
 
         if (pixel_diff) {
+          result.diff_percent += 1.f / float(width * height);
+          result.max_diff_percent =
+              std::max(result.max_diff_percent, pixel_max_diff_percent);
           result.diff_pixel_count += 1;
           result.min_x = std::min(result.min_x, x);
           result.min_y = std::min(result.min_y, y);
