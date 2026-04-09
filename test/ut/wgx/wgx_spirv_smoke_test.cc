@@ -931,7 +931,8 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   ASSERT_GE(words.size(), 5u);
   EXPECT_TRUE(ContainsInstruction(words, SpvOpSelectionMerge));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
-  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));  // Should load the bool variable
+  EXPECT_TRUE(
+      ContainsInstruction(words, SpvOpLoad));  // Should load the bool variable
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
@@ -1064,6 +1065,109 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpSelectionMerge));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpBranch));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForCountedI32Loop) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  var i: i32 = 0;
+  loop {
+    if (i >= 2) {
+      break;
+    }
+    i = i + 1;
+    continue;
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_i32_counted_loop.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoopMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSGreaterThanEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIAdd));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForForLoop) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  for (var i: i32 = 0; i < 3; i++) {
+    pos = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_for_loop.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoopMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSLessThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIAdd));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForWhileLoop) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  var i: i32 = 0;
+  while (i < 2) {
+    i = i + 1;
+    pos = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_while_loop.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoopMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSLessThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIAdd));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 

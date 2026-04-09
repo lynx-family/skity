@@ -26,12 +26,21 @@ bool Lowerer::LowerStatement(const ast::Statement* statement,
     case ast::StatementType::kAssign:
       return LowerAssignStatement(
           static_cast<const ast::AssignStatement*>(statement), block);
+    case ast::StatementType::kIncDecl:
+      return LowerIncrementStatement(
+          static_cast<const ast::IncrementDeclStatement*>(statement), block);
     case ast::StatementType::kIf:
       return LowerIfStatement(static_cast<const ast::IfStatement*>(statement),
                               block);
     case ast::StatementType::kLoop:
       return LowerLoopStatement(
           static_cast<const ast::LoopStatement*>(statement), block);
+    case ast::StatementType::kForLoop:
+      return LowerForLoopStatement(
+          static_cast<const ast::ForLoopStatement*>(statement), block);
+    case ast::StatementType::kWhileLoop:
+      return LowerWhileLoopStatement(
+          static_cast<const ast::WhileLoopStatement*>(statement), block);
     case ast::StatementType::kBreak:
       return LowerBreakStatement(block);
     case ast::StatementType::kContinue:
@@ -315,6 +324,260 @@ bool Lowerer::LowerLoopStatement(const ast::LoopStatement* loop_stmt,
   return SwitchToBlock(merge_block_id);
 }
 
+bool Lowerer::LowerForLoopStatement(const ast::ForLoopStatement* for_loop,
+                                    ir::Block* block) {
+  if (for_loop == nullptr || block == nullptr || for_loop->body == nullptr) {
+    return false;
+  }
+
+  if (for_loop->initializer != nullptr &&
+      !LowerStatement(for_loop->initializer, block)) {
+    return false;
+  }
+
+  ir::Block* current_block = CurrentBlock();
+  if (current_block == nullptr) {
+    return false;
+  }
+  if (!current_block->instructions.empty() &&
+      current_block->instructions.back().IsTerminator()) {
+    return true;
+  }
+
+  const ir::BlockId current_block_id = current_block->id;
+  const ir::BlockId header_block_id = ir_function_->AllocateBlockId();
+  const ir::BlockId condition_block_id = ir_function_->AllocateBlockId();
+  const ir::BlockId body_block_id = ir_function_->AllocateBlockId();
+  const ir::BlockId continue_block_id = ir_function_->AllocateBlockId();
+  const ir::BlockId merge_block_id = ir_function_->AllocateBlockId();
+  if (header_block_id == ir::kInvalidBlockId ||
+      condition_block_id == ir::kInvalidBlockId ||
+      body_block_id == ir::kInvalidBlockId ||
+      continue_block_id == ir::kInvalidBlockId ||
+      merge_block_id == ir::kInvalidBlockId) {
+    return false;
+  }
+
+  if (CreateBlockWithId("for.header", header_block_id) == ir::kInvalidBlockId ||
+      CreateBlockWithId("for.cond", condition_block_id) ==
+          ir::kInvalidBlockId ||
+      CreateBlockWithId("for.body", body_block_id) == ir::kInvalidBlockId) {
+    return false;
+  }
+
+  current_block = ir_function_->GetBlock(current_block_id);
+  ir::Block* header_block = ir_function_->GetBlock(header_block_id);
+  ir::Block* condition_block = ir_function_->GetBlock(condition_block_id);
+  ir::Block* body_block = ir_function_->GetBlock(body_block_id);
+  if (current_block == nullptr || header_block == nullptr ||
+      condition_block == nullptr || body_block == nullptr) {
+    return false;
+  }
+
+  ir::Instruction enter_loop;
+  enter_loop.kind = ir::InstKind::kBranch;
+  enter_loop.target_block = header_block_id;
+  current_block->instructions.emplace_back(enter_loop);
+
+  header_block->loop_merge_block = merge_block_id;
+  header_block->loop_continue_block = continue_block_id;
+
+  ir::Instruction to_condition;
+  to_condition.kind = ir::InstKind::kBranch;
+  to_condition.target_block = condition_block_id;
+  header_block->instructions.emplace_back(to_condition);
+
+  if (for_loop->condition != nullptr) {
+    if (!SwitchToBlock(condition_block_id)) {
+      return false;
+    }
+    ir::ExprResult cond_expr =
+        LowerExpression(const_cast<ast::Expression*>(for_loop->condition));
+    if (!cond_expr.IsValid()) {
+      return false;
+    }
+    ir::Value cond_value = EnsureValue(cond_expr, condition_block);
+    if (!cond_value.IsValue() ||
+        cond_value.type != type_table_->GetBoolType()) {
+      return false;
+    }
+
+    ir::Instruction cond_branch;
+    cond_branch.kind = ir::InstKind::kCondBranch;
+    cond_branch.operands.push_back(cond_value);
+    cond_branch.true_block = body_block_id;
+    cond_branch.false_block = merge_block_id;
+    condition_block->instructions.emplace_back(cond_branch);
+  } else {
+    ir::Instruction enter_body;
+    enter_body.kind = ir::InstKind::kBranch;
+    enter_body.target_block = body_block_id;
+    condition_block->instructions.emplace_back(enter_body);
+  }
+
+  loop_stack_.push_back(
+      LoopContext{header_block_id, continue_block_id, merge_block_id});
+
+  if (!LowerBlockStatement(for_loop->body, body_block)) {
+    loop_stack_.pop_back();
+    return false;
+  }
+
+  if (CurrentBlock() != nullptr &&
+      (CurrentBlock()->instructions.empty() ||
+       !CurrentBlock()->instructions.back().IsTerminator())) {
+    ir::Instruction to_continue;
+    to_continue.kind = ir::InstKind::kBranch;
+    to_continue.target_block = continue_block_id;
+    CurrentBlock()->instructions.emplace_back(to_continue);
+  }
+
+  if (!SwitchToBlock(continue_block_id)) {
+    if (CreateBlockWithId("for.continue", continue_block_id) ==
+        ir::kInvalidBlockId) {
+      loop_stack_.pop_back();
+      return false;
+    }
+  }
+
+  ir::Block* continue_block = ir_function_->GetBlock(continue_block_id);
+  if (continue_block == nullptr || !SwitchToBlock(continue_block_id)) {
+    loop_stack_.pop_back();
+    return false;
+  }
+
+  if (for_loop->continuing != nullptr &&
+      !LowerStatement(for_loop->continuing, continue_block)) {
+    loop_stack_.pop_back();
+    return false;
+  }
+
+  if (CurrentBlock() != nullptr &&
+      (CurrentBlock()->instructions.empty() ||
+       !CurrentBlock()->instructions.back().IsTerminator())) {
+    ir::Instruction loop_back;
+    loop_back.kind = ir::InstKind::kBranch;
+    loop_back.target_block = header_block_id;
+    CurrentBlock()->instructions.emplace_back(loop_back);
+  }
+
+  loop_stack_.pop_back();
+  if (CreateBlockWithId("for.merge", merge_block_id) == ir::kInvalidBlockId) {
+    return false;
+  }
+  return SwitchToBlock(merge_block_id);
+}
+
+bool Lowerer::LowerWhileLoopStatement(const ast::WhileLoopStatement* while_loop,
+                                      ir::Block* block) {
+  if (while_loop == nullptr || block == nullptr ||
+      while_loop->body == nullptr || while_loop->condition == nullptr) {
+    return false;
+  }
+
+  const ir::BlockId current_block_id = block->id;
+  const ir::BlockId header_block_id = ir_function_->AllocateBlockId();
+  const ir::BlockId condition_block_id = ir_function_->AllocateBlockId();
+  const ir::BlockId body_block_id = ir_function_->AllocateBlockId();
+  const ir::BlockId continue_block_id = ir_function_->AllocateBlockId();
+  const ir::BlockId merge_block_id = ir_function_->AllocateBlockId();
+  if (header_block_id == ir::kInvalidBlockId ||
+      condition_block_id == ir::kInvalidBlockId ||
+      body_block_id == ir::kInvalidBlockId ||
+      continue_block_id == ir::kInvalidBlockId ||
+      merge_block_id == ir::kInvalidBlockId) {
+    return false;
+  }
+
+  if (CreateBlockWithId("while.header", header_block_id) ==
+          ir::kInvalidBlockId ||
+      CreateBlockWithId("while.cond", condition_block_id) ==
+          ir::kInvalidBlockId ||
+      CreateBlockWithId("while.body", body_block_id) == ir::kInvalidBlockId) {
+    return false;
+  }
+
+  ir::Block* current_block = ir_function_->GetBlock(current_block_id);
+  ir::Block* header_block = ir_function_->GetBlock(header_block_id);
+  ir::Block* condition_block = ir_function_->GetBlock(condition_block_id);
+  ir::Block* body_block = ir_function_->GetBlock(body_block_id);
+  if (current_block == nullptr || header_block == nullptr ||
+      condition_block == nullptr || body_block == nullptr) {
+    return false;
+  }
+
+  ir::Instruction enter_loop;
+  enter_loop.kind = ir::InstKind::kBranch;
+  enter_loop.target_block = header_block_id;
+  current_block->instructions.emplace_back(enter_loop);
+
+  header_block->loop_merge_block = merge_block_id;
+  header_block->loop_continue_block = continue_block_id;
+
+  ir::Instruction to_condition;
+  to_condition.kind = ir::InstKind::kBranch;
+  to_condition.target_block = condition_block_id;
+  header_block->instructions.emplace_back(to_condition);
+
+  if (!SwitchToBlock(condition_block_id)) {
+    return false;
+  }
+  ir::ExprResult cond_expr =
+      LowerExpression(const_cast<ast::Expression*>(while_loop->condition));
+  if (!cond_expr.IsValid()) {
+    return false;
+  }
+  ir::Value cond_value = EnsureValue(cond_expr, condition_block);
+  if (!cond_value.IsValue() || cond_value.type != type_table_->GetBoolType()) {
+    return false;
+  }
+
+  ir::Instruction cond_branch;
+  cond_branch.kind = ir::InstKind::kCondBranch;
+  cond_branch.operands.push_back(cond_value);
+  cond_branch.true_block = body_block_id;
+  cond_branch.false_block = merge_block_id;
+  condition_block->instructions.emplace_back(cond_branch);
+
+  loop_stack_.push_back(
+      LoopContext{header_block_id, continue_block_id, merge_block_id});
+
+  if (!LowerBlockStatement(while_loop->body, body_block)) {
+    loop_stack_.pop_back();
+    return false;
+  }
+
+  if (CurrentBlock() != nullptr &&
+      (CurrentBlock()->instructions.empty() ||
+       !CurrentBlock()->instructions.back().IsTerminator())) {
+    ir::Instruction to_continue;
+    to_continue.kind = ir::InstKind::kBranch;
+    to_continue.target_block = continue_block_id;
+    CurrentBlock()->instructions.emplace_back(to_continue);
+  }
+
+  if (CreateBlockWithId("while.continue", continue_block_id) ==
+      ir::kInvalidBlockId) {
+    loop_stack_.pop_back();
+    return false;
+  }
+  if (!SwitchToBlock(continue_block_id)) {
+    loop_stack_.pop_back();
+    return false;
+  }
+
+  ir::Instruction loop_back;
+  loop_back.kind = ir::InstKind::kBranch;
+  loop_back.target_block = header_block_id;
+  CurrentBlock()->instructions.emplace_back(loop_back);
+
+  loop_stack_.pop_back();
+  if (CreateBlockWithId("while.merge", merge_block_id) == ir::kInvalidBlockId) {
+    return false;
+  }
+  return SwitchToBlock(merge_block_id);
+}
+
 bool Lowerer::LowerBreakStatement(ir::Block* block) {
   if (block == nullptr || loop_stack_.empty()) {
     return false;
@@ -334,6 +597,76 @@ bool Lowerer::LowerContinueStatement(ir::Block* block) {
   inst.kind = ir::InstKind::kBranch;
   inst.target_block = loop_stack_.back().continue_block_id;
   block->instructions.emplace_back(inst);
+  return true;
+}
+
+bool Lowerer::LowerIncrementStatement(const ast::IncrementDeclStatement* inc,
+                                      ir::Block* block) {
+  if (inc == nullptr || block == nullptr || inc->lhs == nullptr ||
+      inc->lhs->GetType() != ast::ExpressionType::kIdentifier) {
+    return false;
+  }
+
+  auto* ident = static_cast<ast::IdentifierExp*>(inc->lhs);
+  if (ident->ident == nullptr) {
+    return false;
+  }
+
+  const semantic::Symbol* target_symbol = FindResolvedSymbol(ident);
+  if (target_symbol == nullptr) {
+    return false;
+  }
+
+  auto var_info = LookupVar(target_symbol);
+  if (var_info.id == 0) {
+    var_info = LookupOrRegisterGlobalVar(target_symbol);
+    if (var_info.id == 0) {
+      return false;
+    }
+  }
+
+  ir::Value target_var = ir::Value::Variable(var_info.type, var_info.id);
+  ir::Instruction load_inst;
+  load_inst.kind = ir::InstKind::kLoad;
+  load_inst.result_type = var_info.type;
+  load_inst.result_id = AllocateSSAId();
+  if (load_inst.result_id == 0) {
+    return false;
+  }
+  load_inst.operands.push_back(target_var);
+  block->instructions.emplace_back(load_inst);
+
+  ir::Value one = ir::Value::None();
+  if (var_info.type == type_table_->GetI32Type()) {
+    one = ir::Value::ConstantI32(var_info.type, 1);
+  } else if (var_info.type == type_table_->GetU32Type()) {
+    one = ir::Value::ConstantU32(var_info.type, 1u);
+  } else if (var_info.type == type_table_->GetF32Type()) {
+    one = ir::Value::ConstantF32(var_info.type, 1.0f);
+  } else {
+    return false;
+  }
+
+  ir::Instruction binary_inst;
+  binary_inst.kind = ir::InstKind::kBinary;
+  binary_inst.binary_op =
+      inc->increment ? ir::BinaryOpKind::kAdd : ir::BinaryOpKind::kSubtract;
+  binary_inst.result_type = var_info.type;
+  binary_inst.result_id = AllocateSSAId();
+  if (binary_inst.result_id == 0) {
+    return false;
+  }
+  binary_inst.operands.push_back(
+      ir::Value::SSA(var_info.type, load_inst.result_id));
+  binary_inst.operands.push_back(one);
+  block->instructions.emplace_back(binary_inst);
+
+  ir::Instruction store_inst;
+  store_inst.kind = ir::InstKind::kStore;
+  store_inst.operands.push_back(target_var);
+  store_inst.operands.push_back(
+      ir::Value::SSA(var_info.type, binary_inst.result_id));
+  block->instructions.emplace_back(store_inst);
   return true;
 }
 

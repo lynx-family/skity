@@ -369,10 +369,14 @@ VerificationResult Verifier::VerifyCondBranch(const Instruction& inst,
                                        index, inst.kind);
   }
   if (function.GetBlock(inst.true_block) == nullptr ||
-      function.GetBlock(inst.false_block) == nullptr ||
+      function.GetBlock(inst.false_block) == nullptr) {
+    return VerificationResult::Failure("CondBranch target block does not exist",
+                                       index, inst.kind);
+  }
+  if (inst.merge_block != kInvalidBlockId &&
       function.GetBlock(inst.merge_block) == nullptr) {
-    return VerificationResult::Failure(
-        "CondBranch target or merge block does not exist", index, inst.kind);
+    return VerificationResult::Failure("CondBranch merge block does not exist",
+                                       index, inst.kind);
   }
   return VerificationResult::Success();
 }
