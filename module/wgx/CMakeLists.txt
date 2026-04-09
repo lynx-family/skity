@@ -84,10 +84,17 @@ if (WGX_VULKAN_BACKEND)
         ${CMAKE_CURRENT_LIST_DIR}/ir/value.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ir/verifier.h
         ${CMAKE_CURRENT_LIST_DIR}/ir/verifier.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lower/lower_core.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lower/lower_expr.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lower/lower_internal.h
+        ${CMAKE_CURRENT_LIST_DIR}/lower/lower_stmt.cpp
         ${CMAKE_CURRENT_LIST_DIR}/lower/lower_to_ir.cpp
         ${CMAKE_CURRENT_LIST_DIR}/lower/lower_to_ir.h
-        ${CMAKE_CURRENT_LIST_DIR}/spirv/emitter.cpp
         ${CMAKE_CURRENT_LIST_DIR}/spirv/emitter.h
+        ${CMAKE_CURRENT_LIST_DIR}/spirv/emitter_internal.h
+        ${CMAKE_CURRENT_LIST_DIR}/spirv/emitter_support.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/spirv/module_builder.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/spirv/type_emitter.cpp
     )
 
     target_link_libraries(wgsl-cross PRIVATE SPIRV-Headers::SPIRV-Headers)

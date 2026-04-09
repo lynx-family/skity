@@ -149,7 +149,14 @@ struct Instruction {
 struct Block {
   BlockId id = kInvalidBlockId;
   std::string name = {};
+  BlockId loop_merge_block = kInvalidBlockId;
+  BlockId loop_continue_block = kInvalidBlockId;
   std::vector<Instruction> instructions = {};
+
+  bool IsLoopHeader() const {
+    return loop_merge_block != kInvalidBlockId &&
+           loop_continue_block != kInvalidBlockId;
+  }
 };
 
 struct Function {

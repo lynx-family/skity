@@ -46,6 +46,20 @@ VerificationResult Verifier::VerifyFunction(const Function& function) {
       return VerificationResult::Failure("Block has no instructions", 0,
                                          InstKind::kReturn, block_index);
     }
+    if ((block.loop_merge_block == kInvalidBlockId) !=
+        (block.loop_continue_block == kInvalidBlockId)) {
+      return VerificationResult::Failure(
+          "Loop header block must provide both merge and continue targets", 0,
+          InstKind::kBranch, block_index);
+    }
+    if (block.IsLoopHeader()) {
+      if (function.GetBlock(block.loop_merge_block) == nullptr ||
+          function.GetBlock(block.loop_continue_block) == nullptr) {
+        return VerificationResult::Failure(
+            "Loop header references a non-existent merge or continue block", 0,
+            InstKind::kBranch, block_index);
+      }
+    }
 
     for (size_t i = 0; i < block.instructions.size(); ++i) {
       auto result =

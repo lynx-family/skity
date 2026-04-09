@@ -935,6 +935,74 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForLoopWithBreak) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  loop {
+    pos = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    break;
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_loop_break.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoopMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranch));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForLoopWithContinue) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  var done: bool = false;
+  loop {
+    if (done) {
+      break;
+    }
+    done = true;
+    continue;
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_loop_continue.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoopMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelectionMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranch));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
 /**
  * Test function parameter usage.
  * Entry point parameters should be usable in function body.
