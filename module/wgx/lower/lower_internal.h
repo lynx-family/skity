@@ -82,6 +82,8 @@ class Lowerer {
   bool LowerWhileLoopStatement(const ast::WhileLoopStatement* while_loop,
                                ir::Block* block);
   bool LowerBreakStatement(ir::Block* block);
+  bool LowerBreakIfStatement(const ast::BreakIfStatement* break_if,
+                             ir::Block* block);
   bool LowerContinueStatement(ir::Block* block);
   bool LowerIncrementStatement(const ast::IncrementDeclStatement* inc,
                                ir::Block* block);

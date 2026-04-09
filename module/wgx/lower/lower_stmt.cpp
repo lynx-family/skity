@@ -43,6 +43,9 @@ bool Lowerer::LowerStatement(const ast::Statement* statement,
           static_cast<const ast::WhileLoopStatement*>(statement), block);
     case ast::StatementType::kBreak:
       return LowerBreakStatement(block);
+    case ast::StatementType::kBreakIf:
+      return LowerBreakIfStatement(
+          static_cast<const ast::BreakIfStatement*>(statement), block);
     case ast::StatementType::kContinue:
       return LowerContinueStatement(block);
     default:
@@ -585,6 +588,33 @@ bool Lowerer::LowerBreakStatement(ir::Block* block) {
   ir::Instruction inst;
   inst.kind = ir::InstKind::kBranch;
   inst.target_block = loop_stack_.back().merge_block_id;
+  block->instructions.emplace_back(inst);
+  return true;
+}
+
+bool Lowerer::LowerBreakIfStatement(const ast::BreakIfStatement* break_if,
+                                    ir::Block* block) {
+  if (break_if == nullptr || block == nullptr || break_if->condition == nullptr ||
+      loop_stack_.empty()) {
+    return false;
+  }
+
+  ir::ExprResult cond_expr =
+      LowerExpression(const_cast<ast::Expression*>(break_if->condition));
+  if (!cond_expr.IsValid()) {
+    return false;
+  }
+
+  ir::Value cond_value = EnsureValue(cond_expr, block);
+  if (!cond_value.IsValue() || cond_value.type != type_table_->GetBoolType()) {
+    return false;
+  }
+
+  ir::Instruction inst;
+  inst.kind = ir::InstKind::kCondBranch;
+  inst.operands.push_back(cond_value);
+  inst.true_block = loop_stack_.back().merge_block_id;
+  inst.false_block = loop_stack_.back().header_block_id;
   block->instructions.emplace_back(inst);
   return true;
 }

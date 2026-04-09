@@ -1105,6 +1105,43 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForLoopWithBreakIfContinuing) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  var done: bool = false;
+  loop {
+    pos = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    continuing {
+      done = true;
+      break if done;
+    }
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_loop_break_if.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoopMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForForLoop) {
   auto program = wgx::Program::Parse(R"(
 @vertex
