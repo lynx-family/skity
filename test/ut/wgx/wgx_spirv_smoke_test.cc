@@ -935,6 +935,70 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForIfWithF32Comparison) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+  var x: f32 = 0.25;
+  if (x < 1.0) {
+    pos = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_f32_compare_if.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFOrdLessThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelectionMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForBoolFromI32Equality) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+  var use_red: bool = 1 == 1;
+  if (use_red) {
+    pos = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_i32_equal_bool.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForLoopWithBreak) {
   auto program = wgx::Program::Parse(R"(
 @vertex

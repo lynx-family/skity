@@ -100,6 +100,12 @@ enum class InstKind {
 enum class BinaryOpKind {
   kAdd,
   kSubtract,
+  kEqual,
+  kNotEqual,
+  kLessThan,
+  kGreaterThan,
+  kLessThanEqual,
+  kGreaterThanEqual,
 };
 
 struct Instruction {
