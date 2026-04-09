@@ -11,6 +11,37 @@
 namespace wgx {
 namespace lower {
 
+namespace {
+
+bool IsComparisonOp(ast::BinaryOp op) {
+  switch (op) {
+    case ast::BinaryOp::kEqual:
+    case ast::BinaryOp::kNotEqual:
+    case ast::BinaryOp::kLessThan:
+    case ast::BinaryOp::kGreaterThan:
+    case ast::BinaryOp::kLessThanEqual:
+    case ast::BinaryOp::kGreaterThanEqual:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool SupportsComparisonForType(ast::BinaryOp op, ir::TypeId type_id,
+                               ir::TypeTable* type_table) {
+  if (type_table == nullptr || !type_table->IsScalarType(type_id)) {
+    return false;
+  }
+
+  if (type_table->GetBoolType() == type_id) {
+    return op == ast::BinaryOp::kEqual || op == ast::BinaryOp::kNotEqual;
+  }
+
+  return type_table->IsIntegerType(type_id) || type_table->IsFloatType(type_id);
+}
+
+}  // namespace
+
 ir::Value Lowerer::EnsureValue(const ir::ExprResult& expr, ir::Block* block) {
   if (!expr.IsAddress()) {
     return expr.value;
@@ -216,6 +247,24 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
     case ast::BinaryOp::kSubtract:
       op_kind = ir::BinaryOpKind::kSubtract;
       break;
+    case ast::BinaryOp::kEqual:
+      op_kind = ir::BinaryOpKind::kEqual;
+      break;
+    case ast::BinaryOp::kNotEqual:
+      op_kind = ir::BinaryOpKind::kNotEqual;
+      break;
+    case ast::BinaryOp::kLessThan:
+      op_kind = ir::BinaryOpKind::kLessThan;
+      break;
+    case ast::BinaryOp::kGreaterThan:
+      op_kind = ir::BinaryOpKind::kGreaterThan;
+      break;
+    case ast::BinaryOp::kLessThanEqual:
+      op_kind = ir::BinaryOpKind::kLessThanEqual;
+      break;
+    case ast::BinaryOp::kGreaterThanEqual:
+      op_kind = ir::BinaryOpKind::kGreaterThanEqual;
+      break;
     default:
       return ir::ExprResult();
   }
@@ -242,6 +291,12 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
   }
 
   ir::TypeId result_type = lhs_value.type;
+  if (IsComparisonOp(binary->op)) {
+    if (!SupportsComparisonForType(binary->op, lhs_value.type, type_table_)) {
+      return ir::ExprResult();
+    }
+    result_type = type_table_->GetBoolType();
+  }
 
   uint32_t result_id = AllocateSSAId();
   if (result_id == 0) {

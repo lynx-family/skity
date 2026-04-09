@@ -10,6 +10,146 @@
 namespace wgx {
 namespace spirv {
 
+namespace {
+
+bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
+                         ir::TypeId result_type, ir::TypeTable* type_table,
+                         SpvOp* out_op) {
+  if (type_table == nullptr || out_op == nullptr) {
+    return false;
+  }
+
+  const bool is_bool = operand_type == type_table->GetBoolType();
+  const bool is_int = type_table->IsIntegerType(operand_type);
+  const bool is_float = type_table->IsFloatType(operand_type);
+  const bool is_float_vector =
+      type_table->IsVectorType(operand_type) &&
+      type_table->GetComponentType(operand_type) == type_table->GetF32Type();
+  const bool is_signed = operand_type == type_table->GetI32Type();
+  const bool is_unsigned = operand_type == type_table->GetU32Type();
+
+  switch (op_kind) {
+    case ir::BinaryOpKind::kAdd:
+      if ((!is_float && !is_float_vector) || result_type != operand_type) {
+        return false;
+      }
+      *out_op = SpvOpFAdd;
+      return true;
+    case ir::BinaryOpKind::kSubtract:
+      if ((!is_float && !is_float_vector) || result_type != operand_type) {
+        return false;
+      }
+      *out_op = SpvOpFSub;
+      return true;
+    case ir::BinaryOpKind::kEqual:
+      if (result_type != type_table->GetBoolType()) {
+        return false;
+      }
+      if (is_bool) {
+        *out_op = SpvOpLogicalEqual;
+        return true;
+      }
+      if (is_int) {
+        *out_op = SpvOpIEqual;
+        return true;
+      }
+      if (is_float) {
+        *out_op = SpvOpFOrdEqual;
+        return true;
+      }
+      return false;
+    case ir::BinaryOpKind::kNotEqual:
+      if (result_type != type_table->GetBoolType()) {
+        return false;
+      }
+      if (is_bool) {
+        *out_op = SpvOpLogicalNotEqual;
+        return true;
+      }
+      if (is_int) {
+        *out_op = SpvOpINotEqual;
+        return true;
+      }
+      if (is_float) {
+        *out_op = SpvOpFOrdNotEqual;
+        return true;
+      }
+      return false;
+    case ir::BinaryOpKind::kLessThan:
+      if (result_type != type_table->GetBoolType()) {
+        return false;
+      }
+      if (is_signed) {
+        *out_op = SpvOpSLessThan;
+        return true;
+      }
+      if (is_unsigned) {
+        *out_op = SpvOpULessThan;
+        return true;
+      }
+      if (is_float) {
+        *out_op = SpvOpFOrdLessThan;
+        return true;
+      }
+      return false;
+    case ir::BinaryOpKind::kGreaterThan:
+      if (result_type != type_table->GetBoolType()) {
+        return false;
+      }
+      if (is_signed) {
+        *out_op = SpvOpSGreaterThan;
+        return true;
+      }
+      if (is_unsigned) {
+        *out_op = SpvOpUGreaterThan;
+        return true;
+      }
+      if (is_float) {
+        *out_op = SpvOpFOrdGreaterThan;
+        return true;
+      }
+      return false;
+    case ir::BinaryOpKind::kLessThanEqual:
+      if (result_type != type_table->GetBoolType()) {
+        return false;
+      }
+      if (is_signed) {
+        *out_op = SpvOpSLessThanEqual;
+        return true;
+      }
+      if (is_unsigned) {
+        *out_op = SpvOpULessThanEqual;
+        return true;
+      }
+      if (is_float) {
+        *out_op = SpvOpFOrdLessThanEqual;
+        return true;
+      }
+      return false;
+    case ir::BinaryOpKind::kGreaterThanEqual:
+      if (result_type != type_table->GetBoolType()) {
+        return false;
+      }
+      if (is_signed) {
+        *out_op = SpvOpSGreaterThanEqual;
+        return true;
+      }
+      if (is_unsigned) {
+        *out_op = SpvOpUGreaterThanEqual;
+        return true;
+      }
+      if (is_float) {
+        *out_op = SpvOpFOrdGreaterThanEqual;
+        return true;
+      }
+      return false;
+  }
+
+  return false;
+}
+
+}  // namespace
+
 ModuleBuilder::ModuleBuilder(const ir::Module& module,
                              const ir::Function& entry,
                              SpvExecutionModel execution_model)
@@ -471,13 +611,10 @@ bool ModuleBuilder::EmitBinary(const ir::Instruction& inst) {
   if (!MaterializeValue(inst.operands[1], &rhs_id)) return false;
 
   SpvOp op = SpvOpNop;
-  switch (inst.binary_op) {
-    case ir::BinaryOpKind::kAdd:
-      op = SpvOpFAdd;
-      break;
-    case ir::BinaryOpKind::kSubtract:
-      op = SpvOpFSub;
-      break;
+  if (!ResolveBinaryOpcode(inst.binary_op, inst.operands[0].type,
+                           inst.result_type, type_emitter_->GetTypeTable(),
+                           &op)) {
+    return false;
   }
 
   uint32_t result_id = ids_.Allocate();
