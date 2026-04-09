@@ -7,6 +7,14 @@
 namespace wgx {
 namespace lower {
 
+namespace {
+
+bool SupportsSwitchType(ir::TypeId type_id, ir::TypeTable* type_table) {
+  return type_table != nullptr && type_table->IsIntegerType(type_id);
+}
+
+}  // namespace
+
 bool Lowerer::LowerStatement(const ast::Statement* statement,
                              ir::Block* block) {
   if (statement == nullptr || block == nullptr) {
@@ -32,6 +40,9 @@ bool Lowerer::LowerStatement(const ast::Statement* statement,
     case ast::StatementType::kIf:
       return LowerIfStatement(static_cast<const ast::IfStatement*>(statement),
                               block);
+    case ast::StatementType::kSwitch:
+      return LowerSwitchStatement(
+          static_cast<const ast::SwitchStatement*>(statement), block);
     case ast::StatementType::kLoop:
       return LowerLoopStatement(
           static_cast<const ast::LoopStatement*>(statement), block);
@@ -221,6 +232,228 @@ bool Lowerer::LowerIfStatement(const ast::IfStatement* if_stmt,
     }
   }
 
+  return SwitchToBlock(merge_block_id);
+}
+
+bool Lowerer::LowerSwitchStatement(const ast::SwitchStatement* switch_stmt,
+                                   ir::Block* block) {
+  if (switch_stmt == nullptr || block == nullptr ||
+      switch_stmt->condition == nullptr) {
+    return false;
+  }
+  const ir::BlockId switch_entry_block_id = block->id;
+
+  ir::ExprResult switch_expr = LowerExpression(switch_stmt->condition);
+  if (!switch_expr.IsValid()) {
+    return false;
+  }
+
+  ir::Value switch_value = EnsureValue(switch_expr, block);
+  if (!switch_value.IsValue() ||
+      !SupportsSwitchType(switch_value.type, type_table_)) {
+    return false;
+  }
+
+  const ir::BlockId merge_block_id = ir_function_->AllocateBlockId();
+  if (merge_block_id == ir::kInvalidBlockId) {
+    return false;
+  }
+
+  struct SelectorDispatch {
+    ast::Expression* selector = nullptr;
+    const ast::BlockStatement* body = nullptr;
+  };
+
+  std::vector<SelectorDispatch> selector_dispatches;
+  const ast::BlockStatement* default_body = nullptr;
+  for (size_t i = 0; i < switch_stmt->body.size(); ++i) {
+    const ast::CaseStatement* case_stmt = switch_stmt->body[i];
+    if (case_stmt == nullptr || case_stmt->body == nullptr) {
+      return false;
+    }
+    for (auto* selector : case_stmt->selectors) {
+      if (selector == nullptr) {
+        return false;
+      }
+      if (selector->IsDefault()) {
+        default_body = case_stmt->body;
+        continue;
+      }
+      selector_dispatches.push_back(
+          SelectorDispatch{selector->expr, case_stmt->body});
+    }
+  }
+
+  std::vector<ir::BlockId> test_block_ids(selector_dispatches.size(),
+                                          ir::kInvalidBlockId);
+  std::vector<ir::BlockId> body_block_ids(selector_dispatches.size(),
+                                          ir::kInvalidBlockId);
+  std::vector<ir::BlockId> selector_merge_block_ids(selector_dispatches.size(),
+                                                    ir::kInvalidBlockId);
+
+  for (size_t i = 0; i < selector_dispatches.size(); ++i) {
+    test_block_ids[i] =
+        i == 0 ? switch_entry_block_id : ir_function_->AllocateBlockId();
+    body_block_ids[i] = ir_function_->AllocateBlockId();
+    selector_merge_block_ids[i] =
+        i == 0 ? merge_block_id : ir_function_->AllocateBlockId();
+    if (test_block_ids[i] == ir::kInvalidBlockId ||
+        body_block_ids[i] == ir::kInvalidBlockId ||
+        selector_merge_block_ids[i] == ir::kInvalidBlockId) {
+      return false;
+    }
+  }
+
+  ir::BlockId default_block_id = merge_block_id;
+  if (default_body != nullptr) {
+    default_block_id = ir_function_->AllocateBlockId();
+    if (default_block_id == ir::kInvalidBlockId) {
+      return false;
+    }
+  }
+
+  for (size_t i = 1; i < test_block_ids.size(); ++i) {
+    if (CreateBlockWithId("switch.test." + std::to_string(i),
+                          test_block_ids[i]) == ir::kInvalidBlockId) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < body_block_ids.size(); ++i) {
+    if (CreateBlockWithId("switch.case." + std::to_string(i),
+                          body_block_ids[i]) == ir::kInvalidBlockId) {
+      return false;
+    }
+  }
+  if (default_body != nullptr &&
+      CreateBlockWithId("switch.default", default_block_id) ==
+          ir::kInvalidBlockId) {
+    return false;
+  }
+  for (size_t i = 1; i < selector_merge_block_ids.size(); ++i) {
+    if (CreateBlockWithId("switch.merge." + std::to_string(i),
+                          selector_merge_block_ids[i]) == ir::kInvalidBlockId) {
+      return false;
+    }
+  }
+
+  if (default_body != nullptr) {
+    ir::Block* default_block = ir_function_->GetBlock(default_block_id);
+    if (default_block == nullptr || !SwitchToBlock(default_block_id) ||
+        !LowerBlockStatement(default_body, default_block)) {
+      return false;
+    }
+  }
+
+  ir::BlockId nested_false_entry = default_block_id;
+  ir::BlockId nested_false_exit = default_block_id;
+
+  for (size_t dispatch_index = selector_dispatches.size(); dispatch_index > 0;
+       --dispatch_index) {
+    const size_t arm_index = dispatch_index - 1;
+    const ir::BlockId test_block_id = test_block_ids[arm_index];
+    const ir::BlockId body_block_id = body_block_ids[arm_index];
+    const ir::BlockId selector_merge_block_id =
+        selector_merge_block_ids[arm_index];
+
+    if (!SwitchToBlock(test_block_id)) {
+      return false;
+    }
+    ir::Block* test_block = CurrentBlock();
+    if (test_block == nullptr) {
+      return false;
+    }
+
+    ir::ExprResult selector_expr =
+        LowerExpression(selector_dispatches[arm_index].selector);
+    if (!selector_expr.IsValid()) {
+      return false;
+    }
+
+    ir::Value selector_value = EnsureValue(selector_expr, test_block);
+    if (!selector_value.IsValue() || selector_value.type != switch_value.type) {
+      return false;
+    }
+
+    ir::Instruction compare_inst;
+    compare_inst.kind = ir::InstKind::kBinary;
+    compare_inst.binary_op = ir::BinaryOpKind::kEqual;
+    compare_inst.result_type = type_table_->GetBoolType();
+    compare_inst.result_id = AllocateSSAId();
+    if (compare_inst.result_id == 0) {
+      return false;
+    }
+    compare_inst.operands.push_back(switch_value);
+    compare_inst.operands.push_back(selector_value);
+    test_block->instructions.emplace_back(compare_inst);
+
+    ir::Instruction branch_inst;
+    branch_inst.kind = ir::InstKind::kCondBranch;
+    branch_inst.operands.push_back(
+        ir::Value::SSA(type_table_->GetBoolType(), compare_inst.result_id));
+    branch_inst.true_block = body_block_id;
+    branch_inst.false_block = nested_false_entry;
+    branch_inst.merge_block = selector_merge_block_id;
+    test_block->instructions.emplace_back(branch_inst);
+
+    ir::Block* body_block = ir_function_->GetBlock(body_block_id);
+    if (body_block == nullptr || !SwitchToBlock(body_block_id) ||
+        !LowerBlockStatement(selector_dispatches[arm_index].body, body_block)) {
+      return false;
+    }
+    if (CurrentBlock() != nullptr &&
+        (CurrentBlock()->instructions.empty() ||
+         !CurrentBlock()->instructions.back().IsTerminator())) {
+      ir::Instruction exit_case;
+      exit_case.kind = ir::InstKind::kBranch;
+      exit_case.target_block = selector_merge_block_id;
+      CurrentBlock()->instructions.emplace_back(exit_case);
+    }
+
+    if (nested_false_exit != merge_block_id) {
+      ir::Block* false_exit_block = ir_function_->GetBlock(nested_false_exit);
+      if (false_exit_block == nullptr || !SwitchToBlock(nested_false_exit)) {
+        return false;
+      }
+      if (CurrentBlock() != nullptr &&
+          (CurrentBlock()->instructions.empty() ||
+           !CurrentBlock()->instructions.back().IsTerminator())) {
+        ir::Instruction exit_nested;
+        exit_nested.kind = ir::InstKind::kBranch;
+        exit_nested.target_block = selector_merge_block_id;
+        CurrentBlock()->instructions.emplace_back(exit_nested);
+      }
+    }
+
+    nested_false_entry = test_block_id;
+    nested_false_exit = selector_merge_block_id;
+  }
+
+  if (CreateBlockWithId("switch.merge", merge_block_id) ==
+      ir::kInvalidBlockId) {
+    return false;
+  }
+  if (selector_dispatches.empty()) {
+    if (!SwitchToBlock(switch_entry_block_id)) {
+      return false;
+    }
+    ir::Instruction enter_target;
+    enter_target.kind = ir::InstKind::kBranch;
+    enter_target.target_block = default_block_id;
+    block->instructions.emplace_back(enter_target);
+  }
+  if (default_body != nullptr && nested_false_exit == default_block_id) {
+    if (!SwitchToBlock(default_block_id)) {
+      return false;
+    }
+    if (CurrentBlock() != nullptr &&
+        (CurrentBlock()->instructions.empty() ||
+         !CurrentBlock()->instructions.back().IsTerminator())) {
+      ir::Instruction exit_default;
+      exit_default.kind = ir::InstKind::kBranch;
+      exit_default.target_block = merge_block_id;
+      CurrentBlock()->instructions.emplace_back(exit_default);
+    }
+  }
   return SwitchToBlock(merge_block_id);
 }
 
@@ -594,8 +827,8 @@ bool Lowerer::LowerBreakStatement(ir::Block* block) {
 
 bool Lowerer::LowerBreakIfStatement(const ast::BreakIfStatement* break_if,
                                     ir::Block* block) {
-  if (break_if == nullptr || block == nullptr || break_if->condition == nullptr ||
-      loop_stack_.empty()) {
+  if (break_if == nullptr || block == nullptr ||
+      break_if->condition == nullptr || loop_stack_.empty()) {
     return false;
   }
 
