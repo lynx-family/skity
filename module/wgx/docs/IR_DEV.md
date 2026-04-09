@@ -42,8 +42,8 @@ Because of that, the near-term focus should be:
 5. ~~introduce multi-block IR and structured control flow (if/if-else)~~ ✓ Completed
 6. ~~expand to loops, break/continue, comparison expressions, and counted loop building blocks~~ ✓ Completed
 7. ~~focus next on the remaining structured-control gaps (`break if`, `switch`)~~
-   `break if` completed; focus next on `switch` before resuming larger feature
-   expansion (texture/sampler, function calls)
+   `break if` and `switch` are now completed; broader feature expansion
+   (texture/sampler, function calls) is now the next priority
 
 ## Current IR State
 
@@ -183,9 +183,10 @@ The backend currently still has these important limitations:
    - current confidence is based on smoke tests + `spirv-val` + `spirv-dis`
 
 7. **Structured control flow is still a subset, not full WGSL control flow**
-   - `switch` is not lowered yet
    - `break if` in loop `continuing` blocks is now lowered through conditional
      exit from the continue block to loop merge vs loop header
+   - `switch` is now lowered through nested equality tests and structured case
+     blocks with shared exit merge
    - loop support is intentionally focused on the current structured subset
 
 8. **Comparison/arithmetic support is still intentionally incomplete**
@@ -237,9 +238,8 @@ The current recommendation for the next steps is:
    - loop-condition blocks are kept separate from loop headers so emitted SPIR-V satisfies structured-control constraints
    - smoke tests + `spirv-val` now cover the supported `loop` / `for` / `while` subset
 
-7. **Next control-flow expansion should target the remaining WGSL constructs**
-   - `switch`
-   - only after those are stable should broader expression/runtime features take priority
+7. **The remaining structured-control milestone is now complete**
+   - broader expression/runtime features can take priority again
 
 8. **Only resume broader feature work after the above cleanup is stable**
    - especially before introducing function calls, texture/sampler ops, or
@@ -251,8 +251,8 @@ If you are continuing work in this area:
 
 1. read `module/wgx/docs/IR_REFACTOR_PLAN.md` first
 2. prefer structural cleanup over immediate feature expansion
-3. prioritize the remaining structured control-flow work (`switch`)
-   before texture-sampler or broader feature expansion
+3. treat the structured control-flow baseline as complete and move on to
+   texture-sampler or broader feature expansion
 4. avoid reintroducing special-case return/store/materialization encodings that
    bypass `ir::Value`
 5. keep using the current local validation workflow:

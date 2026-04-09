@@ -1000,6 +1000,48 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+TEST(WgxSpirvSmokeTest,
+     EmitsVertexSpirvBinaryForSwitchWithMultipleSelectorsAndDefault) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+  var mode: i32 = 2;
+  switch mode {
+    case 0: {
+      pos = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+    }
+    case 1, 2: {
+      pos = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    }
+    default: {
+      pos = vec4<f32>(1.0, 1.0, 0.0, 1.0);
+    }
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_switch_multi_default.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelectionMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranch));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForLoopWithBreak) {
   auto program = wgx::Program::Parse(R"(
 @vertex

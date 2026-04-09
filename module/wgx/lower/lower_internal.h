@@ -75,6 +75,8 @@ class Lowerer {
   bool SwitchToBlock(ir::BlockId id);
   bool LowerBlockStatement(const ast::BlockStatement* nested, ir::Block* block);
   bool LowerIfStatement(const ast::IfStatement* if_stmt, ir::Block* block);
+  bool LowerSwitchStatement(const ast::SwitchStatement* switch_stmt,
+                            ir::Block* block);
   bool LowerLoopStatement(const ast::LoopStatement* loop_stmt,
                           ir::Block* block);
   bool LowerForLoopStatement(const ast::ForLoopStatement* for_loop,
