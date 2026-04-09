@@ -40,7 +40,8 @@ Because of that, the near-term focus should be:
 3. ~~make the emitter more type-driven and less `vec4<f32>`-specialized~~ ✓ Completed
 4. ~~complete the remaining structural gaps around global storage classes~~ ✓ Completed
 5. ~~introduce multi-block IR and structured control flow (if/if-else)~~ ✓ Completed
-6. expand to loops, switch statements, break/continue as the next priority
+6. ~~expand to loops, break/continue, comparison expressions, and counted loop building blocks~~ ✓ Completed
+7. focus next on the remaining structured-control gaps (`break if`, `switch`)
    before resuming larger feature expansion (texture/sampler, function calls)
 
 ## Current IR State
@@ -117,19 +118,35 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - resource binding attributes (`@group`, `@binding`) with proper SPIR-V decorations
    - automatic struct wrapping for non-struct uniform/storage types (Vulkan compliance)
 
-6. **Structured control flow (if / if-else)**
+6. **Structured control flow**
    - `if` statement with boolean constant condition
    - `if` statement with boolean variable condition
    - `if-else` statement support
    - proper block graph structure (entry, then, else, merge)
    - valid SPIR-V structured control flow (`OpSelectionMerge`, `OpBranchConditional`)
 
-7. **Validation workflow already available**
+7. **Loop support**
+   - `loop` with `break`
+   - `loop` with `continue`
+   - counted loops built from `i32` compare + increment
+   - `for` statements lowered onto the existing loop IR
+   - `while` statements lowered onto the existing loop IR
+   - valid SPIR-V loop structure (`OpLoopMerge`, `OpBranch`, `OpBranchConditional`)
+
+8. **Current comparison subset**
+   - scalar comparisons for `f32`, `i32`, `u32`
+   - boolean equality / inequality (`==`, `!=`)
+   - comparison results can feed `if`, `for`, `while`, and local stores
+   - SPIR-V emission uses the corresponding typed compare ops (`OpFOrd*`, `OpIEqual`, `OpSLessThan`, `OpUGreaterThanEqual`, etc.)
+
+9. **Validation workflow already available**
    - WGX SPIR-V smoke tests
    - `spirv-val --target-env vulkan1.1`
    - `spirv-dis` spot-check / disassembly generation
    - local helper script:
      - `./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build`
+   - note: the helper currently skips `wgx_vs_main_workgroup.spv` during
+     `spirv-val` because workgroup storage is not yet supported for vertex entry points
 
 ## Current Structural Limitations
 
@@ -163,6 +180,16 @@ The backend currently still has these important limitations:
 
 6. **Validation is strong at the static SPIR-V level, but not yet Vulkan-runtime-integrated**
    - current confidence is based on smoke tests + `spirv-val` + `spirv-dis`
+
+7. **Structured control flow is still a subset, not full WGSL control flow**
+   - `break if` is not lowered yet
+   - `switch` is not lowered yet
+   - loop support is intentionally focused on the current structured subset
+
+8. **Comparison/arithmetic support is still intentionally incomplete**
+   - compare support is currently scalar-focused
+   - the newly supported counted-loop path relies on scalar integer arithmetic
+   - broader operator coverage (more scalar/vector ops, casts, richer expressions) remains future work
 
 ## Next Planned Refactor Steps
 
@@ -200,9 +227,20 @@ The current recommendation for the next steps is:
    - Lowering creates proper block graph with entry, then, else, and merge blocks
    - SPIR-V emitter generates `OpSelectionMerge`, `OpBranchConditional`, `OpBranch`
    - Basic if/if-else supported with boolean constants and boolean variables as conditions
-   - Future: expand to `loop`, `switch`, `break`, `continue`, comparison expressions
+   - Later work expanded this to `loop`, `for`, `while`, `break`, `continue`, and scalar comparison expressions
 
-6. **Only resume broader feature work after the above cleanup is stable**
+6. ~~**Add loop/control-flow expansion on top of the multi-block IR**~~ ✓ Completed for the current subset
+   - `loop` lowers with explicit header/body/continue/merge blocks
+   - `for` and `while` lower onto the same structured loop representation
+   - loop-condition blocks are kept separate from loop headers so emitted SPIR-V satisfies structured-control constraints
+   - smoke tests + `spirv-val` now cover the supported `loop` / `for` / `while` subset
+
+7. **Next control-flow expansion should target the remaining WGSL constructs**
+   - `break if`
+   - `switch`
+   - only after those are stable should broader expression/runtime features take priority
+
+8. **Only resume broader feature work after the above cleanup is stable**
    - especially before introducing function calls, texture/sampler ops, or
      matrix/struct heavy features
 
@@ -212,7 +250,8 @@ If you are continuing work in this area:
 
 1. read `module/wgx/docs/IR_REFACTOR_PLAN.md` first
 2. prefer structural cleanup over immediate feature expansion
-3. prioritize multi-block IR / control-flow work before texture-sampler or broader feature expansion
+3. prioritize the remaining structured control-flow work (`break if`, `switch`)
+   before texture-sampler or broader feature expansion
 4. avoid reintroducing special-case return/store/materialization encodings that
    bypass `ir::Value`
 5. keep using the current local validation workflow:

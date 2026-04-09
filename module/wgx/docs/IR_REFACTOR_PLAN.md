@@ -330,7 +330,7 @@ Plan for a future migration toward:
 - multiple basic blocks
 - explicit terminators
 - structured control flow
-- eventually loop/branch support
+- later expansion to the remaining WGSL control constructs (`break if`, `switch`)
 
 **Expected payoff**
 

@@ -77,8 +77,14 @@ class Lowerer {
   bool LowerIfStatement(const ast::IfStatement* if_stmt, ir::Block* block);
   bool LowerLoopStatement(const ast::LoopStatement* loop_stmt,
                           ir::Block* block);
+  bool LowerForLoopStatement(const ast::ForLoopStatement* for_loop,
+                             ir::Block* block);
+  bool LowerWhileLoopStatement(const ast::WhileLoopStatement* while_loop,
+                               ir::Block* block);
   bool LowerBreakStatement(ir::Block* block);
   bool LowerContinueStatement(ir::Block* block);
+  bool LowerIncrementStatement(const ast::IncrementDeclStatement* inc,
+                               ir::Block* block);
   bool LowerVarDecl(const ast::VarDeclStatement* var_decl, ir::Block* block);
   bool LowerAssignStatement(const ast::AssignStatement* assign,
                             ir::Block* block);

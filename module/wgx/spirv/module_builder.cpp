@@ -30,17 +30,31 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
 
   switch (op_kind) {
     case ir::BinaryOpKind::kAdd:
-      if ((!is_float && !is_float_vector) || result_type != operand_type) {
+      if (result_type != operand_type) {
         return false;
       }
-      *out_op = SpvOpFAdd;
-      return true;
+      if (is_float || is_float_vector) {
+        *out_op = SpvOpFAdd;
+        return true;
+      }
+      if (is_int) {
+        *out_op = SpvOpIAdd;
+        return true;
+      }
+      return false;
     case ir::BinaryOpKind::kSubtract:
-      if ((!is_float && !is_float_vector) || result_type != operand_type) {
+      if (result_type != operand_type) {
         return false;
       }
-      *out_op = SpvOpFSub;
-      return true;
+      if (is_float || is_float_vector) {
+        *out_op = SpvOpFSub;
+        return true;
+      }
+      if (is_int) {
+        *out_op = SpvOpISub;
+        return true;
+      }
+      return false;
     case ir::BinaryOpKind::kEqual:
       if (result_type != type_table->GetBoolType()) {
         return false;
@@ -457,6 +471,7 @@ bool ModuleBuilder::WriteFunctionSection() {
        static_cast<uint32_t>(SpvFunctionControlMaskNone), function_type_id_});
 
   for (const auto& block : entry_.blocks) {
+    current_block_ = &block;
     uint32_t block_label_id = GetOrCreateBlockLabel(block.id);
     AppendInstruction(&sections_->functions, SpvOpLabel, {block_label_id});
 
@@ -482,6 +497,8 @@ bool ModuleBuilder::WriteFunctionSection() {
       if (!EmitInstruction(inst)) return false;
     }
   }
+
+  current_block_ = nullptr;
 
   AppendInstruction(&sections_->functions, SpvOpFunctionEnd, {});
   return true;
@@ -775,9 +792,16 @@ bool ModuleBuilder::EmitCondBranch(const ir::Instruction& inst) {
     return false;
   }
 
-  AppendInstruction(&sections_->functions, SpvOpSelectionMerge,
-                    {GetOrCreateBlockLabel(inst.merge_block),
-                     static_cast<uint32_t>(SpvSelectionControlMaskNone)});
+  if (current_block_ == nullptr) {
+    return false;
+  }
+
+  if (inst.merge_block != ir::kInvalidBlockId &&
+      !current_block_->IsLoopHeader()) {
+    AppendInstruction(&sections_->functions, SpvOpSelectionMerge,
+                      {GetOrCreateBlockLabel(inst.merge_block),
+                       static_cast<uint32_t>(SpvSelectionControlMaskNone)});
+  }
   AppendInstruction(&sections_->functions, SpvOpBranchConditional,
                     {cond_id, GetOrCreateBlockLabel(inst.true_block),
                      GetOrCreateBlockLabel(inst.false_block)});

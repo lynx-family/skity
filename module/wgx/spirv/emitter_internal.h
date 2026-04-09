@@ -198,6 +198,7 @@ class ModuleBuilder {
   std::vector<GlobalVarInfo> global_vars_;
   std::vector<ValueInfo> values_;
   std::unordered_map<uint32_t, uint32_t> value_map_;
+  const ir::Block* current_block_ = nullptr;
 };
 
 }  // namespace spirv
