@@ -194,9 +194,37 @@ bool Lowerer::RegisterFunctionParameters() {
     ir_param.name = std::string{param->name->name};
     ir_param.type = param_type;
     ir_param.var_id = var_id;
+    ResolveParameterDecorations(param, &ir_param);
     ir_function_->parameters.push_back(std::move(ir_param));
   }
   return true;
+}
+
+void Lowerer::ResolveParameterDecorations(
+    const ast::Parameter* param, ir::FunctionParameter* ir_param) const {
+  if (param == nullptr || ir_param == nullptr) {
+    return;
+  }
+
+  for (auto* attr : param->attributes) {
+    if (attr == nullptr) {
+      continue;
+    }
+
+    if (attr->GetType() == ast::AttributeType::kBuiltin) {
+      auto* builtin = static_cast<const ast::BuiltinAttribute*>(attr);
+      if (builtin->name == "position") {
+        ir_param->SetBuiltin(ir::BuiltinType::kPosition);
+      } else if (builtin->name == "vertex_index") {
+        ir_param->SetBuiltin(ir::BuiltinType::kVertexIndex);
+      } else if (builtin->name == "instance_index") {
+        ir_param->SetBuiltin(ir::BuiltinType::kInstanceIndex);
+      }
+    } else if (attr->GetType() == ast::AttributeType::kLocation) {
+      auto* loc = static_cast<const ast::LocationAttribute*>(attr);
+      ir_param->SetLocation(static_cast<uint32_t>(loc->index));
+    }
+  }
 }
 
 bool Lowerer::LowerFunctionBody() {
@@ -267,8 +295,7 @@ std::vector<ir::OutputVariable> Lowerer::ResolveOutputVars(
     } else if (attr->GetType() == ast::AttributeType::kLocation) {
       auto* loc = static_cast<const ast::LocationAttribute*>(attr);
       output.name = "location_output_" + std::to_string(loc->index);
-      output.decoration_kind = ir::OutputDecorationKind::kLocation;
-      output.decoration_value = static_cast<uint32_t>(loc->index);
+      output.SetLocation(static_cast<uint32_t>(loc->index));
       break;
     }
   }

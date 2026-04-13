@@ -120,16 +120,36 @@ bool SupportsCurrentIR(const ir::Function& function) {
     const auto& output = function.output_vars[0];
 
     if (function.stage == ir::PipelineStage::kVertex) {
-      if (output.decoration_kind != ir::OutputDecorationKind::kBuiltin ||
+      if (output.decoration_kind != ir::InterfaceDecorationKind::kBuiltin ||
           output.GetBuiltin() != ir::BuiltinType::kPosition) {
         return false;
       }
     } else if (function.stage == ir::PipelineStage::kFragment) {
-      if (output.decoration_kind != ir::OutputDecorationKind::kLocation) {
+      if (output.decoration_kind != ir::InterfaceDecorationKind::kLocation) {
         return false;
       }
     } else {
       return false;
+    }
+  }
+
+  if (function.stage != ir::PipelineStage::kUnknown) {
+    for (const auto& param : function.parameters) {
+      if (!param.IsEntryPointInterfaceInput()) {
+        return false;
+      }
+
+      if (param.decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
+        if (function.stage != ir::PipelineStage::kVertex) {
+          return false;
+        }
+
+        if (param.GetBuiltin() != ir::BuiltinType::kVertexIndex &&
+            param.GetBuiltin() != ir::BuiltinType::kInstanceIndex &&
+            param.GetBuiltin() != ir::BuiltinType::kPosition) {
+          return false;
+        }
+      }
     }
   }
   return true;

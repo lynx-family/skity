@@ -17,6 +17,33 @@ That document remains the primary guide for follow-up implementation work.
 The current recommendation is still to prioritize structural refactoring before
 adding broader language/backend features.
 
+## Current Active Slice
+
+If you are resuming work from the current state, the recommended next task is:
+
+1. keep the current `texture_2d<f32>` / `sampler` path stable
+2. treat entry-point input interface lowering as completed for the current
+   scalar/vector slice
+3. resume broader runtime builtin work before expanding to additional texture
+   kinds
+
+The most recent completed slice is entry-point input interface support:
+
+- entry-point parameters now preserve `@location(...)` / `@builtin(...)`
+  decoration metadata in IR
+- SPIR-V entry-point interface emission now wires decorated input variables into
+  `OpEntryPoint`
+- entry-point inputs are materialized through SPIR-V `Input` variables and then
+  loaded into the existing function-local parameter slots
+- the validated smoke coverage now includes fragment `@location(0)` sample
+  coordinates and vertex `@builtin(vertex_index)` / `@location(0)` inputs
+
+Likely edit targets for this slice:
+
+- `module/wgx/ir/module.h`
+- `module/wgx/lower/lower_core.cpp`
+- `module/wgx/spirv/module_builder.cpp`
+
 ## Current Direction
 
 The current assessment is:
@@ -122,14 +149,22 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - vertex entry-point emission
    - fragment entry-point emission
    - fragment `OriginUpperLeft` execution mode
+   - decorated entry-point input interface emission for the current scalar /
+     vector subset
    - basic debug names and builtin position decoration for the supported vertex
      return path
 
-2. **Return forms**
+2. **Entry-point input subset**
+   - fragment `@location(...)` inputs for the current scalar/vector subset
+   - vertex `@location(...)` inputs for the current scalar/vector subset
+   - vertex `@builtin(vertex_index)` and `@builtin(instance_index)` input
+     plumbing through IR and SPIR-V interface variables
+
+3. **Return forms**
    - void return
    - vertex `@builtin(position) vec4<f32>` return
 
-3. **Current local-value subset**
+4. **Current local-value subset**
    - local `var` declaration for scalar and vector values (f32, i32, u32, bool,
      vec2/3/4 of those types)
    - local variable initialization with constructor constants
@@ -137,27 +172,27 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - variable-to-variable assignment (`b = a`)
    - return of a local variable
 
-4. **Current arithmetic subset**
+5. **Current arithmetic subset**
    - scalar and vector binary arithmetic for the supported types
    - supported ops: `add`, `sub`
    - direct return of arithmetic result
    - store of arithmetic result to a local variable before return
 
-5. **Global variables**
+6. **Global variables**
    - global variable reference, load, and store
    - constant initializers for scalar and vector types
    - WGSL address space mapping (`private`, `uniform`, `storage`, `workgroup`)
    - resource binding attributes (`@group`, `@binding`) with proper SPIR-V decorations
    - automatic struct wrapping for non-struct uniform/storage types (Vulkan compliance)
 
-6. **Structured control flow**
+7. **Structured control flow**
    - `if` statement with boolean constant condition
    - `if` statement with boolean variable condition
    - `if-else` statement support
    - proper block graph structure (entry, then, else, merge)
    - valid SPIR-V structured control flow (`OpSelectionMerge`, `OpBranchConditional`)
 
-7. **Loop support**
+8. **Loop support**
    - `loop` with `break`
    - `loop` with `continue`
    - counted loops built from `i32` compare + increment
@@ -165,13 +200,13 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - `while` statements lowered onto the existing loop IR
    - valid SPIR-V loop structure (`OpLoopMerge`, `OpBranch`, `OpBranchConditional`)
 
-8. **Current comparison subset**
+9. **Current comparison subset**
    - scalar comparisons for `f32`, `i32`, `u32`
    - boolean equality / inequality (`==`, `!=`)
    - comparison results can feed `if`, `for`, `while`, and local stores
    - SPIR-V emission uses the corresponding typed compare ops (`OpFOrd*`, `OpIEqual`, `OpSLessThan`, `OpUGreaterThanEqual`, etc.)
 
-9. **Validation workflow already available**
+10. **Validation workflow already available**
    - WGX SPIR-V smoke tests
    - `spirv-val --target-env vulkan1.1`
    - `spirv-dis` spot-check / disassembly generation
@@ -180,7 +215,7 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - note: the helper currently skips `wgx_vs_main_workgroup.spv` during
      `spirv-val` because workgroup storage is not yet supported for vertex entry points
 
-10. **Function call subset**
+11. **Function call subset**
    - user-defined function calls with scalar parameters and scalar return values
    - calls from entry points into helper functions defined earlier or later in
      the WGSL module
@@ -354,12 +389,22 @@ useful next implementation slice is:
 
 1. keep the current `texture_2d<f32>` resource slice stable instead of adding
    more texture kinds immediately
-2. add entry-point input/output interface lowering as needed for non-constant
-   fragment sample coordinates
-3. if texture work resumes later, extend the builtin surface before extending
+2. treat entry-point input/output interface lowering as complete for the
+   current validated scalar/vector slice
+3. if texture work resumes next, extend the builtin surface before extending
    the texture-type matrix
 4. defer array/cube/3d/comparison texture expansion until there is a concrete
    product need
+
+The completed validation baseline for the interface slice is:
+
+- fragment entry point with `@location(0) uv: vec2<f32>`
+- `textureSample(texture, sampler, uv)` using that non-constant input
+- vertex entry point with `@builtin(vertex_index)` input
+- vertex entry point with `@location(0)` input
+- validation through `WgxSpirvSmokeTest.*`,
+  `./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build`,
+  `spirv-val`, and `spirv-dis`
 
 ## Practical Rule For Future Agents
 

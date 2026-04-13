@@ -13,6 +13,29 @@ long-term goal is a robust and extensible WGSL -> IR -> SPIR-V toolchain, the
 items below should be addressed before feature growth makes them expensive to
 untangle.
 
+## Current Active Task
+
+If you are picking up work from the current state, start here before taking on
+broader feature expansion:
+
+- keep the existing `texture_2d<f32>` resource slice stable
+- treat entry-point input interface lowering for `@location(...)` / `@builtin(...)`
+  parameters as completed for the current scalar/vector slice
+- resume broader texture/sampler builtin expansion before widening the
+  texture-type matrix
+- defer additional texture kinds until there is a concrete need beyond the
+  validated `texture_2d<f32>` path
+
+Completion signal for this slice:
+
+- a fragment entry point can take a decorated input such as
+  `@location(0) uv: vec2<f32>`
+- that input can flow into `textureSample(texture, sampler, uv)`
+- vertex entry points can also consume decorated builtin/location inputs through
+  the same interface path
+- the generated SPIR-V includes the required Input interface variables and
+  passes smoke validation and `spirv-val`
+
 ## Priority Levels
 
 - **P0**: should be addressed before expanding many new language features
