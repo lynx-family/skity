@@ -815,6 +815,108 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
       value_map_[inst.result_id] = result_id;
       return true;
     }
+    case ir::BuiltinCallKind::kTextureSample: {
+      if (inst.operands.size() != 3u) {
+        return false;
+      }
+
+      const ir::Value& texture = inst.operands[0];
+      const ir::Value& sampler = inst.operands[1];
+      const ir::Value& coord = inst.operands[2];
+
+      uint32_t texture_id = 0;
+      uint32_t sampler_id = 0;
+      uint32_t coord_id = 0;
+      if (!MaterializeValue(texture, &texture_id) ||
+          !MaterializeValue(sampler, &sampler_id) ||
+          !MaterializeValue(coord, &coord_id)) {
+        return false;
+      }
+
+      uint32_t sampled_image_type =
+          type_emitter_->GetSampledImageType(texture.type);
+      if (sampled_image_type == 0) {
+        return false;
+      }
+
+      uint32_t sampled_image_id = ids_.Allocate();
+      AppendInstruction(
+          &sections_->functions, SpvOpSampledImage,
+          {sampled_image_type, sampled_image_id, texture_id, sampler_id});
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(&sections_->functions, SpvOpImageSampleImplicitLod,
+                        {GetSpirvTypeId(inst.result_type), result_id,
+                         sampled_image_id, coord_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
+    case ir::BuiltinCallKind::kTextureSampleLevel: {
+      if (inst.operands.size() != 4u) {
+        return false;
+      }
+
+      const ir::Value& texture = inst.operands[0];
+      const ir::Value& sampler = inst.operands[1];
+      const ir::Value& coord = inst.operands[2];
+      const ir::Value& level = inst.operands[3];
+
+      uint32_t texture_id = 0;
+      uint32_t sampler_id = 0;
+      uint32_t coord_id = 0;
+      uint32_t level_id = 0;
+      if (!MaterializeValue(texture, &texture_id) ||
+          !MaterializeValue(sampler, &sampler_id) ||
+          !MaterializeValue(coord, &coord_id) ||
+          !MaterializeValue(level, &level_id)) {
+        return false;
+      }
+
+      uint32_t sampled_image_type =
+          type_emitter_->GetSampledImageType(texture.type);
+      if (sampled_image_type == 0) {
+        return false;
+      }
+
+      uint32_t sampled_image_id = ids_.Allocate();
+      AppendInstruction(
+          &sections_->functions, SpvOpSampledImage,
+          {sampled_image_type, sampled_image_id, texture_id, sampler_id});
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(
+          &sections_->functions, SpvOpImageSampleExplicitLod,
+          {GetSpirvTypeId(inst.result_type), result_id, sampled_image_id,
+           coord_id, static_cast<uint32_t>(SpvImageOperandsLodMask), level_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
+    case ir::BuiltinCallKind::kTextureLoad: {
+      if (inst.operands.size() != 3u) {
+        return false;
+      }
+
+      const ir::Value& texture = inst.operands[0];
+      const ir::Value& coord = inst.operands[1];
+      const ir::Value& level = inst.operands[2];
+
+      uint32_t texture_id = 0;
+      uint32_t coord_id = 0;
+      uint32_t level_id = 0;
+      if (!MaterializeValue(texture, &texture_id) ||
+          !MaterializeValue(coord, &coord_id) ||
+          !MaterializeValue(level, &level_id)) {
+        return false;
+      }
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(
+          &sections_->functions, SpvOpImageFetch,
+          {GetSpirvTypeId(inst.result_type), result_id, texture_id, coord_id,
+           static_cast<uint32_t>(SpvImageOperandsLodMask), level_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
     case ir::BuiltinCallKind::kNone:
     default:
       return false;

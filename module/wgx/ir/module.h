@@ -108,6 +108,9 @@ enum class InstKind {
 enum class BuiltinCallKind {
   kNone,
   kTextureDimensions,
+  kTextureSample,
+  kTextureSampleLevel,
+  kTextureLoad,
 };
 
 // Supported binary operations in the current IR subset.

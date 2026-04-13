@@ -131,6 +131,29 @@ uint32_t TypeEmitter::GetPointerType(ir::TypeId pointee,
   return ptr_id;
 }
 
+uint32_t TypeEmitter::GetSampledImageType(ir::TypeId image_type) {
+  auto it = sampled_image_types_.find(image_type);
+  if (it != sampled_image_types_.end()) {
+    return it->second;
+  }
+
+  const ir::Type* image = type_table_->GetType(image_type);
+  if (image == nullptr || image->kind != ir::TypeKind::kTexture2D) {
+    return 0;
+  }
+
+  uint32_t spirv_image_type = EmitType(image_type);
+  if (spirv_image_type == 0) {
+    return 0;
+  }
+
+  uint32_t sampled_image_id = ids_->Allocate();
+  AppendInstruction(&sections_->types_consts_globals, SpvOpTypeSampledImage,
+                    {sampled_image_id, spirv_image_type});
+  sampled_image_types_[image_type] = sampled_image_id;
+  return sampled_image_id;
+}
+
 uint32_t TypeEmitter::EmitF32Constant(float value) {
   uint32_t bits = FloatToBits(value);
   auto it = f32_constants_.find(bits);

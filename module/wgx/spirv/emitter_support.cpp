@@ -113,15 +113,22 @@ bool SupportsCurrentIR(const ir::Function& function) {
   }
 
   if (!function.output_vars.empty()) {
-    if (function.stage != ir::PipelineStage::kVertex) {
-      return false;
-    }
     if (function.output_vars.size() != 1) {
       return false;
     }
+
     const auto& output = function.output_vars[0];
-    if (output.decoration_kind != ir::OutputDecorationKind::kBuiltin ||
-        output.GetBuiltin() != ir::BuiltinType::kPosition) {
+
+    if (function.stage == ir::PipelineStage::kVertex) {
+      if (output.decoration_kind != ir::OutputDecorationKind::kBuiltin ||
+          output.GetBuiltin() != ir::BuiltinType::kPosition) {
+        return false;
+      }
+    } else if (function.stage == ir::PipelineStage::kFragment) {
+      if (output.decoration_kind != ir::OutputDecorationKind::kLocation) {
+        return false;
+      }
+    } else {
       return false;
     }
   }

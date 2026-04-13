@@ -308,6 +308,93 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsCapability(words, SpvCapabilityImageQuery));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsTextureSampleBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  return textureSample(tex, samp, vec2<f32>(0.5, 0.5));
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_texture_sample.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeImage));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeSampler));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeSampledImage));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSampledImage));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpImageSampleImplicitLod));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsTextureSampleLevelBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  return textureSampleLevel(tex, samp, vec2<f32>(0.5, 0.5), 0.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_texture_sample_level.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeSampledImage));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSampledImage));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpImageSampleExplicitLod));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsTextureLoadBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(0) var tex: texture_2d<f32>;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  return textureLoad(tex, vec2<i32>(0, 0), 0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_texture_load.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeImage));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpImageFetch));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForScalarConstantStore) {
   auto program = wgx::Program::Parse(R"(
 @vertex

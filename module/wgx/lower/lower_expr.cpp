@@ -406,20 +406,188 @@ ir::ExprResult Lowerer::LowerBuiltinCallExpression(
     return ir::ExprResult();
   }
 
-  if (symbol->original_name != "textureDimensions") {
-    return ir::ExprResult();
+  if (symbol->original_name == "textureDimensions") {
+    if (call->args.empty() || call->args.size() > 2u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult texture_expr = LowerExpression(call->args[0]);
+    if (!texture_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value texture_value = EnsureValue(texture_expr, block);
+    if (!texture_value.IsValue()) {
+      return ir::ExprResult();
+    }
+
+    const ir::Type* texture_type = type_table_->GetType(texture_value.type);
+    if (texture_type == nullptr ||
+        texture_type->kind != ir::TypeKind::kTexture2D) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kTextureDimensions;
+    builtin_inst.result_type =
+        type_table_->GetVectorType(type_table_->GetU32Type(), 2u);
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_type == ir::kInvalidTypeId ||
+        builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(texture_value);
+
+    if (call->args.size() == 2u) {
+      ir::ExprResult lod_expr = LowerExpression(call->args[1]);
+      if (!lod_expr.IsValid()) {
+        return ir::ExprResult();
+      }
+      ir::Value lod_value = EnsureValue(lod_expr, block);
+      if (!lod_value.IsValue()) {
+        return ir::ExprResult();
+      }
+      builtin_inst.operands.push_back(lod_value);
+    } else {
+      builtin_inst.operands.push_back(
+          ir::Value::ConstantI32(type_table_->GetI32Type(), 0));
+    }
+
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
   }
-  if (call->args.empty() || call->args.size() > 2u) {
+
+  if (symbol->original_name == "textureSample") {
+    if (call->args.size() != 3u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult texture_expr = LowerExpression(call->args[0]);
+    ir::ExprResult sampler_expr = LowerExpression(call->args[1]);
+    ir::ExprResult coord_expr = LowerExpression(call->args[2]);
+    if (!texture_expr.IsValid() || !sampler_expr.IsValid() ||
+        !coord_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value texture_value = EnsureValue(texture_expr, block);
+    ir::Value sampler_value = EnsureValue(sampler_expr, block);
+    ir::Value coord_value = EnsureValue(coord_expr, block);
+    if (!texture_value.IsValue() || !sampler_value.IsValue() ||
+        !coord_value.IsValue()) {
+      return ir::ExprResult();
+    }
+
+    const ir::Type* texture_type = type_table_->GetType(texture_value.type);
+    const ir::Type* sampler_type = type_table_->GetType(sampler_value.type);
+    if (texture_type == nullptr || sampler_type == nullptr ||
+        texture_type->kind != ir::TypeKind::kTexture2D ||
+        sampler_type->kind != ir::TypeKind::kSampler) {
+      return ir::ExprResult();
+    }
+
+    const ir::TypeId coord_type =
+        type_table_->GetVectorType(type_table_->GetF32Type(), 2u);
+    if (coord_value.type != coord_type) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kTextureSample;
+    builtin_inst.result_type =
+        type_table_->GetVectorType(texture_type->element_type, 4u);
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_type == ir::kInvalidTypeId ||
+        builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+
+    builtin_inst.operands.push_back(texture_value);
+    builtin_inst.operands.push_back(sampler_value);
+    builtin_inst.operands.push_back(coord_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "textureSampleLevel") {
+    if (call->args.size() != 4u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult texture_expr = LowerExpression(call->args[0]);
+    ir::ExprResult sampler_expr = LowerExpression(call->args[1]);
+    ir::ExprResult coord_expr = LowerExpression(call->args[2]);
+    ir::ExprResult level_expr = LowerExpression(call->args[3]);
+    if (!texture_expr.IsValid() || !sampler_expr.IsValid() ||
+        !coord_expr.IsValid() || !level_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value texture_value = EnsureValue(texture_expr, block);
+    ir::Value sampler_value = EnsureValue(sampler_expr, block);
+    ir::Value coord_value = EnsureValue(coord_expr, block);
+    ir::Value level_value = EnsureValue(level_expr, block);
+    if (!texture_value.IsValue() || !sampler_value.IsValue() ||
+        !coord_value.IsValue() || !level_value.IsValue()) {
+      return ir::ExprResult();
+    }
+
+    const ir::Type* texture_type = type_table_->GetType(texture_value.type);
+    const ir::Type* sampler_type = type_table_->GetType(sampler_value.type);
+    if (texture_type == nullptr || sampler_type == nullptr ||
+        texture_type->kind != ir::TypeKind::kTexture2D ||
+        sampler_type->kind != ir::TypeKind::kSampler) {
+      return ir::ExprResult();
+    }
+
+    const ir::TypeId coord_type =
+        type_table_->GetVectorType(type_table_->GetF32Type(), 2u);
+    if (coord_value.type != coord_type ||
+        level_value.type != type_table_->GetF32Type()) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kTextureSampleLevel;
+    builtin_inst.result_type =
+        type_table_->GetVectorType(texture_type->element_type, 4u);
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_type == ir::kInvalidTypeId ||
+        builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+
+    builtin_inst.operands.push_back(texture_value);
+    builtin_inst.operands.push_back(sampler_value);
+    builtin_inst.operands.push_back(coord_value);
+    builtin_inst.operands.push_back(level_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name != "textureLoad" || call->args.size() != 3u) {
     return ir::ExprResult();
   }
 
   ir::ExprResult texture_expr = LowerExpression(call->args[0]);
-  if (!texture_expr.IsValid()) {
+  ir::ExprResult coord_expr = LowerExpression(call->args[1]);
+  ir::ExprResult level_expr = LowerExpression(call->args[2]);
+  if (!texture_expr.IsValid() || !coord_expr.IsValid() ||
+      !level_expr.IsValid()) {
     return ir::ExprResult();
   }
 
   ir::Value texture_value = EnsureValue(texture_expr, block);
-  if (!texture_value.IsValue()) {
+  ir::Value coord_value = EnsureValue(coord_expr, block);
+  ir::Value level_value = EnsureValue(level_expr, block);
+  if (!texture_value.IsValue() || !coord_value.IsValue() ||
+      !level_value.IsValue()) {
     return ir::ExprResult();
   }
 
@@ -429,33 +597,27 @@ ir::ExprResult Lowerer::LowerBuiltinCallExpression(
     return ir::ExprResult();
   }
 
+  const ir::TypeId coord_type =
+      type_table_->GetVectorType(type_table_->GetI32Type(), 2u);
+  if (coord_value.type != coord_type ||
+      level_value.type != type_table_->GetI32Type()) {
+    return ir::ExprResult();
+  }
+
   ir::Instruction builtin_inst;
   builtin_inst.kind = ir::InstKind::kBuiltinCall;
-  builtin_inst.builtin_call = ir::BuiltinCallKind::kTextureDimensions;
+  builtin_inst.builtin_call = ir::BuiltinCallKind::kTextureLoad;
   builtin_inst.result_type =
-      type_table_->GetVectorType(type_table_->GetU32Type(), 2u);
+      type_table_->GetVectorType(texture_type->element_type, 4u);
   builtin_inst.result_id = AllocateSSAId();
   if (builtin_inst.result_type == ir::kInvalidTypeId ||
       builtin_inst.result_id == 0) {
     return ir::ExprResult();
   }
+
   builtin_inst.operands.push_back(texture_value);
-
-  if (call->args.size() == 2u) {
-    ir::ExprResult lod_expr = LowerExpression(call->args[1]);
-    if (!lod_expr.IsValid()) {
-      return ir::ExprResult();
-    }
-    ir::Value lod_value = EnsureValue(lod_expr, block);
-    if (!lod_value.IsValue()) {
-      return ir::ExprResult();
-    }
-    builtin_inst.operands.push_back(lod_value);
-  } else {
-    builtin_inst.operands.push_back(
-        ir::Value::ConstantI32(type_table_->GetI32Type(), 0));
-  }
-
+  builtin_inst.operands.push_back(coord_value);
+  builtin_inst.operands.push_back(level_value);
   block->instructions.emplace_back(builtin_inst);
   return ir::ExprResult::ValueResult(
       ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));

@@ -57,7 +57,12 @@ Because of that, the near-term focus should be:
      intrinsics through the user-function `kCall` instruction
    - SPIR-V emission now supports the minimum image-query path needed for
      `OpTypeImage` + `OpImageQuerySizeLod`
-   - the next immediate step is `textureSample(texture, sampler, coord)`
+   - the minimum sampled-image path is now also in place for fragment
+     `textureSample(texture, sampler, coord)` with `texture_2d<f32>`
+   - explicit-lod and load-style texture builtins are now also wired up for the
+     same `texture_2d<f32>` resource slice
+   - current texture work is intentionally staying on the existing
+     `texture_2d<f32>` path instead of expanding to additional texture kinds yet
 
 ## Current IR State
 
@@ -317,26 +322,44 @@ should be staged instead of attempting the full surface area in one step.
    - smoke tests, `spirv-val`, and `spirv-dis` now cover
      `wgx_vs_main_texture_dimensions.spv`
 
-4. **Implement `textureSample(texture, sampler, coord)` second**
-   - once handle typing and builtin-call plumbing are stable, add sampled-image
-     emission (`OpSampledImage`) and the first image sampling instruction path
-   - reuse the already working GLSL/MSL texture builtin behavior as the semantic
-     reference when validating the SPIR-V lowering
+4. ~~**Implement `textureSample(texture, sampler, coord)` second**~~ ✓ First slice completed
+   - sampled-image emission (`OpTypeSampledImage`, `OpSampledImage`) and the
+     first sampling instruction path (`OpImageSampleImplicitLod`) are now wired
+     up for fragment shaders
+   - the current supported sampling slice is intentionally narrow:
+     `texture_2d<f32>` + `sampler` + `vec2<f32>` coord + fragment-stage
+     implicit-lod sampling
+   - reuse of the already working GLSL/MSL texture builtin behavior remains the
+     semantic reference for further expansion
 
-5. **Only then expand to the broader texture builtin surface**
-   - examples: `textureSampleLevel`, `textureLoad`, `textureNumLevels`,
-     `textureNumLayers`, comparison samplers, and array/cube/3d texture forms
-   - keep adding the smallest relevant test slice before broadening coverage
+5. ~~**Add explicit-lod and load-style texture builtins on top of the first sampling slice**~~ ✓ Completed
+   - `textureSampleLevel(texture, sampler, coord, level)` now lowers and emits
+     through `OpSampledImage` + `OpImageSampleExplicitLod`
+   - `textureLoad(texture, coords, level)` now lowers and emits through
+     `OpImageFetch`
+   - smoke tests, `spirv-val`, and `spirv-dis` now cover
+     `wgx_fs_main_texture_sample_level.spv` and
+     `wgx_fs_main_texture_load.spv`
+
+6. **Only then expand to the broader texture builtin surface**
+   - examples: `textureNumLevels`, `textureNumLayers`, comparison samplers, and
+     array/cube/3d texture forms
+   - current recommendation is to defer texture-type expansion for now and keep
+     the implementation focused on the already validated `texture_2d<f32>` path
 
 ## Concrete Next Slice
 
 If continuing immediately after the current user-function-call work, the most
 useful next implementation slice is:
 
-1. sampled-image construction and emission for `textureSample`
-2. fragment-oriented smoke coverage for texture + sampler usage
-3. validator/disassembly coverage for the emitted sampled-image path
-4. then broader texture builtin expansion (`textureLoad`, explicit lod, etc.)
+1. keep the current `texture_2d<f32>` resource slice stable instead of adding
+   more texture kinds immediately
+2. add entry-point input/output interface lowering as needed for non-constant
+   fragment sample coordinates
+3. if texture work resumes later, extend the builtin surface before extending
+   the texture-type matrix
+4. defer array/cube/3d/comparison texture expansion until there is a concrete
+   product need
 
 ## Practical Rule For Future Agents
 
