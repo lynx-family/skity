@@ -75,6 +75,7 @@ class TypeEmitter {
   uint32_t GetFunctionType(ir::TypeId return_type,
                            const std::vector<ir::TypeId>& param_types);
   uint32_t GetPointerType(ir::TypeId pointee, SpvStorageClass storage);
+  uint32_t GetSampledImageType(ir::TypeId image_type);
   uint32_t EmitF32Constant(float value);
   uint32_t EmitI32Constant(int32_t value);
   uint32_t EmitU32Constant(uint32_t value);
@@ -119,6 +120,7 @@ class TypeEmitter {
   std::unordered_map<bool, uint32_t> bool_constants_;
   std::unordered_map<std::pair<ir::TypeId, SpvStorageClass>, uint32_t, PairHash>
       pointer_types_;
+  std::unordered_map<ir::TypeId, uint32_t> sampled_image_types_;
   std::unordered_map<FunctionSignature, uint32_t, FunctionSignatureHash>
       function_types_;
   uint32_t function_void_type_ = 0;
