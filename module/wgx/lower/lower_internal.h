@@ -105,6 +105,9 @@ class Lowerer {
   ir::ExprResult LowerBinaryExpression(ast::BinaryExp* binary);
   ir::ExprResult LowerFunctionCallExpression(ast::FunctionCallExp* call,
                                              ir::Block* block);
+  ir::ExprResult LowerBuiltinCallExpression(ast::FunctionCallExp* call,
+                                            const semantic::Symbol* symbol,
+                                            ir::Block* block);
   ir::ExprResult LowerIdentifierExpression(ast::IdentifierExp* ident);
 
   uint32_t AllocateVarId();
@@ -118,6 +121,8 @@ class Lowerer {
       const ast::IdentifierExp* ident) const;
   const semantic::Symbol* FindDeclSymbol(const ast::Identifier* ident) const;
   const ast::Function* FindResolvedFunction(
+      const ast::FunctionCallExp* call) const;
+  const semantic::Symbol* FindResolvedCallee(
       const ast::FunctionCallExp* call) const;
   bool EnsureFunctionLowered(const ast::Function* function);
   ir::TypeId GetFunctionReturnType(const ast::Function* function);

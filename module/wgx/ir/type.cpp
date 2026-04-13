@@ -44,6 +44,10 @@ TypeTable::TypeTable() {
   Type f32_type;
   f32_type.kind = TypeKind::kF32;
   f32_type_id_ = RegisterType(f32_type);
+
+  Type sampler_type;
+  sampler_type.kind = TypeKind::kSampler;
+  sampler_type_id_ = RegisterType(sampler_type);
 }
 
 TypeTable::~TypeTable() = default;
@@ -151,6 +155,23 @@ TypeId TypeTable::GetPointerType(TypeId pointee, StorageClass storage) {
   return RegisterType(type);
 }
 
+TypeId TypeTable::GetTexture2DType(TypeId sampled_type) {
+  if (sampled_type == kInvalidTypeId || !IsScalarType(sampled_type)) {
+    return kInvalidTypeId;
+  }
+
+  Type type;
+  type.kind = TypeKind::kTexture2D;
+  type.element_type = sampled_type;
+
+  auto it = type_map_.find(type);
+  if (it != type_map_.end()) {
+    return it->second;
+  }
+
+  return RegisterType(type);
+}
+
 const Type* TypeTable::GetType(TypeId id) const {
   if (id == kInvalidTypeId || id > types_.size()) {
     return nullptr;
@@ -192,6 +213,16 @@ bool TypeTable::IsVectorType(TypeId id) const {
 bool TypeTable::IsMatrixType(TypeId id) const {
   const Type* type = GetType(id);
   return type != nullptr && type->kind == TypeKind::kMatrix;
+}
+
+bool TypeTable::IsSamplerType(TypeId id) const {
+  const Type* type = GetType(id);
+  return type != nullptr && type->kind == TypeKind::kSampler;
+}
+
+bool TypeTable::IsTextureType(TypeId id) const {
+  const Type* type = GetType(id);
+  return type != nullptr && type->kind == TypeKind::kTexture2D;
 }
 
 uint32_t TypeTable::GetVectorComponentCount(TypeId id) const {

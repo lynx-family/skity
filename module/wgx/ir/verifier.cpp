@@ -104,6 +104,8 @@ VerificationResult Verifier::VerifyInstruction(const Instruction& inst,
       return VerifyConstruct(inst, index);
     case InstKind::kCall:
       return VerifyCall(inst, index);
+    case InstKind::kBuiltinCall:
+      return VerifyBuiltinCall(inst, index);
     case InstKind::kBranch:
       return VerifyBranch(inst, index, function);
     case InstKind::kCondBranch:
@@ -389,6 +391,33 @@ VerificationResult Verifier::VerifyCall(const Instruction& inst, size_t index) {
     }
     TrackSSADefinition(inst.result_id);
   }
+  return VerificationResult::Success();
+}
+
+VerificationResult Verifier::VerifyBuiltinCall(const Instruction& inst,
+                                               size_t index) {
+  if (inst.builtin_call == BuiltinCallKind::kNone) {
+    return VerificationResult::Failure(
+        "Builtin call instruction has no builtin kind", index, inst.kind);
+  }
+  if (inst.result_id == 0 || inst.result_type == kInvalidTypeId) {
+    return VerificationResult::Failure(
+        "Builtin call instruction must produce a typed result", index,
+        inst.kind);
+  }
+
+  for (const auto& operand : inst.operands) {
+    if (!operand.IsValue()) {
+      return VerificationResult::Failure("Builtin call operands must be values",
+                                         index, inst.kind);
+    }
+    if (!IsValidValue(operand, "builtin call operand")) {
+      return VerificationResult::Failure(
+          "Builtin call operand is invalid or undefined", index, inst.kind);
+    }
+  }
+
+  TrackSSADefinition(inst.result_id);
   return VerificationResult::Success();
 }
 

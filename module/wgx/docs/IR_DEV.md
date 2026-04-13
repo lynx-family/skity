@@ -49,7 +49,15 @@ Because of that, the near-term focus should be:
      `OpFunctionCall`
    - dynamic vector constructors such as `vec4<f32>(x, 0.0, 0.0, 1.0)` now
      lower through IR construction instead of being limited to constant folding
-9. texture/sampler builtin calls remain the next broader runtime feature area
+9. texture/sampler builtin calls are now the active broader runtime feature area
+   - the first resource-handle vertical slice is now in place for
+     `textureDimensions(texture_2d<f32>)`
+   - resource-handle lowering now recognizes `texture_2d<f32>` and `sampler`
+   - IR now has a dedicated builtin-call path instead of forcing texture
+     intrinsics through the user-function `kCall` instruction
+   - SPIR-V emission now supports the minimum image-query path needed for
+     `OpTypeImage` + `OpImageQuerySizeLod`
+   - the next immediate step is `textureSample(texture, sampler, coord)`
 
 ## Current IR State
 
@@ -281,6 +289,55 @@ The current recommendation for the next steps is:
 8. **Only resume broader runtime feature work after the current call path is stable**
    - especially for texture/sampler builtins, casts, and matrix/struct-heavy expressions
 
+## Recommended Runtime Feature Expansion Order
+
+The next runtime feature work should start with texture/sampler builtins, but it
+should be staged instead of attempting the full surface area in one step.
+
+1. **Add IR type support for resource handles**
+   - extend lowering so `texture_2d<f32>` and `sampler` no longer fail type resolution
+   - do not model all handles as an undifferentiated storage-class-only concept;
+     the IR must retain enough type information to distinguish image vs sampler
+     and to recover sampled element type during SPIR-V emission
+   - teach the SPIR-V type emitter to generate the corresponding handle types
+     (`OpTypeImage`, `OpTypeSampler`) instead of only pointer/scalar/vector forms
+
+2. **Introduce explicit IR support for builtin runtime intrinsics**
+   - do not overload the current user-function `kCall` path for texture/sampler
+     builtins
+   - add a dedicated builtin/intrinsic representation in IR so lowering and the
+     emitter can distinguish user calls from operations such as
+     `textureDimensions()` and `textureSample()`
+   - keep builtin lowering on top of the same `ir::Value` discipline already used
+     for load/store/binary/construct/call
+
+3. ~~**Implement `textureDimensions(texture)` first as the minimum vertical slice**~~ ✓ Completed
+   - handle typing, builtin lowering, and SPIR-V image query emission are now
+     wired up for the `texture_2d<f32>` path
+   - smoke tests, `spirv-val`, and `spirv-dis` now cover
+     `wgx_vs_main_texture_dimensions.spv`
+
+4. **Implement `textureSample(texture, sampler, coord)` second**
+   - once handle typing and builtin-call plumbing are stable, add sampled-image
+     emission (`OpSampledImage`) and the first image sampling instruction path
+   - reuse the already working GLSL/MSL texture builtin behavior as the semantic
+     reference when validating the SPIR-V lowering
+
+5. **Only then expand to the broader texture builtin surface**
+   - examples: `textureSampleLevel`, `textureLoad`, `textureNumLevels`,
+     `textureNumLayers`, comparison samplers, and array/cube/3d texture forms
+   - keep adding the smallest relevant test slice before broadening coverage
+
+## Concrete Next Slice
+
+If continuing immediately after the current user-function-call work, the most
+useful next implementation slice is:
+
+1. sampled-image construction and emission for `textureSample`
+2. fragment-oriented smoke coverage for texture + sampler usage
+3. validator/disassembly coverage for the emitted sampled-image path
+4. then broader texture builtin expansion (`textureLoad`, explicit lod, etc.)
+
 ## Practical Rule For Future Agents
 
 If you are continuing work in this area:
@@ -294,6 +351,7 @@ If you are continuing work in this area:
 5. keep using the current local validation workflow:
 
 ```bash
+cmake --build out/cmake_host_build -j4
 ./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build
 ```
 6. remember the language-order mismatch:

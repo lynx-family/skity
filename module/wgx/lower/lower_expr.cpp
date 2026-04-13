@@ -352,6 +352,15 @@ ir::ExprResult Lowerer::LowerFunctionCallExpression(ast::FunctionCallExp* call,
     return ir::ExprResult();
   }
 
+  const semantic::Symbol* callee_symbol = FindResolvedCallee(call);
+  if (callee_symbol == nullptr) {
+    return ir::ExprResult();
+  }
+
+  if (callee_symbol->kind == semantic::SymbolKind::kBuiltinFunction) {
+    return LowerBuiltinCallExpression(call, callee_symbol, block);
+  }
+
   const ast::Function* callee = FindResolvedFunction(call);
   if (callee == nullptr || !EnsureFunctionLowered(callee)) {
     return ir::ExprResult();
@@ -388,6 +397,68 @@ ir::ExprResult Lowerer::LowerFunctionCallExpression(ast::FunctionCallExp* call,
 
   block->instructions.emplace_back(call_inst);
   return ir::ExprResult::ValueResult(ir::Value::None());
+}
+
+ir::ExprResult Lowerer::LowerBuiltinCallExpression(
+    ast::FunctionCallExp* call, const semantic::Symbol* symbol,
+    ir::Block* block) {
+  if (call == nullptr || symbol == nullptr || block == nullptr) {
+    return ir::ExprResult();
+  }
+
+  if (symbol->original_name != "textureDimensions") {
+    return ir::ExprResult();
+  }
+  if (call->args.empty() || call->args.size() > 2u) {
+    return ir::ExprResult();
+  }
+
+  ir::ExprResult texture_expr = LowerExpression(call->args[0]);
+  if (!texture_expr.IsValid()) {
+    return ir::ExprResult();
+  }
+
+  ir::Value texture_value = EnsureValue(texture_expr, block);
+  if (!texture_value.IsValue()) {
+    return ir::ExprResult();
+  }
+
+  const ir::Type* texture_type = type_table_->GetType(texture_value.type);
+  if (texture_type == nullptr ||
+      texture_type->kind != ir::TypeKind::kTexture2D) {
+    return ir::ExprResult();
+  }
+
+  ir::Instruction builtin_inst;
+  builtin_inst.kind = ir::InstKind::kBuiltinCall;
+  builtin_inst.builtin_call = ir::BuiltinCallKind::kTextureDimensions;
+  builtin_inst.result_type =
+      type_table_->GetVectorType(type_table_->GetU32Type(), 2u);
+  builtin_inst.result_id = AllocateSSAId();
+  if (builtin_inst.result_type == ir::kInvalidTypeId ||
+      builtin_inst.result_id == 0) {
+    return ir::ExprResult();
+  }
+  builtin_inst.operands.push_back(texture_value);
+
+  if (call->args.size() == 2u) {
+    ir::ExprResult lod_expr = LowerExpression(call->args[1]);
+    if (!lod_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+    ir::Value lod_value = EnsureValue(lod_expr, block);
+    if (!lod_value.IsValue()) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(lod_value);
+  } else {
+    builtin_inst.operands.push_back(
+        ir::Value::ConstantI32(type_table_->GetI32Type(), 0));
+  }
+
+  block->instructions.emplace_back(builtin_inst);
+  return ir::ExprResult::ValueResult(
+      ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
 }
 
 ir::ExprResult Lowerer::LowerIdentifierExpression(ast::IdentifierExp* ident) {
@@ -478,6 +549,13 @@ Lowerer::VarInfo Lowerer::LookupOrRegisterGlobalVar(
   ir::Module::GlobalVariable global_var_info;
   global_var_info.type = var_type;
   global_var_info.storage_class = ir::StorageClass::kPrivate;
+
+  const ir::Type* resolved_type = type_table_->GetType(var_type);
+  if (resolved_type != nullptr &&
+      (resolved_type->kind == ir::TypeKind::kSampler ||
+       resolved_type->kind == ir::TypeKind::kTexture2D)) {
+    global_var_info.storage_class = ir::StorageClass::kHandle;
+  }
 
   if (global_var->GetType() == ast::VariableType::kVar) {
     auto* var_node = static_cast<ast::Var*>(global_var);

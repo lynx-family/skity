@@ -112,6 +112,30 @@ bool ContainsDecoration(const std::vector<uint32_t>& words,
   return false;
 }
 
+bool ContainsCapability(const std::vector<uint32_t>& words,
+                        SpvCapability capability) {
+  size_t offset = 5u;
+  while (offset < words.size()) {
+    const uint32_t inst = words[offset];
+    const uint16_t word_count =
+        static_cast<uint16_t>(inst >> SpvWordCountShift);
+    const auto opcode = static_cast<SpvOp>(inst & SpvOpCodeMask);
+
+    if (word_count == 0u) {
+      return false;
+    }
+
+    if (opcode == SpvOpCapability && word_count >= 2u &&
+        words[offset + 1u] == static_cast<uint32_t>(capability)) {
+      return true;
+    }
+
+    offset += word_count;
+  }
+
+  return false;
+}
+
 void DumpSpirvBinary(const std::string& filename,
                      const std::vector<uint32_t>& words) {
   if (words.empty()) {
@@ -253,6 +277,35 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsTextureDimensionsBuiltinForTextureHandle) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(0) var tex: texture_2d<f32>;
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  let dims: vec2<u32> = textureDimensions(tex);
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_texture_dimensions.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeImage));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpImageQuerySizeLod));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
+  EXPECT_TRUE(ContainsCapability(words, SpvCapabilityImageQuery));
 }
 
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForScalarConstantStore) {

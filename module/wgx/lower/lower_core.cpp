@@ -290,6 +290,25 @@ ir::TypeId Lowerer::ResolveType(const ast::Type& type) {
       return scalar_type;
     }
 
+    if (ident->ident->name == "sampler") {
+      return type_table_->GetSamplerType();
+    }
+
+    if (ident->ident->name == "texture_2d") {
+      const auto& args = ident->ident->args;
+      if (args.size() != 1u || args[0] == nullptr ||
+          args[0]->GetType() != ast::ExpressionType::kIdentifier) {
+        return ir::kInvalidTypeId;
+      }
+
+      ir::TypeId sampled_type = detail::ResolveScalarType(
+          static_cast<const ast::IdentifierExp*>(args[0]), type_table_);
+      if (sampled_type == ir::kInvalidTypeId) {
+        return ir::kInvalidTypeId;
+      }
+      return type_table_->GetTexture2DType(sampled_type);
+    }
+
     const ast::IdentifierExp* scalar_ident = detail::GetVectorScalarType(ident);
     if (scalar_ident != nullptr) {
       ir::TypeId component_type =
@@ -324,17 +343,22 @@ const semantic::Symbol* Lowerer::FindDeclSymbol(
 
 const ast::Function* Lowerer::FindResolvedFunction(
     const ast::FunctionCallExp* call) const {
-  if (call == nullptr || call->ident == nullptr) {
-    return nullptr;
-  }
-
-  const semantic::Symbol* symbol = FindResolvedSymbol(call->ident);
+  const semantic::Symbol* symbol = FindResolvedCallee(call);
   if (symbol == nullptr || symbol->kind != semantic::SymbolKind::kFunction ||
       symbol->declaration == nullptr) {
     return nullptr;
   }
 
   return static_cast<const ast::Function*>(symbol->declaration);
+}
+
+const semantic::Symbol* Lowerer::FindResolvedCallee(
+    const ast::FunctionCallExp* call) const {
+  if (call == nullptr || call->ident == nullptr) {
+    return nullptr;
+  }
+
+  return FindResolvedSymbol(call->ident);
 }
 
 bool Lowerer::EnsureFunctionLowered(const ast::Function* function) {
