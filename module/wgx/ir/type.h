@@ -29,6 +29,8 @@ enum class TypeKind {
   kArray,    // element_type + count
   kStruct,   // members[]
   kPointer,  // storage_class + pointee_type
+  kSampler,
+  kTexture2D,  // sampled element type in element_type
 };
 
 // Storage class for pointers
@@ -51,8 +53,7 @@ struct StructMember {
   uint32_t offset = 0;
 
   bool operator==(const StructMember& other) const {
-    return type == other.type && name == other.name &&
-           offset == other.offset;
+    return type == other.type && name == other.name && offset == other.offset;
   }
 };
 
@@ -76,12 +77,9 @@ struct Type {
 
   // Equality for deduplication
   bool operator==(const Type& other) const {
-    return kind == other.kind &&
-           element_type == other.element_type &&
-           count == other.count &&
-           count2 == other.count2 &&
-           members == other.members &&
-           storage_class == other.storage_class;
+    return kind == other.kind && element_type == other.element_type &&
+           count == other.count && count2 == other.count2 &&
+           members == other.members && storage_class == other.storage_class;
   }
 };
 
@@ -106,6 +104,7 @@ class TypeTable {
   TypeId GetI32Type() const { return i32_type_id_; }
   TypeId GetU32Type() const { return u32_type_id_; }
   TypeId GetF32Type() const { return f32_type_id_; }
+  TypeId GetSamplerType() const { return sampler_type_id_; }
 
   // Get or create composite types
   TypeId GetVectorType(TypeId component_type, uint32_t count);
@@ -113,6 +112,7 @@ class TypeTable {
   TypeId GetArrayType(TypeId element_type, uint32_t count);
   TypeId GetStructType(const std::vector<StructMember>& members);
   TypeId GetPointerType(TypeId pointee, StorageClass storage);
+  TypeId GetTexture2DType(TypeId sampled_type);
 
   // Lookup type info by ID
   const Type* GetType(TypeId id) const;
@@ -132,6 +132,8 @@ class TypeTable {
   bool IsFloatType(TypeId id) const;
   bool IsVectorType(TypeId id) const;
   bool IsMatrixType(TypeId id) const;
+  bool IsSamplerType(TypeId id) const;
+  bool IsTextureType(TypeId id) const;
 
   // Get component count for vectors
   uint32_t GetVectorComponentCount(TypeId id) const;
@@ -168,6 +170,7 @@ class TypeTable {
   TypeId i32_type_id_ = kInvalidTypeId;
   TypeId u32_type_id_ = kInvalidTypeId;
   TypeId f32_type_id_ = kInvalidTypeId;
+  TypeId sampler_type_id_ = kInvalidTypeId;
 };
 
 }  // namespace ir

@@ -236,6 +236,7 @@ bool ModuleBuilder::AnalyzeFunction(const ir::Function& function) {
       } else if (inst.kind == ir::InstKind::kBinary ||
                  inst.kind == ir::InstKind::kLoad ||
                  inst.kind == ir::InstKind::kConstruct ||
+                 inst.kind == ir::InstKind::kBuiltinCall ||
                  (inst.kind == ir::InstKind::kCall && inst.result_id != 0)) {
         ValueInfo info;
         info.ir_value_id = inst.result_id;
@@ -353,6 +354,8 @@ bool ModuleBuilder::AllocateCoreIds() {
 void ModuleBuilder::WriteCapabilityMemoryModel() {
   AppendInstruction(&sections_->capabilities, SpvOpCapability,
                     {static_cast<uint32_t>(SpvCapabilityShader)});
+  AppendInstruction(&sections_->capabilities, SpvOpCapability,
+                    {static_cast<uint32_t>(SpvCapabilityImageQuery)});
   AppendInstruction(&sections_->memory_model, SpvOpMemoryModel,
                     {static_cast<uint32_t>(SpvAddressingModelLogical),
                      static_cast<uint32_t>(SpvMemoryModelGLSL450)});
@@ -582,6 +585,8 @@ bool ModuleBuilder::EmitInstruction(const ir::Instruction& inst) {
       return EmitConstruct(inst);
     case ir::InstKind::kCall:
       return EmitCall(inst);
+    case ir::InstKind::kBuiltinCall:
+      return EmitBuiltinCall(inst);
     case ir::InstKind::kBranch:
       return EmitBranch(inst);
     case ir::InstKind::kCondBranch:
@@ -780,6 +785,40 @@ bool ModuleBuilder::EmitCall(const ir::Instruction& inst) {
     value_map_[inst.result_id] = result_id;
   }
   return true;
+}
+
+bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
+  if (FindValue(inst.result_id) == values_.end()) {
+    return false;
+  }
+
+  switch (inst.builtin_call) {
+    case ir::BuiltinCallKind::kTextureDimensions: {
+      if (inst.operands.size() != 2u) {
+        return false;
+      }
+
+      uint32_t texture_id = 0;
+      if (!MaterializeValue(inst.operands[0], &texture_id)) {
+        return false;
+      }
+
+      uint32_t lod_id = 0;
+      if (!MaterializeValue(inst.operands[1], &lod_id)) {
+        return false;
+      }
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(
+          &sections_->functions, SpvOpImageQuerySizeLod,
+          {GetSpirvTypeId(inst.result_type), result_id, texture_id, lod_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
+    case ir::BuiltinCallKind::kNone:
+    default:
+      return false;
+  }
 }
 
 bool ModuleBuilder::MaterializeValue(const ir::Value& value,

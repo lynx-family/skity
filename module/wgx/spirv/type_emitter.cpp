@@ -61,6 +61,12 @@ uint32_t TypeEmitter::EmitType(ir::TypeId type_id) {
     case ir::TypeKind::kPointer:
       EmitPointerType(type, spirv_id);
       break;
+    case ir::TypeKind::kSampler:
+      EmitSamplerType(spirv_id);
+      break;
+    case ir::TypeKind::kTexture2D:
+      EmitTexture2DType(type, spirv_id);
+      break;
   }
 
   return spirv_id;
@@ -235,6 +241,21 @@ void TypeEmitter::EmitPointerType(const ir::Type* type, uint32_t spirv_id) {
       &sections_->types_consts_globals, SpvOpTypePointer,
       {spirv_id, static_cast<uint32_t>(ToSpvStorageClass(type->storage_class)),
        pointee_id});
+}
+
+void TypeEmitter::EmitSamplerType(uint32_t spirv_id) {
+  AppendInstruction(&sections_->types_consts_globals, SpvOpTypeSampler,
+                    {spirv_id});
+}
+
+void TypeEmitter::EmitTexture2DType(const ir::Type* type, uint32_t spirv_id) {
+  uint32_t sampled_type_id = EmitType(type->element_type);
+  if (sampled_type_id == 0) return;
+
+  AppendInstruction(
+      &sections_->types_consts_globals, SpvOpTypeImage,
+      {spirv_id, sampled_type_id, static_cast<uint32_t>(SpvDim2D), 0u, 0u, 0u,
+       1u, static_cast<uint32_t>(SpvImageFormatUnknown)});
 }
 
 size_t TypeEmitter::PairHash::operator()(

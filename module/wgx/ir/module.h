@@ -100,8 +100,14 @@ enum class InstKind {
   kBinary,
   kConstruct,
   kCall,
+  kBuiltinCall,
   kBranch,
   kCondBranch,
+};
+
+enum class BuiltinCallKind {
+  kNone,
+  kTextureDimensions,
 };
 
 // Supported binary operations in the current IR subset.
@@ -138,6 +144,9 @@ struct Instruction {
   // Callee function name for kCall instructions.
   std::string callee_name;
 
+  // Builtin operation kind for kBuiltinCall instructions.
+  BuiltinCallKind builtin_call = BuiltinCallKind::kNone;
+
   // Branch targets for control-flow terminators.
   BlockId target_block = kInvalidBlockId;
   BlockId true_block = kInvalidBlockId;
@@ -152,12 +161,14 @@ struct Instruction {
   // - kBinary: 2 operands (lhs value, rhs value)
   // - kConstruct: N operands (constructor arguments)
   // - kCall: N operands (call arguments)
+  // - kBuiltinCall: N operands (builtin arguments)
   // - kCondBranch: 1 operand (boolean condition value)
   std::vector<Value> operands = {};
 
   bool HasResult() const {
     return kind == InstKind::kLoad || kind == InstKind::kBinary ||
-           kind == InstKind::kConstruct || kind == InstKind::kCall;
+           kind == InstKind::kConstruct || kind == InstKind::kCall ||
+           kind == InstKind::kBuiltinCall;
   }
 
   bool IsTerminator() const {

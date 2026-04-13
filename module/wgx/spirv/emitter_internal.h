@@ -88,6 +88,8 @@ class TypeEmitter {
   void EmitArrayType(const ir::Type* type, uint32_t spirv_id);
   void EmitStructType(const ir::Type* type, uint32_t spirv_id);
   void EmitPointerType(const ir::Type* type, uint32_t spirv_id);
+  void EmitSamplerType(uint32_t spirv_id);
+  void EmitTexture2DType(const ir::Type* type, uint32_t spirv_id);
 
   struct PairHash {
     size_t operator()(const std::pair<ir::TypeId, SpvStorageClass>& p) const;
@@ -196,6 +198,7 @@ class ModuleBuilder {
   bool EmitBinary(const ir::Instruction& inst);
   bool EmitConstruct(const ir::Instruction& inst);
   bool EmitCall(const ir::Instruction& inst);
+  bool EmitBuiltinCall(const ir::Instruction& inst);
   bool MaterializeValue(const ir::Value& value, uint32_t* value_id);
   uint32_t GetSpirvTypeId(ir::TypeId type_id);
   uint32_t EmitConstant(const ir::Value& value);
