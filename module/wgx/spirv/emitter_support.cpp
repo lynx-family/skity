@@ -151,6 +151,7 @@ bool Emitter::Emit(const ir::Module& module) {
     return false;
   }
   if (module.functions.empty()) return false;
+  if (!ir::Verify(module).valid) return false;
 
   const ir::Function* entry_function = FindEntryFunction(module);
   if (entry_function == nullptr || entry_function->stage != module.stage) {

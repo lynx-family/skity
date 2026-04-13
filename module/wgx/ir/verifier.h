@@ -109,6 +109,8 @@ class Verifier {
   VerificationResult VerifyLoad(const Instruction& inst, size_t index);
   VerificationResult VerifyStore(const Instruction& inst, size_t index);
   VerificationResult VerifyBinary(const Instruction& inst, size_t index);
+  VerificationResult VerifyConstruct(const Instruction& inst, size_t index);
+  VerificationResult VerifyCall(const Instruction& inst, size_t index);
   VerificationResult VerifyBranch(const Instruction& inst, size_t index,
                                   const Function& function);
   VerificationResult VerifyCondBranch(const Instruction& inst, size_t index,

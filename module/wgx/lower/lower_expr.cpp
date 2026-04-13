@@ -97,6 +97,11 @@ ir::ExprResult Lowerer::LowerExpression(ast::Expression* expression) {
     return LowerBinaryExpression(static_cast<ast::BinaryExp*>(expression));
   }
 
+  if (expression->GetType() == ast::ExpressionType::kFuncCall) {
+    return LowerFunctionCallExpression(
+        static_cast<ast::FunctionCallExp*>(expression), CurrentBlock());
+  }
+
   if (expression->GetType() == ast::ExpressionType::kParenExp) {
     auto* paren_exp = static_cast<ast::ParenExp*>(expression);
     if (paren_exp->exps.empty()) {
@@ -175,6 +180,7 @@ ir::ExprResult Lowerer::LowerVectorConstructor(ast::Expression* expression) {
     return ir::ExprResult();
   }
 
+  bool all_constant = true;
   std::array<float, 4> values = {0.f, 0.f, 0.f, 0.f};
   for (size_t i = 0; i < count; ++i) {
     auto* arg = call->args[i];
@@ -182,56 +188,80 @@ ir::ExprResult Lowerer::LowerVectorConstructor(ast::Expression* expression) {
       return ir::ExprResult();
     }
 
+    ir::ExprResult arg_const = LowerConstant(arg);
+    if (!arg_const.IsValid() || !arg_const.value.IsConstant()) {
+      all_constant = false;
+      break;
+    }
+
+    if (arg_const.GetType() != component_type) {
+      return ir::ExprResult();
+    }
+
     if (component_type == type_table_->GetF32Type()) {
-      if (arg->GetType() != ast::ExpressionType::kFloatLiteral) {
-        return ir::ExprResult();
-      }
-      values[i] =
-          static_cast<float>(static_cast<ast::FloatLiteralExp*>(arg)->value);
+      values[i] = arg_const.value.GetF32Unchecked();
     } else if (component_type == type_table_->GetI32Type()) {
-      if (arg->GetType() != ast::ExpressionType::kIntLiteral) {
-        return ir::ExprResult();
-      }
-      int32_t iv =
-          static_cast<int32_t>(static_cast<ast::IntLiteralExp*>(arg)->value);
+      int32_t iv = arg_const.value.GetI32Unchecked();
       std::memcpy(&values[i], &iv, sizeof(iv));
     } else if (component_type == type_table_->GetU32Type()) {
-      if (arg->GetType() != ast::ExpressionType::kIntLiteral) {
-        return ir::ExprResult();
-      }
-      uint32_t uv =
-          static_cast<uint32_t>(static_cast<ast::IntLiteralExp*>(arg)->value);
+      uint32_t uv = arg_const.value.GetU32Unchecked();
       std::memcpy(&values[i], &uv, sizeof(uv));
     } else if (component_type == type_table_->GetBoolType()) {
-      if (arg->GetType() != ast::ExpressionType::kBoolLiteral) {
-        return ir::ExprResult();
-      }
-      bool bv = static_cast<ast::BoolLiteralExp*>(arg)->value;
+      bool bv = arg_const.value.GetBoolUnchecked();
       std::memcpy(&values[i], &bv, sizeof(bv));
-    } else {
-      return ir::ExprResult();
     }
   }
 
-  ir::Value result_value;
-  switch (count) {
-    case 2:
-      result_value =
-          ir::Value::ConstantVec2F32(vector_type, values[0], values[1]);
-      break;
-    case 3:
-      result_value = ir::Value::ConstantVec3F32(vector_type, values[0],
-                                                values[1], values[2]);
-      break;
-    case 4:
-      result_value = ir::Value::ConstantVec4F32(
-          vector_type, values[0], values[1], values[2], values[3]);
-      break;
-    default:
-      return ir::ExprResult();
+  if (all_constant) {
+    ir::Value result_value;
+    switch (count) {
+      case 2:
+        result_value =
+            ir::Value::ConstantVec2F32(vector_type, values[0], values[1]);
+        break;
+      case 3:
+        result_value = ir::Value::ConstantVec3F32(vector_type, values[0],
+                                                  values[1], values[2]);
+        break;
+      case 4:
+        result_value = ir::Value::ConstantVec4F32(
+            vector_type, values[0], values[1], values[2], values[3]);
+        break;
+      default:
+        return ir::ExprResult();
+    }
+
+    return ir::ExprResult::ValueResult(result_value);
   }
 
-  return ir::ExprResult::ValueResult(result_value);
+  ir::Block* current_block = CurrentBlock();
+  if (current_block == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::Instruction construct_inst;
+  construct_inst.kind = ir::InstKind::kConstruct;
+  construct_inst.result_type = vector_type;
+  construct_inst.result_id = AllocateSSAId();
+  if (construct_inst.result_id == 0) {
+    return ir::ExprResult();
+  }
+
+  for (auto* arg : call->args) {
+    ir::ExprResult arg_expr = LowerExpression(arg);
+    if (!arg_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+    ir::Value arg_value = EnsureValue(arg_expr, current_block);
+    if (!arg_value.IsValue() || arg_value.type != component_type) {
+      return ir::ExprResult();
+    }
+    construct_inst.operands.push_back(arg_value);
+  }
+
+  current_block->instructions.emplace_back(construct_inst);
+  return ir::ExprResult::ValueResult(
+      ir::Value::SSA(vector_type, construct_inst.result_id));
 }
 
 ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
@@ -314,6 +344,50 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
   current_block->instructions.emplace_back(binary_inst);
 
   return ir::ExprResult::ValueResult(ir::Value::SSA(result_type, result_id));
+}
+
+ir::ExprResult Lowerer::LowerFunctionCallExpression(ast::FunctionCallExp* call,
+                                                    ir::Block* block) {
+  if (call == nullptr || block == nullptr) {
+    return ir::ExprResult();
+  }
+
+  const ast::Function* callee = FindResolvedFunction(call);
+  if (callee == nullptr || !EnsureFunctionLowered(callee)) {
+    return ir::ExprResult();
+  }
+
+  ir::Instruction call_inst;
+  call_inst.kind = ir::InstKind::kCall;
+  call_inst.callee_name = std::string{callee->name->name};
+
+  for (auto* arg : call->args) {
+    ir::ExprResult arg_expr = LowerExpression(arg);
+    if (!arg_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value arg_value = EnsureValue(arg_expr, block);
+    if (!arg_value.IsValue()) {
+      return ir::ExprResult();
+    }
+    call_inst.operands.push_back(arg_value);
+  }
+
+  const ir::TypeId return_type = GetFunctionReturnType(callee);
+  if (return_type != ir::kInvalidTypeId) {
+    const uint32_t result_id = AllocateSSAId();
+    if (result_id == 0) {
+      return ir::ExprResult();
+    }
+    call_inst.result_type = return_type;
+    call_inst.result_id = result_id;
+    block->instructions.emplace_back(call_inst);
+    return ir::ExprResult::ValueResult(ir::Value::SSA(return_type, result_id));
+  }
+
+  block->instructions.emplace_back(call_inst);
+  return ir::ExprResult::ValueResult(ir::Value::None());
 }
 
 ir::ExprResult Lowerer::LowerIdentifierExpression(ast::IdentifierExp* ident) {

@@ -100,6 +100,10 @@ VerificationResult Verifier::VerifyInstruction(const Instruction& inst,
       return VerifyStore(inst, index);
     case InstKind::kBinary:
       return VerifyBinary(inst, index);
+    case InstKind::kConstruct:
+      return VerifyConstruct(inst, index);
+    case InstKind::kCall:
+      return VerifyCall(inst, index);
     case InstKind::kBranch:
       return VerifyBranch(inst, index, function);
     case InstKind::kCondBranch:
@@ -331,6 +335,60 @@ VerificationResult Verifier::VerifyBinary(const Instruction& inst,
         "Binary instruction must have a valid result type", index, inst.kind);
   }
   TrackSSADefinition(inst.result_id);
+  return VerificationResult::Success();
+}
+
+VerificationResult Verifier::VerifyConstruct(const Instruction& inst,
+                                             size_t index) {
+  if (inst.operands.empty()) {
+    return VerificationResult::Failure(
+        "Construct instruction must have at least 1 operand", index, inst.kind);
+  }
+  if (inst.result_id == 0 || inst.result_type == kInvalidTypeId) {
+    return VerificationResult::Failure(
+        "Construct instruction must produce a typed result", index, inst.kind);
+  }
+  for (const auto& operand : inst.operands) {
+    if (!operand.IsValue()) {
+      return VerificationResult::Failure("Construct operands must be values",
+                                         index, inst.kind);
+    }
+    if (!IsValidValue(operand, "construct operand")) {
+      return VerificationResult::Failure(
+          "Construct operand is invalid or undefined", index, inst.kind);
+    }
+  }
+  TrackSSADefinition(inst.result_id);
+  return VerificationResult::Success();
+}
+
+VerificationResult Verifier::VerifyCall(const Instruction& inst, size_t index) {
+  if (inst.callee_name.empty()) {
+    return VerificationResult::Failure("Call instruction has no callee name",
+                                       index, inst.kind);
+  }
+
+  for (const auto& operand : inst.operands) {
+    if (!operand.IsValue()) {
+      return VerificationResult::Failure("Call operands must be values", index,
+                                         inst.kind);
+    }
+    if (!IsValidValue(operand, "call operand")) {
+      return VerificationResult::Failure("Call operand is invalid or undefined",
+                                         index, inst.kind);
+    }
+  }
+
+  const bool has_result =
+      inst.result_id != 0 || inst.result_type != kInvalidTypeId;
+  if (has_result) {
+    if (inst.result_id == 0 || inst.result_type == kInvalidTypeId) {
+      return VerificationResult::Failure(
+          "Call instruction result must provide both result_id and result_type",
+          index, inst.kind);
+    }
+    TrackSSADefinition(inst.result_id);
+  }
   return VerificationResult::Success();
 }
 
