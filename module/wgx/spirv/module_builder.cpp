@@ -180,7 +180,16 @@ bool ModuleBuilder::Build(SectionBuffers* sections,
 
   type_emitter_ = std::make_unique<TypeEmitter>(&ids_, sections_, type_table);
 
-  if (!AnalyzeEntryBlock()) return false;
+  output_vars_.clear();
+  for (const auto& ir_output : entry_.output_vars) {
+    OutputVarInfo info;
+    info.name = ir_output.name;
+    info.ir_type = ir_output.type;
+    info.decoration_kind = ir_output.decoration_kind;
+    info.decoration_value = ir_output.decoration_value;
+    output_vars_.push_back(std::move(info));
+  }
+
   if (!AllocateCoreIds()) return false;
 
   WriteCapabilityMemoryModel();
@@ -195,48 +204,63 @@ bool ModuleBuilder::Build(SectionBuffers* sections,
   return true;
 }
 
-bool ModuleBuilder::AnalyzeEntryBlock() {
-  const ir::Block* entry_block = entry_.GetBlock(entry_.entry_block_id);
-  if (entry_block == nullptr || entry_.blocks.empty()) return false;
+bool ModuleBuilder::AnalyzeFunction(const ir::Function& function) {
+  function_params_.clear();
+  local_vars_.clear();
+  values_.clear();
+  value_map_.clear();
+  block_label_map_.clear();
 
-  for (const auto& ir_output : entry_.output_vars) {
-    OutputVarInfo info;
-    info.name = ir_output.name;
-    info.ir_type = ir_output.type;
-    info.decoration_kind = ir_output.decoration_kind;
-    info.decoration_value = ir_output.decoration_value;
-    output_vars_.push_back(std::move(info));
+  const ir::Block* entry_block = function.GetBlock(function.entry_block_id);
+  if (entry_block == nullptr || function.blocks.empty()) return false;
+
+  for (const auto& param : function.parameters) {
+    FunctionParamInfo info;
+    info.ir_var_id = param.var_id;
+    info.var_type = param.type;
+    info.name = param.name;
+    info.spirv_param_id = ids_.Allocate();
+    info.spirv_local_id = ids_.Allocate();
+    function_params_.push_back(std::move(info));
   }
 
-  for (const auto& block : entry_.blocks) {
+  for (const auto& block : function.blocks) {
+    block_label_map_[block.id] = ids_.Allocate();
     for (const auto& inst : block.instructions) {
       if (inst.kind == ir::InstKind::kVariable) {
         LocalVarInfo info;
         info.ir_var_id = inst.var_id;
         info.var_type = inst.result_type;
-        local_vars_.push_back(info);
+        info.spirv_var_id = ids_.Allocate();
+        local_vars_.push_back(std::move(info));
       } else if (inst.kind == ir::InstKind::kBinary ||
-                 inst.kind == ir::InstKind::kLoad) {
+                 inst.kind == ir::InstKind::kLoad ||
+                 inst.kind == ir::InstKind::kConstruct ||
+                 (inst.kind == ir::InstKind::kCall && inst.result_id != 0)) {
         ValueInfo info;
         info.ir_value_id = inst.result_id;
         info.value_type = inst.result_type;
-        values_.push_back(info);
+        values_.push_back(std::move(info));
+      }
+    }
+  }
+  return true;
+}
+
+void ModuleBuilder::CollectGlobalVarReferences(const ir::Function& function) {
+  std::unordered_set<uint32_t> local_var_ids;
+  for (const auto& param : function.parameters) {
+    local_var_ids.insert(param.var_id);
+  }
+  for (const auto& block : function.blocks) {
+    for (const auto& inst : block.instructions) {
+      if (inst.kind == ir::InstKind::kVariable) {
+        local_var_ids.insert(inst.var_id);
       }
     }
   }
 
-  CollectGlobalVarReferences(entry_.blocks);
-  return true;
-}
-
-void ModuleBuilder::CollectGlobalVarReferences(
-    const std::vector<ir::Block>& blocks) {
-  std::unordered_set<uint32_t> local_var_ids;
-  for (const auto& var : local_vars_) {
-    local_var_ids.insert(var.ir_var_id);
-  }
-
-  for (const auto& block : blocks) {
+  for (const auto& block : function.blocks) {
     for (const auto& inst : block.instructions) {
       for (const auto& operand : inst.operands) {
         if (!operand.IsVariable()) {
@@ -290,18 +314,38 @@ void ModuleBuilder::CollectGlobalVarReferences(
 }
 
 bool ModuleBuilder::AllocateCoreIds() {
-  function_id_ = ids_.Allocate();
+  function_id_map_.clear();
+  function_type_id_map_.clear();
+
+  for (const auto& function : module_.functions) {
+    function_id_map_[function.name] = ids_.Allocate();
+
+    std::vector<ir::TypeId> param_types;
+    param_types.reserve(function.parameters.size());
+    for (const auto& param : function.parameters) {
+      param_types.push_back(param.type);
+    }
+
+    const ir::TypeId return_type = GetSpirvFunctionReturnType(function);
+    const uint32_t function_type_id =
+        type_emitter_->GetFunctionType(return_type, param_types);
+    if (function_type_id == 0) {
+      return false;
+    }
+    function_type_id_map_[function.name] = function_type_id;
+  }
+
+  function_id_ = GetFunctionId(module_.entry_point);
   for (auto& output : output_vars_) {
     output.spirv_var_id = ids_.Allocate();
   }
-  for (auto& var : local_vars_) {
-    var.spirv_var_id = ids_.Allocate();
+
+  global_vars_.clear();
+  for (const auto& function : module_.functions) {
+    CollectGlobalVarReferences(function);
   }
   for (auto& global : global_vars_) {
     global.spirv_var_id = ids_.Allocate();
-  }
-  for (const auto& block : entry_.blocks) {
-    block_label_map_[block.id] = ids_.Allocate();
   }
   return function_id_ != 0;
 }
@@ -319,31 +363,24 @@ void ModuleBuilder::WriteEntryPointSection() {
   for (const auto& output : output_vars_) {
     interface_ids.push_back(output.spirv_var_id);
   }
-  AppendEntryPoint(&sections_->entry_points, execution_model_, function_id_,
-                   module_.entry_point, interface_ids);
+  AppendEntryPoint(&sections_->entry_points, execution_model_,
+                   GetFunctionId(module_.entry_point), module_.entry_point,
+                   interface_ids);
 }
 
 void ModuleBuilder::WriteExecutionModeSection() {
   if (module_.stage != ir::PipelineStage::kFragment) return;
-  AppendInstruction(
-      &sections_->execution_modes, SpvOpExecutionMode,
-      {function_id_, static_cast<uint32_t>(SpvExecutionModeOriginUpperLeft)});
+  AppendInstruction(&sections_->execution_modes, SpvOpExecutionMode,
+                    {GetFunctionId(module_.entry_point),
+                     static_cast<uint32_t>(SpvExecutionModeOriginUpperLeft)});
 }
 
 void ModuleBuilder::WriteDebugSection() {
-  AppendName(&sections_->debug, function_id_, module_.entry_point);
+  for (const auto& function : module_.functions) {
+    AppendName(&sections_->debug, GetFunctionId(function.name), function.name);
+  }
   for (const auto& output : output_vars_) {
     AppendName(&sections_->debug, output.spirv_var_id, output.name);
-  }
-  for (const auto& block : entry_.blocks) {
-    for (const auto& inst : block.instructions) {
-      if (inst.kind == ir::InstKind::kVariable && !inst.var_name.empty()) {
-        auto it = FindLocalVar(inst.var_id);
-        if (it != local_vars_.end()) {
-          AppendName(&sections_->debug, it->spirv_var_id, inst.var_name);
-        }
-      }
-    }
   }
 }
 
@@ -413,9 +450,6 @@ bool ModuleBuilder::WriteTypeConstGlobalSection() {
       type_emitter_->EmitType(type_emitter_->GetTypeTable()->GetVoidType());
   if (void_type == 0) return false;
 
-  function_type_id_ = type_emitter_->GetFunctionTypeVoid();
-  if (function_type_id_ == 0) return false;
-
   for (auto& output : output_vars_) {
     uint32_t spirv_type = type_emitter_->EmitType(output.ir_type);
     if (spirv_type == 0) return false;
@@ -462,45 +496,75 @@ bool ModuleBuilder::WriteTypeConstGlobalSection() {
 }
 
 bool ModuleBuilder::WriteFunctionSection() {
-  uint32_t void_type =
-      type_emitter_->EmitType(type_emitter_->GetTypeTable()->GetVoidType());
-
-  AppendInstruction(
-      &sections_->functions, SpvOpFunction,
-      {void_type, function_id_,
-       static_cast<uint32_t>(SpvFunctionControlMaskNone), function_type_id_});
-
-  for (const auto& block : entry_.blocks) {
-    current_block_ = &block;
-    uint32_t block_label_id = GetOrCreateBlockLabel(block.id);
-    AppendInstruction(&sections_->functions, SpvOpLabel, {block_label_id});
-
-    if (block.IsLoopHeader()) {
-      AppendInstruction(&sections_->functions, SpvOpLoopMerge,
-                        {GetOrCreateBlockLabel(block.loop_merge_block),
-                         GetOrCreateBlockLabel(block.loop_continue_block),
-                         static_cast<uint32_t>(SpvLoopControlMaskNone)});
+  for (const auto& function : module_.functions) {
+    if (!AnalyzeFunction(function)) {
+      return false;
     }
 
-    if (block.id == entry_.entry_block_id) {
-      for (auto& var : local_vars_) {
-        uint32_t ptr_type = type_emitter_->GetPointerType(
-            var.var_type, SpvStorageClassFunction);
-        if (ptr_type == 0) return false;
-        AppendInstruction(&sections_->functions, SpvOpVariable,
-                          {ptr_type, var.spirv_var_id,
-                           static_cast<uint32_t>(SpvStorageClassFunction)});
+    function_id_ = GetFunctionId(function.name);
+    function_type_id_ = GetFunctionTypeId(function.name);
+    uint32_t return_type_id =
+        type_emitter_->EmitType(GetSpirvFunctionReturnType(function));
+    if (function_id_ == 0 || function_type_id_ == 0 || return_type_id == 0) {
+      return false;
+    }
+
+    AppendInstruction(
+        &sections_->functions, SpvOpFunction,
+        {return_type_id, function_id_,
+         static_cast<uint32_t>(SpvFunctionControlMaskNone), function_type_id_});
+
+    for (const auto& param : function_params_) {
+      uint32_t param_type_id = type_emitter_->EmitType(param.var_type);
+      if (param_type_id == 0) {
+        return false;
+      }
+      AppendInstruction(&sections_->functions, SpvOpFunctionParameter,
+                        {param_type_id, param.spirv_param_id});
+    }
+
+    for (const auto& block : function.blocks) {
+      current_block_ = &block;
+      uint32_t block_label_id = GetOrCreateBlockLabel(block.id);
+      AppendInstruction(&sections_->functions, SpvOpLabel, {block_label_id});
+
+      if (block.IsLoopHeader()) {
+        AppendInstruction(&sections_->functions, SpvOpLoopMerge,
+                          {GetOrCreateBlockLabel(block.loop_merge_block),
+                           GetOrCreateBlockLabel(block.loop_continue_block),
+                           static_cast<uint32_t>(SpvLoopControlMaskNone)});
+      }
+
+      if (block.id == function.entry_block_id) {
+        for (auto& param : function_params_) {
+          uint32_t ptr_type = type_emitter_->GetPointerType(
+              param.var_type, SpvStorageClassFunction);
+          if (ptr_type == 0) return false;
+          AppendInstruction(&sections_->functions, SpvOpVariable,
+                            {ptr_type, param.spirv_local_id,
+                             static_cast<uint32_t>(SpvStorageClassFunction)});
+          AppendInstruction(&sections_->functions, SpvOpStore,
+                            {param.spirv_local_id, param.spirv_param_id});
+        }
+
+        for (auto& var : local_vars_) {
+          uint32_t ptr_type = type_emitter_->GetPointerType(
+              var.var_type, SpvStorageClassFunction);
+          if (ptr_type == 0) return false;
+          AppendInstruction(&sections_->functions, SpvOpVariable,
+                            {ptr_type, var.spirv_var_id,
+                             static_cast<uint32_t>(SpvStorageClassFunction)});
+        }
+      }
+
+      for (const auto& inst : block.instructions) {
+        if (!EmitInstruction(inst)) return false;
       }
     }
 
-    for (const auto& inst : block.instructions) {
-      if (!EmitInstruction(inst)) return false;
-    }
+    current_block_ = nullptr;
+    AppendInstruction(&sections_->functions, SpvOpFunctionEnd, {});
   }
-
-  current_block_ = nullptr;
-
-  AppendInstruction(&sections_->functions, SpvOpFunctionEnd, {});
   return true;
 }
 
@@ -514,6 +578,10 @@ bool ModuleBuilder::EmitInstruction(const ir::Instruction& inst) {
       return EmitStore(inst);
     case ir::InstKind::kBinary:
       return EmitBinary(inst);
+    case ir::InstKind::kConstruct:
+      return EmitConstruct(inst);
+    case ir::InstKind::kCall:
+      return EmitCall(inst);
     case ir::InstKind::kBranch:
       return EmitBranch(inst);
     case ir::InstKind::kCondBranch:
@@ -526,6 +594,12 @@ bool ModuleBuilder::EmitInstruction(const ir::Instruction& inst) {
 }
 
 uint32_t ModuleBuilder::FindVariableSpirvId(uint32_t ir_var_id) {
+  for (const auto& param : function_params_) {
+    if (param.ir_var_id == ir_var_id) {
+      return param.spirv_local_id;
+    }
+  }
+
   auto local_it = FindLocalVar(ir_var_id);
   if (local_it != local_vars_.end()) {
     return local_it->spirv_var_id;
@@ -538,6 +612,16 @@ uint32_t ModuleBuilder::FindVariableSpirvId(uint32_t ir_var_id) {
   }
 
   return 0;
+}
+
+const ir::Function* ModuleBuilder::FindFunctionByName(
+    std::string_view name) const {
+  for (const auto& function : module_.functions) {
+    if (function.name == name) {
+      return &function;
+    }
+  }
+  return nullptr;
 }
 
 const GlobalVarInfo* ModuleBuilder::FindGlobalVarInfo(
@@ -639,6 +723,62 @@ bool ModuleBuilder::EmitBinary(const ir::Instruction& inst) {
       &sections_->functions, op,
       {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
   value_map_[inst.result_id] = result_id;
+  return true;
+}
+
+bool ModuleBuilder::EmitConstruct(const ir::Instruction& inst) {
+  if (FindValue(inst.result_id) == values_.end()) return false;
+  if (inst.operands.empty()) return false;
+
+  std::vector<uint32_t> operands;
+  operands.push_back(GetSpirvTypeId(inst.result_type));
+  const uint32_t result_id = ids_.Allocate();
+  operands.push_back(result_id);
+
+  for (const auto& operand : inst.operands) {
+    uint32_t component_id = 0;
+    if (!MaterializeValue(operand, &component_id)) {
+      return false;
+    }
+    operands.push_back(component_id);
+  }
+
+  AppendInstruction(&sections_->functions, SpvOpCompositeConstruct, operands);
+  value_map_[inst.result_id] = result_id;
+  return true;
+}
+
+bool ModuleBuilder::EmitCall(const ir::Instruction& inst) {
+  const ir::Function* callee = FindFunctionByName(inst.callee_name);
+  if (callee == nullptr) {
+    return false;
+  }
+
+  std::vector<uint32_t> operands;
+  const uint32_t result_type =
+      type_emitter_->EmitType(GetSpirvFunctionReturnType(*callee));
+  const uint32_t result_id =
+      inst.result_id != 0 ? ids_.Allocate() : ids_.Allocate();
+  const uint32_t callee_id = GetFunctionId(inst.callee_name);
+  if (result_type == 0 || callee_id == 0) {
+    return false;
+  }
+
+  operands.push_back(result_type);
+  operands.push_back(result_id);
+  operands.push_back(callee_id);
+  for (const auto& operand : inst.operands) {
+    uint32_t arg_id = 0;
+    if (!MaterializeValue(operand, &arg_id)) {
+      return false;
+    }
+    operands.push_back(arg_id);
+  }
+
+  AppendInstruction(&sections_->functions, SpvOpFunctionCall, operands);
+  if (inst.result_id != 0) {
+    value_map_[inst.result_id] = result_id;
+  }
   return true;
 }
 
@@ -809,6 +949,23 @@ bool ModuleBuilder::EmitCondBranch(const ir::Instruction& inst) {
 }
 
 bool ModuleBuilder::EmitReturn(const ir::Instruction& inst) {
+  if (function_id_ != GetFunctionId(module_.entry_point)) {
+    if (inst.operands.empty()) {
+      AppendInstruction(&sections_->functions, SpvOpReturn, {});
+      return true;
+    }
+
+    if (inst.operands.size() != 1 || !inst.operands[0].IsValue()) return false;
+
+    uint32_t return_value = 0;
+    if (!MaterializeValue(inst.operands[0], &return_value)) {
+      return false;
+    }
+
+    AppendInstruction(&sections_->functions, SpvOpReturnValue, {return_value});
+    return true;
+  }
+
   if (inst.operands.empty()) {
     AppendInstruction(&sections_->functions, SpvOpReturn, {});
     return true;
@@ -877,6 +1034,28 @@ uint32_t ModuleBuilder::OutputVarInfo::GetLocation() const {
     return decoration_value;
   }
   return 0;
+}
+
+uint32_t ModuleBuilder::GetFunctionId(std::string_view function_name) const {
+  auto it = function_id_map_.find(std::string(function_name));
+  return it == function_id_map_.end() ? 0 : it->second;
+}
+
+uint32_t ModuleBuilder::GetFunctionTypeId(
+    std::string_view function_name) const {
+  auto it = function_type_id_map_.find(std::string(function_name));
+  return it == function_type_id_map_.end() ? 0 : it->second;
+}
+
+ir::TypeId ModuleBuilder::GetSpirvFunctionReturnType(
+    const ir::Function& function) const {
+  if (function.name == module_.entry_point) {
+    return type_emitter_->GetTypeTable()->GetVoidType();
+  }
+  if (function.return_type == ir::kInvalidTypeId) {
+    return type_emitter_->GetTypeTable()->GetVoidType();
+  }
+  return function.return_type;
 }
 
 uint32_t ModuleBuilder::GetOrCreateBlockLabel(ir::BlockId block_id) {

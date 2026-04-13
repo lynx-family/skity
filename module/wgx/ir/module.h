@@ -86,12 +86,20 @@ struct OutputVariable {
   }
 };
 
+struct FunctionParameter {
+  std::string name;
+  TypeId type = kInvalidTypeId;
+  uint32_t var_id = 0;
+};
+
 enum class InstKind {
   kReturn,
   kVariable,
   kLoad,
   kStore,
   kBinary,
+  kConstruct,
+  kCall,
   kBranch,
   kCondBranch,
 };
@@ -127,6 +135,9 @@ struct Instruction {
   // Binary op kind for kBinary instructions
   BinaryOpKind binary_op = BinaryOpKind::kAdd;
 
+  // Callee function name for kCall instructions.
+  std::string callee_name;
+
   // Branch targets for control-flow terminators.
   BlockId target_block = kInvalidBlockId;
   BlockId true_block = kInvalidBlockId;
@@ -139,11 +150,14 @@ struct Instruction {
   // - kLoad: 1 operand (source variable address)
   // - kStore: 2 operands (target variable address, source value)
   // - kBinary: 2 operands (lhs value, rhs value)
+  // - kConstruct: N operands (constructor arguments)
+  // - kCall: N operands (call arguments)
   // - kCondBranch: 1 operand (boolean condition value)
   std::vector<Value> operands = {};
 
   bool HasResult() const {
-    return kind == InstKind::kLoad || kind == InstKind::kBinary;
+    return kind == InstKind::kLoad || kind == InstKind::kBinary ||
+           kind == InstKind::kConstruct || kind == InstKind::kCall;
   }
 
   bool IsTerminator() const {
@@ -178,6 +192,7 @@ struct Function {
   // - One entry for simple scalar/vector returns
   // - Multiple entries for struct returns (one per decorated member)
   std::vector<OutputVariable> output_vars = {};
+  std::vector<FunctionParameter> parameters = {};
 
   BlockId entry_block_id = kInvalidBlockId;
   std::vector<Block> blocks = {};

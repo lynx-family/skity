@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "ir/module.h"
@@ -59,10 +60,12 @@ class Lowerer {
     ir::BlockId merge_block_id = ir::kInvalidBlockId;
   };
 
+  bool LowerFunction(const ast::Function* function, bool is_entry_point);
   bool RegisterFunctionParameters();
   bool LowerFunctionBody();
   bool InsertImplicitReturn();
-  std::vector<ir::OutputVariable> ResolveOutputVars();
+  std::vector<ir::OutputVariable> ResolveOutputVars(
+      const ast::Function* function) const;
   ir::TypeId ResolveType(const ast::Type& type);
   bool IsVoidType(const ast::Type& type) const;
 
@@ -87,6 +90,7 @@ class Lowerer {
   bool LowerBreakIfStatement(const ast::BreakIfStatement* break_if,
                              ir::Block* block);
   bool LowerContinueStatement(ir::Block* block);
+  bool LowerCallStatement(const ast::CallStatement* call, ir::Block* block);
   bool LowerIncrementStatement(const ast::IncrementDeclStatement* inc,
                                ir::Block* block);
   bool LowerVarDecl(const ast::VarDeclStatement* var_decl, ir::Block* block);
@@ -99,6 +103,8 @@ class Lowerer {
   ir::ExprResult LowerConstant(ast::Expression* expression);
   ir::ExprResult LowerVectorConstructor(ast::Expression* expression);
   ir::ExprResult LowerBinaryExpression(ast::BinaryExp* binary);
+  ir::ExprResult LowerFunctionCallExpression(ast::FunctionCallExp* call,
+                                             ir::Block* block);
   ir::ExprResult LowerIdentifierExpression(ast::IdentifierExp* ident);
 
   uint32_t AllocateVarId();
@@ -111,9 +117,14 @@ class Lowerer {
   const semantic::Symbol* FindResolvedSymbol(
       const ast::IdentifierExp* ident) const;
   const semantic::Symbol* FindDeclSymbol(const ast::Identifier* ident) const;
+  const ast::Function* FindResolvedFunction(
+      const ast::FunctionCallExp* call) const;
+  bool EnsureFunctionLowered(const ast::Function* function);
+  ir::TypeId GetFunctionReturnType(const ast::Function* function);
 
   const ast::Module* ast_module_;
   const ast::Function* ast_entry_point_;
+  const ast::Function* current_ast_function_ = nullptr;
   const std::unordered_map<const ast::IdentifierExp*, semantic::Symbol*>&
       ident_symbols_;
   const std::unordered_map<const ast::Identifier*, semantic::Symbol*>&
@@ -124,6 +135,8 @@ class Lowerer {
   ir::BlockId current_block_id_ = ir::kInvalidBlockId;
   std::unordered_map<const semantic::Symbol*, VarInfo> var_map_;
   std::vector<LoopContext> loop_stack_;
+  std::unordered_set<const ast::Function*> lowered_functions_;
+  std::unordered_set<const ast::Function*> lowering_functions_;
 };
 
 }  // namespace lower

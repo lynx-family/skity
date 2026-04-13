@@ -91,49 +91,82 @@ std::unique_ptr<ir::Module> Lowerer::Run() {
   ir_module->type_table = std::make_unique<ir::TypeTable>();
   type_table_ = ir_module->type_table.get();
 
-  auto ir_function = std::make_unique<ir::Function>();
-  ir_function_ = ir_function.get();
-
-  ir_function->name = ir_module->entry_point;
-  // All later blocks are created off this entry block; keeping the initial
-  // setup here makes the control-flow expansion in lower_stmt.cpp easier to
-  // follow.
-  ir::Block entry_block;
-  entry_block.id = ir_function->AllocateBlockId();
-  entry_block.name = "entry";
-  ir_function->entry_block_id = entry_block.id;
-  ir_function->blocks.push_back(std::move(entry_block));
-  current_block_id_ = ir_function->entry_block_id;
-  ir_function->stage = ir_module->stage;
-  ir_function->return_type = ResolveType(ast_entry_point_->return_type);
-  ir_function->output_vars = ResolveOutputVars();
-
-  if (!RegisterFunctionParameters()) {
+  if (!LowerFunction(ast_entry_point_, true)) {
     return nullptr;
   }
-  if (!LowerFunctionBody()) {
-    return nullptr;
-  }
-  if (!InsertImplicitReturn()) {
-    return nullptr;
-  }
-
-#ifndef SKITY_RELEASE
-  // Keep structural verification at the lowering boundary so later backend
-  // failures are more likely to be actual capability gaps instead of malformed
-  // IR.
-  auto verify_result = ir::Verify(*ir_function_);
-  if (!verify_result.valid) {
-    return nullptr;
-  }
-#endif
-
-  ir_module->functions.emplace_back(std::move(*ir_function));
   return ir_module;
 }
 
+bool Lowerer::LowerFunction(const ast::Function* function,
+                            bool is_entry_point) {
+  if (function == nullptr) {
+    return false;
+  }
+  if (lowered_functions_.count(function) > 0) {
+    return true;
+  }
+  if (lowering_functions_.count(function) > 0) {
+    return false;
+  }
+
+  lowering_functions_.insert(function);
+
+  auto* saved_ast_function = current_ast_function_;
+  auto* saved_ir_function = ir_function_;
+  const ir::BlockId saved_block_id = current_block_id_;
+  auto saved_var_map = var_map_;
+  auto saved_loop_stack = loop_stack_;
+
+  auto ir_function = std::make_unique<ir::Function>();
+  ir_function_ = ir_function.get();
+  current_ast_function_ = function;
+  var_map_.clear();
+  loop_stack_.clear();
+
+  ir_function_->name = std::string{function->name->name};
+  ir::Block entry_block;
+  entry_block.id = ir_function_->AllocateBlockId();
+  entry_block.name = "entry";
+  ir_function_->entry_block_id = entry_block.id;
+  ir_function_->blocks.push_back(std::move(entry_block));
+  current_block_id_ = ir_function_->entry_block_id;
+  ir_function_->stage =
+      is_entry_point ? ir_module_->stage : ir::PipelineStage::kUnknown;
+  ir_function_->return_type = ResolveType(function->return_type);
+  ir_function_->output_vars = is_entry_point
+                                  ? ResolveOutputVars(function)
+                                  : std::vector<ir::OutputVariable>{};
+
+  bool ok = RegisterFunctionParameters() && LowerFunctionBody() &&
+            InsertImplicitReturn();
+
+#ifndef SKITY_RELEASE
+  if (ok) {
+    auto verify_result = ir::Verify(*ir_function_);
+    ok = verify_result.valid;
+  }
+#endif
+
+  if (ok) {
+    ir_module_->functions.emplace_back(std::move(*ir_function_));
+    lowered_functions_.insert(function);
+  }
+
+  lowering_functions_.erase(function);
+  current_ast_function_ = saved_ast_function;
+  ir_function_ = saved_ir_function;
+  current_block_id_ = saved_block_id;
+  var_map_ = std::move(saved_var_map);
+  loop_stack_ = std::move(saved_loop_stack);
+  return ok;
+}
+
 bool Lowerer::RegisterFunctionParameters() {
-  for (auto* param : ast_entry_point_->params) {
+  if (current_ast_function_ == nullptr || ir_function_ == nullptr) {
+    return false;
+  }
+
+  for (auto* param : current_ast_function_->params) {
     if (param == nullptr || param->name == nullptr) {
       continue;
     }
@@ -156,15 +189,22 @@ bool Lowerer::RegisterFunctionParameters() {
     if (!RegisterVar(param_symbol, var_id, param_type)) {
       return false;
     }
+
+    ir::FunctionParameter ir_param;
+    ir_param.name = std::string{param->name->name};
+    ir_param.type = param_type;
+    ir_param.var_id = var_id;
+    ir_function_->parameters.push_back(std::move(ir_param));
   }
   return true;
 }
 
 bool Lowerer::LowerFunctionBody() {
-  if (ast_entry_point_->body == nullptr) {
+  if (current_ast_function_ == nullptr ||
+      current_ast_function_->body == nullptr) {
     return true;
   }
-  for (auto* statement : ast_entry_point_->body->statements) {
+  for (auto* statement : current_ast_function_->body->statements) {
     ir::Block* current = CurrentBlock();
     if (current == nullptr) {
       return false;
@@ -181,7 +221,11 @@ bool Lowerer::LowerFunctionBody() {
 }
 
 bool Lowerer::InsertImplicitReturn() {
-  const bool is_void_return = IsVoidType(ast_entry_point_->return_type);
+  if (current_ast_function_ == nullptr) {
+    return false;
+  }
+
+  const bool is_void_return = IsVoidType(current_ast_function_->return_type);
   const bool has_terminator =
       CurrentBlock() != nullptr && !CurrentBlock()->instructions.empty() &&
       CurrentBlock()->instructions.back().IsTerminator();
@@ -199,17 +243,18 @@ bool Lowerer::InsertImplicitReturn() {
   return true;
 }
 
-std::vector<ir::OutputVariable> Lowerer::ResolveOutputVars() {
+std::vector<ir::OutputVariable> Lowerer::ResolveOutputVars(
+    const ast::Function* function) const {
   std::vector<ir::OutputVariable> outputs;
 
-  if (IsVoidType(ast_entry_point_->return_type)) {
+  if (function == nullptr || IsVoidType(function->return_type)) {
     return outputs;
   }
 
   ir::OutputVariable output;
-  output.type = ResolveType(ast_entry_point_->return_type);
+  output.type = const_cast<Lowerer*>(this)->ResolveType(function->return_type);
 
-  for (auto* attr : ast_entry_point_->return_type_attrs) {
+  for (auto* attr : function->return_type_attrs) {
     if (attr == nullptr) continue;
 
     if (attr->GetType() == ast::AttributeType::kBuiltin) {
@@ -275,6 +320,41 @@ const semantic::Symbol* Lowerer::FindDeclSymbol(
     const ast::Identifier* ident) const {
   auto it = decl_symbols_.find(ident);
   return it == decl_symbols_.end() ? nullptr : it->second;
+}
+
+const ast::Function* Lowerer::FindResolvedFunction(
+    const ast::FunctionCallExp* call) const {
+  if (call == nullptr || call->ident == nullptr) {
+    return nullptr;
+  }
+
+  const semantic::Symbol* symbol = FindResolvedSymbol(call->ident);
+  if (symbol == nullptr || symbol->kind != semantic::SymbolKind::kFunction ||
+      symbol->declaration == nullptr) {
+    return nullptr;
+  }
+
+  return static_cast<const ast::Function*>(symbol->declaration);
+}
+
+bool Lowerer::EnsureFunctionLowered(const ast::Function* function) {
+  if (function == nullptr) {
+    return false;
+  }
+  if (lowered_functions_.count(function) > 0) {
+    return true;
+  }
+  if (function == current_ast_function_) {
+    return false;
+  }
+  return LowerFunction(function, false);
+}
+
+ir::TypeId Lowerer::GetFunctionReturnType(const ast::Function* function) {
+  if (function == nullptr || IsVoidType(function->return_type)) {
+    return ir::kInvalidTypeId;
+  }
+  return ResolveType(function->return_type);
 }
 
 }  // namespace lower

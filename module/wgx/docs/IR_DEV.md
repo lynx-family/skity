@@ -42,8 +42,14 @@ Because of that, the near-term focus should be:
 5. ~~introduce multi-block IR and structured control flow (if/if-else)~~ ✓ Completed
 6. ~~expand to loops, break/continue, comparison expressions, and counted loop building blocks~~ ✓ Completed
 7. ~~focus next on the remaining structured-control gaps (`break if`, `switch`)~~
-   `break if` and `switch` are now completed; broader feature expansion
-   (texture/sampler, function calls) is now the next priority
+   `break if` and `switch` are now completed
+8. ~~resume broader feature work with function calls~~ ✓ First user-function slice completed
+   - user-defined function calls now lower through IR `kCall`
+   - SPIR-V emission now supports multi-function modules, parameters, and
+     `OpFunctionCall`
+   - dynamic vector constructors such as `vec4<f32>(x, 0.0, 0.0, 1.0)` now
+     lower through IR construction instead of being limited to constant folding
+9. texture/sampler builtin calls remain the next broader runtime feature area
 
 ## Current IR State
 
@@ -65,6 +71,8 @@ The active function-body IR now has these properties:
    - `kLoad`: one variable `Value` operand
    - `kStore`: target variable `Value` + source value `Value`
    - `kBinary`: lhs `Value` + rhs `Value`
+   - `kConstruct`: N value operands for vector construction
+   - `kCall`: N value operands for user-function call arguments
 
 4. **Separated variable id vs SSA id allocation**
    - `var_id` is allocated independently from SSA ids
@@ -80,6 +88,16 @@ The active function-body IR now has these properties:
    - `GlobalVariable` holds `type`, `storage_class`, `initializer`, `group`, `binding`
    - lowering extracts address space, binding attributes, and constant initializers
    - SPIR-V emitter uses storage class and emits `OpVariable` with initializers and decorations
+
+7. **Multi-function module lowering**
+   - lowering no longer stops at the entry point; user-defined callees are
+     recursively lowered into the same `ir::Module`
+   - `ir::Function` now carries parameter metadata used by SPIR-V emission
+   - current lowering order ensures WGSL source order does not need to match
+     SPIR-V function emission order
+   - this matters because WGSL allows calling a function defined later in the
+     module, while SPIR-V emission still needs callee definitions/types ready
+     before `OpFunctionCall` use sites
 
 ## Current Backend Capability Boundary
 
@@ -149,6 +167,15 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - note: the helper currently skips `wgx_vs_main_workgroup.spv` during
      `spirv-val` because workgroup storage is not yet supported for vertex entry points
 
+10. **Function call subset**
+   - user-defined function calls with scalar parameters and scalar return values
+   - calls from entry points into helper functions defined earlier or later in
+     the WGSL module
+   - SPIR-V emission of `OpTypeFunction`, `OpFunctionParameter`,
+     `OpFunctionCall`, and helper-side `OpReturnValue`
+   - dynamic vector construction via `OpCompositeConstruct` for supported
+     scalar/vector component types
+
 ## Current Structural Limitations
 
 The backend currently still has these important limitations:
@@ -194,6 +221,12 @@ The backend currently still has these important limitations:
    - the newly supported counted-loop path relies on scalar integer arithmetic
    - broader operator coverage (more scalar/vector ops, casts, richer expressions) remains future work
 
+9. **Function call coverage is still intentionally narrow**
+   - the current call path is for user-defined WGSL functions, not builtin
+     texture/sampler/runtime intrinsics
+   - return/value handling is validated for the current scalar and vector
+     subsets, not full WGSL aggregate semantics
+
 ## Next Planned Refactor Steps
 
 The current recommendation for the next steps is:
@@ -238,12 +271,15 @@ The current recommendation for the next steps is:
    - loop-condition blocks are kept separate from loop headers so emitted SPIR-V satisfies structured-control constraints
    - smoke tests + `spirv-val` now cover the supported `loop` / `for` / `while` subset
 
-7. **The remaining structured-control milestone is now complete**
-   - broader expression/runtime features can take priority again
+7. ~~**Reintroduce user-function calls on top of the current IR**~~ ✓ Completed for the current subset
+   - lowering recursively materializes helper functions into the IR module
+   - SPIR-V emission now handles helper function definitions, parameters, and
+     `OpFunctionCall`
+   - smoke tests cover helper calls and dynamic vector constructors that depend
+     on runtime values
 
-8. **Only resume broader feature work after the above cleanup is stable**
-   - especially before introducing function calls, texture/sampler ops, or
-     matrix/struct heavy features
+8. **Only resume broader runtime feature work after the current call path is stable**
+   - especially for texture/sampler builtins, casts, and matrix/struct-heavy expressions
 
 ## Practical Rule For Future Agents
 
@@ -252,7 +288,7 @@ If you are continuing work in this area:
 1. read `module/wgx/docs/IR_REFACTOR_PLAN.md` first
 2. prefer structural cleanup over immediate feature expansion
 3. treat the structured control-flow baseline as complete and move on to
-   texture-sampler or broader feature expansion
+   texture-sampler or broader runtime feature expansion
 4. avoid reintroducing special-case return/store/materialization encodings that
    bypass `ir::Value`
 5. keep using the current local validation workflow:
@@ -260,6 +296,11 @@ If you are continuing work in this area:
 ```bash
 ./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build
 ```
+6. remember the language-order mismatch:
+   - WGSL helper functions may be called before their source declaration
+   - SPIR-V still needs function types/definitions available in emission order
+   - keep lowering/emission responsible for that ordering instead of imposing a
+     WGSL source-order restriction
 
 ## Validation Baseline
 

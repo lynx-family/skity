@@ -72,6 +72,8 @@ class TypeEmitter {
 
   uint32_t EmitType(ir::TypeId type_id);
   uint32_t GetFunctionTypeVoid();
+  uint32_t GetFunctionType(ir::TypeId return_type,
+                           const std::vector<ir::TypeId>& param_types);
   uint32_t GetPointerType(ir::TypeId pointee, SpvStorageClass storage);
   uint32_t EmitF32Constant(float value);
   uint32_t EmitI32Constant(int32_t value);
@@ -91,6 +93,20 @@ class TypeEmitter {
     size_t operator()(const std::pair<ir::TypeId, SpvStorageClass>& p) const;
   };
 
+  struct FunctionSignature {
+    ir::TypeId return_type = ir::kInvalidTypeId;
+    std::vector<ir::TypeId> param_types;
+
+    bool operator==(const FunctionSignature& other) const {
+      return return_type == other.return_type &&
+             param_types == other.param_types;
+    }
+  };
+
+  struct FunctionSignatureHash {
+    size_t operator()(const FunctionSignature& sig) const;
+  };
+
   IdAllocator* ids_;
   SectionBuffers* sections_;
   ir::TypeTable* type_table_;
@@ -101,6 +117,8 @@ class TypeEmitter {
   std::unordered_map<bool, uint32_t> bool_constants_;
   std::unordered_map<std::pair<ir::TypeId, SpvStorageClass>, uint32_t, PairHash>
       pointer_types_;
+  std::unordered_map<FunctionSignature, uint32_t, FunctionSignatureHash>
+      function_types_;
   uint32_t function_void_type_ = 0;
 };
 
@@ -127,6 +145,14 @@ struct ValueInfo {
   ir::TypeId value_type = ir::kInvalidTypeId;
 };
 
+struct FunctionParamInfo {
+  uint32_t ir_var_id = 0;
+  ir::TypeId var_type = ir::kInvalidTypeId;
+  std::string name;
+  uint32_t spirv_param_id = 0;
+  uint32_t spirv_local_id = 0;
+};
+
 class ModuleBuilder {
  public:
   ModuleBuilder(const ir::Module& module, const ir::Function& entry,
@@ -146,11 +172,10 @@ class ModuleBuilder {
     uint32_t GetLocation() const;
   };
 
-  bool AnalyzeEntryBlock();
   // Global variables are discovered from IR operands rather than declarations,
   // because globals are module-level metadata instead of kVariable
   // instructions inside function blocks.
-  void CollectGlobalVarReferences(const std::vector<ir::Block>& blocks);
+  void CollectGlobalVarReferences(const ir::Function& function);
   bool AllocateCoreIds();
   void WriteCapabilityMemoryModel();
   void WriteEntryPointSection();
@@ -159,14 +184,18 @@ class ModuleBuilder {
   void WriteAnnotationSection();
   bool WriteTypeConstGlobalSection();
   bool WriteFunctionSection();
+  bool AnalyzeFunction(const ir::Function& function);
   bool EmitInstruction(const ir::Instruction& inst);
   uint32_t FindVariableSpirvId(uint32_t ir_var_id);
+  const ir::Function* FindFunctionByName(std::string_view name) const;
   const GlobalVarInfo* FindGlobalVarInfo(uint32_t ir_var_id) const;
   uint32_t GetAccessPointer(uint32_t ir_var_id, ir::TypeId inner_type,
                             uint32_t* out_ptr_id);
   bool EmitLoad(const ir::Instruction& inst);
   bool EmitStore(const ir::Instruction& inst);
   bool EmitBinary(const ir::Instruction& inst);
+  bool EmitConstruct(const ir::Instruction& inst);
+  bool EmitCall(const ir::Instruction& inst);
   bool MaterializeValue(const ir::Value& value, uint32_t* value_id);
   uint32_t GetSpirvTypeId(ir::TypeId type_id);
   uint32_t EmitConstant(const ir::Value& value);
@@ -176,6 +205,9 @@ class ModuleBuilder {
   bool EmitBranch(const ir::Instruction& inst);
   bool EmitCondBranch(const ir::Instruction& inst);
   bool EmitReturn(const ir::Instruction& inst);
+  uint32_t GetFunctionId(std::string_view function_name) const;
+  uint32_t GetFunctionTypeId(std::string_view function_name) const;
+  ir::TypeId GetSpirvFunctionReturnType(const ir::Function& function) const;
   void AssembleModule(std::vector<uint32_t>* output_words);
   std::vector<LocalVarInfo>::iterator FindLocalVar(uint32_t ir_var_id);
   std::vector<ValueInfo>::iterator FindValue(uint32_t ir_value_id);
@@ -192,8 +224,11 @@ class ModuleBuilder {
   // Function-local emission state.
   uint32_t function_id_ = 0;
   uint32_t function_type_id_ = 0;
+  std::unordered_map<std::string, uint32_t> function_id_map_;
+  std::unordered_map<std::string, uint32_t> function_type_id_map_;
   std::unordered_map<ir::BlockId, uint32_t> block_label_map_;
   std::vector<OutputVarInfo> output_vars_;
+  std::vector<FunctionParamInfo> function_params_;
   std::vector<LocalVarInfo> local_vars_;
   std::vector<GlobalVarInfo> global_vars_;
   std::vector<ValueInfo> values_;

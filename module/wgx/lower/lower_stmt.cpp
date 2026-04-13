@@ -59,6 +59,9 @@ bool Lowerer::LowerStatement(const ast::Statement* statement,
           static_cast<const ast::BreakIfStatement*>(statement), block);
     case ast::StatementType::kContinue:
       return LowerContinueStatement(block);
+    case ast::StatementType::kCall:
+      return LowerCallStatement(
+          static_cast<const ast::CallStatement*>(statement), block);
     default:
       return false;
   }
@@ -87,6 +90,22 @@ bool Lowerer::LowerReturnStatement(const ast::ReturnStatement* ret,
 
   block->instructions.emplace_back(inst);
   return true;
+}
+
+bool Lowerer::LowerCallStatement(const ast::CallStatement* call,
+                                 ir::Block* block) {
+  if (call == nullptr || call->expr == nullptr || block == nullptr) {
+    return false;
+  }
+
+  const ast::Function* callee = FindResolvedFunction(call->expr);
+  if (callee == nullptr) {
+    return false;
+  }
+
+  ir::ExprResult result = LowerFunctionCallExpression(call->expr, block);
+  return GetFunctionReturnType(callee) == ir::kInvalidTypeId ||
+         result.IsValid();
 }
 
 ir::Block* Lowerer::CurrentBlock() {

@@ -69,13 +69,42 @@ uint32_t TypeEmitter::EmitType(ir::TypeId type_id) {
 uint32_t TypeEmitter::GetFunctionTypeVoid() {
   if (function_void_type_ != 0) return function_void_type_;
 
-  uint32_t void_type = EmitType(type_table_->GetVoidType());
-  if (void_type == 0) return 0;
-
-  function_void_type_ = ids_->Allocate();
-  AppendInstruction(&sections_->types_consts_globals, SpvOpTypeFunction,
-                    {function_void_type_, void_type});
+  function_void_type_ = GetFunctionType(type_table_->GetVoidType(), {});
   return function_void_type_;
+}
+
+uint32_t TypeEmitter::GetFunctionType(
+    ir::TypeId return_type, const std::vector<ir::TypeId>& param_types) {
+  FunctionSignature signature;
+  signature.return_type = return_type;
+  signature.param_types = param_types;
+
+  auto it = function_types_.find(signature);
+  if (it != function_types_.end()) {
+    return it->second;
+  }
+
+  uint32_t spirv_return_type = EmitType(return_type);
+  if (spirv_return_type == 0) {
+    return 0;
+  }
+
+  std::vector<uint32_t> operands;
+  const uint32_t function_type_id = ids_->Allocate();
+  operands.push_back(function_type_id);
+  operands.push_back(spirv_return_type);
+  for (ir::TypeId param_type : param_types) {
+    uint32_t spirv_param_type = EmitType(param_type);
+    if (spirv_param_type == 0) {
+      return 0;
+    }
+    operands.push_back(spirv_param_type);
+  }
+
+  AppendInstruction(&sections_->types_consts_globals, SpvOpTypeFunction,
+                    operands);
+  function_types_[signature] = function_type_id;
+  return function_type_id;
 }
 
 uint32_t TypeEmitter::GetPointerType(ir::TypeId pointee,
@@ -212,6 +241,16 @@ size_t TypeEmitter::PairHash::operator()(
     const std::pair<ir::TypeId, SpvStorageClass>& p) const {
   return std::hash<ir::TypeId>{}(p.first) ^
          (std::hash<int>{}(static_cast<int>(p.second)) << 1);
+}
+
+size_t TypeEmitter::FunctionSignatureHash::operator()(
+    const FunctionSignature& sig) const {
+  size_t hash = std::hash<ir::TypeId>{}(sig.return_type);
+  for (ir::TypeId param_type : sig.param_types) {
+    hash ^= std::hash<ir::TypeId>{}(param_type) + 0x9e3779b9 + (hash << 6) +
+            (hash >> 2);
+  }
+  return hash;
 }
 
 }  // namespace spirv

@@ -1292,15 +1292,58 @@ fn helper(offset: f32) -> f32 {
 
 @vertex
 fn vs_main() -> @builtin(position) vec4<f32> {
-  var x: f32 = helper(0.5);
+  if (helper(0.5) > 1.0) {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  }
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_helper_call.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionParameter));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFAdd));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFOrdGreaterThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpReturnValue));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithDynamicVectorConstructor) {
+  auto program = wgx::Program::Parse(R"(
+fn helper(offset: f32) -> f32 {
+  return offset + 1.0;
+}
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  let x: f32 = helper(0.5);
   return vec4<f32>(x, 0.0, 0.0, 1.0);
 }
 )");
 
   ASSERT_NE(program, nullptr);
-  // Semantic should pass (function call is valid)
-  // But lower doesn't support function calls yet, so this is expected to fail
-  // at lower/emit stage
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_dynamic_vec_ctor.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpReturnValue));
 }
 
 #endif
