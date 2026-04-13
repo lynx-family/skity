@@ -112,6 +112,30 @@ bool ContainsDecoration(const std::vector<uint32_t>& words,
   return false;
 }
 
+bool ContainsVariableWithStorageClass(const std::vector<uint32_t>& words,
+                                      SpvStorageClass storage_class) {
+  size_t offset = 5u;
+  while (offset < words.size()) {
+    const uint32_t inst = words[offset];
+    const uint16_t word_count =
+        static_cast<uint16_t>(inst >> SpvWordCountShift);
+    const auto opcode = static_cast<SpvOp>(inst & SpvOpCodeMask);
+
+    if (word_count == 0u) {
+      return false;
+    }
+
+    if (opcode == SpvOpVariable && word_count >= 4u &&
+        words[offset + 3u] == static_cast<uint32_t>(storage_class)) {
+      return true;
+    }
+
+    offset += word_count;
+  }
+
+  return false;
+}
+
 bool ContainsCapability(const std::vector<uint32_t>& words,
                         SpvCapability capability) {
   size_t offset = 5u;
@@ -339,6 +363,37 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+}
+
+TEST(WgxSpirvSmokeTest,
+     EmitsTextureSampleBuiltinForFragmentShaderWithLocationInput) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+
+@fragment
+fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+  return textureSample(tex, samp, uv);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_texture_sample_input.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
+  EXPECT_TRUE(ContainsVariableWithStorageClass(words, SpvStorageClassInput));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSampledImage));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpImageSampleImplicitLod));
 }
 
 TEST(WgxSpirvSmokeTest, EmitsTextureSampleLevelBuiltinForFragmentShader) {
@@ -1390,16 +1445,11 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
-/**
- * Test function parameter usage.
- * Entry point parameters should be usable in function body.
- */
 TEST(WgxSpirvSmokeTest, EmitsSpirvWithFunctionParameter) {
   auto program = wgx::Program::Parse(R"(
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> @builtin(position) vec4<f32> {
-  var x: f32 = f32(vertex_index);
-  return vec4<f32>(x, 0.0, 0.0, 1.0);
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
 }
 )");
 
@@ -1409,16 +1459,40 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> @builtin(position) vec4<
   wgx::SpirvOptions options;
   auto result = program->WriteToSpirv("vs_main", options);
 
-  // Note: This test uses vertex_index parameter.
-  // The lowerer now supports parameters, but the emitter may not
-  // yet handle all parameter types (like u32).
-  // For now, we just verify the lowerer doesn't crash.
-  if (result.success) {
-    DumpSpirvBinary("wgx_vs_main_param.spv", result.spirv);
-    auto words = result.spirv;
-    ASSERT_GE(words.size(), 5u);
-    EXPECT_EQ(words[0], SpvMagicNumber);
-  }
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_param.spv", result.spirv);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsVariableWithStorageClass(words, SpvStorageClassInput));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInVertexIndex));
+  EXPECT_FALSE(ContainsInstruction(words, SpvOpFunctionParameter));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForLocationInput) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main(@location(0) pos: vec2<f32>) -> @builtin(position) vec4<f32> {
+  var local_pos: vec2<f32> = pos;
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_location_input.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsVariableWithStorageClass(words, SpvStorageClassInput));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
 }
 
 /**

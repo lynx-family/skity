@@ -180,6 +180,21 @@ bool ModuleBuilder::Build(SectionBuffers* sections,
 
   type_emitter_ = std::make_unique<TypeEmitter>(&ids_, sections_, type_table);
 
+  input_vars_.clear();
+  for (const auto& ir_param : entry_.parameters) {
+    if (!ir_param.IsEntryPointInterfaceInput()) {
+      continue;
+    }
+
+    InputVarInfo info;
+    info.ir_var_id = ir_param.var_id;
+    info.name = ir_param.name;
+    info.ir_type = ir_param.type;
+    info.decoration_kind = ir_param.decoration_kind;
+    info.decoration_value = ir_param.decoration_value;
+    input_vars_.push_back(std::move(info));
+  }
+
   output_vars_.clear();
   for (const auto& ir_output : entry_.output_vars) {
     OutputVarInfo info;
@@ -219,8 +234,12 @@ bool ModuleBuilder::AnalyzeFunction(const ir::Function& function) {
     info.ir_var_id = param.var_id;
     info.var_type = param.type;
     info.name = param.name;
-    info.spirv_param_id = ids_.Allocate();
     info.spirv_local_id = ids_.Allocate();
+    info.is_entry_interface_input = function.name == module_.entry_point &&
+                                    param.IsEntryPointInterfaceInput();
+    if (!info.is_entry_interface_input) {
+      info.spirv_param_id = ids_.Allocate();
+    }
     function_params_.push_back(std::move(info));
   }
 
@@ -322,9 +341,11 @@ bool ModuleBuilder::AllocateCoreIds() {
     function_id_map_[function.name] = ids_.Allocate();
 
     std::vector<ir::TypeId> param_types;
-    param_types.reserve(function.parameters.size());
-    for (const auto& param : function.parameters) {
-      param_types.push_back(param.type);
+    if (function.name != module_.entry_point) {
+      param_types.reserve(function.parameters.size());
+      for (const auto& param : function.parameters) {
+        param_types.push_back(param.type);
+      }
     }
 
     const ir::TypeId return_type = GetSpirvFunctionReturnType(function);
@@ -337,6 +358,9 @@ bool ModuleBuilder::AllocateCoreIds() {
   }
 
   function_id_ = GetFunctionId(module_.entry_point);
+  for (auto& input : input_vars_) {
+    input.spirv_var_id = ids_.Allocate();
+  }
   for (auto& output : output_vars_) {
     output.spirv_var_id = ids_.Allocate();
   }
@@ -363,6 +387,9 @@ void ModuleBuilder::WriteCapabilityMemoryModel() {
 
 void ModuleBuilder::WriteEntryPointSection() {
   std::vector<uint32_t> interface_ids;
+  for (const auto& input : input_vars_) {
+    interface_ids.push_back(input.spirv_var_id);
+  }
   for (const auto& output : output_vars_) {
     interface_ids.push_back(output.spirv_var_id);
   }
@@ -382,6 +409,9 @@ void ModuleBuilder::WriteDebugSection() {
   for (const auto& function : module_.functions) {
     AppendName(&sections_->debug, GetFunctionId(function.name), function.name);
   }
+  for (const auto& input : input_vars_) {
+    AppendName(&sections_->debug, input.spirv_var_id, input.name);
+  }
   for (const auto& output : output_vars_) {
     AppendName(&sections_->debug, output.spirv_var_id, output.name);
   }
@@ -392,6 +422,10 @@ SpvBuiltIn ConvertBuiltin(ir::BuiltinType builtin) {
   switch (builtin) {
     case ir::BuiltinType::kPosition:
       return SpvBuiltInPosition;
+    case ir::BuiltinType::kVertexIndex:
+      return SpvBuiltInVertexIndex;
+    case ir::BuiltinType::kInstanceIndex:
+      return SpvBuiltInInstanceIndex;
     case ir::BuiltinType::kNone:
     default:
       return SpvBuiltInMax;
@@ -400,14 +434,30 @@ SpvBuiltIn ConvertBuiltin(ir::BuiltinType builtin) {
 }  // namespace
 
 void ModuleBuilder::WriteAnnotationSection() {
+  for (const auto& input : input_vars_) {
+    if (input.decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
+      SpvBuiltIn spirv_builtin = ConvertBuiltin(input.GetBuiltin());
+      AppendInstruction(
+          &sections_->annotations, SpvOpDecorate,
+          {input.spirv_var_id, static_cast<uint32_t>(SpvDecorationBuiltIn),
+           static_cast<uint32_t>(spirv_builtin)});
+    } else if (input.decoration_kind ==
+               ir::InterfaceDecorationKind::kLocation) {
+      AppendInstruction(
+          &sections_->annotations, SpvOpDecorate,
+          {input.spirv_var_id, static_cast<uint32_t>(SpvDecorationLocation),
+           input.decoration_value});
+    }
+  }
   for (const auto& output : output_vars_) {
-    if (output.decoration_kind == ir::OutputDecorationKind::kBuiltin) {
+    if (output.decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
       SpvBuiltIn spirv_builtin = ConvertBuiltin(output.GetBuiltin());
       AppendInstruction(
           &sections_->annotations, SpvOpDecorate,
           {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationBuiltIn),
            static_cast<uint32_t>(spirv_builtin)});
-    } else if (output.decoration_kind == ir::OutputDecorationKind::kLocation) {
+    } else if (output.decoration_kind ==
+               ir::InterfaceDecorationKind::kLocation) {
       AppendInstruction(
           &sections_->annotations, SpvOpDecorate,
           {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationLocation),
@@ -452,6 +502,19 @@ bool ModuleBuilder::WriteTypeConstGlobalSection() {
   uint32_t void_type =
       type_emitter_->EmitType(type_emitter_->GetTypeTable()->GetVoidType());
   if (void_type == 0) return false;
+
+  for (auto& input : input_vars_) {
+    uint32_t spirv_type = type_emitter_->EmitType(input.ir_type);
+    if (spirv_type == 0) return false;
+
+    uint32_t input_ptr_type =
+        type_emitter_->GetPointerType(input.ir_type, SpvStorageClassInput);
+    if (input_ptr_type == 0) return false;
+
+    AppendInstruction(&sections_->types_consts_globals, SpvOpVariable,
+                      {input_ptr_type, input.spirv_var_id,
+                       static_cast<uint32_t>(SpvStorageClassInput)});
+  }
 
   for (auto& output : output_vars_) {
     uint32_t spirv_type = type_emitter_->EmitType(output.ir_type);
@@ -517,13 +580,15 @@ bool ModuleBuilder::WriteFunctionSection() {
         {return_type_id, function_id_,
          static_cast<uint32_t>(SpvFunctionControlMaskNone), function_type_id_});
 
-    for (const auto& param : function_params_) {
-      uint32_t param_type_id = type_emitter_->EmitType(param.var_type);
-      if (param_type_id == 0) {
-        return false;
+    if (function.name != module_.entry_point) {
+      for (const auto& param : function_params_) {
+        uint32_t param_type_id = type_emitter_->EmitType(param.var_type);
+        if (param_type_id == 0) {
+          return false;
+        }
+        AppendInstruction(&sections_->functions, SpvOpFunctionParameter,
+                          {param_type_id, param.spirv_param_id});
       }
-      AppendInstruction(&sections_->functions, SpvOpFunctionParameter,
-                        {param_type_id, param.spirv_param_id});
     }
 
     for (const auto& block : function.blocks) {
@@ -546,8 +611,6 @@ bool ModuleBuilder::WriteFunctionSection() {
           AppendInstruction(&sections_->functions, SpvOpVariable,
                             {ptr_type, param.spirv_local_id,
                              static_cast<uint32_t>(SpvStorageClassFunction)});
-          AppendInstruction(&sections_->functions, SpvOpStore,
-                            {param.spirv_local_id, param.spirv_param_id});
         }
 
         for (auto& var : local_vars_) {
@@ -557,6 +620,24 @@ bool ModuleBuilder::WriteFunctionSection() {
           AppendInstruction(&sections_->functions, SpvOpVariable,
                             {ptr_type, var.spirv_var_id,
                              static_cast<uint32_t>(SpvStorageClassFunction)});
+        }
+
+        for (auto& param : function_params_) {
+          if (param.is_entry_interface_input) {
+            const InputVarInfo* input = FindInputVarInfo(param.ir_var_id);
+            if (input == nullptr) {
+              return false;
+            }
+            uint32_t loaded_input_id = ids_.Allocate();
+            AppendInstruction(&sections_->functions, SpvOpLoad,
+                              {GetSpirvTypeId(param.var_type), loaded_input_id,
+                               input->spirv_var_id});
+            AppendInstruction(&sections_->functions, SpvOpStore,
+                              {param.spirv_local_id, loaded_input_id});
+          } else {
+            AppendInstruction(&sections_->functions, SpvOpStore,
+                              {param.spirv_local_id, param.spirv_param_id});
+          }
         }
       }
 
@@ -1164,14 +1245,28 @@ std::vector<ValueInfo>::iterator ModuleBuilder::FindValue(
 }
 
 ir::BuiltinType ModuleBuilder::OutputVarInfo::GetBuiltin() const {
-  if (decoration_kind == ir::OutputDecorationKind::kBuiltin) {
+  if (decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
     return static_cast<ir::BuiltinType>(decoration_value);
   }
   return ir::BuiltinType::kNone;
 }
 
 uint32_t ModuleBuilder::OutputVarInfo::GetLocation() const {
-  if (decoration_kind == ir::OutputDecorationKind::kLocation) {
+  if (decoration_kind == ir::InterfaceDecorationKind::kLocation) {
+    return decoration_value;
+  }
+  return 0;
+}
+
+ir::BuiltinType ModuleBuilder::InputVarInfo::GetBuiltin() const {
+  if (decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
+    return static_cast<ir::BuiltinType>(decoration_value);
+  }
+  return ir::BuiltinType::kNone;
+}
+
+uint32_t ModuleBuilder::InputVarInfo::GetLocation() const {
+  if (decoration_kind == ir::InterfaceDecorationKind::kLocation) {
     return decoration_value;
   }
   return 0;
@@ -1207,6 +1302,16 @@ uint32_t ModuleBuilder::GetOrCreateBlockLabel(ir::BlockId block_id) {
   uint32_t label_id = ids_.Allocate();
   block_label_map_[block_id] = label_id;
   return label_id;
+}
+
+const ModuleBuilder::InputVarInfo* ModuleBuilder::FindInputVarInfo(
+    uint32_t ir_var_id) const {
+  for (const auto& input : input_vars_) {
+    if (input.ir_var_id == ir_var_id) {
+      return &input;
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace spirv

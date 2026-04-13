@@ -155,6 +155,7 @@ struct FunctionParamInfo {
   std::string name;
   uint32_t spirv_param_id = 0;
   uint32_t spirv_local_id = 0;
+  bool is_entry_interface_input = false;
 };
 
 class ModuleBuilder {
@@ -168,7 +169,21 @@ class ModuleBuilder {
   struct OutputVarInfo {
     std::string name;
     ir::TypeId ir_type = ir::kInvalidTypeId;
-    ir::OutputDecorationKind decoration_kind = ir::OutputDecorationKind::kNone;
+    ir::InterfaceDecorationKind decoration_kind =
+        ir::InterfaceDecorationKind::kNone;
+    uint32_t decoration_value = 0;
+    uint32_t spirv_var_id = 0;
+
+    ir::BuiltinType GetBuiltin() const;
+    uint32_t GetLocation() const;
+  };
+
+  struct InputVarInfo {
+    uint32_t ir_var_id = 0;
+    std::string name;
+    ir::TypeId ir_type = ir::kInvalidTypeId;
+    ir::InterfaceDecorationKind decoration_kind =
+        ir::InterfaceDecorationKind::kNone;
     uint32_t decoration_value = 0;
     uint32_t spirv_var_id = 0;
 
@@ -217,6 +232,7 @@ class ModuleBuilder {
   std::vector<LocalVarInfo>::iterator FindLocalVar(uint32_t ir_var_id);
   std::vector<ValueInfo>::iterator FindValue(uint32_t ir_value_id);
   uint32_t GetOrCreateBlockLabel(ir::BlockId block_id);
+  const InputVarInfo* FindInputVarInfo(uint32_t ir_var_id) const;
 
   const ir::Module& module_;
   const ir::Function& entry_;
@@ -232,6 +248,7 @@ class ModuleBuilder {
   std::unordered_map<std::string, uint32_t> function_id_map_;
   std::unordered_map<std::string, uint32_t> function_type_id_map_;
   std::unordered_map<ir::BlockId, uint32_t> block_label_map_;
+  std::vector<InputVarInfo> input_vars_;
   std::vector<OutputVarInfo> output_vars_;
   std::vector<FunctionParamInfo> function_params_;
   std::vector<LocalVarInfo> local_vars_;

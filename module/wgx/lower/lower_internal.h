@@ -64,6 +64,8 @@ class Lowerer {
   bool RegisterFunctionParameters();
   bool LowerFunctionBody();
   bool InsertImplicitReturn();
+  void ResolveParameterDecorations(const ast::Parameter* param,
+                                   ir::FunctionParameter* ir_param) const;
   std::vector<ir::OutputVariable> ResolveOutputVars(
       const ast::Function* function) const;
   ir::TypeId ResolveType(const ast::Type& type);

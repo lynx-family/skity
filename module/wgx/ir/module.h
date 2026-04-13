@@ -25,8 +25,8 @@ enum class PipelineStage {
 using BlockId = uint32_t;
 constexpr BlockId kInvalidBlockId = 0;
 
-// Output variable decoration types
-enum class OutputDecorationKind {
+// Entry-point interface decoration types
+enum class InterfaceDecorationKind {
   kNone,      // No decoration (void)
   kBuiltin,   // @builtin(...)
   kLocation,  // @location(...)
@@ -37,7 +37,9 @@ enum class OutputDecorationKind {
 enum class BuiltinType {
   kNone,
   kPosition,
-  // Future: kFragDepth, kSampleMask, kVertexIndex, etc.
+  kVertexIndex,
+  kInstanceIndex,
+  // Future: kFragDepth, kSampleMask, etc.
 };
 
 // Description of a single output variable
@@ -50,7 +52,7 @@ struct OutputVariable {
   TypeId type = kInvalidTypeId;
 
   // Decoration kind
-  OutputDecorationKind decoration_kind = OutputDecorationKind::kNone;
+  InterfaceDecorationKind decoration_kind = InterfaceDecorationKind::kNone;
 
   // Decoration value:
   // - For kBuiltin: BuiltinType enum value
@@ -59,13 +61,13 @@ struct OutputVariable {
 
   // Helper to set builtin decoration
   void SetBuiltin(BuiltinType builtin) {
-    decoration_kind = OutputDecorationKind::kBuiltin;
+    decoration_kind = InterfaceDecorationKind::kBuiltin;
     decoration_value = static_cast<uint32_t>(builtin);
   }
 
   // Helper to get builtin type
   BuiltinType GetBuiltin() const {
-    if (decoration_kind == OutputDecorationKind::kBuiltin) {
+    if (decoration_kind == InterfaceDecorationKind::kBuiltin) {
       return static_cast<BuiltinType>(decoration_value);
     }
     return BuiltinType::kNone;
@@ -73,13 +75,13 @@ struct OutputVariable {
 
   // Helper to set location decoration
   void SetLocation(uint32_t loc) {
-    decoration_kind = OutputDecorationKind::kLocation;
+    decoration_kind = InterfaceDecorationKind::kLocation;
     decoration_value = loc;
   }
 
   // Helper to get location index
   uint32_t GetLocation() const {
-    if (decoration_kind == OutputDecorationKind::kLocation) {
+    if (decoration_kind == InterfaceDecorationKind::kLocation) {
       return decoration_value;
     }
     return 0;
@@ -90,6 +92,36 @@ struct FunctionParameter {
   std::string name;
   TypeId type = kInvalidTypeId;
   uint32_t var_id = 0;
+  InterfaceDecorationKind decoration_kind = InterfaceDecorationKind::kNone;
+  uint32_t decoration_value = 0;
+
+  bool IsEntryPointInterfaceInput() const {
+    return decoration_kind != InterfaceDecorationKind::kNone;
+  }
+
+  void SetBuiltin(BuiltinType builtin) {
+    decoration_kind = InterfaceDecorationKind::kBuiltin;
+    decoration_value = static_cast<uint32_t>(builtin);
+  }
+
+  BuiltinType GetBuiltin() const {
+    if (decoration_kind == InterfaceDecorationKind::kBuiltin) {
+      return static_cast<BuiltinType>(decoration_value);
+    }
+    return BuiltinType::kNone;
+  }
+
+  void SetLocation(uint32_t loc) {
+    decoration_kind = InterfaceDecorationKind::kLocation;
+    decoration_value = loc;
+  }
+
+  uint32_t GetLocation() const {
+    if (decoration_kind == InterfaceDecorationKind::kLocation) {
+      return decoration_value;
+    }
+    return 0;
+  }
 };
 
 enum class InstKind {
