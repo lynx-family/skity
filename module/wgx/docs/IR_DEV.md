@@ -45,17 +45,22 @@ entry-point struct IO for the current validated subset:
   interface boundary rather than inside general lowering
 - the validated smoke coverage now includes:
   - vertex `VertexInput` / `VertexOutput` style interface structs
+  - fragment struct input/output interfaces
   - helper-function struct parameters
   - struct return followed by member extraction
+  - nested member access chains
+  - whole-struct assignment / copy
+  - struct/member-access combined with `if/else`, `while`, `for`, and `switch`
 
 The current highest-priority missing slices are the broader struct edges that
 still sit outside the validated subset:
 
-- nested member access chains such as `a.b.c`
-- broader struct initialization / whole-value assignment coverage
 - additional entry-point shapes beyond the current scalar/vector member subset
-- more validation around fragment-stage struct IO and mixed helper/entry-point
-  struct flows
+- deeper nested chains such as `a.b.c.d`
+- more whole-struct initialization / copy combinations across richer aggregate
+  shapes
+- more validation around mixed helper/entry-point aggregate flows and real
+  runtime pipeline usage beyond the first pipeline-creation slice
 
 Likely edit targets for this slice:
 
@@ -253,6 +258,8 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - WGX SPIR-V smoke tests
    - `spirv-val --target-env vulkan1.1`
    - `spirv-dis` spot-check / disassembly generation
+   - a dedicated Vulkan runtime test that creates real shader modules and a
+     graphics pipeline through SwiftShader
    - local helper script:
      - `./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build`
    - note: the helper currently skips `wgx_vs_main_workgroup.spv` during
@@ -299,8 +306,11 @@ The backend currently still has these important limitations:
    - `Block` has `id` and `name` for identification
    - terminator instructions (`kBranch`, `kCondBranch`, `kReturn`) end each block
 
-6. **Validation is strong at the static SPIR-V level, but not yet Vulkan-runtime-integrated**
+6. **Validation now includes a first Vulkan runtime slice, but is still narrow**
    - current confidence is based on smoke tests + `spirv-val` + `spirv-dis`
+   - there is now also a real SwiftShader-backed pipeline-creation test
+   - runtime validation is still intentionally narrow and should be expanded
+     beyond the first happy-path graphics pipeline
 
 7. **Structured control flow is still a subset, not full WGSL control flow**
    - `break if` in loop `continuing` blocks is now lowered through conditional
@@ -440,10 +450,10 @@ useful next implementation slice is:
 
 1. keep the current `texture_2d<f32>` resource slice stable instead of adding
    more texture kinds immediately
-2. expand nested/member-chain and whole-struct behavior on top of the current
-   aggregate IR model
-3. add more validation for fragment-stage struct IO and helper/entry-point
-   aggregate interactions
+2. expand deeper nested/member-chain and richer whole-struct behavior on top of
+   the current aggregate IR model
+3. add more runtime validation cases on top of the shared Vulkan test context
+   now that the first SwiftShader pipeline-creation slice is in place
 4. once those edges are stable, return to texture builtin expansion before
    expanding the texture-type matrix
 
@@ -453,17 +463,23 @@ The completed validation baseline for the scalar/vector interface slice is:
 - `textureSample(texture, sampler, uv)` using that non-constant input
 - vertex entry point with `@builtin(vertex_index)` input
 - vertex entry point with `@location(0)` input
+- vertex and fragment struct interface IO
+- nested member access and whole-struct assignment
+- struct/member-access combined with `if/else`, `while`, `for`, and `switch`
+- a dedicated SwiftShader-backed Vulkan graphics-pipeline creation test
 - validation through `WgxSpirvSmokeTest.*`,
+  `WgxVulkanPipelineTest.*`,
   `./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build`,
   `spirv-val`, and `spirv-dis`
 
 The recommended first validation target for the next slice is:
 
-- nested member access such as `a.b.c`
+- deeper nested member access such as `a.b.c.d`
 - whole-struct copy / assignment where the source or destination later feeds
-  member access
-- fragment entry point using struct input/output on the same aggregate path
+  nested member access
 - helper-function chains that pass structs across multiple calls
+- additional Vulkan runtime pipeline cases that stress more than the current
+  happy-path shader pair
 
 ## Clarification: Full Struct Support Direction
 
@@ -569,12 +585,16 @@ changes in this slice are:
 
 4. **Current validation coverage**
    - vertex entry point with struct input/output interface members
+   - fragment entry point with struct input/output interface members
    - helper function with struct parameter
    - helper function returning a struct followed by member extraction at the
      call site
+   - nested member access and whole-struct assignment
+   - struct/member-access combined with `if/else`, `while`, `for`, and `switch`
+   - a dedicated SwiftShader-backed Vulkan graphics pipeline creation test
 
 5. **Important non-goals of this exact slice**
-   - nested member chains are not yet the validated baseline
+   - arbitrarily deep nested member chains are not yet the validated baseline
    - this slice does not claim complete WGSL aggregate support across every
      matrix/array/struct combination
    - the current texture/runtime builtin work should remain stable while the
@@ -610,10 +630,12 @@ At the time this document was last rewritten, the actively supported smoke-test
 outputs were verified through:
 
 - `WgxSpirvSmokeTest.*`
+- `WgxVulkanPipelineTest.*`
 - `spirv-val --target-env vulkan1.1`
 - `spirv-dis`
 
 This means the currently generated supported `.spv` samples are statically
-validated and disassemblable, but future work should still treat the current
-backend as a refactor-first in-progress system rather than a feature-complete
-compiler backend.
+validated and disassemblable, and there is now a first real Vulkan
+pipeline-creation check through SwiftShader. Future work should still treat the
+current backend as a refactor-first in-progress system rather than a
+feature-complete compiler backend.

@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstring>
+#include <unordered_set>
 
 #include "spirv/emitter_internal.h"
 

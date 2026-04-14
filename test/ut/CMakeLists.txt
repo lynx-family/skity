@@ -124,12 +124,22 @@ target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
 if (${SKITY_VK_BACKEND})
     target_sources(skity_unit_test PRIVATE
         wgx/wgx_spirv_smoke_test.cc
+        wgx/wgx_vulkan_pipeline_test.cc
         wgx/wgx_value_test.cc
     )
 
     target_compile_definitions(skity_unit_test PRIVATE -DWGX_VULKAN=1)
     target_compile_definitions(skity_unit_test PRIVATE -DWGX_SPIRV_DUMP_DEFAULT_DIR="${CMAKE_BINARY_DIR}")
-    target_link_libraries(skity_unit_test PRIVATE SPIRV-Headers::SPIRV-Headers)
+    target_include_directories(skity_unit_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include
+    )
+    target_link_libraries(skity_unit_test PRIVATE
+        SPIRV-Headers::SPIRV-Headers
+        ${CMAKE_SOURCE_DIR}/third_party/libSwAngle/lib/libvk_swiftshader.dylib
+    )
+    set_target_properties(skity_unit_test PROPERTIES
+        BUILD_RPATH "${CMAKE_SOURCE_DIR}/third_party/libSwAngle/lib"
+    )
 endif()
 
 
