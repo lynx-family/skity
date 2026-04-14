@@ -13,28 +13,22 @@ long-term goal is a robust and extensible WGSL -> IR -> SPIR-V toolchain, the
 items below should be addressed before feature growth makes them expensive to
 untangle.
 
-## Current Active Task
+## Scope
 
-If you are picking up work from the current state, start here before taking on
-broader feature expansion:
+This document is intentionally not the source of truth for the current active
+implementation slice.
 
-- keep the existing `texture_2d<f32>` resource slice stable
-- treat entry-point input interface lowering for `@location(...)` / `@builtin(...)`
-  parameters as completed for the current scalar/vector slice
-- resume broader texture/sampler builtin expansion before widening the
-  texture-type matrix
-- defer additional texture kinds until there is a concrete need beyond the
-  validated `texture_2d<f32>` path
+Use `module/wgx/docs/IR_DEV.md` for:
 
-Completion signal for this slice:
+- the current recommended next task
+- the actively supported backend boundary
+- the latest validation baseline
 
-- a fragment entry point can take a decorated input such as
-  `@location(0) uv: vec2<f32>`
-- that input can flow into `textureSample(texture, sampler, uv)`
-- vertex entry points can also consume decorated builtin/location inputs through
-  the same interface path
-- the generated SPIR-V includes the required Input interface variables and
-  passes smoke validation and `spirv-val`
+Use this document for:
+
+- long-lived IR design constraints
+- refactor priorities that should still guide feature work
+- architectural risks that remain relevant even as the active slice changes
 
 ## Priority Levels
 
@@ -361,7 +355,60 @@ This is required for non-trivial WGSL programs.
 
 ---
 
-### 12. Expand validation beyond static SPIR-V legality
+### 12. Add a real aggregate/member-access IR model
+
+**Problem**
+
+WGSL struct support can be partially approximated by flattening selected
+entry-point interfaces, but that does not create a general model for:
+
+- local struct variables
+- helper-function struct parameters and returns
+- member access (`a.b`)
+- member assignment (`a.b = x`)
+- later nested aggregate access
+
+If struct support keeps being implemented through ad hoc flattening or by
+mapping members onto unrelated plain local variable slots, then some entry-point
+cases may work, but the language's aggregate semantics remain under-modeled.
+
+**Why it matters**
+
+Without an explicit aggregate/member-access model:
+
+- struct support becomes fragmented between entry-point code paths and ordinary
+  lowering
+- helper-function struct passing needs more special cases
+- nested structs and richer aggregate expressions stay awkward to add
+- backend code must infer structure that should already be represented in IR
+
+**Recommendation**
+
+Introduce an explicit IR-level aggregate access path. The final instruction
+shapes can vary, but the semantics should cover at least:
+
+- struct values as first-class IR types
+- struct addresses as first-class lvalues
+- a member-address operation for `address-of-struct -> address-of-member`
+- a member-extract operation for `value-of-struct -> value-of-member`
+
+Then build higher-level behavior on top of that model:
+
+- assignment uses member addresses
+- expression reads use member extracts or loads from member addresses
+- helper-function calls can accept and return struct values directly
+- entry-point struct IO flattening becomes a boundary transformation rather
+  than the main representation of structs
+
+**Expected payoff**
+
+This gives the compiler one coherent story for general structs and makes
+entry-point `VertexInput` / `VertexOutput` support a special case of the same
+aggregate semantics instead of a separate temporary universe.
+
+---
+
+### 13. Expand validation beyond static SPIR-V legality
 
 **Problem**
 

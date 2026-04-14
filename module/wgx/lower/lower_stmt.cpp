@@ -992,7 +992,7 @@ bool Lowerer::LowerVarDecl(const ast::VarDeclStatement* var_decl,
     if (!init_expr.IsValid()) {
       return false;
     }
-    if (!EmitStore(init_expr, var_id, block)) {
+    if (!EmitStore(init_expr, ir::Value::Variable(var_type, var_id), block)) {
       return false;
     }
   }
@@ -1007,22 +1007,8 @@ bool Lowerer::LowerAssignStatement(const ast::AssignStatement* assign,
     return false;
   }
 
-  if (assign->lhs->GetType() != ast::ExpressionType::kIdentifier) {
-    return false;
-  }
-
-  auto* ident = static_cast<ast::IdentifierExp*>(assign->lhs);
-  if (ident->ident == nullptr) {
-    return false;
-  }
-
-  const semantic::Symbol* target_symbol = FindResolvedSymbol(ident);
-  if (target_symbol == nullptr) {
-    return false;
-  }
-
-  auto var_info = LookupVar(target_symbol);
-  if (var_info.id == 0) {
+  ir::ExprResult lhs_expr = LowerExpression(assign->lhs);
+  if (!lhs_expr.IsValid() || !lhs_expr.IsAddress()) {
     return false;
   }
 
@@ -1031,7 +1017,7 @@ bool Lowerer::LowerAssignStatement(const ast::AssignStatement* assign,
     return false;
   }
 
-  return EmitStore(rhs_expr, var_info.id, block);
+  return EmitStore(rhs_expr, lhs_expr.value, block);
 }
 
 }  // namespace lower

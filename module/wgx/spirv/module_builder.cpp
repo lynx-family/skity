@@ -181,17 +181,14 @@ bool ModuleBuilder::Build(SectionBuffers* sections,
   type_emitter_ = std::make_unique<TypeEmitter>(&ids_, sections_, type_table);
 
   input_vars_.clear();
-  for (const auto& ir_param : entry_.parameters) {
-    if (!ir_param.IsEntryPointInterfaceInput()) {
-      continue;
-    }
-
+  for (const auto& ir_input : entry_.input_vars) {
     InputVarInfo info;
-    info.ir_var_id = ir_param.var_id;
-    info.name = ir_param.name;
-    info.ir_type = ir_param.type;
-    info.decoration_kind = ir_param.decoration_kind;
-    info.decoration_value = ir_param.decoration_value;
+    info.target_var_id = ir_input.target_var_id;
+    info.member_index = ir_input.member_index;
+    info.name = ir_input.name;
+    info.ir_type = ir_input.type;
+    info.decoration_kind = ir_input.decoration_kind;
+    info.decoration_value = ir_input.decoration_value;
     input_vars_.push_back(std::move(info));
   }
 
@@ -200,6 +197,7 @@ bool ModuleBuilder::Build(SectionBuffers* sections,
     OutputVarInfo info;
     info.name = ir_output.name;
     info.ir_type = ir_output.type;
+    info.member_index = ir_output.member_index;
     info.decoration_kind = ir_output.decoration_kind;
     info.decoration_value = ir_output.decoration_value;
     output_vars_.push_back(std::move(info));
@@ -235,9 +233,7 @@ bool ModuleBuilder::AnalyzeFunction(const ir::Function& function) {
     info.var_type = param.type;
     info.name = param.name;
     info.spirv_local_id = ids_.Allocate();
-    info.is_entry_interface_input = function.name == module_.entry_point &&
-                                    param.IsEntryPointInterfaceInput();
-    if (!info.is_entry_interface_input) {
+    if (function.name != module_.entry_point) {
       info.spirv_param_id = ids_.Allocate();
     }
     function_params_.push_back(std::move(info));
@@ -252,7 +248,9 @@ bool ModuleBuilder::AnalyzeFunction(const ir::Function& function) {
         info.var_type = inst.result_type;
         info.spirv_var_id = ids_.Allocate();
         local_vars_.push_back(std::move(info));
-      } else if (inst.kind == ir::InstKind::kBinary ||
+      } else if (inst.kind == ir::InstKind::kAccess ||
+                 inst.kind == ir::InstKind::kExtract ||
+                 inst.kind == ir::InstKind::kBinary ||
                  inst.kind == ir::InstKind::kLoad ||
                  inst.kind == ir::InstKind::kConstruct ||
                  inst.kind == ir::InstKind::kBuiltinCall ||
@@ -622,19 +620,44 @@ bool ModuleBuilder::WriteFunctionSection() {
                              static_cast<uint32_t>(SpvStorageClassFunction)});
         }
 
-        for (auto& param : function_params_) {
-          if (param.is_entry_interface_input) {
-            const InputVarInfo* input = FindInputVarInfo(param.ir_var_id);
-            if (input == nullptr) {
-              return false;
-            }
+        if (function.name == module_.entry_point) {
+          for (const auto& input : input_vars_) {
             uint32_t loaded_input_id = ids_.Allocate();
             AppendInstruction(&sections_->functions, SpvOpLoad,
-                              {GetSpirvTypeId(param.var_type), loaded_input_id,
-                               input->spirv_var_id});
+                              {GetSpirvTypeId(input.ir_type), loaded_input_id,
+                               input.spirv_var_id});
+
+            uint32_t ptr_id = 0;
+            if (input.member_index.has_value()) {
+              const FunctionParamInfo* param_info =
+                  FindFunctionParamInfo(input.target_var_id);
+              if (param_info == nullptr) {
+                return false;
+              }
+
+              uint32_t ptr_type = type_emitter_->GetPointerType(
+                  input.ir_type, SpvStorageClassFunction);
+              uint32_t member_index_id =
+                  type_emitter_->EmitI32Constant(input.member_index.value());
+              if (ptr_type == 0 || member_index_id == 0) {
+                return false;
+              }
+
+              ptr_id = ids_.Allocate();
+              AppendInstruction(&sections_->functions, SpvOpAccessChain,
+                                {ptr_type, ptr_id, param_info->spirv_local_id,
+                                 member_index_id});
+            } else {
+              ptr_id = FindVariableSpirvId(input.target_var_id);
+            }
+            if (ptr_id == 0) {
+              return false;
+            }
             AppendInstruction(&sections_->functions, SpvOpStore,
-                              {param.spirv_local_id, loaded_input_id});
-          } else {
+                              {ptr_id, loaded_input_id});
+          }
+        } else {
+          for (auto& param : function_params_) {
             AppendInstruction(&sections_->functions, SpvOpStore,
                               {param.spirv_local_id, param.spirv_param_id});
           }
@@ -660,6 +683,10 @@ bool ModuleBuilder::EmitInstruction(const ir::Instruction& inst) {
       return EmitLoad(inst);
     case ir::InstKind::kStore:
       return EmitStore(inst);
+    case ir::InstKind::kAccess:
+      return EmitAccess(inst);
+    case ir::InstKind::kExtract:
+      return EmitExtract(inst);
     case ir::InstKind::kBinary:
       return EmitBinary(inst);
     case ir::InstKind::kConstruct:
@@ -700,6 +727,16 @@ uint32_t ModuleBuilder::FindVariableSpirvId(uint32_t ir_var_id) {
   return 0;
 }
 
+const FunctionParamInfo* ModuleBuilder::FindFunctionParamInfo(
+    uint32_t ir_var_id) const {
+  for (const auto& param : function_params_) {
+    if (param.ir_var_id == ir_var_id) {
+      return &param;
+    }
+  }
+  return nullptr;
+}
+
 const ir::Function* ModuleBuilder::FindFunctionByName(
     std::string_view name) const {
   for (const auto& function : module_.functions) {
@@ -720,9 +757,19 @@ const GlobalVarInfo* ModuleBuilder::FindGlobalVarInfo(
   return nullptr;
 }
 
-uint32_t ModuleBuilder::GetAccessPointer(uint32_t ir_var_id,
-                                         ir::TypeId inner_type,
-                                         uint32_t* out_ptr_id) {
+uint32_t ModuleBuilder::GetAddressPointer(const ir::Value& address,
+                                          ir::TypeId inner_type,
+                                          uint32_t* out_ptr_id) {
+  if (out_ptr_id == nullptr || !address.IsAddress()) {
+    return 0;
+  }
+
+  if (address.IsPointerSSA()) {
+    *out_ptr_id = value_map_[address.GetSSAId().value_or(0)];
+    return *out_ptr_id != 0 ? 1 : 0;
+  }
+
+  uint32_t ir_var_id = address.GetVarId().value_or(0);
   const GlobalVarInfo* global_info = FindGlobalVarInfo(ir_var_id);
   if (global_info == nullptr) {
     *out_ptr_id = FindVariableSpirvId(ir_var_id);
@@ -751,11 +798,10 @@ uint32_t ModuleBuilder::GetAccessPointer(uint32_t ir_var_id,
 bool ModuleBuilder::EmitLoad(const ir::Instruction& inst) {
   if (inst.operands.size() != 1) return false;
   const ir::Value& source = inst.operands[0];
-  if (!source.IsVariable()) return false;
+  if (!source.IsAddress()) return false;
 
-  uint32_t ir_var_id = source.GetVarId().value();
   uint32_t ptr_id = 0;
-  if (GetAccessPointer(ir_var_id, inst.result_type, &ptr_id) == 0) {
+  if (GetAddressPointer(source, inst.result_type, &ptr_id) == 0) {
     return false;
   }
 
@@ -771,11 +817,10 @@ bool ModuleBuilder::EmitStore(const ir::Instruction& inst) {
   if (inst.operands.size() != 2) return false;
   const ir::Value& target = inst.operands[0];
   const ir::Value& source = inst.operands[1];
-  if (!target.IsVariable() || !source.IsValue()) return false;
+  if (!target.IsAddress() || !source.IsValue()) return false;
 
-  uint32_t ir_var_id = target.GetVarId().value();
   uint32_t ptr_id = 0;
-  if (GetAccessPointer(ir_var_id, source.type, &ptr_id) == 0) {
+  if (GetAddressPointer(target, source.type, &ptr_id) == 0) {
     return false;
   }
 
@@ -785,6 +830,65 @@ bool ModuleBuilder::EmitStore(const ir::Instruction& inst) {
   }
 
   AppendInstruction(&sections_->functions, SpvOpStore, {ptr_id, value_id});
+  return true;
+}
+
+bool ModuleBuilder::EmitAccess(const ir::Instruction& inst) {
+  if (inst.operands.size() != 1 || FindValue(inst.result_id) == values_.end()) {
+    return false;
+  }
+  const ir::Value& base = inst.operands[0];
+  if (!base.IsAddress()) {
+    return false;
+  }
+
+  uint32_t base_ptr_id = 0;
+  if (!MaterializeAddress(base, base.type, &base_ptr_id)) {
+    return false;
+  }
+
+  uint32_t ptr_type =
+      type_emitter_->GetPointerType(inst.result_type, SpvStorageClassFunction);
+  if (ptr_type == 0) {
+    const GlobalVarInfo* global_info =
+        base.IsVariable() ? FindGlobalVarInfo(base.GetVarId().value_or(0))
+                          : nullptr;
+    if (global_info != nullptr) {
+      ptr_type = type_emitter_->GetPointerType(inst.result_type,
+                                               global_info->storage_class);
+    }
+  }
+  if (ptr_type == 0) {
+    return false;
+  }
+
+  uint32_t access_id = ids_.Allocate();
+  uint32_t index_id = type_emitter_->EmitI32Constant(inst.access_index);
+  AppendInstruction(&sections_->functions, SpvOpAccessChain,
+                    {ptr_type, access_id, base_ptr_id, index_id});
+  value_map_[inst.result_id] = access_id;
+  return true;
+}
+
+bool ModuleBuilder::EmitExtract(const ir::Instruction& inst) {
+  if (inst.operands.size() != 1 || FindValue(inst.result_id) == values_.end()) {
+    return false;
+  }
+  const ir::Value& base = inst.operands[0];
+  if (!base.IsValue()) {
+    return false;
+  }
+
+  uint32_t base_id = 0;
+  if (!MaterializeValue(base, &base_id)) {
+    return false;
+  }
+
+  uint32_t result_id = ids_.Allocate();
+  AppendInstruction(&sections_->functions, SpvOpCompositeExtract,
+                    {GetSpirvTypeId(inst.result_type), result_id, base_id,
+                     inst.access_index});
+  value_map_[inst.result_id] = result_id;
   return true;
 }
 
@@ -1026,6 +1130,15 @@ bool ModuleBuilder::MaterializeValue(const ir::Value& value,
   return false;
 }
 
+bool ModuleBuilder::MaterializeAddress(const ir::Value& value,
+                                       ir::TypeId pointee_type,
+                                       uint32_t* ptr_id) {
+  if (ptr_id == nullptr || !value.IsAddress()) {
+    return false;
+  }
+  return GetAddressPointer(value, pointee_type, ptr_id) != 0;
+}
+
 uint32_t ModuleBuilder::GetSpirvTypeId(ir::TypeId type_id) {
   return type_emitter_->EmitType(type_id);
 }
@@ -1193,14 +1306,33 @@ bool ModuleBuilder::EmitReturn(const ir::Instruction& inst) {
     return true;
   }
 
-  if (inst.operands.size() != 1 || !inst.operands[0].IsValue()) return false;
-
-  uint32_t value_to_store = 0;
-  if (!MaterializeValue(inst.operands[0], &value_to_store)) {
+  if (inst.operands.size() != 1 || !inst.operands[0].IsValue()) {
     return false;
   }
 
+  uint32_t return_value_id = 0;
+  if (!MaterializeValue(inst.operands[0], &return_value_id)) {
+    return false;
+  }
+
+  const ir::Type* return_type =
+      type_emitter_->GetTypeTable()->GetType(inst.operands[0].type);
+  const bool is_struct_return =
+      return_type != nullptr && return_type->kind == ir::TypeKind::kStruct;
+
   for (const auto& output : output_vars_) {
+    uint32_t value_to_store = return_value_id;
+    if (is_struct_return) {
+      if (!output.member_index.has_value()) {
+        return false;
+      }
+      uint32_t extracted_id = ids_.Allocate();
+      AppendInstruction(&sections_->functions, SpvOpCompositeExtract,
+                        {GetSpirvTypeId(output.ir_type), extracted_id,
+                         return_value_id, output.member_index.value()});
+      value_to_store = extracted_id;
+    }
+
     AppendInstruction(&sections_->functions, SpvOpStore,
                       {output.spirv_var_id, value_to_store});
   }
@@ -1304,10 +1436,10 @@ uint32_t ModuleBuilder::GetOrCreateBlockLabel(ir::BlockId block_id) {
   return label_id;
 }
 
-const ModuleBuilder::InputVarInfo* ModuleBuilder::FindInputVarInfo(
+const ModuleBuilder::InputVarInfo* ModuleBuilder::FindInputVarInfoByTarget(
     uint32_t ir_var_id) const {
   for (const auto& input : input_vars_) {
-    if (input.ir_var_id == ir_var_id) {
+    if (input.target_var_id == ir_var_id) {
       return &input;
     }
   }

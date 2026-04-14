@@ -13,35 +13,54 @@ Before continuing SPIR-V backend development, read:
 
 - `module/wgx/docs/IR_REFACTOR_PLAN.md`
 
-That document remains the primary guide for follow-up implementation work.
-The current recommendation is still to prioritize structural refactoring before
-adding broader language/backend features.
+That document remains useful as the long-lived architecture/reference note for
+IR design constraints and refactor priorities.
+
+This document is now the primary place to record the current active slice and
+the practical next step for follow-up implementation work.
 
 ## Current Active Slice
 
 If you are resuming work from the current state, the recommended next task is:
 
 1. keep the current `texture_2d<f32>` / `sampler` path stable
-2. treat entry-point input interface lowering as completed for the current
-   scalar/vector slice
-3. resume broader runtime builtin work before expanding to additional texture
-   kinds
+2. build on the new struct/member-access IR path instead of reintroducing
+   flatten-only lowering shortcuts
+3. expand struct coverage in the places still outside the validated slice
+   before widening more runtime builtin surface
 
-The most recent completed slice is entry-point input interface support:
+The most recent completed slice is general struct/member access plus
+entry-point struct IO for the current validated subset:
 
-- entry-point parameters now preserve `@location(...)` / `@builtin(...)`
-  decoration metadata in IR
-- SPIR-V entry-point interface emission now wires decorated input variables into
-  `OpEntryPoint`
-- entry-point inputs are materialized through SPIR-V `Input` variables and then
-  loaded into the existing function-local parameter slots
-- the validated smoke coverage now includes fragment `@location(0)` sample
-  coordinates and vertex `@builtin(vertex_index)` / `@location(0)` inputs
+- struct types now remain first-class through the current IR path instead of
+  being flattened into unrelated local slots during lowering
+- IR now has explicit aggregate operations for member-address and member-value
+  access
+- lowering uses the same address/value model for ordinary member access,
+  member assignment, helper-function struct parameters/returns, and
+  entry-point struct IO
+- SPIR-V emission now lowers those aggregate operations through
+  `OpAccessChain` and `OpCompositeExtract`
+- entry-point struct input/output flattening now happens at the SPIR-V
+  interface boundary rather than inside general lowering
+- the validated smoke coverage now includes:
+  - vertex `VertexInput` / `VertexOutput` style interface structs
+  - helper-function struct parameters
+  - struct return followed by member extraction
+
+The current highest-priority missing slices are the broader struct edges that
+still sit outside the validated subset:
+
+- nested member access chains such as `a.b.c`
+- broader struct initialization / whole-value assignment coverage
+- additional entry-point shapes beyond the current scalar/vector member subset
+- more validation around fragment-stage struct IO and mixed helper/entry-point
+  struct flows
 
 Likely edit targets for this slice:
 
-- `module/wgx/ir/module.h`
-- `module/wgx/lower/lower_core.cpp`
+- `module/wgx/lower/lower_expr.cpp`
+- `module/wgx/lower/lower_stmt.cpp`
 - `module/wgx/spirv/module_builder.cpp`
 
 ## Current Direction
@@ -99,6 +118,8 @@ The active function-body IR now has these properties:
    - constants are represented as `Value`
    - SSA results are represented as `Value::SSA(...)`
    - local variable references are represented as `Value::Variable(...)`
+   - address-producing member access results are represented as
+     `Value::PointerSSA(...)`
 
 2. **Explicit address vs value modeling in lowering**
    - expression lowering returns `ExprResult`
@@ -108,8 +129,10 @@ The active function-body IR now has these properties:
 
 3. **Explicit load/store/return operands**
    - `kReturn`: zero or one `Value` operand
-   - `kLoad`: one variable `Value` operand
-   - `kStore`: target variable `Value` + source value `Value`
+   - `kLoad`: one address `Value` operand
+   - `kStore`: target address `Value` + source value `Value`
+   - `kAccess`: one base-address operand + member index
+   - `kExtract`: one base-value operand + member index
    - `kBinary`: lhs `Value` + rhs `Value`
    - `kConstruct`: N value operands for vector construction
    - `kCall`: N value operands for user-function call arguments
@@ -139,6 +162,14 @@ The active function-body IR now has these properties:
      module, while SPIR-V emission still needs callee definitions/types ready
      before `OpFunctionCall` use sites
 
+8. **First-class struct/member-access path**
+   - struct parameters, locals, and returns are preserved as aggregate types in
+     the current IR path
+   - member access no longer relies on side maps of per-member variable ids
+   - entry-point interface metadata for struct members is carried separately as
+     input/output interface variables, while the function body still sees the
+     aggregate value/address model
+
 ## Current Backend Capability Boundary
 
 The current SPIR-V backend still supports a deliberately narrow subset.
@@ -160,39 +191,51 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - vertex `@builtin(vertex_index)` and `@builtin(instance_index)` input
      plumbing through IR and SPIR-V interface variables
 
-3. **Return forms**
+3. **Entry-point struct IO subset**
+   - WGSL struct-based entry-point parameters/returns now lower for the current
+     scalar/vector member subset
+   - repository-style `VertexInput` / `VertexOutput` shaders are part of the
+     validated path
+   - entry-point struct flattening currently remains a boundary-lowering step,
+     not the general representation of structs
+
+4. **Return forms**
    - void return
    - vertex `@builtin(position) vec4<f32>` return
+   - entry-point struct return lowered onto multiple output interface variables
+   - helper-function struct return plus later member extraction
 
-4. **Current local-value subset**
+5. **Current local-value subset**
    - local `var` declaration for scalar and vector values (f32, i32, u32, bool,
      vec2/3/4 of those types)
    - local variable initialization with constructor constants
    - plain local assignment (`=`) for supported values
    - variable-to-variable assignment (`b = a`)
    - return of a local variable
+   - member assignment through the aggregate address path for the current
+     struct subset
 
-5. **Current arithmetic subset**
+6. **Current arithmetic subset**
    - scalar and vector binary arithmetic for the supported types
    - supported ops: `add`, `sub`
    - direct return of arithmetic result
    - store of arithmetic result to a local variable before return
 
-6. **Global variables**
+7. **Global variables**
    - global variable reference, load, and store
    - constant initializers for scalar and vector types
    - WGSL address space mapping (`private`, `uniform`, `storage`, `workgroup`)
    - resource binding attributes (`@group`, `@binding`) with proper SPIR-V decorations
    - automatic struct wrapping for non-struct uniform/storage types (Vulkan compliance)
 
-7. **Structured control flow**
+8. **Structured control flow**
    - `if` statement with boolean constant condition
    - `if` statement with boolean variable condition
    - `if-else` statement support
    - proper block graph structure (entry, then, else, merge)
    - valid SPIR-V structured control flow (`OpSelectionMerge`, `OpBranchConditional`)
 
-8. **Loop support**
+9. **Loop support**
    - `loop` with `break`
    - `loop` with `continue`
    - counted loops built from `i32` compare + increment
@@ -200,13 +243,13 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - `while` statements lowered onto the existing loop IR
    - valid SPIR-V loop structure (`OpLoopMerge`, `OpBranch`, `OpBranchConditional`)
 
-9. **Current comparison subset**
+10. **Current comparison subset**
    - scalar comparisons for `f32`, `i32`, `u32`
    - boolean equality / inequality (`==`, `!=`)
    - comparison results can feed `if`, `for`, `while`, and local stores
    - SPIR-V emission uses the corresponding typed compare ops (`OpFOrd*`, `OpIEqual`, `OpSLessThan`, `OpUGreaterThanEqual`, etc.)
 
-10. **Validation workflow already available**
+11. **Validation workflow already available**
    - WGX SPIR-V smoke tests
    - `spirv-val --target-env vulkan1.1`
    - `spirv-dis` spot-check / disassembly generation
@@ -215,7 +258,7 @@ The current SPIR-V backend still supports a deliberately narrow subset.
    - note: the helper currently skips `wgx_vs_main_workgroup.spv` during
      `spirv-val` because workgroup storage is not yet supported for vertex entry points
 
-11. **Function call subset**
+12. **Function call subset**
    - user-defined function calls with scalar parameters and scalar return values
    - calls from entry points into helper functions defined earlier or later in
      the WGSL module
@@ -223,6 +266,8 @@ The current SPIR-V backend still supports a deliberately narrow subset.
      `OpFunctionCall`, and helper-side `OpReturnValue`
    - dynamic vector construction via `OpCompositeConstruct` for supported
      scalar/vector component types
+   - helper-function struct parameters and struct returns for the current
+     aggregate/member-access slice
 
 ## Current Structural Limitations
 
@@ -272,8 +317,14 @@ The backend currently still has these important limitations:
 9. **Function call coverage is still intentionally narrow**
    - the current call path is for user-defined WGSL functions, not builtin
      texture/sampler/runtime intrinsics
-   - return/value handling is validated for the current scalar and vector
-     subsets, not full WGSL aggregate semantics
+   - aggregate support is now present for the current struct/member-access
+     slice, but not yet for all WGSL aggregate forms
+
+10. **Struct-heavy entry-point and expression paths are not yet complete**
+   - nested struct/member chains still need more coverage and validation
+   - whole-struct operations are not yet broadly validated across all forms
+   - matrix/struct-heavy expressions should still be treated as an in-progress
+     area outside the validated narrow subset
 
 ## Next Planned Refactor Steps
 
@@ -384,19 +435,19 @@ should be staged instead of attempting the full surface area in one step.
 
 ## Concrete Next Slice
 
-If continuing immediately after the current user-function-call work, the most
+If continuing immediately after the current struct/member-access slice, the most
 useful next implementation slice is:
 
 1. keep the current `texture_2d<f32>` resource slice stable instead of adding
    more texture kinds immediately
-2. treat entry-point input/output interface lowering as complete for the
-   current validated scalar/vector slice
-3. if texture work resumes next, extend the builtin surface before extending
-   the texture-type matrix
-4. defer array/cube/3d/comparison texture expansion until there is a concrete
-   product need
+2. expand nested/member-chain and whole-struct behavior on top of the current
+   aggregate IR model
+3. add more validation for fragment-stage struct IO and helper/entry-point
+   aggregate interactions
+4. once those edges are stable, return to texture builtin expansion before
+   expanding the texture-type matrix
 
-The completed validation baseline for the interface slice is:
+The completed validation baseline for the scalar/vector interface slice is:
 
 - fragment entry point with `@location(0) uv: vec2<f32>`
 - `textureSample(texture, sampler, uv)` using that non-constant input
@@ -406,23 +457,148 @@ The completed validation baseline for the interface slice is:
   `./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build`,
   `spirv-val`, and `spirv-dis`
 
+The recommended first validation target for the next slice is:
+
+- nested member access such as `a.b.c`
+- whole-struct copy / assignment where the source or destination later feeds
+  member access
+- fragment entry point using struct input/output on the same aggregate path
+- helper-function chains that pass structs across multiple calls
+
+## Clarification: Full Struct Support Direction
+
+The short-term entry-point struct IO work and the long-term struct/member-access
+work are related, but they are not the same implementation goal.
+
+If the development goal is only:
+
+- unblock repository shaders that use `VertexInput` / `VertexOutput`
+- keep the backend moving with a narrow validation slice
+
+then a temporary flattening-oriented lowering path is acceptable.
+
+If the real development goal is broader:
+
+- support general WGSL struct values in local variables
+- support struct parameters and struct returns in ordinary helper functions
+- support general member access such as `a.b`, `a.b = x`, `foo(s)`,
+  `foo(s.b)`, and later nested access
+- support entry-point struct IO as one application of the same aggregate model
+
+then the preferred direction is **not** to keep expanding the temporary
+"register one var id per member" lowering pattern.
+
+Instead, treat that pattern only as a narrow compatibility bridge and move the
+main design toward a general aggregate/member-access IR model.
+
+## Recommended Design Order For Full Struct Support
+
+If you are continuing this work with the broader goal above, use this order:
+
+1. keep struct types as first-class IR types instead of flattening them away in
+   general lowering
+2. add explicit aggregate/member-access semantics to IR
+   - from a struct address, produce a member address
+   - from a struct value, produce a member value
+3. make lowering for `MemberAccessor` use that general IR operation instead of
+   side maps of per-member local vars
+4. make assignment / load / return / call all work on top of the same struct
+   value/address model
+5. only at the SPIR-V entry-point interface boundary, flatten entry-point
+   struct inputs/outputs into interface variables
+
+In other words:
+
+- **general struct/member-access semantics should be the main model**
+- **entry-point struct IO flattening should be a boundary-lowering detail**
+
+## What Can Be Reused From The Current Slice
+
+Even if the implementation direction shifts to the broader design above, the
+following work remains useful:
+
+- struct type resolution in lowering
+- entry-point interface decoration collection from struct members
+- verifier/backend allowance for multi-output entry-point returns
+- smoke tests for `VertexInput` / `VertexOutput` style shaders
+
+The part that should not become the long-term foundation is:
+
+- representing struct member access by allocating a separate plain local
+  variable id for each member and treating member access as a name lookup into
+  that flattened side map
+
+That approach is acceptable as a temporary bridge for entry-point compatibility,
+but it scales poorly to helper-function struct passing, nested structs, and
+general aggregate semantics.
+
+## Change Notes For The Current Struct Slice
+
+To make the current implementation easier to resume, the important code-shape
+changes in this slice are:
+
+1. **IR surface changes**
+   - `ir::Function` now keeps entry-point interface inputs separately from
+     ordinary function parameters
+   - interface metadata for flattened entry-point struct members is carried in
+     `input_vars` / `output_vars`
+   - IR instruction kinds now include aggregate member access operations
+     (`kAccess`, `kExtract`)
+   - `ir::Value` can now represent address-producing SSA results through
+     `PointerSSA`
+
+2. **Lowering changes**
+   - ordinary struct parameters, locals, and returns stay as aggregate types in
+     the function body
+   - `MemberAccessor` lowering now chooses between:
+     - member-address access for lvalue paths
+     - member-value extraction for rvalue paths
+   - assignment/store lowering now accepts general addresses instead of only
+     plain local/global variable ids
+   - entry-point struct parameters and returns only collect interface metadata
+     during lowering; they are not flattened away from the function-body IR
+
+3. **SPIR-V emission changes**
+   - aggregate member-address operations lower through `OpAccessChain`
+   - aggregate member-value extraction lowers through `OpCompositeExtract`
+   - entry-point struct inputs are flattened only when creating SPIR-V `Input`
+     interface variables, then written back into the function's aggregate
+     parameter storage
+   - entry-point struct returns are flattened only when writing to SPIR-V
+     `Output` interface variables
+
+4. **Current validation coverage**
+   - vertex entry point with struct input/output interface members
+   - helper function with struct parameter
+   - helper function returning a struct followed by member extraction at the
+     call site
+
+5. **Important non-goals of this exact slice**
+   - nested member chains are not yet the validated baseline
+   - this slice does not claim complete WGSL aggregate support across every
+     matrix/array/struct combination
+   - the current texture/runtime builtin work should remain stable while the
+     remaining struct edges are hardened
+
 ## Practical Rule For Future Agents
 
 If you are continuing work in this area:
 
 1. read `module/wgx/docs/IR_REFACTOR_PLAN.md` first
 2. prefer structural cleanup over immediate feature expansion
-3. treat the structured control-flow baseline as complete and move on to
-   texture-sampler or broader runtime feature expansion
-4. avoid reintroducing special-case return/store/materialization encodings that
+3. if the active goal is full struct/member-access support, prioritize the
+   aggregate IR work above before resuming broader builtin expansion
+4. otherwise, treat the structured control-flow baseline as complete and move
+   on to texture-sampler or broader runtime feature expansion
+5. avoid reintroducing special-case return/store/materialization encodings that
    bypass `ir::Value`
-5. keep using the current local validation workflow:
+6. keep using the current local validation workflow:
 
 ```bash
 cmake --build out/cmake_host_build -j4
 ./module/wgx/tools/validate_spirv_smoke.sh out/cmake_host_build
 ```
-6. remember the language-order mismatch:
+7. remember the language-order mismatch:
    - WGSL helper functions may be called before their source declaration
    - SPIR-V still needs function types/definitions available in emission order
    - keep lowering/emission responsible for that ordering instead of imposing a

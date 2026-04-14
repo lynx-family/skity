@@ -155,7 +155,6 @@ struct FunctionParamInfo {
   std::string name;
   uint32_t spirv_param_id = 0;
   uint32_t spirv_local_id = 0;
-  bool is_entry_interface_input = false;
 };
 
 class ModuleBuilder {
@@ -169,6 +168,7 @@ class ModuleBuilder {
   struct OutputVarInfo {
     std::string name;
     ir::TypeId ir_type = ir::kInvalidTypeId;
+    std::optional<uint32_t> member_index;
     ir::InterfaceDecorationKind decoration_kind =
         ir::InterfaceDecorationKind::kNone;
     uint32_t decoration_value = 0;
@@ -179,7 +179,8 @@ class ModuleBuilder {
   };
 
   struct InputVarInfo {
-    uint32_t ir_var_id = 0;
+    uint32_t target_var_id = 0;
+    std::optional<uint32_t> member_index;
     std::string name;
     ir::TypeId ir_type = ir::kInvalidTypeId;
     ir::InterfaceDecorationKind decoration_kind =
@@ -206,17 +207,22 @@ class ModuleBuilder {
   bool AnalyzeFunction(const ir::Function& function);
   bool EmitInstruction(const ir::Instruction& inst);
   uint32_t FindVariableSpirvId(uint32_t ir_var_id);
+  const FunctionParamInfo* FindFunctionParamInfo(uint32_t ir_var_id) const;
   const ir::Function* FindFunctionByName(std::string_view name) const;
   const GlobalVarInfo* FindGlobalVarInfo(uint32_t ir_var_id) const;
-  uint32_t GetAccessPointer(uint32_t ir_var_id, ir::TypeId inner_type,
-                            uint32_t* out_ptr_id);
+  uint32_t GetAddressPointer(const ir::Value& address, ir::TypeId inner_type,
+                             uint32_t* out_ptr_id);
   bool EmitLoad(const ir::Instruction& inst);
   bool EmitStore(const ir::Instruction& inst);
+  bool EmitAccess(const ir::Instruction& inst);
+  bool EmitExtract(const ir::Instruction& inst);
   bool EmitBinary(const ir::Instruction& inst);
   bool EmitConstruct(const ir::Instruction& inst);
   bool EmitCall(const ir::Instruction& inst);
   bool EmitBuiltinCall(const ir::Instruction& inst);
   bool MaterializeValue(const ir::Value& value, uint32_t* value_id);
+  bool MaterializeAddress(const ir::Value& value, ir::TypeId pointee_type,
+                          uint32_t* ptr_id);
   uint32_t GetSpirvTypeId(ir::TypeId type_id);
   uint32_t EmitConstant(const ir::Value& value);
   uint32_t EmitConstantComposite(const ir::Value& value);
@@ -232,7 +238,7 @@ class ModuleBuilder {
   std::vector<LocalVarInfo>::iterator FindLocalVar(uint32_t ir_var_id);
   std::vector<ValueInfo>::iterator FindValue(uint32_t ir_value_id);
   uint32_t GetOrCreateBlockLabel(ir::BlockId block_id);
-  const InputVarInfo* FindInputVarInfo(uint32_t ir_var_id) const;
+  const InputVarInfo* FindInputVarInfoByTarget(uint32_t ir_var_id) const;
 
   const ir::Module& module_;
   const ir::Function& entry_;
