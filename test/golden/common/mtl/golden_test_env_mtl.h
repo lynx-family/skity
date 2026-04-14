@@ -19,9 +19,9 @@ class GoldenTestEnvMTL : public GoldenTestEnv {
 
   Backend GetBackend() const override { return Backend::kMetal; }
 
-  std::shared_ptr<GoldenTexture> DisplayListToTexture(DisplayList* dl,
-                                                      uint32_t width,
-                                                      uint32_t height) override;
+  std::shared_ptr<GoldenTexture> RenderToTexture(
+      uint32_t width, uint32_t height,
+      const std::function<void(Canvas*)>& render) override;
 
   id<MTLDevice> GetDevice() const { return device_; }
 

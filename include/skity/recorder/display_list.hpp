@@ -14,6 +14,10 @@ namespace skity {
 
 class RecordedOpOffset {
  public:
+  static RecordedOpOffset Make(int32_t offset) {
+    return RecordedOpOffset(offset);
+  }
+
   int32_t GetValue() const { return offset_; }
   bool IsValid() const { return offset_ >= 0; }
 
@@ -21,9 +25,12 @@ class RecordedOpOffset {
   explicit RecordedOpOffset(int32_t offset) : offset_(offset) {}
   int32_t offset_;
   friend class RecordingCanvas;
+  friend class DisplayList;
 };
 
 struct RecordedOp;
+struct DisplayListBuilder;
+class DisplayListRTree;
 
 // Manages a buffer allocated with malloc.
 class DisplayListStorage {
@@ -31,7 +38,8 @@ class DisplayListStorage {
   DisplayListStorage() = default;
   DisplayListStorage(DisplayListStorage&&) = default;
 
-  uint8_t* get() const { return ptr_.get(); }
+  uint8_t* get() { return ptr_.get(); }
+  const uint8_t* get() const { return ptr_.get(); }
 
   void realloc(size_t count) {
     ptr_.reset(static_cast<uint8_t*>(std::realloc(ptr_.release(), count)));
@@ -46,6 +54,7 @@ class DisplayListStorage {
 
 class SKITY_API DisplayList {
   friend class RecordingCanvas;
+  friend struct DisplayListBuilder;
 
  public:
   enum class Property : uint32_t {
@@ -63,7 +72,8 @@ class SKITY_API DisplayList {
   ~DisplayList();
 
   bool Empty() const { return byte_count_ == 0; }
-  void Draw(Canvas* canvas);
+  void Draw(Canvas* canvas) const;
+  void Draw(Canvas* canvas, const Rect& cull_rect) const;
   void DisposeOps(uint8_t* ptr, uint8_t* end);
   uint32_t OpCount() const { return op_count_; }
 
@@ -90,13 +100,18 @@ class SKITY_API DisplayList {
   }
 
   Paint* GetOpPaintByOffset(RecordedOpOffset offset);
+  std::vector<RecordedOpOffset> Search(const Rect& rect) const;
+  std::vector<Rect> SearchNonOverlappingDrawnRects(const Rect& rect) const;
 
  private:
+  void SetRTree(std::unique_ptr<DisplayListRTree> rtree);
+
   const DisplayListStorage storage_;
   size_t byte_count_ = 0;
   uint32_t op_count_ = 0u;
   Rect bounds_;
   uint32_t properties_ = 0;
+  std::unique_ptr<DisplayListRTree> rtree_;
 };
 
 }  // namespace skity

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <functional>
 #include <skity/recorder/display_list.hpp>
 #include <skity/skity.hpp>
 #include <vector>
@@ -35,6 +36,9 @@ struct PathList {
  */
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
                           const char* path);
+
+bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
+                          const std::function<void(Canvas*)>& render);
 
 /**
  * @brief compare the display list with the golden texture. If the golden_test

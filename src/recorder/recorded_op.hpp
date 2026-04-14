@@ -19,7 +19,6 @@ namespace skity {
 #define FOR_EACH_RECORDED_OP(V) \
   V(Save)                       \
   V(Restore)                    \
-  V(RestoreToCount)             \
   V(Translate)                  \
   V(Scale)                      \
   V(RotateByDegree)             \
@@ -62,16 +61,11 @@ struct RecordedOp {
 
 struct SaveOp : RecordedOp {
   SaveOp() : RecordedOp(RecordedOpType::kSave) {}
+  int32_t restore_offset = -1;
 };
 
 struct RestoreOp : RecordedOp {
   RestoreOp() : RecordedOp(RecordedOpType::kRestore) {}
-};
-
-struct RestoreToCountOp : RecordedOp {
-  explicit RestoreToCountOp(int& saveCount)
-      : RecordedOp(RecordedOpType::kRestoreToCount), saveCount(saveCount) {}
-  int saveCount;
 };
 
 struct TranslateOp : RecordedOp {
@@ -259,6 +253,7 @@ struct SaveLayerOp : RecordedOp {
       : RecordedOp(RecordedOpType::kSaveLayer), bounds(bounds), paint(paint) {}
   Rect bounds;
   Paint paint;
+  int32_t restore_offset = -1;
 };
 
 struct DrawTextBlobOp : RecordedOp {
@@ -299,6 +294,9 @@ struct DrawGlyphsOp : RecordedOp {
         count(count),
         font(font),
         paint(paint) {
+    if (count == 0) {
+      return;
+    }
     m_glyphs.assign(glyphs, glyphs + count);
     m_positions_x.assign(positions_x, positions_x + count);
     m_positions_y.assign(positions_y, positions_y + count);

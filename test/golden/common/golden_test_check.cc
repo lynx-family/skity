@@ -175,9 +175,20 @@ std::shared_ptr<Pixmap> ReadImage(const char* path) {
   return codec->Decode();
 }
 
+static bool CompareGoldenTextureImpl(
+    uint32_t width, uint32_t height, const char* path,
+    GoldenTestEnvConfig config, const std::function<void(Canvas*)>& render);
+
 static bool CompareGoldenTextureImpl(DisplayList* dl, uint32_t width,
                                      uint32_t height, const char* path,
                                      GoldenTestEnvConfig config) {
+  return CompareGoldenTextureImpl(width, height, path, config,
+                                  [dl](Canvas* canvas) { dl->Draw(canvas); });
+}
+
+static bool CompareGoldenTextureImpl(
+    uint32_t width, uint32_t height, const char* path,
+    GoldenTestEnvConfig config, const std::function<void(Canvas*)>& render) {
   auto test_info = ::testing::UnitTest::GetInstance()->current_test_info();
 
   std::cout << "test name: " << test_info->name() << std::endl;
@@ -186,7 +197,7 @@ static bool CompareGoldenTextureImpl(DisplayList* dl, uint32_t width,
 
   auto env = GoldenTestEnv::GetInstance();
   AutoRestoreConfig auto_restore_config(env->GetGPUContext(), config);
-  auto texture = env->DisplayListToTexture(dl, width, height);
+  auto texture = env->RenderToTexture(width, height, render);
 
   EXPECT_TRUE(texture != nullptr)
       << "Failed to generate rendering result texture";
@@ -297,6 +308,11 @@ static bool CompareGoldenTextureImpl(DisplayList* dl, uint32_t width,
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
                           const char* path) {
   return CompareGoldenTextureImpl(dl, width, height, path, {});
+}
+
+bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
+                          const std::function<void(Canvas*)>& render) {
+  return CompareGoldenTextureImpl(width, height, path, {}, render);
 }
 
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,

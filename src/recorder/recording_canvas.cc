@@ -8,7 +8,6 @@
 
 #include "src/recorder/display_list_builder.hpp"
 #include "src/recorder/recorded_op.hpp"
-#include "src/render/canvas_state.hpp"
 
 namespace skity {
 
@@ -113,6 +112,7 @@ void RecordingCanvas::OnDrawPath(Path const& path, Paint const& paint) {
 void RecordingCanvas::OnSaveLayer(const Rect& bounds, const Paint& paint) {
   Push<SaveLayerOp>(bounds, paint);
   if (dp_builder_) {
+    dp_builder_->save_op_stack_.push_back(dp_builder_->last_op_offset_);
     dp_builder_->properties_ |=
         static_cast<uint32_t>(DisplayList::Property::kSaveLayer);
     UpdateProperties(paint);
@@ -154,11 +154,23 @@ void RecordingCanvas::OnDrawPaint(Paint const& paint) {
   UpdateProperties(paint);
   AccumulateOpBounds(GetGlobalClipBounds(), nullptr);
 }
-void RecordingCanvas::OnSave() { Push<SaveOp>(); }
-void RecordingCanvas::OnRestore() { Push<RestoreOp>(); }
-void RecordingCanvas::OnRestoreToCount(int saveCount) {
-  Push<RestoreToCountOp>(saveCount);
+void RecordingCanvas::OnSave() {
+  Push<SaveOp>();
+  if (dp_builder_) {
+    dp_builder_->save_op_stack_.push_back(dp_builder_->last_op_offset_);
+  }
 }
+void RecordingCanvas::OnRestore() {
+  Push<RestoreOp>();
+  if (dp_builder_ == nullptr || dp_builder_->save_op_stack_.empty()) {
+    return;
+  }
+  const int32_t restore_offset = dp_builder_->last_op_offset_;
+  const int32_t save_offset = dp_builder_->save_op_stack_.back();
+  dp_builder_->save_op_stack_.pop_back();
+  dp_builder_->SetSaveRestoreOffset(save_offset, restore_offset);
+}
+void RecordingCanvas::OnRestoreToCount(int saveCount) {}
 void RecordingCanvas::OnTranslate(float dx, float dy) {
   Push<TranslateOp>(dx, dy);
 }
@@ -185,6 +197,11 @@ void RecordingCanvas::AccumulateOpBounds(const Rect& raw_bounds,
   GetTotalMatrix().MapRect(&mapped_bounds, bounds);
   if (!mapped_bounds.Intersect(GetGlobalClipBounds())) {
     return;
+  }
+
+  if (dp_builder_->build_rtree_) {
+    dp_builder_->spatial_ops_.emplace_back(mapped_bounds,
+                                           dp_builder_->last_op_offset_);
   }
   dp_builder_->bounds_.Join(mapped_bounds);
 }

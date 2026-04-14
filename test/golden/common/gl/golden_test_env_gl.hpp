@@ -23,9 +23,9 @@ class GoldenTestEnvGL : public GoldenTestEnv {
 
   void TearDown() override;
 
-  std::shared_ptr<GoldenTexture> DisplayListToTexture(DisplayList* dl,
-                                                      uint32_t width,
-                                                      uint32_t height) override;
+  std::shared_ptr<GoldenTexture> RenderToTexture(
+      uint32_t width, uint32_t height,
+      const std::function<void(Canvas*)>& render) override;
 
  protected:
   std::unique_ptr<skity::GPUContext> CreateGPUContext() override;

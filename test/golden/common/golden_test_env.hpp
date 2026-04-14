@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#include <functional>
 #include <skity/gpu/gpu_context.hpp>
 #include <skity/gpu/texture.hpp>
 #include <skity/recorder/display_list.hpp>
@@ -31,8 +32,16 @@ class GoldenTestEnv : public ::testing::Environment {
 
   virtual Backend GetBackend() const = 0;
 
-  virtual std::shared_ptr<GoldenTexture> DisplayListToTexture(
-      DisplayList* dl, uint32_t width, uint32_t height) = 0;
+  std::shared_ptr<GoldenTexture> DisplayListToTexture(DisplayList* dl,
+                                                      uint32_t width,
+                                                      uint32_t height) {
+    return RenderToTexture(width, height,
+                           [dl](Canvas* canvas) { dl->Draw(canvas); });
+  }
+
+  virtual std::shared_ptr<GoldenTexture> RenderToTexture(
+      uint32_t width, uint32_t height,
+      const std::function<void(Canvas*)>& render) = 0;
 
   bool SaveGoldenImage(std::shared_ptr<Pixmap> image, const char* path);
 

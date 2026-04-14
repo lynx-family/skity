@@ -27,6 +27,7 @@ class MockCanvas : public skity::Canvas {
   MOCK_METHOD(void, OnSave, (), (override));
   MOCK_METHOD(void, OnRestore, (), (override));
   MOCK_METHOD(void, OnRestoreToCount, (int saveCount), (override));
+  MOCK_METHOD(void, OnTranslate, (float dx, float dy), (override));
 
   MOCK_METHOD(void, OnDrawRect,
               (skity::Rect const& rect, skity::Paint const& paint), (override));
@@ -78,6 +79,20 @@ skity::Rect CalculateDisplayListBounds(
   draw_callback(canvas);
   auto display_list = recorder.FinishRecording();
   return display_list->GetBounds();
+}
+
+std::vector<int32_t> SearchDisplayListOffsets(skity::DisplayList* display_list,
+                                              const skity::Rect& rect) {
+  std::vector<int32_t> offsets;
+  for (const auto& offset : display_list->Search(rect)) {
+    offsets.push_back(offset.GetValue());
+  }
+  return offsets;
+}
+
+std::vector<skity::Rect> SearchNonOverlappingDrawnRects(
+    skity::DisplayList* display_list, const skity::Rect& rect) {
+  return display_list->SearchNonOverlappingDrawnRects(rect);
 }
 
 TEST(DisplayList, CanCalculateBounds) {
@@ -231,6 +246,520 @@ TEST(DisplayList, ChangeOpPaint) {
   EXPECT_CALL(mock_canvas2, OnDrawRect(_, blue_paint)).Times(1);
   EXPECT_CALL(mock_canvas2, OnDrawPath(_, yellow_paint)).Times(1);
   display_list->Draw(&mock_canvas2);
+}
+
+TEST(DisplayList, SearchByRect) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 200, 200), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->Save();
+  canvas->Translate(20, 10);
+  canvas->DrawRect(skity::Rect::MakeLTRB(0, 0, 20, 20), skity::Paint{});
+  auto translated_rect_offset = canvas->GetLastOpOffset();
+  canvas->Restore();
+
+  canvas->Save();
+  canvas->ClipRect(skity::Rect::MakeLTRB(60, 60, 90, 90));
+  canvas->DrawRect(skity::Rect::MakeLTRB(50, 50, 120, 120), skity::Paint{});
+  auto clipped_rect_offset = canvas->GetLastOpOffset();
+  canvas->Restore();
+
+  canvas->DrawRect(skity::Rect::MakeLTRB(140, 140, 180, 180), skity::Paint{});
+  auto far_rect_offset = canvas->GetLastOpOffset();
+
+  auto display_list = recorder.FinishRecording();
+
+  EXPECT_THAT(SearchDisplayListOffsets(display_list.get(),
+                                       skity::Rect::MakeLTRB(25, 15, 35, 25)),
+              testing::ElementsAre(translated_rect_offset.GetValue()));
+  EXPECT_THAT(SearchDisplayListOffsets(display_list.get(),
+                                       skity::Rect::MakeLTRB(65, 65, 75, 75)),
+              testing::ElementsAre(clipped_rect_offset.GetValue()));
+  EXPECT_THAT(
+      SearchDisplayListOffsets(display_list.get(),
+                               skity::Rect::MakeLTRB(145, 145, 150, 150)),
+      testing::ElementsAre(far_rect_offset.GetValue()));
+  EXPECT_THAT(SearchDisplayListOffsets(display_list.get(),
+                                       skity::Rect::MakeLTRB(0, 0, 55, 55)),
+              testing::ElementsAre(translated_rect_offset.GetValue()));
+  EXPECT_TRUE(SearchDisplayListOffsets(display_list.get(),
+                                       skity::Rect::MakeLTRB(0, 0, 10, 10))
+                  .empty());
+}
+
+TEST(DisplayList, SearchWithoutRTree) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->DrawRect(skity::Rect::MakeLTRB(10, 10, 40, 40), skity::Paint{});
+
+  auto display_list = recorder.FinishRecording();
+  EXPECT_TRUE(SearchDisplayListOffsets(display_list.get(),
+                                       skity::Rect::MakeLTRB(20, 20, 30, 30))
+                  .empty());
+}
+
+TEST(DisplayList, SearchNonOverlappingDrawnRects) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->DrawRect(skity::Rect::MakeLTRB(0, 0, 20, 20), skity::Paint{});
+  canvas->DrawRect(skity::Rect::MakeLTRB(10, 10, 30, 30), skity::Paint{});
+  canvas->DrawRect(skity::Rect::MakeLTRB(40, 0, 50, 10), skity::Paint{});
+
+  auto display_list = recorder.FinishRecording();
+
+  EXPECT_THAT(SearchNonOverlappingDrawnRects(
+                  display_list.get(), skity::Rect::MakeLTRB(15, 15, 16, 16)),
+              testing::ElementsAre(skity::Rect::MakeLTRB(0, 0, 20, 10),
+                                   skity::Rect::MakeLTRB(0, 10, 30, 20),
+                                   skity::Rect::MakeLTRB(10, 20, 30, 30)));
+
+  EXPECT_THAT(SearchNonOverlappingDrawnRects(
+                  display_list.get(), skity::Rect::MakeLTRB(45, 5, 46, 6)),
+              testing::ElementsAre(skity::Rect::MakeLTRB(40, 0, 50, 10)));
+}
+
+TEST(DisplayList, SearchNonOverlappingDrawnRectsWithoutRTree) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->DrawRect(skity::Rect::MakeLTRB(0, 0, 20, 20), skity::Paint{});
+
+  auto display_list = recorder.FinishRecording();
+  EXPECT_TRUE(SearchNonOverlappingDrawnRects(
+                  display_list.get(), skity::Rect::MakeLTRB(5, 5, 10, 10))
+                  .empty());
+}
+
+TEST(DisplayList, SearchByRectManySizes) {
+  constexpr int kMaxN = 24;
+
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 500, 500), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  std::vector<int32_t> offsets;
+  offsets.reserve(kMaxN);
+  for (int i = 0; i < kMaxN; ++i) {
+    canvas->DrawRect(skity::Rect::MakeXYWH(i * 20, i * 20, 10, 10),
+                     skity::Paint{});
+    offsets.push_back(canvas->GetLastOpOffset().GetValue());
+  }
+
+  auto display_list = recorder.FinishRecording();
+  EXPECT_TRUE(
+      SearchDisplayListOffsets(display_list.get(), skity::Rect()).empty());
+
+  for (int i = 0; i < kMaxN; ++i) {
+    auto query = skity::Rect::MakeXYWH(i * 20 + 2, i * 20 + 2, 6, 6);
+    EXPECT_THAT(SearchDisplayListOffsets(display_list.get(), query),
+                testing::ElementsAre(offsets[i]));
+    EXPECT_THAT(
+        SearchNonOverlappingDrawnRects(display_list.get(), query),
+        testing::ElementsAre(skity::Rect::MakeXYWH(i * 20, i * 20, 10, 10)));
+  }
+}
+
+TEST(DisplayList, SearchByRectGrid) {
+  constexpr int kRows = 4;
+  constexpr int kCols = 4;
+
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  int32_t offsets[kRows][kCols];
+  for (int r = 0; r < kRows; ++r) {
+    for (int c = 0; c < kCols; ++c) {
+      canvas->DrawRect(skity::Rect::MakeXYWH(c * 20 + 5, r * 20 + 5, 10, 10),
+                       skity::Paint{});
+      offsets[r][c] = canvas->GetLastOpOffset().GetValue();
+    }
+  }
+
+  auto display_list = recorder.FinishRecording();
+
+  EXPECT_THAT(SearchDisplayListOffsets(display_list.get(),
+                                       skity::Rect::MakeXYWH(27, 27, 6, 6)),
+              testing::ElementsAre(offsets[1][1]));
+  EXPECT_TRUE(SearchDisplayListOffsets(display_list.get(),
+                                       skity::Rect::MakeXYWH(17, 17, 6, 6))
+                  .empty());
+  EXPECT_THAT(SearchDisplayListOffsets(display_list.get(),
+                                       skity::Rect::MakeXYWH(14, 14, 12, 12)),
+              testing::ElementsAre(offsets[0][0], offsets[0][1], offsets[1][0],
+                                   offsets[1][1]));
+  EXPECT_THAT(
+      SearchNonOverlappingDrawnRects(display_list.get(),
+                                     skity::Rect::MakeXYWH(14, 14, 12, 12)),
+      testing::UnorderedElementsAre(skity::Rect::MakeXYWH(5, 5, 10, 10),
+                                    skity::Rect::MakeXYWH(25, 5, 10, 10),
+                                    skity::Rect::MakeXYWH(5, 25, 10, 10),
+                                    skity::Rect::MakeXYWH(25, 25, 10, 10)));
+}
+
+TEST(DisplayList, SearchNonOverlappingDrawnRectsOverlappingRects) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 80, 80), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  for (int r = 0; r < 3; ++r) {
+    for (int c = 0; c < 3; ++c) {
+      const int x = 15 + 20 * c;
+      const int y = 15 + 20 * r;
+      canvas->DrawRect(skity::Rect::MakeLTRB(x - 15, y - 15, x + 15, y + 15),
+                       skity::Paint{});
+    }
+  }
+
+  auto display_list = recorder.FinishRecording();
+
+  EXPECT_THAT(SearchNonOverlappingDrawnRects(
+                  display_list.get(), skity::Rect::MakeLTRB(29, 34, 41, 36)),
+              testing::ElementsAre(skity::Rect::MakeLTRB(0, 20, 70, 50)));
+  EXPECT_THAT(SearchNonOverlappingDrawnRects(
+                  display_list.get(), skity::Rect::MakeLTRB(34, 29, 36, 41)),
+              testing::ElementsAre(skity::Rect::MakeLTRB(20, 0, 50, 70)));
+  EXPECT_THAT(SearchNonOverlappingDrawnRects(
+                  display_list.get(), skity::Rect::MakeLTRB(29, 29, 41, 41)),
+              testing::ElementsAre(skity::Rect::MakeLTRB(0, 0, 70, 70)));
+}
+
+TEST(DisplayList, SearchNonOverlappingDrawnRectsRegion) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  for (int i = 0; i < 9; ++i) {
+    canvas->DrawRect(skity::Rect::MakeXYWH(i * 10, i * 10, 20, 20),
+                     skity::Paint{});
+  }
+
+  auto display_list = recorder.FinishRecording();
+  EXPECT_THAT(
+      SearchNonOverlappingDrawnRects(
+          display_list.get(), skity::Rect::MakeLTRB(-100, -100, 200, 200)),
+      testing::ElementsAre(skity::Rect::MakeLTRB(0, 0, 20, 10),
+                           skity::Rect::MakeLTRB(0, 10, 30, 20),
+                           skity::Rect::MakeLTRB(10, 20, 40, 30),
+                           skity::Rect::MakeLTRB(20, 30, 50, 40),
+                           skity::Rect::MakeLTRB(30, 40, 60, 50),
+                           skity::Rect::MakeLTRB(40, 50, 70, 60),
+                           skity::Rect::MakeLTRB(50, 60, 80, 70),
+                           skity::Rect::MakeLTRB(60, 70, 90, 80),
+                           skity::Rect::MakeLTRB(70, 80, 100, 90),
+                           skity::Rect::MakeLTRB(80, 90, 100, 100)));
+}
+
+TEST(DisplayList, SearchNonOverlappingDrawnRectsMergeTouchingRectangles) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(-20, -20, 30, 30), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  const int starts[3] = {-10, 0, 10};
+  for (int y : starts) {
+    for (int x : starts) {
+      canvas->DrawRect(skity::Rect::MakeXYWH(x, y, 10, 10), skity::Paint{});
+    }
+  }
+
+  auto display_list = recorder.FinishRecording();
+  EXPECT_THAT(
+      SearchNonOverlappingDrawnRects(
+          display_list.get(), skity::Rect::MakeLTRB(-100, -100, 100, 100)),
+      testing::ElementsAre(skity::Rect::MakeLTRB(-10, -10, 20, 20)));
+}
+
+TEST(DisplayList, SearchNonOverlappingDrawnRectsOverlappingChain) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  for (int i = 0; i < 6; ++i) {
+    canvas->DrawRect(skity::Rect::MakeXYWH(i * 10, i * 10, 50, 50),
+                     skity::Paint{});
+  }
+
+  auto display_list = recorder.FinishRecording();
+  EXPECT_THAT(
+      SearchNonOverlappingDrawnRects(
+          display_list.get(), skity::Rect::MakeLTRB(-100, -100, 200, 200)),
+      testing::ElementsAre(skity::Rect::MakeLTRB(0, 0, 50, 10),
+                           skity::Rect::MakeLTRB(0, 10, 60, 20),
+                           skity::Rect::MakeLTRB(0, 20, 70, 30),
+                           skity::Rect::MakeLTRB(0, 30, 80, 40),
+                           skity::Rect::MakeLTRB(0, 40, 90, 50),
+                           skity::Rect::MakeLTRB(10, 50, 100, 60),
+                           skity::Rect::MakeLTRB(20, 60, 100, 70),
+                           skity::Rect::MakeLTRB(30, 70, 100, 80),
+                           skity::Rect::MakeLTRB(40, 80, 100, 90),
+                           skity::Rect::MakeLTRB(50, 90, 100, 100)));
+}
+
+TEST(DisplayList, PartialReplayByRect) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 200, 200), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->Save();
+  canvas->Translate(10, 5);
+  canvas->DrawRect(skity::Rect::MakeLTRB(20, 20, 40, 40), skity::Paint{});
+  canvas->Restore();
+  canvas->DrawRect(skity::Rect::MakeLTRB(100, 100, 140, 140), skity::Paint{});
+
+  auto display_list = recorder.FinishRecording();
+
+  MockCanvas mock_canvas;
+  EXPECT_CALL(mock_canvas, OnSave()).Times(1);
+  EXPECT_CALL(mock_canvas, OnTranslate(10, 5)).Times(1);
+  EXPECT_CALL(mock_canvas, OnDrawRect(skity::Rect::MakeLTRB(20, 20, 40, 40), _))
+      .Times(1);
+  EXPECT_CALL(mock_canvas,
+              OnDrawRect(skity::Rect::MakeLTRB(100, 100, 140, 140), _))
+      .Times(0);
+  EXPECT_CALL(mock_canvas, OnRestore()).Times(1);
+
+  display_list->Draw(&mock_canvas, skity::Rect::MakeLTRB(30, 30, 35, 35));
+}
+
+TEST(DisplayList, PartialReplayRestoreToCount) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 200, 200), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  int outer_save_count = canvas->Save();
+  canvas->Translate(10, 0);
+  canvas->Save();
+  canvas->ClipRect(skity::Rect::MakeLTRB(0, 0, 50, 50));
+  canvas->DrawRect(skity::Rect::MakeLTRB(10, 10, 30, 30), skity::Paint{});
+  canvas->RestoreToCount(outer_save_count);
+  canvas->DrawRect(skity::Rect::MakeLTRB(120, 120, 150, 150), skity::Paint{});
+
+  auto display_list = recorder.FinishRecording();
+
+  MockCanvas mock_canvas;
+  EXPECT_CALL(mock_canvas, OnSave()).Times(2);
+  EXPECT_CALL(mock_canvas, OnTranslate(10, 0)).Times(1);
+  EXPECT_CALL(mock_canvas, OnClipRect(skity::Rect::MakeLTRB(0, 0, 50, 50),
+                                      skity::Canvas::ClipOp::kIntersect))
+      .Times(1);
+  EXPECT_CALL(mock_canvas, OnDrawRect(skity::Rect::MakeLTRB(10, 10, 30, 30), _))
+      .Times(1);
+  EXPECT_CALL(mock_canvas,
+              OnDrawRect(skity::Rect::MakeLTRB(120, 120, 150, 150), _))
+      .Times(0);
+  EXPECT_CALL(mock_canvas, OnRestore()).Times(2);
+  EXPECT_CALL(mock_canvas, OnRestoreToCount(_)).Times(0);
+
+  display_list->Draw(&mock_canvas, skity::Rect::MakeLTRB(20, 20, 25, 25));
+}
+
+TEST(DisplayList, PartialReplayRestoreToCountSkipsIrrelevantScope) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 200, 200), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  int outer_save_count = canvas->Save();
+  canvas->Translate(10, 0);
+  canvas->Save();
+  canvas->ClipRect(skity::Rect::MakeLTRB(0, 0, 50, 50));
+  canvas->DrawRect(skity::Rect::MakeLTRB(10, 10, 30, 30), skity::Paint{});
+  canvas->RestoreToCount(outer_save_count);
+  canvas->DrawRect(skity::Rect::MakeLTRB(120, 120, 150, 150), skity::Paint{});
+
+  auto display_list = recorder.FinishRecording();
+
+  testing::StrictMock<MockCanvas> mock_canvas;
+  EXPECT_CALL(mock_canvas, OnSave()).Times(0);
+  EXPECT_CALL(mock_canvas, OnTranslate(_, _)).Times(0);
+  EXPECT_CALL(mock_canvas, OnClipRect(_, _)).Times(0);
+  EXPECT_CALL(mock_canvas, OnRestore()).Times(0);
+  EXPECT_CALL(mock_canvas, OnRestoreToCount(_)).Times(0);
+  EXPECT_CALL(mock_canvas,
+              OnDrawRect(skity::Rect::MakeLTRB(120, 120, 150, 150), _))
+      .Times(1);
+
+  display_list->Draw(&mock_canvas, skity::Rect::MakeLTRB(125, 125, 130, 130));
+}
+
+TEST(DisplayList, PartialReplaySaveLayerScope) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 200, 200), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  skity::Paint layer_paint;
+  layer_paint.SetColor(skity::Color_RED);
+  canvas->SaveLayer(skity::Rect::MakeLTRB(0, 0, 100, 100), layer_paint);
+  canvas->Translate(10, 5);
+  canvas->DrawRect(skity::Rect::MakeLTRB(20, 20, 40, 40), skity::Paint{});
+  canvas->Restore();
+  canvas->DrawRect(skity::Rect::MakeLTRB(140, 140, 180, 180), skity::Paint{});
+
+  auto display_list = recorder.FinishRecording();
+
+  MockCanvas mock_canvas;
+  EXPECT_CALL(mock_canvas,
+              OnSaveLayer(skity::Rect::MakeLTRB(0, 0, 100, 100), layer_paint))
+      .Times(1);
+  EXPECT_CALL(mock_canvas, OnTranslate(10, 5)).Times(1);
+  EXPECT_CALL(mock_canvas, OnDrawRect(skity::Rect::MakeLTRB(20, 20, 40, 40), _))
+      .Times(1);
+  EXPECT_CALL(mock_canvas,
+              OnDrawRect(skity::Rect::MakeLTRB(140, 140, 180, 180), _))
+      .Times(0);
+  EXPECT_CALL(mock_canvas, OnRestore()).Times(1);
+
+  display_list->Draw(&mock_canvas, skity::Rect::MakeLTRB(30, 30, 35, 35));
+}
+
+TEST(DisplayList, PartialReplayMultipleHitsInSameScope) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 200, 200), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->Save();
+  canvas->Translate(10, 5);
+  canvas->DrawRect(skity::Rect::MakeLTRB(20, 20, 40, 40), skity::Paint{});
+  canvas->DrawRect(skity::Rect::MakeLTRB(50, 20, 70, 40), skity::Paint{});
+  canvas->Restore();
+  canvas->DrawRect(skity::Rect::MakeLTRB(120, 120, 160, 160), skity::Paint{});
+
+  auto display_list = recorder.FinishRecording();
+
+  testing::StrictMock<MockCanvas> mock_canvas;
+  EXPECT_CALL(mock_canvas, OnSave()).Times(1);
+  EXPECT_CALL(mock_canvas, OnTranslate(10, 5)).Times(1);
+  EXPECT_CALL(mock_canvas, OnDrawRect(skity::Rect::MakeLTRB(20, 20, 40, 40), _))
+      .Times(1);
+  EXPECT_CALL(mock_canvas, OnDrawRect(skity::Rect::MakeLTRB(50, 20, 70, 40), _))
+      .Times(1);
+  EXPECT_CALL(mock_canvas,
+              OnDrawRect(skity::Rect::MakeLTRB(120, 120, 160, 160), _))
+      .Times(0);
+  EXPECT_CALL(mock_canvas, OnRestore()).Times(1);
+
+  display_list->Draw(&mock_canvas, skity::Rect::MakeLTRB(30, 25, 65, 30));
+}
+
+TEST(DisplayList, PartialReplayOuterScopeContinuesAfterInnerRestore) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 200, 200), options);
+  auto canvas = recorder.GetRecordingCanvas();
+
+  canvas->Save();
+  canvas->Translate(10, 0);
+  canvas->Save();
+  canvas->ClipRect(skity::Rect::MakeLTRB(0, 0, 40, 40));
+  canvas->DrawRect(skity::Rect::MakeLTRB(10, 10, 30, 30), skity::Paint{});
+  canvas->Restore();
+  canvas->DrawRect(skity::Rect::MakeLTRB(80, 10, 110, 40), skity::Paint{});
+  canvas->Restore();
+
+  auto display_list = recorder.FinishRecording();
+
+  testing::StrictMock<MockCanvas> mock_canvas;
+  EXPECT_CALL(mock_canvas, OnSave()).Times(1);
+  EXPECT_CALL(mock_canvas, OnTranslate(10, 0)).Times(1);
+  EXPECT_CALL(mock_canvas, OnClipRect(_, _)).Times(0);
+  EXPECT_CALL(mock_canvas, OnDrawRect(skity::Rect::MakeLTRB(10, 10, 30, 30), _))
+      .Times(0);
+  EXPECT_CALL(mock_canvas,
+              OnDrawRect(skity::Rect::MakeLTRB(80, 10, 110, 40), _))
+      .Times(1);
+  EXPECT_CALL(mock_canvas, OnRestore()).Times(1);
+
+  display_list->Draw(&mock_canvas, skity::Rect::MakeLTRB(95, 20, 100, 25));
+}
+
+TEST(DisplayList, PartialReplayWithoutRTree) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->DrawRect(skity::Rect::MakeLTRB(10, 10, 40, 40), skity::Paint{});
+
+  auto display_list = recorder.FinishRecording();
+  MockCanvas mock_canvas;
+
+  EXPECT_CALL(mock_canvas, OnDrawRect(skity::Rect::MakeLTRB(10, 10, 40, 40), _))
+      .Times(1);
+  display_list->Draw(&mock_canvas, skity::Rect::MakeLTRB(20, 20, 30, 30));
+}
+
+TEST(DisplayList, PartialReplayEmptyRectNoOp) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 200, 200), options);
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Save();
+  canvas->Translate(10, 5);
+  canvas->DrawRect(skity::Rect::MakeLTRB(20, 20, 40, 40), skity::Paint{});
+  canvas->Restore();
+
+  auto display_list = recorder.FinishRecording();
+  testing::StrictMock<MockCanvas> mock_canvas;
+
+  display_list->Draw(&mock_canvas, skity::Rect::MakeEmpty());
+}
+
+TEST(DisplayList, DrawGlyphsWithZeroCount) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100));
+  auto canvas = recorder.GetRecordingCanvas();
+  skity::Font font;
+  skity::Paint paint;
+
+  canvas->DrawGlyphs(0, nullptr, nullptr, nullptr, font, paint);
+
+  auto display_list = recorder.FinishRecording();
+  testing::StrictMock<MockCanvas> mock_canvas;
+
+  EXPECT_CALL(mock_canvas, OnDrawGlyphs(0, _, _, _, _, _)).Times(1);
+  display_list->Draw(&mock_canvas);
+}
+
+TEST(DisplayList, DrawNullCanvasNoOp) {
+  skity::PictureRecorder recorder;
+  skity::DisplayListBuildOptions options;
+  options.build_rtree = true;
+  recorder.BeginRecording(skity::Rect::MakeLTRB(0, 0, 100, 100), options);
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->DrawRect(skity::Rect::MakeLTRB(10, 10, 40, 40), skity::Paint{});
+
+  auto display_list = recorder.FinishRecording();
+  display_list->Draw(nullptr);
+  display_list->Draw(nullptr, skity::Rect::MakeLTRB(10, 10, 20, 20));
 }
 
 TEST(DisplayList, ClipRect) {
