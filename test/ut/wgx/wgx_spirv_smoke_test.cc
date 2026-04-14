@@ -1600,6 +1600,278 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithNestedStructMemberAccess) {
+  auto program = wgx::Program::Parse(R"(
+struct Inner {
+  position: vec4<f32>,
+};
+
+struct Outer {
+  inner: Inner,
+};
+
+fn helper(input: Outer) -> vec4<f32> {
+  return input.inner.position;
+}
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var value: Outer;
+  value.inner.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  return helper(value);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_nested_struct_member_access.spv", result.spirv);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithWholeStructAssignment) {
+  auto program = wgx::Program::Parse(R"(
+struct VertexOutput {
+  position: vec4<f32>,
+};
+
+fn make_output() -> VertexOutput {
+  var output: VertexOutput;
+  output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  return output;
+}
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var a: VertexOutput;
+  var b: VertexOutput;
+  a = make_output();
+  b = a;
+  return b.position;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_whole_struct_assignment.spv", result.spirv);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsFragmentSpirvBinaryForStructInterfaceIo) {
+  auto program = wgx::Program::Parse(R"(
+struct FragmentInput {
+  @location(0) color: vec4<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  output.color = input.color;
+  return output;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_struct_interface_io.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
+  EXPECT_TRUE(ContainsVariableWithStorageClass(words, SpvStorageClassInput));
+  EXPECT_TRUE(ContainsVariableWithStorageClass(words, SpvStorageClassOutput));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsFragmentSpirvBinaryForStructControlFlow) {
+  auto program = wgx::Program::Parse(R"(
+struct FragmentInput {
+  @location(0) color: vec4<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+fn make_output(color: vec4<f32>) -> FragmentOutput {
+  var output: FragmentOutput;
+  output.color = color;
+  return output;
+}
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  var use_input: bool = true;
+  var i: i32 = 0;
+
+  if (use_input) {
+    output = make_output(input.color);
+  } else {
+    output = make_output(vec4<f32>(0.0, 0.0, 0.0, 1.0));
+  }
+
+  while (i < 1) {
+    i = i + 1;
+    output.color = output.color;
+  }
+
+  return output;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_struct_control_flow.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelectionMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoopMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsFragmentSpirvBinaryForStructForLoop) {
+  auto program = wgx::Program::Parse(R"(
+struct FragmentInput {
+  @location(0) color: vec4<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  output.color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+
+  for (var i: i32 = 0; i < 2; i++) {
+    output.color = input.color;
+  }
+
+  return output;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_struct_for_loop.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoopMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSLessThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIAdd));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsFragmentSpirvBinaryForStructSwitch) {
+  auto program = wgx::Program::Parse(R"(
+struct FragmentInput {
+  @location(0) color: vec4<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+fn make_output(color: vec4<f32>) -> FragmentOutput {
+  var output: FragmentOutput;
+  output.color = color;
+  return output;
+}
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  var mode: i32 = 1;
+
+  switch mode {
+    case 0: {
+      output = make_output(vec4<f32>(0.0, 0.0, 0.0, 1.0));
+    }
+    case 1, 2: {
+      output = make_output(input.color);
+    }
+    default: {
+      output = make_output(vec4<f32>(1.0, 0.0, 0.0, 1.0));
+    }
+  }
+
+  return output;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_struct_switch.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelectionMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+}
+
 /**
  * Test function parameter with simple type (f32).
  */
