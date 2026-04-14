@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -18,6 +19,7 @@
 #include "wgsl/ast/identifier.h"
 #include "wgsl/ast/module.h"
 #include "wgsl/ast/statement.h"
+#include "wgsl/ast/type_decl.h"
 #include "wgsl/ast/variable.h"
 
 namespace wgx {
@@ -62,6 +64,8 @@ class Lowerer {
 
   bool LowerFunction(const ast::Function* function, bool is_entry_point);
   bool RegisterFunctionParameters();
+  std::vector<ir::InputVariable> ResolveInputVars(
+      const ast::Function* function) const;
   bool LowerFunctionBody();
   bool InsertImplicitReturn();
   void ResolveParameterDecorations(const ast::Parameter* param,
@@ -99,12 +103,13 @@ class Lowerer {
   bool LowerAssignStatement(const ast::AssignStatement* assign,
                             ir::Block* block);
 
-  bool EmitStore(const ir::ExprResult& source_expr, uint32_t target_var_id,
+  bool EmitStore(const ir::ExprResult& source_expr, const ir::Value& target,
                  ir::Block* block);
   ir::ExprResult LowerExpression(ast::Expression* expression);
   ir::ExprResult LowerConstant(ast::Expression* expression);
   ir::ExprResult LowerVectorConstructor(ast::Expression* expression);
   ir::ExprResult LowerBinaryExpression(ast::BinaryExp* binary);
+  ir::ExprResult LowerMemberAccessorExpression(ast::MemberAccessor* member);
   ir::ExprResult LowerFunctionCallExpression(ast::FunctionCallExp* call,
                                              ir::Block* block);
   ir::ExprResult LowerBuiltinCallExpression(ast::FunctionCallExp* call,
@@ -128,6 +133,15 @@ class Lowerer {
       const ast::FunctionCallExp* call) const;
   bool EnsureFunctionLowered(const ast::Function* function);
   ir::TypeId GetFunctionReturnType(const ast::Function* function);
+  const ast::StructDecl* ResolveStructDecl(const ast::Type& type) const;
+  const ast::StructDecl* ResolveStructDeclByName(std::string_view name) const;
+  void ResolveInterfaceDecorations(
+      const std::vector<ast::Attribute*>& attributes,
+      ir::InterfaceDecorationKind* decoration_kind,
+      uint32_t* decoration_value) const;
+  const ir::StructMember* FindStructMember(ir::TypeId struct_type,
+                                           std::string_view member_name,
+                                           uint32_t* member_index) const;
 
   const ast::Module* ast_module_;
   const ast::Function* ast_entry_point_;

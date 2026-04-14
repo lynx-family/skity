@@ -13,9 +13,7 @@ namespace ir {
  *  Value factory implementations
  *  ======================================================================== */
 
-Value Value::None() {
-  return Value();
-}
+Value Value::None() { return Value(); }
 
 Value Value::ConstantF32(TypeId type, float value) {
   Value v;
@@ -97,7 +95,7 @@ Value Value::ConstantPoolRef(TypeId type, uint32_t pool_index) {
   Value v;
   v.kind = ValueKind::kConstant;
   v.type = type;
-  v.const_kind = InlineConstKind::kNone;  /** Indicates pool reference */
+  v.const_kind = InlineConstKind::kNone; /** Indicates pool reference */
   v.const_data.pool_index = pool_index;
   return v;
 }
@@ -118,12 +116,20 @@ Value Value::Variable(TypeId var_type, uint32_t var_id) {
   return v;
 }
 
+Value Value::PointerSSA(TypeId pointee_type, uint32_t ssa_id) {
+  Value v;
+  v.kind = ValueKind::kPointerSSA;
+  v.type = pointee_type;
+  v.id = ssa_id;
+  return v;
+}
+
 /** ========================================================================
  *  Safe value extraction implementations
  *  ======================================================================== */
 
 std::optional<uint32_t> Value::GetSSAId() const {
-  if (kind != ValueKind::kSSA) {
+  if (kind != ValueKind::kSSA && kind != ValueKind::kPointerSSA) {
     return std::nullopt;
   }
   return id;

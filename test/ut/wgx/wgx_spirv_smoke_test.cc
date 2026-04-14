@@ -1495,6 +1495,111 @@ fn vs_main(@location(0) pos: vec2<f32>) -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForStructInterfaceIo) {
+  auto program = wgx::Program::Parse(R"(
+struct VertexInput {
+  @location(0) pos: vec2<f32>,
+  @location(1) uv: vec2<f32>,
+};
+
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+  var output: VertexOutput;
+  output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  output.uv = input.uv;
+  return output;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_struct_interface_io.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsVariableWithStorageClass(words, SpvStorageClassInput));
+  EXPECT_TRUE(ContainsVariableWithStorageClass(words, SpvStorageClassOutput));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_FALSE(ContainsInstruction(words, SpvOpFunctionParameter));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithStructFunctionParameter) {
+  auto program = wgx::Program::Parse(R"(
+struct VertexInput {
+  position: vec4<f32>,
+};
+
+fn helper(input: VertexInput) -> vec4<f32> {
+  return input.position;
+}
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var input: VertexInput;
+  input.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  return helper(input);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionParameter));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithStructReturnMemberExtract) {
+  auto program = wgx::Program::Parse(R"(
+struct VertexOutput {
+  position: vec4<f32>,
+};
+
+fn helper() -> VertexOutput {
+  var output: VertexOutput;
+  output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  return output;
+}
+
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  return helper().position;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeExtract));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
 /**
  * Test function parameter with simple type (f32).
  */

@@ -58,8 +58,8 @@ ir::Value Lowerer::EnsureValue(const ir::ExprResult& expr, ir::Block* block) {
 }
 
 bool Lowerer::EmitStore(const ir::ExprResult& source_expr,
-                        uint32_t target_var_id, ir::Block* block) {
-  if (block == nullptr || target_var_id == 0) {
+                        const ir::Value& target, ir::Block* block) {
+  if (block == nullptr || !target.IsAddress()) {
     return false;
   }
 
@@ -70,8 +70,7 @@ bool Lowerer::EmitStore(const ir::ExprResult& source_expr,
 
   ir::Instruction store_inst;
   store_inst.kind = ir::InstKind::kStore;
-  store_inst.operands.push_back(
-      ir::Value::Variable(source_value.type, target_var_id));
+  store_inst.operands.push_back(target);
   store_inst.operands.push_back(source_value);
 
   block->instructions.emplace_back(store_inst);
@@ -95,6 +94,11 @@ ir::ExprResult Lowerer::LowerExpression(ast::Expression* expression) {
 
   if (expression->GetType() == ast::ExpressionType::kBinaryExp) {
     return LowerBinaryExpression(static_cast<ast::BinaryExp*>(expression));
+  }
+
+  if (expression->GetType() == ast::ExpressionType::kMemberAccessor) {
+    return LowerMemberAccessorExpression(
+        static_cast<ast::MemberAccessor*>(expression));
   }
 
   if (expression->GetType() == ast::ExpressionType::kFuncCall) {
@@ -344,6 +348,52 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
   current_block->instructions.emplace_back(binary_inst);
 
   return ir::ExprResult::ValueResult(ir::Value::SSA(result_type, result_id));
+}
+
+ir::ExprResult Lowerer::LowerMemberAccessorExpression(
+    ast::MemberAccessor* member) {
+  if (member == nullptr || member->obj == nullptr ||
+      member->member == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::ExprResult base_expr = LowerExpression(member->obj);
+  if (!base_expr.IsValid()) {
+    return ir::ExprResult();
+  }
+
+  uint32_t member_index = 0;
+  const ir::StructMember* struct_member = FindStructMember(
+      base_expr.GetType(), member->member->name, &member_index);
+  if (struct_member == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::Block* current_block = CurrentBlock();
+  if (current_block == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::Instruction member_inst;
+  member_inst.result_id = AllocateSSAId();
+  member_inst.result_type = struct_member->type;
+  member_inst.access_index = member_index;
+  member_inst.operands.push_back(base_expr.value);
+  if (member_inst.result_id == 0) {
+    return ir::ExprResult();
+  }
+
+  if (base_expr.IsAddress()) {
+    member_inst.kind = ir::InstKind::kAccess;
+    current_block->instructions.emplace_back(member_inst);
+    return ir::ExprResult::AddressResult(
+        ir::Value::PointerSSA(struct_member->type, member_inst.result_id));
+  }
+
+  member_inst.kind = ir::InstKind::kExtract;
+  current_block->instructions.emplace_back(member_inst);
+  return ir::ExprResult::ValueResult(
+      ir::Value::SSA(struct_member->type, member_inst.result_id));
 }
 
 ir::ExprResult Lowerer::LowerFunctionCallExpression(ast::FunctionCallExp* call,

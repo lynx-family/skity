@@ -113,20 +113,30 @@ bool SupportsCurrentIR(const ir::Function& function) {
   }
 
   if (!function.output_vars.empty()) {
-    if (function.output_vars.size() != 1) {
-      return false;
-    }
-
-    const auto& output = function.output_vars[0];
-
     if (function.stage == ir::PipelineStage::kVertex) {
-      if (output.decoration_kind != ir::InterfaceDecorationKind::kBuiltin ||
-          output.GetBuiltin() != ir::BuiltinType::kPosition) {
+      bool has_position = false;
+      for (const auto& output : function.output_vars) {
+        if (output.decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
+          if (output.GetBuiltin() != ir::BuiltinType::kPosition ||
+              has_position) {
+            return false;
+          }
+          has_position = true;
+          continue;
+        }
+
+        if (output.decoration_kind != ir::InterfaceDecorationKind::kLocation) {
+          return false;
+        }
+      }
+      if (!has_position) {
         return false;
       }
     } else if (function.stage == ir::PipelineStage::kFragment) {
-      if (output.decoration_kind != ir::InterfaceDecorationKind::kLocation) {
-        return false;
+      for (const auto& output : function.output_vars) {
+        if (output.decoration_kind != ir::InterfaceDecorationKind::kLocation) {
+          return false;
+        }
       }
     } else {
       return false;
@@ -134,19 +144,15 @@ bool SupportsCurrentIR(const ir::Function& function) {
   }
 
   if (function.stage != ir::PipelineStage::kUnknown) {
-    for (const auto& param : function.parameters) {
-      if (!param.IsEntryPointInterfaceInput()) {
-        return false;
-      }
-
-      if (param.decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
+    for (const auto& input : function.input_vars) {
+      if (input.decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
         if (function.stage != ir::PipelineStage::kVertex) {
           return false;
         }
 
-        if (param.GetBuiltin() != ir::BuiltinType::kVertexIndex &&
-            param.GetBuiltin() != ir::BuiltinType::kInstanceIndex &&
-            param.GetBuiltin() != ir::BuiltinType::kPosition) {
+        if (input.GetBuiltin() != ir::BuiltinType::kVertexIndex &&
+            input.GetBuiltin() != ir::BuiltinType::kInstanceIndex &&
+            input.GetBuiltin() != ir::BuiltinType::kPosition) {
           return false;
         }
       }
@@ -178,13 +184,18 @@ bool Emitter::Emit(const ir::Module& module) {
     return false;
   }
   if (module.functions.empty()) return false;
-  if (!ir::Verify(module).valid) return false;
+  auto verify_module = ir::Verify(module);
+  if (!verify_module.valid) {
+    return false;
+  }
 
   const ir::Function* entry_function = FindEntryFunction(module);
   if (entry_function == nullptr || entry_function->stage != module.stage) {
     return false;
   }
-  if (!SupportsCurrentIR(*entry_function)) return false;
+  if (!SupportsCurrentIR(*entry_function)) {
+    return false;
+  }
 
   const auto execution_model = ToExecutionModel(module.stage);
   if (execution_model == SpvExecutionModelMax) return false;
@@ -192,7 +203,9 @@ bool Emitter::Emit(const ir::Module& module) {
   SectionBuffers sections;
   std::vector<uint32_t> words;
   ModuleBuilder builder(module, *entry_function, execution_model);
-  if (!builder.Build(&sections, &words)) return false;
+  if (!builder.Build(&sections, &words)) {
+    return false;
+  }
 
   result_ = std::move(words);
   return true;

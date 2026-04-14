@@ -51,6 +51,10 @@ struct OutputVariable {
   // Type of this output variable
   TypeId type = kInvalidTypeId;
 
+  // Member index in the source struct return type when this output comes from
+  // a flattened struct interface.
+  std::optional<uint32_t> member_index;
+
   // Decoration kind
   InterfaceDecorationKind decoration_kind = InterfaceDecorationKind::kNone;
 
@@ -92,12 +96,15 @@ struct FunctionParameter {
   std::string name;
   TypeId type = kInvalidTypeId;
   uint32_t var_id = 0;
+};
+
+struct InputVariable {
+  std::string name;
+  TypeId type = kInvalidTypeId;
+  uint32_t target_var_id = 0;
+  std::optional<uint32_t> member_index;
   InterfaceDecorationKind decoration_kind = InterfaceDecorationKind::kNone;
   uint32_t decoration_value = 0;
-
-  bool IsEntryPointInterfaceInput() const {
-    return decoration_kind != InterfaceDecorationKind::kNone;
-  }
 
   void SetBuiltin(BuiltinType builtin) {
     decoration_kind = InterfaceDecorationKind::kBuiltin;
@@ -129,6 +136,8 @@ enum class InstKind {
   kVariable,
   kLoad,
   kStore,
+  kAccess,
+  kExtract,
   kBinary,
   kConstruct,
   kCall,
@@ -176,6 +185,9 @@ struct Instruction {
   // Binary op kind for kBinary instructions
   BinaryOpKind binary_op = BinaryOpKind::kAdd;
 
+  // Member index for kAccess instructions.
+  uint32_t access_index = 0;
+
   // Callee function name for kCall instructions.
   std::string callee_name;
 
@@ -191,8 +203,10 @@ struct Instruction {
   // Unified operands expressed via Value.
   // - kReturn: 0 or 1 operand (return value)
   // - kVariable: 0 operands today (initializer lowered as a following kStore)
-  // - kLoad: 1 operand (source variable address)
-  // - kStore: 2 operands (target variable address, source value)
+  // - kLoad: 1 operand (source address)
+  // - kStore: 2 operands (target address, source value)
+  // - kAccess: 1 operand (base address)
+  // - kExtract: 1 operand (base value)
   // - kBinary: 2 operands (lhs value, rhs value)
   // - kConstruct: N operands (constructor arguments)
   // - kCall: N operands (call arguments)
@@ -201,7 +215,8 @@ struct Instruction {
   std::vector<Value> operands = {};
 
   bool HasResult() const {
-    return kind == InstKind::kLoad || kind == InstKind::kBinary ||
+    return kind == InstKind::kLoad || kind == InstKind::kAccess ||
+           kind == InstKind::kExtract || kind == InstKind::kBinary ||
            kind == InstKind::kConstruct || kind == InstKind::kCall ||
            kind == InstKind::kBuiltinCall;
   }
@@ -237,6 +252,7 @@ struct Function {
   // - Empty for void returns
   // - One entry for simple scalar/vector returns
   // - Multiple entries for struct returns (one per decorated member)
+  std::vector<InputVariable> input_vars = {};
   std::vector<OutputVariable> output_vars = {};
   std::vector<FunctionParameter> parameters = {};
 

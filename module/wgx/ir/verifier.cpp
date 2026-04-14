@@ -98,6 +98,10 @@ VerificationResult Verifier::VerifyInstruction(const Instruction& inst,
       return VerifyLoad(inst, index);
     case InstKind::kStore:
       return VerifyStore(inst, index);
+    case InstKind::kAccess:
+      return VerifyAccess(inst, index);
+    case InstKind::kExtract:
+      return VerifyExtract(inst, index);
     case InstKind::kBinary:
       return VerifyBinary(inst, index);
     case InstKind::kConstruct:
@@ -179,6 +183,16 @@ bool Verifier::IsValidValue(const Value& value, const std::string& context) {
     }
   }
 
+  if (value.IsPointerSSA()) {
+    auto ssa_id = value.GetSSAId();
+    if (!ssa_id.has_value()) {
+      return false;
+    }
+    if (!IsSSADefined(ssa_id.value())) {
+      return false;
+    }
+  }
+
   if (value.IsVariable()) {
     auto var_id = value.GetVarId();
     if (!var_id.has_value()) {
@@ -195,12 +209,7 @@ bool Verifier::IsValidValue(const Value& value, const std::string& context) {
 
 VerificationResult Verifier::VerifyReturn(const Instruction& inst,
                                           size_t index) {
-  if (inst.operands.size() > 1) {
-    return VerificationResult::Failure(
-        "Return instruction has more than 1 operand", index, inst.kind);
-  }
-  if (!inst.operands.empty()) {
-    const Value& ret_val = inst.operands[0];
+  for (const auto& ret_val : inst.operands) {
     if (!ret_val.IsValue()) {
       return VerificationResult::Failure(
           "Return value must be a value (constant or SSA), not a variable "
@@ -251,9 +260,9 @@ VerificationResult Verifier::VerifyLoad(const Instruction& inst, size_t index) {
         "Load instruction must have exactly 1 operand", index, inst.kind);
   }
   const Value& source = inst.operands[0];
-  if (!source.IsVariable()) {
-    return VerificationResult::Failure(
-        "Load source must be a variable reference", index, inst.kind);
+  if (!source.IsAddress()) {
+    return VerificationResult::Failure("Load source must be an address", index,
+                                       inst.kind);
   }
   if (!IsValidValue(source, "load source")) {
     return VerificationResult::Failure("Load source is invalid or undefined",
@@ -281,9 +290,9 @@ VerificationResult Verifier::VerifyStore(const Instruction& inst,
   }
   const Value& target = inst.operands[0];
   const Value& source = inst.operands[1];
-  if (!target.IsVariable()) {
-    return VerificationResult::Failure(
-        "Store target must be a variable reference", index, inst.kind);
+  if (!target.IsAddress()) {
+    return VerificationResult::Failure("Store target must be an address", index,
+                                       inst.kind);
   }
   if (!IsValidValue(target, "store target")) {
     return VerificationResult::Failure("Store target is invalid or undefined",
@@ -301,6 +310,56 @@ VerificationResult Verifier::VerifyStore(const Instruction& inst,
     return VerificationResult::Failure(
         "Store instruction should not have a result_id", index, inst.kind);
   }
+  return VerificationResult::Success();
+}
+
+VerificationResult Verifier::VerifyAccess(const Instruction& inst,
+                                          size_t index) {
+  if (inst.operands.size() != 1) {
+    return VerificationResult::Failure(
+        "Access instruction must have exactly 1 operand", index, inst.kind);
+  }
+  const Value& base = inst.operands[0];
+  if (!base.IsAddress()) {
+    return VerificationResult::Failure("Access base must be an address", index,
+                                       inst.kind);
+  }
+  if (!IsValidValue(base, "access base")) {
+    return VerificationResult::Failure("Access base is invalid or undefined",
+                                       index, inst.kind);
+  }
+  if (inst.result_id == 0) {
+    return VerificationResult::Failure(
+        "Access instruction must produce a result_id", index, inst.kind);
+  }
+  if (inst.result_type == kInvalidTypeId) {
+    return VerificationResult::Failure(
+        "Access instruction must have a valid result type", index, inst.kind);
+  }
+  TrackSSADefinition(inst.result_id);
+  return VerificationResult::Success();
+}
+
+VerificationResult Verifier::VerifyExtract(const Instruction& inst,
+                                           size_t index) {
+  if (inst.operands.size() != 1) {
+    return VerificationResult::Failure(
+        "Extract instruction must have exactly 1 operand", index, inst.kind);
+  }
+  const Value& base = inst.operands[0];
+  if (!base.IsValue()) {
+    return VerificationResult::Failure("Extract base must be a value", index,
+                                       inst.kind);
+  }
+  if (!IsValidValue(base, "extract base")) {
+    return VerificationResult::Failure("Extract base is invalid or undefined",
+                                       index, inst.kind);
+  }
+  if (inst.result_id == 0 || inst.result_type == kInvalidTypeId) {
+    return VerificationResult::Failure(
+        "Extract instruction must produce a typed result", index, inst.kind);
+  }
+  TrackSSADefinition(inst.result_id);
   return VerificationResult::Success();
 }
 

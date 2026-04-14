@@ -133,12 +133,17 @@ bool Lowerer::LowerFunction(const ast::Function* function,
   ir_function_->stage =
       is_entry_point ? ir_module_->stage : ir::PipelineStage::kUnknown;
   ir_function_->return_type = ResolveType(function->return_type);
-  ir_function_->output_vars = is_entry_point
-                                  ? ResolveOutputVars(function)
-                                  : std::vector<ir::OutputVariable>{};
 
-  bool ok = RegisterFunctionParameters() && LowerFunctionBody() &&
-            InsertImplicitReturn();
+  bool ok = RegisterFunctionParameters();
+  if (ok) {
+    ir_function_->input_vars = is_entry_point
+                                   ? ResolveInputVars(function)
+                                   : std::vector<ir::InputVariable>{};
+    ir_function_->output_vars = is_entry_point
+                                    ? ResolveOutputVars(function)
+                                    : std::vector<ir::OutputVariable>{};
+  }
+  ok = ok && LowerFunctionBody() && InsertImplicitReturn();
 
 #ifndef SKITY_RELEASE
   if (ok) {
@@ -200,31 +205,71 @@ bool Lowerer::RegisterFunctionParameters() {
   return true;
 }
 
-void Lowerer::ResolveParameterDecorations(
-    const ast::Parameter* param, ir::FunctionParameter* ir_param) const {
-  if (param == nullptr || ir_param == nullptr) {
-    return;
+std::vector<ir::InputVariable> Lowerer::ResolveInputVars(
+    const ast::Function* function) const {
+  std::vector<ir::InputVariable> inputs;
+  if (function == nullptr) {
+    return inputs;
   }
 
-  for (auto* attr : param->attributes) {
-    if (attr == nullptr) {
+  for (auto* param : function->params) {
+    if (param == nullptr || param->name == nullptr) {
       continue;
     }
 
-    if (attr->GetType() == ast::AttributeType::kBuiltin) {
-      auto* builtin = static_cast<const ast::BuiltinAttribute*>(attr);
-      if (builtin->name == "position") {
-        ir_param->SetBuiltin(ir::BuiltinType::kPosition);
-      } else if (builtin->name == "vertex_index") {
-        ir_param->SetBuiltin(ir::BuiltinType::kVertexIndex);
-      } else if (builtin->name == "instance_index") {
-        ir_param->SetBuiltin(ir::BuiltinType::kInstanceIndex);
+    const semantic::Symbol* param_symbol = FindDeclSymbol(param->name);
+    if (param_symbol == nullptr) {
+      continue;
+    }
+
+    auto var_it = var_map_.find(param_symbol);
+    if (var_it == var_map_.end()) {
+      continue;
+    }
+
+    const ast::StructDecl* struct_decl = ResolveStructDecl(param->type);
+    if (struct_decl != nullptr) {
+      for (uint32_t i = 0; i < struct_decl->members.size(); ++i) {
+        auto* member = struct_decl->members[i];
+        if (member == nullptr || member->name == nullptr) {
+          continue;
+        }
+
+        ir::InputVariable input;
+        input.name = std::string{param->name->name} + "." +
+                     std::string{member->name->name};
+        input.type = const_cast<Lowerer*>(this)->ResolveType(member->type);
+        input.target_var_id = var_it->second.id;
+        input.member_index = i;
+        ResolveInterfaceDecorations(member->attributes, &input.decoration_kind,
+                                    &input.decoration_value);
+        if (input.type == ir::kInvalidTypeId ||
+            input.decoration_kind == ir::InterfaceDecorationKind::kNone) {
+          continue;
+        }
+        inputs.push_back(std::move(input));
       }
-    } else if (attr->GetType() == ast::AttributeType::kLocation) {
-      auto* loc = static_cast<const ast::LocationAttribute*>(attr);
-      ir_param->SetLocation(static_cast<uint32_t>(loc->index));
+      continue;
+    }
+
+    ir::InputVariable input;
+    input.name = std::string{param->name->name};
+    input.type = var_it->second.type;
+    input.target_var_id = var_it->second.id;
+    ResolveInterfaceDecorations(param->attributes, &input.decoration_kind,
+                                &input.decoration_value);
+    if (input.decoration_kind != ir::InterfaceDecorationKind::kNone) {
+      inputs.push_back(std::move(input));
     }
   }
+
+  return inputs;
+}
+
+void Lowerer::ResolveParameterDecorations(
+    const ast::Parameter* param, ir::FunctionParameter* ir_param) const {
+  (void)param;
+  (void)ir_param;
 }
 
 bool Lowerer::LowerFunctionBody() {
@@ -279,27 +324,40 @@ std::vector<ir::OutputVariable> Lowerer::ResolveOutputVars(
     return outputs;
   }
 
-  ir::OutputVariable output;
-  output.type = const_cast<Lowerer*>(this)->ResolveType(function->return_type);
-
-  for (auto* attr : function->return_type_attrs) {
-    if (attr == nullptr) continue;
-
-    if (attr->GetType() == ast::AttributeType::kBuiltin) {
-      auto* builtin = static_cast<const ast::BuiltinAttribute*>(attr);
-      if (builtin->name == "position") {
-        output.name = "position_output";
-        output.SetBuiltin(ir::BuiltinType::kPosition);
-        break;
+  const ast::StructDecl* struct_decl = ResolveStructDecl(function->return_type);
+  if (struct_decl != nullptr) {
+    for (uint32_t i = 0; i < struct_decl->members.size(); ++i) {
+      auto* member = struct_decl->members[i];
+      if (member == nullptr || member->name == nullptr) {
+        continue;
       }
-    } else if (attr->GetType() == ast::AttributeType::kLocation) {
-      auto* loc = static_cast<const ast::LocationAttribute*>(attr);
-      output.name = "location_output_" + std::to_string(loc->index);
-      output.SetLocation(static_cast<uint32_t>(loc->index));
-      break;
+
+      ir::OutputVariable output;
+      output.name = std::string{member->name->name};
+      output.type = const_cast<Lowerer*>(this)->ResolveType(member->type);
+      output.member_index = i;
+      ResolveInterfaceDecorations(member->attributes, &output.decoration_kind,
+                                  &output.decoration_value);
+      if (output.type == ir::kInvalidTypeId ||
+          output.decoration_kind == ir::InterfaceDecorationKind::kNone) {
+        continue;
+      }
+      outputs.push_back(std::move(output));
     }
+    return outputs;
   }
 
+  ir::OutputVariable output;
+  output.type = const_cast<Lowerer*>(this)->ResolveType(function->return_type);
+  ResolveInterfaceDecorations(function->return_type_attrs,
+                              &output.decoration_kind,
+                              &output.decoration_value);
+  if (output.decoration_kind == ir::InterfaceDecorationKind::kBuiltin &&
+      output.GetBuiltin() == ir::BuiltinType::kPosition) {
+    output.name = "position_output";
+  } else if (output.decoration_kind == ir::InterfaceDecorationKind::kLocation) {
+    output.name = "location_output_" + std::to_string(output.GetLocation());
+  }
   outputs.push_back(std::move(output));
   return outputs;
 }
@@ -334,6 +392,24 @@ ir::TypeId Lowerer::ResolveType(const ast::Type& type) {
         return ir::kInvalidTypeId;
       }
       return type_table_->GetTexture2DType(sampled_type);
+    }
+
+    if (const ast::StructDecl* struct_decl = ResolveStructDecl(type);
+        struct_decl != nullptr) {
+      std::vector<ir::StructMember> members;
+      members.reserve(struct_decl->members.size());
+      for (auto* member : struct_decl->members) {
+        if (member == nullptr || member->name == nullptr) {
+          continue;
+        }
+        ir::TypeId member_type = ResolveType(member->type);
+        if (member_type == ir::kInvalidTypeId) {
+          return ir::kInvalidTypeId;
+        }
+        members.push_back(
+            ir::StructMember{member_type, std::string{member->name->name}, 0});
+      }
+      return type_table_->GetStructType(members);
     }
 
     const ast::IdentifierExp* scalar_ident = detail::GetVectorScalarType(ident);
@@ -406,6 +482,108 @@ ir::TypeId Lowerer::GetFunctionReturnType(const ast::Function* function) {
     return ir::kInvalidTypeId;
   }
   return ResolveType(function->return_type);
+}
+
+const ast::StructDecl* Lowerer::ResolveStructDecl(const ast::Type& type) const {
+  if (type.expr == nullptr ||
+      type.expr->GetType() != ast::ExpressionType::kIdentifier) {
+    return nullptr;
+  }
+  auto* ident = static_cast<const ast::IdentifierExp*>(type.expr);
+  if (ident->ident == nullptr) {
+    return nullptr;
+  }
+  return ResolveStructDeclByName(ident->ident->name);
+}
+
+const ast::StructDecl* Lowerer::ResolveStructDeclByName(
+    std::string_view name) const {
+  if (ast_module_ == nullptr) {
+    return nullptr;
+  }
+
+  auto* type_decl = ast_module_->GetGlobalTypeDecl(name);
+  if (type_decl == nullptr) {
+    return nullptr;
+  }
+
+  if (type_decl->GetType() == ast::TypeDeclType::kStruct) {
+    return static_cast<const ast::StructDecl*>(type_decl);
+  }
+
+  if (type_decl->GetType() != ast::TypeDeclType::kAlias) {
+    return nullptr;
+  }
+
+  auto* alias = static_cast<const ast::Alias*>(type_decl);
+  return ResolveStructDecl(alias->type);
+}
+
+void Lowerer::ResolveInterfaceDecorations(
+    const std::vector<ast::Attribute*>& attributes,
+    ir::InterfaceDecorationKind* decoration_kind,
+    uint32_t* decoration_value) const {
+  if (decoration_kind == nullptr || decoration_value == nullptr) {
+    return;
+  }
+
+  *decoration_kind = ir::InterfaceDecorationKind::kNone;
+  *decoration_value = 0;
+
+  for (auto* attr : attributes) {
+    if (attr == nullptr) {
+      continue;
+    }
+
+    if (attr->GetType() == ast::AttributeType::kBuiltin) {
+      auto* builtin = static_cast<const ast::BuiltinAttribute*>(attr);
+      *decoration_kind = ir::InterfaceDecorationKind::kBuiltin;
+      if (builtin->name == "position") {
+        *decoration_value = static_cast<uint32_t>(ir::BuiltinType::kPosition);
+      } else if (builtin->name == "vertex_index") {
+        *decoration_value =
+            static_cast<uint32_t>(ir::BuiltinType::kVertexIndex);
+      } else if (builtin->name == "instance_index") {
+        *decoration_value =
+            static_cast<uint32_t>(ir::BuiltinType::kInstanceIndex);
+      } else {
+        *decoration_kind = ir::InterfaceDecorationKind::kNone;
+      }
+      if (*decoration_kind != ir::InterfaceDecorationKind::kNone) {
+        return;
+      }
+    } else if (attr->GetType() == ast::AttributeType::kLocation) {
+      auto* loc = static_cast<const ast::LocationAttribute*>(attr);
+      *decoration_kind = ir::InterfaceDecorationKind::kLocation;
+      *decoration_value = static_cast<uint32_t>(loc->index);
+      return;
+    }
+  }
+}
+
+const ir::StructMember* Lowerer::FindStructMember(
+    ir::TypeId struct_type, std::string_view member_name,
+    uint32_t* member_index) const {
+  if (member_index != nullptr) {
+    *member_index = 0;
+  }
+
+  const ir::Type* type =
+      type_table_ != nullptr ? type_table_->GetType(struct_type) : nullptr;
+  if (type == nullptr || type->kind != ir::TypeKind::kStruct) {
+    return nullptr;
+  }
+
+  for (uint32_t i = 0; i < type->members.size(); ++i) {
+    const auto& member = type->members[i];
+    if (member.name == member_name) {
+      if (member_index != nullptr) {
+        *member_index = i;
+      }
+      return &member;
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace lower

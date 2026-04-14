@@ -24,13 +24,13 @@ class ConstantPool;
  */
 enum class InlineConstKind {
   kNone,
-  kF32,       /** 32-bit float */
-  kI32,       /** 32-bit signed int */
-  kU32,       /** 32-bit unsigned int */
-  kBool,      /** boolean */
-  kVec2F32,   /** vec2<f32> */
-  kVec3F32,   /** vec3<f32> */
-  kVec4F32,   /** vec4<f32> */
+  kF32,     /** 32-bit float */
+  kI32,     /** 32-bit signed int */
+  kU32,     /** 32-bit unsigned int */
+  kBool,    /** boolean */
+  kVec2F32, /** vec2<f32> */
+  kVec3F32, /** vec3<f32> */
+  kVec4F32, /** vec4<f32> */
 };
 
 /**
@@ -46,6 +46,7 @@ enum class ValueKind {
   kConstant,   /** Constant value - inline or from constant pool */
   kSSA,        /** SSA value (instruction result) */
   kVariable,   /** Variable reference (address, needs load to use as value) */
+  kPointerSSA, /** SSA value representing an address */
 };
 
 /**
@@ -73,7 +74,8 @@ enum class ValueKind {
 struct Value {
   /** ========================================================================
    *  Static factory methods
-   *  ======================================================================== */
+   *  ========================================================================
+   */
 
   /** Create an invalid/null value */
   static Value None();
@@ -103,8 +105,8 @@ struct Value {
   static Value ConstantVec4F32(TypeId type, const std::array<float, 4>& values);
 
   /**
-   * Create a constant referencing the constant pool (for large/complex constants).
-   * The pool_index is an index into ConstantPool.
+   * Create a constant referencing the constant pool (for large/complex
+   * constants). The pool_index is an index into ConstantPool.
    */
   static Value ConstantPoolRef(TypeId type, uint32_t pool_index);
 
@@ -114,9 +116,13 @@ struct Value {
   /** Create a variable reference (address/lvalue) */
   static Value Variable(TypeId var_type, uint32_t var_id);
 
+  /** Create an SSA address value (result of access/address instructions) */
+  static Value PointerSSA(TypeId pointee_type, uint32_t ssa_id);
+
   /** ========================================================================
    *  Member data
-   *  ======================================================================== */
+   *  ========================================================================
+   */
 
   ValueKind kind = ValueKind::kNone;
   TypeId type = kInvalidTypeId;
@@ -146,18 +152,26 @@ struct Value {
 
   /** ========================================================================
    *  Inline convenience accessors and queries
-   *  ======================================================================== */
+   *  ========================================================================
+   */
 
-  bool IsValid() const { return kind != ValueKind::kNone && type != kInvalidTypeId; }
+  bool IsValid() const {
+    return kind != ValueKind::kNone && type != kInvalidTypeId;
+  }
   bool IsConstant() const { return kind == ValueKind::kConstant; }
   bool IsSSA() const { return kind == ValueKind::kSSA; }
   bool IsVariable() const { return kind == ValueKind::kVariable; }
+  bool IsPointerSSA() const { return kind == ValueKind::kPointerSSA; }
 
   /** Check if this is an address/lvalue (variable reference) */
-  bool IsAddress() const { return kind == ValueKind::kVariable; }
+  bool IsAddress() const {
+    return kind == ValueKind::kVariable || kind == ValueKind::kPointerSSA;
+  }
 
   /** Check if this is a value (constant or SSA) */
-  bool IsValue() const { return kind == ValueKind::kConstant || kind == ValueKind::kSSA; }
+  bool IsValue() const {
+    return kind == ValueKind::kConstant || kind == ValueKind::kSSA;
+  }
 
   /** Check if constant is stored inline (vs in constant pool) */
   bool IsInlineConstant() const {
@@ -166,7 +180,8 @@ struct Value {
 
   /** ========================================================================
    *  Safe value extraction - returns nullopt/std::array{} if type mismatch
-   *  ======================================================================== */
+   *  ========================================================================
+   */
 
   /** Get the SSA id if this is an SSA value, otherwise nullopt */
   std::optional<uint32_t> GetSSAId() const;
@@ -174,7 +189,8 @@ struct Value {
   /** Get the variable id if this is a variable reference, otherwise nullopt */
   std::optional<uint32_t> GetVarId() const;
 
-  /** Get inline vec4<f32> values if this is a vec4<f32> constant, otherwise empty array */
+  /** Get inline vec4<f32> values if this is a vec4<f32> constant, otherwise
+   * empty array */
   std::array<float, 4> GetVec4F32() const;
 
   /** Get inline f32 value if this is an f32 constant, otherwise 0.0f */
@@ -195,7 +211,8 @@ struct Value {
   /** ========================================================================
    *  Unchecked value extraction - caller must verify type first
    *  These are faster but unsafe if called on wrong Value kind
-   *  ======================================================================== */
+   *  ========================================================================
+   */
 
   /** Directly return the id field - works for SSA, Variable, and PoolRef */
   uint32_t GetIdUnchecked() const { return id; }
@@ -204,7 +221,9 @@ struct Value {
   float GetF32Unchecked() const { return const_data.f32; }
 
   /** Directly access the vec4 field in const_data */
-  const std::array<float, 4>& GetVec4Unchecked() const { return const_data.vec4; }
+  const std::array<float, 4>& GetVec4Unchecked() const {
+    return const_data.vec4;
+  }
 
   /** Directly access the i32 field in const_data */
   int32_t GetI32Unchecked() const { return const_data.i32; }
@@ -232,8 +251,8 @@ struct ExprResult {
   Value value;
 
   /**
-   * True if this is an address/lvalue (can be assigned to, needs load for value)
-   * False if this is already a value (constant or SSA)
+   * True if this is an address/lvalue (can be assigned to, needs load for
+   * value) False if this is already a value (constant or SSA)
    */
   bool is_address = false;
 

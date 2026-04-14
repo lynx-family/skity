@@ -108,6 +108,8 @@ class Verifier {
   VerificationResult VerifyVariable(const Instruction& inst, size_t index);
   VerificationResult VerifyLoad(const Instruction& inst, size_t index);
   VerificationResult VerifyStore(const Instruction& inst, size_t index);
+  VerificationResult VerifyAccess(const Instruction& inst, size_t index);
+  VerificationResult VerifyExtract(const Instruction& inst, size_t index);
   VerificationResult VerifyBinary(const Instruction& inst, size_t index);
   VerificationResult VerifyConstruct(const Instruction& inst, size_t index);
   VerificationResult VerifyCall(const Instruction& inst, size_t index);
