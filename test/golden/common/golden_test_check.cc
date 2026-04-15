@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -27,6 +28,52 @@ namespace {
 
 constexpr uint8_t kIgnoredChannelDiff = 2;
 constexpr uint8_t kIgnoredSoftEdgeChannelDiff = 8;
+
+bool ShouldUseGLGoldenPath() {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  return env != nullptr && env->GetBackend() == skity::testing::Backend::kGL;
+}
+
+std::string BuildGLGoldenImagePath(const char* path) {
+  if (path == nullptr) {
+    return {};
+  }
+
+  std::filesystem::path base_path(path);
+  return (base_path.parent_path() /
+          (base_path.stem().string() + "_gl" + base_path.extension().string()))
+      .string();
+}
+
+std::string ResolveGoldenReadPath(const char* path) {
+  if (path == nullptr) {
+    return {};
+  }
+
+  if (!ShouldUseGLGoldenPath()) {
+    return path;
+  }
+
+  auto gl_path = BuildGLGoldenImagePath(path);
+
+  if (std::filesystem::exists(gl_path)) {
+    return gl_path;
+  }
+
+  return path;
+}
+
+std::string ResolveGoldenWritePath(const char* path) {
+  if (path == nullptr) {
+    return {};
+  }
+
+  if (!ShouldUseGLGoldenPath()) {
+    return path;
+  }
+
+  return BuildGLGoldenImagePath(path);
+}
 
 uint8_t GetComparableChannel(const std::shared_ptr<Pixmap>& pixmap,
                              const uint8_t* pixel, int channel_index) {
@@ -198,6 +245,8 @@ static bool CompareGoldenTextureImpl(
   auto env = GoldenTestEnv::GetInstance();
   AutoRestoreConfig auto_restore_config(env->GetGPUContext(), config);
   auto texture = env->RenderToTexture(width, height, render);
+  auto expected_image_read_path = ResolveGoldenReadPath(path);
+  auto expected_image_write_path = ResolveGoldenWritePath(path);
 
   EXPECT_TRUE(texture != nullptr)
       << "Failed to generate rendering result texture";
@@ -207,7 +256,7 @@ static bool CompareGoldenTextureImpl(
   EXPECT_TRUE(source != nullptr)
       << "Failed to read rendering result texture pixels";
 
-  auto target = ReadImage(path);
+  auto target = ReadImage(expected_image_read_path.c_str());
 
   if (target != nullptr && (source->Width() != target->Width() ||
                             source->Height() != target->Height())) {
@@ -228,8 +277,8 @@ static bool CompareGoldenTextureImpl(
     std::string diff_pixels_path;
 
     const char* out_dir = std::getenv("AGENT_OUT_DIR");
-    if (path && out_dir) {
-      std::string p(path);
+    if (!expected_image_write_path.empty() && out_dir) {
+      std::string p(expected_image_write_path);
       auto slash_pos = p.find_last_of("/\\");
       std::string basename =
           (slash_pos != std::string::npos) ? p.substr(slash_pos + 1) : p;
@@ -283,7 +332,12 @@ static bool CompareGoldenTextureImpl(
                 << std::endl;
     }
     std::cout << "  \"expected_image\": \""
-              << EscapeJSONString(path ? path : "") << "\"";
+              << EscapeJSONString(expected_image_read_path) << "\"";
+    if (expected_image_write_path != expected_image_read_path) {
+      std::cout << "," << std::endl
+                << "  \"golden_output_path\": \""
+                << EscapeJSONString(expected_image_write_path) << "\"";
+    }
     if (!actual_path.empty()) {
       std::cout << "," << std::endl
                 << "  \"actual_image\": \"" << EscapeJSONString(actual_path)
@@ -298,7 +352,8 @@ static bool CompareGoldenTextureImpl(
   }
 
 #ifdef SKITY_GOLDEN_GUI
-  return OpenPlayground(result.Passed(), texture, target, path,
+  return OpenPlayground(result.Passed(), texture, target,
+                        expected_image_write_path.c_str(),
                         auto_restore_config.GetNameSuffix());
 #else
   return result.Passed();
