@@ -203,12 +203,6 @@ if (NOT ${SKITY_CT_FONT})
 
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
-  # header file for functor view
-  target_include_directories(skity
-    PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/../third_party/chromium
-  )
-
   target_sources(
     skity
     PRIVATE
@@ -444,10 +438,6 @@ if(${SKITY_HW_RENDERER})
       ${CMAKE_CURRENT_LIST_DIR}/render/hw/gl/gl_root_layer.cc
       ${CMAKE_CURRENT_LIST_DIR}/render/hw/gl/gl_root_layer.hpp
     )
-
-    if(${SKITY_USE_MESA_GLES})
-      target_compile_definitions(skity PRIVATE -DSKITY_MESA_GLES)
-    endif()
   endif()
 
   # Metal backend
