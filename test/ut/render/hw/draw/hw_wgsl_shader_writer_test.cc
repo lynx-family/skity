@@ -1061,7 +1061,7 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = vec4<f32>(input.f_color.rgb * input.f_color.a, input.f_color.a);
   var mask_alpha: f32 = 1.0;
-  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(input.v_fs_packed.z), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
+  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(round(input.v_fs_packed.z)), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
   color = color * mask_alpha;
   return color;
 }
@@ -1367,7 +1367,7 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = generate_gradient_color(input.f_param_pos);
   var mask_alpha: f32 = 1.0;
-  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(input.v_fs_packed.z), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
+  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(round(input.v_fs_packed.z)), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
   color = color * mask_alpha;
   return color;
 }
@@ -1674,7 +1674,7 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
 
   color *= image_color_info.global_alpha;
   var mask_alpha: f32 = 1.0;
-  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(input.v_fs_packed.z), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
+  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(round(input.v_fs_packed.z)), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
   color = color * mask_alpha;
   return color;
 }

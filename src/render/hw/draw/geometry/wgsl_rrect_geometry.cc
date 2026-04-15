@@ -333,7 +333,7 @@ fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect
 
 void WGSLRRectGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
   ss << R"(
-  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(input.v_fs_packed.z), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
+  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(round(input.v_fs_packed.z)), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
 )";
 }
 
