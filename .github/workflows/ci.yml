@@ -202,7 +202,6 @@ jobs:
                 ./out/cmake_golden_test/test/golden/skity_golden_test_shape
                 ./out/cmake_golden_test/test/golden/skity_golden_test_text
           - name: Run Experimental GL Golden Test
-            continue-on-error: true
             run: |
                 ./out/cmake_golden_test/test/golden/skity_golden_test_shape --backend gl
 

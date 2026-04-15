@@ -42,6 +42,12 @@ python3 tools/test-runner.py --suite=golden-text --build-dir <build directory>
 python3 tools/test-runner.py --suite=golden-shape --backend=gl --build-dir <build directory>
 ```
 
+When running with `--backend=gl`, golden comparison will first look for a
+backend-specific image with the `_gl` suffix in the same directory, such as
+`foo_gl.png`. If that file does not exist, it falls back to `foo.png` for
+comparison. When updating the baseline from the GUI, the GL backend always
+writes to `foo_gl.png`, while the Metal backend writes to `foo.png`.
+
 If you want to run the golden executables directly, you still need to set the environment variable `DYLD_LIBRARY_PATH` to the path of the libSwAngle library and the environment variable `ANGLE_DEFAULT_PLATFORM` to `swiftshader` for Angle backend even if running the test case with Metal backend.
 
 ```bash

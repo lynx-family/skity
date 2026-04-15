@@ -8,6 +8,7 @@
 #include <EGL/eglext.h>
 #include <GLES3/gl3.h>
 
+#include <iostream>
 #include <skity/gpu/gpu_context_gl.hpp>
 
 #include "common/gl/golden_texture_gl.hpp"
@@ -49,9 +50,13 @@ void GoldenTestEnvGL::SetUp() {
   const EGLint pbufferAttribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
   surface_ = eglCreatePbufferSurface(display_, config, pbufferAttribs);
 
-  const EGLint contextAttribs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
+  const EGLint contextAttribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
   context_ = eglCreateContext(display_, config, EGL_NO_CONTEXT, contextAttribs);
   eglMakeCurrent(display_, surface_, surface_, context_);
+
+  std::cout << "EGL version: " << major << "." << minor << std::endl;
+  std::cout << "GL version: " << glGetString(GL_VERSION) << std::endl;
+  std::cout << "GL_RENDERER: " << glGetString(GL_RENDERER) << std::endl;
 
   GoldenTestEnv::SetUp();
 }
@@ -162,7 +167,14 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvGL::RenderToTexture(
 }
 
 std::unique_ptr<skity::GPUContext> GoldenTestEnvGL::CreateGPUContext() {
-  return GLContextCreate((void*)eglGetProcAddress);
+  auto ctx = GLContextCreate((void*)eglGetProcAddress);
+
+  // disable render target cache in Angle + SwiftShader
+  // in this case, reuse fbo has issues and cause test failure
+  // so we disable render target cache to make test pass
+  ctx->EnableRenderTargetCache(false);
+
+  return ctx;
 }
 
 GoldenTestEnv* CreateGoldenTestEnvGL() { return new GoldenTestEnvGL(); }
