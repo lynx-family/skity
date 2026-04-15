@@ -57,29 +57,38 @@ class HWResourceCache {
 
   std::shared_ptr<HWResource<K, V>> ObtainResource(K key,
                                                    Pool* pool = nullptr) {
-    auto range = purgeable_map_.equal_range(key);
-    if (range.first != range.second) {
-      auto list_it = range.first->second;
-      auto resource = *list_it;
-      purgeable_list_.erase(list_it);
-      purgeable_map_.erase(range.first);
-      purgeable_bytes_ -= resource->GetBytes();
-      if (pool) {
-        pool->PutResource(resource);
+    if (!disable_cache_) {
+      auto range = purgeable_map_.equal_range(key);
+      if (range.first != range.second) {
+        auto list_it = range.first->second;
+        auto resource = *list_it;
+        purgeable_list_.erase(list_it);
+        purgeable_map_.erase(range.first);
+        purgeable_bytes_ -= resource->GetBytes();
+        if (pool) {
+          pool->PutResource(resource);
+        }
+        return resource;
       }
-      return resource;
     }
 
     std::shared_ptr<HWResource<K, V>> resource =
         allocator_->AllocateResource(key);
-    total_resource_bytes_ += resource->GetBytes();
+
     if (pool) {
       pool->PutResource(resource);
+    }
+
+    if (!disable_cache_) {
+      total_resource_bytes_ += resource->GetBytes();
     }
     return resource;
   }
 
   void StoreResource(std::shared_ptr<HWResource<K, V>> resource) {
+    if (disable_cache_) {
+      return;
+    }
     purgeable_list_.push_front(resource);
     purgeable_map_.insert({resource->GetKey(), purgeable_list_.begin()});
     purgeable_bytes_ += resource->GetBytes();
@@ -108,6 +117,8 @@ class HWResourceCache {
     PurgeAsNeeded();
   }
 
+  void SetDisableCache(bool disable_cache) { disable_cache_ = disable_cache; }
+
   size_t GetTotalResourceBytes() const { return total_resource_bytes_; }
   size_t GetPurgableBytes() const { return purgeable_bytes_; }
   size_t GetMaxbytes() const { return max_bytes_; }
@@ -117,6 +128,7 @@ class HWResourceCache {
   size_t purgeable_bytes_ = 0;
   std::unique_ptr<HWResourceAllocator<K, V>> allocator_;
   size_t max_bytes_;
+  bool disable_cache_ = false;
 
   std::list<std::shared_ptr<HWResource<K, V>>> purgeable_list_;
   std::multimap<K, decltype(purgeable_list_.begin()), Compare> purgeable_map_;

@@ -243,6 +243,25 @@ class SKITY_API GPUContext {
     return enable_simple_shape_pipeline_;
   }
 
+  /**
+   * Used to enable or disable render target cache during a frame.
+   * When enabled, Skity will try to reuse the render target created in the same
+   * frame when the descriptor matches. This can reduce the render target
+   * creation overhead, and save GPU memory.
+   *
+   * @note This API is not stable, and may changed in the future.
+   *
+   * @param enable whether to enable render target cache, the default value is
+   * true.
+   */
+  void EnableRenderTargetCache(bool enable) {
+    enable_render_target_cache_ = enable;
+  }
+
+  bool IsRenderTargetCacheEnabled() const {
+    return enable_render_target_cache_;
+  }
+
  private:
   GPUErrorCallback error_callback_ = nullptr;
   void* error_callback_user_data_ = nullptr;
@@ -252,6 +271,7 @@ class SKITY_API GPUContext {
   bool enable_text_linear_filter_ = false;
   bool enable_gpu_tessellation_ = true;
   bool enable_simple_shape_pipeline_ = false;
+  bool enable_render_target_cache_ = true;
 };
 
 }  // namespace skity

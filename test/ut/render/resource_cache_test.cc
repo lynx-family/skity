@@ -237,3 +237,34 @@ TEST(ResourceCache, PurgeResourcesByOrder) {
   EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
   EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
 }
+
+TEST(ResourceCache, DisableCache) {
+  skity::testing::TestResourceCache cache(
+      std::make_unique<skity::testing::TestResourceAllocator>(), 1000);
+  cache.SetDisableCache(true);
+
+  EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
+  EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
+
+  skity::testing::TestResourceKey key1{100};
+  auto resource1 = cache.ObtainResource(key1);
+  EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
+  EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
+
+  auto resource2 = cache.ObtainResource(key1);
+  EXPECT_NE(resource1.get(), resource2.get());
+  EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
+  EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
+
+  {
+    auto pool =
+        std::make_unique<skity::testing::TestResourceCache::Pool>((&cache));
+    auto resource3 = cache.ObtainResource(key1, pool.get());
+    EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
+    EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
+    EXPECT_NE(resource2.get(), resource3.get());
+  }
+
+  EXPECT_EQ(cache.GetTotalResourceBytes(), static_cast<size_t>(0));
+  EXPECT_EQ(cache.GetPurgableBytes(), static_cast<size_t>(0));
+}

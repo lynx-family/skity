@@ -40,6 +40,7 @@ class GPUContextImpl : public GPUContext {
   GPUDevice* GetGPUDevice() const { return gpu_device_.get(); }
 
   HWRenderTargetCache* GetRenderTargetCache() const {
+    render_target_cache_->SetDisableCache(!IsRenderTargetCacheEnabled());
     return render_target_cache_.get();
   }
 
