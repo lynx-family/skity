@@ -158,6 +158,8 @@ enum class BuiltinCallKind {
 enum class BinaryOpKind {
   kAdd,
   kSubtract,
+  kMultiply,
+  kDivide,
   kEqual,
   kNotEqual,
   kLessThan,

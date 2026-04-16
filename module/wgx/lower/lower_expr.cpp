@@ -40,6 +40,41 @@ bool SupportsComparisonForType(ast::BinaryOp op, ir::TypeId type_id,
   return type_table->IsIntegerType(type_id) || type_table->IsFloatType(type_id);
 }
 
+bool IsVectorScalarBinary(ast::BinaryOp op, ir::TypeId lhs_type,
+                          ir::TypeId rhs_type, ir::TypeTable* type_table,
+                          ir::TypeId* result_type) {
+  if (type_table == nullptr || result_type == nullptr) {
+    return false;
+  }
+
+  if (op != ast::BinaryOp::kMultiply && op != ast::BinaryOp::kDivide) {
+    return false;
+  }
+
+  const bool lhs_is_vector = type_table->IsVectorType(lhs_type);
+  const bool rhs_is_vector = type_table->IsVectorType(rhs_type);
+  const bool lhs_is_scalar = type_table->IsScalarType(lhs_type);
+  const bool rhs_is_scalar = type_table->IsScalarType(rhs_type);
+
+  if (lhs_is_vector && rhs_is_scalar) {
+    if (type_table->GetComponentType(lhs_type) != rhs_type) {
+      return false;
+    }
+    *result_type = lhs_type;
+    return true;
+  }
+
+  if (op == ast::BinaryOp::kMultiply && lhs_is_scalar && rhs_is_vector) {
+    if (type_table->GetComponentType(rhs_type) != lhs_type) {
+      return false;
+    }
+    *result_type = rhs_type;
+    return true;
+  }
+
+  return false;
+}
+
 }  // namespace
 
 ir::Value Lowerer::EnsureValue(const ir::ExprResult& expr, ir::Block* block) {
@@ -281,6 +316,12 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
     case ast::BinaryOp::kSubtract:
       op_kind = ir::BinaryOpKind::kSubtract;
       break;
+    case ast::BinaryOp::kMultiply:
+      op_kind = ir::BinaryOpKind::kMultiply;
+      break;
+    case ast::BinaryOp::kDivide:
+      op_kind = ir::BinaryOpKind::kDivide;
+      break;
     case ast::BinaryOp::kEqual:
       op_kind = ir::BinaryOpKind::kEqual;
       break;
@@ -320,11 +361,16 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
   ir::Value lhs_value = EnsureValue(lhs_expr, current_block);
   ir::Value rhs_value = EnsureValue(rhs_expr, current_block);
 
+  ir::TypeId result_type = lhs_value.type;
   if (lhs_value.type != rhs_value.type) {
-    return ir::ExprResult();
+    if (!IsVectorScalarBinary(binary->op, lhs_value.type, rhs_value.type,
+                              type_table_, &result_type)) {
+      return ir::ExprResult();
+    }
+  } else {
+    result_type = lhs_value.type;
   }
 
-  ir::TypeId result_type = lhs_value.type;
   if (IsComparisonOp(binary->op)) {
     if (!SupportsComparisonForType(binary->op, lhs_value.type, type_table_)) {
       return ir::ExprResult();
