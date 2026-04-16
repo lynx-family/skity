@@ -220,6 +220,8 @@ class ModuleBuilder {
   bool EmitCall(const ir::Instruction& inst);
   bool EmitBuiltinCall(const ir::Instruction& inst);
   bool MaterializeValue(const ir::Value& value, uint32_t* value_id);
+  bool MaterializeBinaryOperand(const ir::Value& value, ir::TypeId result_type,
+                                uint32_t* value_id);
   bool MaterializeAddress(const ir::Value& value, ir::TypeId pointee_type,
                           uint32_t* ptr_id);
   uint32_t GetSpirvTypeId(ir::TypeId type_id);

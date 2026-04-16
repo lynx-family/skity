@@ -56,6 +56,36 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
         return true;
       }
       return false;
+    case ir::BinaryOpKind::kMultiply:
+      if (result_type != operand_type) {
+        return false;
+      }
+      if (is_float || is_float_vector) {
+        *out_op = SpvOpFMul;
+        return true;
+      }
+      if (is_int) {
+        *out_op = SpvOpIMul;
+        return true;
+      }
+      return false;
+    case ir::BinaryOpKind::kDivide:
+      if (result_type != operand_type) {
+        return false;
+      }
+      if (is_float || is_float_vector) {
+        *out_op = SpvOpFDiv;
+        return true;
+      }
+      if (is_signed) {
+        *out_op = SpvOpSDiv;
+        return true;
+      }
+      if (is_unsigned) {
+        *out_op = SpvOpUDiv;
+        return true;
+      }
+      return false;
     case ir::BinaryOpKind::kEqual:
       if (result_type != type_table->GetBoolType()) {
         return false;
@@ -897,13 +927,25 @@ bool ModuleBuilder::EmitBinary(const ir::Instruction& inst) {
   if (FindValue(inst.result_id) == values_.end()) return false;
   if (inst.operands.size() != 2) return false;
 
+  const ir::TypeId operand_materialize_type =
+      inst.operands[0].type == inst.operands[1].type ? inst.operands[0].type
+                                                     : inst.result_type;
   uint32_t lhs_id = 0;
-  if (!MaterializeValue(inst.operands[0], &lhs_id)) return false;
+  if (!MaterializeBinaryOperand(inst.operands[0], operand_materialize_type,
+                                &lhs_id)) {
+    return false;
+  }
   uint32_t rhs_id = 0;
-  if (!MaterializeValue(inst.operands[1], &rhs_id)) return false;
+  if (!MaterializeBinaryOperand(inst.operands[1], operand_materialize_type,
+                                &rhs_id)) {
+    return false;
+  }
 
+  const ir::TypeId opcode_operand_type =
+      inst.operands[0].type == inst.operands[1].type ? inst.operands[0].type
+                                                     : inst.result_type;
   SpvOp op = SpvOpNop;
-  if (!ResolveBinaryOpcode(inst.binary_op, inst.operands[0].type,
+  if (!ResolveBinaryOpcode(inst.binary_op, opcode_operand_type,
                            inst.result_type, type_emitter_->GetTypeTable(),
                            &op)) {
     return false;
@@ -1129,6 +1171,45 @@ bool ModuleBuilder::MaterializeValue(const ir::Value& value,
   }
 
   return false;
+}
+
+bool ModuleBuilder::MaterializeBinaryOperand(const ir::Value& value,
+                                             ir::TypeId result_type,
+                                             uint32_t* value_id) {
+  if (value_id == nullptr) {
+    return false;
+  }
+  if (value.type == result_type) {
+    return MaterializeValue(value, value_id);
+  }
+
+  ir::TypeTable* type_table = type_emitter_->GetTypeTable();
+  if (type_table == nullptr || !type_table->IsVectorType(result_type) ||
+      !type_table->IsScalarType(value.type) ||
+      type_table->GetComponentType(result_type) != value.type) {
+    return false;
+  }
+
+  uint32_t scalar_id = 0;
+  if (!MaterializeValue(value, &scalar_id)) {
+    return false;
+  }
+
+  const uint32_t component_count =
+      type_table->GetVectorComponentCount(result_type);
+  if (component_count < 2u || component_count > 4u) {
+    return false;
+  }
+
+  std::vector<uint32_t> operands = {GetSpirvTypeId(result_type),
+                                    ids_.Allocate()};
+  for (uint32_t i = 0; i < component_count; ++i) {
+    operands.push_back(scalar_id);
+  }
+
+  AppendInstruction(&sections_->functions, SpvOpCompositeConstruct, operands);
+  *value_id = operands[1];
+  return true;
 }
 
 bool ModuleBuilder::MaterializeAddress(const ir::Value& value,
