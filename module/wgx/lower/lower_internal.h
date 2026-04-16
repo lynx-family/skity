@@ -30,6 +30,9 @@ namespace detail {
 ir::PipelineStage ToIRStage(ast::PipelineStage stage);
 const ast::IdentifierExp* GetVectorScalarType(const ast::IdentifierExp* ident);
 uint32_t GetVectorComponentCount(const ast::IdentifierExp* ident);
+const ast::IdentifierExp* GetMatrixScalarType(const ast::IdentifierExp* ident);
+uint32_t GetMatrixRowCount(const ast::IdentifierExp* ident);
+uint32_t GetMatrixColumnCount(const ast::IdentifierExp* ident);
 ir::TypeId ResolveScalarType(const ast::IdentifierExp* ident,
                              ir::TypeTable* type_table);
 
@@ -108,6 +111,8 @@ class Lowerer {
   ir::ExprResult LowerExpression(ast::Expression* expression);
   ir::ExprResult LowerConstant(ast::Expression* expression);
   ir::ExprResult LowerVectorConstructor(ast::Expression* expression);
+  ir::ExprResult LowerMatrixConstructor(ast::Expression* expression);
+  ir::ExprResult LowerScalarCastConstructor(ast::Expression* expression);
   ir::ExprResult LowerBinaryExpression(ast::BinaryExp* binary);
   ir::ExprResult LowerMemberAccessorExpression(ast::MemberAccessor* member);
   ir::ExprResult LowerFunctionCallExpression(ast::FunctionCallExp* call,

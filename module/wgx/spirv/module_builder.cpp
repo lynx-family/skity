@@ -13,6 +13,92 @@ namespace spirv {
 
 namespace {
 
+bool IsVectorScalarBinary(const ir::Instruction& inst,
+                          ir::TypeTable* type_table) {
+  if (type_table == nullptr || inst.operands.size() != 2u ||
+      (inst.binary_op != ir::BinaryOpKind::kMultiply &&
+       inst.binary_op != ir::BinaryOpKind::kDivide)) {
+    return false;
+  }
+
+  const ir::TypeId lhs_type = inst.operands[0].type;
+  const ir::TypeId rhs_type = inst.operands[1].type;
+  if (lhs_type == rhs_type || !type_table->IsVectorType(inst.result_type)) {
+    return false;
+  }
+
+  const ir::TypeId result_component =
+      type_table->GetComponentType(inst.result_type);
+  if (lhs_type == inst.result_type && type_table->IsScalarType(rhs_type) &&
+      result_component == rhs_type) {
+    return true;
+  }
+
+  return inst.binary_op == ir::BinaryOpKind::kMultiply &&
+         rhs_type == inst.result_type && type_table->IsScalarType(lhs_type) &&
+         result_component == lhs_type;
+}
+
+bool IsMatrixVectorMultiply(const ir::Instruction& inst,
+                            ir::TypeTable* type_table) {
+  if (type_table == nullptr || inst.operands.size() != 2u ||
+      inst.binary_op != ir::BinaryOpKind::kMultiply) {
+    return false;
+  }
+
+  const ir::TypeId lhs_type = inst.operands[0].type;
+  const ir::TypeId rhs_type = inst.operands[1].type;
+  if (!type_table->IsMatrixType(lhs_type) ||
+      !type_table->IsVectorType(rhs_type) ||
+      !type_table->IsVectorType(inst.result_type)) {
+    return false;
+  }
+
+  const ir::Type* matrix_type = type_table->GetType(lhs_type);
+  if (matrix_type == nullptr ||
+      matrix_type->element_type != type_table->GetF32Type()) {
+    return false;
+  }
+
+  return type_table->GetComponentType(rhs_type) == type_table->GetF32Type() &&
+         type_table->GetComponentType(inst.result_type) ==
+             type_table->GetF32Type() &&
+         matrix_type->count2 == type_table->GetVectorComponentCount(rhs_type) &&
+         matrix_type->count ==
+             type_table->GetVectorComponentCount(inst.result_type);
+}
+
+bool IsMatrixMatrixMultiply(const ir::Instruction& inst,
+                            ir::TypeTable* type_table) {
+  if (type_table == nullptr || inst.operands.size() != 2u ||
+      inst.binary_op != ir::BinaryOpKind::kMultiply) {
+    return false;
+  }
+
+  const ir::TypeId lhs_type = inst.operands[0].type;
+  const ir::TypeId rhs_type = inst.operands[1].type;
+  if (!type_table->IsMatrixType(lhs_type) ||
+      !type_table->IsMatrixType(rhs_type) ||
+      !type_table->IsMatrixType(inst.result_type)) {
+    return false;
+  }
+
+  const ir::Type* lhs_matrix_type = type_table->GetType(lhs_type);
+  const ir::Type* rhs_matrix_type = type_table->GetType(rhs_type);
+  const ir::Type* result_matrix_type = type_table->GetType(inst.result_type);
+  if (lhs_matrix_type == nullptr || rhs_matrix_type == nullptr ||
+      result_matrix_type == nullptr) {
+    return false;
+  }
+
+  return lhs_matrix_type->element_type == type_table->GetF32Type() &&
+         rhs_matrix_type->element_type == type_table->GetF32Type() &&
+         result_matrix_type->element_type == type_table->GetF32Type() &&
+         lhs_matrix_type->count2 == rhs_matrix_type->count &&
+         result_matrix_type->count == lhs_matrix_type->count &&
+         result_matrix_type->count2 == rhs_matrix_type->count2;
+}
+
 bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
                          ir::TypeId result_type, ir::TypeTable* type_table,
                          SpvOp* out_op) {
@@ -193,6 +279,49 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
   return false;
 }
 
+bool ResolveCastOpcode(ir::TypeId source_type, ir::TypeId result_type,
+                       ir::TypeTable* type_table, SpvOp* out_op) {
+  if (type_table == nullptr || out_op == nullptr) {
+    return false;
+  }
+  if (source_type == result_type) {
+    return false;
+  }
+
+  const bool source_is_float = source_type == type_table->GetF32Type();
+  const bool source_is_i32 = source_type == type_table->GetI32Type();
+  const bool source_is_u32 = source_type == type_table->GetU32Type();
+  const bool result_is_float = result_type == type_table->GetF32Type();
+  const bool result_is_i32 = result_type == type_table->GetI32Type();
+  const bool result_is_u32 = result_type == type_table->GetU32Type();
+
+  if (source_is_i32 && result_is_float) {
+    *out_op = SpvOpConvertSToF;
+    return true;
+  }
+  if (source_is_u32 && result_is_float) {
+    *out_op = SpvOpConvertUToF;
+    return true;
+  }
+  if (source_is_float && result_is_i32) {
+    *out_op = SpvOpConvertFToS;
+    return true;
+  }
+  if (source_is_float && result_is_u32) {
+    *out_op = SpvOpConvertFToU;
+    return true;
+  }
+  if (source_is_u32 && result_is_i32) {
+    *out_op = SpvOpSConvert;
+    return true;
+  }
+  if (source_is_i32 && result_is_u32) {
+    *out_op = SpvOpUConvert;
+    return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 ModuleBuilder::ModuleBuilder(const ir::Module& module,
@@ -282,6 +411,7 @@ bool ModuleBuilder::AnalyzeFunction(const ir::Function& function) {
       } else if (inst.kind == ir::InstKind::kAccess ||
                  inst.kind == ir::InstKind::kExtract ||
                  inst.kind == ir::InstKind::kBinary ||
+                 inst.kind == ir::InstKind::kCast ||
                  inst.kind == ir::InstKind::kLoad ||
                  inst.kind == ir::InstKind::kConstruct ||
                  inst.kind == ir::InstKind::kBuiltinCall ||
@@ -720,6 +850,8 @@ bool ModuleBuilder::EmitInstruction(const ir::Instruction& inst) {
       return EmitExtract(inst);
     case ir::InstKind::kBinary:
       return EmitBinary(inst);
+    case ir::InstKind::kCast:
+      return EmitCast(inst);
     case ir::InstKind::kConstruct:
       return EmitConstruct(inst);
     case ir::InstKind::kCall:
@@ -927,18 +1059,43 @@ bool ModuleBuilder::EmitBinary(const ir::Instruction& inst) {
   if (FindValue(inst.result_id) == values_.end()) return false;
   if (inst.operands.size() != 2) return false;
 
-  const ir::TypeId operand_materialize_type =
-      inst.operands[0].type == inst.operands[1].type ? inst.operands[0].type
-                                                     : inst.result_type;
   uint32_t lhs_id = 0;
-  if (!MaterializeBinaryOperand(inst.operands[0], operand_materialize_type,
-                                &lhs_id)) {
+  uint32_t rhs_id = 0;
+  ir::TypeTable* type_table = type_emitter_->GetTypeTable();
+  if (type_table == nullptr) {
     return false;
   }
-  uint32_t rhs_id = 0;
-  if (!MaterializeBinaryOperand(inst.operands[1], operand_materialize_type,
-                                &rhs_id)) {
-    return false;
+
+  if (IsVectorScalarBinary(inst, type_table)) {
+    if (!MaterializeBinaryOperand(inst.operands[0], inst.result_type,
+                                  &lhs_id) ||
+        !MaterializeBinaryOperand(inst.operands[1], inst.result_type,
+                                  &rhs_id)) {
+      return false;
+    }
+  } else {
+    if (!MaterializeValue(inst.operands[0], &lhs_id) ||
+        !MaterializeValue(inst.operands[1], &rhs_id)) {
+      return false;
+    }
+  }
+
+  if (IsMatrixVectorMultiply(inst, type_table)) {
+    uint32_t result_id = ids_.Allocate();
+    AppendInstruction(
+        &sections_->functions, SpvOpMatrixTimesVector,
+        {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
+    value_map_[inst.result_id] = result_id;
+    return true;
+  }
+
+  if (IsMatrixMatrixMultiply(inst, type_table)) {
+    uint32_t result_id = ids_.Allocate();
+    AppendInstruction(
+        &sections_->functions, SpvOpMatrixTimesMatrix,
+        {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
+    value_map_[inst.result_id] = result_id;
+    return true;
   }
 
   const ir::TypeId opcode_operand_type =
@@ -946,8 +1103,7 @@ bool ModuleBuilder::EmitBinary(const ir::Instruction& inst) {
                                                      : inst.result_type;
   SpvOp op = SpvOpNop;
   if (!ResolveBinaryOpcode(inst.binary_op, opcode_operand_type,
-                           inst.result_type, type_emitter_->GetTypeTable(),
-                           &op)) {
+                           inst.result_type, type_table, &op)) {
     return false;
   }
 
@@ -955,6 +1111,32 @@ bool ModuleBuilder::EmitBinary(const ir::Instruction& inst) {
   AppendInstruction(
       &sections_->functions, op,
       {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
+  value_map_[inst.result_id] = result_id;
+  return true;
+}
+
+bool ModuleBuilder::EmitCast(const ir::Instruction& inst) {
+  if (FindValue(inst.result_id) == values_.end()) {
+    return false;
+  }
+  if (inst.operands.size() != 1u) {
+    return false;
+  }
+
+  uint32_t source_id = 0;
+  if (!MaterializeValue(inst.operands[0], &source_id)) {
+    return false;
+  }
+
+  SpvOp op = SpvOpNop;
+  if (!ResolveCastOpcode(inst.operands[0].type, inst.result_type,
+                         type_emitter_->GetTypeTable(), &op)) {
+    return false;
+  }
+
+  uint32_t result_id = ids_.Allocate();
+  AppendInstruction(&sections_->functions, op,
+                    {GetSpirvTypeId(inst.result_type), result_id, source_id});
   value_map_[inst.result_id] = result_id;
   return true;
 }
