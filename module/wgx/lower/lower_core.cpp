@@ -49,6 +49,60 @@ uint32_t GetVectorComponentCount(const ast::IdentifierExp* ident) {
   return 0;
 }
 
+const ast::IdentifierExp* GetMatrixScalarType(const ast::IdentifierExp* ident) {
+  if (ident == nullptr || ident->ident == nullptr) {
+    return nullptr;
+  }
+
+  if (GetMatrixRowCount(ident) == 0 || GetMatrixColumnCount(ident) == 0) {
+    return nullptr;
+  }
+
+  const auto& args = ident->ident->args;
+  if (args.size() != 1u || args[0] == nullptr ||
+      args[0]->GetType() != ast::ExpressionType::kIdentifier) {
+    return nullptr;
+  }
+
+  return static_cast<ast::IdentifierExp*>(args[0]);
+}
+
+uint32_t GetMatrixRowCount(const ast::IdentifierExp* ident) {
+  if (ident == nullptr || ident->ident == nullptr) {
+    return 0;
+  }
+
+  const auto& name = ident->ident->name;
+  if (name.size() != 6u || name[0] != 'm' || name[1] != 'a' || name[2] != 't' ||
+      name[4] != 'x') {
+    return 0;
+  }
+
+  if (name[3] < '2' || name[3] > '4' || name[5] < '2' || name[5] > '4') {
+    return 0;
+  }
+
+  return static_cast<uint32_t>(name[5] - '0');
+}
+
+uint32_t GetMatrixColumnCount(const ast::IdentifierExp* ident) {
+  if (ident == nullptr || ident->ident == nullptr) {
+    return 0;
+  }
+
+  const auto& name = ident->ident->name;
+  if (name.size() != 6u || name[0] != 'm' || name[1] != 'a' || name[2] != 't' ||
+      name[4] != 'x') {
+    return 0;
+  }
+
+  if (name[3] < '2' || name[3] > '4' || name[5] < '2' || name[5] > '4') {
+    return 0;
+  }
+
+  return static_cast<uint32_t>(name[3] - '0');
+}
+
 ir::TypeId ResolveScalarType(const ast::IdentifierExp* ident,
                              ir::TypeTable* type_table) {
   if (ident == nullptr || ident->ident == nullptr) {
@@ -420,6 +474,19 @@ ir::TypeId Lowerer::ResolveType(const ast::Type& type) {
         uint32_t count = detail::GetVectorComponentCount(ident);
         if (count >= 2 && count <= 4) {
           return type_table_->GetVectorType(component_type, count);
+        }
+      }
+    }
+
+    scalar_ident = detail::GetMatrixScalarType(ident);
+    if (scalar_ident != nullptr) {
+      ir::TypeId component_type =
+          detail::ResolveScalarType(scalar_ident, type_table_);
+      if (component_type != ir::kInvalidTypeId) {
+        uint32_t rows = detail::GetMatrixRowCount(ident);
+        uint32_t cols = detail::GetMatrixColumnCount(ident);
+        if (rows >= 2 && rows <= 4 && cols >= 2 && cols <= 4) {
+          return type_table_->GetMatrixType(component_type, rows, cols);
         }
       }
     }

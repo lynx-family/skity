@@ -96,11 +96,13 @@ The current backend supports a deliberately narrow but real graphics subset.
 
 ### Current arithmetic / expression subset
 
-The backend currently supports only a small expression surface:
+The backend now supports a meaningful first rendering-oriented expression slice:
 
 1. binary arithmetic:
    - `add`
    - `sub`
+   - `mul`
+   - `div`
 2. scalar comparisons:
    - `==`
    - `!=`
@@ -108,9 +110,24 @@ The backend currently supports only a small expression surface:
    - `>`
    - `<=`
    - `>=`
-3. dynamic vector constructors for supported scalar/vector types
+3. explicit scalar casts:
+   - `f32(...)`
+   - `i32(...)`
+   - `u32(...)`
+4. dynamic vector constructors for supported scalar/vector types
+5. matrix constructors for:
+   - `mat2x2<f32>`
+   - `mat3x3<f32>`
+   - `mat4x4<f32>`
+   from either scalar arguments or column vectors
+6. matrix multiply for:
+   - `mat2x2<f32> * vec2<f32>`
+   - `mat3x3<f32> * vec3<f32>`
+   - `mat4x4<f32> * vec4<f32>`
+   - `mat4x4<f32> * mat4x4<f32>`
 
-This is the most important current limitation for repository-style shaders.
+The most important remaining limitation is no longer basic arithmetic.
+It is now the missing math builtin surface used by repository-style shaders.
 
 ## What Is Actually Validated Today
 
@@ -133,7 +150,7 @@ python3 tools/test-runner.py --suite=unit --build-dir out/cmake_host_build --fil
 
 At the time this document was updated:
 
-1. `WgxSpirvSmokeTest.*`: 53 passed, 0 failed
+1. `WgxSpirvSmokeTest.*`: 64 passed, 0 failed
 2. `WgxVulkanPipelineTest.*`: 4 passed, 0 failed
 
 The Vulkan pipeline tests currently cover:
@@ -164,10 +181,8 @@ The main blocker is expression and math surface area.
 
 Repository shaders already use operations such as:
 
-1. matrix-vector multiply
-2. scalar/vector multiply and divide
-3. explicit numeric casts
-4. math builtins such as:
+1. matrix multiply chains beyond the currently validated slice
+2. math builtins such as:
    - `dot`
    - `distance`
    - `sqrt`
@@ -178,8 +193,8 @@ Repository shaders already use operations such as:
    - `atan`
    - `mix`
    - `select`
-5. richer matrix/vector construction and use
-6. some geometry paths also use bit-style manipulation patterns
+3. richer matrix/vector construction and use in more complex expressions
+4. some geometry paths also use bit-style manipulation patterns
 
 That means the current backend can already satisfy a basic graphics-pipeline
 slice, but it is still short of the expression surface needed by many existing
@@ -196,17 +211,7 @@ blocked.
 
 Implement these first:
 
-1. binary `*`
-2. binary `/`
-3. scalar/vector multiply and divide combinations needed by current shaders
-4. explicit casts:
-   - `f32(...)`
-   - `i32(...)`
-   - `u32(...)`
-5. matrix multiply:
-   - `mat4x4<f32> * vec4<f32>`
-   - `mat2x2<f32> * vec2<f32>`
-6. math builtins:
+1. math builtins:
    - `dot`
    - `distance`
    - `sqrt`
@@ -222,14 +227,15 @@ Implement these first:
 
 After the first list is stable, extend:
 
-1. richer vector/matrix constructors
-2. vector or matrix indexing paths that current shaders depend on
-3. additional common math builtins:
+1. `mat3x3<f32> * mat3x3<f32>` if conical-gradient style transforms require it
+2. `vec * mat` if a real shader path needs it
+3. vector or matrix indexing paths that current shaders depend on
+4. additional common math builtins:
    - `length`
    - `normalize`
    - `min`
-4. bit/shift operators if still needed by geometry shaders
-5. deeper aggregate validation for struct-heavy expressions
+5. bit/shift operators if still needed by geometry shaders
+6. deeper aggregate validation for struct-heavy expressions
 
 ### Priority 3: broaden runtime feature surface
 
@@ -244,14 +250,12 @@ Only after the expression/math slice is stable:
 
 If continuing immediately from the current state, use this order:
 
-1. add `*` and `/` to lowering, IR support checks, emission, and smoke tests
-2. add explicit numeric casts
-3. add matrix-vector multiply
-4. add `dot`, `distance`, and `sqrt`
-5. add `abs`, `sign`, `max`, and `clamp`
-6. add `mix` and `select`
-7. add `atan`
-8. add any still-needed bit/shift operations
+1. add `dot`, `distance`, and `sqrt`
+2. add `abs`, `sign`, `max`, and `clamp`
+3. add `mix` and `select`
+4. add `atan`
+5. add `mat3x3<f32> * mat3x3<f32>` if needed by repository shaders
+6. add any still-needed bit/shift operations
 
 This order matches the current repository shader pressure better than jumping
 straight to more texture forms.
@@ -269,7 +273,7 @@ For each newly added operator or builtin:
 
 Good immediate validation targets are:
 
-1. texture-style vertex transforms using `mat4x4 * vec4`
+1. texture-style vertex transforms using `mat4x4 * mat4x4 * vec4`
 2. gradient-style fragment math using `dot` or `distance`
 3. rrect-style geometry snippets using `sqrt`, `abs`, `sign`, `max`, `mix`,
    and `select`

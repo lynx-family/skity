@@ -216,6 +216,7 @@ class ModuleBuilder {
   bool EmitAccess(const ir::Instruction& inst);
   bool EmitExtract(const ir::Instruction& inst);
   bool EmitBinary(const ir::Instruction& inst);
+  bool EmitCast(const ir::Instruction& inst);
   bool EmitConstruct(const ir::Instruction& inst);
   bool EmitCall(const ir::Instruction& inst);
   bool EmitBuiltinCall(const ir::Instruction& inst);

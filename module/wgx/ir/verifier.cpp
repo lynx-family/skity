@@ -104,6 +104,8 @@ VerificationResult Verifier::VerifyInstruction(const Instruction& inst,
       return VerifyExtract(inst, index);
     case InstKind::kBinary:
       return VerifyBinary(inst, index);
+    case InstKind::kCast:
+      return VerifyCast(inst, index);
     case InstKind::kConstruct:
       return VerifyConstruct(inst, index);
     case InstKind::kCall:
@@ -394,6 +396,28 @@ VerificationResult Verifier::VerifyBinary(const Instruction& inst,
   if (inst.result_type == kInvalidTypeId) {
     return VerificationResult::Failure(
         "Binary instruction must have a valid result type", index, inst.kind);
+  }
+  TrackSSADefinition(inst.result_id);
+  return VerificationResult::Success();
+}
+
+VerificationResult Verifier::VerifyCast(const Instruction& inst, size_t index) {
+  if (inst.operands.size() != 1) {
+    return VerificationResult::Failure(
+        "Cast instruction must have exactly 1 operand", index, inst.kind);
+  }
+  const Value& source = inst.operands[0];
+  if (!source.IsValue()) {
+    return VerificationResult::Failure("Cast source must be a value", index,
+                                       inst.kind);
+  }
+  if (!IsValidValue(source, "cast source")) {
+    return VerificationResult::Failure("Cast source is invalid or undefined",
+                                       index, inst.kind);
+  }
+  if (inst.result_id == 0 || inst.result_type == kInvalidTypeId) {
+    return VerificationResult::Failure(
+        "Cast instruction must produce a typed result", index, inst.kind);
   }
   TrackSSADefinition(inst.result_id);
   return VerificationResult::Success();

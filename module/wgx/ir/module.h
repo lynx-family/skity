@@ -139,6 +139,7 @@ enum class InstKind {
   kAccess,
   kExtract,
   kBinary,
+  kCast,
   kConstruct,
   kCall,
   kBuiltinCall,
@@ -219,8 +220,8 @@ struct Instruction {
   bool HasResult() const {
     return kind == InstKind::kLoad || kind == InstKind::kAccess ||
            kind == InstKind::kExtract || kind == InstKind::kBinary ||
-           kind == InstKind::kConstruct || kind == InstKind::kCall ||
-           kind == InstKind::kBuiltinCall;
+           kind == InstKind::kCast || kind == InstKind::kConstruct ||
+           kind == InstKind::kCall || kind == InstKind::kBuiltinCall;
   }
 
   bool IsTerminator() const {

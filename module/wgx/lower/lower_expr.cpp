@@ -75,6 +75,131 @@ bool IsVectorScalarBinary(ast::BinaryOp op, ir::TypeId lhs_type,
   return false;
 }
 
+bool IsMatrixVectorBinary(ast::BinaryOp op, ir::TypeId lhs_type,
+                          ir::TypeId rhs_type, ir::TypeTable* type_table,
+                          ir::TypeId* result_type) {
+  if (type_table == nullptr || result_type == nullptr ||
+      op != ast::BinaryOp::kMultiply) {
+    return false;
+  }
+
+  if (!type_table->IsMatrixType(lhs_type) ||
+      !type_table->IsVectorType(rhs_type)) {
+    return false;
+  }
+
+  const ir::Type* matrix_type = type_table->GetType(lhs_type);
+  if (matrix_type == nullptr ||
+      matrix_type->element_type != type_table->GetF32Type()) {
+    return false;
+  }
+
+  if (type_table->GetComponentType(rhs_type) != type_table->GetF32Type()) {
+    return false;
+  }
+
+  const uint32_t columns = matrix_type->count2;
+  const uint32_t rows = matrix_type->count;
+  if (columns != type_table->GetVectorComponentCount(rhs_type)) {
+    return false;
+  }
+
+  *result_type = type_table->GetVectorType(type_table->GetF32Type(), rows);
+  return *result_type != ir::kInvalidTypeId;
+}
+
+bool IsMatrixMatrixBinary(ast::BinaryOp op, ir::TypeId lhs_type,
+                          ir::TypeId rhs_type, ir::TypeTable* type_table,
+                          ir::TypeId* result_type) {
+  if (type_table == nullptr || result_type == nullptr ||
+      op != ast::BinaryOp::kMultiply) {
+    return false;
+  }
+
+  if (!type_table->IsMatrixType(lhs_type) ||
+      !type_table->IsMatrixType(rhs_type)) {
+    return false;
+  }
+
+  const ir::Type* lhs_matrix_type = type_table->GetType(lhs_type);
+  const ir::Type* rhs_matrix_type = type_table->GetType(rhs_type);
+  if (lhs_matrix_type == nullptr || rhs_matrix_type == nullptr ||
+      lhs_matrix_type->element_type != type_table->GetF32Type() ||
+      rhs_matrix_type->element_type != type_table->GetF32Type()) {
+    return false;
+  }
+
+  if (lhs_matrix_type->count2 != rhs_matrix_type->count) {
+    return false;
+  }
+
+  *result_type = type_table->GetMatrixType(type_table->GetF32Type(),
+                                           lhs_matrix_type->count,
+                                           rhs_matrix_type->count2);
+  return *result_type != ir::kInvalidTypeId;
+}
+
+bool IsSupportedScalarCastType(ir::TypeId type_id, ir::TypeTable* type_table) {
+  if (type_table == nullptr || type_id == ir::kInvalidTypeId) {
+    return false;
+  }
+  return type_id == type_table->GetF32Type() ||
+         type_id == type_table->GetI32Type() ||
+         type_id == type_table->GetU32Type();
+}
+
+std::optional<ir::Value> FoldScalarCastConstant(const ir::Value& value,
+                                                ir::TypeId result_type,
+                                                ir::TypeTable* type_table) {
+  if (type_table == nullptr || !value.IsConstant() ||
+      !IsSupportedScalarCastType(result_type, type_table) ||
+      !IsSupportedScalarCastType(value.type, type_table)) {
+    return std::nullopt;
+  }
+
+  if (value.type == result_type) {
+    return value;
+  }
+
+  if (result_type == type_table->GetF32Type()) {
+    if (value.type == type_table->GetI32Type()) {
+      return ir::Value::ConstantF32(
+          result_type, static_cast<float>(value.GetI32Unchecked()));
+    }
+    if (value.type == type_table->GetU32Type()) {
+      return ir::Value::ConstantF32(
+          result_type, static_cast<float>(value.GetU32Unchecked()));
+    }
+    return std::nullopt;
+  }
+
+  if (result_type == type_table->GetI32Type()) {
+    if (value.type == type_table->GetF32Type()) {
+      return ir::Value::ConstantI32(
+          result_type, static_cast<int32_t>(value.GetF32Unchecked()));
+    }
+    if (value.type == type_table->GetU32Type()) {
+      return ir::Value::ConstantI32(
+          result_type, static_cast<int32_t>(value.GetU32Unchecked()));
+    }
+    return std::nullopt;
+  }
+
+  if (result_type == type_table->GetU32Type()) {
+    if (value.type == type_table->GetF32Type()) {
+      return ir::Value::ConstantU32(
+          result_type, static_cast<uint32_t>(value.GetF32Unchecked()));
+    }
+    if (value.type == type_table->GetI32Type()) {
+      return ir::Value::ConstantU32(
+          result_type, static_cast<uint32_t>(value.GetI32Unchecked()));
+    }
+    return std::nullopt;
+  }
+
+  return std::nullopt;
+}
+
 }  // namespace
 
 ir::Value Lowerer::EnsureValue(const ir::ExprResult& expr, ir::Block* block) {
@@ -179,7 +304,15 @@ ir::ExprResult Lowerer::LowerConstant(ast::Expression* expression) {
   }
 
   if (expression->GetType() == ast::ExpressionType::kFuncCall) {
-    return LowerVectorConstructor(expression);
+    ir::ExprResult vector_result = LowerVectorConstructor(expression);
+    if (vector_result.IsValid()) {
+      return vector_result;
+    }
+    ir::ExprResult matrix_result = LowerMatrixConstructor(expression);
+    if (matrix_result.IsValid()) {
+      return matrix_result;
+    }
+    return LowerScalarCastConstructor(expression);
   }
 
   return ir::ExprResult();
@@ -303,6 +436,174 @@ ir::ExprResult Lowerer::LowerVectorConstructor(ast::Expression* expression) {
       ir::Value::SSA(vector_type, construct_inst.result_id));
 }
 
+ir::ExprResult Lowerer::LowerScalarCastConstructor(
+    ast::Expression* expression) {
+  if (expression == nullptr ||
+      expression->GetType() != ast::ExpressionType::kFuncCall) {
+    return ir::ExprResult();
+  }
+
+  auto* call = static_cast<ast::FunctionCallExp*>(expression);
+  if (call->ident == nullptr || call->ident->ident == nullptr ||
+      call->args.size() != 1u) {
+    return ir::ExprResult();
+  }
+
+  ir::TypeId result_type = detail::ResolveScalarType(call->ident, type_table_);
+  if (!IsSupportedScalarCastType(result_type, type_table_)) {
+    return ir::ExprResult();
+  }
+
+  ir::ExprResult arg_expr = LowerExpression(call->args[0]);
+  if (!arg_expr.IsValid()) {
+    return ir::ExprResult();
+  }
+
+  ir::Block* current_block = CurrentBlock();
+  if (arg_expr.IsAddress() && current_block == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::Value arg_value = EnsureValue(arg_expr, current_block);
+  if (!arg_value.IsValue() ||
+      !IsSupportedScalarCastType(arg_value.type, type_table_)) {
+    return ir::ExprResult();
+  }
+
+  if (arg_value.type == result_type) {
+    return ir::ExprResult::ValueResult(arg_value);
+  }
+
+  if (auto folded = FoldScalarCastConstant(arg_value, result_type, type_table_);
+      folded.has_value()) {
+    return ir::ExprResult::ValueResult(*folded);
+  }
+
+  if (current_block == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::Instruction cast_inst;
+  cast_inst.kind = ir::InstKind::kCast;
+  cast_inst.result_type = result_type;
+  cast_inst.result_id = AllocateSSAId();
+  if (cast_inst.result_id == 0) {
+    return ir::ExprResult();
+  }
+  cast_inst.operands.push_back(arg_value);
+  current_block->instructions.emplace_back(cast_inst);
+  return ir::ExprResult::ValueResult(
+      ir::Value::SSA(result_type, cast_inst.result_id));
+}
+
+ir::ExprResult Lowerer::LowerMatrixConstructor(ast::Expression* expression) {
+  if (expression == nullptr ||
+      expression->GetType() != ast::ExpressionType::kFuncCall) {
+    return ir::ExprResult();
+  }
+
+  auto* call = static_cast<ast::FunctionCallExp*>(expression);
+  if (call->ident == nullptr) {
+    return ir::ExprResult();
+  }
+
+  const uint32_t rows = detail::GetMatrixRowCount(call->ident);
+  const uint32_t cols = detail::GetMatrixColumnCount(call->ident);
+  if (rows < 2u || rows > 4u || cols < 2u || cols > 4u) {
+    return ir::ExprResult();
+  }
+
+  const ast::IdentifierExp* scalar_ident =
+      detail::GetMatrixScalarType(call->ident);
+  if (scalar_ident == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::TypeId component_type =
+      detail::ResolveScalarType(scalar_ident, type_table_);
+  if (component_type != type_table_->GetF32Type()) {
+    return ir::ExprResult();
+  }
+
+  ir::TypeId column_type = type_table_->GetVectorType(component_type, rows);
+  ir::TypeId matrix_type =
+      type_table_->GetMatrixType(component_type, rows, cols);
+  if (column_type == ir::kInvalidTypeId || matrix_type == ir::kInvalidTypeId) {
+    return ir::ExprResult();
+  }
+
+  const bool scalar_form = call->args.size() == rows * cols;
+  const bool column_form = call->args.size() == cols;
+  if (!scalar_form && !column_form) {
+    return ir::ExprResult();
+  }
+
+  ir::Block* current_block = CurrentBlock();
+  if (current_block == nullptr) {
+    return ir::ExprResult();
+  }
+
+  std::vector<ir::Value> column_values;
+  column_values.reserve(cols);
+
+  if (column_form) {
+    for (auto* arg : call->args) {
+      ir::ExprResult arg_expr = LowerExpression(arg);
+      if (!arg_expr.IsValid()) {
+        return ir::ExprResult();
+      }
+
+      ir::Value arg_value = EnsureValue(arg_expr, current_block);
+      if (!arg_value.IsValue() || arg_value.type != column_type) {
+        return ir::ExprResult();
+      }
+      column_values.push_back(arg_value);
+    }
+  } else {
+    for (uint32_t col = 0; col < cols; ++col) {
+      ir::Instruction column_construct;
+      column_construct.kind = ir::InstKind::kConstruct;
+      column_construct.result_type = column_type;
+      column_construct.result_id = AllocateSSAId();
+      if (column_construct.result_id == 0) {
+        return ir::ExprResult();
+      }
+
+      for (uint32_t row = 0; row < rows; ++row) {
+        ast::Expression* arg = call->args[col * rows + row];
+        ir::ExprResult arg_expr = LowerExpression(arg);
+        if (!arg_expr.IsValid()) {
+          return ir::ExprResult();
+        }
+
+        ir::Value arg_value = EnsureValue(arg_expr, current_block);
+        if (!arg_value.IsValue() || arg_value.type != component_type) {
+          return ir::ExprResult();
+        }
+
+        column_construct.operands.push_back(arg_value);
+      }
+
+      current_block->instructions.emplace_back(column_construct);
+      column_values.push_back(
+          ir::Value::SSA(column_type, column_construct.result_id));
+    }
+  }
+
+  ir::Instruction matrix_construct;
+  matrix_construct.kind = ir::InstKind::kConstruct;
+  matrix_construct.result_type = matrix_type;
+  matrix_construct.result_id = AllocateSSAId();
+  if (matrix_construct.result_id == 0) {
+    return ir::ExprResult();
+  }
+  matrix_construct.operands = std::move(column_values);
+  current_block->instructions.emplace_back(matrix_construct);
+
+  return ir::ExprResult::ValueResult(
+      ir::Value::SSA(matrix_type, matrix_construct.result_id));
+}
+
 ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
   if (binary == nullptr) {
     return ir::ExprResult();
@@ -364,11 +665,20 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
   ir::TypeId result_type = lhs_value.type;
   if (lhs_value.type != rhs_value.type) {
     if (!IsVectorScalarBinary(binary->op, lhs_value.type, rhs_value.type,
+                              type_table_, &result_type) &&
+        !IsMatrixVectorBinary(binary->op, lhs_value.type, rhs_value.type,
+                              type_table_, &result_type) &&
+        !IsMatrixMatrixBinary(binary->op, lhs_value.type, rhs_value.type,
                               type_table_, &result_type)) {
       return ir::ExprResult();
     }
   } else {
-    result_type = lhs_value.type;
+    if (IsMatrixMatrixBinary(binary->op, lhs_value.type, rhs_value.type,
+                             type_table_, &result_type)) {
+      // result_type updated by helper
+    } else {
+      result_type = lhs_value.type;
+    }
   }
 
   if (IsComparisonOp(binary->op)) {

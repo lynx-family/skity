@@ -228,10 +228,11 @@ void TypeEmitter::EmitVectorType(const ir::Type* type, uint32_t spirv_id) {
 }
 
 void TypeEmitter::EmitMatrixType(const ir::Type* type, uint32_t spirv_id) {
-  uint32_t component_id = EmitType(type->element_type);
-  if (component_id == 0) return;
+  uint32_t column_type =
+      EmitType(type_table_->GetVectorType(type->element_type, type->count));
+  if (column_type == 0) return;
   AppendInstruction(&sections_->types_consts_globals, SpvOpTypeMatrix,
-                    {spirv_id, component_id, type->count2});
+                    {spirv_id, column_type, type->count2});
 }
 
 void TypeEmitter::EmitArrayType(const ir::Type* type, uint32_t spirv_id) {
