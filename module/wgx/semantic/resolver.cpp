@@ -104,6 +104,7 @@ static constexpr const char* kBuiltinFunctionNames[] = {
     "fwidthFine",
     "insertBits",
     "inverseSqrt",
+    "inversesqrt",
     "ldexp",
     "length",
     "log",

@@ -812,6 +812,431 @@ ir::ExprResult Lowerer::LowerBuiltinCallExpression(
     return ir::ExprResult();
   }
 
+  const auto is_f32_or_f32_vector = [&](ir::TypeId type) {
+    return type == type_table_->GetF32Type() ||
+           (type_table_->IsVectorType(type) &&
+            type_table_->GetComponentType(type) == type_table_->GetF32Type());
+  };
+
+  if (symbol->original_name == "atan") {
+    if (call->args.size() != 1u && call->args.size() != 2u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult lhs_expr = LowerExpression(call->args[0]);
+    if (!lhs_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+    ir::Value lhs_value = EnsureValue(lhs_expr, block);
+    if (!lhs_value.IsValue() || !is_f32_or_f32_vector(lhs_value.type)) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = call->args.size() == 1u
+                                    ? ir::BuiltinCallKind::kAtan
+                                    : ir::BuiltinCallKind::kAtan2;
+    builtin_inst.result_type = lhs_value.type;
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(lhs_value);
+
+    if (call->args.size() == 2u) {
+      ir::ExprResult rhs_expr = LowerExpression(call->args[1]);
+      if (!rhs_expr.IsValid()) {
+        return ir::ExprResult();
+      }
+      ir::Value rhs_value = EnsureValue(rhs_expr, block);
+      if (!rhs_value.IsValue() || rhs_value.type != lhs_value.type) {
+        return ir::ExprResult();
+      }
+      builtin_inst.operands.push_back(rhs_value);
+    }
+
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "length") {
+    if (call->args.size() != 1u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult arg_expr = LowerExpression(call->args[0]);
+    if (!arg_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value arg_value = EnsureValue(arg_expr, block);
+    if (!arg_value.IsValue() || !is_f32_or_f32_vector(arg_value.type)) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kLength;
+    builtin_inst.result_type = type_table_->GetF32Type();
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(arg_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "normalize") {
+    if (call->args.size() != 1u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult arg_expr = LowerExpression(call->args[0]);
+    if (!arg_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value arg_value = EnsureValue(arg_expr, block);
+    if (!arg_value.IsValue() || !is_f32_or_f32_vector(arg_value.type)) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kNormalize;
+    builtin_inst.result_type = arg_value.type;
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(arg_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "inverseSqrt" ||
+      symbol->original_name == "inversesqrt") {
+    if (call->args.size() != 1u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult arg_expr = LowerExpression(call->args[0]);
+    if (!arg_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value arg_value = EnsureValue(arg_expr, block);
+    if (!arg_value.IsValue() || !is_f32_or_f32_vector(arg_value.type)) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kInverseSqrt;
+    builtin_inst.result_type = arg_value.type;
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(arg_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "mix") {
+    if (call->args.size() != 3u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult x_expr = LowerExpression(call->args[0]);
+    ir::ExprResult y_expr = LowerExpression(call->args[1]);
+    ir::ExprResult a_expr = LowerExpression(call->args[2]);
+    if (!x_expr.IsValid() || !y_expr.IsValid() || !a_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value x_value = EnsureValue(x_expr, block);
+    ir::Value y_value = EnsureValue(y_expr, block);
+    ir::Value a_value = EnsureValue(a_expr, block);
+    if (!x_value.IsValue() || !y_value.IsValue() || !a_value.IsValue() ||
+        x_value.type != y_value.type || !is_f32_or_f32_vector(x_value.type)) {
+      return ir::ExprResult();
+    }
+
+    const bool factor_same_type = a_value.type == x_value.type;
+    const bool factor_scalar_for_vector =
+        type_table_->IsVectorType(x_value.type) &&
+        a_value.type == type_table_->GetF32Type();
+    if (!factor_same_type && !factor_scalar_for_vector) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kMix;
+    builtin_inst.result_type = x_value.type;
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(x_value);
+    builtin_inst.operands.push_back(y_value);
+    builtin_inst.operands.push_back(a_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "select") {
+    if (call->args.size() != 3u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult false_expr = LowerExpression(call->args[0]);
+    ir::ExprResult true_expr = LowerExpression(call->args[1]);
+    ir::ExprResult cond_expr = LowerExpression(call->args[2]);
+    if (!false_expr.IsValid() || !true_expr.IsValid() || !cond_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value false_value = EnsureValue(false_expr, block);
+    ir::Value true_value = EnsureValue(true_expr, block);
+    ir::Value cond_value = EnsureValue(cond_expr, block);
+    if (!false_value.IsValue() || !true_value.IsValue() ||
+        !cond_value.IsValue() || false_value.type != true_value.type ||
+        cond_value.type != type_table_->GetBoolType()) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kSelect;
+    builtin_inst.result_type = false_value.type;
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(false_value);
+    builtin_inst.operands.push_back(true_value);
+    builtin_inst.operands.push_back(cond_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "abs" || symbol->original_name == "sign" ||
+      symbol->original_name == "sqrt") {
+    if (call->args.size() != 1u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult arg_expr = LowerExpression(call->args[0]);
+    if (!arg_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value arg_value = EnsureValue(arg_expr, block);
+    if (!arg_value.IsValue() || !is_f32_or_f32_vector(arg_value.type)) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    if (symbol->original_name == "abs") {
+      builtin_inst.builtin_call = ir::BuiltinCallKind::kAbs;
+    } else if (symbol->original_name == "sign") {
+      builtin_inst.builtin_call = ir::BuiltinCallKind::kSign;
+    } else {
+      builtin_inst.builtin_call = ir::BuiltinCallKind::kSqrt;
+    }
+    builtin_inst.result_type = arg_value.type;
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(arg_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "max") {
+    if (call->args.size() != 2u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult lhs_expr = LowerExpression(call->args[0]);
+    ir::ExprResult rhs_expr = LowerExpression(call->args[1]);
+    if (!lhs_expr.IsValid() || !rhs_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value lhs_value = EnsureValue(lhs_expr, block);
+    ir::Value rhs_value = EnsureValue(rhs_expr, block);
+    if (!lhs_value.IsValue() || !rhs_value.IsValue() ||
+        lhs_value.type != rhs_value.type ||
+        !is_f32_or_f32_vector(lhs_value.type)) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kMax;
+    builtin_inst.result_type = lhs_value.type;
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(lhs_value);
+    builtin_inst.operands.push_back(rhs_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "clamp") {
+    if (call->args.size() != 3u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult value_expr = LowerExpression(call->args[0]);
+    ir::ExprResult low_expr = LowerExpression(call->args[1]);
+    ir::ExprResult high_expr = LowerExpression(call->args[2]);
+    if (!value_expr.IsValid() || !low_expr.IsValid() || !high_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value value = EnsureValue(value_expr, block);
+    ir::Value low = EnsureValue(low_expr, block);
+    ir::Value high = EnsureValue(high_expr, block);
+    if (!value.IsValue() || !low.IsValue() || !high.IsValue() ||
+        value.type != low.type || value.type != high.type ||
+        !is_f32_or_f32_vector(value.type)) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kClamp;
+    builtin_inst.result_type = value.type;
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(value);
+    builtin_inst.operands.push_back(low);
+    builtin_inst.operands.push_back(high);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "dot") {
+    if (call->args.size() != 2u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult lhs_expr = LowerExpression(call->args[0]);
+    ir::ExprResult rhs_expr = LowerExpression(call->args[1]);
+    if (!lhs_expr.IsValid() || !rhs_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value lhs_value = EnsureValue(lhs_expr, block);
+    ir::Value rhs_value = EnsureValue(rhs_expr, block);
+    if (!lhs_value.IsValue() || !rhs_value.IsValue() ||
+        lhs_value.type != rhs_value.type ||
+        !type_table_->IsVectorType(lhs_value.type) ||
+        type_table_->GetComponentType(lhs_value.type) !=
+            type_table_->GetF32Type()) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kDot;
+    builtin_inst.result_type = type_table_->GetF32Type();
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(lhs_value);
+    builtin_inst.operands.push_back(rhs_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
+  if (symbol->original_name == "distance") {
+    if (call->args.size() != 2u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult lhs_expr = LowerExpression(call->args[0]);
+    ir::ExprResult rhs_expr = LowerExpression(call->args[1]);
+    if (!lhs_expr.IsValid() || !rhs_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value lhs_value = EnsureValue(lhs_expr, block);
+    ir::Value rhs_value = EnsureValue(rhs_expr, block);
+    if (!lhs_value.IsValue() || !rhs_value.IsValue() ||
+        lhs_value.type != rhs_value.type ||
+        !type_table_->IsVectorType(lhs_value.type) ||
+        type_table_->GetComponentType(lhs_value.type) !=
+            type_table_->GetF32Type()) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction sub_inst;
+    sub_inst.kind = ir::InstKind::kBinary;
+    sub_inst.binary_op = ir::BinaryOpKind::kSubtract;
+    sub_inst.result_type = lhs_value.type;
+    sub_inst.result_id = AllocateSSAId();
+    if (sub_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    sub_inst.operands.push_back(lhs_value);
+    sub_inst.operands.push_back(rhs_value);
+    block->instructions.emplace_back(sub_inst);
+
+    ir::Value delta_value =
+        ir::Value::SSA(sub_inst.result_type, sub_inst.result_id);
+
+    ir::Instruction dot_inst;
+    dot_inst.kind = ir::InstKind::kBuiltinCall;
+    dot_inst.builtin_call = ir::BuiltinCallKind::kDot;
+    dot_inst.result_type = type_table_->GetF32Type();
+    dot_inst.result_id = AllocateSSAId();
+    if (dot_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    dot_inst.operands.push_back(delta_value);
+    dot_inst.operands.push_back(delta_value);
+    block->instructions.emplace_back(dot_inst);
+
+    ir::Instruction sqrt_inst;
+    sqrt_inst.kind = ir::InstKind::kBuiltinCall;
+    sqrt_inst.builtin_call = ir::BuiltinCallKind::kSqrt;
+    sqrt_inst.result_type = type_table_->GetF32Type();
+    sqrt_inst.result_id = AllocateSSAId();
+    if (sqrt_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    sqrt_inst.operands.push_back(
+        ir::Value::SSA(dot_inst.result_type, dot_inst.result_id));
+    block->instructions.emplace_back(sqrt_inst);
+
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(sqrt_inst.result_type, sqrt_inst.result_id));
+  }
+
   if (symbol->original_name == "textureDimensions") {
     if (call->args.empty() || call->args.size() > 2u) {
       return ir::ExprResult();

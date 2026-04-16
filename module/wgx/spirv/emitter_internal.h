@@ -52,6 +52,7 @@ struct SectionBuffers {
   // only at the end so helpers can emit in logical order without caring about
   // final binary layout.
   std::vector<uint32_t> capabilities;
+  std::vector<uint32_t> ext_inst_imports;
   std::vector<uint32_t> memory_model;
   std::vector<uint32_t> entry_points;
   std::vector<uint32_t> execution_modes;
@@ -223,6 +224,8 @@ class ModuleBuilder {
   bool MaterializeValue(const ir::Value& value, uint32_t* value_id);
   bool MaterializeBinaryOperand(const ir::Value& value, ir::TypeId result_type,
                                 uint32_t* value_id);
+  bool MaterializeBuiltinOperand(const ir::Value& value, ir::TypeId target_type,
+                                 uint32_t* value_id);
   bool MaterializeAddress(const ir::Value& value, ir::TypeId pointee_type,
                           uint32_t* ptr_id);
   uint32_t GetSpirvTypeId(ir::TypeId type_id);
@@ -230,6 +233,7 @@ class ModuleBuilder {
   uint32_t EmitConstantComposite(const ir::Value& value);
   uint32_t EmitWrappedConstant(const ir::Value& inner_value,
                                ir::TypeId struct_type_id);
+  uint32_t GetGlslStd450ImportId();
   bool EmitBranch(const ir::Instruction& inst);
   bool EmitCondBranch(const ir::Instruction& inst);
   bool EmitReturn(const ir::Instruction& inst);
@@ -263,6 +267,7 @@ class ModuleBuilder {
   std::vector<GlobalVarInfo> global_vars_;
   std::vector<ValueInfo> values_;
   std::unordered_map<uint32_t, uint32_t> value_map_;
+  uint32_t glsl_std_450_import_id_ = 0;
   const ir::Block* current_block_ = nullptr;
 };
 
