@@ -7,6 +7,7 @@
 #include <unordered_set>
 
 #include "spirv/emitter_internal.h"
+#include "spirv/unified1/GLSL.std.450.h"
 
 namespace wgx {
 namespace spirv {
@@ -1203,6 +1204,75 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
   }
 
   switch (inst.builtin_call) {
+    case ir::BuiltinCallKind::kAbs:
+    case ir::BuiltinCallKind::kSign:
+    case ir::BuiltinCallKind::kMax:
+    case ir::BuiltinCallKind::kClamp:
+    case ir::BuiltinCallKind::kDot: {
+      if (inst.builtin_call != ir::BuiltinCallKind::kDot) {
+        break;
+      }
+      if (inst.operands.size() != 2u) {
+        return false;
+      }
+
+      uint32_t lhs_id = 0;
+      uint32_t rhs_id = 0;
+      if (!MaterializeValue(inst.operands[0], &lhs_id) ||
+          !MaterializeValue(inst.operands[1], &rhs_id)) {
+        return false;
+      }
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(
+          &sections_->functions, SpvOpDot,
+          {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
+    case ir::BuiltinCallKind::kSqrt: {
+      if (inst.operands.size() != 1u) {
+        return false;
+      }
+
+      uint32_t operand_id = 0;
+      if (!MaterializeValue(inst.operands[0], &operand_id)) {
+        return false;
+      }
+
+      const uint32_t import_id = GetGlslStd450ImportId();
+      if (import_id == 0) {
+        return false;
+      }
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(&sections_->functions, SpvOpExtInst,
+                        {GetSpirvTypeId(inst.result_type), result_id, import_id,
+                         static_cast<uint32_t>(GLSLstd450Sqrt), operand_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
+    case ir::BuiltinCallKind::kSelect: {
+      if (inst.operands.size() != 3u) {
+        return false;
+      }
+
+      uint32_t false_id = 0;
+      uint32_t true_id = 0;
+      uint32_t cond_id = 0;
+      if (!MaterializeValue(inst.operands[0], &false_id) ||
+          !MaterializeValue(inst.operands[1], &true_id) ||
+          !MaterializeValue(inst.operands[2], &cond_id)) {
+        return false;
+      }
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(&sections_->functions, SpvOpSelect,
+                        {GetSpirvTypeId(inst.result_type), result_id, cond_id,
+                         false_id, true_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
     case ir::BuiltinCallKind::kTextureDimensions: {
       if (inst.operands.size() != 2u) {
         return false;
@@ -1329,6 +1399,78 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
     }
     case ir::BuiltinCallKind::kNone:
     default:
+      break;
+  }
+
+  auto emit_glsl_ext_inst = [&](uint32_t opcode) -> bool {
+    uint32_t import_id = GetGlslStd450ImportId();
+    if (import_id == 0) {
+      return false;
+    }
+
+    std::vector<uint32_t> operands = {GetSpirvTypeId(inst.result_type),
+                                      ids_.Allocate(), import_id, opcode};
+    for (const auto& operand : inst.operands) {
+      uint32_t value_id = 0;
+      if (!MaterializeValue(operand, &value_id)) {
+        return false;
+      }
+      operands.push_back(value_id);
+    }
+
+    AppendInstruction(&sections_->functions, SpvOpExtInst, operands);
+    value_map_[inst.result_id] = operands[1];
+    return true;
+  };
+
+  switch (inst.builtin_call) {
+    case ir::BuiltinCallKind::kAbs:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FAbs));
+    case ir::BuiltinCallKind::kSign:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FSign));
+    case ir::BuiltinCallKind::kMax:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FMax));
+    case ir::BuiltinCallKind::kClamp:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FClamp));
+    case ir::BuiltinCallKind::kMix: {
+      if (inst.operands.size() != 3u) {
+        return false;
+      }
+
+      uint32_t import_id = GetGlslStd450ImportId();
+      if (import_id == 0) {
+        return false;
+      }
+
+      uint32_t x_id = 0;
+      uint32_t y_id = 0;
+      uint32_t a_id = 0;
+      if (!MaterializeValue(inst.operands[0], &x_id) ||
+          !MaterializeValue(inst.operands[1], &y_id) ||
+          !MaterializeBuiltinOperand(inst.operands[2], inst.result_type,
+                                     &a_id)) {
+        return false;
+      }
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(
+          &sections_->functions, SpvOpExtInst,
+          {GetSpirvTypeId(inst.result_type), result_id, import_id,
+           static_cast<uint32_t>(GLSLstd450FMix), x_id, y_id, a_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
+    case ir::BuiltinCallKind::kAtan:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Atan));
+    case ir::BuiltinCallKind::kAtan2:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Atan2));
+    case ir::BuiltinCallKind::kLength:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Length));
+    case ir::BuiltinCallKind::kNormalize:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Normalize));
+    case ir::BuiltinCallKind::kInverseSqrt:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450InverseSqrt));
+    default:
       return false;
   }
 }
@@ -1384,6 +1526,45 @@ bool ModuleBuilder::MaterializeBinaryOperand(const ir::Value& value,
   }
 
   std::vector<uint32_t> operands = {GetSpirvTypeId(result_type),
+                                    ids_.Allocate()};
+  for (uint32_t i = 0; i < component_count; ++i) {
+    operands.push_back(scalar_id);
+  }
+
+  AppendInstruction(&sections_->functions, SpvOpCompositeConstruct, operands);
+  *value_id = operands[1];
+  return true;
+}
+
+bool ModuleBuilder::MaterializeBuiltinOperand(const ir::Value& value,
+                                              ir::TypeId target_type,
+                                              uint32_t* value_id) {
+  if (value_id == nullptr) {
+    return false;
+  }
+  if (value.type == target_type) {
+    return MaterializeValue(value, value_id);
+  }
+
+  ir::TypeTable* type_table = type_emitter_->GetTypeTable();
+  if (type_table == nullptr || !type_table->IsVectorType(target_type) ||
+      !type_table->IsScalarType(value.type) ||
+      type_table->GetComponentType(target_type) != value.type) {
+    return false;
+  }
+
+  uint32_t scalar_id = 0;
+  if (!MaterializeValue(value, &scalar_id)) {
+    return false;
+  }
+
+  const uint32_t component_count =
+      type_table->GetVectorComponentCount(target_type);
+  if (component_count < 2u || component_count > 4u) {
+    return false;
+  }
+
+  std::vector<uint32_t> operands = {GetSpirvTypeId(target_type),
                                     ids_.Allocate()};
   for (uint32_t i = 0; i < component_count; ++i) {
     operands.push_back(scalar_id);
@@ -1516,6 +1697,19 @@ uint32_t ModuleBuilder::EmitWrappedConstant(const ir::Value& inner_value,
   return result_id;
 }
 
+uint32_t ModuleBuilder::GetGlslStd450ImportId() {
+  if (glsl_std_450_import_id_ != 0) {
+    return glsl_std_450_import_id_;
+  }
+
+  glsl_std_450_import_id_ = ids_.Allocate();
+  std::vector<uint32_t> operands = {glsl_std_450_import_id_};
+  std::vector<uint32_t> literal = EncodeStringLiteral("GLSL.std.450");
+  operands.insert(operands.end(), literal.begin(), literal.end());
+  AppendInstruction(&sections_->ext_inst_imports, SpvOpExtInstImport, operands);
+  return glsl_std_450_import_id_;
+}
+
 bool ModuleBuilder::EmitBranch(const ir::Instruction& inst) {
   if (inst.target_block == ir::kInvalidBlockId) return false;
   AppendInstruction(&sections_->functions, SpvOpBranch,
@@ -1613,6 +1807,7 @@ void ModuleBuilder::AssembleModule(std::vector<uint32_t>* output_words) {
   output_words->push_back(0u);
 
   AppendSection(output_words, sections_->capabilities);
+  AppendSection(output_words, sections_->ext_inst_imports);
   AppendSection(output_words, sections_->memory_model);
   AppendSection(output_words, sections_->entry_points);
   AppendSection(output_words, sections_->execution_modes);
