@@ -108,6 +108,9 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
   }
 
   const bool is_bool = operand_type == type_table->GetBoolType();
+  const bool is_bool_vector =
+      type_table->IsVectorType(operand_type) &&
+      type_table->GetComponentType(operand_type) == type_table->GetBoolType();
   const bool is_int = type_table->IsIntegerType(operand_type);
   const bool is_float = type_table->IsFloatType(operand_type);
   const bool is_integer_vector =
@@ -199,6 +202,18 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
         return false;
       }
       *out_op = SpvOpBitwiseXor;
+      return true;
+    case ir::BinaryOpKind::kLogicalAnd:
+      if (result_type != operand_type || (!is_bool && !is_bool_vector)) {
+        return false;
+      }
+      *out_op = SpvOpLogicalAnd;
+      return true;
+    case ir::BinaryOpKind::kLogicalOr:
+      if (result_type != operand_type || (!is_bool && !is_bool_vector)) {
+        return false;
+      }
+      *out_op = SpvOpLogicalOr;
       return true;
     case ir::BinaryOpKind::kShiftLeft:
       if (result_type != operand_type || (!is_int && !is_integer_vector)) {

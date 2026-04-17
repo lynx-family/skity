@@ -114,6 +114,7 @@ class Lowerer {
   ir::ExprResult LowerMatrixConstructor(ast::Expression* expression);
   ir::ExprResult LowerArrayConstructor(ast::Expression* expression);
   ir::ExprResult LowerScalarCastConstructor(ast::Expression* expression);
+  ir::ExprResult LowerUnaryExpression(ast::UnaryExp* unary);
   ir::ExprResult LowerBinaryExpression(ast::BinaryExp* binary);
   ir::ExprResult LowerIndexAccessorExpression(ast::IndexAccessorExp* index);
   ir::ExprResult LowerMemberAccessorExpression(ast::MemberAccessor* member);

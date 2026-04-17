@@ -1611,6 +1611,141 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForLogicalAndReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var value: bool = (1.0 < 2.0) && (3.0 > 2.0);
+  return vec4<f32>(select(0.0, 1.0, value), 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_logical_and_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLogicalAnd));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelect));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForLogicalOrReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var value: bool = (1.0 > 2.0) || (3.0 > 2.0);
+  return vec4<f32>(select(0.0, 1.0, value), 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_logical_or_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLogicalOr));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelect));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvUnaryNotReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var value: bool = !(1.0 > 2.0);
+  return vec4<f32>(select(0.0, 1.0, value), 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_unary_not_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLogicalEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelect));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvUnaryNegationScalarReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var input: f32 = 2.5;
+  var value: f32 = -input;
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_unary_neg_scalar_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFSub));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvUnaryNegationVectorReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var value: vec2<f32> = -vec2<f32>(1.0, 2.0);
+  return vec4<f32>(value[0], value[1], 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_unary_neg_vector_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFSub));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvDynamicVectorIndexReturn) {
   auto program = wgx::Program::Parse(R"(
 @vertex
