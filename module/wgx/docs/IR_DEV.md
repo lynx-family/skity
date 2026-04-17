@@ -103,6 +103,8 @@ The backend now supports a meaningful first rendering-oriented expression slice:
    - `sub`
    - `mul`
    - `div`
+   - `shift-left`
+   - `shift-right`
 2. scalar comparisons:
    - `==`
    - `!=`
@@ -124,6 +126,7 @@ The backend now supports a meaningful first rendering-oriented expression slice:
    - `mat2x2<f32> * vec2<f32>`
    - `mat3x3<f32> * vec3<f32>`
    - `mat4x4<f32> * vec4<f32>`
+   - `mat3x3<f32> * mat3x3<f32>`
    - `mat4x4<f32> * mat4x4<f32>`
 7. math builtins for the current validated float slice:
    - `dot`
@@ -139,10 +142,24 @@ The backend now supports a meaningful first rendering-oriented expression slice:
    - `length`
    - `normalize`
    - `inverseSqrt` / `inversesqrt`
+   - `min`
+   - `floor`
+   - `ceil`
+   - `round`
+   - `step`
+   - `smoothstep`
+   - `pow`
+   - `exp`
+   - `sin`
+   - `cos`
+   - `dFdx` / `dFdy`
+8. `select` for:
+   - scalar result with `bool` condition
+   - vector result with `vecN<bool>` mask
 
-The most important remaining limitation is no longer basic arithmetic.
-It is now the remaining math builtin surface and a few expression-shape gaps
-used by repository-style shaders.
+The most important remaining limitation is no longer basic arithmetic or the
+first wave of rendering math builtins. It is now the remaining expression-shape
+gaps used by repository-style shaders.
 
 ## What Is Actually Validated Today
 
@@ -165,7 +182,7 @@ python3 tools/test-runner.py --suite=unit --build-dir out/cmake_host_build --fil
 
 At the time this document was updated:
 
-1. `WgxSpirvSmokeTest.*`: 77 passed, 0 failed
+1. `WgxSpirvSmokeTest.*`: 93 passed, 0 failed
 2. `WgxVulkanPipelineTest.*`: 4 passed, 0 failed
 
 The Vulkan pipeline tests currently cover:
@@ -191,25 +208,34 @@ The backend is not yet sufficient for:
 
 ## What Still Blocks Repository-Style Rendering Shaders
 
-The main blocker is no longer resource binding or entry-point plumbing.
-The main blocker is expression and math surface area.
+The main blocker is no longer resource binding, entry-point plumbing, or the
+first wave of math builtins. The remaining blocker is expression surface area.
 
-Repository shaders already use operations such as:
+Repository shaders still need capabilities such as:
 
-1. matrix multiply chains beyond the currently validated slice
-2. math builtins such as:
-   - `min`
-   - `floor`
-   - `ceil`
-   - `round`
-   - and broader forms of already-started builtins when repository shaders
-     require them
-3. richer matrix/vector construction and use in more complex expressions
-4. some geometry paths also use bit-style manipulation patterns
+1. index access in real shader code:
+   - vector indexing like `core_rect_x[corner_idx]`
+   - matrix column extraction like `j[0]`
+   - uniform/storage array indexing like `gradient_info.stops[batchIndex]`
+   - function-local array indexing like `points[idx]`
+2. bitwise operators beyond shifts:
+   - `&`
+   - `|`
+   - `^`
+3. logical operators:
+   - `&&`
+   - `||`
+4. unary expression support still used by repository shaders:
+   - logical not `!`
+   - unary negation `-x`
+5. deeper aggregate coverage around arrays and indexed aggregate access
+6. broader integer/unsigned overloads only if repository shaders start needing
+   them in practice
 
-That means the current backend can already satisfy a basic graphics-pipeline
-slice, but it is still short of the expression surface needed by many existing
-Skity rendering shaders.
+That means the backend can already satisfy a meaningful graphics-pipeline slice
+and a large part of the repository's current WGSL math usage, but it is still
+short of the expression surface needed by several existing geometry, gradient,
+and text shaders.
 
 ## Recommended Next Work
 
@@ -222,28 +248,31 @@ blocked.
 
 Implement these first:
 
-1. math builtins:
-   - `min`
-   - `floor`
-   - `ceil`
-   - `round`
-   - remaining forms of `abs` / `sign` / `max` / `clamp` if non-float slices
-     become necessary
-   - broader forms of `select` if vector-bool masks are required
+1. index access for the current repository slice:
+   - vector indexing
+   - matrix indexing
+   - array indexing
+2. bitwise operators:
+   - `&`
+   - `|`
+   - `^`
+3. logical operators:
+   - `&&`
+   - `||`
+4. unary operators used by repository shaders:
+   - `!`
+   - unary `-`
 
 ### Priority 2: widen the expression surface around the same shaders
 
 After the first list is stable, extend:
 
-1. `mat3x3<f32> * mat3x3<f32>` if conical-gradient style transforms require it
-2. `vec * mat` if a real shader path needs it
-3. vector or matrix indexing paths that current shaders depend on
-4. additional common math builtins:
-   - `smoothstep`
-   - `step`
-   - `min` if integer/unsigned slices become necessary
-5. bit/shift operators if still needed by geometry shaders
-6. deeper aggregate validation for struct-heavy expressions
+1. `vec * mat` if a real shader path needs it
+2. broader array and aggregate validation for struct-heavy expressions
+3. integer/unsigned builtin overloads only when they are demanded by real
+   shaders
+4. any still-missing builtin forms that show up in repository WGSL rather than
+   speculative API expansion
 
 ### Priority 3: broaden runtime feature surface
 
@@ -258,10 +287,11 @@ Only after the expression/math slice is stable:
 
 If continuing immediately from the current state, use this order:
 
-1. add `min`, `floor`, `ceil`, and `round`
-2. add broader `select` forms if real shaders require vector-bool masks
-3. add `mat3x3<f32> * mat3x3<f32>` if needed by repository shaders
-4. add any still-needed bit/shift operations
+1. add index access for vector, matrix, and array cases
+2. add `&`, `|`, and `^`
+3. add `&&` and `||`
+4. add unary `!` and unary `-`
+5. add any follow-up aggregate fixes revealed by repository shader snippets
 
 This order matches the current repository shader pressure better than jumping
 straight to more texture forms.
@@ -279,11 +309,10 @@ For each newly added operator or builtin:
 
 Good immediate validation targets are:
 
-1. texture-style vertex transforms using `mat4x4 * mat4x4 * vec4`
-2. gradient-style fragment math using `dot` or `distance`
-3. rrect-style geometry snippets using `sqrt`, `abs`, `sign`, `max`, `mix`,
-   and `select`
-4. text / SDF snippets using `inversesqrt`, `length`, and `normalize`
+1. gradient-style snippets using indexed stop/color arrays
+2. rrect-style snippets using matrix/vector indexing and bitwise ops
+3. text snippets using packed bit extraction with `>>` and `&`
+4. repository-style boolean expressions using `&&`, `||`, and `!`
 
 ## Builtin Mapping Rule
 
@@ -291,6 +320,7 @@ For new builtin work, prefer this mapping rule:
 
 1. use SPIR-V core instructions when there is a direct opcode:
    - arithmetic / comparisons
+   - shifts / bitwise / logical selections where applicable
    - `OpDot`
    - matrix multiply ops
    - cast ops

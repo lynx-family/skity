@@ -455,6 +455,30 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsMinBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: vec2<f32> = min(vec2<f32>(1.0, 4.0), vec2<f32>(2.0, 3.0));
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_min.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsClampBuiltinForFragmentShader) {
   auto program = wgx::Program::Parse(R"(
 @fragment
@@ -472,6 +496,127 @@ fn fs_main() -> @location(0) vec4<f32> {
 
   ASSERT_TRUE(result.success);
   DumpSpirvBinary("wgx_fs_main_clamp.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsFloorBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: f32 = floor(1.5);
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_floor.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsCeilBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: f32 = ceil(1.5);
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_ceil.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsRoundBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: f32 = round(1.5);
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_round.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsStepBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: vec2<f32> = step(0.5, vec2<f32>(0.25, 0.75));
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_step.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSmoothStepBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: f32 = smoothstep(-1.0, 1.0, 0.25);
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_smoothstep.spv", result.spirv);
   auto words = result.spirv;
 
   ASSERT_GE(words.size(), 5u);
@@ -527,6 +672,31 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpSelect));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsVectorMaskSelectBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let mask: vec2<bool> = vec2<bool>(true, false);
+  let value: vec2<f32> = select(vec2<f32>(0.0, 1.0), vec2<f32>(2.0, 3.0), mask);
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_select_vec_mask.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeVector));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelect));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsAtanBuiltinForFragmentShader) {
   auto program = wgx::Program::Parse(R"(
 @fragment
@@ -544,6 +714,102 @@ fn fs_main() -> @location(0) vec4<f32> {
 
   ASSERT_TRUE(result.success);
   DumpSpirvBinary("wgx_fs_main_atan.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsPowBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: f32 = pow(4.0, 0.5);
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_pow.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsExpBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: f32 = exp(1.0);
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_exp.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSinBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: f32 = sin(1.0);
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_sin.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsCosBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: f32 = cos(1.0);
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_cos.spv", result.spirv);
   auto words = result.spirv;
 
   ASSERT_GE(words.size(), 5u);
@@ -703,6 +969,54 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsDFdxBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main(@location(0) value: f32) -> @location(0) vec4<f32> {
+  let grad: f32 = dFdx(value);
+  return vec4<f32>(grad, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_dfdx.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpDPdx));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsDFdyBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+  let grad: vec2<f32> = dFdy(uv);
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_dfdy.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpDPdy));
 }
 
 TEST(WgxSpirvSmokeTest,
@@ -1151,6 +1465,63 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   ASSERT_GE(words.size(), 5u);
   EXPECT_EQ(words[0], SpvMagicNumber);
   EXPECT_TRUE(ContainsInstruction(words, SpvOpFDiv));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForUnsignedShiftLeftReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var base: u32 = u32(1);
+  var value: u32 = base << u32(3);
+  return vec4<f32>(f32(value), 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_u32_shift_left_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpShiftLeftLogical));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConvertUToF));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForSignedShiftRightReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var base: i32 = 8;
+  var value: i32 = base >> 1;
+  return vec4<f32>(f32(value), 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_i32_shift_right_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpShiftRightArithmetic));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConvertSToF));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
@@ -2557,6 +2928,42 @@ fn vs_main() -> @builtin(position) vec4<f32> {
 
   ASSERT_TRUE(result.success);
   DumpSpirvBinary("wgx_vs_main_mat4_chain_mul.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeMatrix));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpMatrixTimesMatrix));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpMatrixTimesVector));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithMat3x3MatrixMultiply) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  let lhs: mat3x3<f32> = mat3x3<f32>(
+      1.0, 0.0, 0.0,
+      0.0, 1.0, 0.0,
+      0.0, 0.0, 1.0);
+  let rhs: mat3x3<f32> = mat3x3<f32>(
+      2.0, 0.0, 0.0,
+      0.0, 2.0, 0.0,
+      0.0, 0.0, 1.0);
+  let transform: mat3x3<f32> = lhs * rhs;
+  let pos: vec3<f32> = transform * vec3<f32>(0.25, 0.5, 1.0);
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_mat3_matrix_mul.spv", result.spirv);
   auto words = result.spirv;
 
   ASSERT_GE(words.size(), 5u);
