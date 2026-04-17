@@ -25,7 +25,6 @@ WGSLBlurFilter::WGSLBlurFilter(std::shared_ptr<GPUTexture> texture, Vec2 dir,
 
 uint32_t WGSLBlurFilter::NextBindingIndex() const { return 3; }
 
-
 HWFunctionBaseKey WGSLBlurFilter::GetMainKey() const {
   return HWFragmentKeyType::kBlur;
 }
@@ -65,11 +64,12 @@ std::string WGSLBlurFilter::GenSourceWGSL() const {
     }
 
     fn decl_texture(uv: vec2<f32>) -> vec4<f32> {
+      var result : vec4<f32> = textureSample(uTexture, uSampler, uv);
       if uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 {
-        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        result = vec4<f32>(0.0, 0.0, 0.0, 0.0);
       }
 
-      return textureSample(uTexture, uSampler, uv);
+      return result;
     }
 
     fn calculate_blur(uv: vec2<f32>, dir: vec2<f32>, radius: f32) -> vec4<f32> {
@@ -100,10 +100,11 @@ std::string WGSLBlurFilter::GenSourceWGSL() const {
       var dir         : vec2<f32> = blur_slot.dir;
       var uv          : vec2<f32> = v_uv * blur_slot.uv_scale + blur_slot.uv_offset;
 
+      var result : vec4<f32> = textureSample(uTexture, uSampler, uv);
       if blur_radius > 0.0 {
         return calculate_blur(uv, dir, blur_radius);
       } else {
-        return textureSample(uTexture, uSampler, uv);
+        return result;
       }
     }
   )";
