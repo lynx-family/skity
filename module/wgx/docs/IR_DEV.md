@@ -106,6 +106,8 @@ The backend now supports a meaningful first rendering-oriented expression slice:
    - `bitwise-and`
    - `bitwise-or`
    - `bitwise-xor`
+   - `logical-and`
+   - `logical-or`
    - `shift-left`
    - `shift-right`
 2. scalar comparisons:
@@ -166,6 +168,12 @@ The backend now supports a meaningful first rendering-oriented expression slice:
 10. array support for the current validated slice:
    - `array<T, N>` type lowering
    - `array<T, N>(...)` construction
+11. unary expressions for the current validated slice:
+   - logical not `!`
+   - unary negation `-x`
+12. Vulkan-style uniform/storage block emission:
+   - `var<uniform>` / `var<storage>` lower to block-compatible structs
+   - wrapped buffers emit `Block` + `MemberDecorate Offset`
 
 The most important remaining limitation is no longer basic arithmetic or the
 first wave of rendering math builtins. It is now the remaining expression-shape
@@ -192,8 +200,8 @@ python3 tools/test-runner.py --suite=unit --build-dir out/cmake_host_build --fil
 
 At the time this document was updated:
 
-1. `WgxSpirvSmokeTest.*`: 99 passed, 0 failed
-2. `WgxVulkanPipelineTest.*`: 4 passed, 0 failed
+1. `WgxSpirvSmokeTest.*`: 104 passed, 0 failed
+2. `WgxVulkanPipelineTest.*`: 5 passed, 0 failed
 
 The Vulkan pipeline tests currently cover:
 
@@ -201,6 +209,8 @@ The Vulkan pipeline tests currently cover:
 2. descriptor-set / uniform mapped shaders
 3. texture + sampler mapped shaders
 4. vertex attribute input shaders
+5. repository-style texture fragment bindings with uniform struct + sampler +
+   `textureSample`
 
 ### Practical conclusion from the current baseline
 
@@ -223,13 +233,12 @@ first wave of math builtins. The remaining blocker is expression surface area.
 
 Repository shaders still need capabilities such as:
 
-1. logical operators:
-   - `&&`
-   - `||`
-2. unary expression support still used by repository shaders:
-   - logical not `!`
-   - unary negation `-x`
-3. deeper aggregate coverage around arrays and indexed aggregate access
+1. deeper aggregate coverage around arrays and indexed aggregate access
+2. mixed vector constructors commonly emitted by repository WGSL, for example:
+   - `vec4<f32>(vec2<f32>, f32, f32)`
+   - `vec4<f32>(vec3<f32>, f32)`
+3. follow-up repository-style vertex snippets that combine helper-style struct
+   uniforms, matrix math, and aggregate construction
 4. broader integer/unsigned overloads only if repository shaders start needing
    them in practice
 
@@ -249,13 +258,10 @@ blocked.
 
 Implement these first:
 
-1. logical operators:
-   - `&&`
-   - `||`
-2. unary operators used by repository shaders:
-   - `!`
-   - unary `-`
-3. follow-up aggregate fixes discovered while exercising repository snippets
+1. mixed vector constructors used by repository shaders
+2. follow-up aggregate fixes discovered while exercising repository snippets
+3. broader repository-style pipeline tests beyond the current texture fragment
+   slice
 4. broader integer/unsigned overloads only if real shaders demand them
 
 ### Priority 2: widen the expression surface around the same shaders

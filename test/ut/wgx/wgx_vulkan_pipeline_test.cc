@@ -142,13 +142,23 @@ bool LoadDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
 
 std::vector<uint32_t> CompileToSpirv(const char* source, const char* entry) {
   auto program = wgx::Program::Parse(source);
-  if (program == nullptr || program->GetDiagnosis().has_value()) {
+  if (program == nullptr) {
+    ADD_FAILURE() << "WGSL parse returned null program for entry " << entry;
+    return {};
+  }
+
+  if (program->GetDiagnosis().has_value()) {
+    const auto& diagnosis = program->GetDiagnosis().value();
+    ADD_FAILURE() << "WGSL diagnosis for entry " << entry << ": "
+                  << diagnosis.message << " at " << diagnosis.line << ":"
+                  << diagnosis.column;
     return {};
   }
 
   wgx::SpirvOptions options;
   auto result = program->WriteToSpirv(entry, options);
   if (!result.success) {
+    ADD_FAILURE() << "WriteToSpirv failed for entry " << entry;
     return {};
   }
   return result.spirv;
@@ -866,6 +876,131 @@ fn fs_main(input: FragmentInput) -> FragmentOutput {
   context_.DestroyRenderPass(render_pass);
   context_.DestroyPipelineLayout(pipeline_layout);
   context_.DestroyDescriptorSetLayout(descriptor_set_layout);
+  context_.DestroyShaderModule(fragment_module);
+  context_.DestroyShaderModule(vertex_module);
+}
+
+TEST_F(WgxVulkanPipelineTest,
+       CreatesGraphicsPipelineForRepositoryStyleTextureShaders) {
+  const char* vertex_source = R"(
+struct VertexInput {
+  @location(0) pos: vec2<f32>,
+  @location(1) uv: vec2<f32>,
+};
+
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) f_frag_coord: vec2<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+  var output: VertexOutput;
+  output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  output.f_frag_coord = input.uv;
+  return output;
+}
+)";
+
+  const char* fragment_source = R"(
+struct ImageColorInfo {
+  infos: vec3<i32>,
+  global_alpha: f32,
+};
+
+@group(1) @binding(0)
+var<uniform> image_color_info: ImageColorInfo;
+
+@group(1) @binding(1)
+var uSampler: sampler;
+
+@group(1) @binding(2)
+var uTexture: texture_2d<f32>;
+
+struct FragmentInput {
+  @location(0) f_frag_coord: vec2<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  var color: vec4<f32> =
+      textureSample(uTexture, uSampler, input.f_frag_coord);
+  output.color = color * image_color_info.global_alpha;
+  return output;
+}
+)";
+
+  std::vector<uint32_t> vertex_spirv = CompileToSpirv(vertex_source, "vs_main");
+  std::vector<uint32_t> fragment_spirv =
+      CompileToSpirv(fragment_source, "fs_main");
+  ASSERT_FALSE(vertex_spirv.empty());
+  ASSERT_FALSE(fragment_spirv.empty());
+
+  VkShaderModule vertex_module = context_.CreateShaderModule(vertex_spirv);
+  VkShaderModule fragment_module = context_.CreateShaderModule(fragment_spirv);
+  ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+  ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding image_color_binding = {};
+  image_color_binding.binding = 0;
+  image_color_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  image_color_binding.descriptorCount = 1;
+  image_color_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding sampler_binding = {};
+  sampler_binding.binding = 1;
+  sampler_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+  sampler_binding.descriptorCount = 1;
+  sampler_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding texture_binding = {};
+  texture_binding.binding = 2;
+  texture_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  texture_binding.descriptorCount = 1;
+  texture_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayout set1_layout = context_.CreateDescriptorSetLayout(
+      {image_color_binding, sampler_binding, texture_binding});
+  ASSERT_NE(set1_layout, VK_NULL_HANDLE);
+
+  VkPipelineLayout pipeline_layout =
+      context_.CreatePipelineLayout({set1_layout});
+  ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+
+  VkRenderPass render_pass = context_.CreateSimpleColorRenderPass();
+  ASSERT_NE(render_pass, VK_NULL_HANDLE);
+
+  VkVertexInputBindingDescription vertex_binding = {};
+  vertex_binding.binding = 0;
+  vertex_binding.stride = 4 * sizeof(float);
+  vertex_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+  VkVertexInputAttributeDescription position_attribute = {};
+  position_attribute.location = 0;
+  position_attribute.binding = 0;
+  position_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  position_attribute.offset = 0;
+
+  VkVertexInputAttributeDescription uv_attribute = {};
+  uv_attribute.location = 1;
+  uv_attribute.binding = 0;
+  uv_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  uv_attribute.offset = 2 * sizeof(float);
+
+  VkPipeline pipeline = context_.CreateSimpleGraphicsPipeline(
+      vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+      render_pass, {vertex_binding}, {position_attribute, uv_attribute});
+  ASSERT_NE(pipeline, VK_NULL_HANDLE);
+
+  context_.DestroyPipeline(pipeline);
+  context_.DestroyRenderPass(render_pass);
+  context_.DestroyPipelineLayout(pipeline_layout);
+  context_.DestroyDescriptorSetLayout(set1_layout);
   context_.DestroyShaderModule(fragment_module);
   context_.DestroyShaderModule(vertex_module);
 }

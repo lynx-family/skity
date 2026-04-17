@@ -189,6 +189,8 @@ enum class BinaryOpKind {
   kBitwiseAnd,
   kBitwiseOr,
   kBitwiseXor,
+  kLogicalAnd,
+  kLogicalOr,
   kShiftLeft,
   kShiftRight,
   kEqual,

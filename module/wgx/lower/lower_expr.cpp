@@ -73,6 +73,40 @@ bool SupportsBitwiseForType(ir::TypeId type_id, ir::TypeTable* type_table) {
   return type_table->IsIntegerType(type_table->GetComponentType(type_id));
 }
 
+bool SupportsLogicalForType(ir::TypeId type_id, ir::TypeTable* type_table) {
+  if (type_table == nullptr) {
+    return false;
+  }
+
+  if (type_id == type_table->GetBoolType()) {
+    return true;
+  }
+
+  if (!type_table->IsVectorType(type_id)) {
+    return false;
+  }
+
+  return type_table->GetComponentType(type_id) == type_table->GetBoolType();
+}
+
+bool SupportsNegationForType(ir::TypeId type_id, ir::TypeTable* type_table) {
+  if (type_table == nullptr) {
+    return false;
+  }
+
+  if (type_table->IsFloatType(type_id) || type_table->IsIntegerType(type_id)) {
+    return true;
+  }
+
+  if (!type_table->IsVectorType(type_id)) {
+    return false;
+  }
+
+  const ir::TypeId component_type = type_table->GetComponentType(type_id);
+  return type_table->IsFloatType(component_type) ||
+         type_table->IsIntegerType(component_type);
+}
+
 bool IsVectorScalarBinary(ast::BinaryOp op, ir::TypeId lhs_type,
                           ir::TypeId rhs_type, ir::TypeTable* type_table,
                           ir::TypeId* result_type) {
@@ -289,6 +323,10 @@ ir::ExprResult Lowerer::LowerExpression(ast::Expression* expression) {
     return LowerBinaryExpression(static_cast<ast::BinaryExp*>(expression));
   }
 
+  if (expression->GetType() == ast::ExpressionType::kUnaryExp) {
+    return LowerUnaryExpression(static_cast<ast::UnaryExp*>(expression));
+  }
+
   if (expression->GetType() == ast::ExpressionType::kIndexAccessor) {
     return LowerIndexAccessorExpression(
         static_cast<ast::IndexAccessorExp*>(expression));
@@ -313,6 +351,113 @@ ir::ExprResult Lowerer::LowerExpression(ast::Expression* expression) {
   }
 
   return ir::ExprResult();
+}
+
+ir::ExprResult Lowerer::LowerUnaryExpression(ast::UnaryExp* unary) {
+  if (unary == nullptr || unary->exp == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::ExprResult operand_expr = LowerExpression(unary->exp);
+  if (!operand_expr.IsValid()) {
+    return ir::ExprResult();
+  }
+
+  ir::Block* current_block = CurrentBlock();
+  if (current_block == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::Value operand_value = EnsureValue(operand_expr, current_block);
+  if (!operand_value.IsValue()) {
+    return ir::ExprResult();
+  }
+
+  if (unary->op == ast::UnaryOp::kNot) {
+    if (operand_value.type != type_table_->GetBoolType()) {
+      return ir::ExprResult();
+    }
+
+    uint32_t result_id = AllocateSSAId();
+    if (result_id == 0) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction not_inst;
+    not_inst.kind = ir::InstKind::kBinary;
+    not_inst.binary_op = ir::BinaryOpKind::kEqual;
+    not_inst.result_type = type_table_->GetBoolType();
+    not_inst.result_id = result_id;
+    not_inst.operands.push_back(operand_value);
+    not_inst.operands.push_back(
+        ir::Value::ConstantBool(type_table_->GetBoolType(), false));
+    current_block->instructions.emplace_back(not_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(type_table_->GetBoolType(), result_id));
+  }
+
+  if (unary->op != ast::UnaryOp::kNegation ||
+      !SupportsNegationForType(operand_value.type, type_table_)) {
+    return ir::ExprResult();
+  }
+
+  ir::Value zero_value;
+  if (type_table_->IsVectorType(operand_value.type)) {
+    const ir::TypeId component_type =
+        type_table_->GetComponentType(operand_value.type);
+    const uint32_t component_count =
+        type_table_->GetVectorComponentCount(operand_value.type);
+
+    ir::Instruction zero_construct;
+    zero_construct.kind = ir::InstKind::kConstruct;
+    zero_construct.result_type = operand_value.type;
+    zero_construct.result_id = AllocateSSAId();
+    if (zero_construct.result_id == 0) {
+      return ir::ExprResult();
+    }
+
+    for (uint32_t i = 0; i < component_count; ++i) {
+      if (component_type == type_table_->GetF32Type()) {
+        zero_construct.operands.push_back(
+            ir::Value::ConstantF32(component_type, 0.0f));
+      } else if (component_type == type_table_->GetI32Type()) {
+        zero_construct.operands.push_back(
+            ir::Value::ConstantI32(component_type, 0));
+      } else if (component_type == type_table_->GetU32Type()) {
+        zero_construct.operands.push_back(
+            ir::Value::ConstantU32(component_type, 0u));
+      } else {
+        return ir::ExprResult();
+      }
+    }
+
+    current_block->instructions.emplace_back(zero_construct);
+    zero_value = ir::Value::SSA(operand_value.type, zero_construct.result_id);
+  } else if (operand_value.type == type_table_->GetF32Type()) {
+    zero_value = ir::Value::ConstantF32(operand_value.type, 0.0f);
+  } else if (operand_value.type == type_table_->GetI32Type()) {
+    zero_value = ir::Value::ConstantI32(operand_value.type, 0);
+  } else if (operand_value.type == type_table_->GetU32Type()) {
+    zero_value = ir::Value::ConstantU32(operand_value.type, 0u);
+  } else {
+    return ir::ExprResult();
+  }
+
+  uint32_t result_id = AllocateSSAId();
+  if (result_id == 0) {
+    return ir::ExprResult();
+  }
+
+  ir::Instruction negate_inst;
+  negate_inst.kind = ir::InstKind::kBinary;
+  negate_inst.binary_op = ir::BinaryOpKind::kSubtract;
+  negate_inst.result_type = operand_value.type;
+  negate_inst.result_id = result_id;
+  negate_inst.operands.push_back(zero_value);
+  negate_inst.operands.push_back(operand_value);
+  current_block->instructions.emplace_back(negate_inst);
+  return ir::ExprResult::ValueResult(
+      ir::Value::SSA(operand_value.type, result_id));
 }
 
 ir::ExprResult Lowerer::LowerConstant(ast::Expression* expression) {
@@ -728,6 +873,12 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
     case ast::BinaryOp::kXor:
       op_kind = ir::BinaryOpKind::kBitwiseXor;
       break;
+    case ast::BinaryOp::kLogicalAnd:
+      op_kind = ir::BinaryOpKind::kLogicalAnd;
+      break;
+    case ast::BinaryOp::kLogicalOr:
+      op_kind = ir::BinaryOpKind::kLogicalOr;
+      break;
     case ast::BinaryOp::kShiftLeft:
       op_kind = ir::BinaryOpKind::kShiftLeft;
       break;
@@ -797,6 +948,13 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
       return ir::ExprResult();
     }
     result_type = type_table_->GetBoolType();
+  } else if (binary->op == ast::BinaryOp::kLogicalAnd ||
+             binary->op == ast::BinaryOp::kLogicalOr) {
+    if (lhs_value.type != rhs_value.type ||
+        !SupportsLogicalForType(lhs_value.type, type_table_)) {
+      return ir::ExprResult();
+    }
+    result_type = lhs_value.type;
   } else if (binary->op == ast::BinaryOp::kAnd ||
              binary->op == ast::BinaryOp::kOr ||
              binary->op == ast::BinaryOp::kXor) {
