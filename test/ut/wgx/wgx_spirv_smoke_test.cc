@@ -1527,6 +1527,181 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForBitwiseAndReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var value: i32 = 13 & 7;
+  return vec4<f32>(f32(value), 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_bitwise_and_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBitwiseAnd));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConvertSToF));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForBitwiseOrReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var base: u32 = u32(4);
+  var value: u32 = base | u32(1);
+  return vec4<f32>(f32(value), 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_bitwise_or_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBitwiseOr));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConvertUToF));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForBitwiseXorReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var lhs: u32 = u32(6);
+  var rhs: u32 = u32(3);
+  var value: u32 = lhs ^ rhs;
+  return vec4<f32>(f32(value), 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_bitwise_xor_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBitwiseXor));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConvertUToF));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvDynamicVectorIndexReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var values: vec4<f32> = vec4<f32>(1.0, 2.0, 3.0, 4.0);
+  var idx: i32 = 2;
+  var value: f32 = values[idx];
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_vec_dynamic_index_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvMatrixIndexReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var m: mat2x2<f32> = mat2x2<f32>(1.0, 2.0, 3.0, 4.0);
+  var col: vec2<f32> = m[1];
+  return vec4<f32>(col[0], col[1], 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_mat_index_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeExtract));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvArrayIndexReturn) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var points: array<vec2<f32>, 4> = array<vec2<f32>, 4>(
+      vec2<f32>(1.0, 2.0),
+      vec2<f32>(3.0, 4.0),
+      vec2<f32>(5.0, 6.0),
+      vec2<f32>(7.0, 8.0));
+  var idx: i32 = 2;
+  var point: vec2<f32> = points[idx];
+  return vec4<f32>(point[0], point[1], 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_array_index_return.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_EQ(words[0], SpvMagicNumber);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeArray));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
 /**
  * Test scope stack: nested block with variable shadowing
  * Verifies that inner block's variable doesn't leak to outer scope

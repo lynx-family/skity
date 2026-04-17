@@ -182,6 +182,24 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
         return true;
       }
       return false;
+    case ir::BinaryOpKind::kBitwiseAnd:
+      if (result_type != operand_type || (!is_int && !is_integer_vector)) {
+        return false;
+      }
+      *out_op = SpvOpBitwiseAnd;
+      return true;
+    case ir::BinaryOpKind::kBitwiseOr:
+      if (result_type != operand_type || (!is_int && !is_integer_vector)) {
+        return false;
+      }
+      *out_op = SpvOpBitwiseOr;
+      return true;
+    case ir::BinaryOpKind::kBitwiseXor:
+      if (result_type != operand_type || (!is_int && !is_integer_vector)) {
+        return false;
+      }
+      *out_op = SpvOpBitwiseXor;
+      return true;
     case ir::BinaryOpKind::kShiftLeft:
       if (result_type != operand_type || (!is_int && !is_integer_vector)) {
         return false;
@@ -1026,7 +1044,8 @@ bool ModuleBuilder::EmitStore(const ir::Instruction& inst) {
 }
 
 bool ModuleBuilder::EmitAccess(const ir::Instruction& inst) {
-  if (inst.operands.size() != 1 || FindValue(inst.result_id) == values_.end()) {
+  if ((inst.operands.size() != 1 && inst.operands.size() != 2) ||
+      FindValue(inst.result_id) == values_.end()) {
     return false;
   }
   const ir::Value& base = inst.operands[0];
@@ -1055,7 +1074,14 @@ bool ModuleBuilder::EmitAccess(const ir::Instruction& inst) {
   }
 
   uint32_t access_id = ids_.Allocate();
-  uint32_t index_id = type_emitter_->EmitI32Constant(inst.access_index);
+  uint32_t index_id = 0;
+  if (inst.operands.size() == 2u) {
+    if (!MaterializeValue(inst.operands[1], &index_id)) {
+      return false;
+    }
+  } else {
+    index_id = type_emitter_->EmitI32Constant(inst.access_index);
+  }
   AppendInstruction(&sections_->functions, SpvOpAccessChain,
                     {ptr_type, access_id, base_ptr_id, index_id});
   value_map_[inst.result_id] = access_id;
@@ -1063,7 +1089,8 @@ bool ModuleBuilder::EmitAccess(const ir::Instruction& inst) {
 }
 
 bool ModuleBuilder::EmitExtract(const ir::Instruction& inst) {
-  if (inst.operands.size() != 1 || FindValue(inst.result_id) == values_.end()) {
+  if ((inst.operands.size() != 1 && inst.operands.size() != 2) ||
+      FindValue(inst.result_id) == values_.end()) {
     return false;
   }
   const ir::Value& base = inst.operands[0];
@@ -1077,6 +1104,23 @@ bool ModuleBuilder::EmitExtract(const ir::Instruction& inst) {
   }
 
   uint32_t result_id = ids_.Allocate();
+  if (inst.operands.size() == 2u) {
+    ir::TypeTable* type_table = type_emitter_->GetTypeTable();
+    if (type_table == nullptr || !type_table->IsVectorType(base.type)) {
+      return false;
+    }
+
+    uint32_t index_id = 0;
+    if (!MaterializeValue(inst.operands[1], &index_id)) {
+      return false;
+    }
+    AppendInstruction(
+        &sections_->functions, SpvOpVectorExtractDynamic,
+        {GetSpirvTypeId(inst.result_type), result_id, base_id, index_id});
+    value_map_[inst.result_id] = result_id;
+    return true;
+  }
+
   AppendInstruction(&sections_->functions, SpvOpCompositeExtract,
                     {GetSpirvTypeId(inst.result_type), result_id, base_id,
                      inst.access_index});

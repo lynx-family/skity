@@ -57,6 +57,22 @@ bool SupportsShiftForType(ir::TypeId type_id, ir::TypeTable* type_table) {
   return type_table->IsIntegerType(component_type);
 }
 
+bool SupportsBitwiseForType(ir::TypeId type_id, ir::TypeTable* type_table) {
+  if (type_table == nullptr) {
+    return false;
+  }
+
+  if (type_table->IsIntegerType(type_id)) {
+    return true;
+  }
+
+  if (!type_table->IsVectorType(type_id)) {
+    return false;
+  }
+
+  return type_table->IsIntegerType(type_table->GetComponentType(type_id));
+}
+
 bool IsVectorScalarBinary(ast::BinaryOp op, ir::TypeId lhs_type,
                           ir::TypeId rhs_type, ir::TypeTable* type_table,
                           ir::TypeId* result_type) {
@@ -273,6 +289,11 @@ ir::ExprResult Lowerer::LowerExpression(ast::Expression* expression) {
     return LowerBinaryExpression(static_cast<ast::BinaryExp*>(expression));
   }
 
+  if (expression->GetType() == ast::ExpressionType::kIndexAccessor) {
+    return LowerIndexAccessorExpression(
+        static_cast<ast::IndexAccessorExp*>(expression));
+  }
+
   if (expression->GetType() == ast::ExpressionType::kMemberAccessor) {
     return LowerMemberAccessorExpression(
         static_cast<ast::MemberAccessor*>(expression));
@@ -329,10 +350,68 @@ ir::ExprResult Lowerer::LowerConstant(ast::Expression* expression) {
     if (matrix_result.IsValid()) {
       return matrix_result;
     }
+    ir::ExprResult array_result = LowerArrayConstructor(expression);
+    if (array_result.IsValid()) {
+      return array_result;
+    }
     return LowerScalarCastConstructor(expression);
   }
 
   return ir::ExprResult();
+}
+
+ir::ExprResult Lowerer::LowerArrayConstructor(ast::Expression* expression) {
+  if (expression == nullptr ||
+      expression->GetType() != ast::ExpressionType::kFuncCall) {
+    return ir::ExprResult();
+  }
+
+  auto* call = static_cast<ast::FunctionCallExp*>(expression);
+  if (call->ident == nullptr || call->ident->ident == nullptr ||
+      call->ident->ident->name != "array") {
+    return ir::ExprResult();
+  }
+
+  ast::Type array_type_decl;
+  array_type_decl.expr = call->ident;
+  ir::TypeId array_type = ResolveType(array_type_decl);
+  if (!type_table_->IsArrayType(array_type)) {
+    return ir::ExprResult();
+  }
+
+  const ir::Type* array_desc = type_table_->GetType(array_type);
+  if (array_desc == nullptr || call->args.size() != array_desc->count) {
+    return ir::ExprResult();
+  }
+
+  ir::Block* current_block = CurrentBlock();
+  if (current_block == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::Instruction construct_inst;
+  construct_inst.kind = ir::InstKind::kConstruct;
+  construct_inst.result_type = array_type;
+  construct_inst.result_id = AllocateSSAId();
+  if (construct_inst.result_id == 0) {
+    return ir::ExprResult();
+  }
+
+  for (auto* arg : call->args) {
+    ir::ExprResult arg_expr = LowerExpression(arg);
+    if (!arg_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+    ir::Value arg_value = EnsureValue(arg_expr, current_block);
+    if (!arg_value.IsValue() || arg_value.type != array_desc->element_type) {
+      return ir::ExprResult();
+    }
+    construct_inst.operands.push_back(arg_value);
+  }
+
+  current_block->instructions.emplace_back(construct_inst);
+  return ir::ExprResult::ValueResult(
+      ir::Value::SSA(array_type, construct_inst.result_id));
 }
 
 ir::ExprResult Lowerer::LowerVectorConstructor(ast::Expression* expression) {
@@ -640,6 +719,15 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
     case ast::BinaryOp::kDivide:
       op_kind = ir::BinaryOpKind::kDivide;
       break;
+    case ast::BinaryOp::kAnd:
+      op_kind = ir::BinaryOpKind::kBitwiseAnd;
+      break;
+    case ast::BinaryOp::kOr:
+      op_kind = ir::BinaryOpKind::kBitwiseOr;
+      break;
+    case ast::BinaryOp::kXor:
+      op_kind = ir::BinaryOpKind::kBitwiseXor;
+      break;
     case ast::BinaryOp::kShiftLeft:
       op_kind = ir::BinaryOpKind::kShiftLeft;
       break;
@@ -709,6 +797,14 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
       return ir::ExprResult();
     }
     result_type = type_table_->GetBoolType();
+  } else if (binary->op == ast::BinaryOp::kAnd ||
+             binary->op == ast::BinaryOp::kOr ||
+             binary->op == ast::BinaryOp::kXor) {
+    if (lhs_value.type != rhs_value.type ||
+        !SupportsBitwiseForType(lhs_value.type, type_table_)) {
+      return ir::ExprResult();
+    }
+    result_type = lhs_value.type;
   } else if (binary->op == ast::BinaryOp::kShiftLeft ||
              binary->op == ast::BinaryOp::kShiftRight) {
     if (lhs_value.type != rhs_value.type ||
@@ -734,6 +830,101 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
   current_block->instructions.emplace_back(binary_inst);
 
   return ir::ExprResult::ValueResult(ir::Value::SSA(result_type, result_id));
+}
+
+ir::ExprResult Lowerer::LowerIndexAccessorExpression(
+    ast::IndexAccessorExp* index) {
+  if (index == nullptr || index->obj == nullptr || index->idx == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::ExprResult base_expr = LowerExpression(index->obj);
+  if (!base_expr.IsValid()) {
+    return ir::ExprResult();
+  }
+
+  ir::ExprResult index_expr = LowerExpression(index->idx);
+  if (!index_expr.IsValid()) {
+    return ir::ExprResult();
+  }
+
+  ir::Block* current_block = CurrentBlock();
+  if (current_block == nullptr) {
+    return ir::ExprResult();
+  }
+
+  ir::Value index_value = EnsureValue(index_expr, current_block);
+  if (!index_value.IsValue() || !type_table_->IsIntegerType(index_value.type) ||
+      !type_table_->IsScalarType(index_value.type)) {
+    return ir::ExprResult();
+  }
+
+  const ir::TypeId result_type =
+      type_table_->GetIndexedElementType(base_expr.GetType());
+  if (result_type == ir::kInvalidTypeId) {
+    return ir::ExprResult();
+  }
+
+  ir::Instruction access_inst;
+  access_inst.result_id = AllocateSSAId();
+  access_inst.result_type = result_type;
+  if (access_inst.result_id == 0) {
+    return ir::ExprResult();
+  }
+
+  bool has_constant_index = false;
+  uint32_t constant_index = 0;
+  if (index_value.IsConstant()) {
+    if (index_value.type == type_table_->GetI32Type()) {
+      const int32_t raw_index = index_value.GetI32Unchecked();
+      if (raw_index >= 0) {
+        has_constant_index = true;
+        constant_index = static_cast<uint32_t>(raw_index);
+      }
+    } else if (index_value.type == type_table_->GetU32Type()) {
+      has_constant_index = true;
+      constant_index = index_value.GetU32Unchecked();
+    }
+  }
+
+  if (base_expr.IsAddress() && has_constant_index &&
+      (type_table_->IsVectorType(base_expr.GetType()) ||
+       type_table_->IsMatrixType(base_expr.GetType()))) {
+    ir::Value base_value = EnsureValue(base_expr, current_block);
+    if (!base_value.IsValue()) {
+      return ir::ExprResult();
+    }
+    access_inst.kind = ir::InstKind::kExtract;
+    access_inst.operands.push_back(base_value);
+    access_inst.access_index = constant_index;
+    current_block->instructions.emplace_back(access_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(result_type, access_inst.result_id));
+  }
+
+  if (base_expr.IsAddress()) {
+    access_inst.kind = ir::InstKind::kAccess;
+    access_inst.operands.push_back(base_expr.value);
+    if (has_constant_index) {
+      access_inst.access_index = constant_index;
+    } else {
+      access_inst.operands.push_back(index_value);
+    }
+    current_block->instructions.emplace_back(access_inst);
+    return ir::ExprResult::AddressResult(
+        ir::Value::PointerSSA(result_type, access_inst.result_id));
+  }
+
+  access_inst.kind = ir::InstKind::kExtract;
+  access_inst.operands.push_back(base_expr.value);
+  if (has_constant_index) {
+    access_inst.access_index = constant_index;
+  } else {
+    access_inst.operands.push_back(index_value);
+  }
+  current_block->instructions.emplace_back(access_inst);
+  return ir::ExprResult::ValueResult(
+      ir::Value::SSA(result_type, access_inst.result_id));
 }
 
 ir::ExprResult Lowerer::LowerMemberAccessorExpression(
