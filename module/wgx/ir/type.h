@@ -132,6 +132,7 @@ class TypeTable {
   bool IsFloatType(TypeId id) const;
   bool IsVectorType(TypeId id) const;
   bool IsMatrixType(TypeId id) const;
+  bool IsArrayType(TypeId id) const;
   bool IsSamplerType(TypeId id) const;
   bool IsTextureType(TypeId id) const;
 
@@ -140,6 +141,7 @@ class TypeTable {
 
   // Get component type for vectors/matrices
   TypeId GetComponentType(TypeId id) const;
+  TypeId GetIndexedElementType(TypeId id);
 
   // Layout calculation for uniform/storage buffers
   // std140 is used for uniform buffers, std430 for storage buffers

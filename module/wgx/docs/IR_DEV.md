@@ -103,6 +103,9 @@ The backend now supports a meaningful first rendering-oriented expression slice:
    - `sub`
    - `mul`
    - `div`
+   - `bitwise-and`
+   - `bitwise-or`
+   - `bitwise-xor`
    - `shift-left`
    - `shift-right`
 2. scalar comparisons:
@@ -156,6 +159,13 @@ The backend now supports a meaningful first rendering-oriented expression slice:
 8. `select` for:
    - scalar result with `bool` condition
    - vector result with `vecN<bool>` mask
+9. indexed access for the current validated slice:
+   - dynamic vector indexing
+   - constant matrix column extraction
+   - dynamic array indexing
+10. array support for the current validated slice:
+   - `array<T, N>` type lowering
+   - `array<T, N>(...)` construction
 
 The most important remaining limitation is no longer basic arithmetic or the
 first wave of rendering math builtins. It is now the remaining expression-shape
@@ -182,7 +192,7 @@ python3 tools/test-runner.py --suite=unit --build-dir out/cmake_host_build --fil
 
 At the time this document was updated:
 
-1. `WgxSpirvSmokeTest.*`: 93 passed, 0 failed
+1. `WgxSpirvSmokeTest.*`: 99 passed, 0 failed
 2. `WgxVulkanPipelineTest.*`: 4 passed, 0 failed
 
 The Vulkan pipeline tests currently cover:
@@ -213,23 +223,14 @@ first wave of math builtins. The remaining blocker is expression surface area.
 
 Repository shaders still need capabilities such as:
 
-1. index access in real shader code:
-   - vector indexing like `core_rect_x[corner_idx]`
-   - matrix column extraction like `j[0]`
-   - uniform/storage array indexing like `gradient_info.stops[batchIndex]`
-   - function-local array indexing like `points[idx]`
-2. bitwise operators beyond shifts:
-   - `&`
-   - `|`
-   - `^`
-3. logical operators:
+1. logical operators:
    - `&&`
    - `||`
-4. unary expression support still used by repository shaders:
+2. unary expression support still used by repository shaders:
    - logical not `!`
    - unary negation `-x`
-5. deeper aggregate coverage around arrays and indexed aggregate access
-6. broader integer/unsigned overloads only if repository shaders start needing
+3. deeper aggregate coverage around arrays and indexed aggregate access
+4. broader integer/unsigned overloads only if repository shaders start needing
    them in practice
 
 That means the backend can already satisfy a meaningful graphics-pipeline slice
@@ -248,30 +249,22 @@ blocked.
 
 Implement these first:
 
-1. index access for the current repository slice:
-   - vector indexing
-   - matrix indexing
-   - array indexing
-2. bitwise operators:
-   - `&`
-   - `|`
-   - `^`
-3. logical operators:
+1. logical operators:
    - `&&`
    - `||`
-4. unary operators used by repository shaders:
+2. unary operators used by repository shaders:
    - `!`
    - unary `-`
+3. follow-up aggregate fixes discovered while exercising repository snippets
+4. broader integer/unsigned overloads only if real shaders demand them
 
 ### Priority 2: widen the expression surface around the same shaders
 
 After the first list is stable, extend:
 
 1. `vec * mat` if a real shader path needs it
-2. broader array and aggregate validation for struct-heavy expressions
-3. integer/unsigned builtin overloads only when they are demanded by real
-   shaders
-4. any still-missing builtin forms that show up in repository WGSL rather than
+2. broader aggregate validation for struct-heavy expressions
+3. any still-missing builtin forms that show up in repository WGSL rather than
    speculative API expansion
 
 ### Priority 3: broaden runtime feature surface
@@ -287,11 +280,10 @@ Only after the expression/math slice is stable:
 
 If continuing immediately from the current state, use this order:
 
-1. add index access for vector, matrix, and array cases
-2. add `&`, `|`, and `^`
-3. add `&&` and `||`
-4. add unary `!` and unary `-`
-5. add any follow-up aggregate fixes revealed by repository shader snippets
+1. add `&&` and `||`
+2. add unary `!` and unary `-`
+3. add any follow-up aggregate fixes revealed by repository shader snippets
+4. add broader integer/unsigned overloads only if real shaders require them
 
 This order matches the current repository shader pressure better than jumping
 straight to more texture forms.
@@ -309,10 +301,10 @@ For each newly added operator or builtin:
 
 Good immediate validation targets are:
 
-1. gradient-style snippets using indexed stop/color arrays
-2. rrect-style snippets using matrix/vector indexing and bitwise ops
-3. text snippets using packed bit extraction with `>>` and `&`
-4. repository-style boolean expressions using `&&`, `||`, and `!`
+1. repository-style boolean expressions using `&&`, `||`, and `!`
+2. rrect-style snippets mixing boolean conditions with indexed values
+3. text or geometry snippets that combine packed integer math with logical flow
+4. follow-up array-heavy snippets if aggregate edge cases appear
 
 ## Builtin Mapping Rule
 

@@ -215,6 +215,11 @@ bool TypeTable::IsMatrixType(TypeId id) const {
   return type != nullptr && type->kind == TypeKind::kMatrix;
 }
 
+bool TypeTable::IsArrayType(TypeId id) const {
+  const Type* type = GetType(id);
+  return type != nullptr && type->kind == TypeKind::kArray;
+}
+
 bool TypeTable::IsSamplerType(TypeId id) const {
   const Type* type = GetType(id);
   return type != nullptr && type->kind == TypeKind::kSampler;
@@ -241,6 +246,23 @@ TypeId TypeTable::GetComponentType(TypeId id) const {
   if (type->kind == TypeKind::kVector || type->kind == TypeKind::kMatrix) {
     return type->element_type;
   }
+  return kInvalidTypeId;
+}
+
+TypeId TypeTable::GetIndexedElementType(TypeId id) {
+  const Type* type = GetType(id);
+  if (type == nullptr) {
+    return kInvalidTypeId;
+  }
+
+  if (type->kind == TypeKind::kVector || type->kind == TypeKind::kArray) {
+    return type->element_type;
+  }
+
+  if (type->kind == TypeKind::kMatrix) {
+    return GetVectorType(type->element_type, type->count);
+  }
+
   return kInvalidTypeId;
 }
 

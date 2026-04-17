@@ -448,6 +448,30 @@ ir::TypeId Lowerer::ResolveType(const ast::Type& type) {
       return type_table_->GetTexture2DType(sampled_type);
     }
 
+    if (ident->ident->name == "array") {
+      const auto& args = ident->ident->args;
+      if (args.size() != 2u || args[0] == nullptr || args[1] == nullptr ||
+          args[0]->GetType() != ast::ExpressionType::kIdentifier ||
+          args[1]->GetType() != ast::ExpressionType::kIntLiteral) {
+        return ir::kInvalidTypeId;
+      }
+
+      ast::Type element_type_decl;
+      element_type_decl.expr = static_cast<ast::IdentifierExp*>(args[0]);
+      ir::TypeId element_type = ResolveType(element_type_decl);
+      if (element_type == ir::kInvalidTypeId) {
+        return ir::kInvalidTypeId;
+      }
+
+      auto* count_lit = static_cast<ast::IntLiteralExp*>(args[1]);
+      if (count_lit->value <= 0) {
+        return ir::kInvalidTypeId;
+      }
+
+      return type_table_->GetArrayType(element_type,
+                                       static_cast<uint32_t>(count_lit->value));
+    }
+
     if (const ast::StructDecl* struct_decl = ResolveStructDecl(type);
         struct_decl != nullptr) {
       std::vector<ir::StructMember> members;

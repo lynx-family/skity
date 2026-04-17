@@ -186,6 +186,9 @@ enum class BinaryOpKind {
   kSubtract,
   kMultiply,
   kDivide,
+  kBitwiseAnd,
+  kBitwiseOr,
+  kBitwiseXor,
   kShiftLeft,
   kShiftRight,
   kEqual,
@@ -215,7 +218,8 @@ struct Instruction {
   // Binary op kind for kBinary instructions
   BinaryOpKind binary_op = BinaryOpKind::kAdd;
 
-  // Member index for kAccess instructions.
+  // Constant index for kAccess / kExtract instructions when the indexed value
+  // is known at lowering time.
   uint32_t access_index = 0;
 
   // Callee function name for kCall instructions.
@@ -235,8 +239,8 @@ struct Instruction {
   // - kVariable: 0 operands today (initializer lowered as a following kStore)
   // - kLoad: 1 operand (source address)
   // - kStore: 2 operands (target address, source value)
-  // - kAccess: 1 operand (base address)
-  // - kExtract: 1 operand (base value)
+  // - kAccess: 1 operand (base address) or 2 operands (base address, index)
+  // - kExtract: 1 operand (base value) or 2 operands (base value, index)
   // - kBinary: 2 operands (lhs value, rhs value)
   // - kConstruct: N operands (constructor arguments)
   // - kCall: N operands (call arguments)

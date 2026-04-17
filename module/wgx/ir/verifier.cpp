@@ -317,9 +317,9 @@ VerificationResult Verifier::VerifyStore(const Instruction& inst,
 
 VerificationResult Verifier::VerifyAccess(const Instruction& inst,
                                           size_t index) {
-  if (inst.operands.size() != 1) {
+  if (inst.operands.size() != 1 && inst.operands.size() != 2) {
     return VerificationResult::Failure(
-        "Access instruction must have exactly 1 operand", index, inst.kind);
+        "Access instruction must have 1 or 2 operands", index, inst.kind);
   }
   const Value& base = inst.operands[0];
   if (!base.IsAddress()) {
@@ -338,15 +338,26 @@ VerificationResult Verifier::VerifyAccess(const Instruction& inst,
     return VerificationResult::Failure(
         "Access instruction must have a valid result type", index, inst.kind);
   }
+  if (inst.operands.size() == 2) {
+    const Value& dynamic_index = inst.operands[1];
+    if (!dynamic_index.IsValue()) {
+      return VerificationResult::Failure("Access dynamic index must be a value",
+                                         index, inst.kind);
+    }
+    if (!IsValidValue(dynamic_index, "access dynamic index")) {
+      return VerificationResult::Failure(
+          "Access dynamic index is invalid or undefined", index, inst.kind);
+    }
+  }
   TrackSSADefinition(inst.result_id);
   return VerificationResult::Success();
 }
 
 VerificationResult Verifier::VerifyExtract(const Instruction& inst,
                                            size_t index) {
-  if (inst.operands.size() != 1) {
+  if (inst.operands.size() != 1 && inst.operands.size() != 2) {
     return VerificationResult::Failure(
-        "Extract instruction must have exactly 1 operand", index, inst.kind);
+        "Extract instruction must have 1 or 2 operands", index, inst.kind);
   }
   const Value& base = inst.operands[0];
   if (!base.IsValue()) {
@@ -360,6 +371,17 @@ VerificationResult Verifier::VerifyExtract(const Instruction& inst,
   if (inst.result_id == 0 || inst.result_type == kInvalidTypeId) {
     return VerificationResult::Failure(
         "Extract instruction must produce a typed result", index, inst.kind);
+  }
+  if (inst.operands.size() == 2) {
+    const Value& dynamic_index = inst.operands[1];
+    if (!dynamic_index.IsValue()) {
+      return VerificationResult::Failure(
+          "Extract dynamic index must be a value", index, inst.kind);
+    }
+    if (!IsValidValue(dynamic_index, "extract dynamic index")) {
+      return VerificationResult::Failure(
+          "Extract dynamic index is invalid or undefined", index, inst.kind);
+    }
   }
   TrackSSADefinition(inst.result_id);
   return VerificationResult::Success();
