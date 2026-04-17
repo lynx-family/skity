@@ -5,12 +5,14 @@
 set(INSTALL_GTEST OFF CACHE BOOL "disable INSTALL_GTEST")
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/gtest third_party/gtest)
 
-add_subdirectory(ut)
+if(${SKITY_TEST_UT})
+  add_subdirectory(ut)
+endif()
 
-if(${SKITY_SW_RENDERER})
+if(${SKITY_TEST_BENCH} AND ${SKITY_SW_RENDERER})
   add_subdirectory(bench)
 endif()
 
-if (${SKITY_MTL_BACKEND} AND ${SKITY_CODEC_MODULE})
+if(${SKITY_TEST_GOLDEN} AND ${SKITY_MTL_BACKEND} AND ${SKITY_CODEC_MODULE})
   add_subdirectory(golden)
 endif()

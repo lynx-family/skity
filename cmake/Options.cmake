@@ -30,11 +30,30 @@ cmake_dependent_option(
 # User can pass -DSKITY_EXAMPLE=ON to build example if needed
 option(SKITY_EXAMPLE "option for building example" OFF)
 
-# option for building test, it controls both unit test , benchmark and golden test
+# option for building test
 # User can pass -DSKITY_TEST=ON to build test if needed
-# Note:
-#  The golden test code can only run on APPLE platform
 option(SKITY_TEST "option for building test" OFF)
+
+cmake_dependent_option(
+  SKITY_TEST_UT "option for building unit test"
+  ON
+  [[SKITY_TEST]]
+  OFF
+)
+
+cmake_dependent_option(
+  SKITY_TEST_BENCH "option for building benchmark test"
+  ON
+  [[SKITY_TEST]]
+  OFF
+)
+
+cmake_dependent_option(
+  SKITY_TEST_GOLDEN "option for building golden test"
+  ON
+  [[SKITY_TEST]]
+  OFF
+)
 
 # option for generate code coverage report
 # Note:
