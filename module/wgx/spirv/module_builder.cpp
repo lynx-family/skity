@@ -110,11 +110,20 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
   const bool is_bool = operand_type == type_table->GetBoolType();
   const bool is_int = type_table->IsIntegerType(operand_type);
   const bool is_float = type_table->IsFloatType(operand_type);
+  const bool is_integer_vector =
+      type_table->IsVectorType(operand_type) &&
+      type_table->IsIntegerType(type_table->GetComponentType(operand_type));
   const bool is_float_vector =
       type_table->IsVectorType(operand_type) &&
       type_table->GetComponentType(operand_type) == type_table->GetF32Type();
   const bool is_signed = operand_type == type_table->GetI32Type();
   const bool is_unsigned = operand_type == type_table->GetU32Type();
+  const bool is_signed_vector =
+      type_table->IsVectorType(operand_type) &&
+      type_table->GetComponentType(operand_type) == type_table->GetI32Type();
+  const bool is_unsigned_vector =
+      type_table->IsVectorType(operand_type) &&
+      type_table->GetComponentType(operand_type) == type_table->GetU32Type();
 
   switch (op_kind) {
     case ir::BinaryOpKind::kAdd:
@@ -170,6 +179,25 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
       }
       if (is_unsigned) {
         *out_op = SpvOpUDiv;
+        return true;
+      }
+      return false;
+    case ir::BinaryOpKind::kShiftLeft:
+      if (result_type != operand_type || (!is_int && !is_integer_vector)) {
+        return false;
+      }
+      *out_op = SpvOpShiftLeftLogical;
+      return true;
+    case ir::BinaryOpKind::kShiftRight:
+      if (result_type != operand_type) {
+        return false;
+      }
+      if (is_signed || is_signed_vector) {
+        *out_op = SpvOpShiftRightArithmetic;
+        return true;
+      }
+      if (is_unsigned || is_unsigned_vector) {
+        *out_op = SpvOpShiftRightLogical;
         return true;
       }
       return false;
@@ -1206,8 +1234,11 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
   switch (inst.builtin_call) {
     case ir::BuiltinCallKind::kAbs:
     case ir::BuiltinCallKind::kSign:
+    case ir::BuiltinCallKind::kMin:
     case ir::BuiltinCallKind::kMax:
     case ir::BuiltinCallKind::kClamp:
+    case ir::BuiltinCallKind::kStep:
+    case ir::BuiltinCallKind::kSmoothStep:
     case ir::BuiltinCallKind::kDot: {
       if (inst.builtin_call != ir::BuiltinCallKind::kDot) {
         break;
@@ -1249,6 +1280,27 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
       AppendInstruction(&sections_->functions, SpvOpExtInst,
                         {GetSpirvTypeId(inst.result_type), result_id, import_id,
                          static_cast<uint32_t>(GLSLstd450Sqrt), operand_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
+    case ir::BuiltinCallKind::kDPdx:
+    case ir::BuiltinCallKind::kDPdy: {
+      if (inst.operands.size() != 1u) {
+        return false;
+      }
+
+      uint32_t operand_id = 0;
+      if (!MaterializeValue(inst.operands[0], &operand_id)) {
+        return false;
+      }
+
+      uint32_t result_id = ids_.Allocate();
+      const SpvOp opcode = inst.builtin_call == ir::BuiltinCallKind::kDPdx
+                               ? SpvOpDPdx
+                               : SpvOpDPdy;
+      AppendInstruction(
+          &sections_->functions, opcode,
+          {GetSpirvTypeId(inst.result_type), result_id, operand_id});
       value_map_[inst.result_id] = result_id;
       return true;
     }
@@ -1432,6 +1484,62 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
       return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FMax));
     case ir::BuiltinCallKind::kClamp:
       return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FClamp));
+    case ir::BuiltinCallKind::kMin:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FMin));
+    case ir::BuiltinCallKind::kStep: {
+      if (inst.operands.size() != 2u) {
+        return false;
+      }
+
+      uint32_t import_id = GetGlslStd450ImportId();
+      if (import_id == 0) {
+        return false;
+      }
+
+      uint32_t edge_id = 0;
+      uint32_t x_id = 0;
+      if (!MaterializeBuiltinOperand(inst.operands[0], inst.result_type,
+                                     &edge_id) ||
+          !MaterializeValue(inst.operands[1], &x_id)) {
+        return false;
+      }
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(&sections_->functions, SpvOpExtInst,
+                        {GetSpirvTypeId(inst.result_type), result_id, import_id,
+                         static_cast<uint32_t>(GLSLstd450Step), edge_id, x_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
+    case ir::BuiltinCallKind::kSmoothStep: {
+      if (inst.operands.size() != 3u) {
+        return false;
+      }
+
+      uint32_t import_id = GetGlslStd450ImportId();
+      if (import_id == 0) {
+        return false;
+      }
+
+      uint32_t edge0_id = 0;
+      uint32_t edge1_id = 0;
+      uint32_t x_id = 0;
+      if (!MaterializeBuiltinOperand(inst.operands[0], inst.result_type,
+                                     &edge0_id) ||
+          !MaterializeBuiltinOperand(inst.operands[1], inst.result_type,
+                                     &edge1_id) ||
+          !MaterializeValue(inst.operands[2], &x_id)) {
+        return false;
+      }
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(&sections_->functions, SpvOpExtInst,
+                        {GetSpirvTypeId(inst.result_type), result_id, import_id,
+                         static_cast<uint32_t>(GLSLstd450SmoothStep), edge0_id,
+                         edge1_id, x_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
     case ir::BuiltinCallKind::kMix: {
       if (inst.operands.size() != 3u) {
         return false;
@@ -1464,6 +1572,20 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
       return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Atan));
     case ir::BuiltinCallKind::kAtan2:
       return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Atan2));
+    case ir::BuiltinCallKind::kPow:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Pow));
+    case ir::BuiltinCallKind::kExp:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Exp));
+    case ir::BuiltinCallKind::kSin:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Sin));
+    case ir::BuiltinCallKind::kCos:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Cos));
+    case ir::BuiltinCallKind::kFloor:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Floor));
+    case ir::BuiltinCallKind::kCeil:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Ceil));
+    case ir::BuiltinCallKind::kRound:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Round));
     case ir::BuiltinCallKind::kLength:
       return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Length));
     case ir::BuiltinCallKind::kNormalize:

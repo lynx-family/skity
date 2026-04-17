@@ -83,6 +83,8 @@ static constexpr const char* kBuiltinFunctionNames[] = {
     "determinant",
     "distance",
     "dot",
+    "dFdx",
+    "dFdy",
     "dpdx",
     "dpdxCoarse",
     "dpdxFine",
