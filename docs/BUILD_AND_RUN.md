@@ -83,6 +83,9 @@ There are several options you can use to configure the build:
 * Options for build other development components (Make sure you sync dev dependencies):
     * `SKITY_EXAMPLE` - Option for building example code. Default is OFF. Pass `-DSKITY_EXAMPLE=ON` in command line to enable it.
     * `SKITY_TEST` - Option for building test code. Default is OFF. Pass `-DSKITY_TEST=ON` in command line to enable it.
+    * `SKITY_TEST_UT` - Option for building unit tests when `SKITY_TEST=ON`. Default is ON.
+    * `SKITY_TEST_BENCH` - Option for building benchmarks when `SKITY_TEST=ON`. Default is ON.
+    * `SKITY_TEST_GOLDEN` - Option for building golden tests when `SKITY_TEST=ON`. Default is ON.
 
 > Note: Other options not mentioned above are used internally and may be changed or removed in the future.
 
