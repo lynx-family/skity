@@ -1007,6 +1007,117 @@ bool Lowerer::LowerAssignStatement(const ast::AssignStatement* assign,
     return false;
   }
 
+  if (assign->lhs->GetType() == ast::ExpressionType::kMemberAccessor) {
+    auto* member = static_cast<ast::MemberAccessor*>(assign->lhs);
+    if (member != nullptr && member->obj != nullptr &&
+        member->member != nullptr && !member->member->name.empty()) {
+      ir::ExprResult base_expr = LowerExpression(member->obj);
+      if (!base_expr.IsValid() || !base_expr.IsAddress()) {
+        return false;
+      }
+
+      const ir::TypeId base_type = base_expr.GetType();
+      if (type_table_->IsVectorType(base_type)) {
+        std::vector<uint32_t> swizzle_components;
+        if (!detail::ParseVectorSwizzle(
+                member->member->name,
+                type_table_->GetVectorComponentCount(base_type),
+                &swizzle_components)) {
+          return false;
+        }
+
+        ir::ExprResult rhs_expr = LowerExpression(assign->rhs);
+        if (!rhs_expr.IsValid()) {
+          return false;
+        }
+
+        const ir::TypeId component_type =
+            type_table_->GetComponentType(base_type);
+        if (component_type == ir::kInvalidTypeId) {
+          return false;
+        }
+
+        if (swizzle_components.size() == 1u) {
+          ir::Instruction access_inst;
+          access_inst.kind = ir::InstKind::kAccess;
+          access_inst.result_id = AllocateSSAId();
+          access_inst.result_type = component_type;
+          access_inst.access_index = swizzle_components[0];
+          access_inst.operands.push_back(base_expr.value);
+          if (access_inst.result_id == 0) {
+            return false;
+          }
+          block->instructions.emplace_back(access_inst);
+          return EmitStore(
+              rhs_expr,
+              ir::Value::PointerSSA(component_type, access_inst.result_id),
+              block);
+        }
+
+        if (detail::HasDuplicateSwizzleComponents(swizzle_components)) {
+          return false;
+        }
+
+        ir::Value rhs_value = EnsureValue(rhs_expr, block);
+        const ir::TypeId rhs_type = type_table_->GetVectorType(
+            component_type, static_cast<uint32_t>(swizzle_components.size()));
+        if (!rhs_value.IsValue() || rhs_value.type != rhs_type) {
+          return false;
+        }
+
+        ir::Value base_value = EnsureValue(base_expr, block);
+        if (!base_value.IsValue()) {
+          return false;
+        }
+
+        const uint32_t vector_width =
+            type_table_->GetVectorComponentCount(base_type);
+        std::vector<int32_t> swizzle_sources(vector_width, -1);
+        for (size_t i = 0; i < swizzle_components.size(); ++i) {
+          swizzle_sources[swizzle_components[i]] = static_cast<int32_t>(i);
+        }
+
+        std::vector<ir::Value> new_components;
+        new_components.reserve(vector_width);
+        for (uint32_t component_index = 0; component_index < vector_width;
+             ++component_index) {
+          ir::Instruction extract_inst;
+          extract_inst.kind = ir::InstKind::kExtract;
+          extract_inst.result_id = AllocateSSAId();
+          extract_inst.result_type = component_type;
+          extract_inst.operands.push_back(
+              swizzle_sources[component_index] >= 0 ? rhs_value : base_value);
+          if (swizzle_sources[component_index] >= 0) {
+            extract_inst.access_index =
+                static_cast<uint32_t>(swizzle_sources[component_index]);
+          } else {
+            extract_inst.access_index = component_index;
+          }
+          if (extract_inst.result_id == 0) {
+            return false;
+          }
+          block->instructions.emplace_back(extract_inst);
+          new_components.push_back(
+              ir::Value::SSA(component_type, extract_inst.result_id));
+        }
+
+        ir::Instruction construct_inst;
+        construct_inst.kind = ir::InstKind::kConstruct;
+        construct_inst.result_id = AllocateSSAId();
+        construct_inst.result_type = base_type;
+        construct_inst.operands = std::move(new_components);
+        if (construct_inst.result_id == 0) {
+          return false;
+        }
+        block->instructions.emplace_back(construct_inst);
+
+        return EmitStore(ir::ExprResult::ValueResult(ir::Value::SSA(
+                             base_type, construct_inst.result_id)),
+                         base_expr.value, block);
+      }
+    }
+  }
+
   ir::ExprResult lhs_expr = LowerExpression(assign->lhs);
   if (!lhs_expr.IsValid() || !lhs_expr.IsAddress()) {
     return false;

@@ -527,6 +527,30 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsFractBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let value: f32 = fract(1.5);
+  return vec4<f32>(value, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_fract.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInstImport));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpExtInst));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsCeilBuiltinForFragmentShader) {
   auto program = wgx::Program::Parse(R"(
 @fragment
@@ -3092,6 +3116,115 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpReturnValue));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithMixedVec4ConstructorFromVec2AndScalars) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  let xy: vec2<f32> = vec2<f32>(0.25, 0.5);
+  return vec4<f32>(xy, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_mixed_vec2_scalar_vec4_ctor.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeExtract));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithMixedVec4ConstructorFromVec3AndScalar) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  let xyz: vec3<f32> = vec3<f32>(0.25, 0.5, 0.75);
+  return vec4<f32>(xyz, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_mixed_vec3_scalar_vec4_ctor.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeExtract));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithVectorSwizzleRead) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  let color: vec4<f32> = vec4<f32>(0.25, 0.5, 0.75, 1.0);
+  let xy: vec2<f32> = color.xy;
+  let ba: vec2<f32> = color.ba;
+  return vec4<f32>(xy, ba.x, ba.y);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_vector_swizzle_read.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeExtract));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithVectorSwizzleAssignment) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var uv: vec2<f32> = vec2<f32>(0.25, 0.5);
+  uv.x = 1.0 - uv.x;
+
+  var edge_distances: vec4<f32> = vec4<f32>(0.25, 0.5, 0.75, 1.0);
+  edge_distances.zw = -edge_distances.zw;
+
+  return vec4<f32>(uv.xy, edge_distances.zw);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_vector_swizzle_assignment.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeExtract));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeConstruct));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
 }
 
 TEST(WgxSpirvSmokeTest, EmitsSpirvWithMat2x2ConstructorAndMultiply) {

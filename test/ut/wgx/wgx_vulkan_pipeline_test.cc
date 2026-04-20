@@ -1004,3 +1004,321 @@ fn fs_main(input: FragmentInput) -> FragmentOutput {
   context_.DestroyShaderModule(fragment_module);
   context_.DestroyShaderModule(vertex_module);
 }
+
+TEST_F(WgxVulkanPipelineTest,
+       CreatesGraphicsPipelineForRepositoryStyleGradientShaders) {
+  const char* vertex_source = R"(
+struct VertexInput {
+  @location(0) local_pos: vec2<f32>,
+};
+
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) f_param_pos: vec2<f32>,
+};
+
+@group(0) @binding(1)
+var<uniform> inv_matrix: mat4x4<f32>;
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+  var output: VertexOutput;
+  var mapped_pos: vec4<f32> = inv_matrix * vec4<f32>(input.local_pos, 0.0, 1.0);
+  output.position = vec4<f32>(input.local_pos, 0.0, 1.0);
+  output.f_param_pos = vec2<f32>(mapped_pos[0], mapped_pos[1]);
+  return output;
+}
+)";
+
+  const char* fragment_source = R"(
+struct GradientInfo {
+  infos: vec3<i32>,
+  global_alpha: f32,
+};
+
+@group(1) @binding(0)
+var<uniform> gradient_info: GradientInfo;
+
+@group(1) @binding(1)
+var<uniform> linear_start: vec2<f32>;
+
+@group(1) @binding(2)
+var<uniform> linear_end: vec2<f32>;
+
+struct FragmentInput {
+  @location(0) f_param_pos: vec2<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
+  var cs: vec2<f32> = v_pos - linear_start;
+  var se: vec2<f32> = linear_end - linear_start;
+  var t: f32 = dot(cs, se) / dot(se, se);
+  var t_clamped: f32 = clamp(t, 0.0, 1.0);
+  var color: vec4<f32> = mix(
+      vec4<f32>(1.0, 0.0, 0.0, 1.0),
+      vec4<f32>(0.0, 0.0, 1.0, 1.0),
+      t_clamped);
+  if gradient_info.infos[0] == 0 {
+    var premul_rgb: vec3<f32> = vec3<f32>(
+        color[0] * color[3],
+        color[1] * color[3],
+        color[2] * color[3]);
+    color = vec4<f32>(premul_rgb, color[3]);
+  }
+  return color * gradient_info.global_alpha;
+}
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  output.color = generate_gradient_color(input.f_param_pos);
+  return output;
+}
+)";
+
+  std::vector<uint32_t> vertex_spirv = CompileToSpirv(vertex_source, "vs_main");
+  std::vector<uint32_t> fragment_spirv =
+      CompileToSpirv(fragment_source, "fs_main");
+  ASSERT_FALSE(vertex_spirv.empty());
+  ASSERT_FALSE(fragment_spirv.empty());
+
+  VkShaderModule vertex_module = context_.CreateShaderModule(vertex_spirv);
+  VkShaderModule fragment_module = context_.CreateShaderModule(fragment_spirv);
+  ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+  ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding inv_matrix_binding = {};
+  inv_matrix_binding.binding = 1;
+  inv_matrix_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  inv_matrix_binding.descriptorCount = 1;
+  inv_matrix_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+  VkDescriptorSetLayout set0_layout =
+      context_.CreateDescriptorSetLayout({inv_matrix_binding});
+  ASSERT_NE(set0_layout, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding gradient_info_binding = {};
+  gradient_info_binding.binding = 0;
+  gradient_info_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  gradient_info_binding.descriptorCount = 1;
+  gradient_info_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding linear_pts_binding = {};
+  linear_pts_binding.binding = 1;
+  linear_pts_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  linear_pts_binding.descriptorCount = 1;
+  linear_pts_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding linear_end_binding = {};
+  linear_end_binding.binding = 2;
+  linear_end_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  linear_end_binding.descriptorCount = 1;
+  linear_end_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayout set1_layout = context_.CreateDescriptorSetLayout(
+      {gradient_info_binding, linear_pts_binding, linear_end_binding});
+  ASSERT_NE(set1_layout, VK_NULL_HANDLE);
+
+  VkPipelineLayout pipeline_layout =
+      context_.CreatePipelineLayout({set0_layout, set1_layout});
+  ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+
+  VkRenderPass render_pass = context_.CreateSimpleColorRenderPass();
+  ASSERT_NE(render_pass, VK_NULL_HANDLE);
+
+  VkVertexInputBindingDescription vertex_binding = {};
+  vertex_binding.binding = 0;
+  vertex_binding.stride = 2 * sizeof(float);
+  vertex_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+  VkVertexInputAttributeDescription position_attribute = {};
+  position_attribute.location = 0;
+  position_attribute.binding = 0;
+  position_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  position_attribute.offset = 0;
+
+  VkPipeline pipeline = context_.CreateSimpleGraphicsPipeline(
+      vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+      render_pass, {vertex_binding}, {position_attribute});
+  ASSERT_NE(pipeline, VK_NULL_HANDLE);
+
+  context_.DestroyPipeline(pipeline);
+  context_.DestroyRenderPass(render_pass);
+  context_.DestroyPipelineLayout(pipeline_layout);
+  context_.DestroyDescriptorSetLayout(set1_layout);
+  context_.DestroyDescriptorSetLayout(set0_layout);
+  context_.DestroyShaderModule(fragment_module);
+  context_.DestroyShaderModule(vertex_module);
+}
+
+TEST_F(WgxVulkanPipelineTest,
+       CreatesGraphicsPipelineForRepositoryStyleTextureFragmentShaders) {
+  const char* vertex_source = R"(
+struct VertexInput {
+  @location(0) local_pos: vec2<f32>,
+  @location(1) uv: vec2<f32>,
+};
+
+struct ImageBoundsInfo {
+  bounds: vec2<f32>,
+  inv_matrix: mat4x4<f32>,
+};
+
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) f_frag_coord: vec2<f32>,
+};
+
+@group(0) @binding(1)
+var<uniform> image_bounds: ImageBoundsInfo;
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+  var output: VertexOutput;
+  var mapped_pos: vec2<f32> =
+      (image_bounds.inv_matrix * vec4<f32>(input.local_pos.xy, 0.0, 1.0)).xy;
+  var mapped_lt: vec2<f32> = vec2<f32>(0.0, 0.0);
+  var mapped_rb: vec2<f32> = image_bounds.bounds;
+  var total_x: f32 = mapped_rb.x - mapped_lt.x;
+  var total_y: f32 = mapped_rb.y - mapped_lt.y;
+  var v_x: f32 = (mapped_pos.x - mapped_lt.x) / total_x;
+  var v_y: f32 = (mapped_pos.y - mapped_lt.y) / total_y;
+  output.position = vec4<f32>(input.local_pos, 0.0, 1.0);
+  output.f_frag_coord = vec2<f32>(v_x, v_y);
+  return output;
+}
+)";
+
+  const char* fragment_source = R"(
+fn remap_float_tile(t: f32, tile_mode: i32) -> f32 {
+  if tile_mode == 0 {
+    return clamp(t, 0.0, 1.0);
+  } else if tile_mode == 1 {
+    return fract(t);
+  } else if tile_mode == 2 {
+    var t1: f32 = t - 1.0;
+    var t2: f32 = t1 - 2.0 * floor(t1 / 2.0) - 1.0;
+    return abs(t2);
+  }
+  return t;
+}
+
+struct ImageColorInfo {
+  infos: vec3<i32>,
+  global_alpha: f32,
+};
+
+@group(1) @binding(0)
+var<uniform> image_color_info: ImageColorInfo;
+
+@group(1) @binding(1)
+var uSampler: sampler;
+
+@group(1) @binding(2)
+var uTexture: texture_2d<f32>;
+
+@fragment
+fn fs_main(@location(0) f_frag_coord: vec2<f32>) -> @location(0) vec4<f32> {
+  var uv: vec2<f32> = f_frag_coord;
+  var color: vec4<f32> = textureSample(uTexture, uSampler, uv);
+
+  if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) ||
+      (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0)) {
+    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  }
+
+  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
+  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
+
+  if image_color_info.infos.x == 3 {
+    color = vec4<f32>(color.xyz * color.w, color.w);
+  }
+
+  return color * image_color_info.global_alpha;
+}
+)";
+
+  std::vector<uint32_t> vertex_spirv = CompileToSpirv(vertex_source, "vs_main");
+  std::vector<uint32_t> fragment_spirv =
+      CompileToSpirv(fragment_source, "fs_main");
+  ASSERT_FALSE(vertex_spirv.empty());
+  ASSERT_FALSE(fragment_spirv.empty());
+
+  VkShaderModule vertex_module = context_.CreateShaderModule(vertex_spirv);
+  VkShaderModule fragment_module = context_.CreateShaderModule(fragment_spirv);
+  ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+  ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding image_bounds_binding = {};
+  image_bounds_binding.binding = 1;
+  image_bounds_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  image_bounds_binding.descriptorCount = 1;
+  image_bounds_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+  VkDescriptorSetLayout set0_layout =
+      context_.CreateDescriptorSetLayout({image_bounds_binding});
+  ASSERT_NE(set0_layout, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding image_color_binding = {};
+  image_color_binding.binding = 0;
+  image_color_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  image_color_binding.descriptorCount = 1;
+  image_color_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding sampler_binding = {};
+  sampler_binding.binding = 1;
+  sampler_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+  sampler_binding.descriptorCount = 1;
+  sampler_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding texture_binding = {};
+  texture_binding.binding = 2;
+  texture_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  texture_binding.descriptorCount = 1;
+  texture_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayout set1_layout = context_.CreateDescriptorSetLayout(
+      {image_color_binding, sampler_binding, texture_binding});
+  ASSERT_NE(set1_layout, VK_NULL_HANDLE);
+
+  VkPipelineLayout pipeline_layout =
+      context_.CreatePipelineLayout({set0_layout, set1_layout});
+  ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+
+  VkRenderPass render_pass = context_.CreateSimpleColorRenderPass();
+  ASSERT_NE(render_pass, VK_NULL_HANDLE);
+
+  VkVertexInputBindingDescription vertex_binding = {};
+  vertex_binding.binding = 0;
+  vertex_binding.stride = 4 * sizeof(float);
+  vertex_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+  VkVertexInputAttributeDescription position_attribute = {};
+  position_attribute.location = 0;
+  position_attribute.binding = 0;
+  position_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  position_attribute.offset = 0;
+
+  VkVertexInputAttributeDescription uv_attribute = {};
+  uv_attribute.location = 1;
+  uv_attribute.binding = 0;
+  uv_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  uv_attribute.offset = 2 * sizeof(float);
+
+  VkPipeline pipeline = context_.CreateSimpleGraphicsPipeline(
+      vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+      render_pass, {vertex_binding}, {position_attribute, uv_attribute});
+  ASSERT_NE(pipeline, VK_NULL_HANDLE);
+
+  context_.DestroyPipeline(pipeline);
+  context_.DestroyRenderPass(render_pass);
+  context_.DestroyPipelineLayout(pipeline_layout);
+  context_.DestroyDescriptorSetLayout(set1_layout);
+  context_.DestroyDescriptorSetLayout(set0_layout);
+  context_.DestroyShaderModule(fragment_module);
+  context_.DestroyShaderModule(vertex_module);
+}
