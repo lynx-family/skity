@@ -35,6 +35,10 @@ uint32_t GetMatrixRowCount(const ast::IdentifierExp* ident);
 uint32_t GetMatrixColumnCount(const ast::IdentifierExp* ident);
 ir::TypeId ResolveScalarType(const ast::IdentifierExp* ident,
                              ir::TypeTable* type_table);
+bool ParseVectorSwizzle(std::string_view member_name, uint32_t vector_width,
+                        std::vector<uint32_t>* component_indices);
+bool HasDuplicateSwizzleComponents(
+    const std::vector<uint32_t>& component_indices);
 
 }  // namespace detail
 

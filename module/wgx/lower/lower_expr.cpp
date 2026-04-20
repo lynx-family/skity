@@ -107,6 +107,43 @@ bool SupportsNegationForType(ir::TypeId type_id, ir::TypeTable* type_table) {
          type_table->IsIntegerType(component_type);
 }
 
+uint32_t GetVectorWidthIfCompatible(ir::TypeId type_id,
+                                    ir::TypeId component_type,
+                                    ir::TypeTable* type_table) {
+  if (type_table == nullptr || !type_table->IsVectorType(type_id)) {
+    return 0;
+  }
+
+  if (type_table->GetComponentType(type_id) != component_type) {
+    return 0;
+  }
+
+  return type_table->GetVectorComponentCount(type_id);
+}
+
+std::optional<uint32_t> GetSwizzleComponentIndex(char component) {
+  switch (component) {
+    case 'x':
+    case 'r':
+    case 's':
+      return 0u;
+    case 'y':
+    case 'g':
+    case 't':
+      return 1u;
+    case 'z':
+    case 'b':
+    case 'p':
+      return 2u;
+    case 'w':
+    case 'a':
+    case 'q':
+      return 3u;
+    default:
+      return std::nullopt;
+  }
+}
+
 bool IsVectorScalarBinary(ast::BinaryOp op, ir::TypeId lhs_type,
                           ir::TypeId rhs_type, ir::TypeTable* type_table,
                           ir::TypeId* result_type) {
@@ -268,6 +305,46 @@ std::optional<ir::Value> FoldScalarCastConstant(const ir::Value& value,
 }
 
 }  // namespace
+
+namespace detail {
+
+bool ParseVectorSwizzle(std::string_view member_name, uint32_t vector_width,
+                        std::vector<uint32_t>* component_indices) {
+  if (component_indices == nullptr || vector_width < 2u || vector_width > 4u ||
+      member_name.empty() || member_name.size() > 4u) {
+    return false;
+  }
+
+  component_indices->clear();
+  component_indices->reserve(member_name.size());
+  for (char component : member_name) {
+    auto index = GetSwizzleComponentIndex(component);
+    if (!index.has_value() || *index >= vector_width) {
+      component_indices->clear();
+      return false;
+    }
+    component_indices->push_back(*index);
+  }
+
+  return true;
+}
+
+bool HasDuplicateSwizzleComponents(
+    const std::vector<uint32_t>& component_indices) {
+  std::array<bool, 4> seen = {false, false, false, false};
+  for (uint32_t index : component_indices) {
+    if (index >= seen.size()) {
+      return true;
+    }
+    if (seen[index]) {
+      return true;
+    }
+    seen[index] = true;
+  }
+  return false;
+}
+
+}  // namespace detail
 
 ir::Value Lowerer::EnsureValue(const ir::ExprResult& expr, ir::Block* block) {
   if (!expr.IsAddress()) {
@@ -589,43 +666,89 @@ ir::ExprResult Lowerer::LowerVectorConstructor(ast::Expression* expression) {
 
   ir::TypeId vector_type = type_table_->GetVectorType(component_type, count);
 
-  if (call->args.size() != count) {
+  ir::Block* current_block = CurrentBlock();
+  if (current_block == nullptr) {
     return ir::ExprResult();
   }
 
-  bool all_constant = true;
+  bool scalar_only_constant = call->args.size() == count;
   std::array<float, 4> values = {0.f, 0.f, 0.f, 0.f};
-  for (size_t i = 0; i < count; ++i) {
-    auto* arg = call->args[i];
+  std::vector<ir::Value> flattened_components;
+  flattened_components.reserve(count);
+
+  for (auto* arg : call->args) {
     if (arg == nullptr) {
       return ir::ExprResult();
     }
 
-    ir::ExprResult arg_const = LowerConstant(arg);
-    if (!arg_const.IsValid() || !arg_const.value.IsConstant()) {
-      all_constant = false;
-      break;
-    }
-
-    if (arg_const.GetType() != component_type) {
+    ir::ExprResult arg_expr = LowerExpression(arg);
+    if (!arg_expr.IsValid()) {
       return ir::ExprResult();
     }
 
-    if (component_type == type_table_->GetF32Type()) {
-      values[i] = arg_const.value.GetF32Unchecked();
-    } else if (component_type == type_table_->GetI32Type()) {
-      int32_t iv = arg_const.value.GetI32Unchecked();
-      std::memcpy(&values[i], &iv, sizeof(iv));
-    } else if (component_type == type_table_->GetU32Type()) {
-      uint32_t uv = arg_const.value.GetU32Unchecked();
-      std::memcpy(&values[i], &uv, sizeof(uv));
-    } else if (component_type == type_table_->GetBoolType()) {
-      bool bv = arg_const.value.GetBoolUnchecked();
-      std::memcpy(&values[i], &bv, sizeof(bv));
+    ir::Value arg_value = EnsureValue(arg_expr, current_block);
+    if (!arg_value.IsValue()) {
+      return ir::ExprResult();
+    }
+
+    if (arg_value.type == component_type) {
+      if (scalar_only_constant && flattened_components.size() < values.size()) {
+        if (!arg_value.IsConstant()) {
+          scalar_only_constant = false;
+        } else if (component_type == type_table_->GetF32Type()) {
+          values[flattened_components.size()] = arg_value.GetF32Unchecked();
+        } else if (component_type == type_table_->GetI32Type()) {
+          int32_t iv = arg_value.GetI32Unchecked();
+          std::memcpy(&values[flattened_components.size()], &iv, sizeof(iv));
+        } else if (component_type == type_table_->GetU32Type()) {
+          uint32_t uv = arg_value.GetU32Unchecked();
+          std::memcpy(&values[flattened_components.size()], &uv, sizeof(uv));
+        } else if (component_type == type_table_->GetBoolType()) {
+          bool bv = arg_value.GetBoolUnchecked();
+          std::memcpy(&values[flattened_components.size()], &bv, sizeof(bv));
+        } else {
+          scalar_only_constant = false;
+        }
+      }
+
+      flattened_components.push_back(arg_value);
+      continue;
+    }
+
+    scalar_only_constant = false;
+
+    const uint32_t vector_width =
+        GetVectorWidthIfCompatible(arg_value.type, component_type, type_table_);
+    if (vector_width == 0) {
+      return ir::ExprResult();
+    }
+
+    for (uint32_t i = 0; i < vector_width; ++i) {
+      if (flattened_components.size() >= count) {
+        return ir::ExprResult();
+      }
+
+      ir::Instruction extract_inst;
+      extract_inst.kind = ir::InstKind::kExtract;
+      extract_inst.result_type = component_type;
+      extract_inst.result_id = AllocateSSAId();
+      extract_inst.access_index = i;
+      extract_inst.operands.push_back(arg_value);
+      if (extract_inst.result_id == 0) {
+        return ir::ExprResult();
+      }
+
+      current_block->instructions.emplace_back(extract_inst);
+      flattened_components.push_back(
+          ir::Value::SSA(component_type, extract_inst.result_id));
     }
   }
 
-  if (all_constant) {
+  if (flattened_components.size() != count) {
+    return ir::ExprResult();
+  }
+
+  if (scalar_only_constant) {
     ir::Value result_value;
     switch (count) {
       case 2:
@@ -647,11 +770,6 @@ ir::ExprResult Lowerer::LowerVectorConstructor(ast::Expression* expression) {
     return ir::ExprResult::ValueResult(result_value);
   }
 
-  ir::Block* current_block = CurrentBlock();
-  if (current_block == nullptr) {
-    return ir::ExprResult();
-  }
-
   ir::Instruction construct_inst;
   construct_inst.kind = ir::InstKind::kConstruct;
   construct_inst.result_type = vector_type;
@@ -659,18 +777,7 @@ ir::ExprResult Lowerer::LowerVectorConstructor(ast::Expression* expression) {
   if (construct_inst.result_id == 0) {
     return ir::ExprResult();
   }
-
-  for (auto* arg : call->args) {
-    ir::ExprResult arg_expr = LowerExpression(arg);
-    if (!arg_expr.IsValid()) {
-      return ir::ExprResult();
-    }
-    ir::Value arg_value = EnsureValue(arg_expr, current_block);
-    if (!arg_value.IsValue() || arg_value.type != component_type) {
-      return ir::ExprResult();
-    }
-    construct_inst.operands.push_back(arg_value);
-  }
+  construct_inst.operands = std::move(flattened_components);
 
   current_block->instructions.emplace_back(construct_inst);
   return ir::ExprResult::ValueResult(
@@ -1088,7 +1195,7 @@ ir::ExprResult Lowerer::LowerIndexAccessorExpression(
 ir::ExprResult Lowerer::LowerMemberAccessorExpression(
     ast::MemberAccessor* member) {
   if (member == nullptr || member->obj == nullptr ||
-      member->member == nullptr) {
+      member->member == nullptr || member->member->name.empty()) {
     return ir::ExprResult();
   }
 
@@ -1097,9 +1204,95 @@ ir::ExprResult Lowerer::LowerMemberAccessorExpression(
     return ir::ExprResult();
   }
 
+  const std::string_view member_name = member->member->name;
+  const ir::TypeId base_type = base_expr.GetType();
+
+  if (type_table_->IsVectorType(base_type)) {
+    std::vector<uint32_t> swizzle_components;
+    if (!detail::ParseVectorSwizzle(
+            member_name, type_table_->GetVectorComponentCount(base_type),
+            &swizzle_components)) {
+      return ir::ExprResult();
+    }
+
+    const ir::TypeId component_type = type_table_->GetComponentType(base_type);
+    if (component_type == ir::kInvalidTypeId) {
+      return ir::ExprResult();
+    }
+
+    ir::Block* current_block = CurrentBlock();
+    if (current_block == nullptr) {
+      return ir::ExprResult();
+    }
+
+    if (swizzle_components.size() == 1u) {
+      ir::Instruction component_inst;
+      component_inst.result_id = AllocateSSAId();
+      component_inst.result_type = component_type;
+      component_inst.access_index = swizzle_components[0];
+      if (component_inst.result_id == 0) {
+        return ir::ExprResult();
+      }
+
+      if (base_expr.IsAddress()) {
+        component_inst.kind = ir::InstKind::kAccess;
+        component_inst.operands.push_back(base_expr.value);
+        current_block->instructions.emplace_back(component_inst);
+        return ir::ExprResult::AddressResult(
+            ir::Value::PointerSSA(component_type, component_inst.result_id));
+      }
+
+      component_inst.kind = ir::InstKind::kExtract;
+      component_inst.operands.push_back(base_expr.value);
+      current_block->instructions.emplace_back(component_inst);
+      return ir::ExprResult::ValueResult(
+          ir::Value::SSA(component_type, component_inst.result_id));
+    }
+
+    const ir::TypeId swizzle_type = type_table_->GetVectorType(
+        component_type, static_cast<uint32_t>(swizzle_components.size()));
+    if (swizzle_type == ir::kInvalidTypeId) {
+      return ir::ExprResult();
+    }
+
+    ir::Value base_value = EnsureValue(base_expr, current_block);
+    if (!base_value.IsValue()) {
+      return ir::ExprResult();
+    }
+
+    std::vector<ir::Value> extracted_components;
+    extracted_components.reserve(swizzle_components.size());
+    for (uint32_t component_index : swizzle_components) {
+      ir::Instruction extract_inst;
+      extract_inst.kind = ir::InstKind::kExtract;
+      extract_inst.result_id = AllocateSSAId();
+      extract_inst.result_type = component_type;
+      extract_inst.access_index = component_index;
+      extract_inst.operands.push_back(base_value);
+      if (extract_inst.result_id == 0) {
+        return ir::ExprResult();
+      }
+      current_block->instructions.emplace_back(extract_inst);
+      extracted_components.push_back(
+          ir::Value::SSA(component_type, extract_inst.result_id));
+    }
+
+    ir::Instruction construct_inst;
+    construct_inst.kind = ir::InstKind::kConstruct;
+    construct_inst.result_type = swizzle_type;
+    construct_inst.result_id = AllocateSSAId();
+    if (construct_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    construct_inst.operands = std::move(extracted_components);
+    current_block->instructions.emplace_back(construct_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(swizzle_type, construct_inst.result_id));
+  }
+
   uint32_t member_index = 0;
-  const ir::StructMember* struct_member = FindStructMember(
-      base_expr.GetType(), member->member->name, &member_index);
+  const ir::StructMember* struct_member =
+      FindStructMember(base_type, member_name, &member_index);
   if (struct_member == nullptr) {
     return ir::ExprResult();
   }
@@ -1273,8 +1466,8 @@ ir::ExprResult Lowerer::LowerBuiltinCallExpression(
         ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
   }
 
-  if (symbol->original_name == "exp" || symbol->original_name == "sin" ||
-      symbol->original_name == "cos") {
+  if (symbol->original_name == "exp" || symbol->original_name == "fract" ||
+      symbol->original_name == "sin" || symbol->original_name == "cos") {
     if (call->args.size() != 1u) {
       return ir::ExprResult();
     }
@@ -1293,6 +1486,8 @@ ir::ExprResult Lowerer::LowerBuiltinCallExpression(
     builtin_inst.kind = ir::InstKind::kBuiltinCall;
     if (symbol->original_name == "exp") {
       builtin_inst.builtin_call = ir::BuiltinCallKind::kExp;
+    } else if (symbol->original_name == "fract") {
+      builtin_inst.builtin_call = ir::BuiltinCallKind::kFract;
     } else if (symbol->original_name == "sin") {
       builtin_inst.builtin_call = ir::BuiltinCallKind::kSin;
     } else {

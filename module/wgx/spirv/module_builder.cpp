@@ -1635,6 +1635,8 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
       return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Pow));
     case ir::BuiltinCallKind::kExp:
       return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Exp));
+    case ir::BuiltinCallKind::kFract:
+      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Fract));
     case ir::BuiltinCallKind::kSin:
       return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450Sin));
     case ir::BuiltinCallKind::kCos:

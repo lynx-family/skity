@@ -162,6 +162,7 @@ enum class BuiltinCallKind {
   kAtan2,
   kPow,
   kExp,
+  kFract,
   kSin,
   kCos,
   kFloor,

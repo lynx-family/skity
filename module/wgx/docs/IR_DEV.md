@@ -31,6 +31,11 @@ The SPIR-V path is real and in active use for validation:
 `Program::WriteToSpirv()` already goes through the IR path rather than a
 backend-local AST printer.
 
+In the current branch state, the backend is no longer just proving out
+IR-to-SPIR-V plumbing. It already covers a narrow but practical Vulkan graphics
+slice, including repository-style mixed vector constructors, vector swizzles,
+and a texture-fragment path that uses swizzled coordinates plus `fract`.
+
 ## Current IR State
 
 The active IR path has these important properties:
@@ -122,18 +127,22 @@ The backend now supports a meaningful first rendering-oriented expression slice:
    - `i32(...)`
    - `u32(...)`
 4. dynamic vector constructors for supported scalar/vector types
-5. matrix constructors for:
+5. vector swizzles for the current scalar/vector slice:
+   - read access such as `.x`, `.xy`, `.zw`, `.rgb`, `.a`
+   - write access for current local/member-addressable vectors such as
+     `.x = ...` and `.zw = ...`
+6. matrix constructors for:
    - `mat2x2<f32>`
    - `mat3x3<f32>`
    - `mat4x4<f32>`
    from either scalar arguments or column vectors
-6. matrix multiply for:
+7. matrix multiply for:
    - `mat2x2<f32> * vec2<f32>`
    - `mat3x3<f32> * vec3<f32>`
    - `mat4x4<f32> * vec4<f32>`
    - `mat3x3<f32> * mat3x3<f32>`
    - `mat4x4<f32> * mat4x4<f32>`
-7. math builtins for the current validated float slice:
+8. math builtins for the current validated float slice:
    - `dot`
    - `distance`
    - `sqrt`
@@ -141,6 +150,7 @@ The backend now supports a meaningful first rendering-oriented expression slice:
    - `sign`
    - `max`
    - `clamp`
+   - `fract`
    - `mix`
    - `select`
    - `atan`
@@ -200,8 +210,8 @@ python3 tools/test-runner.py --suite=unit --build-dir out/cmake_host_build --fil
 
 At the time this document was updated:
 
-1. `WgxSpirvSmokeTest.*`: 104 passed, 0 failed
-2. `WgxVulkanPipelineTest.*`: 5 passed, 0 failed
+1. `WgxSpirvSmokeTest.*`: 109 passed, 0 failed
+2. `WgxVulkanPipelineTest.*`: 7 passed, 0 failed
 
 The Vulkan pipeline tests currently cover:
 
@@ -209,8 +219,11 @@ The Vulkan pipeline tests currently cover:
 2. descriptor-set / uniform mapped shaders
 3. texture + sampler mapped shaders
 4. vertex attribute input shaders
-5. repository-style texture fragment bindings with uniform struct + sampler +
+5. repository-style gradient shaders with helper-style uniforms and matrix math
+6. repository-style texture fragment bindings with uniform struct + sampler +
    `textureSample`
+7. repository-style texture fragment shaders that exercise swizzles and
+   `fract`
 
 ### Practical conclusion from the current baseline
 
@@ -219,12 +232,18 @@ The backend is already sufficient for:
 1. generating valid SPIR-V for a narrow graphics subset
 2. creating real Vulkan shader modules and graphics pipelines for that subset
 3. validating basic non-compute graphics rendering paths
+4. covering a repository-style shader slice that now includes:
+   - mixed vector constructors
+   - vector swizzle reads/writes
+   - current float math helpers such as `fract`
 
 The backend is not yet sufficient for:
 
 1. covering the full shader feature surface already used by Skity's real WGSL
    generators
 2. claiming broad WGSL graphics-shader compatibility
+3. covering broader non-current texture kinds or builtin IO forms beyond the
+   current validated graphics slice
 
 ## What Still Blocks Repository-Style Rendering Shaders
 
@@ -234,13 +253,25 @@ first wave of math builtins. The remaining blocker is expression surface area.
 Repository shaders still need capabilities such as:
 
 1. deeper aggregate coverage around arrays and indexed aggregate access
-2. mixed vector constructors commonly emitted by repository WGSL, for example:
-   - `vec4<f32>(vec2<f32>, f32, f32)`
-   - `vec4<f32>(vec3<f32>, f32)`
-3. follow-up repository-style vertex snippets that combine helper-style struct
+2. follow-up repository-style vertex snippets that combine helper-style struct
    uniforms, matrix math, and aggregate construction
-4. broader integer/unsigned overloads only if repository shaders start needing
+3. broader integer/unsigned overloads only if repository shaders start needing
    them in practice
+4. follow-up geometry/text snippets that mix current swizzle support with
+   heavier aggregate and control-flow patterns
+5. more direct coverage for the repository's geometry-heavy shaders that still
+   rely on richer aggregate and packed-data expression shapes
+
+These are the immediate blockers.
+There are also known broader capability gaps that matter for future backend
+breadth, but are not the first thing preventing the current repository shaders
+from compiling:
+
+1. texture type coverage is still centered on `texture_2d<f32>`
+2. texture builtin coverage is still intentionally narrow
+3. builtin IO coverage is still centered on the current
+   `position` / `vertex_index` / `instance_index` slice
+4. runtime validation still focuses on the current happy-path graphics subset
 
 That means the backend can already satisfy a meaningful graphics-pipeline slice
 and a large part of the repository's current WGSL math usage, but it is still
@@ -258,11 +289,10 @@ blocked.
 
 Implement these first:
 
-1. mixed vector constructors used by repository shaders
-2. follow-up aggregate fixes discovered while exercising repository snippets
-3. broader repository-style pipeline tests beyond the current texture fragment
-   slice
-4. broader integer/unsigned overloads only if real shaders demand them
+1. follow-up aggregate fixes discovered while exercising repository snippets
+2. broader repository-style pipeline tests beyond the current texture fragment
+   slice, now that mixed constructors, swizzles, and `fract` are in place
+3. broader integer/unsigned overloads only if real shaders demand them
 
 ### Priority 2: widen the expression surface around the same shaders
 
@@ -286,10 +316,11 @@ Only after the expression/math slice is stable:
 
 If continuing immediately from the current state, use this order:
 
-1. add `&&` and `||`
-2. add unary `!` and unary `-`
-3. add any follow-up aggregate fixes revealed by repository shader snippets
-4. add broader integer/unsigned overloads only if real shaders require them
+1. add any follow-up aggregate fixes revealed by repository shader snippets
+2. add broader repository-style pipeline tests beyond the current texture
+   fragment slice
+3. add broader integer/unsigned overloads only if real shaders require them
+4. only then widen texture kinds, texture builtins, or builtin IO surface
 
 This order matches the current repository shader pressure better than jumping
 straight to more texture forms.
