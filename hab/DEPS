@@ -57,6 +57,12 @@ deps = {
         "ignore_in_git": True,
         "commit": "0b17a763ba5643e32da1b2152f8140461b3b7345",
     },
+    "third_party/SPIRV-Headers": {
+        "type": "git",
+        "url": "https://github.com/KhronosGroup/SPIRV-Headers.git",
+        "ignore_in_git": True,
+        "commit": "04f10f650d514df88b76d25e83db360142c7b174",
+    },
     "third_party/glm": {
         "type": "git",
         "url": "https://github.com/g-truc/glm.git",
