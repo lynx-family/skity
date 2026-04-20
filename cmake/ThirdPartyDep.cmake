@@ -37,14 +37,7 @@ endif()
 # Vulkan memory allocator
 if(${SKITY_VK_BACKEND})
   # set vulkan headers
-  if (NOT ANDROID)
-    # android can use system vulkan headers from NDK
-    set(VULKAN_HEADERS_INSTALL_DIR "third_party/Vulkan-Headers" CACHE PATH "Vulkan-Headers")
-  endif()
-
-  target_compile_definitions(skity PRIVATE VK_NO_PROTOTYPES=1)
-  add_subdirectory(third_party/volk)
-  target_link_libraries(skity PRIVATE volk::volk)
+  target_include_directories(skity PRIVATE third_party/VulkanMemoryAllocator/include)
 endif()
 
 # json parser
