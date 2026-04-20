@@ -478,6 +478,18 @@ if(${SKITY_HW_RENDERER})
       "-framework Foundation"
     )
   endif()
+
+  # Vulkan backend
+  if(${SKITY_VK_BACKEND})
+    target_sources(
+      skity
+      PRIVATE
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_context_impl_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_context_impl_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_context_state.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_context_state.hpp
+    )
+  endif()
 endif()
 
 if(${SKITY_SW_RENDERER})

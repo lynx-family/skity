@@ -123,6 +123,7 @@ target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
 
 if (${SKITY_VK_BACKEND})
     target_sources(skity_unit_test PRIVATE
+        gpu/vk/gpu_context_vk_test.cc
         wgx/wgx_spirv_smoke_test.cc
         wgx/wgx_vulkan_pipeline_test.cc
         wgx/wgx_value_test.cc
