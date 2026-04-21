@@ -50,7 +50,9 @@ class VulkanSharedContextTest : public ::testing::Test {
     return static_cast<skity::GPUContextImpl*>(GetVKContext());
   }
 
-  static skity::GPUDevice* GetDevice() { return GetContextImpl()->GetGPUDevice(); }
+  static skity::GPUDevice* GetDevice() {
+    return GetContextImpl()->GetGPUDevice();
+  }
 
   static const skity::VulkanContextState* GetState() {
     return GetVKContext()->GetState();
@@ -257,7 +259,11 @@ TEST(VulkanProcLoaderTest, PreserveUserProvidedExtensionInfo) {
         if (std::string(extension.extensionName) ==
             VK_KHR_SWAPCHAIN_EXTENSION_NAME) {
           enabled_device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-          break;
+        }
+        if (std::string(extension.extensionName) ==
+            VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) {
+          enabled_device_extensions.push_back(
+              VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
         }
       }
     }
@@ -317,6 +323,11 @@ TEST(VulkanProcLoaderTest, PreserveUserProvidedExtensionInfo) {
   EXPECT_TRUE(state->AreEnabledDeviceExtensionsKnown());
   EXPECT_EQ(state->HasEnabledDeviceExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
             !enabled_device_extensions.empty());
+  EXPECT_EQ(state->IsSynchronization2Enabled(),
+            std::find(enabled_device_extensions.begin(),
+                      enabled_device_extensions.end(),
+                      VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) !=
+                enabled_device_extensions.end());
 
   device_fns.vkDestroyDevice(device, nullptr);
   functions.instance.vkDestroyInstance(instance, nullptr);
@@ -356,7 +367,8 @@ TEST_F(VulkanSharedContextTest, CreateShaderFunctionFromWGXModule) {
   EXPECT_NE(vk_function->GetShaderModule(), VK_NULL_HANDLE);
 }
 
-TEST_F(VulkanSharedContextTest, FailToCreateShaderFunctionForMissingEntryPoint) {
+TEST_F(VulkanSharedContextTest,
+       FailToCreateShaderFunctionForMissingEntryPoint) {
   ASSERT_NE(GetContext(), nullptr);
   auto* device = GetDevice();
   ASSERT_NE(device, nullptr);

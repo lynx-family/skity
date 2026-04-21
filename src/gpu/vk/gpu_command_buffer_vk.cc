@@ -54,6 +54,32 @@ void SetVkObjectDebugLabel(const VulkanContextState& state,
 
 }  // namespace
 
+VkResult SubmitCommandBuffer(const VulkanContextState& state, VkQueue queue,
+                             VkCommandBuffer command_buffer, VkFence fence) {
+  const auto& device_fns = state.DeviceFns();
+  if (state.IsSynchronization2Enabled() &&
+      device_fns.vkQueueSubmit2 != nullptr) {
+    VkCommandBufferSubmitInfo command_buffer_info = {};
+    command_buffer_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    command_buffer_info.commandBuffer = command_buffer;
+    command_buffer_info.deviceMask = 0;
+
+    VkSubmitInfo2 submit_info = {};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos = &command_buffer_info;
+
+    return device_fns.vkQueueSubmit2(queue, 1, &submit_info, fence);
+  }
+
+  VkSubmitInfo submit_info = {};
+  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submit_info.commandBufferCount = 1;
+  submit_info.pCommandBuffers = &command_buffer;
+
+  return device_fns.vkQueueSubmit(queue, 1, &submit_info, fence);
+}
+
 GPUCommandBufferVK::GPUCommandBufferVK(
     std::shared_ptr<const VulkanContextState> state)
     : state_(std::move(state)) {}
@@ -157,22 +183,15 @@ bool GPUCommandBufferVK::Submit() {
 
   VkFenceCreateInfo fence_info = {};
   fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  result =
-      device_fns.vkCreateFence(state_->GetLogicalDevice(), &fence_info, nullptr,
-                               &fence);
+  result = device_fns.vkCreateFence(state_->GetLogicalDevice(), &fence_info,
+                                    nullptr, &fence);
   if (result != VK_SUCCESS || fence == VK_NULL_HANDLE) {
     LOGE("Failed to create Vulkan fence: {}", static_cast<int32_t>(result));
     return false;
   }
 
-  VkSubmitInfo submit_info = {};
-  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submit_info.commandBufferCount = 1;
-  submit_info.pCommandBuffers = &command_buffer_;
-
-  result =
-      device_fns.vkQueueSubmit(state_->GetGraphicsQueue(), 1, &submit_info,
-                               fence);
+  result = SubmitCommandBuffer(*state_, state_->GetGraphicsQueue(),
+                               command_buffer_, fence);
   if (result != VK_SUCCESS) {
     LOGE("Failed to submit Vulkan command buffer: {}",
          static_cast<int32_t>(result));
@@ -180,8 +199,8 @@ bool GPUCommandBufferVK::Submit() {
     return false;
   }
 
-  state_->EnqueuePendingSubmission(VulkanPendingSubmission(
-      fence, command_pool_, std::move(stage_buffers_)));
+  state_->EnqueuePendingSubmission(
+      VulkanPendingSubmission(fence, command_pool_, std::move(stage_buffers_)));
   state_->CollectPendingSubmissions(false);
 
   submitted_ = true;

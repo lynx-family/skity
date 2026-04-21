@@ -22,6 +22,7 @@ struct VulkanInstanceFns {
   PFN_vkDestroyInstance vkDestroyInstance = nullptr;
   PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
   PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = nullptr;
+  PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 = nullptr;
   PFN_vkEnumerateDeviceExtensionProperties
       vkEnumerateDeviceExtensionProperties = nullptr;
   PFN_vkGetPhysicalDeviceQueueFamilyProperties
@@ -38,6 +39,7 @@ struct VulkanDeviceFns {
   PFN_vkDestroyDevice vkDestroyDevice = nullptr;
   PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
   PFN_vkQueueSubmit vkQueueSubmit = nullptr;
+  PFN_vkQueueSubmit2 vkQueueSubmit2 = nullptr;
   PFN_vkCreateCommandPool vkCreateCommandPool = nullptr;
   PFN_vkDestroyCommandPool vkDestroyCommandPool = nullptr;
   PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers = nullptr;

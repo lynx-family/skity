@@ -72,6 +72,8 @@ class VulkanContextState {
     return enabled_device_extensions_known_;
   }
 
+  bool IsSynchronization2Enabled() const { return synchronization2_enabled_; }
+
   const std::vector<VkExtensionProperties>& GetAvailableInstanceExtensions()
       const {
     return available_instance_extensions_;
@@ -131,6 +133,7 @@ class VulkanContextState {
   std::vector<std::string> enabled_device_extensions_ = {};
   bool enabled_instance_extensions_known_ = false;
   bool enabled_device_extensions_known_ = false;
+  bool synchronization2_enabled_ = false;
   VulkanDebugRuntimeState debug_runtime_ = {};
   mutable std::vector<VulkanPendingSubmission> pending_submissions_ = {};
 };

@@ -1018,6 +1018,7 @@ bool VulkanContextState::LoadDeviceFns() {
 bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
   enabled_device_extensions_.clear();
   enabled_device_extensions_known_ = false;
+  synchronization2_enabled_ = false;
 
   if (!LoadAvailableDeviceExtensions()) {
     return false;
@@ -1039,6 +1040,8 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
         info.enabled_device_extensions, info.enabled_device_extension_count);
     enabled_device_extensions_known_ = info.enabled_device_extensions_known;
     if (enabled_device_extensions_known_) {
+      synchronization2_enabled_ = ContainsExtension(
+          enabled_device_extensions_, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
       LogEnabledExtensions("device", enabled_device_extensions_);
     } else {
       LOGW(
@@ -1064,6 +1067,32 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
     if (HasAvailableDeviceExtension(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME)) {
       enabled_device_extensions_.emplace_back(
           VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
+    }
+
+    VkPhysicalDeviceFeatures2 physical_device_features = {};
+    physical_device_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    VkPhysicalDeviceSynchronization2Features synchronization2_features = {};
+    synchronization2_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+
+    if (HasAvailableDeviceExtension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+      physical_device_features.pNext = &synchronization2_features;
+      functions_.instance.vkGetPhysicalDeviceFeatures2(
+          physical_device_, &physical_device_features);
+      if (synchronization2_features.synchronization2 == VK_TRUE) {
+        synchronization2_features.synchronization2 = VK_TRUE;
+        synchronization2_enabled_ = true;
+      } else {
+        enabled_device_extensions_.erase(
+            std::remove(enabled_device_extensions_.begin(),
+                        enabled_device_extensions_.end(),
+                        VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME),
+            enabled_device_extensions_.end());
+        LOGW(
+            "Vulkan synchronization2 extension is present but feature is not "
+            "supported, disabling extension request");
+      }
     }
 
     auto enabled_extension_ptrs = BuildNamePtrs(enabled_device_extensions_);
@@ -1100,6 +1129,9 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
     device_info.queueCreateInfoCount =
         static_cast<uint32_t>(queue_infos.size());
     device_info.pQueueCreateInfos = queue_infos.data();
+    if (synchronization2_enabled_) {
+      device_info.pNext = &synchronization2_features;
+    }
     device_info.enabledExtensionCount =
         static_cast<uint32_t>(enabled_extension_ptrs.size());
     device_info.ppEnabledExtensionNames = enabled_extension_ptrs.data();
@@ -1235,6 +1267,7 @@ void VulkanContextState::Reset() {
   enabled_device_extensions_.clear();
   enabled_instance_extensions_known_ = false;
   enabled_device_extensions_known_ = false;
+  synchronization2_enabled_ = false;
   debug_runtime_ = {};
   functions_ = {};
   instance_ = VK_NULL_HANDLE;

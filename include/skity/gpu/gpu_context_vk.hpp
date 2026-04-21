@@ -86,6 +86,11 @@ struct GPUContextInfoVK {
    * For user provided logical device, Vulkan does not expose a way to query
    * enabled device extensions from a live handle, so caller should provide
    * them when this information matters to later rendering logic.
+   *
+   * @note if some advance extensions are in this list, the engine assumed that
+   * the corresponding feature was already enabled when the device was created.
+   * For example, `VK_KHR_synchronization2` needs to put
+   * VkPhysicalDeviceSynchronization2Features in device create info.
    */
   const char* const* enabled_device_extensions = nullptr;
 
