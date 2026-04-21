@@ -128,6 +128,9 @@ bool LoadVulkanInstanceFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
   fns->vkGetPhysicalDeviceProperties =
       reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
           get_instance_proc_addr(instance, "vkGetPhysicalDeviceProperties"));
+  fns->vkGetPhysicalDeviceFeatures2 =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
+          get_instance_proc_addr(instance, "vkGetPhysicalDeviceFeatures2"));
   fns->vkEnumerateDeviceExtensionProperties =
       reinterpret_cast<PFN_vkEnumerateDeviceExtensionProperties>(
           get_instance_proc_addr(instance,
@@ -152,6 +155,7 @@ bool LoadVulkanInstanceFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
   if (fns->vkDestroyInstance == nullptr ||
       fns->vkEnumeratePhysicalDevices == nullptr ||
       fns->vkGetPhysicalDeviceProperties == nullptr ||
+      fns->vkGetPhysicalDeviceFeatures2 == nullptr ||
       fns->vkEnumerateDeviceExtensionProperties == nullptr ||
       fns->vkGetPhysicalDeviceQueueFamilyProperties == nullptr ||
       fns->vkCreateDevice == nullptr || fns->vkGetDeviceProcAddr == nullptr) {
@@ -177,6 +181,8 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkGetDeviceQueue"));
   fns->vkQueueSubmit = reinterpret_cast<PFN_vkQueueSubmit>(
       get_device_proc_addr(device, "vkQueueSubmit"));
+  fns->vkQueueSubmit2 = reinterpret_cast<PFN_vkQueueSubmit2>(
+      get_device_proc_addr(device, "vkQueueSubmit2"));
   fns->vkCreateCommandPool = reinterpret_cast<PFN_vkCreateCommandPool>(
       get_device_proc_addr(device, "vkCreateCommandPool"));
   fns->vkDestroyCommandPool = reinterpret_cast<PFN_vkDestroyCommandPool>(
