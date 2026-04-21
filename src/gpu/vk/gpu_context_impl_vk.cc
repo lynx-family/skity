@@ -175,6 +175,29 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkDestroyDevice"));
   fns->vkGetDeviceQueue = reinterpret_cast<PFN_vkGetDeviceQueue>(
       get_device_proc_addr(device, "vkGetDeviceQueue"));
+  fns->vkQueueSubmit = reinterpret_cast<PFN_vkQueueSubmit>(
+      get_device_proc_addr(device, "vkQueueSubmit"));
+  fns->vkCreateCommandPool = reinterpret_cast<PFN_vkCreateCommandPool>(
+      get_device_proc_addr(device, "vkCreateCommandPool"));
+  fns->vkDestroyCommandPool = reinterpret_cast<PFN_vkDestroyCommandPool>(
+      get_device_proc_addr(device, "vkDestroyCommandPool"));
+  fns->vkAllocateCommandBuffers =
+      reinterpret_cast<PFN_vkAllocateCommandBuffers>(
+          get_device_proc_addr(device, "vkAllocateCommandBuffers"));
+  fns->vkBeginCommandBuffer = reinterpret_cast<PFN_vkBeginCommandBuffer>(
+      get_device_proc_addr(device, "vkBeginCommandBuffer"));
+  fns->vkEndCommandBuffer = reinterpret_cast<PFN_vkEndCommandBuffer>(
+      get_device_proc_addr(device, "vkEndCommandBuffer"));
+  fns->vkCreateFence = reinterpret_cast<PFN_vkCreateFence>(
+      get_device_proc_addr(device, "vkCreateFence"));
+  fns->vkDestroyFence = reinterpret_cast<PFN_vkDestroyFence>(
+      get_device_proc_addr(device, "vkDestroyFence"));
+  fns->vkGetFenceStatus = reinterpret_cast<PFN_vkGetFenceStatus>(
+      get_device_proc_addr(device, "vkGetFenceStatus"));
+  fns->vkWaitForFences = reinterpret_cast<PFN_vkWaitForFences>(
+      get_device_proc_addr(device, "vkWaitForFences"));
+  fns->vkCmdCopyBuffer = reinterpret_cast<PFN_vkCmdCopyBuffer>(
+      get_device_proc_addr(device, "vkCmdCopyBuffer"));
   fns->vkCreateShaderModule = reinterpret_cast<PFN_vkCreateShaderModule>(
       get_device_proc_addr(device, "vkCreateShaderModule"));
   fns->vkDestroyShaderModule = reinterpret_cast<PFN_vkDestroyShaderModule>(
@@ -182,8 +205,26 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
   fns->vkSetDebugUtilsObjectNameEXT =
       reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
           get_device_proc_addr(device, "vkSetDebugUtilsObjectNameEXT"));
+#if defined(SKITY_VK_DEBUG_RUNTIME)
+  fns->vkCmdBeginDebugUtilsLabelEXT =
+      reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
+          get_device_proc_addr(device, "vkCmdBeginDebugUtilsLabelEXT"));
+  fns->vkCmdEndDebugUtilsLabelEXT =
+      reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
+          get_device_proc_addr(device, "vkCmdEndDebugUtilsLabelEXT"));
+  fns->vkCmdInsertDebugUtilsLabelEXT =
+      reinterpret_cast<PFN_vkCmdInsertDebugUtilsLabelEXT>(
+          get_device_proc_addr(device, "vkCmdInsertDebugUtilsLabelEXT"));
+#endif
 
   if (fns->vkDestroyDevice == nullptr || fns->vkGetDeviceQueue == nullptr ||
+      fns->vkQueueSubmit == nullptr || fns->vkCreateCommandPool == nullptr ||
+      fns->vkDestroyCommandPool == nullptr ||
+      fns->vkAllocateCommandBuffers == nullptr ||
+      fns->vkBeginCommandBuffer == nullptr ||
+      fns->vkEndCommandBuffer == nullptr || fns->vkCreateFence == nullptr ||
+      fns->vkDestroyFence == nullptr || fns->vkGetFenceStatus == nullptr ||
+      fns->vkWaitForFences == nullptr || fns->vkCmdCopyBuffer == nullptr ||
       fns->vkCreateShaderModule == nullptr ||
       fns->vkDestroyShaderModule == nullptr) {
     LOGE("Failed to load Vulkan device procedures for device: {:p}",

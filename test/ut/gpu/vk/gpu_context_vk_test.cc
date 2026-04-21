@@ -12,6 +12,7 @@
 
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_shader_module.hpp"
+#include "src/gpu/vk/gpu_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_context_impl_vk.hpp"
 #include "src/gpu/vk/gpu_shader_function_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
@@ -25,6 +26,40 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   return vec4<f32>(0.0, 0.0, 0.0, 1.0);
 }
 )";
+
+std::unique_ptr<skity::GPUContext> CreateDebugGPUContext() {
+  skity::GPUContextInfoVK info = {};
+  info.get_instance_proc_addr = vkGetInstanceProcAddr;
+  info.enable_debug_runtime = true;
+  return skity::CreateGPUContextVK(&info);
+}
+
+class VulkanSharedContextTest : public ::testing::Test {
+ protected:
+  static void SetUpTestSuite() { context_ = CreateDebugGPUContext(); }
+
+  static void TearDownTestSuite() { context_.reset(); }
+
+  static skity::GPUContext* GetContext() { return context_.get(); }
+
+  static skity::GPUContextVK* GetVKContext() {
+    return static_cast<skity::GPUContextVK*>(context_.get());
+  }
+
+  static skity::GPUContextImpl* GetContextImpl() {
+    return static_cast<skity::GPUContextImpl*>(GetVKContext());
+  }
+
+  static skity::GPUDevice* GetDevice() { return GetContextImpl()->GetGPUDevice(); }
+
+  static const skity::VulkanContextState* GetState() {
+    return GetVKContext()->GetState();
+  }
+
+  static std::unique_ptr<skity::GPUContext> context_;
+};
+
+std::unique_ptr<skity::GPUContext> VulkanSharedContextTest::context_ = nullptr;
 
 int32_t FindGraphicsQueueFamilyIndex(
     PFN_vkGetPhysicalDeviceQueueFamilyProperties
@@ -128,15 +163,13 @@ TEST(VulkanProcLoaderTest, CreateDeviceAndLoadDeviceFns) {
   functions.instance.vkDestroyInstance(instance, nullptr);
 }
 
-TEST(VulkanProcLoaderTest, CreateGPUContextWithProcLoader) {
-  auto context = skity::CreateGPUContextVK(vkGetInstanceProcAddr);
+TEST_F(VulkanSharedContextTest, CreateGPUContextWithProcLoader) {
+  ASSERT_NE(GetContext(), nullptr);
+  EXPECT_EQ(GetContext()->GetBackendType(), skity::GPUBackendType::kVulkan);
 
-  ASSERT_NE(context, nullptr);
-  EXPECT_EQ(context->GetBackendType(), skity::GPUBackendType::kVulkan);
-
-  auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
+  auto* vk_context = GetVKContext();
   ASSERT_NE(vk_context, nullptr);
-  const auto* state = vk_context->GetState();
+  const auto* state = GetState();
   ASSERT_NE(state, nullptr);
   EXPECT_NE(state->GetInstance(), VK_NULL_HANDLE);
   EXPECT_NE(state->GetPhysicalDevice(), VK_NULL_HANDLE);
@@ -155,6 +188,7 @@ TEST(VulkanProcLoaderTest, CreateGPUContextWithProcLoader) {
 TEST(VulkanProcLoaderTest, CreateGPUContextWithInfo) {
   skity::GPUContextInfoVK info = {};
   info.get_instance_proc_addr = vkGetInstanceProcAddr;
+  info.enable_debug_runtime = true;
 
   auto context = skity::CreateGPUContextVK(&info);
 
@@ -268,6 +302,7 @@ TEST(VulkanProcLoaderTest, PreserveUserProvidedExtensionInfo) {
       static_cast<uint32_t>(enabled_device_extensions.size());
   info.enabled_device_extensions_known = true;
   info.graphics_queue_family_index = graphics_queue_family_index;
+  info.enable_debug_runtime = true;
 
   auto context = skity::CreateGPUContextVK(&info);
 
@@ -287,16 +322,9 @@ TEST(VulkanProcLoaderTest, PreserveUserProvidedExtensionInfo) {
   functions.instance.vkDestroyInstance(instance, nullptr);
 }
 
-TEST(VulkanShaderFunctionVKTest, CreateShaderFunctionFromWGXModule) {
-  auto context = skity::CreateGPUContextVK(vkGetInstanceProcAddr);
-  ASSERT_NE(context, nullptr);
-
-  auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
-  ASSERT_NE(vk_context, nullptr);
-
-  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
-  ASSERT_NE(context_impl, nullptr);
-  auto* device = context_impl->GetGPUDevice();
+TEST_F(VulkanSharedContextTest, CreateShaderFunctionFromWGXModule) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
   ASSERT_NE(device, nullptr);
 
   skity::GPUShaderModuleDescriptor module_desc = {};
@@ -328,17 +356,9 @@ TEST(VulkanShaderFunctionVKTest, CreateShaderFunctionFromWGXModule) {
   EXPECT_NE(vk_function->GetShaderModule(), VK_NULL_HANDLE);
 }
 
-TEST(VulkanShaderFunctionVKTest,
-     FailToCreateShaderFunctionForMissingEntryPoint) {
-  auto context = skity::CreateGPUContextVK(vkGetInstanceProcAddr);
-  ASSERT_NE(context, nullptr);
-
-  auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
-  ASSERT_NE(vk_context, nullptr);
-
-  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
-  ASSERT_NE(context_impl, nullptr);
-  auto* device = context_impl->GetGPUDevice();
+TEST_F(VulkanSharedContextTest, FailToCreateShaderFunctionForMissingEntryPoint) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
   ASSERT_NE(device, nullptr);
 
   skity::GPUShaderModuleDescriptor module_desc = {};
@@ -366,16 +386,9 @@ TEST(VulkanShaderFunctionVKTest,
   EXPECT_EQ(error_message, "WGX translate to SPIR-V failed");
 }
 
-TEST(VulkanShaderFunctionVKTest, RejectRawShaderSource) {
-  auto context = skity::CreateGPUContextVK(vkGetInstanceProcAddr);
-  ASSERT_NE(context, nullptr);
-
-  auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
-  ASSERT_NE(vk_context, nullptr);
-
-  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
-  ASSERT_NE(context_impl, nullptr);
-  auto* device = context_impl->GetGPUDevice();
+TEST_F(VulkanSharedContextTest, RejectRawShaderSource) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
   ASSERT_NE(device, nullptr);
 
   skity::GPUShaderSourceRaw source = {};
@@ -390,6 +403,39 @@ TEST(VulkanShaderFunctionVKTest, RejectRawShaderSource) {
 
   auto function = device->CreateShaderFunction(function_desc);
   EXPECT_EQ(function, nullptr);
+}
+
+TEST_F(VulkanSharedContextTest, CreateAndUploadBufferData) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+
+  auto buffer = device->CreateBuffer(skity::GPUBufferUsage::kVertexBuffer |
+                                     skity::GPUBufferUsage::kUniformBuffer);
+  ASSERT_NE(buffer, nullptr);
+
+  auto* vk_buffer = static_cast<skity::GPUBufferVK*>(buffer.get());
+  ASSERT_NE(vk_buffer, nullptr);
+  EXPECT_FALSE(vk_buffer->IsValid());
+  EXPECT_EQ(vk_buffer->GetMemoryType(),
+            skity::GPUBufferVKMemoryType::kDeviceLocal);
+
+  const uint32_t payload[] = {1u, 2u, 3u, 4u};
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  auto blit_pass = command_buffer->BeginBlitPass();
+  ASSERT_NE(blit_pass, nullptr);
+  blit_pass->UploadBufferData(vk_buffer, const_cast<uint32_t*>(payload),
+                              sizeof(payload));
+  blit_pass->End();
+  ASSERT_TRUE(command_buffer->Submit());
+
+  EXPECT_TRUE(vk_buffer->IsValid());
+  EXPECT_NE(vk_buffer->GetBuffer(), VK_NULL_HANDLE);
+  EXPECT_NE(vk_buffer->GetAllocation(), VK_NULL_HANDLE);
+  EXPECT_EQ(vk_buffer->GetMappedData(), nullptr);
+  EXPECT_GE(vk_buffer->GetSize(), sizeof(payload));
 }
 
 }  // namespace

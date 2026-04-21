@@ -37,9 +37,25 @@ struct VulkanInstanceFns {
 struct VulkanDeviceFns {
   PFN_vkDestroyDevice vkDestroyDevice = nullptr;
   PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
+  PFN_vkQueueSubmit vkQueueSubmit = nullptr;
+  PFN_vkCreateCommandPool vkCreateCommandPool = nullptr;
+  PFN_vkDestroyCommandPool vkDestroyCommandPool = nullptr;
+  PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers = nullptr;
+  PFN_vkBeginCommandBuffer vkBeginCommandBuffer = nullptr;
+  PFN_vkEndCommandBuffer vkEndCommandBuffer = nullptr;
+  PFN_vkCreateFence vkCreateFence = nullptr;
+  PFN_vkDestroyFence vkDestroyFence = nullptr;
+  PFN_vkGetFenceStatus vkGetFenceStatus = nullptr;
+  PFN_vkWaitForFences vkWaitForFences = nullptr;
+  PFN_vkCmdCopyBuffer vkCmdCopyBuffer = nullptr;
   PFN_vkCreateShaderModule vkCreateShaderModule = nullptr;
   PFN_vkDestroyShaderModule vkDestroyShaderModule = nullptr;
   PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
+#if defined(SKITY_VK_DEBUG_RUNTIME)
+  PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT = nullptr;
+  PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT = nullptr;
+  PFN_vkCmdInsertDebugUtilsLabelEXT vkCmdInsertDebugUtilsLabelEXT = nullptr;
+#endif
 };
 
 struct VulkanFunctionPointers {
