@@ -13,6 +13,16 @@
 
 namespace skity {
 
+#if defined(SKITY_VK_DEBUG_RUNTIME)
+struct VulkanDebugRuntimeState {
+  std::vector<VkLayerProperties> available_instance_layers = {};
+  std::vector<std::string> enabled_instance_layers = {};
+  bool enabled_instance_layers_known = false;
+};
+#else
+struct VulkanDebugRuntimeState {};
+#endif
+
 class VulkanContextState {
  public:
   VulkanContextState() = default;
@@ -29,8 +39,20 @@ class VulkanContextState {
 
   VkQueue GetGraphicsQueue() const { return graphics_queue_; }
 
-  const VulkanFunctionPointers& GetFunctionPointers() const {
-    return functions_;
+  const VulkanFunctionPointers& Fns() const { return functions_; }
+
+  const VulkanGlobalFns& GlobalFns() const { return functions_.global; }
+
+  const VulkanInstanceFns& InstanceFns() const { return functions_.instance; }
+
+  const VulkanDeviceFns& DeviceFns() const { return functions_.device; }
+
+  PFN_vkGetInstanceProcAddr GetInstanceProcAddr() const {
+    return functions_.get_instance_proc_addr;
+  }
+
+  PFN_vkGetDeviceProcAddr GetDeviceProcAddr() const {
+    return functions_.get_device_proc_addr;
   }
 
   bool HasAvailableInstanceExtension(const char* extension_name) const;
@@ -44,6 +66,8 @@ class VulkanContextState {
   bool AreEnabledInstanceExtensionsKnown() const {
     return enabled_instance_extensions_known_;
   }
+
+  bool AreEnabledInstanceLayersKnown() const;
 
   bool AreEnabledDeviceExtensionsKnown() const {
     return enabled_device_extensions_known_;
@@ -59,9 +83,13 @@ class VulkanContextState {
     return available_device_extensions_;
   }
 
+  const std::vector<VkLayerProperties>& GetAvailableInstanceLayers() const;
+
   const std::vector<std::string>& GetEnabledInstanceExtensions() const {
     return enabled_instance_extensions_;
   }
+
+  const std::vector<std::string>& GetEnabledInstanceLayers() const;
 
   const std::vector<std::string>& GetEnabledDeviceExtensions() const {
     return enabled_device_extensions_;
@@ -74,6 +102,7 @@ class VulkanContextState {
   bool InitializeQueues(const GPUContextInfoVK& info);
   bool InitializeDevice(const GPUContextInfoVK& info);
   bool LoadAvailableInstanceExtensions();
+  bool LoadAvailableInstanceLayers();
   bool LoadAvailableDeviceExtensions();
   bool LoadDeviceFns();
   void Reset();
@@ -97,6 +126,7 @@ class VulkanContextState {
   std::vector<std::string> enabled_device_extensions_ = {};
   bool enabled_instance_extensions_known_ = false;
   bool enabled_device_extensions_known_ = false;
+  VulkanDebugRuntimeState debug_runtime_ = {};
 };
 
 }  // namespace skity

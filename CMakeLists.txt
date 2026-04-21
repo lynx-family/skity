@@ -149,7 +149,12 @@ if(${SKITY_LOG})
 endif()
 
 if(${SKITY_VK_BACKEND})
+  find_package(Vulkan REQUIRED)
   target_compile_definitions(skity PUBLIC -DSKITY_VULKAN)
+  target_link_libraries(skity PUBLIC Vulkan::Vulkan)
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(skity PUBLIC -DSKITY_VK_DEBUG_RUNTIME)
+  endif()
 endif()
 
 if(${SKITY_GL_BACKEND})

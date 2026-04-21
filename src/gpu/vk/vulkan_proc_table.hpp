@@ -33,6 +33,9 @@ struct VulkanInstanceFns {
 struct VulkanDeviceFns {
   PFN_vkDestroyDevice vkDestroyDevice = nullptr;
   PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
+  PFN_vkCreateShaderModule vkCreateShaderModule = nullptr;
+  PFN_vkDestroyShaderModule vkDestroyShaderModule = nullptr;
+  PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
 };
 
 struct VulkanFunctionPointers {

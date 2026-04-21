@@ -125,11 +125,19 @@ TEST(VulkanProcLoaderTest, CreateGPUContextWithProcLoader) {
 
   auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
   ASSERT_NE(vk_context, nullptr);
-  ASSERT_NE(vk_context->GetState(), nullptr);
-  EXPECT_NE(vk_context->GetState()->GetInstance(), VK_NULL_HANDLE);
-  EXPECT_NE(vk_context->GetState()->GetPhysicalDevice(), VK_NULL_HANDLE);
-  EXPECT_NE(vk_context->GetState()->GetLogicalDevice(), VK_NULL_HANDLE);
-  EXPECT_NE(vk_context->GetState()->GetGraphicsQueue(), VK_NULL_HANDLE);
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+  EXPECT_NE(state->GetInstance(), VK_NULL_HANDLE);
+  EXPECT_NE(state->GetPhysicalDevice(), VK_NULL_HANDLE);
+  EXPECT_NE(state->GetLogicalDevice(), VK_NULL_HANDLE);
+  EXPECT_NE(state->GetGraphicsQueue(), VK_NULL_HANDLE);
+  EXPECT_NE(state->GetInstanceProcAddr(), nullptr);
+  EXPECT_NE(state->GetDeviceProcAddr(), nullptr);
+  EXPECT_NE(state->GlobalFns().vkCreateInstance, nullptr);
+  EXPECT_NE(state->InstanceFns().vkCreateDevice, nullptr);
+  EXPECT_NE(state->DeviceFns().vkGetDeviceQueue, nullptr);
+  EXPECT_EQ(state->Fns().device.vkGetDeviceQueue,
+            state->DeviceFns().vkGetDeviceQueue);
 }
 
 TEST(VulkanProcLoaderTest, CreateGPUContextWithInfo) {
@@ -143,15 +151,17 @@ TEST(VulkanProcLoaderTest, CreateGPUContextWithInfo) {
 
   auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
   ASSERT_NE(vk_context, nullptr);
-  ASSERT_NE(vk_context->GetState(), nullptr);
-  EXPECT_TRUE(vk_context->GetState()->AreEnabledInstanceExtensionsKnown());
-  EXPECT_TRUE(vk_context->GetState()->AreEnabledDeviceExtensionsKnown());
-  EXPECT_EQ(
-      vk_context->GetState()->HasEnabledInstanceExtension("VK_KHR_surface"),
-      vk_context->GetState()->HasAvailableInstanceExtension("VK_KHR_surface"));
-  EXPECT_EQ(
-      vk_context->GetState()->HasEnabledDeviceExtension("VK_KHR_swapchain"),
-      vk_context->GetState()->HasAvailableDeviceExtension("VK_KHR_swapchain"));
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+  EXPECT_TRUE(state->AreEnabledInstanceExtensionsKnown());
+#if defined(SKITY_VK_DEBUG_RUNTIME)
+  EXPECT_TRUE(state->AreEnabledInstanceLayersKnown());
+#endif
+  EXPECT_TRUE(state->AreEnabledDeviceExtensionsKnown());
+  EXPECT_EQ(state->HasEnabledInstanceExtension("VK_KHR_surface"),
+            state->HasAvailableInstanceExtension("VK_KHR_surface"));
+  EXPECT_EQ(state->HasEnabledDeviceExtension("VK_KHR_swapchain"),
+            state->HasAvailableDeviceExtension("VK_KHR_swapchain"));
 }
 
 TEST(VulkanProcLoaderTest, PreserveUserProvidedExtensionInfo) {
@@ -251,13 +261,13 @@ TEST(VulkanProcLoaderTest, PreserveUserProvidedExtensionInfo) {
   ASSERT_NE(context, nullptr);
   auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
   ASSERT_NE(vk_context, nullptr);
-  ASSERT_NE(vk_context->GetState(), nullptr);
-  EXPECT_TRUE(vk_context->GetState()->AreEnabledInstanceExtensionsKnown());
-  EXPECT_TRUE(vk_context->GetState()->HasEnabledInstanceExtension(
-      VK_KHR_SURFACE_EXTENSION_NAME));
-  EXPECT_TRUE(vk_context->GetState()->AreEnabledDeviceExtensionsKnown());
-  EXPECT_EQ(vk_context->GetState()->HasEnabledDeviceExtension(
-                VK_KHR_SWAPCHAIN_EXTENSION_NAME),
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+  EXPECT_TRUE(state->AreEnabledInstanceExtensionsKnown());
+  EXPECT_TRUE(
+      state->HasEnabledInstanceExtension(VK_KHR_SURFACE_EXTENSION_NAME));
+  EXPECT_TRUE(state->AreEnabledDeviceExtensionsKnown());
+  EXPECT_EQ(state->HasEnabledDeviceExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
             !enabled_device_extensions.empty());
 
   device_fns.vkDestroyDevice(device, nullptr);

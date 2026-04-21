@@ -6,9 +6,16 @@
 
 #include <vector>
 
+#include "src/gpu/vk/gpu_device_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
 #include "src/gpu/vk/vulkan_proc_table.hpp"
 #include "src/logging.hpp"
+
+// put VMA_IMPLEMENTATION here
+#ifndef VMA_IMPLEMENTATION
+#define VMA_IMPLEMENTATION
+#endif
+#include <vk_mem_alloc.h>
 
 namespace skity {
 
@@ -154,8 +161,17 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkDestroyDevice"));
   fns->vkGetDeviceQueue = reinterpret_cast<PFN_vkGetDeviceQueue>(
       get_device_proc_addr(device, "vkGetDeviceQueue"));
+  fns->vkCreateShaderModule = reinterpret_cast<PFN_vkCreateShaderModule>(
+      get_device_proc_addr(device, "vkCreateShaderModule"));
+  fns->vkDestroyShaderModule = reinterpret_cast<PFN_vkDestroyShaderModule>(
+      get_device_proc_addr(device, "vkDestroyShaderModule"));
+  fns->vkSetDebugUtilsObjectNameEXT =
+      reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
+          get_device_proc_addr(device, "vkSetDebugUtilsObjectNameEXT"));
 
-  if (fns->vkDestroyDevice == nullptr || fns->vkGetDeviceQueue == nullptr) {
+  if (fns->vkDestroyDevice == nullptr || fns->vkGetDeviceQueue == nullptr ||
+      fns->vkCreateShaderModule == nullptr ||
+      fns->vkDestroyShaderModule == nullptr) {
     LOGE("Failed to load Vulkan device procedures for device: {:p}",
          reinterpret_cast<void*>(device));
     return false;
@@ -247,52 +263,45 @@ bool CreateVkInstance(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
   return true;
 }
 
-GPUContextVK::GPUContextVK(std::unique_ptr<VulkanContextState> state)
-    : state_(std::move(state)) {}
+GPUContextVK::GPUContextVK(std::shared_ptr<VulkanContextState> state)
+    : GPUContextImpl(GPUBackendType::kVulkan), state_(std::move(state)) {}
 
 GPUContextVK::~GPUContextVK() = default;
 
 std::unique_ptr<GPUSurface> GPUContextVK::CreateSurface(
     GPUSurfaceDescriptor* desc) {
+  (void)desc;
   LOGW("GPUContextVK::CreateSurface is not implemented yet");
   return nullptr;
 }
 
-std::shared_ptr<Texture> GPUContextVK::CreateTexture(TextureFormat format,
-                                                     uint32_t width,
-                                                     uint32_t height,
-                                                     AlphaType alpha_type) {
-  LOGW("GPUContextVK::CreateTexture is not implemented yet");
-  return nullptr;
+std::unique_ptr<GPUDevice> GPUContextVK::CreateGPUDevice() {
+  return std::make_unique<GPUDeviceVK>(state_);
 }
 
-std::shared_ptr<Texture> GPUContextVK::CreateTextureWithDesc(
-    const TextureDescriptor* desc) {
-  LOGW("GPUContextVK::CreateTextureWithDesc is not implemented yet");
-  return nullptr;
+std::shared_ptr<GPUTexture> GPUContextVK::OnWrapTexture(
+    GPUBackendTextureInfo* info, ReleaseCallback callback,
+    ReleaseUserData user_data) {
+  (void)info;
+  (void)callback;
+  (void)user_data;
+  LOGW("GPUContextVK::OnWrapTexture is not implemented yet");
+  return {};
 }
 
-std::shared_ptr<Texture> GPUContextVK::WrapTexture(GPUBackendTextureInfo* info,
-                                                   ReleaseCallback callback,
-                                                   ReleaseUserData user_data) {
-  LOGW("GPUContextVK::WrapTexture is not implemented yet");
-  return nullptr;
+std::unique_ptr<GPURenderTarget> GPUContextVK::OnCreateRenderTarget(
+    const GPURenderTargetDescriptor& desc, std::shared_ptr<Texture> texture) {
+  (void)desc;
+  (void)texture;
+  LOGW("GPUContextVK::OnCreateRenderTarget is not implemented yet");
+  return {};
 }
 
-std::unique_ptr<GPURenderTarget> GPUContextVK::CreateRenderTarget(
-    const GPURenderTargetDescriptor& desc) {
-  LOGW("GPUContextVK::CreateRenderTarget is not implemented yet");
-  return nullptr;
-}
-
-std::shared_ptr<Image> GPUContextVK::MakeSnapshot(
-    std::unique_ptr<GPURenderTarget> render_target) {
-  LOGW("GPUContextVK::MakeSnapshot is not implemented yet");
-  return nullptr;
-}
-
-void GPUContextVK::SetResourceCacheLimit(size_t size_in_bytes) {
-  LOGW("GPUContextVK::SetResourceCacheLimit is not implemented yet");
+std::shared_ptr<Data> GPUContextVK::OnReadPixels(
+    const std::shared_ptr<GPUTexture>& texture) const {
+  (void)texture;
+  LOGW("GPUContextVK::OnReadPixels is not implemented yet");
+  return {};
 }
 
 std::unique_ptr<GPUContext> CreateGPUContextVK(const GPUContextInfoVK* info) {
@@ -302,15 +311,18 @@ std::unique_ptr<GPUContext> CreateGPUContextVK(const GPUContextInfoVK* info) {
 
   LOGD("CreateGPUContextVK called with GPUContextInfoVK: {:p}",
        reinterpret_cast<const void*>(info));
-  auto state = std::make_unique<VulkanContextState>();
+  auto state = std::make_shared<VulkanContextState>();
   if (!state->Initialize(*info)) {
     return nullptr;
   }
 
-  LOGW(
-      "CreateGPUContextVK currently returns a minimal Vulkan context shell. "
-      "Rendering APIs are not implemented yet.");
-  return std::make_unique<GPUContextVK>(std::move(state));
+  auto context = std::make_unique<GPUContextVK>(std::move(state));
+  if (!context->Init()) {
+    LOGE("Failed to initialize GPUContextVK device state");
+    return nullptr;
+  }
+
+  return context;
 }
 
 std::unique_ptr<GPUContext> CreateGPUContextVK(
