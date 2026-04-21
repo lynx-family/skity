@@ -8,23 +8,13 @@
 #include <vk_mem_alloc.h>
 
 #include <skity/gpu/gpu_context_vk.hpp>
-#include <string>
 #include <vector>
 
+#include "src/gpu/vk/vulkan_debug_runtime_state.hpp"
+#include "src/gpu/vk/vulkan_pending_submission.hpp"
 #include "src/gpu/vk/vulkan_proc_table.hpp"
 
 namespace skity {
-
-#if defined(SKITY_VK_DEBUG_RUNTIME)
-struct VulkanDebugRuntimeState {
-  std::vector<VkLayerProperties> available_instance_layers = {};
-  std::vector<std::string> enabled_instance_layers = {};
-  bool enabled_instance_layers_known = false;
-  VkDebugUtilsMessengerEXT debug_utils_messenger = VK_NULL_HANDLE;
-};
-#else
-struct VulkanDebugRuntimeState {};
-#endif
 
 class VulkanContextState {
  public:
@@ -41,6 +31,10 @@ class VulkanContextState {
   VkDevice GetLogicalDevice() const { return logical_device_; }
 
   VkQueue GetGraphicsQueue() const { return graphics_queue_; }
+
+  int32_t GetGraphicsQueueFamilyIndex() const {
+    return graphics_queue_family_index_;
+  }
 
   VmaAllocator GetAllocator() const { return allocator_; }
 
@@ -100,6 +94,10 @@ class VulkanContextState {
     return enabled_device_extensions_;
   }
 
+  void EnqueuePendingSubmission(VulkanPendingSubmission submission) const;
+
+  void CollectPendingSubmissions(bool wait_all) const;
+
  private:
   int32_t FindQueueFamilyIndex(VkQueueFlags flags, bool prefer_dedicated) const;
   bool InitializeInstance(const GPUContextInfoVK& info);
@@ -134,6 +132,7 @@ class VulkanContextState {
   bool enabled_instance_extensions_known_ = false;
   bool enabled_device_extensions_known_ = false;
   VulkanDebugRuntimeState debug_runtime_ = {};
+  mutable std::vector<VulkanPendingSubmission> pending_submissions_ = {};
 };
 
 }  // namespace skity

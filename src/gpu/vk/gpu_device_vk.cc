@@ -4,6 +4,8 @@
 
 #include "src/gpu/vk/gpu_device_vk.hpp"
 
+#include "src/gpu/vk/gpu_buffer_vk.hpp"
+#include "src/gpu/vk/gpu_command_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_shader_function_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
 #include "src/logging.hpp"
@@ -69,8 +71,8 @@ GPUDeviceVK::GPUDeviceVK(std::shared_ptr<const VulkanContextState> state)
   }
 
   VkPhysicalDeviceProperties properties = {};
-  state_->InstanceFns().vkGetPhysicalDeviceProperties(state_->GetPhysicalDevice(),
-                                                      &properties);
+  state_->InstanceFns().vkGetPhysicalDeviceProperties(
+      state_->GetPhysicalDevice(), &properties);
   buffer_alignment_ =
       static_cast<uint32_t>(properties.limits.minUniformBufferOffsetAlignment);
   if (buffer_alignment_ == 0) {
@@ -81,9 +83,13 @@ GPUDeviceVK::GPUDeviceVK(std::shared_ptr<const VulkanContextState> state)
 }
 
 std::unique_ptr<GPUBuffer> GPUDeviceVK::CreateBuffer(GPUBufferUsageMask usage) {
-  (void)usage;
-  LOGW("GPUDeviceVK::CreateBuffer is not implemented yet");
-  return {};
+  if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE ||
+      state_->GetAllocator() == nullptr) {
+    LOGE("GPUDeviceVK::CreateBuffer failed: Vulkan device is unavailable");
+    return {};
+  }
+
+  return std::make_unique<GPUBufferVK>(usage, state_);
 }
 
 std::shared_ptr<GPUShaderFunction> GPUDeviceVK::CreateShaderFunction(
@@ -112,8 +118,11 @@ std::unique_ptr<GPURenderPipeline> GPUDeviceVK::ClonePipeline(
 }
 
 std::shared_ptr<GPUCommandBuffer> GPUDeviceVK::CreateCommandBuffer() {
-  LOGW("GPUDeviceVK::CreateCommandBuffer is not implemented yet");
-  return {};
+  auto command_buffer = std::make_shared<GPUCommandBufferVK>(state_);
+  if (!command_buffer->Init()) {
+    return {};
+  }
+  return command_buffer;
 }
 
 std::shared_ptr<GPUSampler> GPUDeviceVK::CreateSampler(
@@ -140,7 +149,8 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceVK::CreateShaderFunctionFromModule(
 
   auto* source = reinterpret_cast<GPUShaderSourceWGX*>(desc.shader_source);
   if (source == nullptr || source->module == nullptr ||
-      source->module->GetProgram() == nullptr || source->entry_point == nullptr) {
+      source->module->GetProgram() == nullptr ||
+      source->entry_point == nullptr) {
     return {};
   }
 
@@ -180,8 +190,7 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceVK::CreateShaderFunctionFromModule(
     return {};
   }
 
-  SetShaderModuleDebugLabel(*state_, shader_module,
-                            desc.label.ToString());
+  SetShaderModuleDebugLabel(*state_, shader_module, desc.label.ToString());
 
   auto function = std::make_shared<GPUShaderFunctionVK>(
       desc.label, desc.stage, source->entry_point, state_, shader_module);

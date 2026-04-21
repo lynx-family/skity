@@ -537,6 +537,78 @@ bool VulkanContextState::Initialize(const GPUContextInfoVK& info) {
   return true;
 }
 
+void VulkanContextState::EnqueuePendingSubmission(
+    VulkanPendingSubmission submission) const {
+  pending_submissions_.emplace_back(std::move(submission));
+}
+
+void VulkanContextState::CollectPendingSubmissions(bool wait_all) const {
+  if (logical_device_ == VK_NULL_HANDLE ||
+      functions_.device.vkDestroyFence == nullptr ||
+      functions_.device.vkDestroyCommandPool == nullptr) {
+    return;
+  }
+
+  std::vector<VulkanPendingSubmission> completed_submissions;
+  if (pending_submissions_.empty()) {
+    return;
+  }
+
+  if (wait_all) {
+    std::vector<VkFence> fences;
+    fences.reserve(pending_submissions_.size());
+    for (const auto& submission : pending_submissions_) {
+      if (submission.fence != VK_NULL_HANDLE) {
+        fences.push_back(submission.fence);
+      }
+    }
+
+    if (!fences.empty()) {
+      const VkResult result = functions_.device.vkWaitForFences(
+          logical_device_, static_cast<uint32_t>(fences.size()), fences.data(),
+          VK_TRUE, UINT64_MAX);
+      if (result != VK_SUCCESS) {
+        LOGW("Failed to wait Vulkan pending submissions: {}",
+             static_cast<int32_t>(result));
+      }
+    }
+
+    completed_submissions = std::move(pending_submissions_);
+    pending_submissions_.clear();
+  } else {
+    auto it = pending_submissions_.begin();
+    while (it != pending_submissions_.end()) {
+      const VkResult result =
+          functions_.device.vkGetFenceStatus(logical_device_, it->fence);
+      if (result == VK_SUCCESS) {
+        completed_submissions.emplace_back(std::move(*it));
+        it = pending_submissions_.erase(it);
+        continue;
+      }
+
+      if (result != VK_NOT_READY) {
+        LOGW("Failed to query Vulkan fence status: {}",
+             static_cast<int32_t>(result));
+      }
+      ++it;
+    }
+  }
+
+  for (auto& submission : completed_submissions) {
+    if (submission.fence != VK_NULL_HANDLE) {
+      functions_.device.vkDestroyFence(logical_device_, submission.fence,
+                                       nullptr);
+      submission.fence = VK_NULL_HANDLE;
+    }
+
+    if (submission.command_pool != VK_NULL_HANDLE) {
+      functions_.device.vkDestroyCommandPool(logical_device_,
+                                             submission.command_pool, nullptr);
+      submission.command_pool = VK_NULL_HANDLE;
+    }
+  }
+}
+
 bool VulkanContextState::HasAvailableInstanceExtension(
     const char* extension_name) const {
   return ContainsExtension(available_instance_extensions_, extension_name);
@@ -1133,6 +1205,8 @@ void VulkanContextState::Reset() {
     debug_runtime_.debug_utils_messenger = VK_NULL_HANDLE;
   }
 #endif
+
+  CollectPendingSubmissions(true);
 
   if (allocator_ != nullptr) {
     LOGD("Destroying VMA allocator: {:p}", reinterpret_cast<void*>(allocator_));
