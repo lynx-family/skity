@@ -15,6 +15,12 @@
 #ifndef VMA_IMPLEMENTATION
 #define VMA_IMPLEMENTATION
 #endif
+#ifndef VMA_STATIC_VULKAN_FUNCTIONS
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#endif
+#ifndef VMA_DYNAMIC_VULKAN_FUNCTIONS
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#endif
 #include <vk_mem_alloc.h>
 
 namespace skity {
@@ -134,6 +140,14 @@ bool LoadVulkanInstanceFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
       get_instance_proc_addr(instance, "vkCreateDevice"));
   fns->vkGetDeviceProcAddr = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
       get_instance_proc_addr(instance, "vkGetDeviceProcAddr"));
+#if defined(SKITY_VK_DEBUG_RUNTIME)
+  fns->vkCreateDebugUtilsMessengerEXT =
+      reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+          get_instance_proc_addr(instance, "vkCreateDebugUtilsMessengerEXT"));
+  fns->vkDestroyDebugUtilsMessengerEXT =
+      reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+          get_instance_proc_addr(instance, "vkDestroyDebugUtilsMessengerEXT"));
+#endif
 
   if (fns->vkDestroyInstance == nullptr ||
       fns->vkEnumeratePhysicalDevices == nullptr ||

@@ -5,6 +5,8 @@
 #ifndef SRC_GPU_VK_VULKAN_CONTEXT_STATE_HPP
 #define SRC_GPU_VK_VULKAN_CONTEXT_STATE_HPP
 
+#include <vk_mem_alloc.h>
+
 #include <skity/gpu/gpu_context_vk.hpp>
 #include <string>
 #include <vector>
@@ -18,6 +20,7 @@ struct VulkanDebugRuntimeState {
   std::vector<VkLayerProperties> available_instance_layers = {};
   std::vector<std::string> enabled_instance_layers = {};
   bool enabled_instance_layers_known = false;
+  VkDebugUtilsMessengerEXT debug_utils_messenger = VK_NULL_HANDLE;
 };
 #else
 struct VulkanDebugRuntimeState {};
@@ -38,6 +41,8 @@ class VulkanContextState {
   VkDevice GetLogicalDevice() const { return logical_device_; }
 
   VkQueue GetGraphicsQueue() const { return graphics_queue_; }
+
+  VmaAllocator GetAllocator() const { return allocator_; }
 
   const VulkanFunctionPointers& Fns() const { return functions_; }
 
@@ -114,6 +119,8 @@ class VulkanContextState {
   VkQueue graphics_queue_ = VK_NULL_HANDLE;
   VkQueue compute_queue_ = VK_NULL_HANDLE;
   VkQueue transfer_queue_ = VK_NULL_HANDLE;
+  VmaAllocator allocator_ = nullptr;
+  uint32_t api_version_ = VK_API_VERSION_1_0;
   int32_t graphics_queue_family_index_ = -1;
   int32_t compute_queue_family_index_ = -1;
   int32_t transfer_queue_family_index_ = -1;

@@ -5,15 +5,26 @@
 #include <gtest/gtest.h>
 #include <vulkan/vulkan.h>
 
+#include <memory>
 #include <skity/gpu/gpu_context_vk.hpp>
 #include <string>
 #include <vector>
 
+#include "src/gpu/gpu_context_impl.hpp"
+#include "src/gpu/gpu_shader_module.hpp"
 #include "src/gpu/vk/gpu_context_impl_vk.hpp"
+#include "src/gpu/vk/gpu_shader_function_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
 #include "src/gpu/vk/vulkan_proc_table.hpp"
 
 namespace {
+
+constexpr char kSimpleVertexWGSL[] = R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)";
 
 int32_t FindGraphicsQueueFamilyIndex(
     PFN_vkGetPhysicalDeviceQueueFamilyProperties
@@ -131,6 +142,7 @@ TEST(VulkanProcLoaderTest, CreateGPUContextWithProcLoader) {
   EXPECT_NE(state->GetPhysicalDevice(), VK_NULL_HANDLE);
   EXPECT_NE(state->GetLogicalDevice(), VK_NULL_HANDLE);
   EXPECT_NE(state->GetGraphicsQueue(), VK_NULL_HANDLE);
+  EXPECT_NE(state->GetAllocator(), nullptr);
   EXPECT_NE(state->GetInstanceProcAddr(), nullptr);
   EXPECT_NE(state->GetDeviceProcAddr(), nullptr);
   EXPECT_NE(state->GlobalFns().vkCreateInstance, nullptr);
@@ -158,6 +170,7 @@ TEST(VulkanProcLoaderTest, CreateGPUContextWithInfo) {
   EXPECT_TRUE(state->AreEnabledInstanceLayersKnown());
 #endif
   EXPECT_TRUE(state->AreEnabledDeviceExtensionsKnown());
+  EXPECT_NE(state->GetAllocator(), nullptr);
   EXPECT_EQ(state->HasEnabledInstanceExtension("VK_KHR_surface"),
             state->HasAvailableInstanceExtension("VK_KHR_surface"));
   EXPECT_EQ(state->HasEnabledDeviceExtension("VK_KHR_swapchain"),
@@ -272,6 +285,111 @@ TEST(VulkanProcLoaderTest, PreserveUserProvidedExtensionInfo) {
 
   device_fns.vkDestroyDevice(device, nullptr);
   functions.instance.vkDestroyInstance(instance, nullptr);
+}
+
+TEST(VulkanShaderFunctionVKTest, CreateShaderFunctionFromWGXModule) {
+  auto context = skity::CreateGPUContextVK(vkGetInstanceProcAddr);
+  ASSERT_NE(context, nullptr);
+
+  auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
+  ASSERT_NE(vk_context, nullptr);
+
+  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
+  ASSERT_NE(context_impl, nullptr);
+  auto* device = context_impl->GetGPUDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUShaderModuleDescriptor module_desc = {};
+  module_desc.label = skity::GPULabel("vk_shader_module");
+  module_desc.source = kSimpleVertexWGSL;
+  auto module = skity::GPUShaderModule::Create(module_desc);
+  ASSERT_NE(module, nullptr);
+
+  skity::GPUShaderSourceWGX source = {};
+  source.module = module;
+  source.entry_point = "vs_main";
+
+  skity::GPUShaderFunctionDescriptor function_desc = {};
+  function_desc.label = skity::GPULabel("vk_shader_function");
+  function_desc.stage = skity::GPUShaderStage::kVertex;
+  function_desc.source_type = skity::GPUShaderSourceType::kWGX;
+  function_desc.shader_source = &source;
+
+  auto function = device->CreateShaderFunction(function_desc);
+  ASSERT_NE(function, nullptr);
+  EXPECT_TRUE(function->IsValid());
+  EXPECT_EQ(function->GetLabel(), "vk_shader_function");
+
+  auto vk_function =
+      std::static_pointer_cast<skity::GPUShaderFunctionVK>(function);
+  ASSERT_NE(vk_function, nullptr);
+  EXPECT_EQ(vk_function->GetStage(), skity::GPUShaderStage::kVertex);
+  EXPECT_EQ(vk_function->GetEntryPoint(), "vs_main");
+  EXPECT_NE(vk_function->GetShaderModule(), VK_NULL_HANDLE);
+}
+
+TEST(VulkanShaderFunctionVKTest,
+     FailToCreateShaderFunctionForMissingEntryPoint) {
+  auto context = skity::CreateGPUContextVK(vkGetInstanceProcAddr);
+  ASSERT_NE(context, nullptr);
+
+  auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
+  ASSERT_NE(vk_context, nullptr);
+
+  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
+  ASSERT_NE(context_impl, nullptr);
+  auto* device = context_impl->GetGPUDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUShaderModuleDescriptor module_desc = {};
+  module_desc.label = skity::GPULabel("vk_shader_module");
+  module_desc.source = kSimpleVertexWGSL;
+  auto module = skity::GPUShaderModule::Create(module_desc);
+  ASSERT_NE(module, nullptr);
+
+  skity::GPUShaderSourceWGX source = {};
+  source.module = module;
+  source.entry_point = "missing_main";
+
+  std::string error_message;
+  skity::GPUShaderFunctionDescriptor function_desc = {};
+  function_desc.label = skity::GPULabel("vk_shader_function");
+  function_desc.stage = skity::GPUShaderStage::kVertex;
+  function_desc.source_type = skity::GPUShaderSourceType::kWGX;
+  function_desc.shader_source = &source;
+  function_desc.error_callback = [&error_message](char const* message) {
+    error_message = message != nullptr ? message : "";
+  };
+
+  auto function = device->CreateShaderFunction(function_desc);
+  EXPECT_EQ(function, nullptr);
+  EXPECT_EQ(error_message, "WGX translate to SPIR-V failed");
+}
+
+TEST(VulkanShaderFunctionVKTest, RejectRawShaderSource) {
+  auto context = skity::CreateGPUContextVK(vkGetInstanceProcAddr);
+  ASSERT_NE(context, nullptr);
+
+  auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
+  ASSERT_NE(vk_context, nullptr);
+
+  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
+  ASSERT_NE(context_impl, nullptr);
+  auto* device = context_impl->GetGPUDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUShaderSourceRaw source = {};
+  source.source = "void main() {}";
+  source.entry_point = "main";
+
+  skity::GPUShaderFunctionDescriptor function_desc = {};
+  function_desc.label = skity::GPULabel("vk_raw_shader");
+  function_desc.stage = skity::GPUShaderStage::kVertex;
+  function_desc.source_type = skity::GPUShaderSourceType::kRaw;
+  function_desc.shader_source = &source;
+
+  auto function = device->CreateShaderFunction(function_desc);
+  EXPECT_EQ(function, nullptr);
 }
 
 }  // namespace

@@ -133,6 +133,7 @@ if (${SKITY_VK_BACKEND})
     target_compile_definitions(skity_unit_test PRIVATE -DWGX_SPIRV_DUMP_DEFAULT_DIR="${CMAKE_BINARY_DIR}")
     target_include_directories(skity_unit_test PRIVATE
         ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include
+        ${CMAKE_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include
     )
     target_link_libraries(skity_unit_test PRIVATE
         SPIRV-Headers::SPIRV-Headers
