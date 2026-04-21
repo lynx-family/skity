@@ -141,6 +141,23 @@ struct GPUContextInfoVK {
    * If -1, the engine will use the first transfer queue family index.
    */
   int32_t transfer_queue_family_index = -1;
+
+  /**
+   * Enable Vulkan debug runtime features for engine-created instances.
+   *
+   * When enabled in a Debug build, Skity will try to enable
+   * `VK_EXT_debug_utils` and `VK_LAYER_KHRONOS_validation` independently.
+   *
+   * If the validation layer is unavailable but `VK_EXT_debug_utils` is
+   * available, the engine will still enable `VK_EXT_debug_utils` so debug
+   * labels and related utilities can still be used.
+   *
+   * In non-Debug builds this hint is compiled out and has no effect.
+   *
+   * This flag is ignored for user provided Vulkan instances because those
+   * layers and extensions must already be chosen during instance creation.
+   */
+  bool enable_debug_runtime = false;
 };
 
 /**
