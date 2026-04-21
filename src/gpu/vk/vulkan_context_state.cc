@@ -4,6 +4,8 @@
 
 #include "src/gpu/vk/vulkan_context_state.hpp"
 
+#include <vk_mem_alloc.h>
+
 #include <array>
 #include <cstdlib>
 #include <set>
@@ -49,6 +51,10 @@ bool IsApiVersionGreater(uint32_t lhs, uint32_t rhs) {
   }
 
   return VK_API_VERSION_VARIANT(lhs) > VK_API_VERSION_VARIANT(rhs);
+}
+
+uint32_t MinApiVersion(uint32_t lhs, uint32_t rhs) {
+  return IsApiVersionGreater(lhs, rhs) ? rhs : lhs;
 }
 
 const char* VulkanVendorName(uint32_t vendor_id) {
@@ -384,6 +390,72 @@ void MarkDebugRuntimeKnownAndLog(VulkanDebugRuntimeState* debug_runtime) {
   LogEnabledLayers(debug_runtime->enabled_instance_layers);
 }
 
+VkBool32 VKAPI_CALL VulkanDebugUtilsMessengerCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+    VkDebugUtilsMessageTypeFlagsEXT message_types,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+    void* user_data) {
+  (void)user_data;
+
+  const char* message =
+      callback_data != nullptr && callback_data->pMessage != nullptr
+          ? callback_data->pMessage
+          : "Unknown Vulkan validation message";
+
+  const bool is_validation =
+      (message_types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) != 0;
+  const bool is_performance =
+      (message_types & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) != 0;
+
+  if ((message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0) {
+    LOGE("Vulkan validation{}{}: {}", is_validation ? "" : " message",
+         is_performance ? " [performance]" : "", message);
+  } else if ((message_severity &
+              VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != 0) {
+    LOGW("Vulkan validation{}{}: {}", is_validation ? "" : " message",
+         is_performance ? " [performance]" : "", message);
+  } else {
+    LOGD("Vulkan validation{}{}: {}", is_validation ? "" : " message",
+         is_performance ? " [performance]" : "", message);
+  }
+
+  return VK_FALSE;
+}
+
+void TryCreateDebugUtilsMessenger(VkInstance instance,
+                                  const VulkanInstanceFns& instance_fns,
+                                  VulkanDebugRuntimeState* debug_runtime) {
+  if (instance == VK_NULL_HANDLE || debug_runtime == nullptr ||
+      debug_runtime->debug_utils_messenger != VK_NULL_HANDLE ||
+      instance_fns.vkCreateDebugUtilsMessengerEXT == nullptr) {
+    return;
+  }
+
+  VkDebugUtilsMessengerCreateInfoEXT create_info = {};
+  create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+  create_info.messageSeverity =
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+  create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+  create_info.pfnUserCallback = VulkanDebugUtilsMessengerCallback;
+
+  const VkResult result = instance_fns.vkCreateDebugUtilsMessengerEXT(
+      instance, &create_info, nullptr, &debug_runtime->debug_utils_messenger);
+  if (result != VK_SUCCESS) {
+    LOGW("Failed to create Vulkan debug utils messenger: {}",
+         static_cast<int32_t>(result));
+    debug_runtime->debug_utils_messenger = VK_NULL_HANDLE;
+    return;
+  }
+
+  LOGD("Created Vulkan debug utils messenger: {:p}",
+       reinterpret_cast<void*>(debug_runtime->debug_utils_messenger));
+}
+
 }  // namespace
 
 #else
@@ -538,6 +610,8 @@ bool VulkanContextState::InitializeInstance(const GPUContextInfoVK& info) {
     return false;
   }
 
+  api_version_ = ResolveInstanceApiVersion(functions_.global);
+
   if (info.instance != VK_NULL_HANDLE) {
     instance_ = info.instance;
     LOGD("Using user provided Vulkan instance: {:p}",
@@ -622,8 +696,7 @@ bool VulkanContextState::InitializeInstance(const GPUContextInfoVK& info) {
     auto enabled_extension_ptrs = BuildNamePtrs(enabled_instance_extensions_);
     std::vector<const char*> enabled_layer_ptrs;
 
-    const uint32_t target_version =
-        ResolveInstanceApiVersion(functions_.global);
+    const uint32_t target_version = api_version_;
     if (!IsAtLeastVulkan11(target_version)) {
       LOGE("Vulkan 1.1 is required, but only {}.{} is available",
            VK_API_VERSION_MAJOR(target_version),
@@ -659,6 +732,10 @@ bool VulkanContextState::InitializeInstance(const GPUContextInfoVK& info) {
     LOGD("Created owned Vulkan instance: {:p}",
          reinterpret_cast<void*>(instance_));
     enabled_instance_extensions_known_ = true;
+    if (HasEnabledInstanceExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+      TryCreateDebugUtilsMessenger(instance_, functions_.instance,
+                                   &debug_runtime_);
+    }
     MarkDebugRuntimeKnownAndLog(&debug_runtime_);
     LogEnabledExtensions("instance", enabled_instance_extensions_);
   }
@@ -673,6 +750,7 @@ bool VulkanContextState::InitializePhysicalDevice(
     VkPhysicalDeviceProperties properties = {};
     functions_.instance.vkGetPhysicalDeviceProperties(physical_device_,
                                                       &properties);
+    api_version_ = MinApiVersion(api_version_, properties.apiVersion);
     LOGD("Using user provided Vulkan physical device: {:p}",
          reinterpret_cast<void*>(physical_device_));
     LOGD("User physical device API version: {}.{}.{}",
@@ -726,6 +804,7 @@ bool VulkanContextState::InitializePhysicalDevice(
         VK_API_VERSION_MAJOR(selected_api_version),
         VK_API_VERSION_MINOR(selected_api_version),
         VK_API_VERSION_PATCH(selected_api_version));
+    api_version_ = MinApiVersion(api_version_, selected_api_version);
   }
 
   if (physical_device_ == VK_NULL_HANDLE) {
@@ -1017,10 +1096,50 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
         VK_API_VERSION_PATCH(properties.apiVersion));
   }
 
+  VmaVulkanFunctions vulkan_functions = {};
+  vulkan_functions.vkGetInstanceProcAddr = functions_.get_instance_proc_addr;
+  vulkan_functions.vkGetDeviceProcAddr = functions_.get_device_proc_addr;
+
+  VmaAllocatorCreateInfo allocator_info = {};
+  allocator_info.instance = instance_;
+  allocator_info.physicalDevice = physical_device_;
+  allocator_info.device = logical_device_;
+  allocator_info.pVulkanFunctions = &vulkan_functions;
+  allocator_info.vulkanApiVersion = api_version_;
+
+  const VkResult allocator_result =
+      vmaCreateAllocator(&allocator_info, &allocator_);
+  if (allocator_result != VK_SUCCESS || allocator_ == nullptr) {
+    LOGE("Failed to create VMA allocator: result={}",
+         static_cast<int32_t>(allocator_result));
+    allocator_ = nullptr;
+    return false;
+  }
+
+  LOGD("Created VMA allocator: {:p}", reinterpret_cast<void*>(allocator_));
+
   return graphics_queue_ != VK_NULL_HANDLE;
 }
 
 void VulkanContextState::Reset() {
+#if defined(SKITY_VK_DEBUG_RUNTIME)
+  if (debug_runtime_.debug_utils_messenger != VK_NULL_HANDLE &&
+      instance_ != VK_NULL_HANDLE &&
+      functions_.instance.vkDestroyDebugUtilsMessengerEXT != nullptr) {
+    LOGD("Destroying Vulkan debug utils messenger: {:p}",
+         reinterpret_cast<void*>(debug_runtime_.debug_utils_messenger));
+    functions_.instance.vkDestroyDebugUtilsMessengerEXT(
+        instance_, debug_runtime_.debug_utils_messenger, nullptr);
+    debug_runtime_.debug_utils_messenger = VK_NULL_HANDLE;
+  }
+#endif
+
+  if (allocator_ != nullptr) {
+    LOGD("Destroying VMA allocator: {:p}", reinterpret_cast<void*>(allocator_));
+    vmaDestroyAllocator(allocator_);
+    allocator_ = nullptr;
+  }
+
   if (own_device_ && logical_device_ != VK_NULL_HANDLE &&
       functions_.device.vkDestroyDevice != nullptr) {
     LOGD("Destroying owned Vulkan logical device: {:p}",
@@ -1050,6 +1169,8 @@ void VulkanContextState::Reset() {
   graphics_queue_ = VK_NULL_HANDLE;
   compute_queue_ = VK_NULL_HANDLE;
   transfer_queue_ = VK_NULL_HANDLE;
+  allocator_ = nullptr;
+  api_version_ = VK_API_VERSION_1_0;
   graphics_queue_family_index_ = -1;
   compute_queue_family_index_ = -1;
   transfer_queue_family_index_ = -1;

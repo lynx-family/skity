@@ -28,6 +28,10 @@ struct VulkanInstanceFns {
       vkGetPhysicalDeviceQueueFamilyProperties = nullptr;
   PFN_vkCreateDevice vkCreateDevice = nullptr;
   PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
+#if defined(SKITY_VK_DEBUG_RUNTIME)
+  PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT = nullptr;
+  PFN_vkDestroyDebugUtilsMessengerEXT vkDestroyDebugUtilsMessengerEXT = nullptr;
+#endif
 };
 
 struct VulkanDeviceFns {
