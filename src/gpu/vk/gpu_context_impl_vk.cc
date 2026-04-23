@@ -28,6 +28,19 @@ namespace skity {
 namespace {
 
 template <typename Proc>
+Proc LoadInstanceProcByName(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
+                            VkInstance instance, const char* core_name,
+                            const char* extension_name = nullptr) {
+  auto proc =
+      reinterpret_cast<Proc>(get_instance_proc_addr(instance, core_name));
+  if (proc == nullptr && extension_name != nullptr) {
+    proc = reinterpret_cast<Proc>(
+        get_instance_proc_addr(instance, extension_name));
+  }
+  return proc;
+}
+
+template <typename Proc>
 Proc LoadDeviceProcByName(PFN_vkGetDeviceProcAddr get_device_proc_addr,
                           VkDevice device, const char* core_name,
                           const char* extension_name = nullptr) {
@@ -139,9 +152,22 @@ bool LoadVulkanInstanceFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
   fns->vkGetPhysicalDeviceProperties =
       reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
           get_instance_proc_addr(instance, "vkGetPhysicalDeviceProperties"));
+  fns->vkGetPhysicalDeviceMemoryProperties =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties>(
+          get_instance_proc_addr(instance,
+                                 "vkGetPhysicalDeviceMemoryProperties"));
+  fns->vkGetPhysicalDeviceImageFormatProperties =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceImageFormatProperties>(
+          get_instance_proc_addr(instance,
+                                 "vkGetPhysicalDeviceImageFormatProperties"));
   fns->vkGetPhysicalDeviceFeatures2 =
       reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
           get_instance_proc_addr(instance, "vkGetPhysicalDeviceFeatures2"));
+  fns->vkGetPhysicalDeviceMemoryProperties2KHR =
+      LoadInstanceProcByName<PFN_vkGetPhysicalDeviceMemoryProperties2KHR>(
+          get_instance_proc_addr, instance,
+          "vkGetPhysicalDeviceMemoryProperties2",
+          "vkGetPhysicalDeviceMemoryProperties2KHR");
   fns->vkEnumerateDeviceExtensionProperties =
       reinterpret_cast<PFN_vkEnumerateDeviceExtensionProperties>(
           get_instance_proc_addr(instance,
@@ -166,6 +192,8 @@ bool LoadVulkanInstanceFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
   if (fns->vkDestroyInstance == nullptr ||
       fns->vkEnumeratePhysicalDevices == nullptr ||
       fns->vkGetPhysicalDeviceProperties == nullptr ||
+      fns->vkGetPhysicalDeviceMemoryProperties == nullptr ||
+      fns->vkGetPhysicalDeviceImageFormatProperties == nullptr ||
       fns->vkGetPhysicalDeviceFeatures2 == nullptr ||
       fns->vkEnumerateDeviceExtensionProperties == nullptr ||
       fns->vkGetPhysicalDeviceQueueFamilyProperties == nullptr ||
@@ -188,6 +216,8 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
 
   fns->vkDestroyDevice = reinterpret_cast<PFN_vkDestroyDevice>(
       get_device_proc_addr(device, "vkDestroyDevice"));
+  fns->vkDeviceWaitIdle = reinterpret_cast<PFN_vkDeviceWaitIdle>(
+      get_device_proc_addr(device, "vkDeviceWaitIdle"));
   fns->vkGetDeviceQueue = reinterpret_cast<PFN_vkGetDeviceQueue>(
       get_device_proc_addr(device, "vkGetDeviceQueue"));
   fns->vkQueueSubmit = reinterpret_cast<PFN_vkQueueSubmit>(
@@ -213,6 +243,61 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkGetFenceStatus"));
   fns->vkWaitForFences = reinterpret_cast<PFN_vkWaitForFences>(
       get_device_proc_addr(device, "vkWaitForFences"));
+  fns->vkAllocateMemory = reinterpret_cast<PFN_vkAllocateMemory>(
+      get_device_proc_addr(device, "vkAllocateMemory"));
+  fns->vkFreeMemory = reinterpret_cast<PFN_vkFreeMemory>(
+      get_device_proc_addr(device, "vkFreeMemory"));
+  fns->vkMapMemory = reinterpret_cast<PFN_vkMapMemory>(
+      get_device_proc_addr(device, "vkMapMemory"));
+  fns->vkUnmapMemory = reinterpret_cast<PFN_vkUnmapMemory>(
+      get_device_proc_addr(device, "vkUnmapMemory"));
+  fns->vkFlushMappedMemoryRanges =
+      reinterpret_cast<PFN_vkFlushMappedMemoryRanges>(
+          get_device_proc_addr(device, "vkFlushMappedMemoryRanges"));
+  fns->vkInvalidateMappedMemoryRanges =
+      reinterpret_cast<PFN_vkInvalidateMappedMemoryRanges>(
+          get_device_proc_addr(device, "vkInvalidateMappedMemoryRanges"));
+  fns->vkBindBufferMemory = reinterpret_cast<PFN_vkBindBufferMemory>(
+      get_device_proc_addr(device, "vkBindBufferMemory"));
+  fns->vkBindImageMemory = reinterpret_cast<PFN_vkBindImageMemory>(
+      get_device_proc_addr(device, "vkBindImageMemory"));
+  fns->vkGetBufferMemoryRequirements =
+      reinterpret_cast<PFN_vkGetBufferMemoryRequirements>(
+          get_device_proc_addr(device, "vkGetBufferMemoryRequirements"));
+  fns->vkGetImageMemoryRequirements =
+      reinterpret_cast<PFN_vkGetImageMemoryRequirements>(
+          get_device_proc_addr(device, "vkGetImageMemoryRequirements"));
+  fns->vkCreateBuffer = reinterpret_cast<PFN_vkCreateBuffer>(
+      get_device_proc_addr(device, "vkCreateBuffer"));
+  fns->vkDestroyBuffer = reinterpret_cast<PFN_vkDestroyBuffer>(
+      get_device_proc_addr(device, "vkDestroyBuffer"));
+  fns->vkCreateImage = reinterpret_cast<PFN_vkCreateImage>(
+      get_device_proc_addr(device, "vkCreateImage"));
+  fns->vkDestroyImage = reinterpret_cast<PFN_vkDestroyImage>(
+      get_device_proc_addr(device, "vkDestroyImage"));
+  fns->vkGetBufferMemoryRequirements2KHR =
+      LoadDeviceProcByName<PFN_vkGetBufferMemoryRequirements2KHR>(
+          get_device_proc_addr, device, "vkGetBufferMemoryRequirements2",
+          "vkGetBufferMemoryRequirements2KHR");
+  fns->vkGetImageMemoryRequirements2KHR =
+      LoadDeviceProcByName<PFN_vkGetImageMemoryRequirements2KHR>(
+          get_device_proc_addr, device, "vkGetImageMemoryRequirements2",
+          "vkGetImageMemoryRequirements2KHR");
+  fns->vkBindBufferMemory2KHR =
+      LoadDeviceProcByName<PFN_vkBindBufferMemory2KHR>(
+          get_device_proc_addr, device, "vkBindBufferMemory2",
+          "vkBindBufferMemory2KHR");
+  fns->vkBindImageMemory2KHR = LoadDeviceProcByName<PFN_vkBindImageMemory2KHR>(
+      get_device_proc_addr, device, "vkBindImageMemory2",
+      "vkBindImageMemory2KHR");
+  fns->vkGetDeviceBufferMemoryRequirements =
+      LoadDeviceProcByName<PFN_vkGetDeviceBufferMemoryRequirementsKHR>(
+          get_device_proc_addr, device, "vkGetDeviceBufferMemoryRequirements",
+          "vkGetDeviceBufferMemoryRequirementsKHR");
+  fns->vkGetDeviceImageMemoryRequirements =
+      LoadDeviceProcByName<PFN_vkGetDeviceImageMemoryRequirementsKHR>(
+          get_device_proc_addr, device, "vkGetDeviceImageMemoryRequirements",
+          "vkGetDeviceImageMemoryRequirementsKHR");
   fns->vkCmdCopyBuffer = reinterpret_cast<PFN_vkCmdCopyBuffer>(
       get_device_proc_addr(device, "vkCmdCopyBuffer"));
   fns->vkCreateFramebuffer = reinterpret_cast<PFN_vkCreateFramebuffer>(
@@ -260,14 +345,24 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
           get_device_proc_addr(device, "vkCmdInsertDebugUtilsLabelEXT"));
 #endif
 
-  if (fns->vkDestroyDevice == nullptr || fns->vkGetDeviceQueue == nullptr ||
-      fns->vkQueueSubmit == nullptr || fns->vkCreateCommandPool == nullptr ||
+  if (fns->vkDestroyDevice == nullptr || fns->vkDeviceWaitIdle == nullptr ||
+      fns->vkGetDeviceQueue == nullptr || fns->vkQueueSubmit == nullptr ||
+      fns->vkCreateCommandPool == nullptr ||
       fns->vkDestroyCommandPool == nullptr ||
       fns->vkAllocateCommandBuffers == nullptr ||
       fns->vkBeginCommandBuffer == nullptr ||
       fns->vkEndCommandBuffer == nullptr || fns->vkCreateFence == nullptr ||
       fns->vkDestroyFence == nullptr || fns->vkGetFenceStatus == nullptr ||
       fns->vkWaitForFences == nullptr || fns->vkCmdCopyBuffer == nullptr ||
+      fns->vkAllocateMemory == nullptr || fns->vkFreeMemory == nullptr ||
+      fns->vkMapMemory == nullptr || fns->vkUnmapMemory == nullptr ||
+      fns->vkFlushMappedMemoryRanges == nullptr ||
+      fns->vkInvalidateMappedMemoryRanges == nullptr ||
+      fns->vkBindBufferMemory == nullptr || fns->vkBindImageMemory == nullptr ||
+      fns->vkGetBufferMemoryRequirements == nullptr ||
+      fns->vkGetImageMemoryRequirements == nullptr ||
+      fns->vkCreateBuffer == nullptr || fns->vkDestroyBuffer == nullptr ||
+      fns->vkCreateImage == nullptr || fns->vkDestroyImage == nullptr ||
       fns->vkCreateFramebuffer == nullptr ||
       fns->vkDestroyFramebuffer == nullptr ||
       fns->vkCreateRenderPass == nullptr ||

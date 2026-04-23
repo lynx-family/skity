@@ -49,21 +49,18 @@ VkImageUsageFlags ToVkImageUsage(GPUTextureUsageMask usage) {
     flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   }
 
-  if ((usage &
-       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding)) !=
-      0) {
+  if ((usage & static_cast<GPUTextureUsageMask>(
+                   GPUTextureUsage::kTextureBinding)) != 0) {
     flags |= VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   }
 
-  if ((usage &
-       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kStorageBinding)) !=
-      0) {
+  if ((usage & static_cast<GPUTextureUsageMask>(
+                   GPUTextureUsage::kStorageBinding)) != 0) {
     flags |= VK_IMAGE_USAGE_STORAGE_BIT;
   }
 
-  if ((usage &
-       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment)) !=
-      0) {
+  if ((usage & static_cast<GPUTextureUsageMask>(
+                   GPUTextureUsage::kRenderAttachment)) != 0) {
     flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
   }
@@ -86,9 +83,8 @@ VkImageAspectFlags GetImageAspectMask(GPUTextureFormat format) {
 
 VkImageUsageFlags SanitizeImageUsage(GPUTextureFormat format,
                                      VkImageUsageFlags usage) {
-  const bool is_depth_stencil =
-      format == GPUTextureFormat::kStencil8 ||
-      format == GPUTextureFormat::kDepth24Stencil8;
+  const bool is_depth_stencil = format == GPUTextureFormat::kStencil8 ||
+                                format == GPUTextureFormat::kDepth24Stencil8;
 
   if (is_depth_stencil) {
     usage &= ~VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -100,11 +96,48 @@ VkImageUsageFlags SanitizeImageUsage(GPUTextureFormat format,
   return usage;
 }
 
+bool IsImageFormatSupported(const VulkanContextState& state, VkFormat format,
+                            VkImageUsageFlags usage,
+                            VkSampleCountFlagBits samples) {
+  if (format == VK_FORMAT_UNDEFINED ||
+      state.InstanceFns().vkGetPhysicalDeviceImageFormatProperties == nullptr) {
+    return false;
+  }
+
+  VkImageFormatProperties properties = {};
+  const VkResult result =
+      state.InstanceFns().vkGetPhysicalDeviceImageFormatProperties(
+          state.GetPhysicalDevice(), format, VK_IMAGE_TYPE_2D,
+          VK_IMAGE_TILING_OPTIMAL, usage, 0, &properties);
+  if (result != VK_SUCCESS) {
+    return false;
+  }
+
+  return (properties.sampleCounts & samples) != 0;
+}
+
+VkFormat ResolveVkFormat(const VulkanContextState& state,
+                         GPUTextureFormat texture_format,
+                         VkImageUsageFlags usage,
+                         VkSampleCountFlagBits samples) {
+  const VkFormat preferred = ToVkFormat(texture_format);
+  if (IsImageFormatSupported(state, preferred, usage, samples)) {
+    return preferred;
+  }
+
+  if (texture_format == GPUTextureFormat::kDepth24Stencil8 &&
+      IsImageFormatSupported(state, VK_FORMAT_D32_SFLOAT_S8_UINT, usage,
+                             samples)) {
+    return VK_FORMAT_D32_SFLOAT_S8_UINT;
+  }
+
+  return VK_FORMAT_UNDEFINED;
+}
+
 VkImageLayout ResolvePreferredLayout(const GPUTextureDescriptor& descriptor) {
   const bool render_attachment =
-      (descriptor.usage &
-       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment)) !=
-      0;
+      (descriptor.usage & static_cast<GPUTextureUsageMask>(
+                              GPUTextureUsage::kRenderAttachment)) != 0;
   const bool texture_binding =
       (descriptor.usage &
        static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding)) != 0;
@@ -112,8 +145,7 @@ VkImageLayout ResolvePreferredLayout(const GPUTextureDescriptor& descriptor) {
       (descriptor.usage &
        static_cast<GPUTextureUsageMask>(GPUTextureUsage::kStorageBinding)) != 0;
   const bool multi_use = (render_attachment && texture_binding) ||
-                         storage_binding ||
-                         descriptor.sample_count > 1 ||
+                         storage_binding || descriptor.sample_count > 1 ||
                          descriptor.mip_level_count > 1;
 
   if (multi_use) {
@@ -151,13 +183,14 @@ GPUTextureVK::GPUTextureVK(std::shared_ptr<const VulkanContextState> state,
                            const GPUTextureDescriptor& descriptor,
                            VkImage image, VmaAllocation allocation,
                            VkImageView image_view,
-                           VkImageLayout preferred_layout)
+                           VkImageLayout preferred_layout, VkFormat format)
     : GPUTexture(descriptor),
       state_(std::move(state)),
       image_(image),
       allocation_(allocation),
       image_view_(image_view),
-      preferred_layout_(preferred_layout) {}
+      preferred_layout_(preferred_layout),
+      format_(format) {}
 
 GPUTextureVK::~GPUTextureVK() {
   if (state_ != nullptr && state_->GetLogicalDevice() != VK_NULL_HANDLE &&
@@ -182,8 +215,8 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Create(
     return {};
   }
 
-  const VkFormat format = ToVkFormat(descriptor.format);
-  if (format == VK_FORMAT_UNDEFINED || descriptor.width == 0 ||
+  const VkFormat requested_format = ToVkFormat(descriptor.format);
+  if (requested_format == VK_FORMAT_UNDEFINED || descriptor.width == 0 ||
       descriptor.height == 0) {
     LOGE("Failed to create Vulkan texture: invalid descriptor");
     return {};
@@ -197,10 +230,10 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Create(
   image_info.extent.depth = 1;
   image_info.mipLevels = descriptor.mip_level_count;
   image_info.arrayLayers = 1;
-  image_info.format = format;
   image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
   image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  image_info.samples = static_cast<VkSampleCountFlagBits>(descriptor.sample_count);
+  image_info.samples =
+      static_cast<VkSampleCountFlagBits>(descriptor.sample_count);
   image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   image_info.usage =
       SanitizeImageUsage(descriptor.format, ToVkImageUsage(descriptor.usage));
@@ -210,6 +243,13 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Create(
 
   if (image_info.usage == 0) {
     LOGE("Failed to create Vulkan texture: empty image usage");
+    return {};
+  }
+
+  image_info.format = ResolveVkFormat(*state, descriptor.format,
+                                      image_info.usage, image_info.samples);
+  if (image_info.format == VK_FORMAT_UNDEFINED) {
+    LOGE("Failed to create Vulkan texture: unsupported format");
     return {};
   }
 
@@ -239,7 +279,7 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Create(
   view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   view_info.image = image;
   view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  view_info.format = format;
+  view_info.format = image_info.format;
   view_info.subresourceRange.aspectMask = GetImageAspectMask(descriptor.format);
   view_info.subresourceRange.baseMipLevel = 0;
   view_info.subresourceRange.levelCount = descriptor.mip_level_count;
@@ -256,9 +296,9 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Create(
     return {};
   }
 
-  return std::make_shared<GPUTextureVK>(state, descriptor, image, allocation,
-                                        image_view,
-                                        ResolvePreferredLayout(descriptor));
+  return std::make_shared<GPUTextureVK>(
+      state, descriptor, image, allocation, image_view,
+      ResolvePreferredLayout(descriptor), image_info.format);
 }
 
 size_t GPUTextureVK::GetBytes() const {
@@ -282,7 +322,8 @@ void GPUTextureVK::UploadData(uint32_t offset_x, uint32_t offset_y,
     return;
   }
 
-  auto blit_pass = std::make_shared<GPUBlitPassVK>(state_, command_buffer.get());
+  auto blit_pass =
+      std::make_shared<GPUBlitPassVK>(state_, command_buffer.get());
   blit_pass->UploadTextureData(shared_from_this(), offset_x, offset_y, width,
                                height, data);
   blit_pass->End();
