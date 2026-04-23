@@ -22,7 +22,7 @@ class GPUTextureVK : public GPUTexture,
   GPUTextureVK(std::shared_ptr<const VulkanContextState> state,
                const GPUTextureDescriptor& descriptor, VkImage image,
                VmaAllocation allocation, VkImageView image_view,
-               VkImageLayout preferred_layout);
+               VkImageLayout preferred_layout, VkFormat format);
 
   ~GPUTextureVK() override;
 
@@ -38,6 +38,8 @@ class GPUTextureVK : public GPUTexture,
   VkImage GetImage() const { return image_; }
 
   VkImageView GetImageView() const { return image_view_; }
+
+  VkFormat GetVkFormat() const { return format_; }
 
   VkImageLayout GetPreferredLayout() const { return preferred_layout_; }
 
@@ -59,6 +61,7 @@ class GPUTextureVK : public GPUTexture,
   VkImageView image_view_ = VK_NULL_HANDLE;
   VkImageLayout preferred_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
   VkImageLayout current_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
+  VkFormat format_ = VK_FORMAT_UNDEFINED;
 };
 
 }  // namespace skity

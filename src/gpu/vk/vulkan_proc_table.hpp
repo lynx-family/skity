@@ -22,7 +22,13 @@ struct VulkanInstanceFns {
   PFN_vkDestroyInstance vkDestroyInstance = nullptr;
   PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
   PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = nullptr;
+  PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties =
+      nullptr;
+  PFN_vkGetPhysicalDeviceImageFormatProperties
+      vkGetPhysicalDeviceImageFormatProperties = nullptr;
   PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2 = nullptr;
+  PFN_vkGetPhysicalDeviceMemoryProperties2KHR
+      vkGetPhysicalDeviceMemoryProperties2KHR = nullptr;
   PFN_vkEnumerateDeviceExtensionProperties
       vkEnumerateDeviceExtensionProperties = nullptr;
   PFN_vkGetPhysicalDeviceQueueFamilyProperties
@@ -37,6 +43,7 @@ struct VulkanInstanceFns {
 
 struct VulkanDeviceFns {
   PFN_vkDestroyDevice vkDestroyDevice = nullptr;
+  PFN_vkDeviceWaitIdle vkDeviceWaitIdle = nullptr;
   PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
   PFN_vkQueueSubmit vkQueueSubmit = nullptr;
   PFN_vkQueueSubmit2 vkQueueSubmit2 = nullptr;
@@ -49,6 +56,30 @@ struct VulkanDeviceFns {
   PFN_vkDestroyFence vkDestroyFence = nullptr;
   PFN_vkGetFenceStatus vkGetFenceStatus = nullptr;
   PFN_vkWaitForFences vkWaitForFences = nullptr;
+  PFN_vkAllocateMemory vkAllocateMemory = nullptr;
+  PFN_vkFreeMemory vkFreeMemory = nullptr;
+  PFN_vkMapMemory vkMapMemory = nullptr;
+  PFN_vkUnmapMemory vkUnmapMemory = nullptr;
+  PFN_vkFlushMappedMemoryRanges vkFlushMappedMemoryRanges = nullptr;
+  PFN_vkInvalidateMappedMemoryRanges vkInvalidateMappedMemoryRanges = nullptr;
+  PFN_vkBindBufferMemory vkBindBufferMemory = nullptr;
+  PFN_vkBindImageMemory vkBindImageMemory = nullptr;
+  PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements = nullptr;
+  PFN_vkGetImageMemoryRequirements vkGetImageMemoryRequirements = nullptr;
+  PFN_vkCreateBuffer vkCreateBuffer = nullptr;
+  PFN_vkDestroyBuffer vkDestroyBuffer = nullptr;
+  PFN_vkCreateImage vkCreateImage = nullptr;
+  PFN_vkDestroyImage vkDestroyImage = nullptr;
+  PFN_vkGetBufferMemoryRequirements2KHR vkGetBufferMemoryRequirements2KHR =
+      nullptr;
+  PFN_vkGetImageMemoryRequirements2KHR vkGetImageMemoryRequirements2KHR =
+      nullptr;
+  PFN_vkBindBufferMemory2KHR vkBindBufferMemory2KHR = nullptr;
+  PFN_vkBindImageMemory2KHR vkBindImageMemory2KHR = nullptr;
+  PFN_vkGetDeviceBufferMemoryRequirementsKHR
+      vkGetDeviceBufferMemoryRequirements = nullptr;
+  PFN_vkGetDeviceImageMemoryRequirementsKHR vkGetDeviceImageMemoryRequirements =
+      nullptr;
   PFN_vkCmdCopyBuffer vkCmdCopyBuffer = nullptr;
   PFN_vkCreateFramebuffer vkCreateFramebuffer = nullptr;
   PFN_vkDestroyFramebuffer vkDestroyFramebuffer = nullptr;

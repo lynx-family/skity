@@ -18,6 +18,8 @@ namespace skity {
 
 namespace {
 
+constexpr char kPortabilitySubsetExtensionName[] = "VK_KHR_portability_subset";
+
 uint32_t ResolveInstanceApiVersion(const VulkanGlobalFns& global_fns) {
   if (global_fns.vkEnumerateInstanceVersion == nullptr) {
     return VK_API_VERSION_1_0;
@@ -294,6 +296,8 @@ bool LoadAvailableInstanceLayersImpl(const VulkanGlobalFns& global_fns,
   }
 
   debug_runtime->available_instance_layers.clear();
+  debug_runtime->enabled_instance_layers.clear();
+  debug_runtime->enabled_instance_layers_known = false;
   if (global_fns.vkEnumerateInstanceLayerProperties == nullptr) {
     LOGE("Failed to enumerate Vulkan instance layers: loader is null");
     return false;
@@ -709,7 +713,6 @@ bool VulkanContextState::InitializeInstance(const GPUContextInfoVK& info) {
     }
   } else {
     enabled_instance_extensions_.clear();
-    debug_runtime_ = {};
     TryEnableInstanceExtension(&enabled_instance_extensions_,
                                available_instance_extensions_,
                                VK_KHR_SURFACE_EXTENSION_NAME);
@@ -1081,6 +1084,9 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
       enabled_device_extensions_.emplace_back(
           VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
     }
+    if (HasAvailableDeviceExtension(kPortabilitySubsetExtensionName)) {
+      enabled_device_extensions_.emplace_back(kPortabilitySubsetExtensionName);
+    }
 
     VkPhysicalDeviceFeatures2 physical_device_features = {};
     physical_device_features.sType =
@@ -1266,6 +1272,51 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
   VmaVulkanFunctions vulkan_functions = {};
   vulkan_functions.vkGetInstanceProcAddr = functions_.get_instance_proc_addr;
   vulkan_functions.vkGetDeviceProcAddr = functions_.get_device_proc_addr;
+  vulkan_functions.vkGetPhysicalDeviceProperties =
+      functions_.instance.vkGetPhysicalDeviceProperties;
+  vulkan_functions.vkGetPhysicalDeviceMemoryProperties =
+      functions_.instance.vkGetPhysicalDeviceMemoryProperties;
+  vulkan_functions.vkAllocateMemory = functions_.device.vkAllocateMemory;
+  vulkan_functions.vkFreeMemory = functions_.device.vkFreeMemory;
+  vulkan_functions.vkMapMemory = functions_.device.vkMapMemory;
+  vulkan_functions.vkUnmapMemory = functions_.device.vkUnmapMemory;
+  vulkan_functions.vkFlushMappedMemoryRanges =
+      functions_.device.vkFlushMappedMemoryRanges;
+  vulkan_functions.vkInvalidateMappedMemoryRanges =
+      functions_.device.vkInvalidateMappedMemoryRanges;
+  vulkan_functions.vkBindBufferMemory = functions_.device.vkBindBufferMemory;
+  vulkan_functions.vkBindImageMemory = functions_.device.vkBindImageMemory;
+  vulkan_functions.vkGetBufferMemoryRequirements =
+      functions_.device.vkGetBufferMemoryRequirements;
+  vulkan_functions.vkGetImageMemoryRequirements =
+      functions_.device.vkGetImageMemoryRequirements;
+  vulkan_functions.vkCreateBuffer = functions_.device.vkCreateBuffer;
+  vulkan_functions.vkDestroyBuffer = functions_.device.vkDestroyBuffer;
+  vulkan_functions.vkCreateImage = functions_.device.vkCreateImage;
+  vulkan_functions.vkDestroyImage = functions_.device.vkDestroyImage;
+  vulkan_functions.vkCmdCopyBuffer = functions_.device.vkCmdCopyBuffer;
+#if VMA_DEDICATED_ALLOCATION || VMA_VULKAN_VERSION >= 1001000
+  vulkan_functions.vkGetBufferMemoryRequirements2KHR =
+      functions_.device.vkGetBufferMemoryRequirements2KHR;
+  vulkan_functions.vkGetImageMemoryRequirements2KHR =
+      functions_.device.vkGetImageMemoryRequirements2KHR;
+#endif
+#if VMA_BIND_MEMORY2 || VMA_VULKAN_VERSION >= 1001000
+  vulkan_functions.vkBindBufferMemory2KHR =
+      functions_.device.vkBindBufferMemory2KHR;
+  vulkan_functions.vkBindImageMemory2KHR =
+      functions_.device.vkBindImageMemory2KHR;
+#endif
+#if VMA_MEMORY_BUDGET || VMA_VULKAN_VERSION >= 1001000
+  vulkan_functions.vkGetPhysicalDeviceMemoryProperties2KHR =
+      functions_.instance.vkGetPhysicalDeviceMemoryProperties2KHR;
+#endif
+#if VMA_KHR_MAINTENANCE4 || VMA_VULKAN_VERSION >= 1003000
+  vulkan_functions.vkGetDeviceBufferMemoryRequirements =
+      functions_.device.vkGetDeviceBufferMemoryRequirements;
+  vulkan_functions.vkGetDeviceImageMemoryRequirements =
+      functions_.device.vkGetDeviceImageMemoryRequirements;
+#endif
 
   VmaAllocatorCreateInfo allocator_info = {};
   allocator_info.instance = instance_;

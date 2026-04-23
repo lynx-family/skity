@@ -20,15 +20,6 @@ bool IsDepthStencilFormat(GPUTextureFormat format) {
          format == GPUTextureFormat::kDepth24Stencil8;
 }
 
-bool HasDepthAspect(GPUTextureFormat format) {
-  return format == GPUTextureFormat::kDepth24Stencil8;
-}
-
-bool HasStencilAspect(GPUTextureFormat format) {
-  return format == GPUTextureFormat::kStencil8 ||
-         format == GPUTextureFormat::kDepth24Stencil8;
-}
-
 VkImageAspectFlags GetImageAspectMask(GPUTextureFormat format) {
   switch (format) {
     case GPUTextureFormat::kStencil8:
@@ -84,27 +75,9 @@ VkPipelineStageFlags StageMaskForLayout(VkImageLayout layout) {
   }
 }
 
-VkFormat ToVkFormat(GPUTextureFormat format) {
-  switch (format) {
-    case GPUTextureFormat::kR8Unorm:
-      return VK_FORMAT_R8_UNORM;
-    case GPUTextureFormat::kRGB8Unorm:
-      return VK_FORMAT_R8G8B8_UNORM;
-    case GPUTextureFormat::kRGB565Unorm:
-      return VK_FORMAT_R5G6B5_UNORM_PACK16;
-    case GPUTextureFormat::kRGBA8Unorm:
-      return VK_FORMAT_R8G8B8A8_UNORM;
-    case GPUTextureFormat::kBGRA8Unorm:
-      return VK_FORMAT_B8G8R8A8_UNORM;
-    case GPUTextureFormat::kStencil8:
-      return VK_FORMAT_S8_UINT;
-    case GPUTextureFormat::kDepth24Stencil8:
-      return VK_FORMAT_D24_UNORM_S8_UINT;
-    case GPUTextureFormat::kInvalid:
-      return VK_FORMAT_UNDEFINED;
-  }
-
-  return VK_FORMAT_UNDEFINED;
+bool HasTextureUsage(const GPUTextureDescriptor& descriptor,
+                     GPUTextureUsage usage) {
+  return (descriptor.usage & static_cast<GPUTextureUsageMask>(usage)) != 0;
 }
 
 VkAttachmentLoadOp ToVkLoadOp(GPULoadOp op) {
@@ -131,6 +104,13 @@ VkAttachmentStoreOp ToVkStoreOp(GPUStoreOp op) {
   return VK_ATTACHMENT_STORE_OP_STORE;
 }
 
+VkAttachmentStoreOp ToColorAttachmentStoreOp(bool has_resolve, GPUStoreOp op) {
+  if (has_resolve) {
+    return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  }
+  return ToVkStoreOp(op);
+}
+
 bool TransitionImageLayout(const VulkanContextState& state,
                            VkCommandBuffer command_buffer,
                            GPUTextureVK& texture, VkImageLayout new_layout) {
@@ -149,8 +129,7 @@ bool TransitionImageLayout(const VulkanContextState& state,
   barrier.subresourceRange.aspectMask =
       GetImageAspectMask(texture.GetDescriptor().format);
   barrier.subresourceRange.baseMipLevel = 0;
-  barrier.subresourceRange.levelCount =
-      texture.GetDescriptor().mip_level_count;
+  barrier.subresourceRange.levelCount = texture.GetDescriptor().mip_level_count;
   barrier.subresourceRange.baseArrayLayer = 0;
   barrier.subresourceRange.layerCount = 1;
   barrier.srcAccessMask = AccessMaskForLayout(old_layout);
@@ -169,32 +148,6 @@ struct AttachmentContext {
   VkImageLayout attachment_layout = VK_IMAGE_LAYOUT_UNDEFINED;
   VkImageLayout final_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 };
-
-uint32_t GetRenderPassTargetWidth(const GPURenderPassDescriptor& desc) {
-  if (desc.color_attachment.texture != nullptr) {
-    return desc.color_attachment.texture->GetDescriptor().width;
-  }
-  if (desc.depth_attachment.texture != nullptr) {
-    return desc.depth_attachment.texture->GetDescriptor().width;
-  }
-  if (desc.stencil_attachment.texture != nullptr) {
-    return desc.stencil_attachment.texture->GetDescriptor().width;
-  }
-  return 0;
-}
-
-uint32_t GetRenderPassTargetHeight(const GPURenderPassDescriptor& desc) {
-  if (desc.color_attachment.texture != nullptr) {
-    return desc.color_attachment.texture->GetDescriptor().height;
-  }
-  if (desc.depth_attachment.texture != nullptr) {
-    return desc.depth_attachment.texture->GetDescriptor().height;
-  }
-  if (desc.stencil_attachment.texture != nullptr) {
-    return desc.stencil_attachment.texture->GetDescriptor().height;
-  }
-  return 0;
-}
 
 bool PrepareAttachmentContext(const GPUAttachment& attachment,
                               VkImageLayout attachment_layout,
@@ -218,11 +171,77 @@ bool PrepareAttachmentContext(const GPUAttachment& attachment,
   context->final_layout = texture->GetPreferredLayout();
 
   if (attachment.resolve_texture != nullptr) {
-    auto* resolve_texture = GPUTextureVK::Cast(attachment.resolve_texture.get());
+    auto* resolve_texture =
+        GPUTextureVK::Cast(attachment.resolve_texture.get());
     if (resolve_texture == nullptr || !resolve_texture->IsValid()) {
       return false;
     }
+    if (!HasTextureUsage(resolve_texture->GetDescriptor(),
+                         GPUTextureUsage::kRenderAttachment)) {
+      LOGE("Vulkan resolve texture must use RenderAttachment usage");
+      return false;
+    }
     context->resolve_texture = resolve_texture;
+  }
+
+  return true;
+}
+
+bool PrepareColorAttachment(const GPURenderPassDescriptor& desc,
+                            AttachmentContext* color_context) {
+  if (!PrepareAttachmentContext(desc.color_attachment,
+                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                color_context)) {
+    LOGE("Failed to prepare Vulkan color attachment");
+    return false;
+  }
+
+  return true;
+}
+
+bool PrepareDepthStencilAttachment(const GPURenderPassDescriptor& desc,
+                                   AttachmentContext* depth_stencil_context,
+                                   bool* has_depth, bool* has_stencil) {
+  if (depth_stencil_context == nullptr || has_depth == nullptr ||
+      has_stencil == nullptr) {
+    return false;
+  }
+
+  *has_depth = desc.depth_attachment.texture != nullptr;
+  *has_stencil = desc.stencil_attachment.texture != nullptr;
+
+  if (!*has_depth && !*has_stencil) {
+    return true;
+  }
+
+  if (!*has_stencil) {
+    LOGE("Vulkan render pass requires stencil when depth is attached");
+    return false;
+  }
+
+  if (*has_depth &&
+      desc.depth_attachment.texture != desc.stencil_attachment.texture) {
+    LOGE("Vulkan render pass requires depth and stencil to share one texture");
+    return false;
+  }
+
+  if (!PrepareAttachmentContext(
+          desc.stencil_attachment,
+          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+          depth_stencil_context, true)) {
+    LOGE("Failed to prepare Vulkan depth/stencil attachment");
+    return false;
+  }
+
+  const auto format = depth_stencil_context->texture->GetDescriptor().format;
+  if (*has_depth && format != GPUTextureFormat::kDepth24Stencil8) {
+    LOGE("Vulkan depth attachment must use Depth24Stencil8 format");
+    return false;
+  }
+
+  if (!*has_depth && format != GPUTextureFormat::kStencil8) {
+    LOGE("Vulkan stencil-only attachment must use Stencil8 format");
+    return false;
   }
 
   return true;
@@ -235,74 +254,58 @@ void LogUnsupportedCommandsIfNeeded(const GPURenderPass& pass,
   }
 
   if (label.empty()) {
-    LOGW("GPURenderPassVK draw command encoding is not implemented yet; "
-         "render pass will only begin/end");
+    LOGW(
+        "GPURenderPassVK draw command encoding is not implemented yet; "
+        "render pass will only begin/end");
     return;
   }
 
-  LOGW("GPURenderPassVK draw command encoding is not implemented yet; pass "
-       "'{}' will only begin/end", label);
+  LOGW(
+      "GPURenderPassVK draw command encoding is not implemented yet; pass "
+      "'{}' will only begin/end",
+      label);
 }
 
 bool RecordDynamicRenderingPass(const VulkanContextState& state,
                                 GPUCommandBufferVK& command_buffer,
                                 const GPURenderPass& pass) {
   const auto& desc = pass.GetDescriptor();
-  if (desc.color_attachment.texture == nullptr &&
-      desc.depth_attachment.texture == nullptr &&
-      desc.stencil_attachment.texture == nullptr) {
-    LOGE("Vulkan dynamic rendering requires at least one attachment");
+  if (desc.color_attachment.texture == nullptr) {
+    LOGE("Vulkan dynamic rendering requires a color attachment");
     return false;
   }
 
   AttachmentContext color_context = {};
-  if (desc.color_attachment.texture != nullptr &&
-      !PrepareAttachmentContext(desc.color_attachment,
-                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                &color_context)) {
-    LOGE("Failed to prepare Vulkan color attachment");
+  if (!PrepareColorAttachment(desc, &color_context)) {
     return false;
   }
 
-  AttachmentContext depth_context = {};
-  if (desc.depth_attachment.texture != nullptr &&
-      !PrepareAttachmentContext(desc.depth_attachment,
-                                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                                &depth_context, true)) {
-    LOGE("Failed to prepare Vulkan depth attachment");
+  AttachmentContext depth_stencil_context = {};
+  bool has_depth = false;
+  bool has_stencil = false;
+  if (!PrepareDepthStencilAttachment(desc, &depth_stencil_context, &has_depth,
+                                     &has_stencil)) {
     return false;
   }
 
-  AttachmentContext stencil_context = {};
-  if (desc.stencil_attachment.texture != nullptr &&
-      !PrepareAttachmentContext(
-          desc.stencil_attachment,
-          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, &stencil_context,
-          true)) {
-    LOGE("Failed to prepare Vulkan stencil attachment");
-    return false;
-  }
-
-  if (color_context.texture != nullptr &&
-      !TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
+  if (!TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
                              *color_context.texture,
                              color_context.attachment_layout)) {
     return false;
   }
 
   VkRenderingAttachmentInfo color_info = {};
-  if (color_context.texture != nullptr) {
-    color_info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    color_info.imageView = color_context.texture->GetImageView();
-    color_info.imageLayout = color_context.attachment_layout;
-    color_info.loadOp = ToVkLoadOp(desc.color_attachment.load_op);
-    color_info.storeOp = ToVkStoreOp(desc.color_attachment.store_op);
-    color_info.clearValue.color = {
-        {static_cast<float>(desc.color_attachment.clear_value.r),
-         static_cast<float>(desc.color_attachment.clear_value.g),
-         static_cast<float>(desc.color_attachment.clear_value.b),
-         static_cast<float>(desc.color_attachment.clear_value.a)}};
-  }
+  color_info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+  color_info.imageView = color_context.texture->GetImageView();
+  color_info.imageLayout = color_context.attachment_layout;
+  color_info.loadOp = ToVkLoadOp(desc.color_attachment.load_op);
+  color_info.storeOp = ToColorAttachmentStoreOp(
+      color_context.resolve_texture != nullptr, desc.color_attachment.store_op);
+  color_info.clearValue.color = {
+      {static_cast<float>(desc.color_attachment.clear_value.r),
+       static_cast<float>(desc.color_attachment.clear_value.g),
+       static_cast<float>(desc.color_attachment.clear_value.b),
+       static_cast<float>(desc.color_attachment.clear_value.a)}};
 
   if (color_context.resolve_texture != nullptr) {
     if (!TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
@@ -316,41 +319,35 @@ bool RecordDynamicRenderingPass(const VulkanContextState& state,
     color_info.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   }
 
-  if (depth_context.texture != nullptr &&
+  if (depth_stencil_context.texture != nullptr &&
       !TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
-                             *depth_context.texture,
-                             depth_context.attachment_layout)) {
-    return false;
-  }
-
-  if (stencil_context.texture != nullptr &&
-      stencil_context.texture != depth_context.texture &&
-      !TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
-                             *stencil_context.texture,
-                             stencil_context.attachment_layout)) {
+                             *depth_stencil_context.texture,
+                             depth_stencil_context.attachment_layout)) {
     return false;
   }
 
   VkRenderingAttachmentInfo depth_info = {};
-  if (depth_context.texture != nullptr) {
+  if (has_depth) {
     depth_info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    depth_info.imageView = depth_context.texture->GetImageView();
-    depth_info.imageLayout = depth_context.attachment_layout;
+    depth_info.imageView = depth_stencil_context.texture->GetImageView();
+    depth_info.imageLayout = depth_stencil_context.attachment_layout;
     depth_info.loadOp = ToVkLoadOp(desc.depth_attachment.load_op);
     depth_info.storeOp = ToVkStoreOp(desc.depth_attachment.store_op);
-    depth_info.clearValue.depthStencil.depth = desc.depth_attachment.clear_value;
+    depth_info.clearValue.depthStencil.depth =
+        desc.depth_attachment.clear_value;
     depth_info.clearValue.depthStencil.stencil =
         desc.stencil_attachment.clear_value;
   }
 
   VkRenderingAttachmentInfo stencil_info = {};
-  if (stencil_context.texture != nullptr) {
+  if (has_stencil) {
     stencil_info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    stencil_info.imageView = stencil_context.texture->GetImageView();
-    stencil_info.imageLayout = stencil_context.attachment_layout;
+    stencil_info.imageView = depth_stencil_context.texture->GetImageView();
+    stencil_info.imageLayout = depth_stencil_context.attachment_layout;
     stencil_info.loadOp = ToVkLoadOp(desc.stencil_attachment.load_op);
     stencil_info.storeOp = ToVkStoreOp(desc.stencil_attachment.store_op);
-    stencil_info.clearValue.depthStencil.depth = desc.depth_attachment.clear_value;
+    stencil_info.clearValue.depthStencil.depth =
+        desc.depth_attachment.clear_value;
     stencil_info.clearValue.depthStencil.stencil =
         desc.stencil_attachment.clear_value;
   }
@@ -358,99 +355,62 @@ bool RecordDynamicRenderingPass(const VulkanContextState& state,
   VkRenderingInfo rendering_info = {};
   rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
   rendering_info.renderArea.offset = {0, 0};
-  rendering_info.renderArea.extent = {GetRenderPassTargetWidth(desc),
-                                      GetRenderPassTargetHeight(desc)};
+  rendering_info.renderArea.extent = {desc.GetTargetWidth(),
+                                      desc.GetTargetHeight()};
   rendering_info.layerCount = 1;
-  rendering_info.colorAttachmentCount = color_context.texture != nullptr ? 1 : 0;
-  rendering_info.pColorAttachments =
-      color_context.texture != nullptr ? &color_info : nullptr;
-  rendering_info.pDepthAttachment =
-      depth_context.texture != nullptr ? &depth_info : nullptr;
-  rendering_info.pStencilAttachment =
-      stencil_context.texture != nullptr ? &stencil_info : nullptr;
+  rendering_info.colorAttachmentCount = 1;
+  rendering_info.pColorAttachments = &color_info;
+  rendering_info.pDepthAttachment = has_depth ? &depth_info : nullptr;
+  rendering_info.pStencilAttachment = has_stencil ? &stencil_info : nullptr;
 
   state.DeviceFns().vkCmdBeginRendering(command_buffer.GetCommandBuffer(),
                                         &rendering_info);
   LogUnsupportedCommandsIfNeeded(pass, desc.label);
   state.DeviceFns().vkCmdEndRendering(command_buffer.GetCommandBuffer());
 
-  if (color_context.texture != nullptr) {
-    TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
-                          *color_context.texture, color_context.final_layout);
-  }
+  TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
+                        *color_context.texture, color_context.final_layout);
   if (color_context.resolve_texture != nullptr) {
     TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
                           *color_context.resolve_texture,
                           color_context.resolve_texture->GetPreferredLayout());
   }
-  if (depth_context.texture != nullptr) {
+  if (depth_stencil_context.texture != nullptr) {
     TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
-                          *depth_context.texture, depth_context.final_layout);
-  }
-  if (stencil_context.texture != nullptr &&
-      stencil_context.texture != depth_context.texture) {
-    TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
-                          *stencil_context.texture,
-                          stencil_context.final_layout);
+                          *depth_stencil_context.texture,
+                          depth_stencil_context.final_layout);
   }
 
   const auto color_texture_ref = desc.color_attachment.texture;
   const auto resolve_texture_ref = desc.color_attachment.resolve_texture;
   const auto depth_texture_ref = desc.depth_attachment.texture;
   const auto stencil_texture_ref = desc.stencil_attachment.texture;
-  command_buffer.RecordCleanupAction(
-      [color_texture_ref, resolve_texture_ref, depth_texture_ref,
-       stencil_texture_ref]() {});
+  command_buffer.RecordCleanupAction([color_texture_ref, resolve_texture_ref,
+                                      depth_texture_ref,
+                                      stencil_texture_ref]() {});
 
   return true;
 }
 
-bool RecordLegacyRenderPass(const std::shared_ptr<const VulkanContextState>& state,
-                            GPUCommandBufferVK& command_buffer,
-                            const GPURenderPass& pass) {
+bool RecordLegacyRenderPass(
+    const std::shared_ptr<const VulkanContextState>& state,
+    GPUCommandBufferVK& command_buffer, const GPURenderPass& pass) {
   const auto& desc = pass.GetDescriptor();
-  if (desc.color_attachment.texture == nullptr &&
-      desc.depth_attachment.texture == nullptr &&
-      desc.stencil_attachment.texture == nullptr) {
-    LOGE("Vulkan legacy render pass requires at least one attachment");
+  if (desc.color_attachment.texture == nullptr) {
+    LOGE("Vulkan legacy render pass requires a color attachment");
     return false;
   }
 
   AttachmentContext color_context = {};
-  if (desc.color_attachment.texture != nullptr &&
-      !PrepareAttachmentContext(desc.color_attachment,
-                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                &color_context)) {
-    LOGE("Failed to prepare Vulkan legacy color attachment");
+  if (!PrepareColorAttachment(desc, &color_context)) {
     return false;
   }
 
-  AttachmentContext depth_context = {};
-  if (desc.depth_attachment.texture != nullptr &&
-      !PrepareAttachmentContext(desc.depth_attachment,
-                                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                                &depth_context, true)) {
-    LOGE("Failed to prepare Vulkan legacy depth attachment");
-    return false;
-  }
-
-  AttachmentContext stencil_context = {};
-  if (desc.stencil_attachment.texture != nullptr &&
-      !PrepareAttachmentContext(
-          desc.stencil_attachment,
-          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, &stencil_context,
-          true)) {
-    LOGE("Failed to prepare Vulkan legacy stencil attachment");
-    return false;
-  }
-
-  const bool has_combined_depth_stencil =
-      depth_context.texture != nullptr && stencil_context.texture != nullptr &&
-      depth_context.texture == stencil_context.texture;
-  if (depth_context.texture != nullptr && stencil_context.texture != nullptr &&
-      depth_context.texture != stencil_context.texture) {
-    LOGE("Vulkan legacy render pass does not support separate depth and "
-         "stencil textures yet");
+  AttachmentContext depth_stencil_context = {};
+  bool has_depth = false;
+  bool has_stencil = false;
+  if (!PrepareDepthStencilAttachment(desc, &depth_stencil_context, &has_depth,
+                                     &has_stencil)) {
     return false;
   }
 
@@ -461,43 +421,39 @@ bool RecordLegacyRenderPass(const std::shared_ptr<const VulkanContextState>& sta
   uint32_t clear_value_count = 0;
 
   VkAttachmentReference color_ref = {};
-  const VkAttachmentReference* color_ref_ptr = nullptr;
-  if (color_context.texture != nullptr) {
-    attachment_descs[attachment_count].format =
-        ToVkFormat(color_context.texture->GetDescriptor().format);
-    attachment_descs[attachment_count].samples =
-        static_cast<VkSampleCountFlagBits>(
-            color_context.texture->GetDescriptor().sample_count);
-    attachment_descs[attachment_count].loadOp =
-        ToVkLoadOp(desc.color_attachment.load_op);
-    attachment_descs[attachment_count].storeOp =
-        ToVkStoreOp(desc.color_attachment.store_op);
-    attachment_descs[attachment_count].stencilLoadOp =
-        VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachment_descs[attachment_count].stencilStoreOp =
-        VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachment_descs[attachment_count].initialLayout =
-        color_context.texture->GetCurrentLayout();
-    attachment_descs[attachment_count].finalLayout = color_context.final_layout;
-    attachments[attachment_count] = color_context.texture->GetImageView();
-    clear_values[clear_value_count].color = {
-        {static_cast<float>(desc.color_attachment.clear_value.r),
-         static_cast<float>(desc.color_attachment.clear_value.g),
-         static_cast<float>(desc.color_attachment.clear_value.b),
-         static_cast<float>(desc.color_attachment.clear_value.a)}};
+  attachment_descs[attachment_count].format =
+      color_context.texture->GetVkFormat();
+  attachment_descs[attachment_count].samples =
+      static_cast<VkSampleCountFlagBits>(
+          color_context.texture->GetDescriptor().sample_count);
+  attachment_descs[attachment_count].loadOp =
+      ToVkLoadOp(desc.color_attachment.load_op);
+  attachment_descs[attachment_count].storeOp = ToColorAttachmentStoreOp(
+      color_context.resolve_texture != nullptr, desc.color_attachment.store_op);
+  attachment_descs[attachment_count].stencilLoadOp =
+      VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachment_descs[attachment_count].stencilStoreOp =
+      VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachment_descs[attachment_count].initialLayout =
+      color_context.texture->GetCurrentLayout();
+  attachment_descs[attachment_count].finalLayout = color_context.final_layout;
+  attachments[attachment_count] = color_context.texture->GetImageView();
+  clear_values[clear_value_count].color = {
+      {static_cast<float>(desc.color_attachment.clear_value.r),
+       static_cast<float>(desc.color_attachment.clear_value.g),
+       static_cast<float>(desc.color_attachment.clear_value.b),
+       static_cast<float>(desc.color_attachment.clear_value.a)}};
 
-    color_ref.attachment = attachment_count;
-    color_ref.layout = color_context.attachment_layout;
-    color_ref_ptr = &color_ref;
-    ++attachment_count;
-    ++clear_value_count;
-  }
+  color_ref.attachment = attachment_count;
+  color_ref.layout = color_context.attachment_layout;
+  ++attachment_count;
+  ++clear_value_count;
 
   VkAttachmentReference resolve_ref = {};
   const VkAttachmentReference* resolve_ref_ptr = nullptr;
   if (color_context.resolve_texture != nullptr) {
     attachment_descs[attachment_count].format =
-        ToVkFormat(color_context.resolve_texture->GetDescriptor().format);
+        color_context.resolve_texture->GetVkFormat();
     attachment_descs[attachment_count].samples = VK_SAMPLE_COUNT_1_BIT;
     attachment_descs[attachment_count].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachment_descs[attachment_count].storeOp =
@@ -510,7 +466,8 @@ bool RecordLegacyRenderPass(const std::shared_ptr<const VulkanContextState>& sta
         color_context.resolve_texture->GetCurrentLayout();
     attachment_descs[attachment_count].finalLayout =
         color_context.resolve_texture->GetPreferredLayout();
-    attachments[attachment_count] = color_context.resolve_texture->GetImageView();
+    attachments[attachment_count] =
+        color_context.resolve_texture->GetImageView();
     resolve_ref.attachment = attachment_count;
     resolve_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     resolve_ref_ptr = &resolve_ref;
@@ -520,35 +477,28 @@ bool RecordLegacyRenderPass(const std::shared_ptr<const VulkanContextState>& sta
 
   VkAttachmentReference depth_stencil_ref = {};
   const VkAttachmentReference* depth_stencil_ref_ptr = nullptr;
-  if (depth_context.texture != nullptr || stencil_context.texture != nullptr) {
-    auto* depth_stencil_texture =
-        depth_context.texture != nullptr ? depth_context.texture
-                                         : stencil_context.texture;
+  if (depth_stencil_context.texture != nullptr) {
     attachment_descs[attachment_count].format =
-        ToVkFormat(depth_stencil_texture->GetDescriptor().format);
+        depth_stencil_context.texture->GetVkFormat();
     attachment_descs[attachment_count].samples =
         static_cast<VkSampleCountFlagBits>(
-            depth_stencil_texture->GetDescriptor().sample_count);
+            depth_stencil_context.texture->GetDescriptor().sample_count);
     attachment_descs[attachment_count].loadOp =
-        depth_context.texture != nullptr ? ToVkLoadOp(desc.depth_attachment.load_op)
-                                         : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        has_depth ? ToVkLoadOp(desc.depth_attachment.load_op)
+                  : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachment_descs[attachment_count].storeOp =
-        depth_context.texture != nullptr
-            ? ToVkStoreOp(desc.depth_attachment.store_op)
-            : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        has_depth ? ToVkStoreOp(desc.depth_attachment.store_op)
+                  : VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachment_descs[attachment_count].stencilLoadOp =
-        stencil_context.texture != nullptr
-            ? ToVkLoadOp(desc.stencil_attachment.load_op)
-            : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        ToVkLoadOp(desc.stencil_attachment.load_op);
     attachment_descs[attachment_count].stencilStoreOp =
-        stencil_context.texture != nullptr
-            ? ToVkStoreOp(desc.stencil_attachment.store_op)
-            : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        ToVkStoreOp(desc.stencil_attachment.store_op);
     attachment_descs[attachment_count].initialLayout =
-        depth_stencil_texture->GetCurrentLayout();
+        depth_stencil_context.texture->GetCurrentLayout();
     attachment_descs[attachment_count].finalLayout =
-        depth_stencil_texture->GetPreferredLayout();
-    attachments[attachment_count] = depth_stencil_texture->GetImageView();
+        depth_stencil_context.texture->GetPreferredLayout();
+    attachments[attachment_count] =
+        depth_stencil_context.texture->GetImageView();
     clear_values[clear_value_count].depthStencil.depth =
         desc.depth_attachment.clear_value;
     clear_values[clear_value_count].depthStencil.stencil =
@@ -563,8 +513,8 @@ bool RecordLegacyRenderPass(const std::shared_ptr<const VulkanContextState>& sta
 
   VkSubpassDescription subpass = {};
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.colorAttachmentCount = color_ref_ptr != nullptr ? 1 : 0;
-  subpass.pColorAttachments = color_ref_ptr;
+  subpass.colorAttachmentCount = 1;
+  subpass.pColorAttachments = &color_ref;
   subpass.pResolveAttachments = resolve_ref_ptr;
   subpass.pDepthStencilAttachment = depth_stencil_ref_ptr;
 
@@ -589,8 +539,8 @@ bool RecordLegacyRenderPass(const std::shared_ptr<const VulkanContextState>& sta
   framebuffer_info.renderPass = render_pass;
   framebuffer_info.attachmentCount = attachment_count;
   framebuffer_info.pAttachments = attachments.data();
-  framebuffer_info.width = GetRenderPassTargetWidth(desc);
-  framebuffer_info.height = GetRenderPassTargetHeight(desc);
+  framebuffer_info.width = desc.GetTargetWidth();
+  framebuffer_info.height = desc.GetTargetHeight();
   framebuffer_info.layers = 1;
 
   VkFramebuffer framebuffer = VK_NULL_HANDLE;
@@ -609,8 +559,8 @@ bool RecordLegacyRenderPass(const std::shared_ptr<const VulkanContextState>& sta
   begin_info.renderPass = render_pass;
   begin_info.framebuffer = framebuffer;
   begin_info.renderArea.offset = {0, 0};
-  begin_info.renderArea.extent = {GetRenderPassTargetWidth(desc),
-                                  GetRenderPassTargetHeight(desc)};
+  begin_info.renderArea.extent = {desc.GetTargetWidth(),
+                                  desc.GetTargetHeight()};
   begin_info.clearValueCount = clear_value_count;
   begin_info.pClearValues = clear_values.data();
 
@@ -620,20 +570,14 @@ bool RecordLegacyRenderPass(const std::shared_ptr<const VulkanContextState>& sta
   LogUnsupportedCommandsIfNeeded(pass, desc.label);
   state->DeviceFns().vkCmdEndRenderPass(command_buffer.GetCommandBuffer());
 
-  if (color_context.texture != nullptr) {
-    color_context.texture->SetCurrentLayout(color_context.final_layout);
-  }
+  color_context.texture->SetCurrentLayout(color_context.final_layout);
   if (color_context.resolve_texture != nullptr) {
     color_context.resolve_texture->SetCurrentLayout(
         color_context.resolve_texture->GetPreferredLayout());
   }
-  if (depth_context.texture != nullptr) {
-    depth_context.texture->SetCurrentLayout(depth_context.final_layout);
-  }
-  if (stencil_context.texture != nullptr &&
-      (!has_combined_depth_stencil ||
-       stencil_context.texture != depth_context.texture)) {
-    stencil_context.texture->SetCurrentLayout(stencil_context.final_layout);
+  if (depth_stencil_context.texture != nullptr) {
+    depth_stencil_context.texture->SetCurrentLayout(
+        depth_stencil_context.final_layout);
   }
 
   command_buffer.RecordCleanupAction([state, framebuffer, render_pass]() {
@@ -657,18 +601,18 @@ bool RecordLegacyRenderPass(const std::shared_ptr<const VulkanContextState>& sta
   const auto resolve_texture_ref = desc.color_attachment.resolve_texture;
   const auto depth_texture_ref = desc.depth_attachment.texture;
   const auto stencil_texture_ref = desc.stencil_attachment.texture;
-  command_buffer.RecordCleanupAction(
-      [color_texture_ref, resolve_texture_ref, depth_texture_ref,
-       stencil_texture_ref]() {});
+  command_buffer.RecordCleanupAction([color_texture_ref, resolve_texture_ref,
+                                      depth_texture_ref,
+                                      stencil_texture_ref]() {});
 
   return true;
 }
 
 }  // namespace
 
-GPURenderPassVK::GPURenderPassVK(std::shared_ptr<const VulkanContextState> state,
-                                 GPUCommandBufferVK* command_buffer,
-                                 const GPURenderPassDescriptor& desc)
+GPURenderPassVK::GPURenderPassVK(
+    std::shared_ptr<const VulkanContextState> state,
+    GPUCommandBufferVK* command_buffer, const GPURenderPassDescriptor& desc)
     : GPURenderPass(desc),
       state_(std::move(state)),
       command_buffer_(command_buffer) {}

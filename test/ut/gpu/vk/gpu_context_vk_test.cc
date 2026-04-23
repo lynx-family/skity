@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 #include <vulkan/vulkan.h>
 
+#include <algorithm>
 #include <memory>
 #include <skity/gpu/gpu_context_vk.hpp>
 #include <string>
@@ -40,10 +41,27 @@ constexpr bool kThreadSanitizerEnabled = false;
 
 bool SkipVulkanTestsOnThreadSanitizer() { return kThreadSanitizerEnabled; }
 
+bool SkipVulkanRenderPassTestsOnThreadSanitizer() {
+  return kThreadSanitizerEnabled;
+}
+
 int32_t FindGraphicsQueueFamilyIndex(
     PFN_vkGetPhysicalDeviceQueueFamilyProperties
         vk_get_physical_device_queue_family_properties,
     VkPhysicalDevice physical_device);
+
+bool ContainsLayer(const std::vector<VkLayerProperties>& layers,
+                   const char* layer_name) {
+  return std::any_of(layers.begin(), layers.end(),
+                     [layer_name](const auto& layer) {
+                       return std::string(layer.layerName) == layer_name;
+                     });
+}
+
+bool ContainsLayer(const std::vector<std::string>& layers,
+                   const char* layer_name) {
+  return std::find(layers.begin(), layers.end(), layer_name) != layers.end();
+}
 
 std::unique_ptr<skity::GPUContext> CreateDebugGPUContext() {
   skity::GPUContextInfoVK info = {};
@@ -78,11 +96,11 @@ struct LegacyContextBundle {
 
     context.reset();
     if (device != VK_NULL_HANDLE) {
-      vkDeviceWaitIdle(device);
-      vkDestroyDevice(device, nullptr);
+      functions.device.vkDeviceWaitIdle(device);
+      functions.device.vkDestroyDevice(device, nullptr);
     }
     if (instance != VK_NULL_HANDLE) {
-      vkDestroyInstance(instance, nullptr);
+      functions.instance.vkDestroyInstance(instance, nullptr);
     }
 
     context = std::move(other.context);
@@ -99,11 +117,11 @@ struct LegacyContextBundle {
   ~LegacyContextBundle() {
     context.reset();
     if (device != VK_NULL_HANDLE) {
-      vkDeviceWaitIdle(device);
-      vkDestroyDevice(device, nullptr);
+      functions.device.vkDeviceWaitIdle(device);
+      functions.device.vkDestroyDevice(device, nullptr);
     }
     if (instance != VK_NULL_HANDLE) {
-      vkDestroyInstance(instance, nullptr);
+      functions.instance.vkDestroyInstance(instance, nullptr);
     }
   }
 };
@@ -160,6 +178,11 @@ LegacyContextBundle CreateLegacyGPUContextForTest() {
     return std::move(bundle);
   }
 
+  if (!skity::LoadVulkanDeviceFns(bundle.functions.instance.vkGetDeviceProcAddr,
+                                  bundle.device, &bundle.functions.device)) {
+    return std::move(bundle);
+  }
+
   skity::GPUContextInfoVK info = {};
   info.instance = bundle.instance;
   info.get_instance_proc_addr = vkGetInstanceProcAddr;
@@ -177,21 +200,9 @@ LegacyContextBundle CreateLegacyGPUContextForTest() {
 
 class VulkanSharedContextTest : public ::testing::Test {
  protected:
-  static void SetUpTestSuite() {
-    if (SkipVulkanTestsOnThreadSanitizer()) {
-      return;
-    }
-    context_ = CreateDebugGPUContext();
-  }
+  static void SetUpTestSuite() { context_ = CreateDebugGPUContext(); }
 
   static void TearDownTestSuite() { context_.reset(); }
-
-  void SetUp() override {
-    if (SkipVulkanTestsOnThreadSanitizer()) {
-      GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
-                      "SwiftShader in this environment";
-    }
-  }
 
   static skity::GPUContext* GetContext() { return context_.get(); }
 
@@ -611,6 +622,7 @@ TEST_F(VulkanSharedContextTest, CreateAndUploadBufferData) {
                               sizeof(payload));
   blit_pass->End();
   ASSERT_TRUE(command_buffer->Submit());
+  GetState()->CollectPendingSubmissions(true);
 
   EXPECT_TRUE(vk_buffer->IsValid());
   EXPECT_NE(vk_buffer->GetBuffer(), VK_NULL_HANDLE);
@@ -658,6 +670,7 @@ TEST_F(VulkanSharedContextTest, CreateTextureAndUploadData) {
   }
 
   texture->UploadData(0, 0, 4, 4, pixels);
+  GetState()->CollectPendingSubmissions(true);
 
   EXPECT_EQ(vk_texture->GetCurrentLayout(),
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -712,6 +725,10 @@ TEST_F(VulkanSharedContextTest, BeginAndEndRenderPassWithoutCommands) {
   ASSERT_NE(GetContext(), nullptr);
   auto* device = GetDevice();
   ASSERT_NE(device, nullptr);
+  if (SkipVulkanRenderPassTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan render pass tests are unstable under "
+                    "ThreadSanitizer with SwiftShader in this environment";
+  }
   if (!GetState()->IsDynamicRenderingEnabled()) {
     GTEST_SKIP() << "Dynamic rendering is not enabled in this Vulkan context";
   }
@@ -753,18 +770,131 @@ TEST_F(VulkanSharedContextTest, BeginAndEndRenderPassWithoutCommands) {
   EXPECT_EQ(vk_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_GENERAL);
 }
 
+TEST_F(VulkanSharedContextTest, EnablesValidationLayerWhenAvailable) {
+  ASSERT_NE(GetContext(), nullptr);
+  const auto* state = GetState();
+  ASSERT_NE(state, nullptr);
+  ASSERT_TRUE(state->AreEnabledInstanceLayersKnown());
+
+  constexpr char kValidationLayer[] = "VK_LAYER_KHRONOS_validation";
+  if (!ContainsLayer(state->GetAvailableInstanceLayers(), kValidationLayer)) {
+    GTEST_SKIP() << "Vulkan validation layer is not available";
+  }
+
+  EXPECT_TRUE(
+      ContainsLayer(state->GetEnabledInstanceLayers(), kValidationLayer));
+}
+
+TEST_F(VulkanSharedContextTest, EnablesPortabilitySubsetWhenAvailable) {
+  ASSERT_NE(GetContext(), nullptr);
+  const auto* state = GetState();
+  ASSERT_NE(state, nullptr);
+  ASSERT_TRUE(state->AreEnabledDeviceExtensionsKnown());
+
+  constexpr char kPortabilitySubsetExtension[] = "VK_KHR_portability_subset";
+  if (!state->HasAvailableDeviceExtension(kPortabilitySubsetExtension)) {
+    GTEST_SKIP() << "Vulkan portability subset extension is not available";
+  }
+
+  EXPECT_TRUE(state->HasEnabledDeviceExtension(kPortabilitySubsetExtension));
+}
+
+TEST_F(VulkanSharedContextTest, BeginAndEndMSAARenderPassWithoutCommands) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+  if (SkipVulkanRenderPassTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan render pass tests are unstable under "
+                    "ThreadSanitizer with SwiftShader in this environment";
+  }
+  if (!GetState()->IsDynamicRenderingEnabled()) {
+    GTEST_SKIP() << "Dynamic rendering is not enabled in this Vulkan context";
+  }
+
+  skity::GPUTextureDescriptor msaa_desc = {};
+  msaa_desc.width = 16;
+  msaa_desc.height = 16;
+  msaa_desc.mip_level_count = 1;
+  msaa_desc.sample_count = 4;
+  msaa_desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  msaa_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  msaa_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto msaa_texture = device->CreateTexture(msaa_desc);
+  ASSERT_NE(msaa_texture, nullptr);
+
+  skity::GPUTextureDescriptor resolve_desc = {};
+  resolve_desc.width = msaa_desc.width;
+  resolve_desc.height = msaa_desc.height;
+  resolve_desc.mip_level_count = 1;
+  resolve_desc.sample_count = 1;
+  resolve_desc.format = msaa_desc.format;
+  resolve_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+                           skity::GPUTextureUsage::kTextureBinding) |
+                       static_cast<skity::GPUTextureUsageMask>(
+                           skity::GPUTextureUsage::kRenderAttachment);
+  resolve_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto resolve_texture = device->CreateTexture(resolve_desc);
+  ASSERT_NE(resolve_texture, nullptr);
+
+  skity::GPURenderPassDescriptor render_pass_desc = {};
+  render_pass_desc.label = "vk_dynamic_msaa_render_pass";
+  render_pass_desc.color_attachment.texture = msaa_texture;
+  render_pass_desc.color_attachment.resolve_texture = resolve_texture;
+  render_pass_desc.color_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.color_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.color_attachment.clear_value =
+      skity::GPUColor{0.1, 0.2, 0.3, 1.0};
+
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  auto render_pass = command_buffer->BeginRenderPass(render_pass_desc);
+  ASSERT_NE(render_pass, nullptr);
+  render_pass->EncodeCommands();
+  EXPECT_TRUE(command_buffer->Submit());
+  GetState()->CollectPendingSubmissions(true);
+
+  auto* vk_msaa_texture = skity::GPUTextureVK::Cast(msaa_texture.get());
+  ASSERT_NE(vk_msaa_texture, nullptr);
+  EXPECT_EQ(vk_msaa_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_GENERAL);
+
+  auto* vk_resolve_texture = skity::GPUTextureVK::Cast(resolve_texture.get());
+  ASSERT_NE(vk_resolve_texture, nullptr);
+  EXPECT_EQ(vk_resolve_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_GENERAL);
+}
+
 TEST_F(VulkanSharedContextTest,
        BeginAndEndDepthStencilRenderPassWithoutCommands) {
   ASSERT_NE(GetContext(), nullptr);
   auto* device = GetDevice();
   ASSERT_NE(device, nullptr);
+  if (SkipVulkanRenderPassTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan render pass tests are unstable under "
+                    "ThreadSanitizer with SwiftShader in this environment";
+  }
   if (!GetState()->IsDynamicRenderingEnabled()) {
     GTEST_SKIP() << "Dynamic rendering is not enabled in this Vulkan context";
   }
 
+  skity::GPUTextureDescriptor color_desc = {};
+  color_desc.width = 12;
+  color_desc.height = 12;
+  color_desc.mip_level_count = 1;
+  color_desc.sample_count = 1;
+  color_desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  color_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  color_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto color_texture = device->CreateTexture(color_desc);
+  ASSERT_NE(color_texture, nullptr);
+
   skity::GPUTextureDescriptor depth_desc = {};
-  depth_desc.width = 12;
-  depth_desc.height = 12;
+  depth_desc.width = color_desc.width;
+  depth_desc.height = color_desc.height;
   depth_desc.mip_level_count = 1;
   depth_desc.sample_count = 1;
   depth_desc.format = skity::GPUTextureFormat::kDepth24Stencil8;
@@ -777,6 +907,9 @@ TEST_F(VulkanSharedContextTest,
 
   skity::GPURenderPassDescriptor render_pass_desc = {};
   render_pass_desc.label = "vk_dynamic_depth_stencil_render_pass";
+  render_pass_desc.color_attachment.texture = color_texture;
+  render_pass_desc.color_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.color_attachment.store_op = skity::GPUStoreOp::kStore;
   render_pass_desc.depth_attachment.texture = depth_stencil_texture;
   render_pass_desc.depth_attachment.load_op = skity::GPULoadOp::kClear;
   render_pass_desc.depth_attachment.store_op = skity::GPUStoreOp::kStore;
@@ -801,12 +934,70 @@ TEST_F(VulkanSharedContextTest,
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 }
 
-TEST(VulkanProcLoaderTest, BeginAndEndLegacyRenderPassWithoutCommands) {
-  if (SkipVulkanTestsOnThreadSanitizer()) {
-    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
-                    "SwiftShader in this environment";
+TEST_F(VulkanSharedContextTest, BeginAndEndStencilRenderPassWithoutCommands) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+  if (SkipVulkanRenderPassTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan render pass tests are unstable under "
+                    "ThreadSanitizer with SwiftShader in this environment";
+  }
+  if (!GetState()->IsDynamicRenderingEnabled()) {
+    GTEST_SKIP() << "Dynamic rendering is not enabled in this Vulkan context";
   }
 
+  skity::GPUTextureDescriptor color_desc = {};
+  color_desc.width = 14;
+  color_desc.height = 14;
+  color_desc.mip_level_count = 1;
+  color_desc.sample_count = 1;
+  color_desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  color_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  color_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto color_texture = device->CreateTexture(color_desc);
+  ASSERT_NE(color_texture, nullptr);
+
+  skity::GPUTextureDescriptor stencil_desc = {};
+  stencil_desc.width = color_desc.width;
+  stencil_desc.height = color_desc.height;
+  stencil_desc.mip_level_count = 1;
+  stencil_desc.sample_count = 1;
+  stencil_desc.format = skity::GPUTextureFormat::kStencil8;
+  stencil_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  stencil_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto stencil_texture = device->CreateTexture(stencil_desc);
+  ASSERT_NE(stencil_texture, nullptr);
+
+  skity::GPURenderPassDescriptor render_pass_desc = {};
+  render_pass_desc.label = "vk_dynamic_stencil_render_pass";
+  render_pass_desc.color_attachment.texture = color_texture;
+  render_pass_desc.color_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.color_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.stencil_attachment.texture = stencil_texture;
+  render_pass_desc.stencil_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.stencil_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.stencil_attachment.clear_value = 5u;
+
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  auto render_pass = command_buffer->BeginRenderPass(render_pass_desc);
+  ASSERT_NE(render_pass, nullptr);
+  render_pass->EncodeCommands();
+  EXPECT_TRUE(command_buffer->Submit());
+  GetState()->CollectPendingSubmissions(true);
+
+  auto* vk_texture = skity::GPUTextureVK::Cast(stencil_texture.get());
+  ASSERT_NE(vk_texture, nullptr);
+  EXPECT_EQ(vk_texture->GetCurrentLayout(),
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+}
+
+TEST(VulkanProcLoaderTest, BeginAndEndLegacyRenderPassWithoutCommands) {
   auto bundle = CreateLegacyGPUContextForTest();
   ASSERT_NE(bundle.context, nullptr);
 
@@ -858,11 +1049,6 @@ TEST(VulkanProcLoaderTest, BeginAndEndLegacyRenderPassWithoutCommands) {
 
 TEST(VulkanProcLoaderTest,
      BeginAndEndLegacyDepthStencilRenderPassWithoutCommands) {
-  if (SkipVulkanTestsOnThreadSanitizer()) {
-    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
-                    "SwiftShader in this environment";
-  }
-
   auto bundle = CreateLegacyGPUContextForTest();
   ASSERT_NE(bundle.context, nullptr);
 
@@ -876,9 +1062,22 @@ TEST(VulkanProcLoaderTest,
   auto* device = context_impl->GetGPUDevice();
   ASSERT_NE(device, nullptr);
 
+  skity::GPUTextureDescriptor color_desc = {};
+  color_desc.width = 10;
+  color_desc.height = 10;
+  color_desc.mip_level_count = 1;
+  color_desc.sample_count = 1;
+  color_desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  color_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  color_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto color_texture = device->CreateTexture(color_desc);
+  ASSERT_NE(color_texture, nullptr);
+
   skity::GPUTextureDescriptor depth_desc = {};
-  depth_desc.width = 10;
-  depth_desc.height = 10;
+  depth_desc.width = color_desc.width;
+  depth_desc.height = color_desc.height;
   depth_desc.mip_level_count = 1;
   depth_desc.sample_count = 1;
   depth_desc.format = skity::GPUTextureFormat::kDepth24Stencil8;
@@ -891,6 +1090,9 @@ TEST(VulkanProcLoaderTest,
 
   skity::GPURenderPassDescriptor render_pass_desc = {};
   render_pass_desc.label = "vk_legacy_depth_stencil_render_pass";
+  render_pass_desc.color_attachment.texture = color_texture;
+  render_pass_desc.color_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.color_attachment.store_op = skity::GPUStoreOp::kStore;
   render_pass_desc.depth_attachment.texture = depth_stencil_texture;
   render_pass_desc.depth_attachment.load_op = skity::GPULoadOp::kClear;
   render_pass_desc.depth_attachment.store_op = skity::GPUStoreOp::kStore;
