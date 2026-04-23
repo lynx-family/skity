@@ -15,6 +15,7 @@
 #include "src/gpu/vk/gpu_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_context_impl_vk.hpp"
 #include "src/gpu/vk/gpu_shader_function_vk.hpp"
+#include "src/gpu/vk/gpu_texture_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
 #include "src/gpu/vk/vulkan_proc_table.hpp"
 
@@ -27,6 +28,23 @@ fn vs_main() -> @builtin(position) vec4<f32> {
 }
 )";
 
+#if defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+constexpr bool kThreadSanitizerEnabled = true;
+#else
+constexpr bool kThreadSanitizerEnabled = false;
+#endif
+#else
+constexpr bool kThreadSanitizerEnabled = false;
+#endif
+
+bool SkipVulkanTestsOnThreadSanitizer() { return kThreadSanitizerEnabled; }
+
+int32_t FindGraphicsQueueFamilyIndex(
+    PFN_vkGetPhysicalDeviceQueueFamilyProperties
+        vk_get_physical_device_queue_family_properties,
+    VkPhysicalDevice physical_device);
+
 std::unique_ptr<skity::GPUContext> CreateDebugGPUContext() {
   skity::GPUContextInfoVK info = {};
   info.get_instance_proc_addr = vkGetInstanceProcAddr;
@@ -34,11 +52,146 @@ std::unique_ptr<skity::GPUContext> CreateDebugGPUContext() {
   return skity::CreateGPUContextVK(&info);
 }
 
+struct LegacyContextBundle {
+  std::unique_ptr<skity::GPUContext> context = nullptr;
+  skity::VulkanFunctionPointers functions = {};
+  VkInstance instance = VK_NULL_HANDLE;
+  VkDevice device = VK_NULL_HANDLE;
+
+  LegacyContextBundle() = default;
+  LegacyContextBundle(const LegacyContextBundle&) = delete;
+  LegacyContextBundle& operator=(const LegacyContextBundle&) = delete;
+  LegacyContextBundle(LegacyContextBundle&& other) noexcept
+      : context(std::move(other.context)),
+        functions(other.functions),
+        instance(other.instance),
+        device(other.device) {
+    other.instance = VK_NULL_HANDLE;
+    other.device = VK_NULL_HANDLE;
+    other.functions = {};
+  }
+
+  LegacyContextBundle& operator=(LegacyContextBundle&& other) noexcept {
+    if (this == &other) {
+      return *this;
+    }
+
+    context.reset();
+    if (device != VK_NULL_HANDLE) {
+      vkDeviceWaitIdle(device);
+      vkDestroyDevice(device, nullptr);
+    }
+    if (instance != VK_NULL_HANDLE) {
+      vkDestroyInstance(instance, nullptr);
+    }
+
+    context = std::move(other.context);
+    functions = other.functions;
+    instance = other.instance;
+    device = other.device;
+
+    other.instance = VK_NULL_HANDLE;
+    other.device = VK_NULL_HANDLE;
+    other.functions = {};
+    return *this;
+  }
+
+  ~LegacyContextBundle() {
+    context.reset();
+    if (device != VK_NULL_HANDLE) {
+      vkDeviceWaitIdle(device);
+      vkDestroyDevice(device, nullptr);
+    }
+    if (instance != VK_NULL_HANDLE) {
+      vkDestroyInstance(instance, nullptr);
+    }
+  }
+};
+
+LegacyContextBundle CreateLegacyGPUContextForTest() {
+  LegacyContextBundle bundle = {};
+
+  if (!skity::CreateVkInstance(vkGetInstanceProcAddr, &bundle.instance,
+                               &bundle.functions) ||
+      bundle.instance == VK_NULL_HANDLE) {
+    return std::move(bundle);
+  }
+
+  uint32_t physical_device_count = 0;
+  if (bundle.functions.instance.vkEnumeratePhysicalDevices(
+          bundle.instance, &physical_device_count, nullptr) != VK_SUCCESS ||
+      physical_device_count == 0) {
+    return std::move(bundle);
+  }
+
+  std::vector<VkPhysicalDevice> physical_devices(physical_device_count,
+                                                 VK_NULL_HANDLE);
+  if (bundle.functions.instance.vkEnumeratePhysicalDevices(
+          bundle.instance, &physical_device_count, physical_devices.data()) !=
+      VK_SUCCESS) {
+    return std::move(bundle);
+  }
+
+  const VkPhysicalDevice physical_device = physical_devices[0];
+  const int32_t graphics_queue_family_index = FindGraphicsQueueFamilyIndex(
+      bundle.functions.instance.vkGetPhysicalDeviceQueueFamilyProperties,
+      physical_device);
+  if (graphics_queue_family_index < 0) {
+    return std::move(bundle);
+  }
+
+  const float queue_priority = 1.0f;
+  VkDeviceQueueCreateInfo queue_info = {};
+  queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  queue_info.queueFamilyIndex =
+      static_cast<uint32_t>(graphics_queue_family_index);
+  queue_info.queueCount = 1;
+  queue_info.pQueuePriorities = &queue_priority;
+
+  VkDeviceCreateInfo device_info = {};
+  device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  device_info.queueCreateInfoCount = 1;
+  device_info.pQueueCreateInfos = &queue_info;
+
+  if (bundle.functions.instance.vkCreateDevice(physical_device, &device_info,
+                                               nullptr,
+                                               &bundle.device) != VK_SUCCESS ||
+      bundle.device == VK_NULL_HANDLE) {
+    return std::move(bundle);
+  }
+
+  skity::GPUContextInfoVK info = {};
+  info.instance = bundle.instance;
+  info.get_instance_proc_addr = vkGetInstanceProcAddr;
+  info.enabled_instance_extensions_known = true;
+  info.physical_device = physical_device;
+  info.logical_device = bundle.device;
+  info.get_device_proc_addr = bundle.functions.instance.vkGetDeviceProcAddr;
+  info.enabled_device_extension_count = 0;
+  info.enabled_device_extensions_known = true;
+  info.graphics_queue_family_index = graphics_queue_family_index;
+
+  bundle.context = skity::CreateGPUContextVK(&info);
+  return std::move(bundle);
+}
+
 class VulkanSharedContextTest : public ::testing::Test {
  protected:
-  static void SetUpTestSuite() { context_ = CreateDebugGPUContext(); }
+  static void SetUpTestSuite() {
+    if (SkipVulkanTestsOnThreadSanitizer()) {
+      return;
+    }
+    context_ = CreateDebugGPUContext();
+  }
 
   static void TearDownTestSuite() { context_.reset(); }
+
+  void SetUp() override {
+    if (SkipVulkanTestsOnThreadSanitizer()) {
+      GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
+                      "SwiftShader in this environment";
+    }
+  }
 
   static skity::GPUContext* GetContext() { return context_.get(); }
 
@@ -89,6 +242,10 @@ int32_t FindGraphicsQueueFamilyIndex(
 }
 
 TEST(VulkanProcLoaderTest, CreateVkInstanceWithProcLoader) {
+  if (SkipVulkanTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
+                    "SwiftShader in this environment";
+  }
   skity::VulkanFunctionPointers functions = {};
   VkInstance instance = VK_NULL_HANDLE;
 
@@ -104,6 +261,10 @@ TEST(VulkanProcLoaderTest, CreateVkInstanceWithProcLoader) {
 }
 
 TEST(VulkanProcLoaderTest, CreateDeviceAndLoadDeviceFns) {
+  if (SkipVulkanTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
+                    "SwiftShader in this environment";
+  }
   skity::VulkanFunctionPointers functions = {};
   VkInstance instance = VK_NULL_HANDLE;
   VkDevice device = VK_NULL_HANDLE;
@@ -188,6 +349,10 @@ TEST_F(VulkanSharedContextTest, CreateGPUContextWithProcLoader) {
 }
 
 TEST(VulkanProcLoaderTest, CreateGPUContextWithInfo) {
+  if (SkipVulkanTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
+                    "SwiftShader in this environment";
+  }
   skity::GPUContextInfoVK info = {};
   info.get_instance_proc_addr = vkGetInstanceProcAddr;
   info.enable_debug_runtime = true;
@@ -214,6 +379,10 @@ TEST(VulkanProcLoaderTest, CreateGPUContextWithInfo) {
 }
 
 TEST(VulkanProcLoaderTest, PreserveUserProvidedExtensionInfo) {
+  if (SkipVulkanTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
+                    "SwiftShader in this environment";
+  }
   skity::VulkanFunctionPointers functions = {};
   VkInstance instance = VK_NULL_HANDLE;
   VkDevice device = VK_NULL_HANDLE;
@@ -448,6 +617,302 @@ TEST_F(VulkanSharedContextTest, CreateAndUploadBufferData) {
   EXPECT_NE(vk_buffer->GetAllocation(), VK_NULL_HANDLE);
   EXPECT_EQ(vk_buffer->GetMappedData(), nullptr);
   EXPECT_GE(vk_buffer->GetSize(), sizeof(payload));
+}
+
+TEST_F(VulkanSharedContextTest, CreateTextureAndUploadData) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUTextureDescriptor desc = {};
+  desc.width = 4;
+  desc.height = 4;
+  desc.mip_level_count = 1;
+  desc.sample_count = 1;
+  desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  desc.usage =
+      static_cast<skity::GPUTextureUsageMask>(
+          skity::GPUTextureUsage::kTextureBinding) |
+      static_cast<skity::GPUTextureUsageMask>(skity::GPUTextureUsage::kCopyDst);
+  desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto texture = device->CreateTexture(desc);
+  ASSERT_NE(texture, nullptr);
+
+  auto* vk_texture = skity::GPUTextureVK::Cast(texture.get());
+  ASSERT_NE(vk_texture, nullptr);
+  EXPECT_TRUE(vk_texture->IsValid());
+  EXPECT_NE(vk_texture->GetImage(), VK_NULL_HANDLE);
+  EXPECT_NE(vk_texture->GetImageView(), VK_NULL_HANDLE);
+  EXPECT_EQ(vk_texture->GetDescriptor().width, desc.width);
+  EXPECT_EQ(vk_texture->GetDescriptor().height, desc.height);
+  EXPECT_EQ(vk_texture->GetDescriptor().format, desc.format);
+  EXPECT_EQ(vk_texture->GetPreferredLayout(),
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+  EXPECT_EQ(vk_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_UNDEFINED);
+  EXPECT_EQ(vk_texture->GetBytes(), 4u * 4u * 4u);
+
+  uint32_t pixels[16] = {};
+  for (size_t i = 0; i < std::size(pixels); ++i) {
+    pixels[i] = 0xFF000000u | static_cast<uint32_t>(i);
+  }
+
+  texture->UploadData(0, 0, 4, 4, pixels);
+
+  EXPECT_EQ(vk_texture->GetCurrentLayout(),
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}
+
+TEST_F(VulkanSharedContextTest, CreateMultiUseTextureUsesGeneralLayout) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUTextureDescriptor desc = {};
+  desc.width = 8;
+  desc.height = 8;
+  desc.mip_level_count = 1;
+  desc.sample_count = 1;
+  desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  desc.usage = static_cast<skity::GPUTextureUsageMask>(
+                   skity::GPUTextureUsage::kTextureBinding) |
+               static_cast<skity::GPUTextureUsageMask>(
+                   skity::GPUTextureUsage::kRenderAttachment);
+  desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto texture = device->CreateTexture(desc);
+  ASSERT_NE(texture, nullptr);
+
+  auto* vk_texture = skity::GPUTextureVK::Cast(texture.get());
+  ASSERT_NE(vk_texture, nullptr);
+  EXPECT_TRUE(vk_texture->IsValid());
+  EXPECT_EQ(vk_texture->GetPreferredLayout(), VK_IMAGE_LAYOUT_GENERAL);
+  EXPECT_EQ(vk_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_UNDEFINED);
+}
+
+TEST_F(VulkanSharedContextTest, RejectTextureWithInvalidDescriptor) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUTextureDescriptor invalid_desc = {};
+  invalid_desc.width = 0;
+  invalid_desc.height = 8;
+  invalid_desc.mip_level_count = 1;
+  invalid_desc.sample_count = 1;
+  invalid_desc.format = skity::GPUTextureFormat::kInvalid;
+  invalid_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kTextureBinding);
+  invalid_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  EXPECT_EQ(device->CreateTexture(invalid_desc), nullptr);
+}
+
+TEST_F(VulkanSharedContextTest, BeginAndEndRenderPassWithoutCommands) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+  if (!GetState()->IsDynamicRenderingEnabled()) {
+    GTEST_SKIP() << "Dynamic rendering is not enabled in this Vulkan context";
+  }
+
+  skity::GPUTextureDescriptor desc = {};
+  desc.width = 16;
+  desc.height = 16;
+  desc.mip_level_count = 1;
+  desc.sample_count = 1;
+  desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  desc.usage = static_cast<skity::GPUTextureUsageMask>(
+                   skity::GPUTextureUsage::kTextureBinding) |
+               static_cast<skity::GPUTextureUsageMask>(
+                   skity::GPUTextureUsage::kRenderAttachment);
+  desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto texture = device->CreateTexture(desc);
+  ASSERT_NE(texture, nullptr);
+
+  skity::GPURenderPassDescriptor render_pass_desc = {};
+  render_pass_desc.label = "vk_dynamic_render_pass";
+  render_pass_desc.color_attachment.texture = texture;
+  render_pass_desc.color_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.color_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.color_attachment.clear_value =
+      skity::GPUColor{0.25, 0.5, 0.75, 1.0};
+
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  auto render_pass = command_buffer->BeginRenderPass(render_pass_desc);
+  ASSERT_NE(render_pass, nullptr);
+  render_pass->EncodeCommands();
+  EXPECT_TRUE(command_buffer->Submit());
+  GetState()->CollectPendingSubmissions(true);
+
+  auto* vk_texture = skity::GPUTextureVK::Cast(texture.get());
+  ASSERT_NE(vk_texture, nullptr);
+  EXPECT_EQ(vk_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_GENERAL);
+}
+
+TEST_F(VulkanSharedContextTest,
+       BeginAndEndDepthStencilRenderPassWithoutCommands) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+  if (!GetState()->IsDynamicRenderingEnabled()) {
+    GTEST_SKIP() << "Dynamic rendering is not enabled in this Vulkan context";
+  }
+
+  skity::GPUTextureDescriptor depth_desc = {};
+  depth_desc.width = 12;
+  depth_desc.height = 12;
+  depth_desc.mip_level_count = 1;
+  depth_desc.sample_count = 1;
+  depth_desc.format = skity::GPUTextureFormat::kDepth24Stencil8;
+  depth_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  depth_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto depth_stencil_texture = device->CreateTexture(depth_desc);
+  ASSERT_NE(depth_stencil_texture, nullptr);
+
+  skity::GPURenderPassDescriptor render_pass_desc = {};
+  render_pass_desc.label = "vk_dynamic_depth_stencil_render_pass";
+  render_pass_desc.depth_attachment.texture = depth_stencil_texture;
+  render_pass_desc.depth_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.depth_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.depth_attachment.clear_value = 0.5f;
+  render_pass_desc.stencil_attachment.texture = depth_stencil_texture;
+  render_pass_desc.stencil_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.stencil_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.stencil_attachment.clear_value = 7u;
+
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  auto render_pass = command_buffer->BeginRenderPass(render_pass_desc);
+  ASSERT_NE(render_pass, nullptr);
+  render_pass->EncodeCommands();
+  EXPECT_TRUE(command_buffer->Submit());
+  GetState()->CollectPendingSubmissions(true);
+
+  auto* vk_texture = skity::GPUTextureVK::Cast(depth_stencil_texture.get());
+  ASSERT_NE(vk_texture, nullptr);
+  EXPECT_EQ(vk_texture->GetCurrentLayout(),
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+}
+
+TEST(VulkanProcLoaderTest, BeginAndEndLegacyRenderPassWithoutCommands) {
+  if (SkipVulkanTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
+                    "SwiftShader in this environment";
+  }
+
+  auto bundle = CreateLegacyGPUContextForTest();
+  ASSERT_NE(bundle.context, nullptr);
+
+  auto* vk_context = static_cast<skity::GPUContextVK*>(bundle.context.get());
+  ASSERT_NE(vk_context, nullptr);
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+  EXPECT_FALSE(state->IsDynamicRenderingEnabled());
+
+  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
+  auto* device = context_impl->GetGPUDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUTextureDescriptor desc = {};
+  desc.width = 8;
+  desc.height = 8;
+  desc.mip_level_count = 1;
+  desc.sample_count = 1;
+  desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto texture = device->CreateTexture(desc);
+  ASSERT_NE(texture, nullptr);
+
+  skity::GPURenderPassDescriptor render_pass_desc = {};
+  render_pass_desc.label = "vk_legacy_render_pass";
+  render_pass_desc.color_attachment.texture = texture;
+  render_pass_desc.color_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.color_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.color_attachment.clear_value =
+      skity::GPUColor{0.0, 0.0, 0.0, 0.0};
+
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  auto render_pass = command_buffer->BeginRenderPass(render_pass_desc);
+  ASSERT_NE(render_pass, nullptr);
+  render_pass->EncodeCommands();
+  EXPECT_TRUE(command_buffer->Submit());
+  state->CollectPendingSubmissions(true);
+
+  auto* vk_texture = skity::GPUTextureVK::Cast(texture.get());
+  ASSERT_NE(vk_texture, nullptr);
+  EXPECT_EQ(vk_texture->GetCurrentLayout(),
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+}
+
+TEST(VulkanProcLoaderTest,
+     BeginAndEndLegacyDepthStencilRenderPassWithoutCommands) {
+  if (SkipVulkanTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
+                    "SwiftShader in this environment";
+  }
+
+  auto bundle = CreateLegacyGPUContextForTest();
+  ASSERT_NE(bundle.context, nullptr);
+
+  auto* vk_context = static_cast<skity::GPUContextVK*>(bundle.context.get());
+  ASSERT_NE(vk_context, nullptr);
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+  EXPECT_FALSE(state->IsDynamicRenderingEnabled());
+
+  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
+  auto* device = context_impl->GetGPUDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUTextureDescriptor depth_desc = {};
+  depth_desc.width = 10;
+  depth_desc.height = 10;
+  depth_desc.mip_level_count = 1;
+  depth_desc.sample_count = 1;
+  depth_desc.format = skity::GPUTextureFormat::kDepth24Stencil8;
+  depth_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  depth_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto depth_stencil_texture = device->CreateTexture(depth_desc);
+  ASSERT_NE(depth_stencil_texture, nullptr);
+
+  skity::GPURenderPassDescriptor render_pass_desc = {};
+  render_pass_desc.label = "vk_legacy_depth_stencil_render_pass";
+  render_pass_desc.depth_attachment.texture = depth_stencil_texture;
+  render_pass_desc.depth_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.depth_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.depth_attachment.clear_value = 1.0f;
+  render_pass_desc.stencil_attachment.texture = depth_stencil_texture;
+  render_pass_desc.stencil_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.stencil_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.stencil_attachment.clear_value = 3u;
+
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  auto render_pass = command_buffer->BeginRenderPass(render_pass_desc);
+  ASSERT_NE(render_pass, nullptr);
+  render_pass->EncodeCommands();
+  EXPECT_TRUE(command_buffer->Submit());
+  state->CollectPendingSubmissions(true);
+
+  auto* vk_texture = skity::GPUTextureVK::Cast(depth_stencil_texture.get());
+  ASSERT_NE(vk_texture, nullptr);
+  EXPECT_EQ(vk_texture->GetCurrentLayout(),
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 }
 
 }  // namespace

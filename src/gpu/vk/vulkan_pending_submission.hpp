@@ -7,6 +7,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -18,7 +19,8 @@ struct VulkanPendingSubmission {
   VulkanPendingSubmission() = default;
   VulkanPendingSubmission(
       VkFence fence, VkCommandPool command_pool,
-      std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers);
+      std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers,
+      std::vector<std::function<void()>> cleanup_actions = {});
   VulkanPendingSubmission(VulkanPendingSubmission&& other) noexcept;
   VulkanPendingSubmission& operator=(VulkanPendingSubmission&& other) noexcept;
   ~VulkanPendingSubmission();
@@ -29,6 +31,7 @@ struct VulkanPendingSubmission {
   VkFence fence = VK_NULL_HANDLE;
   VkCommandPool command_pool = VK_NULL_HANDLE;
   std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers = {};
+  std::vector<std::function<void()>> cleanup_actions = {};
 };
 
 }  // namespace skity

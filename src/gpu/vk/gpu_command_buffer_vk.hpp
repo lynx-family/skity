@@ -7,6 +7,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -38,6 +39,8 @@ class GPUCommandBufferVK : public GPUCommandBuffer {
 
   void RecordStageBuffer(std::unique_ptr<GPUBufferVK> buffer);
 
+  void RecordCleanupAction(std::function<void()> action);
+
  private:
   void Reset();
 
@@ -47,6 +50,7 @@ class GPUCommandBufferVK : public GPUCommandBuffer {
   bool recording_ = false;
   bool submitted_ = false;
   std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers_ = {};
+  std::vector<std::function<void()>> cleanup_actions_ = {};
 };
 
 }  // namespace skity

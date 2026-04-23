@@ -6,6 +6,7 @@
 
 #include "src/gpu/vk/gpu_blit_pass_vk.hpp"
 #include "src/gpu/vk/gpu_buffer_vk.hpp"
+#include "src/gpu/vk/gpu_render_pass_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
 #include "src/logging.hpp"
 
@@ -147,9 +148,12 @@ bool GPUCommandBufferVK::Init() {
 
 std::shared_ptr<GPURenderPass> GPUCommandBufferVK::BeginRenderPass(
     const GPURenderPassDescriptor& desc) {
-  (void)desc;
-  LOGW("GPUCommandBufferVK::BeginRenderPass is not implemented yet");
-  return {};
+  if (!recording_ || command_buffer_ == VK_NULL_HANDLE || state_ == nullptr) {
+    LOGE("Failed to begin Vulkan render pass: command buffer is not recording");
+    return {};
+  }
+
+  return std::make_shared<GPURenderPassVK>(state_, this, desc);
 }
 
 std::shared_ptr<GPUBlitPass> GPUCommandBufferVK::BeginBlitPass() {
@@ -200,7 +204,8 @@ bool GPUCommandBufferVK::Submit() {
   }
 
   state_->EnqueuePendingSubmission(
-      VulkanPendingSubmission(fence, command_pool_, std::move(stage_buffers_)));
+      VulkanPendingSubmission(fence, command_pool_, std::move(stage_buffers_),
+                              std::move(cleanup_actions_)));
   state_->CollectPendingSubmissions(false);
 
   submitted_ = true;
@@ -213,6 +218,12 @@ void GPUCommandBufferVK::RecordStageBuffer(
     std::unique_ptr<GPUBufferVK> buffer) {
   if (buffer != nullptr) {
     stage_buffers_.emplace_back(std::move(buffer));
+  }
+}
+
+void GPUCommandBufferVK::RecordCleanupAction(std::function<void()> action) {
+  if (action) {
+    cleanup_actions_.emplace_back(std::move(action));
   }
 }
 
@@ -235,6 +246,7 @@ void GPUCommandBufferVK::ApplyDebugLabelsIfNeeded() {
 
 void GPUCommandBufferVK::Reset() {
   stage_buffers_.clear();
+  cleanup_actions_.clear();
 
   if (state_ != nullptr && command_pool_ != VK_NULL_HANDLE &&
       state_->GetLogicalDevice() != VK_NULL_HANDLE &&

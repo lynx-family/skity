@@ -74,6 +74,8 @@ class VulkanContextState {
 
   bool IsSynchronization2Enabled() const { return synchronization2_enabled_; }
 
+  bool IsDynamicRenderingEnabled() const { return dynamic_rendering_enabled_; }
+
   const std::vector<VkExtensionProperties>& GetAvailableInstanceExtensions()
       const {
     return available_instance_extensions_;
@@ -134,6 +136,7 @@ class VulkanContextState {
   bool enabled_instance_extensions_known_ = false;
   bool enabled_device_extensions_known_ = false;
   bool synchronization2_enabled_ = false;
+  bool dynamic_rendering_enabled_ = false;
   VulkanDebugRuntimeState debug_runtime_ = {};
   mutable std::vector<VulkanPendingSubmission> pending_submissions_ = {};
 };

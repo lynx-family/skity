@@ -7,6 +7,7 @@
 #include "src/gpu/vk/gpu_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_command_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_shader_function_vk.hpp"
+#include "src/gpu/vk/gpu_texture_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
 #include "src/logging.hpp"
 #include "src/tracing.hpp"
@@ -134,9 +135,13 @@ std::shared_ptr<GPUSampler> GPUDeviceVK::CreateSampler(
 
 std::shared_ptr<GPUTexture> GPUDeviceVK::CreateTexture(
     const GPUTextureDescriptor& desc) {
-  (void)desc;
-  LOGW("GPUDeviceVK::CreateTexture is not implemented yet");
-  return {};
+  if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE ||
+      state_->GetAllocator() == nullptr) {
+    LOGE("GPUDeviceVK::CreateTexture failed: Vulkan device is unavailable");
+    return {};
+  }
+
+  return GPUTextureVK::Create(state_, desc);
 }
 
 std::shared_ptr<GPUShaderFunction> GPUDeviceVK::CreateShaderFunctionFromModule(
