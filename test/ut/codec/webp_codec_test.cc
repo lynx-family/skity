@@ -79,3 +79,32 @@ TEST(WebPCodecTest, Decode) {
     EXPECT_EQ(color, skity::ColorSetARGB(255, 0, 0, 255));
   }
 }
+
+TEST(WebPCodecTest, DecodeAllFrames) {
+  auto data = skity::Data::MakeFromFileName(SKITY_TEST_WEBP_FILE);
+
+  auto codec = skity::Codec::MakeFromData(data);
+
+  EXPECT_TRUE(codec != nullptr);
+
+  codec->SetData(data);
+
+  auto multi_frame_decoder = codec->DecodeMultiFrame();
+
+  EXPECT_TRUE(multi_frame_decoder != nullptr);
+
+  std::shared_ptr<skity::Pixmap> pixmap;
+  for (int32_t i = 0; i < multi_frame_decoder->GetFrameCount(); ++i) {
+    auto frame = multi_frame_decoder->GetFrameInfo(i);
+
+    ASSERT_TRUE(frame != nullptr);
+
+    pixmap = multi_frame_decoder->DecodeFrame(frame, pixmap);
+
+    ASSERT_TRUE(pixmap != nullptr);
+    EXPECT_EQ(pixmap->Width(), multi_frame_decoder->GetWidth());
+    EXPECT_EQ(pixmap->Height(), multi_frame_decoder->GetHeight());
+    EXPECT_EQ(pixmap->GetColorType(), skity::ColorType::kRGBA);
+    EXPECT_EQ(pixmap->GetAlphaType(), skity::AlphaType::kUnpremul_AlphaType);
+  }
+}

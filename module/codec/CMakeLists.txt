@@ -161,9 +161,11 @@ if (SKITY_ENABLE_CODEC_WEBP)
   if (WIN32)
     # This link config may not work if using llvm clang under minGW or msys2
     # FIXME: use -llibwebp to solve name conflict with ExternalProject_Add(libwebp ...)
-    target_link_libraries(skity-codec PRIVATE libsharpyuv -llibwebp libwebpdecoder libwebpdemux libwebpmux)
+    target_link_libraries(skity-codec PRIVATE libwebpmux libwebpdemux libwebpdecoder -llibwebp libsharpyuv)
   else()
-    target_link_libraries(skity-codec PRIVATE sharpyuv webp webpdecoder webpdemux webpmux)
+    # Keep dependency providers after dependents because these are raw library
+    # names, not imported CMake targets with transitive link metadata.
+    target_link_libraries(skity-codec PRIVATE webpmux webpdemux webpdecoder webp sharpyuv)
   endif()
 
 endif()
