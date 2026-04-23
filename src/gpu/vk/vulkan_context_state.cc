@@ -1019,6 +1019,7 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
   enabled_device_extensions_.clear();
   enabled_device_extensions_known_ = false;
   synchronization2_enabled_ = false;
+  dynamic_rendering_enabled_ = false;
 
   if (!LoadAvailableDeviceExtensions()) {
     return false;
@@ -1042,6 +1043,16 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
     if (enabled_device_extensions_known_) {
       synchronization2_enabled_ = ContainsExtension(
           enabled_device_extensions_, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+      dynamic_rendering_enabled_ = ContainsExtension(
+          enabled_device_extensions_, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+      if (dynamic_rendering_enabled_ &&
+          (functions_.device.vkCmdBeginRendering == nullptr ||
+           functions_.device.vkCmdEndRendering == nullptr)) {
+        LOGW(
+            "Dynamic rendering was declared enabled, but begin/end rendering "
+            "procedures are unavailable; falling back to legacy render pass");
+        dynamic_rendering_enabled_ = false;
+      }
       LogEnabledExtensions("device", enabled_device_extensions_);
     } else {
       LOGW(
@@ -1052,7 +1063,9 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
     if (HasAvailableDeviceExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
       enabled_device_extensions_.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     }
-    if (HasAvailableDeviceExtension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)) {
+    const bool has_dynamic_rendering_extension =
+        HasAvailableDeviceExtension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    if (has_dynamic_rendering_extension) {
       enabled_device_extensions_.emplace_back(
           VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     }
@@ -1072,14 +1085,45 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
     VkPhysicalDeviceFeatures2 physical_device_features = {};
     physical_device_features.sType =
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features = {};
+    dynamic_rendering_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
     VkPhysicalDeviceSynchronization2Features synchronization2_features = {};
     synchronization2_features.sType =
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
 
+    void** feature_query_next = &physical_device_features.pNext;
+    if (has_dynamic_rendering_extension) {
+      *feature_query_next = &dynamic_rendering_features;
+      feature_query_next = &dynamic_rendering_features.pNext;
+    }
     if (HasAvailableDeviceExtension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
-      physical_device_features.pNext = &synchronization2_features;
+      *feature_query_next = &synchronization2_features;
+      feature_query_next = &synchronization2_features.pNext;
+    }
+
+    if (physical_device_features.pNext != nullptr) {
       functions_.instance.vkGetPhysicalDeviceFeatures2(
           physical_device_, &physical_device_features);
+    }
+
+    if (has_dynamic_rendering_extension) {
+      if (dynamic_rendering_features.dynamicRendering == VK_TRUE) {
+        dynamic_rendering_features.dynamicRendering = VK_TRUE;
+        dynamic_rendering_enabled_ = true;
+      } else {
+        enabled_device_extensions_.erase(
+            std::remove(enabled_device_extensions_.begin(),
+                        enabled_device_extensions_.end(),
+                        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME),
+            enabled_device_extensions_.end());
+        LOGW(
+            "Vulkan dynamic rendering extension is present but feature is "
+            "not supported, disabling extension request");
+      }
+    }
+
+    if (HasAvailableDeviceExtension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
       if (synchronization2_features.synchronization2 == VK_TRUE) {
         synchronization2_features.synchronization2 = VK_TRUE;
         synchronization2_enabled_ = true;
@@ -1129,8 +1173,19 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
     device_info.queueCreateInfoCount =
         static_cast<uint32_t>(queue_infos.size());
     device_info.pQueueCreateInfos = queue_infos.data();
+
+    void* enabled_feature_chain = nullptr;
+    void** enabled_feature_next = &enabled_feature_chain;
+    if (dynamic_rendering_enabled_) {
+      *enabled_feature_next = &dynamic_rendering_features;
+      enabled_feature_next = &dynamic_rendering_features.pNext;
+    }
     if (synchronization2_enabled_) {
-      device_info.pNext = &synchronization2_features;
+      *enabled_feature_next = &synchronization2_features;
+      enabled_feature_next = &synchronization2_features.pNext;
+    }
+    if (enabled_feature_chain != nullptr) {
+      device_info.pNext = enabled_feature_chain;
     }
     device_info.enabledExtensionCount =
         static_cast<uint32_t>(enabled_extension_ptrs.size());
@@ -1152,6 +1207,14 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
     if (!LoadDeviceFns()) {
       LOGE("Failed to load procedures from created Vulkan logical device");
       return false;
+    }
+    if (dynamic_rendering_enabled_ &&
+        (functions_.device.vkCmdBeginRendering == nullptr ||
+         functions_.device.vkCmdEndRendering == nullptr)) {
+      LOGW(
+          "Dynamic rendering feature was enabled, but begin/end rendering "
+          "procedures are unavailable; falling back to legacy render pass");
+      dynamic_rendering_enabled_ = false;
     }
     enabled_device_extensions_known_ = true;
     LogEnabledExtensions("device", enabled_device_extensions_);
@@ -1268,6 +1331,7 @@ void VulkanContextState::Reset() {
   enabled_instance_extensions_known_ = false;
   enabled_device_extensions_known_ = false;
   synchronization2_enabled_ = false;
+  dynamic_rendering_enabled_ = false;
   debug_runtime_ = {};
   functions_ = {};
   instance_ = VK_NULL_HANDLE;

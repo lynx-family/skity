@@ -27,6 +27,17 @@ namespace skity {
 
 namespace {
 
+template <typename Proc>
+Proc LoadDeviceProcByName(PFN_vkGetDeviceProcAddr get_device_proc_addr,
+                          VkDevice device, const char* core_name,
+                          const char* extension_name = nullptr) {
+  auto proc = reinterpret_cast<Proc>(get_device_proc_addr(device, core_name));
+  if (proc == nullptr && extension_name != nullptr) {
+    proc = reinterpret_cast<Proc>(get_device_proc_addr(device, extension_name));
+  }
+  return proc;
+}
+
 uint32_t ResolveInstanceApiVersion(const VulkanGlobalFns& global_fns) {
   if (global_fns.vkEnumerateInstanceVersion == nullptr) {
     return VK_API_VERSION_1_0;
@@ -204,6 +215,32 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkWaitForFences"));
   fns->vkCmdCopyBuffer = reinterpret_cast<PFN_vkCmdCopyBuffer>(
       get_device_proc_addr(device, "vkCmdCopyBuffer"));
+  fns->vkCreateFramebuffer = reinterpret_cast<PFN_vkCreateFramebuffer>(
+      get_device_proc_addr(device, "vkCreateFramebuffer"));
+  fns->vkDestroyFramebuffer = reinterpret_cast<PFN_vkDestroyFramebuffer>(
+      get_device_proc_addr(device, "vkDestroyFramebuffer"));
+  fns->vkCreateRenderPass = reinterpret_cast<PFN_vkCreateRenderPass>(
+      get_device_proc_addr(device, "vkCreateRenderPass"));
+  fns->vkDestroyRenderPass = reinterpret_cast<PFN_vkDestroyRenderPass>(
+      get_device_proc_addr(device, "vkDestroyRenderPass"));
+  fns->vkCreateImageView = reinterpret_cast<PFN_vkCreateImageView>(
+      get_device_proc_addr(device, "vkCreateImageView"));
+  fns->vkDestroyImageView = reinterpret_cast<PFN_vkDestroyImageView>(
+      get_device_proc_addr(device, "vkDestroyImageView"));
+  fns->vkCmdBeginRenderPass = reinterpret_cast<PFN_vkCmdBeginRenderPass>(
+      get_device_proc_addr(device, "vkCmdBeginRenderPass"));
+  fns->vkCmdEndRenderPass = reinterpret_cast<PFN_vkCmdEndRenderPass>(
+      get_device_proc_addr(device, "vkCmdEndRenderPass"));
+  fns->vkCmdCopyBufferToImage = reinterpret_cast<PFN_vkCmdCopyBufferToImage>(
+      get_device_proc_addr(device, "vkCmdCopyBufferToImage"));
+  fns->vkCmdPipelineBarrier = reinterpret_cast<PFN_vkCmdPipelineBarrier>(
+      get_device_proc_addr(device, "vkCmdPipelineBarrier"));
+  fns->vkCmdBeginRendering = LoadDeviceProcByName<PFN_vkCmdBeginRendering>(
+      get_device_proc_addr, device, "vkCmdBeginRendering",
+      "vkCmdBeginRenderingKHR");
+  fns->vkCmdEndRendering = LoadDeviceProcByName<PFN_vkCmdEndRendering>(
+      get_device_proc_addr, device, "vkCmdEndRendering",
+      "vkCmdEndRenderingKHR");
   fns->vkCreateShaderModule = reinterpret_cast<PFN_vkCreateShaderModule>(
       get_device_proc_addr(device, "vkCreateShaderModule"));
   fns->vkDestroyShaderModule = reinterpret_cast<PFN_vkDestroyShaderModule>(
@@ -231,6 +268,15 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       fns->vkEndCommandBuffer == nullptr || fns->vkCreateFence == nullptr ||
       fns->vkDestroyFence == nullptr || fns->vkGetFenceStatus == nullptr ||
       fns->vkWaitForFences == nullptr || fns->vkCmdCopyBuffer == nullptr ||
+      fns->vkCreateFramebuffer == nullptr ||
+      fns->vkDestroyFramebuffer == nullptr ||
+      fns->vkCreateRenderPass == nullptr ||
+      fns->vkDestroyRenderPass == nullptr ||
+      fns->vkCreateImageView == nullptr || fns->vkDestroyImageView == nullptr ||
+      fns->vkCmdBeginRenderPass == nullptr ||
+      fns->vkCmdEndRenderPass == nullptr ||
+      fns->vkCmdCopyBufferToImage == nullptr ||
+      fns->vkCmdPipelineBarrier == nullptr ||
       fns->vkCreateShaderModule == nullptr ||
       fns->vkDestroyShaderModule == nullptr) {
     LOGE("Failed to load Vulkan device procedures for device: {:p}",
