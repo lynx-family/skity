@@ -6,7 +6,6 @@
 
 #include <vk_mem_alloc.h>
 
-#include <array>
 #include <cstdlib>
 #include <set>
 #include <string_view>
@@ -613,6 +612,11 @@ void VulkanContextState::CollectPendingSubmissions(bool wait_all) const {
   }
 }
 
+VkRenderPass VulkanContextState::GetOrCreateLegacyRenderPass(
+    const LegacyRenderPassKey& key) const {
+  return render_pass_cache_.GetOrCreate(*this, key);
+}
+
 bool VulkanContextState::HasAvailableInstanceExtension(
     const char* extension_name) const {
   return ContainsExtension(available_instance_extensions_, extension_name);
@@ -720,13 +724,9 @@ bool VulkanContextState::InitializeInstance(const GPUContextInfoVK& info) {
         &enabled_instance_extensions_, available_instance_extensions_,
         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     VkInstanceCreateFlags instance_flags = 0;
-    if (HasAvailableInstanceExtension(
-            VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
-      TryEnableInstanceExtension(&enabled_instance_extensions_,
-                                 available_instance_extensions_,
-                                 VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-      instance_flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-    }
+    EnablePortabilityEnumerationIfAvailable(available_instance_extensions_,
+                                            &enabled_instance_extensions_,
+                                            &instance_flags);
 
 #if defined(SKITY_ANDROID)
 #if defined(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)
@@ -1353,6 +1353,8 @@ void VulkanContextState::Reset() {
 #endif
 
   CollectPendingSubmissions(true);
+
+  render_pass_cache_.Reset(*this);
 
   if (allocator_ != nullptr) {
     LOGD("Destroying VMA allocator: {:p}", reinterpret_cast<void*>(allocator_));

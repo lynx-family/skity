@@ -13,11 +13,14 @@
 #include "src/gpu/vk/vulkan_debug_runtime_state.hpp"
 #include "src/gpu/vk/vulkan_pending_submission.hpp"
 #include "src/gpu/vk/vulkan_proc_table.hpp"
+#include "src/gpu/vk/vulkan_render_pass_cache.hpp"
 
 namespace skity {
 
 class VulkanContextState {
  public:
+  using LegacyRenderPassKey = VulkanRenderPassCache::Key;
+
   VulkanContextState() = default;
 
   ~VulkanContextState();
@@ -102,6 +105,9 @@ class VulkanContextState {
 
   void CollectPendingSubmissions(bool wait_all) const;
 
+  VkRenderPass GetOrCreateLegacyRenderPass(
+      const LegacyRenderPassKey& key) const;
+
  private:
   int32_t FindQueueFamilyIndex(VkQueueFlags flags, bool prefer_dedicated) const;
   bool InitializeInstance(const GPUContextInfoVK& info);
@@ -139,6 +145,7 @@ class VulkanContextState {
   bool dynamic_rendering_enabled_ = false;
   VulkanDebugRuntimeState debug_runtime_ = {};
   mutable std::vector<VulkanPendingSubmission> pending_submissions_ = {};
+  mutable VulkanRenderPassCache render_pass_cache_ = {};
 };
 
 }  // namespace skity

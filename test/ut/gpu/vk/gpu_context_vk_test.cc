@@ -1117,4 +1117,37 @@ TEST(VulkanProcLoaderTest,
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 }
 
+TEST(VulkanProcLoaderTest, LegacyRenderPassCacheReusesCompatibleRenderPass) {
+  auto bundle = CreateLegacyGPUContextForTest();
+  ASSERT_NE(bundle.context, nullptr);
+
+  auto* vk_context = static_cast<skity::GPUContextVK*>(bundle.context.get());
+  ASSERT_NE(vk_context, nullptr);
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+  EXPECT_FALSE(state->IsDynamicRenderingEnabled());
+
+  skity::VulkanContextState::LegacyRenderPassKey key = {};
+  key.color_format = VK_FORMAT_R8G8B8A8_UNORM;
+  key.color_samples = VK_SAMPLE_COUNT_1_BIT;
+  key.color_load_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  key.color_store_op = VK_ATTACHMENT_STORE_OP_STORE;
+
+  const VkRenderPass first = state->GetOrCreateLegacyRenderPass(key);
+  ASSERT_NE(first, VK_NULL_HANDLE);
+
+  const VkRenderPass second = state->GetOrCreateLegacyRenderPass(key);
+  EXPECT_EQ(first, second);
+
+  key.has_stencil = true;
+  key.depth_stencil_format = VK_FORMAT_S8_UINT;
+  key.depth_stencil_samples = VK_SAMPLE_COUNT_1_BIT;
+  key.stencil_load_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  key.stencil_store_op = VK_ATTACHMENT_STORE_OP_STORE;
+
+  const VkRenderPass third = state->GetOrCreateLegacyRenderPass(key);
+  ASSERT_NE(third, VK_NULL_HANDLE);
+  EXPECT_NE(first, third);
+}
+
 }  // namespace
