@@ -147,6 +147,8 @@ class Lowerer {
   ir::TypeId GetFunctionReturnType(const ast::Function* function);
   const ast::StructDecl* ResolveStructDecl(const ast::Type& type) const;
   const ast::StructDecl* ResolveStructDeclByName(std::string_view name) const;
+  ir::TypeId CreateBufferCompatibleType(ir::TypeId type,
+                                        ir::TypeTable::LayoutRule rule);
   void ResolveInterfaceDecorations(
       const std::vector<ast::Attribute*>& attributes,
       ir::InterfaceDecorationKind* decoration_kind,

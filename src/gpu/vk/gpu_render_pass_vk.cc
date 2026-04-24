@@ -6,7 +6,10 @@
 
 #include <array>
 
+#include "src/gpu/vk/gpu_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_command_buffer_vk.hpp"
+#include "src/gpu/vk/gpu_render_pipeline_vk.hpp"
+#include "src/gpu/vk/gpu_sampler_vk.hpp"
 #include "src/gpu/vk/gpu_texture_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
 #include "src/logging.hpp"
@@ -282,28 +285,432 @@ VulkanContextState::LegacyRenderPassKey BuildLegacyRenderPassKey(
   return key;
 }
 
-void LogUnsupportedCommandsIfNeeded(const GPURenderPass& pass,
-                                    const std::string& label) {
-  if (pass.GetCommands().empty()) {
-    return;
-  }
-
-  if (label.empty()) {
-    LOGW(
-        "GPURenderPassVK draw command encoding is not implemented yet; "
-        "render pass will only begin/end");
-    return;
-  }
-
-  LOGW(
-      "GPURenderPassVK draw command encoding is not implemented yet; pass "
-      "'{}' will only begin/end",
-      label);
+VkImageLayout GetSampledImageLayout(const GPUTextureVK& texture) {
+  const auto current_layout = texture.GetCurrentLayout();
+  return current_layout != VK_IMAGE_LAYOUT_UNDEFINED
+             ? current_layout
+             : texture.GetPreferredLayout();
 }
 
-bool RecordDynamicRenderingPass(const VulkanContextState& state,
-                                GPUCommandBufferVK& command_buffer,
+struct DescriptorPoolRequirements {
+  uint32_t max_sets = 0;
+  uint32_t uniform_buffer_count = 0;
+  uint32_t sampled_image_count = 0;
+  uint32_t sampler_count = 0;
+};
+
+void AccumulateDescriptorPoolRequirements(const Command& command,
+                                          const GPURenderPipelineVK& pipeline,
+                                          DescriptorPoolRequirements* req) {
+  if (req == nullptr) {
+    return;
+  }
+
+  req->max_sets +=
+      static_cast<uint32_t>(pipeline.GetDescriptorSetLayouts().size());
+  req->uniform_buffer_count +=
+      static_cast<uint32_t>(command.uniform_bindings.size());
+  req->sampled_image_count +=
+      static_cast<uint32_t>(command.texture_bindings.size());
+  req->sampler_count += static_cast<uint32_t>(command.sampler_bindings.size());
+}
+
+VkDescriptorPool CreateDescriptorPoolForPass(
+    const std::shared_ptr<const VulkanContextState>& state,
+    const GPURenderPass& pass) {
+  if (state == nullptr || state->GetLogicalDevice() == VK_NULL_HANDLE) {
+    return VK_NULL_HANDLE;
+  }
+
+  DescriptorPoolRequirements requirements = {};
+  for (const auto* command : pass.GetCommands()) {
+    if (command == nullptr || !command->IsValid()) {
+      continue;
+    }
+
+    auto* pipeline = GPURenderPipelineVK::Cast(command->pipeline);
+    if (pipeline == nullptr || !pipeline->IsValid()) {
+      continue;
+    }
+
+    AccumulateDescriptorPoolRequirements(*command, *pipeline, &requirements);
+  }
+
+  if (requirements.max_sets == 0) {
+    return VK_NULL_HANDLE;
+  }
+
+  std::vector<VkDescriptorPoolSize> pool_sizes;
+  if (requirements.uniform_buffer_count > 0) {
+    pool_sizes.push_back(
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, requirements.uniform_buffer_count});
+  }
+  if (requirements.sampled_image_count > 0) {
+    pool_sizes.push_back(
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, requirements.sampled_image_count});
+  }
+  if (requirements.sampler_count > 0) {
+    pool_sizes.push_back(
+        {VK_DESCRIPTOR_TYPE_SAMPLER, requirements.sampler_count});
+  }
+
+  VkDescriptorPoolCreateInfo pool_info = {};
+  pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  pool_info.maxSets = requirements.max_sets;
+  pool_info.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
+  pool_info.pPoolSizes = pool_sizes.empty() ? nullptr : pool_sizes.data();
+
+  VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+  const VkResult result = state->DeviceFns().vkCreateDescriptorPool(
+      state->GetLogicalDevice(), &pool_info, nullptr, &descriptor_pool);
+  if (result != VK_SUCCESS || descriptor_pool == VK_NULL_HANDLE) {
+    LOGE("Failed to create Vulkan descriptor pool: {}",
+         static_cast<int32_t>(result));
+    return VK_NULL_HANDLE;
+  }
+
+  return descriptor_pool;
+}
+
+bool PrepareSampledTextures(const VulkanContextState& state,
+                            GPUCommandBufferVK& command_buffer,
+                            const GPURenderPass& pass) {
+  for (const auto* command : pass.GetCommands()) {
+    if (command == nullptr || !command->IsValid()) {
+      continue;
+    }
+
+    for (const auto& binding : command->texture_bindings) {
+      auto* texture = GPUTextureVK::Cast(binding.texture.get());
+      if (texture == nullptr || !texture->IsValid()) {
+        LOGE("Failed to prepare Vulkan sampled texture binding");
+        return false;
+      }
+
+      if (!TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
+                                 *texture, texture->GetPreferredLayout())) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+void RecordBoundResourceCleanup(GPUCommandBufferVK& command_buffer,
                                 const GPURenderPass& pass) {
+  std::vector<std::shared_ptr<GPUTexture>> textures;
+  std::vector<std::shared_ptr<GPUSampler>> samplers;
+
+  for (const auto* command : pass.GetCommands()) {
+    if (command == nullptr || !command->IsValid()) {
+      continue;
+    }
+
+    for (const auto& binding : command->texture_bindings) {
+      if (binding.texture != nullptr) {
+        textures.emplace_back(binding.texture);
+      }
+    }
+
+    for (const auto& binding : command->sampler_bindings) {
+      if (binding.sampler != nullptr) {
+        samplers.emplace_back(binding.sampler);
+      }
+    }
+  }
+
+  command_buffer.RecordCleanupAction(
+      [textures = std::move(textures), samplers = std::move(samplers)]() {});
+}
+
+bool SetupDescriptorSets(const VulkanContextState& state,
+                         VkCommandBuffer command_buffer,
+                         VkDescriptorPool descriptor_pool,
+                         const Command& command,
+                         const GPURenderPipelineVK& pipeline) {
+  const auto& set_layouts = pipeline.GetDescriptorSetLayouts();
+  if (set_layouts.empty()) {
+    return true;
+  }
+
+  if (descriptor_pool == VK_NULL_HANDLE) {
+    LOGE("Failed to bind Vulkan descriptor sets: descriptor pool is null");
+    return false;
+  }
+
+  std::vector<VkDescriptorSet> descriptor_sets(set_layouts.size(),
+                                               VK_NULL_HANDLE);
+  VkDescriptorSetAllocateInfo alloc_info = {};
+  alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  alloc_info.descriptorPool = descriptor_pool;
+  alloc_info.descriptorSetCount = static_cast<uint32_t>(set_layouts.size());
+  alloc_info.pSetLayouts = set_layouts.data();
+
+  const VkResult alloc_result = state.DeviceFns().vkAllocateDescriptorSets(
+      state.GetLogicalDevice(), &alloc_info, descriptor_sets.data());
+  if (alloc_result != VK_SUCCESS) {
+    LOGE("Failed to allocate Vulkan descriptor sets: {}",
+         static_cast<int32_t>(alloc_result));
+    return false;
+  }
+
+  const size_t total_write_count = command.uniform_bindings.size() +
+                                   command.texture_bindings.size() +
+                                   command.sampler_bindings.size();
+  std::vector<VkWriteDescriptorSet> writes;
+  writes.reserve(total_write_count);
+  std::vector<VkDescriptorBufferInfo> buffer_infos;
+  buffer_infos.reserve(command.uniform_bindings.size());
+  std::vector<VkDescriptorImageInfo> image_infos;
+  image_infos.reserve(command.texture_bindings.size() +
+                      command.sampler_bindings.size());
+
+  for (const auto& binding : command.uniform_bindings) {
+    if (binding.group >= descriptor_sets.size()) {
+      LOGE("Invalid Vulkan uniform binding group {}", binding.group);
+      return false;
+    }
+
+    auto* buffer = static_cast<GPUBufferVK*>(binding.buffer.buffer);
+    if (buffer == nullptr || !buffer->IsValid()) {
+      LOGE("Invalid Vulkan uniform buffer binding");
+      return false;
+    }
+
+    buffer_infos.push_back(VkDescriptorBufferInfo{
+        buffer->GetBuffer(),
+        binding.buffer.offset,
+        binding.buffer.range,
+    });
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = descriptor_sets[binding.group];
+    write.dstBinding = binding.binding;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write.pBufferInfo = &buffer_infos.back();
+    writes.push_back(write);
+  }
+
+  for (const auto& binding : command.texture_bindings) {
+    if (binding.group >= descriptor_sets.size()) {
+      LOGE("Invalid Vulkan texture binding group {}", binding.group);
+      return false;
+    }
+
+    auto* texture = GPUTextureVK::Cast(binding.texture.get());
+    if (texture == nullptr || !texture->IsValid()) {
+      LOGE("Invalid Vulkan texture binding");
+      return false;
+    }
+
+    image_infos.push_back(VkDescriptorImageInfo{
+        VK_NULL_HANDLE,
+        texture->GetImageView(),
+        GetSampledImageLayout(*texture),
+    });
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = descriptor_sets[binding.group];
+    write.dstBinding = binding.binding;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    write.pImageInfo = &image_infos.back();
+    writes.push_back(write);
+  }
+
+  for (const auto& binding : command.sampler_bindings) {
+    if (binding.group >= descriptor_sets.size()) {
+      LOGE("Invalid Vulkan sampler binding group {}", binding.group);
+      return false;
+    }
+
+    auto* sampler = GPUSamplerVK::Cast(binding.sampler.get());
+    if (sampler == nullptr || !sampler->IsValid()) {
+      LOGE("Invalid Vulkan sampler binding");
+      return false;
+    }
+
+    image_infos.push_back(VkDescriptorImageInfo{
+        sampler->GetSampler(),
+        VK_NULL_HANDLE,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+    });
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = descriptor_sets[binding.group];
+    write.dstBinding = binding.binding;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    write.pImageInfo = &image_infos.back();
+    writes.push_back(write);
+  }
+
+  if (!writes.empty()) {
+    state.DeviceFns().vkUpdateDescriptorSets(
+        state.GetLogicalDevice(), static_cast<uint32_t>(writes.size()),
+        writes.data(), 0, nullptr);
+  }
+
+  state.DeviceFns().vkCmdBindDescriptorSets(
+      command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+      pipeline.GetPipelineLayout(), 0,
+      static_cast<uint32_t>(descriptor_sets.size()), descriptor_sets.data(), 0,
+      nullptr);
+  return true;
+}
+
+bool RecordDrawCommands(const std::shared_ptr<const VulkanContextState>& state,
+                        GPUCommandBufferVK& command_buffer,
+                        const GPURenderPass& pass,
+                        std::optional<GPUViewport> viewport,
+                        std::optional<GPUScissorRect> scissor) {
+  const auto target_width = pass.GetDescriptor().GetTargetWidth();
+  const auto target_height = pass.GetDescriptor().GetTargetHeight();
+
+  const GPUViewport vp = viewport.value_or(GPUViewport{
+      0.f,
+      0.f,
+      static_cast<float>(target_width),
+      static_cast<float>(target_height),
+      0.f,
+      1.f,
+  });
+  const GPUScissorRect default_scissor = scissor.value_or(GPUScissorRect{
+      0,
+      0,
+      target_width,
+      target_height,
+  });
+
+  VkViewport vk_viewport = {};
+  vk_viewport.x = vp.x;
+  vk_viewport.y = vp.y;
+  vk_viewport.width = vp.width;
+  vk_viewport.height = vp.height;
+  vk_viewport.minDepth = vp.min_depth;
+  vk_viewport.maxDepth = vp.max_depth;
+  state->DeviceFns().vkCmdSetViewport(command_buffer.GetCommandBuffer(), 0, 1,
+                                      &vk_viewport);
+
+  VkRect2D vk_scissor = {};
+  vk_scissor.offset = {static_cast<int32_t>(default_scissor.x),
+                       static_cast<int32_t>(default_scissor.y)};
+  vk_scissor.extent = {default_scissor.width, default_scissor.height};
+  state->DeviceFns().vkCmdSetScissor(command_buffer.GetCommandBuffer(), 0, 1,
+                                     &vk_scissor);
+
+  VkDescriptorPool descriptor_pool = CreateDescriptorPoolForPass(state, pass);
+  if (descriptor_pool != VK_NULL_HANDLE) {
+    command_buffer.RecordCleanupAction([state, descriptor_pool]() {
+      if (state == nullptr || state->GetLogicalDevice() == VK_NULL_HANDLE ||
+          state->DeviceFns().vkDestroyDescriptorPool == nullptr) {
+        return;
+      }
+      state->DeviceFns().vkDestroyDescriptorPool(state->GetLogicalDevice(),
+                                                 descriptor_pool, nullptr);
+    });
+  }
+
+  for (const auto* command : pass.GetCommands()) {
+    if (command == nullptr || !command->IsValid()) {
+      continue;
+    }
+
+    auto* pipeline = GPURenderPipelineVK::Cast(command->pipeline);
+    if (pipeline == nullptr || !pipeline->IsValid()) {
+      LOGE("Failed to record Vulkan draw command: invalid pipeline");
+      return false;
+    }
+
+    state->DeviceFns().vkCmdBindPipeline(command_buffer.GetCommandBuffer(),
+                                         VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                         pipeline->GetPipeline());
+
+    VkRect2D command_scissor = {};
+    command_scissor.offset = {static_cast<int32_t>(command->scissor_rect.x),
+                              static_cast<int32_t>(command->scissor_rect.y)};
+    command_scissor.extent = {command->scissor_rect.width,
+                              command->scissor_rect.height};
+    state->DeviceFns().vkCmdSetScissor(command_buffer.GetCommandBuffer(), 0, 1,
+                                       &command_scissor);
+
+    auto* vertex_buffer =
+        static_cast<GPUBufferVK*>(command->vertex_buffer.buffer);
+    auto* index_buffer =
+        static_cast<GPUBufferVK*>(command->index_buffer.buffer);
+    if (vertex_buffer == nullptr || !vertex_buffer->IsValid() ||
+        index_buffer == nullptr || !index_buffer->IsValid()) {
+      LOGE("Failed to record Vulkan draw command: invalid vertex/index buffer");
+      return false;
+    }
+
+    std::array<VkBuffer, 2> vertex_buffers = {vertex_buffer->GetBuffer(),
+                                              VK_NULL_HANDLE};
+    std::array<VkDeviceSize, 2> vertex_offsets = {
+        command->vertex_buffer.offset,
+        0,
+    };
+    uint32_t vertex_buffer_count = 1;
+    if (command->IsInstanced()) {
+      auto* instance_buffer =
+          static_cast<GPUBufferVK*>(command->instance_buffer.buffer);
+      if (instance_buffer == nullptr || !instance_buffer->IsValid()) {
+        LOGE("Failed to record Vulkan draw command: invalid instance buffer");
+        return false;
+      }
+      vertex_buffers[1] = instance_buffer->GetBuffer();
+      vertex_offsets[1] = command->instance_buffer.offset;
+      vertex_buffer_count = 2;
+    }
+
+    state->DeviceFns().vkCmdBindVertexBuffers(
+        command_buffer.GetCommandBuffer(), 0, vertex_buffer_count,
+        vertex_buffers.data(), vertex_offsets.data());
+    state->DeviceFns().vkCmdBindIndexBuffer(
+        command_buffer.GetCommandBuffer(), index_buffer->GetBuffer(),
+        command->index_buffer.offset, VK_INDEX_TYPE_UINT32);
+
+    if (!SetupDescriptorSets(*state, command_buffer.GetCommandBuffer(),
+                             descriptor_pool, *command, *pipeline)) {
+      return false;
+    }
+
+    state->DeviceFns().vkCmdSetStencilCompareMask(
+        command_buffer.GetCommandBuffer(), VK_STENCIL_FACE_FRONT_BIT,
+        command->front_stencil_compare_mask);
+    state->DeviceFns().vkCmdSetStencilCompareMask(
+        command_buffer.GetCommandBuffer(), VK_STENCIL_FACE_BACK_BIT,
+        command->back_stencil_compare_mask);
+    state->DeviceFns().vkCmdSetStencilWriteMask(
+        command_buffer.GetCommandBuffer(), VK_STENCIL_FACE_FRONT_BIT,
+        command->front_stencil_write_mask);
+    state->DeviceFns().vkCmdSetStencilWriteMask(
+        command_buffer.GetCommandBuffer(), VK_STENCIL_FACE_BACK_BIT,
+        command->back_stencil_write_mask);
+    state->DeviceFns().vkCmdSetStencilReference(
+        command_buffer.GetCommandBuffer(),
+        VK_STENCIL_FACE_FRONT_BIT | VK_STENCIL_FACE_BACK_BIT,
+        command->stencil_reference);
+
+    state->DeviceFns().vkCmdDrawIndexed(
+        command_buffer.GetCommandBuffer(), command->index_count,
+        command->instance_count == 0 ? 1 : command->instance_count, 0, 0, 0);
+  }
+
+  RecordBoundResourceCleanup(command_buffer, pass);
+  return true;
+}
+
+bool RecordDynamicRenderingPass(
+    const std::shared_ptr<const VulkanContextState>& state,
+    GPUCommandBufferVK& command_buffer, const GPURenderPass& pass,
+    std::optional<GPUViewport> viewport,
+    std::optional<GPUScissorRect> scissor) {
   const auto& desc = pass.GetDescriptor();
   if (desc.color_attachment.texture == nullptr) {
     LOGE("Vulkan dynamic rendering requires a color attachment");
@@ -323,7 +730,11 @@ bool RecordDynamicRenderingPass(const VulkanContextState& state,
     return false;
   }
 
-  if (!TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
+  if (!PrepareSampledTextures(*state, command_buffer, pass)) {
+    return false;
+  }
+
+  if (!TransitionImageLayout(*state, command_buffer.GetCommandBuffer(),
                              *color_context.texture,
                              color_context.attachment_layout)) {
     return false;
@@ -343,7 +754,7 @@ bool RecordDynamicRenderingPass(const VulkanContextState& state,
        static_cast<float>(desc.color_attachment.clear_value.a)}};
 
   if (color_context.resolve_texture != nullptr) {
-    if (!TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
+    if (!TransitionImageLayout(*state, command_buffer.GetCommandBuffer(),
                                *color_context.resolve_texture,
                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)) {
       return false;
@@ -355,7 +766,7 @@ bool RecordDynamicRenderingPass(const VulkanContextState& state,
   }
 
   if (depth_stencil_context.texture != nullptr &&
-      !TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
+      !TransitionImageLayout(*state, command_buffer.GetCommandBuffer(),
                              *depth_stencil_context.texture,
                              depth_stencil_context.attachment_layout)) {
     return false;
@@ -398,20 +809,24 @@ bool RecordDynamicRenderingPass(const VulkanContextState& state,
   rendering_info.pDepthAttachment = has_depth ? &depth_info : nullptr;
   rendering_info.pStencilAttachment = has_stencil ? &stencil_info : nullptr;
 
-  state.DeviceFns().vkCmdBeginRendering(command_buffer.GetCommandBuffer(),
-                                        &rendering_info);
-  LogUnsupportedCommandsIfNeeded(pass, desc.label);
-  state.DeviceFns().vkCmdEndRendering(command_buffer.GetCommandBuffer());
+  state->DeviceFns().vkCmdBeginRendering(command_buffer.GetCommandBuffer(),
+                                         &rendering_info);
+  const bool recorded =
+      RecordDrawCommands(state, command_buffer, pass, viewport, scissor);
+  state->DeviceFns().vkCmdEndRendering(command_buffer.GetCommandBuffer());
+  if (!recorded) {
+    return false;
+  }
 
-  TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
+  TransitionImageLayout(*state, command_buffer.GetCommandBuffer(),
                         *color_context.texture, color_context.final_layout);
   if (color_context.resolve_texture != nullptr) {
-    TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
+    TransitionImageLayout(*state, command_buffer.GetCommandBuffer(),
                           *color_context.resolve_texture,
                           color_context.resolve_texture->GetPreferredLayout());
   }
   if (depth_stencil_context.texture != nullptr) {
-    TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
+    TransitionImageLayout(*state, command_buffer.GetCommandBuffer(),
                           *depth_stencil_context.texture,
                           depth_stencil_context.final_layout);
   }
@@ -429,7 +844,9 @@ bool RecordDynamicRenderingPass(const VulkanContextState& state,
 
 bool RecordLegacyRenderPass(
     const std::shared_ptr<const VulkanContextState>& state,
-    GPUCommandBufferVK& command_buffer, const GPURenderPass& pass) {
+    GPUCommandBufferVK& command_buffer, const GPURenderPass& pass,
+    std::optional<GPUViewport> viewport,
+    std::optional<GPUScissorRect> scissor) {
   const auto& desc = pass.GetDescriptor();
   if (desc.color_attachment.texture == nullptr) {
     LOGE("Vulkan legacy render pass requires a color attachment");
@@ -446,6 +863,10 @@ bool RecordLegacyRenderPass(
   bool has_stencil = false;
   if (!PrepareDepthStencilAttachment(desc, &depth_stencil_context, &has_depth,
                                      &has_stencil)) {
+    return false;
+  }
+
+  if (!PrepareSampledTextures(*state, command_buffer, pass)) {
     return false;
   }
 
@@ -516,7 +937,7 @@ bool RecordLegacyRenderPass(
   framebuffer_info.layers = 1;
 
   VkFramebuffer framebuffer = VK_NULL_HANDLE;
-  VkResult result = state->DeviceFns().vkCreateFramebuffer(
+  const VkResult result = state->DeviceFns().vkCreateFramebuffer(
       state->GetLogicalDevice(), &framebuffer_info, nullptr, &framebuffer);
   if (result != VK_SUCCESS || framebuffer == VK_NULL_HANDLE) {
     LOGE("Failed to create Vulkan framebuffer: {}",
@@ -537,8 +958,12 @@ bool RecordLegacyRenderPass(
   state->DeviceFns().vkCmdBeginRenderPass(command_buffer.GetCommandBuffer(),
                                           &begin_info,
                                           VK_SUBPASS_CONTENTS_INLINE);
-  LogUnsupportedCommandsIfNeeded(pass, desc.label);
+  const bool recorded =
+      RecordDrawCommands(state, command_buffer, pass, viewport, scissor);
   state->DeviceFns().vkCmdEndRenderPass(command_buffer.GetCommandBuffer());
+  if (!recorded) {
+    return false;
+  }
 
   TransitionImageLayout(*state, command_buffer.GetCommandBuffer(),
                         *color_context.texture, color_context.final_layout);
@@ -586,20 +1011,18 @@ GPURenderPassVK::GPURenderPassVK(
 
 void GPURenderPassVK::EncodeCommands(std::optional<GPUViewport> viewport,
                                      std::optional<GPUScissorRect> scissor) {
-  (void)viewport;
-  (void)scissor;
-
   if (state_ == nullptr || command_buffer_ == nullptr) {
     LOGE("Failed to encode Vulkan render pass: invalid state");
     return;
   }
 
   if (state_->IsDynamicRenderingEnabled()) {
-    RecordDynamicRenderingPass(*state_, *command_buffer_, *this);
+    RecordDynamicRenderingPass(state_, *command_buffer_, *this, viewport,
+                               scissor);
     return;
   }
 
-  RecordLegacyRenderPass(state_, *command_buffer_, *this);
+  RecordLegacyRenderPass(state_, *command_buffer_, *this, viewport, scissor);
 }
 
 }  // namespace skity

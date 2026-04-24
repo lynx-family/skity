@@ -267,6 +267,7 @@ class ModuleBuilder {
   std::vector<GlobalVarInfo> global_vars_;
   std::vector<ValueInfo> values_;
   std::unordered_map<uint32_t, uint32_t> value_map_;
+  std::unordered_map<uint32_t, SpvStorageClass> pointer_storage_class_map_;
   uint32_t glsl_std_450_import_id_ = 0;
   const ir::Block* current_block_ = nullptr;
 };

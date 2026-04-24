@@ -2166,6 +2166,39 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsFragmentSpirvWithUniformStructMemberAccess) {
+  auto program = wgx::Program::Parse(R"(
+struct FragmentUniforms {
+  color: vec4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> u_data: FragmentUniforms;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  return u_data.color;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_uniform_struct_member_access.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+}
+
 /**
  * Test storage buffer global variable with resource binding.
  * Storage variables should have DescriptorSet and Binding decorations.
