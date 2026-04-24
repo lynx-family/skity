@@ -496,6 +496,8 @@ if(${SKITY_HW_RENDERER})
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_context_impl_vk.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pass_vk.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pass_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pipeline_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pipeline_vk.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_shader_function_vk.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_shader_function_vk.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_texture_vk.cc

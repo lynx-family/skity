@@ -35,6 +35,8 @@ class VulkanContextState {
 
   VkQueue GetGraphicsQueue() const { return graphics_queue_; }
 
+  VkPipelineCache GetPipelineCache() const { return pipeline_cache_; }
+
   int32_t GetGraphicsQueueFamilyIndex() const {
     return graphics_queue_family_index_;
   }
@@ -127,6 +129,7 @@ class VulkanContextState {
   VkQueue graphics_queue_ = VK_NULL_HANDLE;
   VkQueue compute_queue_ = VK_NULL_HANDLE;
   VkQueue transfer_queue_ = VK_NULL_HANDLE;
+  VkPipelineCache pipeline_cache_ = VK_NULL_HANDLE;
   VmaAllocator allocator_ = nullptr;
   uint32_t api_version_ = VK_API_VERSION_1_0;
   int32_t graphics_queue_family_index_ = -1;

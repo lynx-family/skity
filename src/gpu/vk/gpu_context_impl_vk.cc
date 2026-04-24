@@ -374,6 +374,25 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkCreateShaderModule"));
   fns->vkDestroyShaderModule = reinterpret_cast<PFN_vkDestroyShaderModule>(
       get_device_proc_addr(device, "vkDestroyShaderModule"));
+  fns->vkCreateDescriptorSetLayout =
+      reinterpret_cast<PFN_vkCreateDescriptorSetLayout>(
+          get_device_proc_addr(device, "vkCreateDescriptorSetLayout"));
+  fns->vkDestroyDescriptorSetLayout =
+      reinterpret_cast<PFN_vkDestroyDescriptorSetLayout>(
+          get_device_proc_addr(device, "vkDestroyDescriptorSetLayout"));
+  fns->vkCreatePipelineLayout = reinterpret_cast<PFN_vkCreatePipelineLayout>(
+      get_device_proc_addr(device, "vkCreatePipelineLayout"));
+  fns->vkDestroyPipelineLayout = reinterpret_cast<PFN_vkDestroyPipelineLayout>(
+      get_device_proc_addr(device, "vkDestroyPipelineLayout"));
+  fns->vkCreatePipelineCache = reinterpret_cast<PFN_vkCreatePipelineCache>(
+      get_device_proc_addr(device, "vkCreatePipelineCache"));
+  fns->vkDestroyPipelineCache = reinterpret_cast<PFN_vkDestroyPipelineCache>(
+      get_device_proc_addr(device, "vkDestroyPipelineCache"));
+  fns->vkCreateGraphicsPipelines =
+      reinterpret_cast<PFN_vkCreateGraphicsPipelines>(
+          get_device_proc_addr(device, "vkCreateGraphicsPipelines"));
+  fns->vkDestroyPipeline = reinterpret_cast<PFN_vkDestroyPipeline>(
+      get_device_proc_addr(device, "vkDestroyPipeline"));
   fns->vkSetDebugUtilsObjectNameEXT =
       reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
           get_device_proc_addr(device, "vkSetDebugUtilsObjectNameEXT"));
@@ -417,7 +436,15 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       fns->vkCmdCopyBufferToImage == nullptr ||
       fns->vkCmdPipelineBarrier == nullptr ||
       fns->vkCreateShaderModule == nullptr ||
-      fns->vkDestroyShaderModule == nullptr) {
+      fns->vkDestroyShaderModule == nullptr ||
+      fns->vkCreateDescriptorSetLayout == nullptr ||
+      fns->vkDestroyDescriptorSetLayout == nullptr ||
+      fns->vkCreatePipelineLayout == nullptr ||
+      fns->vkDestroyPipelineLayout == nullptr ||
+      fns->vkCreatePipelineCache == nullptr ||
+      fns->vkDestroyPipelineCache == nullptr ||
+      fns->vkCreateGraphicsPipelines == nullptr ||
+      fns->vkDestroyPipeline == nullptr) {
     LOGE("Failed to load Vulkan device procedures for device: {:p}",
          reinterpret_cast<void*>(device));
     return false;

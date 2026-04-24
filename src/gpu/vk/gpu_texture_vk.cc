@@ -13,7 +13,7 @@ namespace skity {
 
 namespace {
 
-VkFormat ToVkFormat(GPUTextureFormat format) {
+VkFormat ConvertToVkFormat(GPUTextureFormat format) {
   switch (format) {
     case GPUTextureFormat::kR8Unorm:
       return VK_FORMAT_R8_UNORM;
@@ -120,7 +120,7 @@ VkFormat ResolveVkFormat(const VulkanContextState& state,
                          GPUTextureFormat texture_format,
                          VkImageUsageFlags usage,
                          VkSampleCountFlagBits samples) {
-  const VkFormat preferred = ToVkFormat(texture_format);
+  const VkFormat preferred = ConvertToVkFormat(texture_format);
   if (IsImageFormatSupported(state, preferred, usage, samples)) {
     return preferred;
   }
@@ -179,6 +179,10 @@ VkImageLayout ResolvePreferredLayout(const GPUTextureDescriptor& descriptor) {
 
 }  // namespace
 
+VkFormat GPUTextureVK::ToVkFormat(GPUTextureFormat format) {
+  return ConvertToVkFormat(format);
+}
+
 GPUTextureVK::GPUTextureVK(std::shared_ptr<const VulkanContextState> state,
                            const GPUTextureDescriptor& descriptor,
                            VkImage image, VmaAllocation allocation,
@@ -215,7 +219,7 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Create(
     return {};
   }
 
-  const VkFormat requested_format = ToVkFormat(descriptor.format);
+  const VkFormat requested_format = ConvertToVkFormat(descriptor.format);
   if (requested_format == VK_FORMAT_UNDEFINED || descriptor.width == 0 ||
       descriptor.height == 0) {
     LOGE("Failed to create Vulkan texture: invalid descriptor");

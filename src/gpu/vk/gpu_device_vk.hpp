@@ -9,6 +9,7 @@
 
 namespace skity {
 
+class GPURenderPipelineVK;
 class VulkanContextState;
 
 class GPUDeviceVK : public GPUDevice {
@@ -46,6 +47,8 @@ class GPUDeviceVK : public GPUDevice {
  private:
   std::shared_ptr<GPUShaderFunction> CreateShaderFunctionFromModule(
       const GPUShaderFunctionDescriptor& desc);
+  std::unique_ptr<GPURenderPipelineVK> CreateRenderPipelineInternal(
+      const GPURenderPipelineDescriptor& desc);
 
   std::shared_ptr<const VulkanContextState> state_ = {};
   uint32_t buffer_alignment_ = 256;

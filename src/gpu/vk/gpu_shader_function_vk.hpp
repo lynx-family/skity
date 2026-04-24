@@ -7,6 +7,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include "src/gpu/backend_cast.hpp"
 #include "src/gpu/gpu_shader_function.hpp"
 
 namespace skity {
@@ -29,6 +30,8 @@ class GPUShaderFunctionVK : public GPUShaderFunction {
   const std::string& GetEntryPoint() const { return entry_point_; }
 
   VkShaderModule GetShaderModule() const { return shader_module_; }
+
+  SKT_BACKEND_CAST(GPUShaderFunctionVK, GPUShaderFunction)
 
  private:
   GPUShaderStage stage_ = GPUShaderStage::kVertex;

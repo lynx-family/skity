@@ -43,7 +43,7 @@ struct HWPipelineDescriptor {
 
 class HWPipeline {
  public:
-  HWPipeline(GPUDevice* device,
+  HWPipeline(GPUDevice* device, GPUBackendType backend,
              std::unique_ptr<GPURenderPipeline> base_pipeline);
 
   ~HWPipeline() = default;
@@ -55,7 +55,12 @@ class HWPipeline {
                      const HWPipelineDescriptor& desc);
 
  private:
+  bool DepthStencilStateMatch(GPURenderPipeline* pipeline,
+                              const HWPipelineDescriptor& desc);
+
+ private:
   GPUDevice* gpu_device_;
+  GPUBackendType backend_;
   std::vector<std::unique_ptr<GPURenderPipeline>> gpu_pipelines_;
 };
 
