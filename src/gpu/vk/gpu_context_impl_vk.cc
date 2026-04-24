@@ -374,6 +374,10 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkCreateShaderModule"));
   fns->vkDestroyShaderModule = reinterpret_cast<PFN_vkDestroyShaderModule>(
       get_device_proc_addr(device, "vkDestroyShaderModule"));
+  fns->vkCreateSampler = reinterpret_cast<PFN_vkCreateSampler>(
+      get_device_proc_addr(device, "vkCreateSampler"));
+  fns->vkDestroySampler = reinterpret_cast<PFN_vkDestroySampler>(
+      get_device_proc_addr(device, "vkDestroySampler"));
   fns->vkCreateDescriptorSetLayout =
       reinterpret_cast<PFN_vkCreateDescriptorSetLayout>(
           get_device_proc_addr(device, "vkCreateDescriptorSetLayout"));
@@ -437,6 +441,7 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       fns->vkCmdPipelineBarrier == nullptr ||
       fns->vkCreateShaderModule == nullptr ||
       fns->vkDestroyShaderModule == nullptr ||
+      fns->vkCreateSampler == nullptr || fns->vkDestroySampler == nullptr ||
       fns->vkCreateDescriptorSetLayout == nullptr ||
       fns->vkDestroyDescriptorSetLayout == nullptr ||
       fns->vkCreatePipelineLayout == nullptr ||
