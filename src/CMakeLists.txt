@@ -501,6 +501,8 @@ if(${SKITY_HW_RENDERER})
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_texture_vk.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_texture_vk.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_debug_runtime_state.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_render_pass_cache.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_render_pass_cache.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_pending_submission.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_pending_submission.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_context_state.cc

@@ -4,6 +4,7 @@
 
 #include "src/gpu/vk/gpu_context_impl_vk.hpp"
 
+#include <string>
 #include <vector>
 
 #include "src/gpu/vk/gpu_device_vk.hpp"
@@ -70,10 +71,45 @@ bool IsAtLeastVulkan11(uint32_t version) {
           VK_API_VERSION_MINOR(version) >= 1);
 }
 
-void LogInstanceExtensions(const VulkanGlobalFns& global_fns) {
+bool ContainsExtension(const std::vector<VkExtensionProperties>& extensions,
+                       const char* extension_name) {
+  if (extension_name == nullptr) {
+    return false;
+  }
+
+  for (const auto& extension : extensions) {
+    if (std::string(extension.extensionName) == extension_name) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool ContainsExtension(const std::vector<std::string>& extensions,
+                       const char* extension_name) {
+  if (extension_name == nullptr) {
+    return false;
+  }
+
+  for (const auto& extension : extensions) {
+    if (extension == extension_name) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool QueryInstanceExtensions(const VulkanGlobalFns& global_fns,
+                             std::vector<VkExtensionProperties>* extensions) {
+  if (extensions == nullptr) {
+    return false;
+  }
+
   if (global_fns.vkEnumerateInstanceExtensionProperties == nullptr) {
     LOGE("Failed to enumerate Vulkan instance extensions: loader is null");
-    return;
+    return false;
   }
 
   uint32_t extension_count = 0;
@@ -82,23 +118,31 @@ void LogInstanceExtensions(const VulkanGlobalFns& global_fns) {
   if (result != VK_SUCCESS) {
     LOGE("Failed to query Vulkan instance extension count: {}",
          static_cast<int32_t>(result));
-    return;
+    return false;
   }
 
-  LOGD("Enumerated {} Vulkan instance extension(s)", extension_count);
+  extensions->clear();
   if (extension_count == 0) {
-    return;
+    return true;
   }
 
-  std::vector<VkExtensionProperties> extensions(extension_count);
+  extensions->resize(extension_count);
   result = global_fns.vkEnumerateInstanceExtensionProperties(
-      nullptr, &extension_count, extensions.data());
+      nullptr, &extension_count, extensions->data());
   if (result != VK_SUCCESS) {
     LOGE("Failed to query Vulkan instance extensions: {}",
          static_cast<int32_t>(result));
-    return;
+    extensions->clear();
+    return false;
   }
 
+  extensions->resize(extension_count);
+  return true;
+}
+
+void LogInstanceExtensions(
+    const std::vector<VkExtensionProperties>& extensions) {
+  LOGD("Enumerated {} Vulkan instance extension(s)", extensions.size());
   for (const auto& extension : extensions) {
     LOGD("Vulkan instance extension: {} (spec version {})",
          extension.extensionName, extension.specVersion);
@@ -382,6 +426,26 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
   return true;
 }
 
+void EnablePortabilityEnumerationIfAvailable(
+    const std::vector<VkExtensionProperties>& available_extensions,
+    std::vector<std::string>* enabled_extensions,
+    VkInstanceCreateFlags* instance_flags) {
+  if (enabled_extensions == nullptr || instance_flags == nullptr) {
+    return;
+  }
+
+  if (!ContainsExtension(available_extensions,
+                         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) ||
+      ContainsExtension(*enabled_extensions,
+                        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+    return;
+  }
+
+  enabled_extensions->emplace_back(
+      VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+  *instance_flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+}
+
 bool CreateVkInstance(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
                       VkInstance* instance, VulkanFunctionPointers* functions,
                       const VkInstanceCreateInfo* create_info,
@@ -402,7 +466,12 @@ bool CreateVkInstance(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
     return false;
   }
 
-  LogInstanceExtensions(target_functions->global);
+  std::vector<VkExtensionProperties> available_extensions;
+  if (!QueryInstanceExtensions(target_functions->global,
+                               &available_extensions)) {
+    return false;
+  }
+  LogInstanceExtensions(available_extensions);
 
   VkApplicationInfo app_info = {};
   VkInstanceCreateInfo instance_info = {};
@@ -430,6 +499,27 @@ bool CreateVkInstance(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
     instance_info.pApplicationInfo = &app_info;
     create_info = &instance_info;
   }
+
+  VkInstanceCreateInfo effective_create_info = *create_info;
+  std::vector<std::string> enabled_extensions;
+  enabled_extensions.reserve(create_info->enabledExtensionCount + 1);
+  for (uint32_t i = 0; i < create_info->enabledExtensionCount; ++i) {
+    if (create_info->ppEnabledExtensionNames[i] != nullptr) {
+      enabled_extensions.emplace_back(create_info->ppEnabledExtensionNames[i]);
+    }
+  }
+  EnablePortabilityEnumerationIfAvailable(
+      available_extensions, &enabled_extensions, &effective_create_info.flags);
+  std::vector<const char*> enabled_extension_ptrs;
+  enabled_extension_ptrs.reserve(enabled_extensions.size());
+  for (const auto& extension : enabled_extensions) {
+    enabled_extension_ptrs.push_back(extension.c_str());
+  }
+  effective_create_info.enabledExtensionCount =
+      static_cast<uint32_t>(enabled_extension_ptrs.size());
+  effective_create_info.ppEnabledExtensionNames =
+      enabled_extension_ptrs.empty() ? nullptr : enabled_extension_ptrs.data();
+  create_info = &effective_create_info;
 
   uint32_t api_version = VK_API_VERSION_1_0;
   if (create_info->pApplicationInfo != nullptr) {

@@ -7,6 +7,9 @@
 
 #include <vulkan/vulkan.h>
 
+#include <string>
+#include <vector>
+
 namespace skity {
 
 struct VulkanGlobalFns {
@@ -121,6 +124,11 @@ bool LoadVulkanInstanceFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
 
 bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
                          VkDevice device, VulkanDeviceFns* fns);
+
+void EnablePortabilityEnumerationIfAvailable(
+    const std::vector<VkExtensionProperties>& available_extensions,
+    std::vector<std::string>* enabled_extensions,
+    VkInstanceCreateFlags* instance_flags);
 
 bool CreateVkInstance(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
                       VkInstance* instance,
