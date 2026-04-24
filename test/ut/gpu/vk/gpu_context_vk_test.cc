@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <skity/gpu/gpu_context_vk.hpp>
 #include <string>
@@ -35,6 +36,19 @@ constexpr char kSimpleFragmentWGSL[] = R"(
 @fragment
 fn fs_main() -> @location(0) vec4<f32> {
   return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+)";
+
+constexpr char kUniformFragmentWGSL[] = R"(
+struct FSUniforms {
+  color : vec4<f32>,
+};
+
+@group(0) @binding(0) var<uniform> fs_uniforms : FSUniforms;
+
+@fragment
+fn fs_uniform_main() -> @location(0) vec4<f32> {
+  return fs_uniforms.color;
 }
 )";
 
@@ -259,6 +273,29 @@ int32_t FindGraphicsQueueFamilyIndex(
   }
 
   return -1;
+}
+
+std::shared_ptr<skity::GPUShaderFunction> CreateWGXShaderFunction(
+    skity::GPUDevice* device, const char* source, const char* label,
+    const char* entry_point, skity::GPUShaderStage stage) {
+  skity::GPUShaderModuleDescriptor module_desc = {};
+  module_desc.label = skity::GPULabel(label);
+  module_desc.source = source;
+  auto module = skity::GPUShaderModule::Create(module_desc);
+  if (module == nullptr) {
+    return nullptr;
+  }
+
+  skity::GPUShaderSourceWGX shader_source = {};
+  shader_source.module = module;
+  shader_source.entry_point = entry_point;
+
+  skity::GPUShaderFunctionDescriptor function_desc = {};
+  function_desc.label = skity::GPULabel(label);
+  function_desc.stage = stage;
+  function_desc.source_type = skity::GPUShaderSourceType::kWGX;
+  function_desc.shader_source = &shader_source;
+  return device->CreateShaderFunction(function_desc);
 }
 
 TEST(VulkanProcLoaderTest, CreateVkInstanceWithProcLoader) {
@@ -701,6 +738,225 @@ TEST_F(VulkanSharedContextTest, CreateAndReuseSampler) {
   EXPECT_EQ(same_sampler.get(), sampler.get());
 }
 
+TEST_F(VulkanSharedContextTest, EncodeDrawCommandWithUniformBinding) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+
+  auto vertex_function =
+      CreateWGXShaderFunction(device, kSimpleVertexWGSL, "vk_draw_uniform_vs",
+                              "vs_main", skity::GPUShaderStage::kVertex);
+  ASSERT_NE(vertex_function, nullptr);
+  ASSERT_TRUE(vertex_function->IsValid());
+
+  auto fragment_function = CreateWGXShaderFunction(
+      device, kUniformFragmentWGSL, "vk_draw_uniform_fs", "fs_uniform_main",
+      skity::GPUShaderStage::kFragment);
+  ASSERT_NE(fragment_function, nullptr);
+  ASSERT_TRUE(fragment_function->IsValid());
+
+  skity::GPURenderPipelineDescriptor pipeline_desc = {};
+  pipeline_desc.vertex_function = vertex_function;
+  pipeline_desc.fragment_function = fragment_function;
+  pipeline_desc.target.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  pipeline_desc.sample_count = 1;
+  pipeline_desc.label = skity::GPULabel("vk_draw_uniform_pipeline");
+
+  auto pipeline = device->CreateRenderPipeline(pipeline_desc);
+  ASSERT_NE(pipeline, nullptr);
+  ASSERT_TRUE(pipeline->IsValid());
+
+  auto vertex_buffer =
+      device->CreateBuffer(skity::GPUBufferUsage::kVertexBuffer);
+  auto index_buffer = device->CreateBuffer(skity::GPUBufferUsage::kIndexBuffer);
+  auto uniform_buffer =
+      device->CreateBuffer(skity::GPUBufferUsage::kUniformBuffer);
+  ASSERT_NE(vertex_buffer, nullptr);
+  ASSERT_NE(index_buffer, nullptr);
+  ASSERT_NE(uniform_buffer, nullptr);
+
+  skity::GPUTextureDescriptor texture_desc = {};
+  texture_desc.width = 16;
+  texture_desc.height = 16;
+  texture_desc.mip_level_count = 1;
+  texture_desc.sample_count = 1;
+  texture_desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  texture_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  texture_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto texture = device->CreateTexture(texture_desc);
+  ASSERT_NE(texture, nullptr);
+
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  float vertex_data[4] = {0.f, 0.f, 0.f, 1.f};
+  uint32_t index_data[3] = {0u, 0u, 0u};
+  float uniform_data[4] = {0.25f, 0.5f, 0.75f, 1.f};
+
+  auto blit_pass = command_buffer->BeginBlitPass();
+  ASSERT_NE(blit_pass, nullptr);
+  blit_pass->UploadBufferData(vertex_buffer.get(), vertex_data,
+                              sizeof(vertex_data));
+  blit_pass->UploadBufferData(index_buffer.get(), index_data,
+                              sizeof(index_data));
+  blit_pass->UploadBufferData(uniform_buffer.get(), uniform_data,
+                              sizeof(uniform_data));
+  blit_pass->End();
+
+  skity::GPURenderPassDescriptor render_pass_desc = {};
+  render_pass_desc.label = "vk_draw_uniform_render_pass";
+  render_pass_desc.color_attachment.texture = texture;
+  render_pass_desc.color_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.color_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.color_attachment.clear_value =
+      skity::GPUColor{0.0, 0.0, 0.0, 0.0};
+
+  auto render_pass = command_buffer->BeginRenderPass(render_pass_desc);
+  ASSERT_NE(render_pass, nullptr);
+
+  skity::Command command = {};
+  command.pipeline = pipeline.get();
+  command.vertex_buffer = {vertex_buffer.get(), 0,
+                           static_cast<uint32_t>(sizeof(vertex_data))};
+  command.index_buffer = {index_buffer.get(), 0,
+                          static_cast<uint32_t>(sizeof(index_data))};
+  command.index_count = 3;
+  command.scissor_rect = {0, 0, texture_desc.width, texture_desc.height};
+
+  skity::UniformBinding uniform_binding = {};
+  uniform_binding.stages =
+      static_cast<skity::GPUShaderStageMask>(skity::GPUShaderStage::kFragment);
+  uniform_binding.index = 0;
+  uniform_binding.group = 0;
+  uniform_binding.binding = 0;
+  uniform_binding.name = "fs_uniforms";
+  uniform_binding.buffer = {uniform_buffer.get(), 0,
+                            static_cast<uint32_t>(sizeof(uniform_data))};
+  command.uniform_bindings.push_back(uniform_binding);
+
+  render_pass->AddCommand(&command);
+  render_pass->EncodeCommands();
+
+  EXPECT_TRUE(command_buffer->Submit());
+  GetState()->CollectPendingSubmissions(true);
+}
+
+TEST(VulkanProcLoaderTest, EncodeLegacyDrawCommandWithUniformBinding) {
+  auto bundle = CreateLegacyGPUContextForTest();
+  ASSERT_NE(bundle.context, nullptr);
+
+  auto* vk_context = static_cast<skity::GPUContextVK*>(bundle.context.get());
+  ASSERT_NE(vk_context, nullptr);
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+  EXPECT_FALSE(state->IsDynamicRenderingEnabled());
+
+  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
+  auto* device = context_impl->GetGPUDevice();
+  ASSERT_NE(device, nullptr);
+
+  auto vertex_function = CreateWGXShaderFunction(
+      device, kSimpleVertexWGSL, "legacy_vk_draw_uniform_vs", "vs_main",
+      skity::GPUShaderStage::kVertex);
+  ASSERT_NE(vertex_function, nullptr);
+  ASSERT_TRUE(vertex_function->IsValid());
+
+  auto fragment_function = CreateWGXShaderFunction(
+      device, kUniformFragmentWGSL, "legacy_vk_draw_uniform_fs",
+      "fs_uniform_main", skity::GPUShaderStage::kFragment);
+  ASSERT_NE(fragment_function, nullptr);
+  ASSERT_TRUE(fragment_function->IsValid());
+
+  skity::GPURenderPipelineDescriptor pipeline_desc = {};
+  pipeline_desc.vertex_function = vertex_function;
+  pipeline_desc.fragment_function = fragment_function;
+  pipeline_desc.target.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  pipeline_desc.sample_count = 1;
+  pipeline_desc.label = skity::GPULabel("legacy_vk_draw_uniform_pipeline");
+
+  auto pipeline = device->CreateRenderPipeline(pipeline_desc);
+  ASSERT_NE(pipeline, nullptr);
+  ASSERT_TRUE(pipeline->IsValid());
+
+  auto vertex_buffer =
+      device->CreateBuffer(skity::GPUBufferUsage::kVertexBuffer);
+  auto index_buffer = device->CreateBuffer(skity::GPUBufferUsage::kIndexBuffer);
+  auto uniform_buffer =
+      device->CreateBuffer(skity::GPUBufferUsage::kUniformBuffer);
+  ASSERT_NE(vertex_buffer, nullptr);
+  ASSERT_NE(index_buffer, nullptr);
+  ASSERT_NE(uniform_buffer, nullptr);
+
+  skity::GPUTextureDescriptor texture_desc = {};
+  texture_desc.width = 16;
+  texture_desc.height = 16;
+  texture_desc.mip_level_count = 1;
+  texture_desc.sample_count = 1;
+  texture_desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  texture_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  texture_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto texture = device->CreateTexture(texture_desc);
+  ASSERT_NE(texture, nullptr);
+
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  float vertex_data[4] = {0.f, 0.f, 0.f, 1.f};
+  uint32_t index_data[3] = {0u, 0u, 0u};
+  float uniform_data[4] = {1.f, 0.f, 0.f, 1.f};
+
+  auto blit_pass = command_buffer->BeginBlitPass();
+  ASSERT_NE(blit_pass, nullptr);
+  blit_pass->UploadBufferData(vertex_buffer.get(), vertex_data,
+                              sizeof(vertex_data));
+  blit_pass->UploadBufferData(index_buffer.get(), index_data,
+                              sizeof(index_data));
+  blit_pass->UploadBufferData(uniform_buffer.get(), uniform_data,
+                              sizeof(uniform_data));
+  blit_pass->End();
+
+  skity::GPURenderPassDescriptor render_pass_desc = {};
+  render_pass_desc.label = "legacy_vk_draw_uniform_render_pass";
+  render_pass_desc.color_attachment.texture = texture;
+  render_pass_desc.color_attachment.load_op = skity::GPULoadOp::kClear;
+  render_pass_desc.color_attachment.store_op = skity::GPUStoreOp::kStore;
+  render_pass_desc.color_attachment.clear_value =
+      skity::GPUColor{0.0, 0.0, 0.0, 0.0};
+
+  auto render_pass = command_buffer->BeginRenderPass(render_pass_desc);
+  ASSERT_NE(render_pass, nullptr);
+
+  skity::Command command = {};
+  command.pipeline = pipeline.get();
+  command.vertex_buffer = {vertex_buffer.get(), 0,
+                           static_cast<uint32_t>(sizeof(vertex_data))};
+  command.index_buffer = {index_buffer.get(), 0,
+                          static_cast<uint32_t>(sizeof(index_data))};
+  command.index_count = 3;
+  command.scissor_rect = {0, 0, texture_desc.width, texture_desc.height};
+
+  skity::UniformBinding uniform_binding = {};
+  uniform_binding.stages =
+      static_cast<skity::GPUShaderStageMask>(skity::GPUShaderStage::kFragment);
+  uniform_binding.index = 0;
+  uniform_binding.group = 0;
+  uniform_binding.binding = 0;
+  uniform_binding.name = "fs_uniforms";
+  uniform_binding.buffer = {uniform_buffer.get(), 0,
+                            static_cast<uint32_t>(sizeof(uniform_data))};
+  command.uniform_bindings.push_back(uniform_binding);
+
+  render_pass->AddCommand(&command);
+  render_pass->EncodeCommands();
+
+  EXPECT_TRUE(command_buffer->Submit());
+  state->CollectPendingSubmissions(true);
+}
+
 TEST(VulkanProcLoaderTest, CreateLegacyRenderPipelineFromWGXFunctions) {
   auto bundle = CreateLegacyGPUContextForTest();
   ASSERT_NE(bundle.context, nullptr);
@@ -852,6 +1108,20 @@ TEST_F(VulkanSharedContextTest, CreateTextureAndUploadData) {
 
   EXPECT_EQ(vk_texture->GetCurrentLayout(),
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}
+
+TEST_F(VulkanSharedContextTest, CollectPendingSubmissionsRunsCleanupActions) {
+  ASSERT_NE(GetState(), nullptr);
+
+  bool cleanup_ran = false;
+  std::vector<std::function<void()>> cleanup_actions;
+  cleanup_actions.emplace_back([&cleanup_ran]() { cleanup_ran = true; });
+
+  GetState()->EnqueuePendingSubmission(skity::VulkanPendingSubmission(
+      VK_NULL_HANDLE, VK_NULL_HANDLE, {}, std::move(cleanup_actions)));
+  GetState()->CollectPendingSubmissions(true);
+
+  EXPECT_TRUE(cleanup_ran);
 }
 
 TEST_F(VulkanSharedContextTest, CreateMultiUseTextureUsesGeneralLayout) {

@@ -444,6 +444,7 @@ bool ModuleBuilder::AnalyzeFunction(const ir::Function& function) {
   local_vars_.clear();
   values_.clear();
   value_map_.clear();
+  pointer_storage_class_map_.clear();
   block_label_map_.clear();
 
   const ir::Block* entry_block = function.GetBlock(function.entry_block_id);
@@ -652,6 +653,46 @@ SpvBuiltIn ConvertBuiltin(ir::BuiltinType builtin) {
       return SpvBuiltInMax;
   }
 }
+
+void DecorateBufferStructMembers(
+    SectionBuffers* sections, TypeEmitter* type_emitter, ir::TypeId type_id,
+    bool decorate_block, std::unordered_set<ir::TypeId>* visited_types) {
+  if (sections == nullptr || type_emitter == nullptr ||
+      visited_types == nullptr || !visited_types->insert(type_id).second) {
+    return;
+  }
+
+  const ir::Type* type = type_emitter->GetTypeTable()->GetType(type_id);
+  if (type == nullptr || type->kind != ir::TypeKind::kStruct) {
+    return;
+  }
+
+  uint32_t struct_type_id = type_emitter->EmitType(type_id);
+  if (struct_type_id == 0) {
+    return;
+  }
+
+  if (decorate_block) {
+    AppendInstruction(
+        &sections->annotations, SpvOpDecorate,
+        {struct_type_id, static_cast<uint32_t>(SpvDecorationBlock)});
+  }
+
+  for (uint32_t index = 0; index < type->members.size(); ++index) {
+    const auto& member = type->members[index];
+    AppendInstruction(
+        &sections->annotations, SpvOpMemberDecorate,
+        {struct_type_id, index, static_cast<uint32_t>(SpvDecorationOffset),
+         member.offset});
+
+    const ir::Type* member_type =
+        type_emitter->GetTypeTable()->GetType(member.type);
+    if (member_type != nullptr && member_type->kind == ir::TypeKind::kStruct) {
+      DecorateBufferStructMembers(sections, type_emitter, member.type, false,
+                                  visited_types);
+    }
+  }
+}
 }  // namespace
 
 void ModuleBuilder::WriteAnnotationSection() {
@@ -698,23 +739,11 @@ void ModuleBuilder::WriteAnnotationSection() {
           {global.spirv_var_id, static_cast<uint32_t>(SpvDecorationBinding),
            global.binding.value()});
     }
-    if (global.is_wrapped_buffer) {
-      uint32_t struct_type_id = type_emitter_->EmitType(global.var_type);
-      if (struct_type_id != 0) {
-        AppendInstruction(
-            &sections_->annotations, SpvOpDecorate,
-            {struct_type_id, static_cast<uint32_t>(SpvDecorationBlock)});
-      }
-      const ir::Type* struct_type =
-          type_emitter_->GetTypeTable()->GetType(global.var_type);
-      uint32_t member_offset = 0;
-      if (struct_type != nullptr && !struct_type->members.empty()) {
-        member_offset = struct_type->members[0].offset;
-      }
-      AppendInstruction(
-          &sections_->annotations, SpvOpMemberDecorate,
-          {struct_type_id, 0, static_cast<uint32_t>(SpvDecorationOffset),
-           member_offset});
+    if (global.storage_class == SpvStorageClassUniform ||
+        global.storage_class == SpvStorageClassStorageBuffer) {
+      std::unordered_set<ir::TypeId> visited_types;
+      DecorateBufferStructMembers(sections_, type_emitter_.get(),
+                                  global.var_type, true, &visited_types);
     }
   }
 }
@@ -990,7 +1019,12 @@ uint32_t ModuleBuilder::GetAddressPointer(const ir::Value& address,
   }
 
   if (address.IsPointerSSA()) {
-    *out_ptr_id = value_map_[address.GetSSAId().value_or(0)];
+    uint32_t ssa_id = address.GetSSAId().value_or(0);
+    auto value_it = value_map_.find(ssa_id);
+    if (value_it == value_map_.end()) {
+      return 0;
+    }
+    *out_ptr_id = value_it->second;
     return *out_ptr_id != 0 ? 1 : 0;
   }
 
@@ -1073,17 +1107,23 @@ bool ModuleBuilder::EmitAccess(const ir::Instruction& inst) {
     return false;
   }
 
-  uint32_t ptr_type =
-      type_emitter_->GetPointerType(inst.result_type, SpvStorageClassFunction);
-  if (ptr_type == 0) {
+  SpvStorageClass storage_class = SpvStorageClassFunction;
+  if (base.IsVariable()) {
     const GlobalVarInfo* global_info =
-        base.IsVariable() ? FindGlobalVarInfo(base.GetVarId().value_or(0))
-                          : nullptr;
+        FindGlobalVarInfo(base.GetVarId().value_or(0));
     if (global_info != nullptr) {
-      ptr_type = type_emitter_->GetPointerType(inst.result_type,
-                                               global_info->storage_class);
+      storage_class = global_info->storage_class;
+    }
+  } else if (base.IsPointerSSA()) {
+    auto storage_it =
+        pointer_storage_class_map_.find(base.GetSSAId().value_or(0));
+    if (storage_it != pointer_storage_class_map_.end()) {
+      storage_class = storage_it->second;
     }
   }
+
+  uint32_t ptr_type =
+      type_emitter_->GetPointerType(inst.result_type, storage_class);
   if (ptr_type == 0) {
     return false;
   }
@@ -1100,6 +1140,7 @@ bool ModuleBuilder::EmitAccess(const ir::Instruction& inst) {
   AppendInstruction(&sections_->functions, SpvOpAccessChain,
                     {ptr_type, access_id, base_ptr_id, index_id});
   value_map_[inst.result_id] = access_id;
+  pointer_storage_class_map_[inst.result_id] = storage_class;
   return true;
 }
 

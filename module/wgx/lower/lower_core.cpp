@@ -519,6 +519,51 @@ ir::TypeId Lowerer::ResolveType(const ast::Type& type) {
   return ir::kInvalidTypeId;
 }
 
+ir::TypeId Lowerer::CreateBufferCompatibleType(ir::TypeId type,
+                                               ir::TypeTable::LayoutRule rule) {
+  const ir::Type* resolved_type =
+      type_table_ != nullptr ? type_table_->GetType(type) : nullptr;
+  if (resolved_type == nullptr) {
+    return ir::kInvalidTypeId;
+  }
+
+  switch (resolved_type->kind) {
+    case ir::TypeKind::kStruct: {
+      std::vector<ir::StructMember> members;
+      members.reserve(resolved_type->members.size());
+
+      uint32_t offset = 0;
+      for (const auto& member : resolved_type->members) {
+        ir::TypeId member_type = CreateBufferCompatibleType(member.type, rule);
+        if (member_type == ir::kInvalidTypeId) {
+          return ir::kInvalidTypeId;
+        }
+
+        auto member_layout = type_table_->GetLayoutInfo(member_type, rule);
+        uint32_t member_offset =
+            ir::TypeTable::AlignOffset(offset, member_layout.alignment);
+        members.push_back(
+            ir::StructMember{member_type, member.name, member_offset});
+        offset = member_offset + member_layout.size;
+      }
+
+      return type_table_->GetStructType(members);
+    }
+
+    case ir::TypeKind::kArray: {
+      ir::TypeId element_type =
+          CreateBufferCompatibleType(resolved_type->element_type, rule);
+      if (element_type == ir::kInvalidTypeId) {
+        return ir::kInvalidTypeId;
+      }
+      return type_table_->GetArrayType(element_type, resolved_type->count);
+    }
+
+    default:
+      return type;
+  }
+}
+
 bool Lowerer::IsVoidType(const ast::Type& type) const {
   return type.expr == nullptr;
 }

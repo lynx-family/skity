@@ -100,6 +100,10 @@ struct VulkanDeviceFns {
   PFN_vkDestroyShaderModule vkDestroyShaderModule = nullptr;
   PFN_vkCreateSampler vkCreateSampler = nullptr;
   PFN_vkDestroySampler vkDestroySampler = nullptr;
+  PFN_vkCreateDescriptorPool vkCreateDescriptorPool = nullptr;
+  PFN_vkDestroyDescriptorPool vkDestroyDescriptorPool = nullptr;
+  PFN_vkAllocateDescriptorSets vkAllocateDescriptorSets = nullptr;
+  PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets = nullptr;
   PFN_vkCreateDescriptorSetLayout vkCreateDescriptorSetLayout = nullptr;
   PFN_vkDestroyDescriptorSetLayout vkDestroyDescriptorSetLayout = nullptr;
   PFN_vkCreatePipelineLayout vkCreatePipelineLayout = nullptr;
@@ -108,6 +112,16 @@ struct VulkanDeviceFns {
   PFN_vkDestroyPipelineCache vkDestroyPipelineCache = nullptr;
   PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines = nullptr;
   PFN_vkDestroyPipeline vkDestroyPipeline = nullptr;
+  PFN_vkCmdBindPipeline vkCmdBindPipeline = nullptr;
+  PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets = nullptr;
+  PFN_vkCmdBindVertexBuffers vkCmdBindVertexBuffers = nullptr;
+  PFN_vkCmdBindIndexBuffer vkCmdBindIndexBuffer = nullptr;
+  PFN_vkCmdDrawIndexed vkCmdDrawIndexed = nullptr;
+  PFN_vkCmdSetViewport vkCmdSetViewport = nullptr;
+  PFN_vkCmdSetScissor vkCmdSetScissor = nullptr;
+  PFN_vkCmdSetStencilCompareMask vkCmdSetStencilCompareMask = nullptr;
+  PFN_vkCmdSetStencilWriteMask vkCmdSetStencilWriteMask = nullptr;
+  PFN_vkCmdSetStencilReference vkCmdSetStencilReference = nullptr;
   PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
 #if defined(SKITY_VK_DEBUG_RUNTIME)
   PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT = nullptr;

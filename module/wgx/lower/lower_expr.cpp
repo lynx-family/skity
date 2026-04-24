@@ -2351,15 +2351,6 @@ Lowerer::VarInfo Lowerer::LookupOrRegisterGlobalVar(
     return VarInfo{};
   }
 
-  const uint32_t var_id = AllocateVarId();
-  if (var_id == 0) {
-    return VarInfo{};
-  }
-
-  if (!RegisterVar(symbol, var_id, var_type)) {
-    return VarInfo{};
-  }
-
   ir::Module::GlobalVariable global_var_info;
   global_var_info.type = var_type;
   global_var_info.storage_class = ir::StorageClass::kPrivate;
@@ -2395,14 +2386,17 @@ Lowerer::VarInfo Lowerer::LookupOrRegisterGlobalVar(
 
   if (global_var_info.storage_class == ir::StorageClass::kUniform ||
       global_var_info.storage_class == ir::StorageClass::kStorage) {
-    const ir::Type* type = type_table_->GetType(var_type);
-    if (type != nullptr && type->kind != ir::TypeKind::kStruct) {
-      global_var_info.inner_type = var_type;
+    ir::TypeTable::LayoutRule layout_rule =
+        (global_var_info.storage_class == ir::StorageClass::kUniform)
+            ? ir::TypeTable::LayoutRule::kStd140
+            : ir::TypeTable::LayoutRule::kStd430;
 
-      ir::TypeTable::LayoutRule layout_rule =
-          (global_var_info.storage_class == ir::StorageClass::kUniform)
-              ? ir::TypeTable::LayoutRule::kStd140
-              : ir::TypeTable::LayoutRule::kStd430;
+    const ir::Type* type = type_table_->GetType(var_type);
+    if (type != nullptr && type->kind == ir::TypeKind::kStruct) {
+      global_var_info.type = CreateBufferCompatibleType(var_type, layout_rule);
+      var_type = global_var_info.type;
+    } else if (type != nullptr) {
+      global_var_info.inner_type = var_type;
 
       auto member_layout = type_table_->GetLayoutInfo(var_type, layout_rule);
       uint32_t member_offset =
@@ -2413,6 +2407,15 @@ Lowerer::VarInfo Lowerer::LookupOrRegisterGlobalVar(
       ir::TypeId struct_type = type_table_->GetStructType(members);
       global_var_info.type = struct_type;
     }
+  }
+
+  const uint32_t var_id = AllocateVarId();
+  if (var_id == 0) {
+    return VarInfo{};
+  }
+
+  if (!RegisterVar(symbol, var_id, var_type)) {
+    return VarInfo{};
   }
 
   for (auto* attr : global_var->attributes) {

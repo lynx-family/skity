@@ -378,6 +378,15 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkCreateSampler"));
   fns->vkDestroySampler = reinterpret_cast<PFN_vkDestroySampler>(
       get_device_proc_addr(device, "vkDestroySampler"));
+  fns->vkCreateDescriptorPool = reinterpret_cast<PFN_vkCreateDescriptorPool>(
+      get_device_proc_addr(device, "vkCreateDescriptorPool"));
+  fns->vkDestroyDescriptorPool = reinterpret_cast<PFN_vkDestroyDescriptorPool>(
+      get_device_proc_addr(device, "vkDestroyDescriptorPool"));
+  fns->vkAllocateDescriptorSets =
+      reinterpret_cast<PFN_vkAllocateDescriptorSets>(
+          get_device_proc_addr(device, "vkAllocateDescriptorSets"));
+  fns->vkUpdateDescriptorSets = reinterpret_cast<PFN_vkUpdateDescriptorSets>(
+      get_device_proc_addr(device, "vkUpdateDescriptorSets"));
   fns->vkCreateDescriptorSetLayout =
       reinterpret_cast<PFN_vkCreateDescriptorSetLayout>(
           get_device_proc_addr(device, "vkCreateDescriptorSetLayout"));
@@ -397,6 +406,29 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
           get_device_proc_addr(device, "vkCreateGraphicsPipelines"));
   fns->vkDestroyPipeline = reinterpret_cast<PFN_vkDestroyPipeline>(
       get_device_proc_addr(device, "vkDestroyPipeline"));
+  fns->vkCmdBindPipeline = reinterpret_cast<PFN_vkCmdBindPipeline>(
+      get_device_proc_addr(device, "vkCmdBindPipeline"));
+  fns->vkCmdBindDescriptorSets = reinterpret_cast<PFN_vkCmdBindDescriptorSets>(
+      get_device_proc_addr(device, "vkCmdBindDescriptorSets"));
+  fns->vkCmdBindVertexBuffers = reinterpret_cast<PFN_vkCmdBindVertexBuffers>(
+      get_device_proc_addr(device, "vkCmdBindVertexBuffers"));
+  fns->vkCmdBindIndexBuffer = reinterpret_cast<PFN_vkCmdBindIndexBuffer>(
+      get_device_proc_addr(device, "vkCmdBindIndexBuffer"));
+  fns->vkCmdDrawIndexed = reinterpret_cast<PFN_vkCmdDrawIndexed>(
+      get_device_proc_addr(device, "vkCmdDrawIndexed"));
+  fns->vkCmdSetViewport = reinterpret_cast<PFN_vkCmdSetViewport>(
+      get_device_proc_addr(device, "vkCmdSetViewport"));
+  fns->vkCmdSetScissor = reinterpret_cast<PFN_vkCmdSetScissor>(
+      get_device_proc_addr(device, "vkCmdSetScissor"));
+  fns->vkCmdSetStencilCompareMask =
+      reinterpret_cast<PFN_vkCmdSetStencilCompareMask>(
+          get_device_proc_addr(device, "vkCmdSetStencilCompareMask"));
+  fns->vkCmdSetStencilWriteMask =
+      reinterpret_cast<PFN_vkCmdSetStencilWriteMask>(
+          get_device_proc_addr(device, "vkCmdSetStencilWriteMask"));
+  fns->vkCmdSetStencilReference =
+      reinterpret_cast<PFN_vkCmdSetStencilReference>(
+          get_device_proc_addr(device, "vkCmdSetStencilReference"));
   fns->vkSetDebugUtilsObjectNameEXT =
       reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
           get_device_proc_addr(device, "vkSetDebugUtilsObjectNameEXT"));
@@ -442,6 +474,10 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       fns->vkCreateShaderModule == nullptr ||
       fns->vkDestroyShaderModule == nullptr ||
       fns->vkCreateSampler == nullptr || fns->vkDestroySampler == nullptr ||
+      fns->vkCreateDescriptorPool == nullptr ||
+      fns->vkDestroyDescriptorPool == nullptr ||
+      fns->vkAllocateDescriptorSets == nullptr ||
+      fns->vkUpdateDescriptorSets == nullptr ||
       fns->vkCreateDescriptorSetLayout == nullptr ||
       fns->vkDestroyDescriptorSetLayout == nullptr ||
       fns->vkCreatePipelineLayout == nullptr ||
@@ -449,7 +485,15 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       fns->vkCreatePipelineCache == nullptr ||
       fns->vkDestroyPipelineCache == nullptr ||
       fns->vkCreateGraphicsPipelines == nullptr ||
-      fns->vkDestroyPipeline == nullptr) {
+      fns->vkDestroyPipeline == nullptr || fns->vkCmdBindPipeline == nullptr ||
+      fns->vkCmdBindDescriptorSets == nullptr ||
+      fns->vkCmdBindVertexBuffers == nullptr ||
+      fns->vkCmdBindIndexBuffer == nullptr ||
+      fns->vkCmdDrawIndexed == nullptr || fns->vkCmdSetViewport == nullptr ||
+      fns->vkCmdSetScissor == nullptr ||
+      fns->vkCmdSetStencilCompareMask == nullptr ||
+      fns->vkCmdSetStencilWriteMask == nullptr ||
+      fns->vkCmdSetStencilReference == nullptr) {
     LOGE("Failed to load Vulkan device procedures for device: {:p}",
          reinterpret_cast<void*>(device));
     return false;

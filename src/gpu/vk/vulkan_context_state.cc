@@ -604,6 +604,13 @@ void VulkanContextState::CollectPendingSubmissions(bool wait_all) const {
       submission.fence = VK_NULL_HANDLE;
     }
 
+    for (auto& cleanup_action : submission.cleanup_actions) {
+      if (cleanup_action) {
+        cleanup_action();
+      }
+    }
+    submission.cleanup_actions.clear();
+
     if (submission.command_pool != VK_NULL_HANDLE) {
       functions_.device.vkDestroyCommandPool(logical_device_,
                                              submission.command_pool, nullptr);
