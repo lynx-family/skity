@@ -1023,6 +1023,7 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
   enabled_device_extensions_known_ = false;
   synchronization2_enabled_ = false;
   dynamic_rendering_enabled_ = false;
+  pipeline_cache_ = VK_NULL_HANDLE;
 
   if (!LoadAvailableDeviceExtensions()) {
     return false;
@@ -1269,6 +1270,22 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
         VK_API_VERSION_PATCH(properties.apiVersion));
   }
 
+  VkPipelineCacheCreateInfo pipeline_cache_info = {};
+  pipeline_cache_info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  const VkResult pipeline_cache_result =
+      functions_.device.vkCreatePipelineCache(
+          logical_device_, &pipeline_cache_info, nullptr, &pipeline_cache_);
+  if (pipeline_cache_result != VK_SUCCESS ||
+      pipeline_cache_ == VK_NULL_HANDLE) {
+    LOGE("Failed to create Vulkan pipeline cache: result={}",
+         static_cast<int32_t>(pipeline_cache_result));
+    pipeline_cache_ = VK_NULL_HANDLE;
+    return false;
+  }
+
+  LOGD("Created Vulkan pipeline cache: {:p}",
+       reinterpret_cast<void*>(pipeline_cache_));
+
   VmaVulkanFunctions vulkan_functions = {};
   vulkan_functions.vkGetInstanceProcAddr = functions_.get_instance_proc_addr;
   vulkan_functions.vkGetDeviceProcAddr = functions_.get_device_proc_addr;
@@ -1356,6 +1373,15 @@ void VulkanContextState::Reset() {
 
   render_pass_cache_.Reset(*this);
 
+  if (pipeline_cache_ != VK_NULL_HANDLE && logical_device_ != VK_NULL_HANDLE &&
+      functions_.device.vkDestroyPipelineCache != nullptr) {
+    LOGD("Destroying Vulkan pipeline cache: {:p}",
+         reinterpret_cast<void*>(pipeline_cache_));
+    functions_.device.vkDestroyPipelineCache(logical_device_, pipeline_cache_,
+                                             nullptr);
+    pipeline_cache_ = VK_NULL_HANDLE;
+  }
+
   if (allocator_ != nullptr) {
     LOGD("Destroying VMA allocator: {:p}", reinterpret_cast<void*>(allocator_));
     vmaDestroyAllocator(allocator_);
@@ -1393,6 +1419,7 @@ void VulkanContextState::Reset() {
   graphics_queue_ = VK_NULL_HANDLE;
   compute_queue_ = VK_NULL_HANDLE;
   transfer_queue_ = VK_NULL_HANDLE;
+  pipeline_cache_ = VK_NULL_HANDLE;
   allocator_ = nullptr;
   api_version_ = VK_API_VERSION_1_0;
   graphics_queue_family_index_ = -1;

@@ -41,6 +41,8 @@ class GPUTextureVK : public GPUTexture,
 
   VkFormat GetVkFormat() const { return format_; }
 
+  static VkFormat ToVkFormat(GPUTextureFormat format);
+
   VkImageLayout GetPreferredLayout() const { return preferred_layout_; }
 
   VkImageLayout GetCurrentLayout() const { return current_layout_; }

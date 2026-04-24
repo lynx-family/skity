@@ -48,8 +48,8 @@ static std::pair<GPUBlendFactor, GPUBlendFactor> get_gpu_blending(
   }
 }
 
-static void setup_blending_state(GPURenderPipelineDescriptor &gpu_desc,
-                                 const HWPipelineDescriptor &hw_desc) {
+static void setup_blending_state(GPURenderPipelineDescriptor& gpu_desc,
+                                 const HWPipelineDescriptor& hw_desc) {
   gpu_desc.target.format = hw_desc.color_format;
   gpu_desc.target.write_mask = hw_desc.color_mask;
 
@@ -60,14 +60,14 @@ static void setup_blending_state(GPURenderPipelineDescriptor &gpu_desc,
   // need to support other advance blending in the future
 }
 
-HWPipeline::HWPipeline(GPUDevice *device,
+HWPipeline::HWPipeline(GPUDevice* device, GPUBackendType backend,
                        std::unique_ptr<GPURenderPipeline> base_pipeline)
-    : gpu_device_(device), gpu_pipelines_() {
+    : gpu_device_(device), backend_(backend), gpu_pipelines_() {
   gpu_pipelines_.emplace_back(std::move(base_pipeline));
 }
 
-GPURenderPipeline *HWPipeline::GetPipeline(const HWPipelineDescriptor &desc) {
-  for (auto &pipeline : gpu_pipelines_) {
+GPURenderPipeline* HWPipeline::GetPipeline(const HWPipelineDescriptor& desc) {
+  for (auto& pipeline : gpu_pipelines_) {
     if (PipelineMatch(pipeline.get(), desc)) {
       return pipeline.get();
     }
@@ -92,13 +92,13 @@ GPURenderPipeline *HWPipeline::GetPipeline(const HWPipelineDescriptor &desc) {
   return gpu_pipelines_.back().get();
 }
 
-bool HWPipeline::PipelineMatch(GPURenderPipeline *pipeline,
-                               const HWPipelineDescriptor &desc) {
-  const auto &gpu_desc = pipeline->GetDescriptor();
-
-  if (gpu_desc.depth_stencil != desc.depth_stencil) {
+bool HWPipeline::PipelineMatch(GPURenderPipeline* pipeline,
+                               const HWPipelineDescriptor& desc) {
+  if (!DepthStencilStateMatch(pipeline, desc)) {
     return false;
   }
+
+  const auto& gpu_desc = pipeline->GetDescriptor();
 
   auto blend_function = get_gpu_blending(desc.blend_mode);
 
@@ -109,8 +109,36 @@ bool HWPipeline::PipelineMatch(GPURenderPipeline *pipeline,
          gpu_desc.target.format == desc.color_format;
 }
 
-GPURenderPipeline *HWPipelineLib::GetPipeline(
-    const HWPipelineKey &key, const HWPipelineDescriptor &desc) {
+bool HWPipeline::DepthStencilStateMatch(GPURenderPipeline* pipeline,
+                                        const HWPipelineDescriptor& desc) {
+  const auto& gpu_desc = pipeline->GetDescriptor();
+  if (backend_ != GPUBackendType::kVulkan) {
+    return gpu_desc.depth_stencil == desc.depth_stencil;
+  }
+
+  const auto& pipeline_ds = gpu_desc.depth_stencil;
+  const auto& request_ds = desc.depth_stencil;
+  if (pipeline_ds.format != request_ds.format ||
+      pipeline_ds.enable_stencil != request_ds.enable_stencil ||
+      pipeline_ds.enable_depth != request_ds.enable_depth ||
+      !(pipeline_ds.depth_state == request_ds.depth_state)) {
+    return false;
+  }
+
+  const auto stencil_face_match = [](const GPUStencilFaceState& lhs,
+                                     const GPUStencilFaceState& rhs) -> bool {
+    return lhs.compare == rhs.compare && lhs.fail_op == rhs.fail_op &&
+           lhs.depth_fail_op == rhs.depth_fail_op && lhs.pass_op == rhs.pass_op;
+  };
+
+  return stencil_face_match(pipeline_ds.stencil_state.front,
+                            request_ds.stencil_state.front) &&
+         stencil_face_match(pipeline_ds.stencil_state.back,
+                            request_ds.stencil_state.back);
+}
+
+GPURenderPipeline* HWPipelineLib::GetPipeline(
+    const HWPipelineKey& key, const HWPipelineDescriptor& desc) {
 #ifdef SKITY_ENABLE_TRACING
   uint64_t vs_key = (static_cast<uint64_t>(GPUShaderStage::kVertex) << 32) |
                     key.GetVertexBaseKey();
@@ -151,14 +179,14 @@ GPURenderPipeline *HWPipelineLib::GetPipeline(
 }
 
 std::unique_ptr<HWPipeline> HWPipelineLib::CreatePipeline(
-    const HWPipelineKey &key, const HWPipelineDescriptor &desc) {
+    const HWPipelineKey& key, const HWPipelineDescriptor& desc) {
   DEBUG_CHECK(desc.shader_generator);
   GPURenderPipelineDescriptor gpu_pso_desc{};
 
   gpu_pso_desc.buffers = desc.buffers;
   gpu_pso_desc.target.format = desc.color_format;
   gpu_pso_desc.sample_count = desc.sample_count;
-  gpu_pso_desc.error_callback = [this](char const *message) {
+  gpu_pso_desc.error_callback = [this](char const* message) {
     ctx_->TriggerErrorCallback(GPUError::kPipelineError, message);
   };
   gpu_pso_desc.label =
@@ -180,12 +208,13 @@ std::unique_ptr<HWPipeline> HWPipelineLib::CreatePipeline(
     return std::unique_ptr<HWPipeline>();
   }
 
-  return std::make_unique<HWPipeline>(gpu_device_, std::move(gpu_pipeline));
+  return std::make_unique<HWPipeline>(gpu_device_, backend_,
+                                      std::move(gpu_pipeline));
 }
 
-void HWPipelineLib::SetupShaderFunction(GPURenderPipelineDescriptor &desc,
-                                        const HWPipelineKey &key,
-                                        HWShaderGenerator *shader_generator) {
+void HWPipelineLib::SetupShaderFunction(GPURenderPipelineDescriptor& desc,
+                                        const HWPipelineKey& key,
+                                        HWShaderGenerator* shader_generator) {
   if (shader_generator == nullptr) {
     return;
   }
@@ -208,10 +237,10 @@ void HWPipelineLib::SetupShaderFunction(GPURenderPipelineDescriptor &desc,
 }
 
 std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
-    const HWPipelineKey &pipeline_key, GPUShaderStage stage,
-    HWShaderGenerator *shader_generator,
-    const wgx::CompilerContext &wgx_context,
-    const GPUShaderFunctionErrorCallback &error_callback) {
+    const HWPipelineKey& pipeline_key, GPUShaderStage stage,
+    HWShaderGenerator* shader_generator,
+    const wgx::CompilerContext& wgx_context,
+    const GPUShaderFunctionErrorCallback& error_callback) {
   HWFunctionKey function_key = pipeline_key.GetFunctionKey(stage);
   if (shader_functions_.count(function_key)) {
     return shader_functions_[function_key];

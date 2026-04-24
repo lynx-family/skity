@@ -15,6 +15,7 @@
 #include "src/gpu/gpu_shader_module.hpp"
 #include "src/gpu/vk/gpu_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_context_impl_vk.hpp"
+#include "src/gpu/vk/gpu_render_pipeline_vk.hpp"
 #include "src/gpu/vk/gpu_shader_function_vk.hpp"
 #include "src/gpu/vk/gpu_texture_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
@@ -26,6 +27,13 @@ constexpr char kSimpleVertexWGSL[] = R"(
 @vertex
 fn vs_main() -> @builtin(position) vec4<f32> {
   return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)";
+
+constexpr char kSimpleFragmentWGSL[] = R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  return vec4<f32>(1.0, 0.0, 0.0, 1.0);
 }
 )";
 
@@ -595,6 +603,149 @@ TEST_F(VulkanSharedContextTest, RejectRawShaderSource) {
 
   auto function = device->CreateShaderFunction(function_desc);
   EXPECT_EQ(function, nullptr);
+}
+
+TEST_F(VulkanSharedContextTest, CreateRenderPipelineFromWGXFunctions) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUShaderModuleDescriptor vertex_module_desc = {};
+  vertex_module_desc.label = skity::GPULabel("vk_vertex_shader_module");
+  vertex_module_desc.source = kSimpleVertexWGSL;
+  auto vertex_module = skity::GPUShaderModule::Create(vertex_module_desc);
+  ASSERT_NE(vertex_module, nullptr);
+
+  skity::GPUShaderSourceWGX vertex_source = {};
+  vertex_source.module = vertex_module;
+  vertex_source.entry_point = "vs_main";
+
+  skity::GPUShaderFunctionDescriptor vertex_desc = {};
+  vertex_desc.label = skity::GPULabel("vk_vertex_shader_function");
+  vertex_desc.stage = skity::GPUShaderStage::kVertex;
+  vertex_desc.source_type = skity::GPUShaderSourceType::kWGX;
+  vertex_desc.shader_source = &vertex_source;
+
+  auto vertex_function = device->CreateShaderFunction(vertex_desc);
+  ASSERT_NE(vertex_function, nullptr);
+  ASSERT_TRUE(vertex_function->IsValid());
+
+  skity::GPUShaderModuleDescriptor fragment_module_desc = {};
+  fragment_module_desc.label = skity::GPULabel("vk_fragment_shader_module");
+  fragment_module_desc.source = kSimpleFragmentWGSL;
+  auto fragment_module = skity::GPUShaderModule::Create(fragment_module_desc);
+  ASSERT_NE(fragment_module, nullptr);
+
+  skity::GPUShaderSourceWGX fragment_source = {};
+  fragment_source.module = fragment_module;
+  fragment_source.entry_point = "fs_main";
+
+  skity::GPUShaderFunctionDescriptor fragment_desc = {};
+  fragment_desc.label = skity::GPULabel("vk_fragment_shader_function");
+  fragment_desc.stage = skity::GPUShaderStage::kFragment;
+  fragment_desc.source_type = skity::GPUShaderSourceType::kWGX;
+  fragment_desc.shader_source = &fragment_source;
+
+  auto fragment_function = device->CreateShaderFunction(fragment_desc);
+  ASSERT_NE(fragment_function, nullptr);
+  ASSERT_TRUE(fragment_function->IsValid());
+
+  skity::GPURenderPipelineDescriptor pipeline_desc = {};
+  pipeline_desc.vertex_function = vertex_function;
+  pipeline_desc.fragment_function = fragment_function;
+  pipeline_desc.target.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  pipeline_desc.sample_count = 1;
+  pipeline_desc.label = skity::GPULabel("vk_render_pipeline");
+
+  auto pipeline = device->CreateRenderPipeline(pipeline_desc);
+  ASSERT_NE(pipeline, nullptr);
+  ASSERT_TRUE(pipeline->IsValid());
+
+  auto* vk_pipeline = skity::GPURenderPipelineVK::Cast(pipeline.get());
+  ASSERT_NE(vk_pipeline, nullptr);
+  EXPECT_NE(vk_pipeline->GetPipeline(), VK_NULL_HANDLE);
+  EXPECT_NE(vk_pipeline->GetPipelineLayout(), VK_NULL_HANDLE);
+  if (GetState()->IsDynamicRenderingEnabled()) {
+    EXPECT_TRUE(vk_pipeline->UsesDynamicRendering());
+    EXPECT_EQ(vk_pipeline->GetRenderPass(), VK_NULL_HANDLE);
+  } else {
+    EXPECT_FALSE(vk_pipeline->UsesDynamicRendering());
+    EXPECT_NE(vk_pipeline->GetRenderPass(), VK_NULL_HANDLE);
+  }
+}
+
+TEST(VulkanProcLoaderTest, CreateLegacyRenderPipelineFromWGXFunctions) {
+  auto bundle = CreateLegacyGPUContextForTest();
+  ASSERT_NE(bundle.context, nullptr);
+
+  auto* vk_context = static_cast<skity::GPUContextVK*>(bundle.context.get());
+  ASSERT_NE(vk_context, nullptr);
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+  EXPECT_FALSE(state->IsDynamicRenderingEnabled());
+
+  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
+  auto* device = context_impl->GetGPUDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUShaderModuleDescriptor vertex_module_desc = {};
+  vertex_module_desc.label = skity::GPULabel("legacy_vk_vertex_shader_module");
+  vertex_module_desc.source = kSimpleVertexWGSL;
+  auto vertex_module = skity::GPUShaderModule::Create(vertex_module_desc);
+  ASSERT_NE(vertex_module, nullptr);
+
+  skity::GPUShaderSourceWGX vertex_source = {};
+  vertex_source.module = vertex_module;
+  vertex_source.entry_point = "vs_main";
+
+  skity::GPUShaderFunctionDescriptor vertex_desc = {};
+  vertex_desc.label = skity::GPULabel("legacy_vk_vertex_shader_function");
+  vertex_desc.stage = skity::GPUShaderStage::kVertex;
+  vertex_desc.source_type = skity::GPUShaderSourceType::kWGX;
+  vertex_desc.shader_source = &vertex_source;
+
+  auto vertex_function = device->CreateShaderFunction(vertex_desc);
+  ASSERT_NE(vertex_function, nullptr);
+  ASSERT_TRUE(vertex_function->IsValid());
+
+  skity::GPUShaderModuleDescriptor fragment_module_desc = {};
+  fragment_module_desc.label =
+      skity::GPULabel("legacy_vk_fragment_shader_module");
+  fragment_module_desc.source = kSimpleFragmentWGSL;
+  auto fragment_module = skity::GPUShaderModule::Create(fragment_module_desc);
+  ASSERT_NE(fragment_module, nullptr);
+
+  skity::GPUShaderSourceWGX fragment_source = {};
+  fragment_source.module = fragment_module;
+  fragment_source.entry_point = "fs_main";
+
+  skity::GPUShaderFunctionDescriptor fragment_desc = {};
+  fragment_desc.label = skity::GPULabel("legacy_vk_fragment_shader_function");
+  fragment_desc.stage = skity::GPUShaderStage::kFragment;
+  fragment_desc.source_type = skity::GPUShaderSourceType::kWGX;
+  fragment_desc.shader_source = &fragment_source;
+
+  auto fragment_function = device->CreateShaderFunction(fragment_desc);
+  ASSERT_NE(fragment_function, nullptr);
+  ASSERT_TRUE(fragment_function->IsValid());
+
+  skity::GPURenderPipelineDescriptor pipeline_desc = {};
+  pipeline_desc.vertex_function = vertex_function;
+  pipeline_desc.fragment_function = fragment_function;
+  pipeline_desc.target.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  pipeline_desc.sample_count = 1;
+  pipeline_desc.label = skity::GPULabel("legacy_vk_render_pipeline");
+
+  auto pipeline = device->CreateRenderPipeline(pipeline_desc);
+  ASSERT_NE(pipeline, nullptr);
+  ASSERT_TRUE(pipeline->IsValid());
+
+  auto* vk_pipeline = skity::GPURenderPipelineVK::Cast(pipeline.get());
+  ASSERT_NE(vk_pipeline, nullptr);
+  EXPECT_FALSE(vk_pipeline->UsesDynamicRendering());
+  EXPECT_NE(vk_pipeline->GetPipeline(), VK_NULL_HANDLE);
+  EXPECT_NE(vk_pipeline->GetPipelineLayout(), VK_NULL_HANDLE);
+  EXPECT_NE(vk_pipeline->GetRenderPass(), VK_NULL_HANDLE);
 }
 
 TEST_F(VulkanSharedContextTest, CreateAndUploadBufferData) {

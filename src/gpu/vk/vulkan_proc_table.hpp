@@ -98,6 +98,14 @@ struct VulkanDeviceFns {
   PFN_vkCmdEndRendering vkCmdEndRendering = nullptr;
   PFN_vkCreateShaderModule vkCreateShaderModule = nullptr;
   PFN_vkDestroyShaderModule vkDestroyShaderModule = nullptr;
+  PFN_vkCreateDescriptorSetLayout vkCreateDescriptorSetLayout = nullptr;
+  PFN_vkDestroyDescriptorSetLayout vkDestroyDescriptorSetLayout = nullptr;
+  PFN_vkCreatePipelineLayout vkCreatePipelineLayout = nullptr;
+  PFN_vkDestroyPipelineLayout vkDestroyPipelineLayout = nullptr;
+  PFN_vkCreatePipelineCache vkCreatePipelineCache = nullptr;
+  PFN_vkDestroyPipelineCache vkDestroyPipelineCache = nullptr;
+  PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines = nullptr;
+  PFN_vkDestroyPipeline vkDestroyPipeline = nullptr;
   PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
 #if defined(SKITY_VK_DEBUG_RUNTIME)
   PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT = nullptr;
