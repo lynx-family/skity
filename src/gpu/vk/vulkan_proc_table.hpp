@@ -98,6 +98,8 @@ struct VulkanDeviceFns {
   PFN_vkCmdEndRendering vkCmdEndRendering = nullptr;
   PFN_vkCreateShaderModule vkCreateShaderModule = nullptr;
   PFN_vkDestroyShaderModule vkDestroyShaderModule = nullptr;
+  PFN_vkCreateSampler vkCreateSampler = nullptr;
+  PFN_vkDestroySampler vkDestroySampler = nullptr;
   PFN_vkCreateDescriptorSetLayout vkCreateDescriptorSetLayout = nullptr;
   PFN_vkDestroyDescriptorSetLayout vkDestroyDescriptorSetLayout = nullptr;
   PFN_vkCreatePipelineLayout vkCreatePipelineLayout = nullptr;

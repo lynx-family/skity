@@ -16,6 +16,7 @@
 #include "src/gpu/vk/gpu_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_context_impl_vk.hpp"
 #include "src/gpu/vk/gpu_render_pipeline_vk.hpp"
+#include "src/gpu/vk/gpu_sampler_vk.hpp"
 #include "src/gpu/vk/gpu_shader_function_vk.hpp"
 #include "src/gpu/vk/gpu_texture_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
@@ -672,6 +673,32 @@ TEST_F(VulkanSharedContextTest, CreateRenderPipelineFromWGXFunctions) {
     EXPECT_FALSE(vk_pipeline->UsesDynamicRendering());
     EXPECT_NE(vk_pipeline->GetRenderPass(), VK_NULL_HANDLE);
   }
+}
+
+TEST_F(VulkanSharedContextTest, CreateAndReuseSampler) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUSamplerDescriptor desc = {};
+  desc.address_mode_u = skity::GPUAddressMode::kRepeat;
+  desc.address_mode_v = skity::GPUAddressMode::kClampToEdge;
+  desc.address_mode_w = skity::GPUAddressMode::kMirrorRepeat;
+  desc.mag_filter = skity::GPUFilterMode::kLinear;
+  desc.min_filter = skity::GPUFilterMode::kLinear;
+  desc.mipmap_filter = skity::GPUMipmapMode::kLinear;
+
+  auto sampler = device->CreateSampler(desc);
+  ASSERT_NE(sampler, nullptr);
+
+  auto* vk_sampler = skity::GPUSamplerVK::Cast(sampler.get());
+  ASSERT_NE(vk_sampler, nullptr);
+  EXPECT_TRUE(vk_sampler->IsValid());
+  EXPECT_NE(vk_sampler->GetSampler(), VK_NULL_HANDLE);
+
+  auto same_sampler = device->CreateSampler(desc);
+  ASSERT_NE(same_sampler, nullptr);
+  EXPECT_EQ(same_sampler.get(), sampler.get());
 }
 
 TEST(VulkanProcLoaderTest, CreateLegacyRenderPipelineFromWGXFunctions) {

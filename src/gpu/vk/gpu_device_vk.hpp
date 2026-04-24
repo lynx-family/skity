@@ -51,6 +51,7 @@ class GPUDeviceVK : public GPUDevice {
       const GPURenderPipelineDescriptor& desc);
 
   std::shared_ptr<const VulkanContextState> state_ = {};
+  GPUSamplerMap sampler_map_ = {};
   uint32_t buffer_alignment_ = 256;
   uint32_t max_texture_size_ = 4096;
 };

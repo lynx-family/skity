@@ -10,6 +10,7 @@
 #include "src/gpu/vk/gpu_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_command_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_render_pipeline_vk.hpp"
+#include "src/gpu/vk/gpu_sampler_vk.hpp"
 #include "src/gpu/vk/gpu_shader_function_vk.hpp"
 #include "src/gpu/vk/gpu_texture_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
@@ -179,6 +180,42 @@ VkColorComponentFlags ToVkColorWriteMask(int32_t write_mask) {
     result |= VK_COLOR_COMPONENT_A_BIT;
   }
   return result;
+}
+
+VkSamplerAddressMode ToVkSamplerAddressMode(skity::GPUAddressMode mode) {
+  switch (mode) {
+    case skity::GPUAddressMode::kRepeat:
+      return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    case skity::GPUAddressMode::kMirrorRepeat:
+      return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    case skity::GPUAddressMode::kClampToEdge:
+      return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  }
+
+  return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+}
+
+VkFilter ToVkFilter(skity::GPUFilterMode mode) {
+  switch (mode) {
+    case skity::GPUFilterMode::kLinear:
+      return VK_FILTER_LINEAR;
+    case skity::GPUFilterMode::kNearest:
+      return VK_FILTER_NEAREST;
+  }
+
+  return VK_FILTER_NEAREST;
+}
+
+VkSamplerMipmapMode ToVkSamplerMipmapMode(skity::GPUMipmapMode mode) {
+  switch (mode) {
+    case skity::GPUMipmapMode::kLinear:
+      return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    case skity::GPUMipmapMode::kNearest:
+    case skity::GPUMipmapMode::kNone:
+      return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  }
+
+  return VK_SAMPLER_MIPMAP_MODE_NEAREST;
 }
 
 bool CreateDescriptorSetLayout(const skity::VulkanContextState& state,
@@ -406,9 +443,47 @@ std::shared_ptr<GPUCommandBuffer> GPUDeviceVK::CreateCommandBuffer() {
 
 std::shared_ptr<GPUSampler> GPUDeviceVK::CreateSampler(
     const GPUSamplerDescriptor& desc) {
-  (void)desc;
-  LOGW("GPUDeviceVK::CreateSampler is not implemented yet");
-  return {};
+  auto it = sampler_map_.find(desc);
+  if (it != sampler_map_.end()) {
+    return it->second;
+  }
+
+  if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE ||
+      state_->DeviceFns().vkCreateSampler == nullptr) {
+    LOGE("GPUDeviceVK::CreateSampler failed: Vulkan device is unavailable");
+    return {};
+  }
+
+  VkSamplerCreateInfo sampler_info = {};
+  sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  sampler_info.magFilter = ToVkFilter(desc.mag_filter);
+  sampler_info.minFilter = ToVkFilter(desc.min_filter);
+  sampler_info.mipmapMode = ToVkSamplerMipmapMode(desc.mipmap_filter);
+  sampler_info.addressModeU = ToVkSamplerAddressMode(desc.address_mode_u);
+  sampler_info.addressModeV = ToVkSamplerAddressMode(desc.address_mode_v);
+  sampler_info.addressModeW = ToVkSamplerAddressMode(desc.address_mode_w);
+  sampler_info.mipLodBias = 0.f;
+  sampler_info.anisotropyEnable = VK_FALSE;
+  sampler_info.maxAnisotropy = 1.f;
+  sampler_info.compareEnable = VK_FALSE;
+  sampler_info.compareOp = VK_COMPARE_OP_ALWAYS;
+  sampler_info.minLod = 0.f;
+  sampler_info.maxLod =
+      desc.mipmap_filter == GPUMipmapMode::kNone ? 0.f : VK_LOD_CLAMP_NONE;
+  sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+  sampler_info.unnormalizedCoordinates = VK_FALSE;
+
+  VkSampler sampler = VK_NULL_HANDLE;
+  const VkResult result = state_->DeviceFns().vkCreateSampler(
+      state_->GetLogicalDevice(), &sampler_info, nullptr, &sampler);
+  if (result != VK_SUCCESS || sampler == VK_NULL_HANDLE) {
+    LOGE("Failed to create Vulkan sampler: {}", static_cast<int32_t>(result));
+    return {};
+  }
+
+  auto sampler_vk = std::make_shared<GPUSamplerVK>(state_, desc, sampler);
+  sampler_map_.insert({desc, sampler_vk});
+  return sampler_vk;
 }
 
 std::shared_ptr<GPUTexture> GPUDeviceVK::CreateTexture(
