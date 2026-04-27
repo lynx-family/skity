@@ -397,7 +397,8 @@ std::vector<ir::InputVariable> Lowerer::ResolveInputVars(
         input.target_var_id = var_it->second.id;
         input.member_index = i;
         ResolveInterfaceDecorations(member->attributes, &input.decoration_kind,
-                                    &input.decoration_value);
+                                    &input.decoration_value,
+                                    &input.interpolation);
         if (input.type == ir::kInvalidTypeId ||
             input.decoration_kind == ir::InterfaceDecorationKind::kNone) {
           continue;
@@ -412,7 +413,7 @@ std::vector<ir::InputVariable> Lowerer::ResolveInputVars(
     input.type = var_it->second.type;
     input.target_var_id = var_it->second.id;
     ResolveInterfaceDecorations(param->attributes, &input.decoration_kind,
-                                &input.decoration_value);
+                                &input.decoration_value, &input.interpolation);
     if (input.decoration_kind != ir::InterfaceDecorationKind::kNone) {
       inputs.push_back(std::move(input));
     }
@@ -505,7 +506,8 @@ std::vector<ir::OutputVariable> Lowerer::ResolveOutputVars(
       output.type = const_cast<Lowerer*>(this)->ResolveType(member->type);
       output.member_index = i;
       ResolveInterfaceDecorations(member->attributes, &output.decoration_kind,
-                                  &output.decoration_value);
+                                  &output.decoration_value,
+                                  &output.interpolation);
       if (output.type == ir::kInvalidTypeId ||
           output.decoration_kind == ir::InterfaceDecorationKind::kNone) {
         continue;
@@ -518,8 +520,8 @@ std::vector<ir::OutputVariable> Lowerer::ResolveOutputVars(
   ir::OutputVariable output;
   output.type = const_cast<Lowerer*>(this)->ResolveType(function->return_type);
   ResolveInterfaceDecorations(function->return_type_attrs,
-                              &output.decoration_kind,
-                              &output.decoration_value);
+                              &output.decoration_kind, &output.decoration_value,
+                              &output.interpolation);
   if (output.decoration_kind == ir::InterfaceDecorationKind::kBuiltin &&
       output.GetBuiltin() == ir::BuiltinType::kPosition) {
     output.name = "position_output";
@@ -771,14 +773,17 @@ const ast::StructDecl* Lowerer::ResolveStructDeclByName(
 
 void Lowerer::ResolveInterfaceDecorations(
     const std::vector<ast::Attribute*>& attributes,
-    ir::InterfaceDecorationKind* decoration_kind,
-    uint32_t* decoration_value) const {
+    ir::InterfaceDecorationKind* decoration_kind, uint32_t* decoration_value,
+    ir::InterpolationType* interpolation) const {
   if (decoration_kind == nullptr || decoration_value == nullptr) {
     return;
   }
 
   *decoration_kind = ir::InterfaceDecorationKind::kNone;
   *decoration_value = 0;
+  if (interpolation != nullptr) {
+    *interpolation = ir::InterpolationType::kNone;
+  }
 
   for (auto* attr : attributes) {
     if (attr == nullptr) {
@@ -806,7 +811,17 @@ void Lowerer::ResolveInterfaceDecorations(
       auto* loc = static_cast<const ast::LocationAttribute*>(attr);
       *decoration_kind = ir::InterfaceDecorationKind::kLocation;
       *decoration_value = static_cast<uint32_t>(loc->index);
-      return;
+    } else if (attr->GetType() == ast::AttributeType::kInterpolate) {
+      auto* interp = static_cast<const ast::InterpolateAttribute*>(attr);
+      if (interpolation != nullptr) {
+        if (interp->type == ast::InterpolateType::kFlat) {
+          *interpolation = ir::InterpolationType::kFlat;
+        } else if (interp->type == ast::InterpolateType::kLinear) {
+          *interpolation = ir::InterpolationType::kLinear;
+        } else if (interp->type == ast::InterpolateType::kPerspective) {
+          *interpolation = ir::InterpolationType::kPerspective;
+        }
+      }
     }
   }
 }

@@ -190,7 +190,7 @@ bool Lowerer::LowerIfStatement(const ast::IfStatement* if_stmt,
   const ir::BlockId current_block_id = block->id;
 
   const ir::BlockId then_block_id = CreateBlock("if.then");
-  const ir::BlockId merge_block_id = CreateBlock("if.merge");
+  const ir::BlockId merge_block_id = ir_function_->AllocateBlockId();
   if (then_block_id == ir::kInvalidBlockId ||
       merge_block_id == ir::kInvalidBlockId) {
     return false;
@@ -257,6 +257,11 @@ bool Lowerer::LowerIfStatement(const ast::IfStatement* if_stmt,
     }
 
     if (then_terminated && else_terminated) {
+      if (ir_function_->GetBlock(merge_block_id) == nullptr &&
+          CreateBlockWithId("if.merge", merge_block_id) ==
+              ir::kInvalidBlockId) {
+        return false;
+      }
       ir::Block* merge_block = ir_function_->GetBlock(merge_block_id);
       if (merge_block == nullptr) {
         return false;
@@ -265,6 +270,11 @@ bool Lowerer::LowerIfStatement(const ast::IfStatement* if_stmt,
       unreachable_inst.kind = ir::InstKind::kUnreachable;
       merge_block->instructions.emplace_back(unreachable_inst);
     }
+  }
+
+  if (ir_function_->GetBlock(merge_block_id) == nullptr &&
+      CreateBlockWithId("if.merge", merge_block_id) == ir::kInvalidBlockId) {
+    return false;
   }
 
   return SwitchToBlock(merge_block_id);
@@ -1019,7 +1029,7 @@ bool Lowerer::LowerVarDecl(const ast::VarDeclStatement* var_decl,
 bool Lowerer::LowerAssignStatement(const ast::AssignStatement* assign,
                                    ir::Block* block) {
   if (assign == nullptr || block == nullptr || assign->lhs == nullptr ||
-      assign->rhs == nullptr || assign->op.has_value()) {
+      assign->rhs == nullptr) {
     return false;
   }
 
@@ -1034,6 +1044,9 @@ bool Lowerer::LowerAssignStatement(const ast::AssignStatement* assign,
 
       const ir::TypeId base_type = base_expr.GetType();
       if (type_table_->IsVectorType(base_type)) {
+        if (assign->op.has_value()) {
+          return false;
+        }
         std::vector<uint32_t> swizzle_components;
         if (!detail::ParseVectorSwizzle(
                 member->member->name,
@@ -1142,6 +1155,76 @@ bool Lowerer::LowerAssignStatement(const ast::AssignStatement* assign,
   ir::ExprResult rhs_expr = LowerExpression(assign->rhs);
   if (!rhs_expr.IsValid()) {
     return false;
+  }
+
+  if (assign->op.has_value()) {
+    ir::Value lhs_value = EnsureValue(lhs_expr, block);
+    if (!lhs_value.IsValue()) {
+      return false;
+    }
+
+    ir::Value rhs_value = EnsureValue(rhs_expr, block);
+    if (!rhs_value.IsValue()) {
+      return false;
+    }
+
+    if (lhs_value.type != rhs_value.type) {
+      return false;
+    }
+
+    ir::BinaryOpKind op_kind = ir::BinaryOpKind::kAdd;
+    switch (*assign->op) {
+      case ast::BinaryOp::kAdd:
+        op_kind = ir::BinaryOpKind::kAdd;
+        break;
+      case ast::BinaryOp::kSubtract:
+        op_kind = ir::BinaryOpKind::kSubtract;
+        break;
+      case ast::BinaryOp::kMultiply:
+        op_kind = ir::BinaryOpKind::kMultiply;
+        break;
+      case ast::BinaryOp::kDivide:
+        op_kind = ir::BinaryOpKind::kDivide;
+        break;
+      case ast::BinaryOp::kModulo:
+        op_kind = ir::BinaryOpKind::kModulo;
+        break;
+      case ast::BinaryOp::kAnd:
+        op_kind = ir::BinaryOpKind::kBitwiseAnd;
+        break;
+      case ast::BinaryOp::kOr:
+        op_kind = ir::BinaryOpKind::kBitwiseOr;
+        break;
+      case ast::BinaryOp::kXor:
+        op_kind = ir::BinaryOpKind::kBitwiseXor;
+        break;
+      case ast::BinaryOp::kShiftLeft:
+        op_kind = ir::BinaryOpKind::kShiftLeft;
+        break;
+      case ast::BinaryOp::kShiftRight:
+        op_kind = ir::BinaryOpKind::kShiftRight;
+        break;
+      default:
+        return false;
+    }
+
+    uint32_t result_id = AllocateSSAId();
+    if (result_id == 0) {
+      return false;
+    }
+
+    ir::Instruction binary_inst;
+    binary_inst.kind = ir::InstKind::kBinary;
+    binary_inst.binary_op = op_kind;
+    binary_inst.result_type = lhs_value.type;
+    binary_inst.result_id = result_id;
+    binary_inst.operands.push_back(lhs_value);
+    binary_inst.operands.push_back(rhs_value);
+    block->instructions.emplace_back(binary_inst);
+
+    return EmitStore(
+        ir::ExprResult::ValueResult(ir::Value::SSA(lhs_value.type, result_id)),
+        lhs_expr.value, block);
   }
 
   return EmitStore(rhs_expr, lhs_expr.value, block);

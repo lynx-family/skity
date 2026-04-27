@@ -32,7 +32,9 @@ void LogWgxError(const char* fmt, ...) {
 bool IsVectorScalarBinary(const ir::Instruction& inst,
                           ir::TypeTable* type_table) {
   if (type_table == nullptr || inst.operands.size() != 2u ||
-      (inst.binary_op != ir::BinaryOpKind::kMultiply &&
+      (inst.binary_op != ir::BinaryOpKind::kAdd &&
+       inst.binary_op != ir::BinaryOpKind::kSubtract &&
+       inst.binary_op != ir::BinaryOpKind::kMultiply &&
        inst.binary_op != ir::BinaryOpKind::kDivide)) {
     return false;
   }
@@ -50,8 +52,7 @@ bool IsVectorScalarBinary(const ir::Instruction& inst,
     return true;
   }
 
-  return inst.binary_op == ir::BinaryOpKind::kMultiply &&
-         rhs_type == inst.result_type && type_table->IsScalarType(lhs_type) &&
+  return rhs_type == inst.result_type && type_table->IsScalarType(lhs_type) &&
          result_component == lhs_type;
 }
 
@@ -197,6 +198,23 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
       }
       if (is_unsigned) {
         *out_op = SpvOpUDiv;
+        return true;
+      }
+      return false;
+    case ir::BinaryOpKind::kModulo:
+      if (result_type != operand_type) {
+        return false;
+      }
+      if (is_float || is_float_vector) {
+        *out_op = SpvOpFRem;
+        return true;
+      }
+      if (is_signed || is_signed_vector) {
+        *out_op = SpvOpSRem;
+        return true;
+      }
+      if (is_unsigned || is_unsigned_vector) {
+        *out_op = SpvOpUMod;
         return true;
       }
       return false;
@@ -443,6 +461,7 @@ bool ModuleBuilder::Build(SectionBuffers* sections,
     info.ir_type = ir_input.type;
     info.decoration_kind = ir_input.decoration_kind;
     info.decoration_value = ir_input.decoration_value;
+    info.interpolation = ir_input.interpolation;
     input_vars_.push_back(std::move(info));
   }
 
@@ -454,6 +473,7 @@ bool ModuleBuilder::Build(SectionBuffers* sections,
     info.member_index = ir_output.member_index;
     info.decoration_kind = ir_output.decoration_kind;
     info.decoration_value = ir_output.decoration_value;
+    info.interpolation = ir_output.interpolation;
     output_vars_.push_back(std::move(info));
   }
 
@@ -792,6 +812,11 @@ void ModuleBuilder::WriteAnnotationSection() {
           {input.spirv_var_id, static_cast<uint32_t>(SpvDecorationLocation),
            input.decoration_value});
     }
+    if (input.interpolation == ir::InterpolationType::kFlat) {
+      AppendInstruction(
+          &sections_->annotations, SpvOpDecorate,
+          {input.spirv_var_id, static_cast<uint32_t>(SpvDecorationFlat)});
+    }
   }
   for (const auto& output : output_vars_) {
     if (output.decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
@@ -807,7 +832,13 @@ void ModuleBuilder::WriteAnnotationSection() {
           {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationLocation),
            output.decoration_value});
     }
+    if (output.interpolation == ir::InterpolationType::kFlat) {
+      AppendInstruction(
+          &sections_->annotations, SpvOpDecorate,
+          {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationFlat)});
+    }
   }
+  std::unordered_set<ir::TypeId> buffer_visited_types;
   for (const auto& global : global_vars_) {
     if (global.group.has_value()) {
       AppendInstruction(&sections_->annotations, SpvOpDecorate,
@@ -827,10 +858,9 @@ void ModuleBuilder::WriteAnnotationSection() {
           global.storage_class == SpvStorageClassUniform
               ? ir::TypeTable::LayoutRule::kStd140
               : ir::TypeTable::LayoutRule::kStd430;
-      std::unordered_set<ir::TypeId> visited_types;
       DecorateBufferStructMembers(sections_, type_emitter_.get(),
                                   global.var_type, layout_rule, true,
-                                  &visited_types);
+                                  &buffer_visited_types);
     }
   }
 }

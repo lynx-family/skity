@@ -151,7 +151,8 @@ bool IsVectorScalarBinary(ast::BinaryOp op, ir::TypeId lhs_type,
     return false;
   }
 
-  if (op != ast::BinaryOp::kMultiply && op != ast::BinaryOp::kDivide) {
+  if (op != ast::BinaryOp::kAdd && op != ast::BinaryOp::kSubtract &&
+      op != ast::BinaryOp::kMultiply && op != ast::BinaryOp::kDivide) {
     return false;
   }
 
@@ -168,7 +169,7 @@ bool IsVectorScalarBinary(ast::BinaryOp op, ir::TypeId lhs_type,
     return true;
   }
 
-  if (op == ast::BinaryOp::kMultiply && lhs_is_scalar && rhs_is_vector) {
+  if (lhs_is_scalar && rhs_is_vector) {
     if (type_table->GetComponentType(rhs_type) != lhs_type) {
       return false;
     }
@@ -785,6 +786,59 @@ ir::ExprResult Lowerer::LowerVectorConstructor(ast::Expression* expression) {
     return ir::ExprResult();
   }
 
+  if (call->args.size() == 1u) {
+    ir::ExprResult arg_expr = LowerExpression(call->args[0]);
+    if (!arg_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value arg_value = EnsureValue(arg_expr, current_block);
+    if (!arg_value.IsValue()) {
+      return ir::ExprResult();
+    }
+
+    if (arg_value.type == vector_type) {
+      return ir::ExprResult::ValueResult(arg_value);
+    }
+
+    if (arg_value.type != component_type) {
+      return ir::ExprResult();
+    }
+
+    if (arg_value.IsConstant()) {
+      if (component_type == type_table_->GetF32Type()) {
+        const float value = arg_value.GetF32Unchecked();
+        switch (count) {
+          case 2:
+            return ir::ExprResult::ValueResult(
+                ir::Value::ConstantVec2F32(vector_type, value, value));
+          case 3:
+            return ir::ExprResult::ValueResult(
+                ir::Value::ConstantVec3F32(vector_type, value, value, value));
+          case 4:
+            return ir::ExprResult::ValueResult(ir::Value::ConstantVec4F32(
+                vector_type, value, value, value, value));
+          default:
+            return ir::ExprResult();
+        }
+      }
+    }
+
+    ir::Instruction construct_inst;
+    construct_inst.kind = ir::InstKind::kConstruct;
+    construct_inst.result_type = vector_type;
+    construct_inst.result_id = AllocateSSAId();
+    if (construct_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      construct_inst.operands.push_back(arg_value);
+    }
+    current_block->instructions.emplace_back(construct_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(vector_type, construct_inst.result_id));
+  }
+
   bool scalar_only_constant = call->args.size() == count;
   std::array<float, 4> values = {0.f, 0.f, 0.f, 0.f};
   std::vector<ir::Value> flattened_components;
@@ -1085,6 +1139,9 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
     case ast::BinaryOp::kDivide:
       op_kind = ir::BinaryOpKind::kDivide;
       break;
+    case ast::BinaryOp::kModulo:
+      op_kind = ir::BinaryOpKind::kModulo;
+      break;
     case ast::BinaryOp::kAnd:
       op_kind = ir::BinaryOpKind::kBitwiseAnd;
       break;
@@ -1188,6 +1245,13 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
              binary->op == ast::BinaryOp::kShiftRight) {
     if (lhs_value.type != rhs_value.type ||
         !SupportsShiftForType(lhs_value.type, type_table_)) {
+      return ir::ExprResult();
+    }
+    result_type = lhs_value.type;
+  } else if (binary->op == ast::BinaryOp::kModulo) {
+    if (lhs_value.type != rhs_value.type ||
+        (!type_table_->IsIntegerType(lhs_value.type) &&
+         !type_table_->IsFloatType(lhs_value.type))) {
       return ir::ExprResult();
     }
     result_type = lhs_value.type;
@@ -2421,7 +2485,7 @@ ir::ExprResult Lowerer::LowerIdentifierExpression(ast::IdentifierExp* ident) {
 }
 
 uint32_t Lowerer::AllocateVarId() {
-  return ir_function_ ? ir_function_->AllocateVarId() : 0;
+  return ir_module_ ? ir_module_->AllocateVarId() : 0;
 }
 
 uint32_t Lowerer::AllocateSSAId() {
@@ -2442,7 +2506,11 @@ Lowerer::VarInfo Lowerer::LookupVar(const semantic::Symbol* symbol) const {
     return VarInfo{};
   }
   auto it = var_map_.find(symbol);
-  return it == var_map_.end() ? VarInfo{} : it->second;
+  if (it != var_map_.end()) {
+    return it->second;
+  }
+  auto global_it = global_var_map_.find(symbol);
+  return global_it == global_var_map_.end() ? VarInfo{} : global_it->second;
 }
 
 Lowerer::VarInfo Lowerer::LookupOrRegisterGlobalVar(
@@ -2468,6 +2536,11 @@ Lowerer::VarInfo Lowerer::LookupOrRegisterGlobalVar(
   auto it = var_map_.find(symbol);
   if (it != var_map_.end()) {
     return it->second;
+  }
+
+  auto global_it = global_var_map_.find(symbol);
+  if (global_it != global_var_map_.end()) {
+    return global_it->second;
   }
 
   ir::TypeId var_type = ResolveType(global_var->type);
@@ -2541,6 +2614,8 @@ Lowerer::VarInfo Lowerer::LookupOrRegisterGlobalVar(
   if (!RegisterVar(symbol, var_id, var_type)) {
     return VarInfo{};
   }
+
+  global_var_map_[symbol] = VarInfo{var_id, var_type};
 
   for (auto* attr : global_var->attributes) {
     if (attr == nullptr) continue;

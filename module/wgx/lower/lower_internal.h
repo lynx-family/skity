@@ -155,8 +155,8 @@ class Lowerer {
                                         ir::TypeTable::LayoutRule rule);
   void ResolveInterfaceDecorations(
       const std::vector<ast::Attribute*>& attributes,
-      ir::InterfaceDecorationKind* decoration_kind,
-      uint32_t* decoration_value) const;
+      ir::InterfaceDecorationKind* decoration_kind, uint32_t* decoration_value,
+      ir::InterpolationType* interpolation) const;
   const ir::StructMember* FindStructMember(ir::TypeId struct_type,
                                            std::string_view member_name,
                                            uint32_t* member_index) const;
@@ -173,6 +173,7 @@ class Lowerer {
   ir::TypeTable* type_table_ = nullptr;
   ir::BlockId current_block_id_ = ir::kInvalidBlockId;
   std::unordered_map<const semantic::Symbol*, VarInfo> var_map_;
+  std::unordered_map<const semantic::Symbol*, VarInfo> global_var_map_;
   std::vector<LoopContext> loop_stack_;
   std::unordered_set<const ast::Function*> lowered_functions_;
   std::unordered_set<const ast::Function*> lowering_functions_;

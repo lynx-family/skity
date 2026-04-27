@@ -14,6 +14,10 @@
 #include <vector>
 
 #include "spirv/unified1/spirv.h"
+#include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
+#include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
+#include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
+#include "src/render/hw/draw/hw_wgsl_shader_writer.hpp"
 
 namespace {
 
@@ -3089,6 +3093,38 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForForLoopWithCompoundAssign) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var pos: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  for (var i: i32 = 0; i < 3; i += 1) {
+    pos = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  }
+  return pos;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  if (result.success) {
+    DumpSpirvBinary("wgx_vs_main_for_loop_compound.spv", result.spirv);
+  }
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoopMerge));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSLessThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIAdd));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBranchConditional));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForWhileLoop) {
   auto program = wgx::Program::Parse(R"(
 @vertex
@@ -3912,6 +3948,66 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpMatrixTimesMatrix));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpMatrixTimesVector));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsGradientLinear4OffsetFastTextWGSL) {
+  skity::Shader::GradientInfo gradient_info;
+  gradient_info.color_count = 4;
+  gradient_info.colors = {{0.0, 0.0, 0.0, 1.0},
+                          {1.0, 0.0, 0.0, 1.0},
+                          {0.0, 1.0, 0.0, 1.0},
+                          {0.0, 0.0, 1.0, 1.0}};
+  skity::WGSLGradientTextFragment gradient_fragment(
+      skity::WGSLGradientTextFragment::BatchedTexture{}, {}, gradient_info,
+      skity::Shader::GradientType::kLinear, 1.0f);
+
+  auto program = wgx::Program::Parse(gradient_fragment.GenSourceWGSL());
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_GradientLinear4OffsetFastTextWGSL.spv", result.spirv);
+  auto words = result.spirv;
+}
+
+TEST(WgxSpirvSmokeTest, EmitsGradientLinear4WGSL) {
+  skity::Shader::GradientInfo gradient_info;
+  gradient_info.color_count = 4;
+  gradient_info.colors = {{0.0, 0.0, 0.0, 1.0},
+                          {1.0, 0.0, 0.0, 1.0},
+                          {0.0, 1.0, 0.0, 1.0},
+                          {0.0, 0.0, 1.0, 1.0}};
+  gradient_info.color_offsets = {0.0f, 0.5f, 1.0f, 1.5f};
+  skity::WGSLGradientFragment gradient_fragment(
+      gradient_info, skity::Shader::GradientType::kLinear, 1.0f, {});
+
+  skity::Paint paint;
+  auto rrect = skity::RRect::MakeOval(skity::Rect::MakeWH(100.0f, 100.0f));
+  std::vector<skity::BatchGroup<skity::RRect>> rrect_batch_group;
+  rrect_batch_group.push_back({rrect, paint});
+  skity::WGSLRRectGeometry geometry{rrect_batch_group};
+
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &gradient_fragment};
+
+  auto fs = shader_writer.GenFSSourceWGSL();
+
+  auto program = wgx::Program::Parse(fs);
+
+  std::cerr << fs << std::endl;
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_GradientLinear4WGSL.spv", result.spirv);
+  auto words = result.spirv;
 }
 
 #endif

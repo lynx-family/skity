@@ -32,6 +32,14 @@ enum class InterfaceDecorationKind {
   kLocation,  // @location(...)
 };
 
+// Interpolation type for fragment shader inputs/outputs
+enum class InterpolationType {
+  kNone,
+  kFlat,
+  kLinear,
+  kPerspective,
+};
+
 // Backend-agnostic builtin types
 // These map to backend-specific values (e.g., SpvBuiltInPosition in SPIR-V)
 enum class BuiltinType {
@@ -90,6 +98,8 @@ struct OutputVariable {
     }
     return 0;
   }
+
+  InterpolationType interpolation = InterpolationType::kNone;
 };
 
 struct FunctionParameter {
@@ -129,6 +139,8 @@ struct InputVariable {
     }
     return 0;
   }
+
+  InterpolationType interpolation = InterpolationType::kNone;
 };
 
 enum class InstKind {
@@ -188,6 +200,7 @@ enum class BinaryOpKind {
   kSubtract,
   kMultiply,
   kDivide,
+  kModulo,
   kBitwiseAnd,
   kBitwiseOr,
   kBitwiseXor,
@@ -357,6 +370,12 @@ struct Module {
     TypeId inner_type = kInvalidTypeId;
   };
   std::unordered_map<uint32_t, GlobalVariable> global_variables;
+
+  // Module-level allocator for variable ids (unique across the module)
+  uint32_t AllocateVarId() { return next_var_id_++; }
+
+ private:
+  uint32_t next_var_id_ = 1;
 };
 
 }  // namespace ir

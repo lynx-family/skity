@@ -173,6 +173,7 @@ class ModuleBuilder {
         ir::InterfaceDecorationKind::kNone;
     uint32_t decoration_value = 0;
     uint32_t spirv_var_id = 0;
+    ir::InterpolationType interpolation = ir::InterpolationType::kNone;
 
     ir::BuiltinType GetBuiltin() const;
     uint32_t GetLocation() const;
@@ -187,6 +188,7 @@ class ModuleBuilder {
         ir::InterfaceDecorationKind::kNone;
     uint32_t decoration_value = 0;
     uint32_t spirv_var_id = 0;
+    ir::InterpolationType interpolation = ir::InterpolationType::kNone;
 
     ir::BuiltinType GetBuiltin() const;
     uint32_t GetLocation() const;
