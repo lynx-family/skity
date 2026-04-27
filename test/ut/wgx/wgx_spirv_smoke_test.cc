@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "spirv/unified1/spirv.h"
@@ -112,6 +113,30 @@ bool ContainsDecoration(const std::vector<uint32_t>& words,
   return false;
 }
 
+bool ContainsMemberDecoration(const std::vector<uint32_t>& words,
+                              SpvDecoration decoration) {
+  size_t offset = 5u;
+  while (offset < words.size()) {
+    const uint32_t inst = words[offset];
+    const uint16_t word_count =
+        static_cast<uint16_t>(inst >> SpvWordCountShift);
+    const auto opcode = static_cast<SpvOp>(inst & SpvOpCodeMask);
+
+    if (word_count == 0u) {
+      return false;
+    }
+
+    if (opcode == SpvOpMemberDecorate && word_count >= 4u &&
+        words[offset + 3u] == static_cast<uint32_t>(decoration)) {
+      return true;
+    }
+
+    offset += word_count;
+  }
+
+  return false;
+}
+
 bool ContainsVariableWithStorageClass(const std::vector<uint32_t>& words,
                                       SpvStorageClass storage_class) {
   size_t offset = 5u;
@@ -128,6 +153,53 @@ bool ContainsVariableWithStorageClass(const std::vector<uint32_t>& words,
     if (opcode == SpvOpVariable && word_count >= 4u &&
         words[offset + 3u] == static_cast<uint32_t>(storage_class)) {
       return true;
+    }
+
+    offset += word_count;
+  }
+
+  return false;
+}
+
+bool ContainsStoreToStorageClass(const std::vector<uint32_t>& words,
+                                 SpvStorageClass storage_class) {
+  std::unordered_map<uint32_t, SpvStorageClass> variable_storage_classes;
+
+  size_t offset = 5u;
+  while (offset < words.size()) {
+    const uint32_t inst = words[offset];
+    const uint16_t word_count =
+        static_cast<uint16_t>(inst >> SpvWordCountShift);
+    const auto opcode = static_cast<SpvOp>(inst & SpvOpCodeMask);
+
+    if (word_count == 0u) {
+      return false;
+    }
+
+    if (opcode == SpvOpVariable && word_count >= 4u) {
+      variable_storage_classes.emplace(
+          words[offset + 2u], static_cast<SpvStorageClass>(words[offset + 3u]));
+    }
+
+    offset += word_count;
+  }
+
+  offset = 5u;
+  while (offset < words.size()) {
+    const uint32_t inst = words[offset];
+    const uint16_t word_count =
+        static_cast<uint16_t>(inst >> SpvWordCountShift);
+    const auto opcode = static_cast<SpvOp>(inst & SpvOpCodeMask);
+
+    if (word_count == 0u) {
+      return false;
+    }
+
+    if (opcode == SpvOpStore && word_count >= 3u) {
+      auto it = variable_storage_classes.find(words[offset + 1u]);
+      if (it != variable_storage_classes.end() && it->second == storage_class) {
+        return true;
+      }
     }
 
     offset += word_count;
@@ -2197,6 +2269,398 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsUniformMatrixStructWithMatrixStrideDecoration) {
+  auto program = wgx::Program::Parse(R"(
+struct VertexUniforms {
+  transform: mat4x4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> u_data: VertexUniforms;
+
+@vertex
+fn vs_main(@location(0) position: vec4<f32>) -> @builtin(position) vec4<f32> {
+  return u_data.transform * position;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_uniform_matrix_struct.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
+  EXPECT_TRUE(ContainsMemberDecoration(words, SpvDecorationColMajor));
+  EXPECT_TRUE(ContainsMemberDecoration(words, SpvDecorationMatrixStride));
+}
+
+TEST(WgxSpirvSmokeTest,
+     EmitsVertexSpirvForHelperCallWithUniformStructArgument) {
+  auto program = wgx::Program::Parse(R"(
+struct CommonSlot {
+  transform: mat4x4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> common_slot: CommonSlot;
+
+fn get_vertex_position(a_pos: vec2<f32>, cs: CommonSlot) -> vec4<f32> {
+  return cs.transform * vec4<f32>(a_pos, 0.0, 1.0);
+}
+
+@vertex
+fn vs_main(@location(0) a_pos: vec2<f32>) -> @builtin(position) vec4<f32> {
+  return get_vertex_position(a_pos, common_slot);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_helper_uniform_struct_arg.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsMemberDecoration(words, SpvDecorationMatrixStride));
+}
+
+TEST(WgxSpirvSmokeTest,
+     EmitsUniformStructArrayMemberWithArrayStrideDecoration) {
+  auto program = wgx::Program::Parse(R"(
+struct GradientInfo {
+  colors: array<vec4<f32>, 4>,
+  stops: array<vec4<f32>, 2>,
+  global_alpha: f32,
+};
+
+@group(0) @binding(0)
+var<uniform> gradient_info: GradientInfo;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  return gradient_info.colors[0] * gradient_info.global_alpha;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_uniform_array_stride.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeArray));
+  EXPECT_TRUE(ContainsDecoration(words, SpvDecorationArrayStride));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsUniformVec3IndexComparisonAsScalarExtract) {
+  auto program = wgx::Program::Parse(R"(
+struct GradientInfo {
+  infos: vec3<i32>,
+  global_alpha: f32,
+};
+
+@group(0) @binding(0)
+var<uniform> gradient_info: GradientInfo;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  if gradient_info.infos[0] == 0 {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  }
+  return vec4<f32>(0.0, 0.0, 1.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_uniform_vec3_index_compare.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeExtract) ||
+              ContainsInstruction(words, SpvOpVectorExtractDynamic));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIEqual));
+}
+
+TEST(WgxSpirvSmokeTest,
+     EmitsRepositoryStyleGradientInfoScalarComparisonAndArrayAccess) {
+  auto program = wgx::Program::Parse(R"(
+struct GradientInfo {
+  infos: vec4<i32>,
+  colors: array<vec4<f32>, 4>,
+  global_alpha: f32,
+  flags: i32,
+};
+
+@group(0) @binding(0)
+var<uniform> gradient_info: GradientInfo;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  if gradient_info.infos.z == 3 {
+    return gradient_info.colors[1] * gradient_info.global_alpha;
+  }
+  return gradient_info.colors[0];
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_repository_gradient_info.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeArray));
+}
+
+TEST(WgxSpirvSmokeTest,
+     EmitsHelperCallWithUniformScalarMemberArgumentAsPlainScalar) {
+  auto program = wgx::Program::Parse(R"(
+fn classify(mode: i32) -> f32 {
+  if mode == 2 {
+    return 1.0;
+  }
+  return 0.0;
+}
+
+struct ImageColorInfo {
+  infos: vec3<i32>,
+  global_alpha: f32,
+};
+
+@group(0) @binding(0)
+var<uniform> image_color_info: ImageColorInfo;
+
+@fragment
+fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+  var x: f32 = classify(image_color_info.infos.y);
+  return vec4<f32>(x, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_uniform_scalar_helper_arg.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIEqual));
+}
+
+TEST(WgxSpirvSmokeTest,
+     EmitsHelperCallWithRepositoryStyleUniformScalarMemberArgument) {
+  auto program = wgx::Program::Parse(R"(
+fn classify(mode: i32) -> f32 {
+  if mode == 2 {
+    return 1.0;
+  }
+  return 0.0;
+}
+
+struct GradientInfo {
+  infos: vec4<i32>,
+  colors: array<vec4<f32>, 4>,
+  global_alpha: f32,
+  flags: i32,
+};
+
+@group(0) @binding(0)
+var<uniform> gradient_info: GradientInfo;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  var x: f32 = classify(gradient_info.infos.z);
+  return vec4<f32>(x, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_repository_scalar_helper_arg.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpLoad));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeArray));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsRepositoryStyleTextureTileHelperShader) {
+  auto program = wgx::Program::Parse(R"(
+fn remap_float_tile(t: f32, tile_mode: i32) -> f32 {
+  if tile_mode == 0 {
+    return clamp(t, 0.0, 1.0);
+  } else if tile_mode == 1 {
+    return fract(t);
+  } else if tile_mode == 2 {
+    var t1: f32 = t - 1.0;
+    var t2: f32 = t1 - 2.0 * floor(t1 / 2.0) - 1.0;
+    return abs(t2);
+  }
+  return t;
+}
+
+struct ImageColorInfo {
+  infos: vec3<i32>,
+  global_alpha: f32,
+};
+
+@group(0) @binding(0)
+var<uniform> image_color_info: ImageColorInfo;
+
+@group(0) @binding(1)
+var uSampler: sampler;
+
+@group(0) @binding(2)
+var uTexture: texture_2d<f32>;
+
+@fragment
+fn fs_main(@location(0) f_frag_coord: vec2<f32>) -> @location(0) vec4<f32> {
+  var uv: vec2<f32> = f_frag_coord;
+  var color: vec4<f32> = textureSample(uTexture, uSampler, uv);
+
+  if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) ||
+      (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0)) {
+    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  }
+
+  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
+  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
+
+  if image_color_info.infos.x == 3 {
+    color = vec4<f32>(color.xyz * color.w, color.w);
+  }
+
+  return color * image_color_info.global_alpha;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_repository_texture_tile_helper.spv",
+                  result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIEqual));
+  EXPECT_FALSE(
+      ContainsStoreToStorageClass(words, SpvStorageClassUniformConstant));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsRepositoryStyleColorTextFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@group(1) @binding(0) var uSampler      : sampler;
+@group(1) @binding(1) var uFontTexture0 : texture_2d<f32>;
+@group(1) @binding(2) var uFontTexture1 : texture_2d<f32>;
+@group(1) @binding(3) var uFontTexture2 : texture_2d<f32>;
+@group(1) @binding(4) var uFontTexture3 : texture_2d<f32>;
+
+fn get_texture_color(font_index: i32, uv: vec2<f32>) -> vec4<f32> {
+  var texture_dimension : vec2<u32> = vec2<u32>(textureDimensions(uFontTexture0));
+  var texture_uv        : vec2<f32> = vec2<f32>(uv.x / f32(texture_dimension.x),
+                                                uv.y / f32(texture_dimension.y));
+
+  var color1 : vec4<f32> = textureSample(uFontTexture0, uSampler, texture_uv);
+  var color2 : vec4<f32> = textureSample(uFontTexture1, uSampler, texture_uv);
+  var color3 : vec4<f32> = textureSample(uFontTexture2, uSampler, texture_uv);
+  var color4 : vec4<f32> = textureSample(uFontTexture3, uSampler, texture_uv);
+
+  if font_index == 0 {
+    return color1;
+  } else if font_index == 1 {
+    return color2;
+  } else if font_index == 2 {
+    return color3;
+  } else if font_index == 3 {
+    return color4;
+  } else {
+    return color1;
+  }
+}
+
+struct ColorTextFSInput {
+  @location(0) @interpolate(flat) txt_index : i32,
+  @location(1)                    v_uv      : vec2<f32>,
+  @location(2)                    v_color   : vec4<f32>
+};
+
+@fragment
+fn fs_main(vs_in : ColorTextFSInput) -> @location(0) vec4<f32> {
+  var fontAlpha: f32 = get_texture_color(vs_in.txt_index, vs_in.v_uv).r;
+  var color: vec4<f32> =
+      vec4<f32>(vs_in.v_color.rgb * vs_in.v_color.a, vs_in.v_color.a);
+  return color * fontAlpha;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_color_text_fragment.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFunctionCall));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpImageSampleImplicitLod));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIEqual));
+  EXPECT_FALSE(
+      ContainsStoreToStorageClass(words, SpvStorageClassUniformConstant));
 }
 
 /**

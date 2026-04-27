@@ -2,12 +2,78 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <cstdarg>
+#include <cstdio>
+#include <string>
+
 #include "ir/verifier.h"
 #include "lower/lower_internal.h"
 
 namespace wgx {
 namespace lower {
 namespace detail {
+
+namespace {
+
+void LogWgxError(const char* fmt, ...) {
+#ifndef NDEBUG
+  std::fprintf(stderr, "[skity] [ERROR]");
+  va_list args;
+  va_start(args, fmt);
+  std::vfprintf(stderr, fmt, args);
+  va_end(args);
+  std::fprintf(stderr, "\n");
+#else
+  (void)fmt;
+#endif
+}
+
+const char* GetStatementTypeName(ast::StatementType type) {
+  switch (type) {
+    case ast::StatementType::kReturn:
+      return "return";
+    case ast::StatementType::kBlock:
+      return "block";
+    case ast::StatementType::kVarDecl:
+      return "var_decl";
+    case ast::StatementType::kAssign:
+      return "assign";
+    case ast::StatementType::kIncDecl:
+      return "increment";
+    case ast::StatementType::kIf:
+      return "if";
+    case ast::StatementType::kSwitch:
+      return "switch";
+    case ast::StatementType::kLoop:
+      return "loop";
+    case ast::StatementType::kForLoop:
+      return "for";
+    case ast::StatementType::kWhileLoop:
+      return "while";
+    case ast::StatementType::kBreak:
+      return "break";
+    case ast::StatementType::kBreakIf:
+      return "break_if";
+    case ast::StatementType::kContinue:
+      return "continue";
+    case ast::StatementType::kCall:
+      return "call";
+    case ast::StatementType::kCase:
+      return "case";
+    case ast::StatementType::kDiscard:
+      return "discard";
+  }
+  return "unknown";
+}
+
+std::string GetFunctionName(const ast::Function* function) {
+  if (function == nullptr || function->name == nullptr) {
+    return "<null>";
+  }
+  return std::string(function->name->name);
+}
+
+}  // namespace
 
 ir::PipelineStage ToIRStage(ast::PipelineStage stage) {
   switch (stage) {
@@ -139,6 +205,9 @@ std::unique_ptr<ir::Module> Lowerer::Run() {
   ir_module->stage = detail::ToIRStage(ast_entry_point_->GetPipelineStage());
 
   if (ir_module->stage == ir::PipelineStage::kUnknown) {
+    detail::LogWgxError(
+        "WGX lowering failed: unknown pipeline stage for entry '%s'",
+        detail::GetFunctionName(ast_entry_point_).c_str());
     return nullptr;
   }
 
@@ -146,6 +215,9 @@ std::unique_ptr<ir::Module> Lowerer::Run() {
   type_table_ = ir_module->type_table.get();
 
   if (!LowerFunction(ast_entry_point_, true)) {
+    detail::LogWgxError(
+        "WGX lowering failed: failed to lower entry function '%s'",
+        detail::GetFunctionName(ast_entry_point_).c_str());
     return nullptr;
   }
   return ir_module;
@@ -154,12 +226,16 @@ std::unique_ptr<ir::Module> Lowerer::Run() {
 bool Lowerer::LowerFunction(const ast::Function* function,
                             bool is_entry_point) {
   if (function == nullptr) {
+    detail::LogWgxError("WGX lowering failed: null function");
     return false;
   }
   if (lowered_functions_.count(function) > 0) {
     return true;
   }
   if (lowering_functions_.count(function) > 0) {
+    detail::LogWgxError(
+        "WGX lowering failed: recursive lowering detected for function '%s'",
+        detail::GetFunctionName(function).c_str());
     return false;
   }
 
@@ -189,6 +265,11 @@ bool Lowerer::LowerFunction(const ast::Function* function,
   ir_function_->return_type = ResolveType(function->return_type);
 
   bool ok = RegisterFunctionParameters();
+  if (!ok) {
+    detail::LogWgxError(
+        "WGX lowering failed: RegisterFunctionParameters failed for '%s'",
+        detail::GetFunctionName(function).c_str());
+  }
   if (ok) {
     ir_function_->input_vars = is_entry_point
                                    ? ResolveInputVars(function)
@@ -197,12 +278,32 @@ bool Lowerer::LowerFunction(const ast::Function* function,
                                     ? ResolveOutputVars(function)
                                     : std::vector<ir::OutputVariable>{};
   }
-  ok = ok && LowerFunctionBody() && InsertImplicitReturn();
+  if (ok && !LowerFunctionBody()) {
+    detail::LogWgxError(
+        "WGX lowering failed: LowerFunctionBody failed for '%s'",
+        detail::GetFunctionName(function).c_str());
+    ok = false;
+  }
+  if (ok && !InsertImplicitReturn()) {
+    detail::LogWgxError(
+        "WGX lowering failed: InsertImplicitReturn failed for '%s'",
+        detail::GetFunctionName(function).c_str());
+    ok = false;
+  }
 
 #ifndef SKITY_RELEASE
   if (ok) {
     auto verify_result = ir::Verify(*ir_function_);
     ok = verify_result.valid;
+    if (!ok) {
+      detail::LogWgxError(
+          "WGX lowering failed: IR verify failed for '%s' at block %zu inst "
+          "%zu kind %u: %s",
+          detail::GetFunctionName(function).c_str(), verify_result.block_index,
+          verify_result.instruction_index,
+          static_cast<uint32_t>(verify_result.instruction_kind),
+          verify_result.error_message.c_str());
+    }
   }
 #endif
 
@@ -334,6 +435,9 @@ bool Lowerer::LowerFunctionBody() {
   for (auto* statement : current_ast_function_->body->statements) {
     ir::Block* current = CurrentBlock();
     if (current == nullptr) {
+      detail::LogWgxError(
+          "WGX lowering failed: current block is null in function '%s'",
+          detail::GetFunctionName(current_ast_function_).c_str());
       return false;
     }
     if (!current->instructions.empty() &&
@@ -341,6 +445,11 @@ bool Lowerer::LowerFunctionBody() {
       break;
     }
     if (!LowerStatement(statement, current)) {
+      detail::LogWgxError(
+          "WGX lowering failed: statement %p ('%s') failed in function '%s'",
+          static_cast<const void*>(statement),
+          detail::GetStatementTypeName(statement->GetType()),
+          detail::GetFunctionName(current_ast_function_).c_str());
       return false;
     }
   }
@@ -349,6 +458,8 @@ bool Lowerer::LowerFunctionBody() {
 
 bool Lowerer::InsertImplicitReturn() {
   if (current_ast_function_ == nullptr) {
+    detail::LogWgxError(
+        "WGX lowering failed: InsertImplicitReturn has no current function");
     return false;
   }
 
@@ -364,6 +475,9 @@ bool Lowerer::InsertImplicitReturn() {
   }
 
   if (!is_void_return && !has_terminator) {
+    detail::LogWgxError(
+        "WGX lowering failed: non-void function '%s' ended without terminator",
+        detail::GetFunctionName(current_ast_function_).c_str());
     return false;
   }
 

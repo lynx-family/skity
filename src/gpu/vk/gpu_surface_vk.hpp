@@ -6,6 +6,7 @@
 #define SRC_GPU_VK_GPU_SURFACE_VK_HPP
 
 #include <memory>
+#include <skity/gpu/gpu_context_vk.hpp>
 
 #include "src/gpu/gpu_surface_impl.hpp"
 
@@ -16,16 +17,20 @@ class GPUTexture;
 class GPUSurfaceVK : public GPUSurfaceImpl {
  public:
   GPUSurfaceVK(const GPUSurfaceDescriptor& desc, GPUContextImpl* ctx,
-               std::shared_ptr<GPUTexture> texture, GPUTextureFormat format)
+               std::shared_ptr<GPUTexture> texture, GPUTextureFormat format,
+               const GPUSurfaceSyncInfoVK* sync_info)
       : GPUSurfaceImpl(desc, ctx),
         texture_(std::move(texture)),
-        format_(format) {}
+        format_(format),
+        sync_info_(sync_info) {}
 
   ~GPUSurfaceVK() override = default;
 
   GPUTextureFormat GetGPUFormat() const override { return format_; }
 
   std::shared_ptr<Pixmap> ReadPixels(const Rect& rect) override;
+
+  void PrepareForSubmit(GPUCommandBuffer* command_buffer) override;
 
  protected:
   HWRootLayer* OnBeginNextFrame(bool clear) override;
@@ -35,6 +40,7 @@ class GPUSurfaceVK : public GPUSurfaceImpl {
  private:
   std::shared_ptr<GPUTexture> texture_ = {};
   GPUTextureFormat format_ = GPUTextureFormat::kInvalid;
+  const GPUSurfaceSyncInfoVK* sync_info_ = nullptr;
 };
 
 }  // namespace skity

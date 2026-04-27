@@ -11,11 +11,12 @@ namespace skity {
 VulkanPendingSubmission::VulkanPendingSubmission(
     VkFence fence_in, VkCommandPool command_pool_in,
     std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers_in,
-    std::vector<std::function<void()>> cleanup_actions_in)
+    std::vector<std::function<void()>> cleanup_actions_in, bool owns_fence_in)
     : fence(fence_in),
       command_pool(command_pool_in),
       stage_buffers(std::move(stage_buffers_in)),
-      cleanup_actions(std::move(cleanup_actions_in)) {}
+      cleanup_actions(std::move(cleanup_actions_in)),
+      owns_fence(owns_fence_in) {}
 
 VulkanPendingSubmission::VulkanPendingSubmission(
     VulkanPendingSubmission&& other) noexcept = default;

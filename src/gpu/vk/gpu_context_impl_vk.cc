@@ -684,10 +684,6 @@ std::unique_ptr<GPUSurface> GPUContextVK::CreateSurface(
     return nullptr;
   }
 
-  if (vk_desc->sync_info != nullptr) {
-    LOGW("GPUSurfaceSyncInfoVK is not consumed by GPUSurfaceVK yet");
-  }
-
   GPUTextureDescriptor texture_desc = {};
   texture_desc.width = vk_desc->width;
   texture_desc.height = vk_desc->height;
@@ -712,8 +708,8 @@ std::unique_ptr<GPUSurface> GPUContextVK::CreateSurface(
     return nullptr;
   }
 
-  return std::make_unique<GPUSurfaceVK>(*desc, this, std::move(texture),
-                                        texture_desc.format);
+  return std::make_unique<GPUSurfaceVK>(
+      *desc, this, std::move(texture), texture_desc.format, vk_desc->sync_info);
 }
 
 std::unique_ptr<GPUDevice> GPUContextVK::CreateGPUDevice() {

@@ -9,6 +9,7 @@
 
 #include <functional>
 #include <memory>
+#include <skity/gpu/gpu_context_vk.hpp>
 #include <vector>
 
 #include "src/gpu/gpu_command_buffer.hpp"
@@ -41,6 +42,8 @@ class GPUCommandBufferVK : public GPUCommandBuffer {
 
   void RecordCleanupAction(std::function<void()> action);
 
+  void SetSubmitSyncInfo(const GPUSurfaceSyncInfoVK* sync_info);
+
  private:
   void Reset();
 
@@ -51,6 +54,7 @@ class GPUCommandBufferVK : public GPUCommandBuffer {
   bool submitted_ = false;
   std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers_ = {};
   std::vector<std::function<void()>> cleanup_actions_ = {};
+  const GPUSurfaceSyncInfoVK* submit_sync_info_ = nullptr;
 };
 
 }  // namespace skity

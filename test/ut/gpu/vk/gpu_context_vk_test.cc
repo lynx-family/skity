@@ -52,6 +52,23 @@ fn fs_uniform_main() -> @location(0) vec4<f32> {
 }
 )";
 
+constexpr char kUniformHelperVertexWGSL[] = R"(
+struct CommonSlot {
+  transform : mat4x4<f32>,
+};
+
+@group(0) @binding(0) var<uniform> common_slot : CommonSlot;
+
+fn get_vertex_position(a_pos: vec2<f32>, cs: CommonSlot) -> vec4<f32> {
+  return cs.transform * vec4<f32>(a_pos, 0.0, 1.0);
+}
+
+@vertex
+fn vs_main(@location(0) a_pos: vec2<f32>) -> @builtin(position) vec4<f32> {
+  return get_vertex_position(a_pos, common_slot);
+}
+)";
+
 #if defined(__has_feature)
 #if __has_feature(thread_sanitizer)
 constexpr bool kThreadSanitizerEnabled = true;
@@ -710,6 +727,36 @@ TEST_F(VulkanSharedContextTest, CreateRenderPipelineFromWGXFunctions) {
     EXPECT_FALSE(vk_pipeline->UsesDynamicRendering());
     EXPECT_NE(vk_pipeline->GetRenderPass(), VK_NULL_HANDLE);
   }
+}
+
+TEST_F(VulkanSharedContextTest,
+       CreateRenderPipelineFromWGXFunctionsWithUniformHelperVertexShader) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+
+  auto vertex_function = CreateWGXShaderFunction(
+      device, kUniformHelperVertexWGSL, "vk_vertex_helper_uniform_shader",
+      "vs_main", skity::GPUShaderStage::kVertex);
+  ASSERT_NE(vertex_function, nullptr);
+  ASSERT_TRUE(vertex_function->IsValid());
+
+  auto fragment_function = CreateWGXShaderFunction(
+      device, kSimpleFragmentWGSL, "vk_fragment_simple_shader", "fs_main",
+      skity::GPUShaderStage::kFragment);
+  ASSERT_NE(fragment_function, nullptr);
+  ASSERT_TRUE(fragment_function->IsValid());
+
+  skity::GPURenderPipelineDescriptor pipeline_desc = {};
+  pipeline_desc.vertex_function = vertex_function;
+  pipeline_desc.fragment_function = fragment_function;
+  pipeline_desc.target.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  pipeline_desc.sample_count = 1;
+  pipeline_desc.label = skity::GPULabel("vk_helper_uniform_render_pipeline");
+
+  auto pipeline = device->CreateRenderPipeline(pipeline_desc);
+  ASSERT_NE(pipeline, nullptr);
+  ASSERT_TRUE(pipeline->IsValid());
 }
 
 TEST_F(VulkanSharedContextTest, CreateAndReuseSampler) {

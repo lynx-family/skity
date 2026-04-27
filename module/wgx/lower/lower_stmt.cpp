@@ -224,6 +224,9 @@ bool Lowerer::LowerIfStatement(const ast::IfStatement* if_stmt,
   if (!LowerBlockStatement(if_stmt->body, then_block)) {
     return false;
   }
+  const bool then_terminated =
+      CurrentBlock() != nullptr && !CurrentBlock()->instructions.empty() &&
+      CurrentBlock()->instructions.back().IsTerminator();
   if (CurrentBlock() != nullptr &&
       (CurrentBlock()->instructions.empty() ||
        !CurrentBlock()->instructions.back().IsTerminator())) {
@@ -241,6 +244,9 @@ bool Lowerer::LowerIfStatement(const ast::IfStatement* if_stmt,
     if (!LowerStatement(if_stmt->else_stmt, else_block)) {
       return false;
     }
+    const bool else_terminated =
+        CurrentBlock() != nullptr && !CurrentBlock()->instructions.empty() &&
+        CurrentBlock()->instructions.back().IsTerminator();
     if (CurrentBlock() != nullptr &&
         (CurrentBlock()->instructions.empty() ||
          !CurrentBlock()->instructions.back().IsTerminator())) {
@@ -248,6 +254,16 @@ bool Lowerer::LowerIfStatement(const ast::IfStatement* if_stmt,
       else_jump.kind = ir::InstKind::kBranch;
       else_jump.target_block = merge_block_id;
       CurrentBlock()->instructions.emplace_back(else_jump);
+    }
+
+    if (then_terminated && else_terminated) {
+      ir::Block* merge_block = ir_function_->GetBlock(merge_block_id);
+      if (merge_block == nullptr) {
+        return false;
+      }
+      ir::Instruction unreachable_inst;
+      unreachable_inst.kind = ir::InstKind::kUnreachable;
+      merge_block->instructions.emplace_back(unreachable_inst);
     }
   }
 
