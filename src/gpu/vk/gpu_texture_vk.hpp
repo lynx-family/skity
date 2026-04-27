@@ -22,13 +22,21 @@ class GPUTextureVK : public GPUTexture,
   GPUTextureVK(std::shared_ptr<const VulkanContextState> state,
                const GPUTextureDescriptor& descriptor, VkImage image,
                VmaAllocation allocation, VkImageView image_view,
-               VkImageLayout preferred_layout, VkFormat format);
+               VkImageLayout preferred_layout, VkFormat format,
+               bool owns_image = true, bool owns_image_view = true);
 
   ~GPUTextureVK() override;
 
   static std::shared_ptr<GPUTexture> Create(
       std::shared_ptr<const VulkanContextState> state,
       const GPUTextureDescriptor& descriptor);
+
+  static std::shared_ptr<GPUTexture> Wrap(
+      std::shared_ptr<const VulkanContextState> state,
+      const GPUTextureDescriptor& descriptor, VkImage image,
+      VkImageView image_view, VkImageLayout initial_layout,
+      VkImageLayout preferred_layout, VkFormat format, bool owns_image,
+      bool owns_image_view);
 
   size_t GetBytes() const override;
 
@@ -50,8 +58,7 @@ class GPUTextureVK : public GPUTexture,
   void SetCurrentLayout(VkImageLayout layout) { current_layout_ = layout; }
 
   bool IsValid() const {
-    return image_ != VK_NULL_HANDLE && image_view_ != VK_NULL_HANDLE &&
-           allocation_ != VK_NULL_HANDLE;
+    return image_ != VK_NULL_HANDLE && image_view_ != VK_NULL_HANDLE;
   }
 
   SKT_BACKEND_CAST(GPUTextureVK, GPUTexture)
@@ -64,6 +71,8 @@ class GPUTextureVK : public GPUTexture,
   VkImageLayout preferred_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
   VkImageLayout current_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
   VkFormat format_ = VK_FORMAT_UNDEFINED;
+  bool owns_image_ = true;
+  bool owns_image_view_ = true;
 };
 
 }  // namespace skity

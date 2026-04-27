@@ -1,0 +1,42 @@
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
+
+#ifndef SRC_GPU_VK_GPU_SURFACE_VK_HPP
+#define SRC_GPU_VK_GPU_SURFACE_VK_HPP
+
+#include <memory>
+
+#include "src/gpu/gpu_surface_impl.hpp"
+
+namespace skity {
+
+class GPUTexture;
+
+class GPUSurfaceVK : public GPUSurfaceImpl {
+ public:
+  GPUSurfaceVK(const GPUSurfaceDescriptor& desc, GPUContextImpl* ctx,
+               std::shared_ptr<GPUTexture> texture, GPUTextureFormat format)
+      : GPUSurfaceImpl(desc, ctx),
+        texture_(std::move(texture)),
+        format_(format) {}
+
+  ~GPUSurfaceVK() override = default;
+
+  GPUTextureFormat GetGPUFormat() const override { return format_; }
+
+  std::shared_ptr<Pixmap> ReadPixels(const Rect& rect) override;
+
+ protected:
+  HWRootLayer* OnBeginNextFrame(bool clear) override;
+
+  void OnFlush() override {}
+
+ private:
+  std::shared_ptr<GPUTexture> texture_ = {};
+  GPUTextureFormat format_ = GPUTextureFormat::kInvalid;
+};
+
+}  // namespace skity
+
+#endif  // SRC_GPU_VK_GPU_SURFACE_VK_HPP

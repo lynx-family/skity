@@ -1124,6 +1124,56 @@ TEST_F(VulkanSharedContextTest, CollectPendingSubmissionsRunsCleanupActions) {
   EXPECT_TRUE(cleanup_ran);
 }
 
+TEST_F(VulkanSharedContextTest, CreateTextureBackedSurfaceAndFlush) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+
+  skity::GPUTextureDescriptor texture_desc = {};
+  texture_desc.width = 16;
+  texture_desc.height = 16;
+  texture_desc.mip_level_count = 1;
+  texture_desc.sample_count = 1;
+  texture_desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  texture_desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  texture_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto texture = device->CreateTexture(texture_desc);
+  ASSERT_NE(texture, nullptr);
+
+  auto* vk_texture = skity::GPUTextureVK::Cast(texture.get());
+  ASSERT_NE(vk_texture, nullptr);
+  ASSERT_TRUE(vk_texture->IsValid());
+
+  skity::GPUSurfaceDescriptorVK surface_desc = {};
+  surface_desc.backend = skity::GPUBackendType::kVulkan;
+  surface_desc.width = texture_desc.width;
+  surface_desc.height = texture_desc.height;
+  surface_desc.sample_count = 1;
+  surface_desc.content_scale = 1.f;
+  surface_desc.surface_type = skity::VKSurfaceType::kTexture;
+  surface_desc.image = vk_texture->GetImage();
+  surface_desc.image_view = vk_texture->GetImageView();
+  surface_desc.format = vk_texture->GetVkFormat();
+  surface_desc.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+  surface_desc.final_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+  auto surface = GetContext()->CreateSurface(&surface_desc);
+  ASSERT_NE(surface, nullptr);
+
+  auto* canvas = surface->LockCanvas();
+  ASSERT_NE(canvas, nullptr);
+
+  skity::Paint paint;
+  paint.SetColor(skity::ColorSetARGB(255, 255, 0, 0));
+  canvas->DrawRect(skity::Rect::MakeWH(16.f, 16.f), paint);
+  canvas->Flush();
+  surface->Flush();
+
+  GetState()->CollectPendingSubmissions(true);
+}
+
 TEST_F(VulkanSharedContextTest, CreateMultiUseTextureUsesGeneralLayout) {
   ASSERT_NE(GetContext(), nullptr);
   auto* device = GetDevice();

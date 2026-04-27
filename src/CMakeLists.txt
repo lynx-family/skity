@@ -502,6 +502,8 @@ if(${SKITY_HW_RENDERER})
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_sampler_vk.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_shader_function_vk.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_shader_function_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_surface_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_surface_vk.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_texture_vk.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_texture_vk.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_debug_runtime_state.hpp
@@ -511,6 +513,8 @@ if(${SKITY_HW_RENDERER})
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_pending_submission.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_context_state.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_context_state.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/render/hw/vk/vk_root_layer.cc
+      ${CMAKE_CURRENT_LIST_DIR}/render/hw/vk/vk_root_layer.hpp
     )
   endif()
 endif()
