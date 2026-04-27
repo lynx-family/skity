@@ -589,9 +589,9 @@ bool RecordDrawCommands(const std::shared_ptr<const VulkanContextState>& state,
 
   VkViewport vk_viewport = {};
   vk_viewport.x = vp.x;
-  vk_viewport.y = vp.y;
+  vk_viewport.y = vp.y + vp.height;
   vk_viewport.width = vp.width;
-  vk_viewport.height = vp.height;
+  vk_viewport.height = -1.f * vp.height;
   vk_viewport.minDepth = vp.min_depth;
   vk_viewport.maxDepth = vp.max_depth;
   state->DeviceFns().vkCmdSetViewport(command_buffer.GetCommandBuffer(), 0, 1,
