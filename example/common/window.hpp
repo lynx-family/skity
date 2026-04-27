@@ -26,11 +26,11 @@ class WindowClient {
  public:
   virtual ~WindowClient() = default;
 
-  virtual void OnStart(skity::GPUContext* context){};
+  virtual void OnStart(skity::GPUContext* context) {};
 
   virtual void OnDraw(skity::GPUContext* context, skity::Canvas* canvas) = 0;
 
-  virtual void OnTerminate(){};
+  virtual void OnTerminate() {};
 
   const Window* GetWindow() const { return window_; }
 
@@ -72,6 +72,8 @@ class Window {
   GLFWwindow* GetNativeWindow() const { return native_window_; }
 
   skity::GPUContext* GetGPUContext() const { return gpu_context_.get(); }
+
+  void ResetGPUContext() { gpu_context_.reset(); }
 
   bool Init();
 

@@ -237,6 +237,7 @@ class ModuleBuilder {
   bool EmitBranch(const ir::Instruction& inst);
   bool EmitCondBranch(const ir::Instruction& inst);
   bool EmitReturn(const ir::Instruction& inst);
+  bool Fail(const std::string& message);
   uint32_t GetFunctionId(std::string_view function_name) const;
   uint32_t GetFunctionTypeId(std::string_view function_name) const;
   ir::TypeId GetSpirvFunctionReturnType(const ir::Function& function) const;
@@ -269,7 +270,9 @@ class ModuleBuilder {
   std::unordered_map<uint32_t, uint32_t> value_map_;
   std::unordered_map<uint32_t, SpvStorageClass> pointer_storage_class_map_;
   uint32_t glsl_std_450_import_id_ = 0;
+  const ir::Function* current_function_ = nullptr;
   const ir::Block* current_block_ = nullptr;
+  const ir::Instruction* current_instruction_ = nullptr;
 };
 
 }  // namespace spirv

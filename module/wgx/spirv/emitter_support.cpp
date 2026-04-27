@@ -2,6 +2,8 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <cstdarg>
+#include <cstdio>
 #include <cstring>
 #include <string_view>
 
@@ -11,6 +13,23 @@
 
 namespace wgx {
 namespace spirv {
+
+namespace {
+
+void LogWgxError(const char* fmt, ...) {
+#ifndef NDEBUG
+  std::fprintf(stderr, "[skity] [ERROR]");
+  va_list args;
+  va_start(args, fmt);
+  std::vfprintf(stderr, fmt, args);
+  va_end(args);
+  std::fprintf(stderr, "\n");
+#else
+  (void)fmt;
+#endif
+}
+
+}  // namespace
 
 std::vector<uint32_t> EncodeStringLiteral(std::string_view value) {
   const size_t word_count = (value.size() + 1u + 3u) / 4u;
@@ -181,29 +200,57 @@ bool Emitter::Emit(const ir::Module& module) {
 
   if (module.entry_point.empty() ||
       module.stage == ir::PipelineStage::kUnknown) {
+    LogWgxError(
+        "WGX SPIR-V emission failed: invalid module entry point or stage");
     return false;
   }
-  if (module.functions.empty()) return false;
+  if (module.functions.empty()) {
+    LogWgxError("WGX SPIR-V emission failed: module has no functions");
+    return false;
+  }
   auto verify_module = ir::Verify(module);
   if (!verify_module.valid) {
+    LogWgxError(
+        "WGX SPIR-V emission failed: IR module verification failed at block "
+        "%zu inst %zu kind %u: %s",
+        verify_module.block_index, verify_module.instruction_index,
+        static_cast<uint32_t>(verify_module.instruction_kind),
+        verify_module.error_message.c_str());
     return false;
   }
 
   const ir::Function* entry_function = FindEntryFunction(module);
   if (entry_function == nullptr || entry_function->stage != module.stage) {
+    LogWgxError(
+        "WGX SPIR-V emission failed: entry function '%s' not found or stage "
+        "mismatch",
+        module.entry_point.c_str());
     return false;
   }
   if (!SupportsCurrentIR(*entry_function)) {
+    LogWgxError(
+        "WGX SPIR-V emission failed: entry function '%s' is not supported by "
+        "current SPIR-V backend",
+        entry_function->name.c_str());
     return false;
   }
 
   const auto execution_model = ToExecutionModel(module.stage);
-  if (execution_model == SpvExecutionModelMax) return false;
+  if (execution_model == SpvExecutionModelMax) {
+    LogWgxError(
+        "WGX SPIR-V emission failed: unsupported execution model for entry "
+        "'%s'",
+        entry_function->name.c_str());
+    return false;
+  }
 
   SectionBuffers sections;
   std::vector<uint32_t> words;
   ModuleBuilder builder(module, *entry_function, execution_model);
   if (!builder.Build(&sections, &words)) {
+    LogWgxError(
+        "WGX SPIR-V emission failed: module builder failed for entry '%s'",
+        entry_function->name.c_str());
     return false;
   }
 

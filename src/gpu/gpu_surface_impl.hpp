@@ -16,6 +16,7 @@ namespace skity {
 class HWCanvas;
 class HWRootLayer;
 class HWStageBuffer;
+class GPUCommandBuffer;
 
 class GPUSurfaceImpl : public GPUSurface {
  public:
@@ -44,6 +45,10 @@ class GPUSurfaceImpl : public GPUSurface {
   ArenaAllocator* GetArenaAllocator() const { return arena_allocator_.get(); }
 
   virtual GPUTextureFormat GetGPUFormat() const = 0;
+
+  virtual void PrepareForSubmit(GPUCommandBuffer* command_buffer) {
+    (void)command_buffer;
+  }
 
  protected:
   virtual HWRootLayer* OnBeginNextFrame(bool clear) = 0;

@@ -20,7 +20,8 @@ struct VulkanPendingSubmission {
   VulkanPendingSubmission(
       VkFence fence, VkCommandPool command_pool,
       std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers,
-      std::vector<std::function<void()>> cleanup_actions = {});
+      std::vector<std::function<void()>> cleanup_actions = {},
+      bool owns_fence = true);
   VulkanPendingSubmission(VulkanPendingSubmission&& other) noexcept;
   VulkanPendingSubmission& operator=(VulkanPendingSubmission&& other) noexcept;
   ~VulkanPendingSubmission();
@@ -32,6 +33,7 @@ struct VulkanPendingSubmission {
   VkCommandPool command_pool = VK_NULL_HANDLE;
   std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers = {};
   std::vector<std::function<void()>> cleanup_actions = {};
+  bool owns_fence = true;
 };
 
 }  // namespace skity

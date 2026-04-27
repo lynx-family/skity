@@ -644,6 +644,8 @@ void HWCanvas::OnFlush() {
 
     root_layer_->Draw(nullptr, cmd.get());
 
+    surface_->PrepareForSubmit(cmd.get());
+
     cmd->Submit();
   }
 

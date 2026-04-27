@@ -314,15 +314,15 @@ TypeTable::LayoutInfo TypeTable::GetLayoutInfo(TypeId id,
       // Matrix is treated as array of column vectors
       uint32_t rows = type->count;
       uint32_t cols = type->count2;
-      uint32_t vec_align = (rule == LayoutRule::kStd140 || cols >= 3) ? 16 : 8;
-      uint32_t vec_size = cols * 4;
-      if (rule == LayoutRule::kStd140 && cols == 3) {
+      uint32_t vec_align = (rule == LayoutRule::kStd140 || rows >= 3) ? 16 : 8;
+      uint32_t vec_size = rows * 4;
+      if (rule == LayoutRule::kStd140 && rows == 3) {
         vec_size = 16;  // vec3 takes 16 bytes in std140
       }
 
       // Array stride is rounded up to alignment
       uint32_t stride = AlignOffset(vec_size, vec_align);
-      uint32_t total_size = stride * rows;
+      uint32_t total_size = stride * cols;
       return LayoutInfo{total_size, vec_align};
     }
 

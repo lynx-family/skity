@@ -598,7 +598,7 @@ void VulkanContextState::CollectPendingSubmissions(bool wait_all) const {
   }
 
   for (auto& submission : completed_submissions) {
-    if (submission.fence != VK_NULL_HANDLE) {
+    if (submission.owns_fence && submission.fence != VK_NULL_HANDLE) {
       functions_.device.vkDestroyFence(logical_device_, submission.fence,
                                        nullptr);
       submission.fence = VK_NULL_HANDLE;

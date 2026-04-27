@@ -92,6 +92,8 @@ VerificationResult Verifier::VerifyInstruction(const Instruction& inst,
   switch (inst.kind) {
     case InstKind::kReturn:
       return VerifyReturn(inst, index);
+    case InstKind::kUnreachable:
+      return VerificationResult::Success();
     case InstKind::kVariable:
       return VerifyVariable(inst, index);
     case InstKind::kLoad:

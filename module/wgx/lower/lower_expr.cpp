@@ -361,6 +361,120 @@ ir::Value Lowerer::EnsureValue(const ir::ExprResult& expr, ir::Block* block) {
   return ir::Value::SSA(expr.GetType(), load_id);
 }
 
+ir::Value Lowerer::ConvertValueToType(const ir::Value& value,
+                                      ir::TypeId target_type,
+                                      ir::Block* block) {
+  if (!value.IsValue() || block == nullptr ||
+      target_type == ir::kInvalidTypeId) {
+    return ir::Value::None();
+  }
+
+  if (value.type == target_type) {
+    return value;
+  }
+
+  const ir::Type* source_type_desc = type_table_->GetType(value.type);
+  const ir::Type* target_type_desc = type_table_->GetType(target_type);
+  if (source_type_desc == nullptr || target_type_desc == nullptr) {
+    return ir::Value::None();
+  }
+
+  if (source_type_desc->kind == ir::TypeKind::kStruct &&
+      source_type_desc->members.size() == 1u) {
+    ir::Instruction extract_inst;
+    extract_inst.kind = ir::InstKind::kExtract;
+    extract_inst.result_id = AllocateSSAId();
+    extract_inst.result_type = source_type_desc->members[0].type;
+    extract_inst.access_index = 0u;
+    extract_inst.operands.push_back(value);
+    if (extract_inst.result_id == 0) {
+      return ir::Value::None();
+    }
+    block->instructions.emplace_back(extract_inst);
+    return ConvertValueToType(ir::Value::SSA(source_type_desc->members[0].type,
+                                             extract_inst.result_id),
+                              target_type, block);
+  }
+
+  if (target_type_desc->kind == ir::TypeKind::kStruct &&
+      target_type_desc->members.size() == 1u) {
+    ir::Value inner_value =
+        ConvertValueToType(value, target_type_desc->members[0].type, block);
+    if (!inner_value.IsValue()) {
+      return ir::Value::None();
+    }
+
+    ir::Instruction construct_inst;
+    construct_inst.kind = ir::InstKind::kConstruct;
+    construct_inst.result_type = target_type;
+    construct_inst.result_id = AllocateSSAId();
+    if (construct_inst.result_id == 0) {
+      return ir::Value::None();
+    }
+    construct_inst.operands.push_back(inner_value);
+    block->instructions.emplace_back(construct_inst);
+    return ir::Value::SSA(target_type, construct_inst.result_id);
+  }
+
+  if (source_type_desc->kind != ir::TypeKind::kStruct ||
+      target_type_desc->kind != ir::TypeKind::kStruct ||
+      source_type_desc->members.size() != target_type_desc->members.size()) {
+    return ir::Value::None();
+  }
+
+  ir::Instruction construct_inst;
+  construct_inst.kind = ir::InstKind::kConstruct;
+  construct_inst.result_type = target_type;
+  construct_inst.result_id = AllocateSSAId();
+  if (construct_inst.result_id == 0) {
+    return ir::Value::None();
+  }
+
+  for (uint32_t member_index = 0;
+       member_index < source_type_desc->members.size(); ++member_index) {
+    ir::Instruction extract_inst;
+    extract_inst.kind = ir::InstKind::kExtract;
+    extract_inst.result_id = AllocateSSAId();
+    extract_inst.result_type = source_type_desc->members[member_index].type;
+    extract_inst.access_index = member_index;
+    extract_inst.operands.push_back(value);
+    if (extract_inst.result_id == 0) {
+      return ir::Value::None();
+    }
+    block->instructions.emplace_back(extract_inst);
+
+    ir::Value member_value = ConvertValueToType(
+        ir::Value::SSA(extract_inst.result_type, extract_inst.result_id),
+        target_type_desc->members[member_index].type, block);
+    if (!member_value.IsValue()) {
+      return ir::Value::None();
+    }
+    construct_inst.operands.push_back(member_value);
+  }
+
+  block->instructions.emplace_back(construct_inst);
+  return ir::Value::SSA(target_type, construct_inst.result_id);
+}
+
+ir::Value Lowerer::MaterializeArgumentValue(const ir::ExprResult& expr,
+                                            ir::TypeId target_type,
+                                            ir::Block* block) {
+  if (!expr.IsValid() || block == nullptr) {
+    return ir::Value::None();
+  }
+
+  if (expr.GetType() == target_type) {
+    return EnsureValue(expr, block);
+  }
+
+  ir::Value source_value = EnsureValue(expr, block);
+  if (!source_value.IsValue()) {
+    return ir::Value::None();
+  }
+
+  return ConvertValueToType(source_value, target_type, block);
+}
+
 bool Lowerer::EmitStore(const ir::ExprResult& source_expr,
                         const ir::Value& target, ir::Block* block) {
   if (block == nullptr || !target.IsAddress()) {
@@ -1348,13 +1462,23 @@ ir::ExprResult Lowerer::LowerFunctionCallExpression(ast::FunctionCallExp* call,
   call_inst.kind = ir::InstKind::kCall;
   call_inst.callee_name = std::string{callee->name->name};
 
-  for (auto* arg : call->args) {
+  if (call->args.size() != callee->params.size()) {
+    return ir::ExprResult();
+  }
+
+  for (size_t arg_index = 0; arg_index < call->args.size(); ++arg_index) {
+    auto* arg = call->args[arg_index];
     ir::ExprResult arg_expr = LowerExpression(arg);
     if (!arg_expr.IsValid()) {
       return ir::ExprResult();
     }
 
-    ir::Value arg_value = EnsureValue(arg_expr, block);
+    const ir::TypeId param_type = ResolveType(callee->params[arg_index]->type);
+    if (param_type == ir::kInvalidTypeId) {
+      return ir::ExprResult();
+    }
+
+    ir::Value arg_value = MaterializeArgumentValue(arg_expr, param_type, block);
     if (!arg_value.IsValue()) {
       return ir::ExprResult();
     }

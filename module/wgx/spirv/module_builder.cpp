@@ -3,6 +3,8 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <array>
+#include <cstdarg>
+#include <cstdio>
 #include <cstring>
 #include <unordered_set>
 
@@ -13,6 +15,19 @@ namespace wgx {
 namespace spirv {
 
 namespace {
+
+void LogWgxError(const char* fmt, ...) {
+#ifndef NDEBUG
+  std::fprintf(stderr, "[skity] [ERROR]");
+  va_list args;
+  va_start(args, fmt);
+  std::vfprintf(stderr, fmt, args);
+  va_end(args);
+  std::fprintf(stderr, "\n");
+#else
+  (void)fmt;
+#endif
+}
 
 bool IsVectorScalarBinary(const ir::Instruction& inst,
                           ir::TypeTable* type_table) {
@@ -391,14 +406,31 @@ ModuleBuilder::ModuleBuilder(const ir::Module& module,
                              SpvExecutionModel execution_model)
     : module_(module), entry_(entry), execution_model_(execution_model) {}
 
+bool ModuleBuilder::Fail(const std::string& message) {
+  LogWgxError(
+      "WGX SPIR-V builder failed: %s (entry='%s', function='%s', block='%s', "
+      "inst_kind=%u)",
+      message.c_str(), entry_.name.c_str(),
+      current_function_ != nullptr ? current_function_->name.c_str() : "<none>",
+      current_block_ != nullptr ? current_block_->name.c_str() : "<none>",
+      current_instruction_ != nullptr
+          ? static_cast<uint32_t>(current_instruction_->kind)
+          : static_cast<uint32_t>(ir::InstKind::kReturn));
+  return false;
+}
+
 bool ModuleBuilder::Build(SectionBuffers* sections,
                           std::vector<uint32_t>* output_words) {
-  if (sections == nullptr || output_words == nullptr) return false;
+  if (sections == nullptr || output_words == nullptr) {
+    return Fail("invalid output buffers");
+  }
 
   sections_ = sections;
 
   ir::TypeTable* type_table = module_.type_table.get();
-  if (type_table == nullptr) return false;
+  if (type_table == nullptr) {
+    return Fail("module type table is null");
+  }
 
   type_emitter_ = std::make_unique<TypeEmitter>(&ids_, sections_, type_table);
 
@@ -425,15 +457,19 @@ bool ModuleBuilder::Build(SectionBuffers* sections,
     output_vars_.push_back(std::move(info));
   }
 
-  if (!AllocateCoreIds()) return false;
+  if (!AllocateCoreIds()) return Fail("AllocateCoreIds failed");
 
   WriteCapabilityMemoryModel();
   WriteEntryPointSection();
   WriteExecutionModeSection();
   WriteDebugSection();
   WriteAnnotationSection();
-  if (!WriteTypeConstGlobalSection()) return false;
-  if (!WriteFunctionSection()) return false;
+  if (!WriteTypeConstGlobalSection()) {
+    return Fail("WriteTypeConstGlobalSection failed");
+  }
+  if (!WriteFunctionSection()) {
+    return Fail("WriteFunctionSection failed");
+  }
 
   AssembleModule(output_words);
   return true;
@@ -656,7 +692,8 @@ SpvBuiltIn ConvertBuiltin(ir::BuiltinType builtin) {
 
 void DecorateBufferStructMembers(
     SectionBuffers* sections, TypeEmitter* type_emitter, ir::TypeId type_id,
-    bool decorate_block, std::unordered_set<ir::TypeId>* visited_types) {
+    ir::TypeTable::LayoutRule layout_rule, bool decorate_block,
+    std::unordered_set<ir::TypeId>* visited_types) {
   if (sections == nullptr || type_emitter == nullptr ||
       visited_types == nullptr || !visited_types->insert(type_id).second) {
     return;
@@ -687,9 +724,54 @@ void DecorateBufferStructMembers(
 
     const ir::Type* member_type =
         type_emitter->GetTypeTable()->GetType(member.type);
+    if (member_type != nullptr && member_type->kind == ir::TypeKind::kMatrix) {
+      const ir::TypeId column_vector_type =
+          type_emitter->GetTypeTable()->GetVectorType(member_type->element_type,
+                                                      member_type->count);
+      const auto column_layout = type_emitter->GetTypeTable()->GetLayoutInfo(
+          column_vector_type, layout_rule);
+      const uint32_t matrix_stride = ir::TypeTable::AlignOffset(
+          column_layout.size, column_layout.alignment);
+
+      AppendInstruction(&sections->annotations, SpvOpMemberDecorate,
+                        {struct_type_id, index,
+                         static_cast<uint32_t>(SpvDecorationColMajor)});
+      AppendInstruction(
+          &sections->annotations, SpvOpMemberDecorate,
+          {struct_type_id, index,
+           static_cast<uint32_t>(SpvDecorationMatrixStride), matrix_stride});
+    }
+
+    if (member_type != nullptr && member_type->kind == ir::TypeKind::kArray) {
+      const uint32_t array_type_id = type_emitter->EmitType(member.type);
+      if (array_type_id != 0) {
+        const auto element_layout = type_emitter->GetTypeTable()->GetLayoutInfo(
+            member_type->element_type, layout_rule);
+        uint32_t array_stride = ir::TypeTable::AlignOffset(
+            element_layout.size, element_layout.alignment);
+        if (layout_rule == ir::TypeTable::LayoutRule::kStd140) {
+          array_stride = ir::TypeTable::AlignOffset(array_stride, 16);
+        }
+
+        AppendInstruction(
+            &sections->annotations, SpvOpDecorate,
+            {array_type_id, static_cast<uint32_t>(SpvDecorationArrayStride),
+             array_stride});
+      }
+
+      const ir::Type* element_type =
+          type_emitter->GetTypeTable()->GetType(member_type->element_type);
+      if (element_type != nullptr &&
+          element_type->kind == ir::TypeKind::kStruct) {
+        DecorateBufferStructMembers(sections, type_emitter,
+                                    member_type->element_type, layout_rule,
+                                    false, visited_types);
+      }
+    }
+
     if (member_type != nullptr && member_type->kind == ir::TypeKind::kStruct) {
-      DecorateBufferStructMembers(sections, type_emitter, member.type, false,
-                                  visited_types);
+      DecorateBufferStructMembers(sections, type_emitter, member.type,
+                                  layout_rule, false, visited_types);
     }
   }
 }
@@ -741,9 +823,14 @@ void ModuleBuilder::WriteAnnotationSection() {
     }
     if (global.storage_class == SpvStorageClassUniform ||
         global.storage_class == SpvStorageClassStorageBuffer) {
+      const ir::TypeTable::LayoutRule layout_rule =
+          global.storage_class == SpvStorageClassUniform
+              ? ir::TypeTable::LayoutRule::kStd140
+              : ir::TypeTable::LayoutRule::kStd430;
       std::unordered_set<ir::TypeId> visited_types;
       DecorateBufferStructMembers(sections_, type_emitter_.get(),
-                                  global.var_type, true, &visited_types);
+                                  global.var_type, layout_rule, true,
+                                  &visited_types);
     }
   }
 }
@@ -813,8 +900,9 @@ bool ModuleBuilder::WriteTypeConstGlobalSection() {
 
 bool ModuleBuilder::WriteFunctionSection() {
   for (const auto& function : module_.functions) {
+    current_function_ = &function;
     if (!AnalyzeFunction(function)) {
-      return false;
+      return Fail("AnalyzeFunction failed");
     }
 
     function_id_ = GetFunctionId(function.name);
@@ -822,7 +910,7 @@ bool ModuleBuilder::WriteFunctionSection() {
     uint32_t return_type_id =
         type_emitter_->EmitType(GetSpirvFunctionReturnType(function));
     if (function_id_ == 0 || function_type_id_ == 0 || return_type_id == 0) {
-      return false;
+      return Fail("failed to resolve function/type ids");
     }
 
     AppendInstruction(
@@ -834,7 +922,7 @@ bool ModuleBuilder::WriteFunctionSection() {
       for (const auto& param : function_params_) {
         uint32_t param_type_id = type_emitter_->EmitType(param.var_type);
         if (param_type_id == 0) {
-          return false;
+          return Fail("failed to emit function parameter type");
         }
         AppendInstruction(&sections_->functions, SpvOpFunctionParameter,
                           {param_type_id, param.spirv_param_id});
@@ -857,7 +945,8 @@ bool ModuleBuilder::WriteFunctionSection() {
         for (auto& param : function_params_) {
           uint32_t ptr_type = type_emitter_->GetPointerType(
               param.var_type, SpvStorageClassFunction);
-          if (ptr_type == 0) return false;
+          if (ptr_type == 0)
+            return Fail("failed to emit parameter pointer type");
           AppendInstruction(&sections_->functions, SpvOpVariable,
                             {ptr_type, param.spirv_local_id,
                              static_cast<uint32_t>(SpvStorageClassFunction)});
@@ -866,7 +955,7 @@ bool ModuleBuilder::WriteFunctionSection() {
         for (auto& var : local_vars_) {
           uint32_t ptr_type = type_emitter_->GetPointerType(
               var.var_type, SpvStorageClassFunction);
-          if (ptr_type == 0) return false;
+          if (ptr_type == 0) return Fail("failed to emit local pointer type");
           AppendInstruction(&sections_->functions, SpvOpVariable,
                             {ptr_type, var.spirv_var_id,
                              static_cast<uint32_t>(SpvStorageClassFunction)});
@@ -884,7 +973,7 @@ bool ModuleBuilder::WriteFunctionSection() {
               const FunctionParamInfo* param_info =
                   FindFunctionParamInfo(input.target_var_id);
               if (param_info == nullptr) {
-                return false;
+                return Fail("failed to find entry input target parameter");
               }
 
               uint32_t ptr_type = type_emitter_->GetPointerType(
@@ -892,7 +981,7 @@ bool ModuleBuilder::WriteFunctionSection() {
               uint32_t member_index_id =
                   type_emitter_->EmitI32Constant(input.member_index.value());
               if (ptr_type == 0 || member_index_id == 0) {
-                return false;
+                return Fail("failed to emit entry input member access types");
               }
 
               ptr_id = ids_.Allocate();
@@ -903,7 +992,7 @@ bool ModuleBuilder::WriteFunctionSection() {
               ptr_id = FindVariableSpirvId(input.target_var_id);
             }
             if (ptr_id == 0) {
-              return false;
+              return Fail("failed to resolve entry input target pointer");
             }
             AppendInstruction(&sections_->functions, SpvOpStore,
                               {ptr_id, loaded_input_id});
@@ -917,13 +1006,16 @@ bool ModuleBuilder::WriteFunctionSection() {
       }
 
       for (const auto& inst : block.instructions) {
-        if (!EmitInstruction(inst)) return false;
+        current_instruction_ = &inst;
+        if (!EmitInstruction(inst)) return Fail("EmitInstruction failed");
       }
+      current_instruction_ = nullptr;
     }
 
     current_block_ = nullptr;
     AppendInstruction(&sections_->functions, SpvOpFunctionEnd, {});
   }
+  current_function_ = nullptr;
   return true;
 }
 
@@ -955,6 +1047,9 @@ bool ModuleBuilder::EmitInstruction(const ir::Instruction& inst) {
       return EmitCondBranch(inst);
     case ir::InstKind::kReturn:
       return EmitReturn(inst);
+    case ir::InstKind::kUnreachable:
+      AppendInstruction(&sections_->functions, SpvOpUnreachable, {});
+      return true;
     default:
       return false;
   }
@@ -1029,6 +1124,19 @@ uint32_t ModuleBuilder::GetAddressPointer(const ir::Value& address,
   }
 
   uint32_t ir_var_id = address.GetVarId().value_or(0);
+
+  const FunctionParamInfo* param_info = FindFunctionParamInfo(ir_var_id);
+  if (param_info != nullptr) {
+    *out_ptr_id = param_info->spirv_local_id;
+    return *out_ptr_id != 0 ? 1 : 0;
+  }
+
+  auto local_it = FindLocalVar(ir_var_id);
+  if (local_it != local_vars_.end()) {
+    *out_ptr_id = local_it->spirv_var_id;
+    return *out_ptr_id != 0 ? 1 : 0;
+  }
+
   const GlobalVarInfo* global_info = FindGlobalVarInfo(ir_var_id);
   if (global_info == nullptr) {
     *out_ptr_id = FindVariableSpirvId(ir_var_id);

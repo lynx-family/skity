@@ -128,6 +128,10 @@ class Lowerer {
                                             const semantic::Symbol* symbol,
                                             ir::Block* block);
   ir::ExprResult LowerIdentifierExpression(ast::IdentifierExp* ident);
+  ir::Value MaterializeArgumentValue(const ir::ExprResult& expr,
+                                     ir::TypeId target_type, ir::Block* block);
+  ir::Value ConvertValueToType(const ir::Value& value, ir::TypeId target_type,
+                               ir::Block* block);
 
   uint32_t AllocateVarId();
   uint32_t AllocateSSAId();
