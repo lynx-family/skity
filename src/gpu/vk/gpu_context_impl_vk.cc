@@ -4,10 +4,13 @@
 
 #include "src/gpu/vk/gpu_context_impl_vk.hpp"
 
+#include <skity/gpu/gpu_context_vk.hpp>
 #include <string>
 #include <vector>
 
 #include "src/gpu/vk/gpu_device_vk.hpp"
+#include "src/gpu/vk/gpu_surface_vk.hpp"
+#include "src/gpu/vk/gpu_texture_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
 #include "src/gpu/vk/vulkan_proc_table.hpp"
 #include "src/logging.hpp"
@@ -27,6 +30,28 @@
 namespace skity {
 
 namespace {
+
+GPUTextureFormat ToGPUTextureFormat(VkFormat format) {
+  switch (format) {
+    case VK_FORMAT_R8_UNORM:
+      return GPUTextureFormat::kR8Unorm;
+    case VK_FORMAT_R8G8B8_UNORM:
+      return GPUTextureFormat::kRGB8Unorm;
+    case VK_FORMAT_R5G6B5_UNORM_PACK16:
+      return GPUTextureFormat::kRGB565Unorm;
+    case VK_FORMAT_R8G8B8A8_UNORM:
+      return GPUTextureFormat::kRGBA8Unorm;
+    case VK_FORMAT_B8G8R8A8_UNORM:
+      return GPUTextureFormat::kBGRA8Unorm;
+    case VK_FORMAT_S8_UINT:
+      return GPUTextureFormat::kStencil8;
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_D32_SFLOAT_S8_UINT:
+      return GPUTextureFormat::kDepth24Stencil8;
+    default:
+      return GPUTextureFormat::kInvalid;
+  }
+}
 
 template <typename Proc>
 Proc LoadInstanceProcByName(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
@@ -638,9 +663,57 @@ GPUContextVK::~GPUContextVK() = default;
 
 std::unique_ptr<GPUSurface> GPUContextVK::CreateSurface(
     GPUSurfaceDescriptor* desc) {
-  (void)desc;
-  LOGW("GPUContextVK::CreateSurface is not implemented yet");
-  return nullptr;
+  if (desc == nullptr || desc->backend != GPUBackendType::kVulkan) {
+    return nullptr;
+  }
+
+  auto* vk_desc = static_cast<GPUSurfaceDescriptorVK*>(desc);
+  if (vk_desc->surface_type != VKSurfaceType::kTexture &&
+      vk_desc->surface_type != VKSurfaceType::kSwapchainImage) {
+    LOGW(
+        "GPUContextVK::CreateSurface only supports texture-backed Vulkan "
+        "surfaces for now");
+    return nullptr;
+  }
+
+  if (vk_desc->image == VK_NULL_HANDLE ||
+      vk_desc->image_view == VK_NULL_HANDLE ||
+      vk_desc->format == VK_FORMAT_UNDEFINED || vk_desc->width == 0 ||
+      vk_desc->height == 0) {
+    LOGE("Failed to create Vulkan surface: invalid descriptor");
+    return nullptr;
+  }
+
+  if (vk_desc->sync_info != nullptr) {
+    LOGW("GPUSurfaceSyncInfoVK is not consumed by GPUSurfaceVK yet");
+  }
+
+  GPUTextureDescriptor texture_desc = {};
+  texture_desc.width = vk_desc->width;
+  texture_desc.height = vk_desc->height;
+  texture_desc.mip_level_count = 1;
+  texture_desc.sample_count = 1;
+  texture_desc.format = ToGPUTextureFormat(vk_desc->format);
+  texture_desc.usage =
+      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment);
+  texture_desc.storage_mode = GPUTextureStorageMode::kPrivate;
+
+  if (texture_desc.format == GPUTextureFormat::kInvalid) {
+    LOGE("Failed to create Vulkan surface: unsupported VkFormat {}",
+         static_cast<int32_t>(vk_desc->format));
+    return nullptr;
+  }
+
+  auto texture = GPUTextureVK::Wrap(
+      state_, texture_desc, vk_desc->image, vk_desc->image_view,
+      vk_desc->initial_layout, vk_desc->final_layout, vk_desc->format,
+      vk_desc->owns_image, vk_desc->owns_image_view);
+  if (texture == nullptr) {
+    return nullptr;
+  }
+
+  return std::make_unique<GPUSurfaceVK>(*desc, this, std::move(texture),
+                                        texture_desc.format);
 }
 
 std::unique_ptr<GPUDevice> GPUContextVK::CreateGPUDevice() {

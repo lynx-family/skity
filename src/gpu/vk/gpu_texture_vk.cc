@@ -187,27 +187,49 @@ GPUTextureVK::GPUTextureVK(std::shared_ptr<const VulkanContextState> state,
                            const GPUTextureDescriptor& descriptor,
                            VkImage image, VmaAllocation allocation,
                            VkImageView image_view,
-                           VkImageLayout preferred_layout, VkFormat format)
+                           VkImageLayout preferred_layout, VkFormat format,
+                           bool owns_image, bool owns_image_view)
     : GPUTexture(descriptor),
       state_(std::move(state)),
       image_(image),
       allocation_(allocation),
       image_view_(image_view),
       preferred_layout_(preferred_layout),
-      format_(format) {}
+      format_(format),
+      owns_image_(owns_image),
+      owns_image_view_(owns_image_view) {}
 
 GPUTextureVK::~GPUTextureVK() {
   if (state_ != nullptr && state_->GetLogicalDevice() != VK_NULL_HANDLE &&
-      image_view_ != VK_NULL_HANDLE &&
+      owns_image_view_ && image_view_ != VK_NULL_HANDLE &&
       state_->DeviceFns().vkDestroyImageView != nullptr) {
     state_->DeviceFns().vkDestroyImageView(state_->GetLogicalDevice(),
                                            image_view_, nullptr);
   }
 
-  if (state_ != nullptr && state_->GetAllocator() != nullptr &&
+  if (state_ != nullptr && state_->GetAllocator() != nullptr && owns_image_ &&
       image_ != VK_NULL_HANDLE && allocation_ != VK_NULL_HANDLE) {
     vmaDestroyImage(state_->GetAllocator(), image_, allocation_);
   }
+}
+
+std::shared_ptr<GPUTexture> GPUTextureVK::Wrap(
+    std::shared_ptr<const VulkanContextState> state,
+    const GPUTextureDescriptor& descriptor, VkImage image,
+    VkImageView image_view, VkImageLayout initial_layout,
+    VkImageLayout preferred_layout, VkFormat format, bool owns_image,
+    bool owns_image_view) {
+  if (state == nullptr || image == VK_NULL_HANDLE ||
+      image_view == VK_NULL_HANDLE || format == VK_FORMAT_UNDEFINED) {
+    LOGE("Failed to wrap Vulkan texture: invalid external image info");
+    return {};
+  }
+
+  auto texture = std::make_shared<GPUTextureVK>(
+      std::move(state), descriptor, image, VK_NULL_HANDLE, image_view,
+      preferred_layout, format, owns_image, owns_image_view);
+  texture->SetCurrentLayout(initial_layout);
+  return texture;
 }
 
 std::shared_ptr<GPUTexture> GPUTextureVK::Create(

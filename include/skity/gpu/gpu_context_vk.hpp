@@ -150,7 +150,7 @@ struct GPUContextInfoVK {
   /**
    * Enable Vulkan debug runtime features for engine-created instances.
    *
-   * When enabled in a Debug build, Skity will try to enable
+   * When enabled in a Debug build, the engine will try to enable
    * `VK_EXT_debug_utils` and `VK_LAYER_KHRONOS_validation` independently.
    *
    * If the validation layer is unavailable but `VK_EXT_debug_utils` is
@@ -163,6 +163,119 @@ struct GPUContextInfoVK {
    * layers and extensions must already be chosen during instance creation.
    */
   bool enable_debug_runtime = false;
+};
+
+/**
+ * @enum VKSurfaceType indicates which Vulkan target a GPUSurface is backed by.
+ */
+enum class VKSurfaceType {
+  /**
+   * empty type, default value
+   */
+  kInvalid,
+  /**
+   * Indicate the Surface targets a user provided Vulkan image.
+   *
+   * @note The image must be renderable with the supplied format and image view.
+   */
+  kTexture,
+  /**
+   * Indicate the Surface targets a swapchain image acquired for the current
+   * frame.
+   *
+   * @note Presentation and swapchain lifecycle should be managed by a higher
+   * level Vulkan presenter rather than the Surface itself.
+   */
+  kSwapchainImage,
+};
+
+struct GPUSurfaceSyncInfoVK {
+  /**
+   * Optional semaphore that must be signaled before the engine starts
+   * rendering to this Surface.
+   */
+  VkSemaphore wait_semaphore = VK_NULL_HANDLE;
+
+  /**
+   * The earliest pipeline stage that waits on `wait_semaphore`.
+   */
+  VkPipelineStageFlags wait_dst_stage_mask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+  /**
+   * Optional semaphore signaled after the engine finishes rendering to this
+   * Surface.
+   */
+  VkSemaphore signal_semaphore = VK_NULL_HANDLE;
+
+  /**
+   * Optional fence signaled after the engine finishes rendering to this
+   * Surface.
+   */
+  VkFence signal_fence = VK_NULL_HANDLE;
+};
+
+struct GPUSurfaceDescriptorVK : public GPUSurfaceDescriptor {
+  VKSurfaceType surface_type = VKSurfaceType::kInvalid;
+
+  /**
+   * User provided Vulkan image used as the render target for this Surface.
+   *
+   * @note If `surface_type` is `VKSurfaceType::kSwapchainImage`, this should be
+   * the image acquired for the current frame.
+   */
+  VkImage image = VK_NULL_HANDLE;
+
+  /**
+   * User provided image view matching `image`.
+   *
+   * @note The image view should be compatible with `format`.
+   */
+  VkImageView image_view = VK_NULL_HANDLE;
+
+  /**
+   * Vulkan format of the render target image.
+   */
+  VkFormat format = VK_FORMAT_UNDEFINED;
+
+  /**
+   * Optional pre-transform for the current frame target.
+   *
+   * This is especially useful when `image` comes from a swapchain image whose
+   * physical orientation differs from the logical surface coordinate system.
+   */
+  VkSurfaceTransformFlagBitsKHR pre_transform =
+      VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+
+  /**
+   * Current image layout when the engine begins rendering to this Surface.
+   */
+  VkImageLayout initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  /**
+   * Image layout should transition to after rendering finishes.
+   */
+  VkImageLayout final_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  /**
+   * Whether the engine owns `image` and should destroy it when the Surface is
+   * released.
+   */
+  bool owns_image = false;
+
+  /**
+   * Whether the engine owns `image_view` and should destroy it when the Surface
+   * is released.
+   */
+  bool owns_image_view = false;
+
+  /**
+   * Optional Vulkan synchronization information for this one-shot Surface.
+   *
+   * The pointed synchronization object is not owned by the engine and must
+   * outlive the create/flush sequence that consumes it.
+   */
+  const GPUSurfaceSyncInfoVK* sync_info = nullptr;
 };
 
 /**
