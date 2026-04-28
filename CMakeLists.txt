@@ -150,6 +150,9 @@ endif()
 
 if(${SKITY_VK_BACKEND})
   target_compile_definitions(skity PUBLIC -DSKITY_VULKAN)
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(skity PUBLIC -DSKITY_VK_DEBUG_RUNTIME)
+  endif()
 endif()
 
 if(${SKITY_GL_BACKEND})

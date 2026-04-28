@@ -1,0 +1,1324 @@
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
+
+#include <gtest/gtest.h>
+#include <vulkan/vulkan.h>
+#include <wgsl_cross.h>
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace {
+
+struct GlobalFns {
+  PFN_vkCreateInstance vkCreateInstance = nullptr;
+  PFN_vkEnumerateInstanceExtensionProperties
+      vkEnumerateInstanceExtensionProperties = nullptr;
+  PFN_vkEnumerateInstanceLayerProperties vkEnumerateInstanceLayerProperties =
+      nullptr;
+};
+
+struct InstanceFns {
+  PFN_vkDestroyInstance vkDestroyInstance = nullptr;
+  PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
+  PFN_vkGetPhysicalDeviceQueueFamilyProperties
+      vkGetPhysicalDeviceQueueFamilyProperties = nullptr;
+  PFN_vkCreateDevice vkCreateDevice = nullptr;
+  PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
+};
+
+struct DeviceFns {
+  PFN_vkDestroyDevice vkDestroyDevice = nullptr;
+  PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
+  PFN_vkCreateDescriptorSetLayout vkCreateDescriptorSetLayout = nullptr;
+  PFN_vkDestroyDescriptorSetLayout vkDestroyDescriptorSetLayout = nullptr;
+  PFN_vkCreateShaderModule vkCreateShaderModule = nullptr;
+  PFN_vkDestroyShaderModule vkDestroyShaderModule = nullptr;
+  PFN_vkCreatePipelineLayout vkCreatePipelineLayout = nullptr;
+  PFN_vkDestroyPipelineLayout vkDestroyPipelineLayout = nullptr;
+  PFN_vkCreateRenderPass vkCreateRenderPass = nullptr;
+  PFN_vkDestroyRenderPass vkDestroyRenderPass = nullptr;
+  PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines = nullptr;
+  PFN_vkDestroyPipeline vkDestroyPipeline = nullptr;
+};
+
+bool LoadGlobalFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
+                   GlobalFns* fns) {
+  if (get_instance_proc_addr == nullptr || fns == nullptr) {
+    return false;
+  }
+
+  fns->vkCreateInstance = reinterpret_cast<PFN_vkCreateInstance>(
+      get_instance_proc_addr(nullptr, "vkCreateInstance"));
+  fns->vkEnumerateInstanceExtensionProperties =
+      reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(
+          get_instance_proc_addr(nullptr,
+                                 "vkEnumerateInstanceExtensionProperties"));
+  fns->vkEnumerateInstanceLayerProperties =
+      reinterpret_cast<PFN_vkEnumerateInstanceLayerProperties>(
+          get_instance_proc_addr(nullptr,
+                                 "vkEnumerateInstanceLayerProperties"));
+
+  return fns->vkCreateInstance != nullptr;
+}
+
+bool LoadInstanceFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
+                     VkInstance instance, InstanceFns* fns) {
+  if (get_instance_proc_addr == nullptr || instance == VK_NULL_HANDLE ||
+      fns == nullptr) {
+    return false;
+  }
+
+  fns->vkDestroyInstance = reinterpret_cast<PFN_vkDestroyInstance>(
+      get_instance_proc_addr(instance, "vkDestroyInstance"));
+  fns->vkEnumeratePhysicalDevices =
+      reinterpret_cast<PFN_vkEnumeratePhysicalDevices>(
+          get_instance_proc_addr(instance, "vkEnumeratePhysicalDevices"));
+  fns->vkGetPhysicalDeviceQueueFamilyProperties =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceQueueFamilyProperties>(
+          get_instance_proc_addr(instance,
+                                 "vkGetPhysicalDeviceQueueFamilyProperties"));
+  fns->vkCreateDevice = reinterpret_cast<PFN_vkCreateDevice>(
+      get_instance_proc_addr(instance, "vkCreateDevice"));
+  fns->vkGetDeviceProcAddr = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
+      get_instance_proc_addr(instance, "vkGetDeviceProcAddr"));
+
+  return fns->vkDestroyInstance != nullptr &&
+         fns->vkEnumeratePhysicalDevices != nullptr &&
+         fns->vkGetPhysicalDeviceQueueFamilyProperties != nullptr &&
+         fns->vkCreateDevice != nullptr && fns->vkGetDeviceProcAddr != nullptr;
+}
+
+bool LoadDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
+                   VkDevice device, DeviceFns* fns) {
+  if (get_device_proc_addr == nullptr || device == VK_NULL_HANDLE ||
+      fns == nullptr) {
+    return false;
+  }
+
+  fns->vkDestroyDevice = reinterpret_cast<PFN_vkDestroyDevice>(
+      get_device_proc_addr(device, "vkDestroyDevice"));
+  fns->vkGetDeviceQueue = reinterpret_cast<PFN_vkGetDeviceQueue>(
+      get_device_proc_addr(device, "vkGetDeviceQueue"));
+  fns->vkCreateDescriptorSetLayout =
+      reinterpret_cast<PFN_vkCreateDescriptorSetLayout>(
+          get_device_proc_addr(device, "vkCreateDescriptorSetLayout"));
+  fns->vkDestroyDescriptorSetLayout =
+      reinterpret_cast<PFN_vkDestroyDescriptorSetLayout>(
+          get_device_proc_addr(device, "vkDestroyDescriptorSetLayout"));
+  fns->vkCreateShaderModule = reinterpret_cast<PFN_vkCreateShaderModule>(
+      get_device_proc_addr(device, "vkCreateShaderModule"));
+  fns->vkDestroyShaderModule = reinterpret_cast<PFN_vkDestroyShaderModule>(
+      get_device_proc_addr(device, "vkDestroyShaderModule"));
+  fns->vkCreatePipelineLayout = reinterpret_cast<PFN_vkCreatePipelineLayout>(
+      get_device_proc_addr(device, "vkCreatePipelineLayout"));
+  fns->vkDestroyPipelineLayout = reinterpret_cast<PFN_vkDestroyPipelineLayout>(
+      get_device_proc_addr(device, "vkDestroyPipelineLayout"));
+  fns->vkCreateRenderPass = reinterpret_cast<PFN_vkCreateRenderPass>(
+      get_device_proc_addr(device, "vkCreateRenderPass"));
+  fns->vkDestroyRenderPass = reinterpret_cast<PFN_vkDestroyRenderPass>(
+      get_device_proc_addr(device, "vkDestroyRenderPass"));
+  fns->vkCreateGraphicsPipelines =
+      reinterpret_cast<PFN_vkCreateGraphicsPipelines>(
+          get_device_proc_addr(device, "vkCreateGraphicsPipelines"));
+  fns->vkDestroyPipeline = reinterpret_cast<PFN_vkDestroyPipeline>(
+      get_device_proc_addr(device, "vkDestroyPipeline"));
+
+  return fns->vkDestroyDevice != nullptr && fns->vkGetDeviceQueue != nullptr &&
+         fns->vkCreateDescriptorSetLayout != nullptr &&
+         fns->vkDestroyDescriptorSetLayout != nullptr &&
+         fns->vkCreateShaderModule != nullptr &&
+         fns->vkDestroyShaderModule != nullptr &&
+         fns->vkCreatePipelineLayout != nullptr &&
+         fns->vkDestroyPipelineLayout != nullptr &&
+         fns->vkCreateRenderPass != nullptr &&
+         fns->vkDestroyRenderPass != nullptr &&
+         fns->vkCreateGraphicsPipelines != nullptr &&
+         fns->vkDestroyPipeline != nullptr;
+}
+
+std::vector<uint32_t> CompileToSpirv(const char* source, const char* entry) {
+  auto program = wgx::Program::Parse(source);
+  if (program == nullptr) {
+    ADD_FAILURE() << "WGSL parse returned null program for entry " << entry;
+    return {};
+  }
+
+  if (program->GetDiagnosis().has_value()) {
+    const auto& diagnosis = program->GetDiagnosis().value();
+    ADD_FAILURE() << "WGSL diagnosis for entry " << entry << ": "
+                  << diagnosis.message << " at " << diagnosis.line << ":"
+                  << diagnosis.column;
+    return {};
+  }
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv(entry, options);
+  if (!result.success) {
+    ADD_FAILURE() << "WriteToSpirv failed for entry " << entry;
+    return {};
+  }
+  return result.spirv;
+}
+
+class VulkanTestContext {
+ public:
+  ~VulkanTestContext() { Reset(); }
+
+  bool Initialize() {
+    if (!LoadGlobalFns(vkGetInstanceProcAddr, &global_fns_)) {
+      return false;
+    }
+
+    VkApplicationInfo app_info = {};
+    app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    app_info.pApplicationName = "wgx_vulkan_pipeline_test";
+    app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.pEngineName = "wgx";
+    app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.apiVersion = VK_API_VERSION_1_0;
+
+    VkInstanceCreateInfo instance_info = {};
+    instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instance_info.pApplicationInfo = &app_info;
+
+    if (global_fns_.vkCreateInstance(&instance_info, nullptr, &instance_) !=
+        VK_SUCCESS) {
+      return false;
+    }
+
+    if (!LoadInstanceFns(vkGetInstanceProcAddr, instance_, &instance_fns_)) {
+      return false;
+    }
+
+    uint32_t physical_device_count = 0;
+    if (instance_fns_.vkEnumeratePhysicalDevices(
+            instance_, &physical_device_count, nullptr) != VK_SUCCESS ||
+        physical_device_count == 0) {
+      return false;
+    }
+
+    std::vector<VkPhysicalDevice> physical_devices(physical_device_count,
+                                                   VK_NULL_HANDLE);
+    if (instance_fns_.vkEnumeratePhysicalDevices(
+            instance_, &physical_device_count, physical_devices.data()) !=
+        VK_SUCCESS) {
+      return false;
+    }
+    physical_device_ = physical_devices[0];
+    if (physical_device_ == VK_NULL_HANDLE) {
+      return false;
+    }
+
+    uint32_t queue_family_count = 0;
+    instance_fns_.vkGetPhysicalDeviceQueueFamilyProperties(
+        physical_device_, &queue_family_count, nullptr);
+    if (queue_family_count == 0) {
+      return false;
+    }
+
+    std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+    instance_fns_.vkGetPhysicalDeviceQueueFamilyProperties(
+        physical_device_, &queue_family_count, queue_families.data());
+
+    for (uint32_t i = 0; i < queue_family_count; ++i) {
+      if ((queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
+        graphics_queue_family_index_ = i;
+        break;
+      }
+    }
+    if (graphics_queue_family_index_ == UINT32_MAX) {
+      return false;
+    }
+
+    const float queue_priority = 1.0f;
+    VkDeviceQueueCreateInfo queue_info = {};
+    queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_info.queueFamilyIndex = graphics_queue_family_index_;
+    queue_info.queueCount = 1;
+    queue_info.pQueuePriorities = &queue_priority;
+
+    VkDeviceCreateInfo device_info = {};
+    device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_info.queueCreateInfoCount = 1;
+    device_info.pQueueCreateInfos = &queue_info;
+
+    if (instance_fns_.vkCreateDevice(physical_device_, &device_info, nullptr,
+                                     &device_) != VK_SUCCESS) {
+      return false;
+    }
+
+    if (!LoadDeviceFns(instance_fns_.vkGetDeviceProcAddr, device_,
+                       &device_fns_)) {
+      return false;
+    }
+
+    device_fns_.vkGetDeviceQueue(device_, graphics_queue_family_index_, 0,
+                                 &graphics_queue_);
+    return graphics_queue_ != VK_NULL_HANDLE;
+  }
+
+  VkShaderModule CreateShaderModule(const std::vector<uint32_t>& spirv) const {
+    if (device_ == VK_NULL_HANDLE || spirv.empty()) {
+      return VK_NULL_HANDLE;
+    }
+
+    VkShaderModuleCreateInfo module_info = {};
+    module_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    module_info.codeSize = spirv.size() * sizeof(uint32_t);
+    module_info.pCode = spirv.data();
+
+    VkShaderModule module = VK_NULL_HANDLE;
+    if (device_fns_.vkCreateShaderModule(device_, &module_info, nullptr,
+                                         &module) != VK_SUCCESS) {
+      return VK_NULL_HANDLE;
+    }
+    return module;
+  }
+
+  VkDescriptorSetLayout CreateDescriptorSetLayout(
+      const std::vector<VkDescriptorSetLayoutBinding>& bindings) const {
+    VkDescriptorSetLayoutCreateInfo layout_info = {};
+    layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layout_info.bindingCount = static_cast<uint32_t>(bindings.size());
+    layout_info.pBindings = bindings.empty() ? nullptr : bindings.data();
+
+    VkDescriptorSetLayout descriptor_set_layout = VK_NULL_HANDLE;
+    if (device_fns_.vkCreateDescriptorSetLayout(device_, &layout_info, nullptr,
+                                                &descriptor_set_layout) !=
+        VK_SUCCESS) {
+      return VK_NULL_HANDLE;
+    }
+    return descriptor_set_layout;
+  }
+
+  VkPipelineLayout CreatePipelineLayout(
+      const std::vector<VkDescriptorSetLayout>& set_layouts = {}) const {
+    VkPipelineLayoutCreateInfo pipeline_layout_info = {};
+    pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipeline_layout_info.setLayoutCount =
+        static_cast<uint32_t>(set_layouts.size());
+    pipeline_layout_info.pSetLayouts =
+        set_layouts.empty() ? nullptr : set_layouts.data();
+
+    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+    if (device_fns_.vkCreatePipelineLayout(device_, &pipeline_layout_info,
+                                           nullptr,
+                                           &pipeline_layout) != VK_SUCCESS) {
+      return VK_NULL_HANDLE;
+    }
+    return pipeline_layout;
+  }
+
+  VkRenderPass CreateSimpleColorRenderPass() const {
+    VkAttachmentDescription color_attachment = {};
+    color_attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+    color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    color_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    color_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    color_attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference color_attachment_ref = {};
+    color_attachment_ref.attachment = 0;
+    color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &color_attachment_ref;
+
+    VkRenderPassCreateInfo render_pass_info = {};
+    render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    render_pass_info.attachmentCount = 1;
+    render_pass_info.pAttachments = &color_attachment;
+    render_pass_info.subpassCount = 1;
+    render_pass_info.pSubpasses = &subpass;
+
+    VkRenderPass render_pass = VK_NULL_HANDLE;
+    if (device_fns_.vkCreateRenderPass(device_, &render_pass_info, nullptr,
+                                       &render_pass) != VK_SUCCESS) {
+      return VK_NULL_HANDLE;
+    }
+    return render_pass;
+  }
+
+  VkPipeline CreateSimpleGraphicsPipeline(
+      VkShaderModule vertex_module, const char* vertex_entry,
+      VkShaderModule fragment_module, const char* fragment_entry,
+      VkPipelineLayout pipeline_layout, VkRenderPass render_pass,
+      const std::vector<VkVertexInputBindingDescription>& vertex_bindings = {},
+      const std::vector<VkVertexInputAttributeDescription>& vertex_attributes =
+          {}) const {
+    if (vertex_module == VK_NULL_HANDLE || fragment_module == VK_NULL_HANDLE ||
+        pipeline_layout == VK_NULL_HANDLE || render_pass == VK_NULL_HANDLE) {
+      return VK_NULL_HANDLE;
+    }
+
+    VkPipelineShaderStageCreateInfo shader_stages[2] = {};
+    shader_stages[0].sType =
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    shader_stages[0].module = vertex_module;
+    shader_stages[0].pName = vertex_entry;
+    shader_stages[1].sType =
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    shader_stages[1].module = fragment_module;
+    shader_stages[1].pName = fragment_entry;
+
+    VkPipelineVertexInputStateCreateInfo vertex_input_state = {};
+    vertex_input_state.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertex_input_state.vertexBindingDescriptionCount =
+        static_cast<uint32_t>(vertex_bindings.size());
+    vertex_input_state.pVertexBindingDescriptions =
+        vertex_bindings.empty() ? nullptr : vertex_bindings.data();
+    vertex_input_state.vertexAttributeDescriptionCount =
+        static_cast<uint32_t>(vertex_attributes.size());
+    vertex_input_state.pVertexAttributeDescriptions =
+        vertex_attributes.empty() ? nullptr : vertex_attributes.data();
+
+    VkPipelineInputAssemblyStateCreateInfo input_assembly_state = {};
+    input_assembly_state.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    input_assembly_state.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkViewport viewport = {};
+    viewport.width = 1.0f;
+    viewport.height = 1.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor = {};
+    scissor.extent.width = 1;
+    scissor.extent.height = 1;
+
+    VkPipelineViewportStateCreateInfo viewport_state = {};
+    viewport_state.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewport_state.viewportCount = 1;
+    viewport_state.pViewports = &viewport;
+    viewport_state.scissorCount = 1;
+    viewport_state.pScissors = &scissor;
+
+    VkPipelineRasterizationStateCreateInfo rasterization_state = {};
+    rasterization_state.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterization_state.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterization_state.cullMode = VK_CULL_MODE_NONE;
+    rasterization_state.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterization_state.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisample_state = {};
+    multisample_state.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisample_state.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState color_blend_attachment = {};
+    color_blend_attachment.colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo color_blend_state = {};
+    color_blend_state.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    color_blend_state.attachmentCount = 1;
+    color_blend_state.pAttachments = &color_blend_attachment;
+
+    VkGraphicsPipelineCreateInfo pipeline_info = {};
+    pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline_info.stageCount = 2;
+    pipeline_info.pStages = shader_stages;
+    pipeline_info.pVertexInputState = &vertex_input_state;
+    pipeline_info.pInputAssemblyState = &input_assembly_state;
+    pipeline_info.pViewportState = &viewport_state;
+    pipeline_info.pRasterizationState = &rasterization_state;
+    pipeline_info.pMultisampleState = &multisample_state;
+    pipeline_info.pColorBlendState = &color_blend_state;
+    pipeline_info.layout = pipeline_layout;
+    pipeline_info.renderPass = render_pass;
+    pipeline_info.subpass = 0;
+
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    if (device_fns_.vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1,
+                                              &pipeline_info, nullptr,
+                                              &pipeline) != VK_SUCCESS) {
+      return VK_NULL_HANDLE;
+    }
+    return pipeline;
+  }
+
+  void DestroyShaderModule(VkShaderModule module) const {
+    if (module != VK_NULL_HANDLE) {
+      device_fns_.vkDestroyShaderModule(device_, module, nullptr);
+    }
+  }
+
+  void DestroyDescriptorSetLayout(
+      VkDescriptorSetLayout descriptor_set_layout) const {
+    if (descriptor_set_layout != VK_NULL_HANDLE) {
+      device_fns_.vkDestroyDescriptorSetLayout(device_, descriptor_set_layout,
+                                               nullptr);
+    }
+  }
+
+  void DestroyPipelineLayout(VkPipelineLayout pipeline_layout) const {
+    if (pipeline_layout != VK_NULL_HANDLE) {
+      device_fns_.vkDestroyPipelineLayout(device_, pipeline_layout, nullptr);
+    }
+  }
+
+  void DestroyRenderPass(VkRenderPass render_pass) const {
+    if (render_pass != VK_NULL_HANDLE) {
+      device_fns_.vkDestroyRenderPass(device_, render_pass, nullptr);
+    }
+  }
+
+  void DestroyPipeline(VkPipeline pipeline) const {
+    if (pipeline != VK_NULL_HANDLE) {
+      device_fns_.vkDestroyPipeline(device_, pipeline, nullptr);
+    }
+  }
+
+ private:
+  void Reset() {
+    if (device_ != VK_NULL_HANDLE) {
+      device_fns_.vkDestroyDevice(device_, nullptr);
+      device_ = VK_NULL_HANDLE;
+    }
+    if (instance_ != VK_NULL_HANDLE) {
+      instance_fns_.vkDestroyInstance(instance_, nullptr);
+      instance_ = VK_NULL_HANDLE;
+    }
+  }
+
+  GlobalFns global_fns_ = {};
+  InstanceFns instance_fns_ = {};
+  DeviceFns device_fns_ = {};
+  VkInstance instance_ = VK_NULL_HANDLE;
+  VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
+  VkDevice device_ = VK_NULL_HANDLE;
+  VkQueue graphics_queue_ = VK_NULL_HANDLE;
+  uint32_t graphics_queue_family_index_ = UINT32_MAX;
+};
+
+class WgxVulkanPipelineTest : public ::testing::Test {
+ protected:
+  void SetUp() override { ASSERT_TRUE(context_.Initialize()); }
+
+  VulkanTestContext context_;
+};
+
+}  // namespace
+
+TEST_F(WgxVulkanPipelineTest,
+       CreatesGraphicsPipelineForStructInterfaceShaders) {
+  const char* vertex_source = R"(
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) color: vec4<f32>,
+};
+
+@vertex
+fn vs_main() -> VertexOutput {
+  var output: VertexOutput;
+  output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  output.color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  return output;
+}
+)";
+
+  const char* fragment_source = R"(
+struct FragmentInput {
+  @location(0) color: vec4<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  var i: i32 = 0;
+  output.color = input.color;
+  while (i < 1) {
+    i = i + 1;
+    output.color = input.color;
+  }
+  return output;
+}
+)";
+
+  std::vector<uint32_t> vertex_spirv = CompileToSpirv(vertex_source, "vs_main");
+  std::vector<uint32_t> fragment_spirv =
+      CompileToSpirv(fragment_source, "fs_main");
+  ASSERT_FALSE(vertex_spirv.empty());
+  ASSERT_FALSE(fragment_spirv.empty());
+
+  VkShaderModule vertex_module = context_.CreateShaderModule(vertex_spirv);
+  VkShaderModule fragment_module = context_.CreateShaderModule(fragment_spirv);
+  ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+  ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+  VkPipelineLayout pipeline_layout = context_.CreatePipelineLayout();
+  ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+
+  VkRenderPass render_pass = context_.CreateSimpleColorRenderPass();
+  ASSERT_NE(render_pass, VK_NULL_HANDLE);
+
+  VkPipeline pipeline = context_.CreateSimpleGraphicsPipeline(
+      vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+      render_pass);
+  ASSERT_NE(pipeline, VK_NULL_HANDLE);
+
+  context_.DestroyPipeline(pipeline);
+  context_.DestroyRenderPass(render_pass);
+  context_.DestroyPipelineLayout(pipeline_layout);
+  context_.DestroyShaderModule(fragment_module);
+  context_.DestroyShaderModule(vertex_module);
+}
+
+TEST_F(WgxVulkanPipelineTest,
+       CreatesGraphicsPipelineForDescriptorSetMappedShaders) {
+  const char* vertex_source = R"(
+@group(0) @binding(1)
+var<uniform> u_data: vec4<f32>;
+
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) color: vec4<f32>,
+};
+
+@vertex
+fn vs_main() -> VertexOutput {
+  var output: VertexOutput;
+  output.position = u_data;
+  output.color = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+  return output;
+}
+)";
+
+  const char* fragment_source = R"(
+struct FragmentInput {
+  @location(0) color: vec4<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  output.color = input.color;
+  return output;
+}
+)";
+
+  std::vector<uint32_t> vertex_spirv = CompileToSpirv(vertex_source, "vs_main");
+  std::vector<uint32_t> fragment_spirv =
+      CompileToSpirv(fragment_source, "fs_main");
+  ASSERT_FALSE(vertex_spirv.empty());
+  ASSERT_FALSE(fragment_spirv.empty());
+
+  VkShaderModule vertex_module = context_.CreateShaderModule(vertex_spirv);
+  VkShaderModule fragment_module = context_.CreateShaderModule(fragment_spirv);
+  ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+  ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding uniform_binding = {};
+  uniform_binding.binding = 1;
+  uniform_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  uniform_binding.descriptorCount = 1;
+  uniform_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+  VkDescriptorSetLayout descriptor_set_layout =
+      context_.CreateDescriptorSetLayout({uniform_binding});
+  ASSERT_NE(descriptor_set_layout, VK_NULL_HANDLE);
+
+  VkPipelineLayout pipeline_layout =
+      context_.CreatePipelineLayout({descriptor_set_layout});
+  ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+
+  VkRenderPass render_pass = context_.CreateSimpleColorRenderPass();
+  ASSERT_NE(render_pass, VK_NULL_HANDLE);
+
+  VkVertexInputBindingDescription vertex_binding = {};
+  vertex_binding.binding = 0;
+  vertex_binding.stride = 4 * sizeof(float);
+  vertex_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+  VkVertexInputAttributeDescription position_attribute = {};
+  position_attribute.location = 0;
+  position_attribute.binding = 0;
+  position_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  position_attribute.offset = 0;
+
+  VkVertexInputAttributeDescription uv_attribute = {};
+  uv_attribute.location = 1;
+  uv_attribute.binding = 0;
+  uv_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  uv_attribute.offset = 2 * sizeof(float);
+
+  VkPipeline pipeline = context_.CreateSimpleGraphicsPipeline(
+      vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+      render_pass, {vertex_binding}, {position_attribute, uv_attribute});
+  ASSERT_NE(pipeline, VK_NULL_HANDLE);
+
+  context_.DestroyPipeline(pipeline);
+  context_.DestroyRenderPass(render_pass);
+  context_.DestroyPipelineLayout(pipeline_layout);
+  context_.DestroyDescriptorSetLayout(descriptor_set_layout);
+  context_.DestroyShaderModule(fragment_module);
+  context_.DestroyShaderModule(vertex_module);
+}
+
+TEST_F(WgxVulkanPipelineTest,
+       CreatesGraphicsPipelineForTextureAndSamplerMappedShaders) {
+  const char* vertex_source = R"(
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+};
+
+struct VertexInput {
+  @location(0) pos: vec2<f32>,
+  @location(1) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+  var output: VertexOutput;
+  output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  output.uv = input.pos + input.uv;
+  return output;
+}
+)";
+
+  const char* fragment_source = R"(
+@group(0) @binding(0)
+var tex: texture_2d<f32>;
+
+@group(0) @binding(1)
+var samp: sampler;
+
+struct FragmentInput {
+  @location(0) uv: vec2<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  output.color = textureSample(tex, samp, input.uv);
+  return output;
+}
+)";
+
+  std::vector<uint32_t> vertex_spirv = CompileToSpirv(vertex_source, "vs_main");
+  std::vector<uint32_t> fragment_spirv =
+      CompileToSpirv(fragment_source, "fs_main");
+  ASSERT_FALSE(vertex_spirv.empty());
+  ASSERT_FALSE(fragment_spirv.empty());
+
+  VkShaderModule vertex_module = context_.CreateShaderModule(vertex_spirv);
+  VkShaderModule fragment_module = context_.CreateShaderModule(fragment_spirv);
+  ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+  ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding texture_binding = {};
+  texture_binding.binding = 0;
+  texture_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  texture_binding.descriptorCount = 1;
+  texture_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding sampler_binding = {};
+  sampler_binding.binding = 1;
+  sampler_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+  sampler_binding.descriptorCount = 1;
+  sampler_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayout descriptor_set_layout =
+      context_.CreateDescriptorSetLayout({texture_binding, sampler_binding});
+  ASSERT_NE(descriptor_set_layout, VK_NULL_HANDLE);
+
+  VkPipelineLayout pipeline_layout =
+      context_.CreatePipelineLayout({descriptor_set_layout});
+  ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+
+  VkRenderPass render_pass = context_.CreateSimpleColorRenderPass();
+  ASSERT_NE(render_pass, VK_NULL_HANDLE);
+
+  VkPipeline pipeline = context_.CreateSimpleGraphicsPipeline(
+      vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+      render_pass);
+  ASSERT_NE(pipeline, VK_NULL_HANDLE);
+
+  context_.DestroyPipeline(pipeline);
+  context_.DestroyRenderPass(render_pass);
+  context_.DestroyPipelineLayout(pipeline_layout);
+  context_.DestroyDescriptorSetLayout(descriptor_set_layout);
+  context_.DestroyShaderModule(fragment_module);
+  context_.DestroyShaderModule(vertex_module);
+}
+
+TEST_F(WgxVulkanPipelineTest,
+       CreatesGraphicsPipelineForVertexAttributeInputShaders) {
+  const char* vertex_source = R"(
+struct VertexInput {
+  @location(0) pos: vec2<f32>,
+  @location(1) uv: vec2<f32>,
+};
+
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+  var output: VertexOutput;
+  output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  output.uv = input.pos + input.uv;
+  return output;
+}
+)";
+
+  const char* fragment_source = R"(
+@group(0) @binding(0)
+var tex: texture_2d<f32>;
+
+@group(0) @binding(1)
+var samp: sampler;
+
+struct FragmentInput {
+  @location(0) uv: vec2<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  output.color = textureSample(tex, samp, input.uv);
+  return output;
+}
+)";
+
+  std::vector<uint32_t> vertex_spirv = CompileToSpirv(vertex_source, "vs_main");
+  std::vector<uint32_t> fragment_spirv =
+      CompileToSpirv(fragment_source, "fs_main");
+  ASSERT_FALSE(vertex_spirv.empty());
+  ASSERT_FALSE(fragment_spirv.empty());
+
+  VkShaderModule vertex_module = context_.CreateShaderModule(vertex_spirv);
+  VkShaderModule fragment_module = context_.CreateShaderModule(fragment_spirv);
+  ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+  ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding texture_binding = {};
+  texture_binding.binding = 0;
+  texture_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  texture_binding.descriptorCount = 1;
+  texture_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding sampler_binding = {};
+  sampler_binding.binding = 1;
+  sampler_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+  sampler_binding.descriptorCount = 1;
+  sampler_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayout descriptor_set_layout =
+      context_.CreateDescriptorSetLayout({texture_binding, sampler_binding});
+  ASSERT_NE(descriptor_set_layout, VK_NULL_HANDLE);
+
+  VkPipelineLayout pipeline_layout =
+      context_.CreatePipelineLayout({descriptor_set_layout});
+  ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+
+  VkRenderPass render_pass = context_.CreateSimpleColorRenderPass();
+  ASSERT_NE(render_pass, VK_NULL_HANDLE);
+
+  VkVertexInputBindingDescription vertex_binding = {};
+  vertex_binding.binding = 0;
+  vertex_binding.stride = 4 * sizeof(float);
+  vertex_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+  VkVertexInputAttributeDescription position_attribute = {};
+  position_attribute.location = 0;
+  position_attribute.binding = 0;
+  position_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  position_attribute.offset = 0;
+
+  VkVertexInputAttributeDescription uv_attribute = {};
+  uv_attribute.location = 1;
+  uv_attribute.binding = 0;
+  uv_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  uv_attribute.offset = 2 * sizeof(float);
+
+  VkPipeline pipeline = context_.CreateSimpleGraphicsPipeline(
+      vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+      render_pass, {vertex_binding}, {position_attribute, uv_attribute});
+  ASSERT_NE(pipeline, VK_NULL_HANDLE);
+
+  context_.DestroyPipeline(pipeline);
+  context_.DestroyRenderPass(render_pass);
+  context_.DestroyPipelineLayout(pipeline_layout);
+  context_.DestroyDescriptorSetLayout(descriptor_set_layout);
+  context_.DestroyShaderModule(fragment_module);
+  context_.DestroyShaderModule(vertex_module);
+}
+
+TEST_F(WgxVulkanPipelineTest,
+       CreatesGraphicsPipelineForRepositoryStyleTextureShaders) {
+  const char* vertex_source = R"(
+struct VertexInput {
+  @location(0) pos: vec2<f32>,
+  @location(1) uv: vec2<f32>,
+};
+
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) f_frag_coord: vec2<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+  var output: VertexOutput;
+  output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  output.f_frag_coord = input.uv;
+  return output;
+}
+)";
+
+  const char* fragment_source = R"(
+struct ImageColorInfo {
+  infos: vec3<i32>,
+  global_alpha: f32,
+};
+
+@group(1) @binding(0)
+var<uniform> image_color_info: ImageColorInfo;
+
+@group(1) @binding(1)
+var uSampler: sampler;
+
+@group(1) @binding(2)
+var uTexture: texture_2d<f32>;
+
+struct FragmentInput {
+  @location(0) f_frag_coord: vec2<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  var color: vec4<f32> =
+      textureSample(uTexture, uSampler, input.f_frag_coord);
+  output.color = color * image_color_info.global_alpha;
+  return output;
+}
+)";
+
+  std::vector<uint32_t> vertex_spirv = CompileToSpirv(vertex_source, "vs_main");
+  std::vector<uint32_t> fragment_spirv =
+      CompileToSpirv(fragment_source, "fs_main");
+  ASSERT_FALSE(vertex_spirv.empty());
+  ASSERT_FALSE(fragment_spirv.empty());
+
+  VkShaderModule vertex_module = context_.CreateShaderModule(vertex_spirv);
+  VkShaderModule fragment_module = context_.CreateShaderModule(fragment_spirv);
+  ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+  ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding image_color_binding = {};
+  image_color_binding.binding = 0;
+  image_color_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  image_color_binding.descriptorCount = 1;
+  image_color_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding sampler_binding = {};
+  sampler_binding.binding = 1;
+  sampler_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+  sampler_binding.descriptorCount = 1;
+  sampler_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding texture_binding = {};
+  texture_binding.binding = 2;
+  texture_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  texture_binding.descriptorCount = 1;
+  texture_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayout set1_layout = context_.CreateDescriptorSetLayout(
+      {image_color_binding, sampler_binding, texture_binding});
+  ASSERT_NE(set1_layout, VK_NULL_HANDLE);
+
+  VkPipelineLayout pipeline_layout =
+      context_.CreatePipelineLayout({set1_layout});
+  ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+
+  VkRenderPass render_pass = context_.CreateSimpleColorRenderPass();
+  ASSERT_NE(render_pass, VK_NULL_HANDLE);
+
+  VkVertexInputBindingDescription vertex_binding = {};
+  vertex_binding.binding = 0;
+  vertex_binding.stride = 4 * sizeof(float);
+  vertex_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+  VkVertexInputAttributeDescription position_attribute = {};
+  position_attribute.location = 0;
+  position_attribute.binding = 0;
+  position_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  position_attribute.offset = 0;
+
+  VkVertexInputAttributeDescription uv_attribute = {};
+  uv_attribute.location = 1;
+  uv_attribute.binding = 0;
+  uv_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  uv_attribute.offset = 2 * sizeof(float);
+
+  VkPipeline pipeline = context_.CreateSimpleGraphicsPipeline(
+      vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+      render_pass, {vertex_binding}, {position_attribute, uv_attribute});
+  ASSERT_NE(pipeline, VK_NULL_HANDLE);
+
+  context_.DestroyPipeline(pipeline);
+  context_.DestroyRenderPass(render_pass);
+  context_.DestroyPipelineLayout(pipeline_layout);
+  context_.DestroyDescriptorSetLayout(set1_layout);
+  context_.DestroyShaderModule(fragment_module);
+  context_.DestroyShaderModule(vertex_module);
+}
+
+TEST_F(WgxVulkanPipelineTest,
+       CreatesGraphicsPipelineForRepositoryStyleGradientShaders) {
+  const char* vertex_source = R"(
+struct VertexInput {
+  @location(0) local_pos: vec2<f32>,
+};
+
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) f_param_pos: vec2<f32>,
+};
+
+@group(0) @binding(1)
+var<uniform> inv_matrix: mat4x4<f32>;
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+  var output: VertexOutput;
+  var mapped_pos: vec4<f32> = inv_matrix * vec4<f32>(input.local_pos, 0.0, 1.0);
+  output.position = vec4<f32>(input.local_pos, 0.0, 1.0);
+  output.f_param_pos = vec2<f32>(mapped_pos[0], mapped_pos[1]);
+  return output;
+}
+)";
+
+  const char* fragment_source = R"(
+struct GradientInfo {
+  infos: vec3<i32>,
+  global_alpha: f32,
+};
+
+@group(1) @binding(0)
+var<uniform> gradient_info: GradientInfo;
+
+@group(1) @binding(1)
+var<uniform> linear_start: vec2<f32>;
+
+@group(1) @binding(2)
+var<uniform> linear_end: vec2<f32>;
+
+struct FragmentInput {
+  @location(0) f_param_pos: vec2<f32>,
+};
+
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+};
+
+fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
+  var cs: vec2<f32> = v_pos - linear_start;
+  var se: vec2<f32> = linear_end - linear_start;
+  var t: f32 = dot(cs, se) / dot(se, se);
+  var t_clamped: f32 = clamp(t, 0.0, 1.0);
+  var color: vec4<f32> = mix(
+      vec4<f32>(1.0, 0.0, 0.0, 1.0),
+      vec4<f32>(0.0, 0.0, 1.0, 1.0),
+      t_clamped);
+  if gradient_info.infos[0] == 0 {
+    var premul_rgb: vec3<f32> = vec3<f32>(
+        color[0] * color[3],
+        color[1] * color[3],
+        color[2] * color[3]);
+    color = vec4<f32>(premul_rgb, color[3]);
+  }
+  return color * gradient_info.global_alpha;
+}
+
+@fragment
+fn fs_main(input: FragmentInput) -> FragmentOutput {
+  var output: FragmentOutput;
+  output.color = generate_gradient_color(input.f_param_pos);
+  return output;
+}
+)";
+
+  std::vector<uint32_t> vertex_spirv = CompileToSpirv(vertex_source, "vs_main");
+  std::vector<uint32_t> fragment_spirv =
+      CompileToSpirv(fragment_source, "fs_main");
+  ASSERT_FALSE(vertex_spirv.empty());
+  ASSERT_FALSE(fragment_spirv.empty());
+
+  VkShaderModule vertex_module = context_.CreateShaderModule(vertex_spirv);
+  VkShaderModule fragment_module = context_.CreateShaderModule(fragment_spirv);
+  ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+  ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding inv_matrix_binding = {};
+  inv_matrix_binding.binding = 1;
+  inv_matrix_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  inv_matrix_binding.descriptorCount = 1;
+  inv_matrix_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+  VkDescriptorSetLayout set0_layout =
+      context_.CreateDescriptorSetLayout({inv_matrix_binding});
+  ASSERT_NE(set0_layout, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding gradient_info_binding = {};
+  gradient_info_binding.binding = 0;
+  gradient_info_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  gradient_info_binding.descriptorCount = 1;
+  gradient_info_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding linear_pts_binding = {};
+  linear_pts_binding.binding = 1;
+  linear_pts_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  linear_pts_binding.descriptorCount = 1;
+  linear_pts_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding linear_end_binding = {};
+  linear_end_binding.binding = 2;
+  linear_end_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  linear_end_binding.descriptorCount = 1;
+  linear_end_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayout set1_layout = context_.CreateDescriptorSetLayout(
+      {gradient_info_binding, linear_pts_binding, linear_end_binding});
+  ASSERT_NE(set1_layout, VK_NULL_HANDLE);
+
+  VkPipelineLayout pipeline_layout =
+      context_.CreatePipelineLayout({set0_layout, set1_layout});
+  ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+
+  VkRenderPass render_pass = context_.CreateSimpleColorRenderPass();
+  ASSERT_NE(render_pass, VK_NULL_HANDLE);
+
+  VkVertexInputBindingDescription vertex_binding = {};
+  vertex_binding.binding = 0;
+  vertex_binding.stride = 2 * sizeof(float);
+  vertex_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+  VkVertexInputAttributeDescription position_attribute = {};
+  position_attribute.location = 0;
+  position_attribute.binding = 0;
+  position_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  position_attribute.offset = 0;
+
+  VkPipeline pipeline = context_.CreateSimpleGraphicsPipeline(
+      vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+      render_pass, {vertex_binding}, {position_attribute});
+  ASSERT_NE(pipeline, VK_NULL_HANDLE);
+
+  context_.DestroyPipeline(pipeline);
+  context_.DestroyRenderPass(render_pass);
+  context_.DestroyPipelineLayout(pipeline_layout);
+  context_.DestroyDescriptorSetLayout(set1_layout);
+  context_.DestroyDescriptorSetLayout(set0_layout);
+  context_.DestroyShaderModule(fragment_module);
+  context_.DestroyShaderModule(vertex_module);
+}
+
+TEST_F(WgxVulkanPipelineTest,
+       CreatesGraphicsPipelineForRepositoryStyleTextureFragmentShaders) {
+  const char* vertex_source = R"(
+struct VertexInput {
+  @location(0) local_pos: vec2<f32>,
+  @location(1) uv: vec2<f32>,
+};
+
+struct ImageBoundsInfo {
+  bounds: vec2<f32>,
+  inv_matrix: mat4x4<f32>,
+};
+
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) f_frag_coord: vec2<f32>,
+};
+
+@group(0) @binding(1)
+var<uniform> image_bounds: ImageBoundsInfo;
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+  var output: VertexOutput;
+  var mapped_pos: vec2<f32> =
+      (image_bounds.inv_matrix * vec4<f32>(input.local_pos.xy, 0.0, 1.0)).xy;
+  var mapped_lt: vec2<f32> = vec2<f32>(0.0, 0.0);
+  var mapped_rb: vec2<f32> = image_bounds.bounds;
+  var total_x: f32 = mapped_rb.x - mapped_lt.x;
+  var total_y: f32 = mapped_rb.y - mapped_lt.y;
+  var v_x: f32 = (mapped_pos.x - mapped_lt.x) / total_x;
+  var v_y: f32 = (mapped_pos.y - mapped_lt.y) / total_y;
+  output.position = vec4<f32>(input.local_pos, 0.0, 1.0);
+  output.f_frag_coord = vec2<f32>(v_x, v_y);
+  return output;
+}
+)";
+
+  const char* fragment_source = R"(
+fn remap_float_tile(t: f32, tile_mode: i32) -> f32 {
+  if tile_mode == 0 {
+    return clamp(t, 0.0, 1.0);
+  } else if tile_mode == 1 {
+    return fract(t);
+  } else if tile_mode == 2 {
+    var t1: f32 = t - 1.0;
+    var t2: f32 = t1 - 2.0 * floor(t1 / 2.0) - 1.0;
+    return abs(t2);
+  }
+  return t;
+}
+
+struct ImageColorInfo {
+  infos: vec3<i32>,
+  global_alpha: f32,
+};
+
+@group(1) @binding(0)
+var<uniform> image_color_info: ImageColorInfo;
+
+@group(1) @binding(1)
+var uSampler: sampler;
+
+@group(1) @binding(2)
+var uTexture: texture_2d<f32>;
+
+@fragment
+fn fs_main(@location(0) f_frag_coord: vec2<f32>) -> @location(0) vec4<f32> {
+  var uv: vec2<f32> = f_frag_coord;
+  var color: vec4<f32> = textureSample(uTexture, uSampler, uv);
+
+  if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) ||
+      (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0)) {
+    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  }
+
+  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
+  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
+
+  if image_color_info.infos.x == 3 {
+    color = vec4<f32>(color.xyz * color.w, color.w);
+  }
+
+  return color * image_color_info.global_alpha;
+}
+)";
+
+  std::vector<uint32_t> vertex_spirv = CompileToSpirv(vertex_source, "vs_main");
+  std::vector<uint32_t> fragment_spirv =
+      CompileToSpirv(fragment_source, "fs_main");
+  ASSERT_FALSE(vertex_spirv.empty());
+  ASSERT_FALSE(fragment_spirv.empty());
+
+  VkShaderModule vertex_module = context_.CreateShaderModule(vertex_spirv);
+  VkShaderModule fragment_module = context_.CreateShaderModule(fragment_spirv);
+  ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+  ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding image_bounds_binding = {};
+  image_bounds_binding.binding = 1;
+  image_bounds_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  image_bounds_binding.descriptorCount = 1;
+  image_bounds_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+  VkDescriptorSetLayout set0_layout =
+      context_.CreateDescriptorSetLayout({image_bounds_binding});
+  ASSERT_NE(set0_layout, VK_NULL_HANDLE);
+
+  VkDescriptorSetLayoutBinding image_color_binding = {};
+  image_color_binding.binding = 0;
+  image_color_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  image_color_binding.descriptorCount = 1;
+  image_color_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding sampler_binding = {};
+  sampler_binding.binding = 1;
+  sampler_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+  sampler_binding.descriptorCount = 1;
+  sampler_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayoutBinding texture_binding = {};
+  texture_binding.binding = 2;
+  texture_binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  texture_binding.descriptorCount = 1;
+  texture_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  VkDescriptorSetLayout set1_layout = context_.CreateDescriptorSetLayout(
+      {image_color_binding, sampler_binding, texture_binding});
+  ASSERT_NE(set1_layout, VK_NULL_HANDLE);
+
+  VkPipelineLayout pipeline_layout =
+      context_.CreatePipelineLayout({set0_layout, set1_layout});
+  ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+
+  VkRenderPass render_pass = context_.CreateSimpleColorRenderPass();
+  ASSERT_NE(render_pass, VK_NULL_HANDLE);
+
+  VkVertexInputBindingDescription vertex_binding = {};
+  vertex_binding.binding = 0;
+  vertex_binding.stride = 4 * sizeof(float);
+  vertex_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+  VkVertexInputAttributeDescription position_attribute = {};
+  position_attribute.location = 0;
+  position_attribute.binding = 0;
+  position_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  position_attribute.offset = 0;
+
+  VkVertexInputAttributeDescription uv_attribute = {};
+  uv_attribute.location = 1;
+  uv_attribute.binding = 0;
+  uv_attribute.format = VK_FORMAT_R32G32_SFLOAT;
+  uv_attribute.offset = 2 * sizeof(float);
+
+  VkPipeline pipeline = context_.CreateSimpleGraphicsPipeline(
+      vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+      render_pass, {vertex_binding}, {position_attribute, uv_attribute});
+  ASSERT_NE(pipeline, VK_NULL_HANDLE);
+
+  context_.DestroyPipeline(pipeline);
+  context_.DestroyRenderPass(render_pass);
+  context_.DestroyPipelineLayout(pipeline_layout);
+  context_.DestroyDescriptorSetLayout(set1_layout);
+  context_.DestroyDescriptorSetLayout(set0_layout);
+  context_.DestroyShaderModule(fragment_module);
+  context_.DestroyShaderModule(vertex_module);
+}

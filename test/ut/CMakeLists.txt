@@ -121,5 +121,65 @@ endif()
 target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
 target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
 
+if (${SKITY_VK_BACKEND})
+    set(SKITY_VK_TEST_LOADER_LIBRARIES)
+    set(SKITY_VK_TEST_RPATH)
+    if (${SKITY_VK_TEST_USE_SYSTEM_LOADER})
+        find_package(Vulkan REQUIRED)
+        list(APPEND SKITY_VK_TEST_LOADER_LIBRARIES Vulkan::Vulkan)
+    else()
+        list(APPEND SKITY_VK_TEST_LOADER_LIBRARIES
+            ${CMAKE_SOURCE_DIR}/third_party/libSwAngle/lib/libvk_swiftshader.dylib
+        )
+        set(SKITY_VK_TEST_RPATH "${CMAKE_SOURCE_DIR}/third_party/libSwAngle/lib")
+    endif()
+
+    add_executable(skity_vulkan_unit_test
+        gpu/vk/gpu_context_vk_test.cc
+        wgx/wgx_spirv_smoke_test.cc
+        wgx/wgx_vulkan_pipeline_test.cc
+        wgx/wgx_value_test.cc
+    )
+
+    target_include_directories(skity_vulkan_unit_test
+        PUBLIC
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/module/wgx
+    )
+    target_compile_definitions(skity_vulkan_unit_test PRIVATE -DWGX_VULKAN=1)
+    if (${SKITY_VK_TEST_USE_SYSTEM_LOADER})
+        target_compile_definitions(skity_vulkan_unit_test PRIVATE -DSKITY_VK_TEST_USE_SYSTEM_LOADER=1)
+    endif()
+    target_compile_definitions(skity_vulkan_unit_test PRIVATE -DWGX_SPIRV_DUMP_DEFAULT_DIR="${CMAKE_BINARY_DIR}")
+    target_include_directories(skity_vulkan_unit_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include
+        ${CMAKE_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include
+    )
+    target_link_libraries(skity_vulkan_unit_test PRIVATE
+        skity::skity
+        gmock_main
+        glm::glm-header-only
+        wgsl-cross
+        SPIRV-Headers::SPIRV-Headers
+        ${SKITY_VK_TEST_LOADER_LIBRARIES}
+    )
+    if (MSVC)
+        target_compile_options(skity_vulkan_unit_test PUBLIC /EHsc /GR-)
+    else()
+        target_compile_options(skity_vulkan_unit_test PUBLIC -fno-rtti)
+    endif()
+    if (${SKITY_TEST_COVERAGE} AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(skity_vulkan_unit_test PRIVATE --coverage -O0 -g)
+        target_link_options(skity_vulkan_unit_test PRIVATE --coverage)
+    endif()
+    if (SKITY_VK_TEST_RPATH)
+        set_target_properties(skity_vulkan_unit_test PROPERTIES
+            BUILD_RPATH "${SKITY_VK_TEST_RPATH}"
+        )
+    endif()
+
+    gtest_add_tests(skity_vulkan_unit_test "" AUTO)
+endif()
+
 
 gtest_add_tests(skity_unit_test "" AUTO)

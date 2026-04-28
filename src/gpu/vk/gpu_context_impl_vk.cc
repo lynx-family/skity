@@ -1,0 +1,785 @@
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
+
+#include "src/gpu/vk/gpu_context_impl_vk.hpp"
+
+#include <cmath>
+#include <skity/gpu/gpu_context_vk.hpp>
+#include <string>
+#include <vector>
+
+#include "src/gpu/vk/gpu_device_vk.hpp"
+#include "src/gpu/vk/gpu_surface_vk.hpp"
+#include "src/gpu/vk/gpu_texture_vk.hpp"
+#include "src/gpu/vk/vulkan_context_state.hpp"
+#include "src/gpu/vk/vulkan_proc_table.hpp"
+#include "src/logging.hpp"
+
+// put VMA_IMPLEMENTATION here
+#ifndef VMA_IMPLEMENTATION
+#define VMA_IMPLEMENTATION
+#endif
+#ifndef VMA_STATIC_VULKAN_FUNCTIONS
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#endif
+#ifndef VMA_DYNAMIC_VULKAN_FUNCTIONS
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#endif
+#include <vk_mem_alloc.h>
+
+namespace skity {
+
+namespace {
+
+GPUTextureFormat ToGPUTextureFormat(VkFormat format) {
+  switch (format) {
+    case VK_FORMAT_R8_UNORM:
+      return GPUTextureFormat::kR8Unorm;
+    case VK_FORMAT_R8G8B8_UNORM:
+      return GPUTextureFormat::kRGB8Unorm;
+    case VK_FORMAT_R5G6B5_UNORM_PACK16:
+      return GPUTextureFormat::kRGB565Unorm;
+    case VK_FORMAT_R8G8B8A8_UNORM:
+      return GPUTextureFormat::kRGBA8Unorm;
+    case VK_FORMAT_B8G8R8A8_UNORM:
+      return GPUTextureFormat::kBGRA8Unorm;
+    case VK_FORMAT_S8_UINT:
+      return GPUTextureFormat::kStencil8;
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_D32_SFLOAT_S8_UINT:
+      return GPUTextureFormat::kDepth24Stencil8;
+    default:
+      return GPUTextureFormat::kInvalid;
+  }
+}
+
+template <typename Proc>
+Proc LoadInstanceProcByName(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
+                            VkInstance instance, const char* core_name,
+                            const char* extension_name = nullptr) {
+  auto proc =
+      reinterpret_cast<Proc>(get_instance_proc_addr(instance, core_name));
+  if (proc == nullptr && extension_name != nullptr) {
+    proc = reinterpret_cast<Proc>(
+        get_instance_proc_addr(instance, extension_name));
+  }
+  return proc;
+}
+
+template <typename Proc>
+Proc LoadDeviceProcByName(PFN_vkGetDeviceProcAddr get_device_proc_addr,
+                          VkDevice device, const char* core_name,
+                          const char* extension_name = nullptr) {
+  auto proc = reinterpret_cast<Proc>(get_device_proc_addr(device, core_name));
+  if (proc == nullptr && extension_name != nullptr) {
+    proc = reinterpret_cast<Proc>(get_device_proc_addr(device, extension_name));
+  }
+  return proc;
+}
+
+uint32_t ResolveInstanceApiVersion(const VulkanGlobalFns& global_fns) {
+  if (global_fns.vkEnumerateInstanceVersion == nullptr) {
+    return VK_API_VERSION_1_0;
+  }
+
+  uint32_t version = VK_API_VERSION_1_0;
+  if (global_fns.vkEnumerateInstanceVersion(&version) != VK_SUCCESS) {
+    return VK_API_VERSION_1_0;
+  }
+
+  return version;
+}
+
+bool IsAtLeastVulkan11(uint32_t version) {
+  return VK_API_VERSION_MAJOR(version) > 1 ||
+         (VK_API_VERSION_MAJOR(version) == 1 &&
+          VK_API_VERSION_MINOR(version) >= 1);
+}
+
+bool ContainsExtension(const std::vector<VkExtensionProperties>& extensions,
+                       const char* extension_name) {
+  if (extension_name == nullptr) {
+    return false;
+  }
+
+  for (const auto& extension : extensions) {
+    if (std::string(extension.extensionName) == extension_name) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool ContainsExtension(const std::vector<std::string>& extensions,
+                       const char* extension_name) {
+  if (extension_name == nullptr) {
+    return false;
+  }
+
+  for (const auto& extension : extensions) {
+    if (extension == extension_name) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool QueryInstanceExtensions(const VulkanGlobalFns& global_fns,
+                             std::vector<VkExtensionProperties>* extensions) {
+  if (extensions == nullptr) {
+    return false;
+  }
+
+  if (global_fns.vkEnumerateInstanceExtensionProperties == nullptr) {
+    LOGE("Failed to enumerate Vulkan instance extensions: loader is null");
+    return false;
+  }
+
+  uint32_t extension_count = 0;
+  VkResult result = global_fns.vkEnumerateInstanceExtensionProperties(
+      nullptr, &extension_count, nullptr);
+  if (result != VK_SUCCESS) {
+    LOGE("Failed to query Vulkan instance extension count: {}",
+         static_cast<int32_t>(result));
+    return false;
+  }
+
+  extensions->clear();
+  if (extension_count == 0) {
+    return true;
+  }
+
+  extensions->resize(extension_count);
+  result = global_fns.vkEnumerateInstanceExtensionProperties(
+      nullptr, &extension_count, extensions->data());
+  if (result != VK_SUCCESS) {
+    LOGE("Failed to query Vulkan instance extensions: {}",
+         static_cast<int32_t>(result));
+    extensions->clear();
+    return false;
+  }
+
+  extensions->resize(extension_count);
+  return true;
+}
+
+void LogInstanceExtensions(
+    const std::vector<VkExtensionProperties>& extensions) {
+  LOGD("Enumerated {} Vulkan instance extension(s)", extensions.size());
+  for (const auto& extension : extensions) {
+    LOGD("Vulkan instance extension: {} (spec version {})",
+         extension.extensionName, extension.specVersion);
+  }
+}
+
+}  // namespace
+
+bool LoadVulkanGlobalFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
+                         VulkanGlobalFns* fns) {
+  if (get_instance_proc_addr == nullptr || fns == nullptr) {
+    LOGE("Failed to load Vulkan global procedures: invalid arguments");
+    return false;
+  }
+
+  fns->vkCreateInstance = reinterpret_cast<PFN_vkCreateInstance>(
+      get_instance_proc_addr(nullptr, "vkCreateInstance"));
+  fns->vkEnumerateInstanceExtensionProperties =
+      reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(
+          get_instance_proc_addr(nullptr,
+                                 "vkEnumerateInstanceExtensionProperties"));
+  fns->vkEnumerateInstanceLayerProperties =
+      reinterpret_cast<PFN_vkEnumerateInstanceLayerProperties>(
+          get_instance_proc_addr(nullptr,
+                                 "vkEnumerateInstanceLayerProperties"));
+  fns->vkEnumerateInstanceVersion =
+      reinterpret_cast<PFN_vkEnumerateInstanceVersion>(
+          get_instance_proc_addr(nullptr, "vkEnumerateInstanceVersion"));
+
+  if (fns->vkCreateInstance == nullptr) {
+    LOGE("Failed to load Vulkan global procedures: vkCreateInstance is null");
+    return false;
+  }
+
+  return true;
+}
+
+bool LoadVulkanInstanceFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
+                           VkInstance instance, VulkanInstanceFns* fns) {
+  if (get_instance_proc_addr == nullptr || instance == VK_NULL_HANDLE ||
+      fns == nullptr) {
+    LOGE("Failed to load Vulkan instance procedures: invalid arguments");
+    return false;
+  }
+
+  fns->vkDestroyInstance = reinterpret_cast<PFN_vkDestroyInstance>(
+      get_instance_proc_addr(instance, "vkDestroyInstance"));
+  fns->vkEnumeratePhysicalDevices =
+      reinterpret_cast<PFN_vkEnumeratePhysicalDevices>(
+          get_instance_proc_addr(instance, "vkEnumeratePhysicalDevices"));
+  fns->vkGetPhysicalDeviceProperties =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
+          get_instance_proc_addr(instance, "vkGetPhysicalDeviceProperties"));
+  fns->vkGetPhysicalDeviceMemoryProperties =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties>(
+          get_instance_proc_addr(instance,
+                                 "vkGetPhysicalDeviceMemoryProperties"));
+  fns->vkGetPhysicalDeviceImageFormatProperties =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceImageFormatProperties>(
+          get_instance_proc_addr(instance,
+                                 "vkGetPhysicalDeviceImageFormatProperties"));
+  fns->vkGetPhysicalDeviceFeatures2 =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
+          get_instance_proc_addr(instance, "vkGetPhysicalDeviceFeatures2"));
+  fns->vkGetPhysicalDeviceMemoryProperties2KHR =
+      LoadInstanceProcByName<PFN_vkGetPhysicalDeviceMemoryProperties2KHR>(
+          get_instance_proc_addr, instance,
+          "vkGetPhysicalDeviceMemoryProperties2",
+          "vkGetPhysicalDeviceMemoryProperties2KHR");
+  fns->vkEnumerateDeviceExtensionProperties =
+      reinterpret_cast<PFN_vkEnumerateDeviceExtensionProperties>(
+          get_instance_proc_addr(instance,
+                                 "vkEnumerateDeviceExtensionProperties"));
+  fns->vkGetPhysicalDeviceQueueFamilyProperties =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceQueueFamilyProperties>(
+          get_instance_proc_addr(instance,
+                                 "vkGetPhysicalDeviceQueueFamilyProperties"));
+  fns->vkCreateDevice = reinterpret_cast<PFN_vkCreateDevice>(
+      get_instance_proc_addr(instance, "vkCreateDevice"));
+  fns->vkGetDeviceProcAddr = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
+      get_instance_proc_addr(instance, "vkGetDeviceProcAddr"));
+#if defined(SKITY_VK_DEBUG_RUNTIME)
+  fns->vkCreateDebugUtilsMessengerEXT =
+      reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+          get_instance_proc_addr(instance, "vkCreateDebugUtilsMessengerEXT"));
+  fns->vkDestroyDebugUtilsMessengerEXT =
+      reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+          get_instance_proc_addr(instance, "vkDestroyDebugUtilsMessengerEXT"));
+#endif
+
+  if (fns->vkDestroyInstance == nullptr ||
+      fns->vkEnumeratePhysicalDevices == nullptr ||
+      fns->vkGetPhysicalDeviceProperties == nullptr ||
+      fns->vkGetPhysicalDeviceMemoryProperties == nullptr ||
+      fns->vkGetPhysicalDeviceImageFormatProperties == nullptr ||
+      fns->vkGetPhysicalDeviceFeatures2 == nullptr ||
+      fns->vkEnumerateDeviceExtensionProperties == nullptr ||
+      fns->vkGetPhysicalDeviceQueueFamilyProperties == nullptr ||
+      fns->vkCreateDevice == nullptr || fns->vkGetDeviceProcAddr == nullptr) {
+    LOGE("Failed to load Vulkan instance procedures for instance: {:p}",
+         reinterpret_cast<void*>(instance));
+    return false;
+  }
+
+  return true;
+}
+
+bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
+                         VkDevice device, VulkanDeviceFns* fns) {
+  if (get_device_proc_addr == nullptr || device == VK_NULL_HANDLE ||
+      fns == nullptr) {
+    LOGE("Failed to load Vulkan device procedures: invalid arguments");
+    return false;
+  }
+
+  fns->vkDestroyDevice = reinterpret_cast<PFN_vkDestroyDevice>(
+      get_device_proc_addr(device, "vkDestroyDevice"));
+  fns->vkDeviceWaitIdle = reinterpret_cast<PFN_vkDeviceWaitIdle>(
+      get_device_proc_addr(device, "vkDeviceWaitIdle"));
+  fns->vkGetDeviceQueue = reinterpret_cast<PFN_vkGetDeviceQueue>(
+      get_device_proc_addr(device, "vkGetDeviceQueue"));
+  fns->vkQueueSubmit = reinterpret_cast<PFN_vkQueueSubmit>(
+      get_device_proc_addr(device, "vkQueueSubmit"));
+  fns->vkQueueSubmit2 = reinterpret_cast<PFN_vkQueueSubmit2>(
+      get_device_proc_addr(device, "vkQueueSubmit2"));
+  fns->vkCreateCommandPool = reinterpret_cast<PFN_vkCreateCommandPool>(
+      get_device_proc_addr(device, "vkCreateCommandPool"));
+  fns->vkDestroyCommandPool = reinterpret_cast<PFN_vkDestroyCommandPool>(
+      get_device_proc_addr(device, "vkDestroyCommandPool"));
+  fns->vkAllocateCommandBuffers =
+      reinterpret_cast<PFN_vkAllocateCommandBuffers>(
+          get_device_proc_addr(device, "vkAllocateCommandBuffers"));
+  fns->vkBeginCommandBuffer = reinterpret_cast<PFN_vkBeginCommandBuffer>(
+      get_device_proc_addr(device, "vkBeginCommandBuffer"));
+  fns->vkEndCommandBuffer = reinterpret_cast<PFN_vkEndCommandBuffer>(
+      get_device_proc_addr(device, "vkEndCommandBuffer"));
+  fns->vkCreateFence = reinterpret_cast<PFN_vkCreateFence>(
+      get_device_proc_addr(device, "vkCreateFence"));
+  fns->vkDestroyFence = reinterpret_cast<PFN_vkDestroyFence>(
+      get_device_proc_addr(device, "vkDestroyFence"));
+  fns->vkGetFenceStatus = reinterpret_cast<PFN_vkGetFenceStatus>(
+      get_device_proc_addr(device, "vkGetFenceStatus"));
+  fns->vkWaitForFences = reinterpret_cast<PFN_vkWaitForFences>(
+      get_device_proc_addr(device, "vkWaitForFences"));
+  fns->vkAllocateMemory = reinterpret_cast<PFN_vkAllocateMemory>(
+      get_device_proc_addr(device, "vkAllocateMemory"));
+  fns->vkFreeMemory = reinterpret_cast<PFN_vkFreeMemory>(
+      get_device_proc_addr(device, "vkFreeMemory"));
+  fns->vkMapMemory = reinterpret_cast<PFN_vkMapMemory>(
+      get_device_proc_addr(device, "vkMapMemory"));
+  fns->vkUnmapMemory = reinterpret_cast<PFN_vkUnmapMemory>(
+      get_device_proc_addr(device, "vkUnmapMemory"));
+  fns->vkFlushMappedMemoryRanges =
+      reinterpret_cast<PFN_vkFlushMappedMemoryRanges>(
+          get_device_proc_addr(device, "vkFlushMappedMemoryRanges"));
+  fns->vkInvalidateMappedMemoryRanges =
+      reinterpret_cast<PFN_vkInvalidateMappedMemoryRanges>(
+          get_device_proc_addr(device, "vkInvalidateMappedMemoryRanges"));
+  fns->vkBindBufferMemory = reinterpret_cast<PFN_vkBindBufferMemory>(
+      get_device_proc_addr(device, "vkBindBufferMemory"));
+  fns->vkBindImageMemory = reinterpret_cast<PFN_vkBindImageMemory>(
+      get_device_proc_addr(device, "vkBindImageMemory"));
+  fns->vkGetBufferMemoryRequirements =
+      reinterpret_cast<PFN_vkGetBufferMemoryRequirements>(
+          get_device_proc_addr(device, "vkGetBufferMemoryRequirements"));
+  fns->vkGetImageMemoryRequirements =
+      reinterpret_cast<PFN_vkGetImageMemoryRequirements>(
+          get_device_proc_addr(device, "vkGetImageMemoryRequirements"));
+  fns->vkCreateBuffer = reinterpret_cast<PFN_vkCreateBuffer>(
+      get_device_proc_addr(device, "vkCreateBuffer"));
+  fns->vkDestroyBuffer = reinterpret_cast<PFN_vkDestroyBuffer>(
+      get_device_proc_addr(device, "vkDestroyBuffer"));
+  fns->vkCreateImage = reinterpret_cast<PFN_vkCreateImage>(
+      get_device_proc_addr(device, "vkCreateImage"));
+  fns->vkDestroyImage = reinterpret_cast<PFN_vkDestroyImage>(
+      get_device_proc_addr(device, "vkDestroyImage"));
+  fns->vkGetBufferMemoryRequirements2KHR =
+      LoadDeviceProcByName<PFN_vkGetBufferMemoryRequirements2KHR>(
+          get_device_proc_addr, device, "vkGetBufferMemoryRequirements2",
+          "vkGetBufferMemoryRequirements2KHR");
+  fns->vkGetImageMemoryRequirements2KHR =
+      LoadDeviceProcByName<PFN_vkGetImageMemoryRequirements2KHR>(
+          get_device_proc_addr, device, "vkGetImageMemoryRequirements2",
+          "vkGetImageMemoryRequirements2KHR");
+  fns->vkBindBufferMemory2KHR =
+      LoadDeviceProcByName<PFN_vkBindBufferMemory2KHR>(
+          get_device_proc_addr, device, "vkBindBufferMemory2",
+          "vkBindBufferMemory2KHR");
+  fns->vkBindImageMemory2KHR = LoadDeviceProcByName<PFN_vkBindImageMemory2KHR>(
+      get_device_proc_addr, device, "vkBindImageMemory2",
+      "vkBindImageMemory2KHR");
+  fns->vkGetDeviceBufferMemoryRequirements =
+      LoadDeviceProcByName<PFN_vkGetDeviceBufferMemoryRequirementsKHR>(
+          get_device_proc_addr, device, "vkGetDeviceBufferMemoryRequirements",
+          "vkGetDeviceBufferMemoryRequirementsKHR");
+  fns->vkGetDeviceImageMemoryRequirements =
+      LoadDeviceProcByName<PFN_vkGetDeviceImageMemoryRequirementsKHR>(
+          get_device_proc_addr, device, "vkGetDeviceImageMemoryRequirements",
+          "vkGetDeviceImageMemoryRequirementsKHR");
+  fns->vkCmdCopyBuffer = reinterpret_cast<PFN_vkCmdCopyBuffer>(
+      get_device_proc_addr(device, "vkCmdCopyBuffer"));
+  fns->vkCreateFramebuffer = reinterpret_cast<PFN_vkCreateFramebuffer>(
+      get_device_proc_addr(device, "vkCreateFramebuffer"));
+  fns->vkDestroyFramebuffer = reinterpret_cast<PFN_vkDestroyFramebuffer>(
+      get_device_proc_addr(device, "vkDestroyFramebuffer"));
+  fns->vkCreateRenderPass = reinterpret_cast<PFN_vkCreateRenderPass>(
+      get_device_proc_addr(device, "vkCreateRenderPass"));
+  fns->vkDestroyRenderPass = reinterpret_cast<PFN_vkDestroyRenderPass>(
+      get_device_proc_addr(device, "vkDestroyRenderPass"));
+  fns->vkCreateImageView = reinterpret_cast<PFN_vkCreateImageView>(
+      get_device_proc_addr(device, "vkCreateImageView"));
+  fns->vkDestroyImageView = reinterpret_cast<PFN_vkDestroyImageView>(
+      get_device_proc_addr(device, "vkDestroyImageView"));
+  fns->vkCmdBeginRenderPass = reinterpret_cast<PFN_vkCmdBeginRenderPass>(
+      get_device_proc_addr(device, "vkCmdBeginRenderPass"));
+  fns->vkCmdEndRenderPass = reinterpret_cast<PFN_vkCmdEndRenderPass>(
+      get_device_proc_addr(device, "vkCmdEndRenderPass"));
+  fns->vkCmdCopyBufferToImage = reinterpret_cast<PFN_vkCmdCopyBufferToImage>(
+      get_device_proc_addr(device, "vkCmdCopyBufferToImage"));
+  fns->vkCmdPipelineBarrier = reinterpret_cast<PFN_vkCmdPipelineBarrier>(
+      get_device_proc_addr(device, "vkCmdPipelineBarrier"));
+  fns->vkCmdBeginRendering = LoadDeviceProcByName<PFN_vkCmdBeginRendering>(
+      get_device_proc_addr, device, "vkCmdBeginRendering",
+      "vkCmdBeginRenderingKHR");
+  fns->vkCmdEndRendering = LoadDeviceProcByName<PFN_vkCmdEndRendering>(
+      get_device_proc_addr, device, "vkCmdEndRendering",
+      "vkCmdEndRenderingKHR");
+  fns->vkCreateShaderModule = reinterpret_cast<PFN_vkCreateShaderModule>(
+      get_device_proc_addr(device, "vkCreateShaderModule"));
+  fns->vkDestroyShaderModule = reinterpret_cast<PFN_vkDestroyShaderModule>(
+      get_device_proc_addr(device, "vkDestroyShaderModule"));
+  fns->vkCreateSampler = reinterpret_cast<PFN_vkCreateSampler>(
+      get_device_proc_addr(device, "vkCreateSampler"));
+  fns->vkDestroySampler = reinterpret_cast<PFN_vkDestroySampler>(
+      get_device_proc_addr(device, "vkDestroySampler"));
+  fns->vkCreateDescriptorPool = reinterpret_cast<PFN_vkCreateDescriptorPool>(
+      get_device_proc_addr(device, "vkCreateDescriptorPool"));
+  fns->vkDestroyDescriptorPool = reinterpret_cast<PFN_vkDestroyDescriptorPool>(
+      get_device_proc_addr(device, "vkDestroyDescriptorPool"));
+  fns->vkAllocateDescriptorSets =
+      reinterpret_cast<PFN_vkAllocateDescriptorSets>(
+          get_device_proc_addr(device, "vkAllocateDescriptorSets"));
+  fns->vkUpdateDescriptorSets = reinterpret_cast<PFN_vkUpdateDescriptorSets>(
+      get_device_proc_addr(device, "vkUpdateDescriptorSets"));
+  fns->vkCreateDescriptorSetLayout =
+      reinterpret_cast<PFN_vkCreateDescriptorSetLayout>(
+          get_device_proc_addr(device, "vkCreateDescriptorSetLayout"));
+  fns->vkDestroyDescriptorSetLayout =
+      reinterpret_cast<PFN_vkDestroyDescriptorSetLayout>(
+          get_device_proc_addr(device, "vkDestroyDescriptorSetLayout"));
+  fns->vkCreatePipelineLayout = reinterpret_cast<PFN_vkCreatePipelineLayout>(
+      get_device_proc_addr(device, "vkCreatePipelineLayout"));
+  fns->vkDestroyPipelineLayout = reinterpret_cast<PFN_vkDestroyPipelineLayout>(
+      get_device_proc_addr(device, "vkDestroyPipelineLayout"));
+  fns->vkCreatePipelineCache = reinterpret_cast<PFN_vkCreatePipelineCache>(
+      get_device_proc_addr(device, "vkCreatePipelineCache"));
+  fns->vkDestroyPipelineCache = reinterpret_cast<PFN_vkDestroyPipelineCache>(
+      get_device_proc_addr(device, "vkDestroyPipelineCache"));
+  fns->vkCreateGraphicsPipelines =
+      reinterpret_cast<PFN_vkCreateGraphicsPipelines>(
+          get_device_proc_addr(device, "vkCreateGraphicsPipelines"));
+  fns->vkDestroyPipeline = reinterpret_cast<PFN_vkDestroyPipeline>(
+      get_device_proc_addr(device, "vkDestroyPipeline"));
+  fns->vkCmdBindPipeline = reinterpret_cast<PFN_vkCmdBindPipeline>(
+      get_device_proc_addr(device, "vkCmdBindPipeline"));
+  fns->vkCmdBindDescriptorSets = reinterpret_cast<PFN_vkCmdBindDescriptorSets>(
+      get_device_proc_addr(device, "vkCmdBindDescriptorSets"));
+  fns->vkCmdBindVertexBuffers = reinterpret_cast<PFN_vkCmdBindVertexBuffers>(
+      get_device_proc_addr(device, "vkCmdBindVertexBuffers"));
+  fns->vkCmdBindIndexBuffer = reinterpret_cast<PFN_vkCmdBindIndexBuffer>(
+      get_device_proc_addr(device, "vkCmdBindIndexBuffer"));
+  fns->vkCmdDrawIndexed = reinterpret_cast<PFN_vkCmdDrawIndexed>(
+      get_device_proc_addr(device, "vkCmdDrawIndexed"));
+  fns->vkCmdSetViewport = reinterpret_cast<PFN_vkCmdSetViewport>(
+      get_device_proc_addr(device, "vkCmdSetViewport"));
+  fns->vkCmdSetScissor = reinterpret_cast<PFN_vkCmdSetScissor>(
+      get_device_proc_addr(device, "vkCmdSetScissor"));
+  fns->vkCmdSetStencilCompareMask =
+      reinterpret_cast<PFN_vkCmdSetStencilCompareMask>(
+          get_device_proc_addr(device, "vkCmdSetStencilCompareMask"));
+  fns->vkCmdSetStencilWriteMask =
+      reinterpret_cast<PFN_vkCmdSetStencilWriteMask>(
+          get_device_proc_addr(device, "vkCmdSetStencilWriteMask"));
+  fns->vkCmdSetStencilReference =
+      reinterpret_cast<PFN_vkCmdSetStencilReference>(
+          get_device_proc_addr(device, "vkCmdSetStencilReference"));
+  fns->vkSetDebugUtilsObjectNameEXT =
+      reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
+          get_device_proc_addr(device, "vkSetDebugUtilsObjectNameEXT"));
+#if defined(SKITY_VK_DEBUG_RUNTIME)
+  fns->vkCmdBeginDebugUtilsLabelEXT =
+      reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
+          get_device_proc_addr(device, "vkCmdBeginDebugUtilsLabelEXT"));
+  fns->vkCmdEndDebugUtilsLabelEXT =
+      reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
+          get_device_proc_addr(device, "vkCmdEndDebugUtilsLabelEXT"));
+  fns->vkCmdInsertDebugUtilsLabelEXT =
+      reinterpret_cast<PFN_vkCmdInsertDebugUtilsLabelEXT>(
+          get_device_proc_addr(device, "vkCmdInsertDebugUtilsLabelEXT"));
+#endif
+
+  if (fns->vkDestroyDevice == nullptr || fns->vkDeviceWaitIdle == nullptr ||
+      fns->vkGetDeviceQueue == nullptr || fns->vkQueueSubmit == nullptr ||
+      fns->vkCreateCommandPool == nullptr ||
+      fns->vkDestroyCommandPool == nullptr ||
+      fns->vkAllocateCommandBuffers == nullptr ||
+      fns->vkBeginCommandBuffer == nullptr ||
+      fns->vkEndCommandBuffer == nullptr || fns->vkCreateFence == nullptr ||
+      fns->vkDestroyFence == nullptr || fns->vkGetFenceStatus == nullptr ||
+      fns->vkWaitForFences == nullptr || fns->vkCmdCopyBuffer == nullptr ||
+      fns->vkAllocateMemory == nullptr || fns->vkFreeMemory == nullptr ||
+      fns->vkMapMemory == nullptr || fns->vkUnmapMemory == nullptr ||
+      fns->vkFlushMappedMemoryRanges == nullptr ||
+      fns->vkInvalidateMappedMemoryRanges == nullptr ||
+      fns->vkBindBufferMemory == nullptr || fns->vkBindImageMemory == nullptr ||
+      fns->vkGetBufferMemoryRequirements == nullptr ||
+      fns->vkGetImageMemoryRequirements == nullptr ||
+      fns->vkCreateBuffer == nullptr || fns->vkDestroyBuffer == nullptr ||
+      fns->vkCreateImage == nullptr || fns->vkDestroyImage == nullptr ||
+      fns->vkCreateFramebuffer == nullptr ||
+      fns->vkDestroyFramebuffer == nullptr ||
+      fns->vkCreateRenderPass == nullptr ||
+      fns->vkDestroyRenderPass == nullptr ||
+      fns->vkCreateImageView == nullptr || fns->vkDestroyImageView == nullptr ||
+      fns->vkCmdBeginRenderPass == nullptr ||
+      fns->vkCmdEndRenderPass == nullptr ||
+      fns->vkCmdCopyBufferToImage == nullptr ||
+      fns->vkCmdPipelineBarrier == nullptr ||
+      fns->vkCreateShaderModule == nullptr ||
+      fns->vkDestroyShaderModule == nullptr ||
+      fns->vkCreateSampler == nullptr || fns->vkDestroySampler == nullptr ||
+      fns->vkCreateDescriptorPool == nullptr ||
+      fns->vkDestroyDescriptorPool == nullptr ||
+      fns->vkAllocateDescriptorSets == nullptr ||
+      fns->vkUpdateDescriptorSets == nullptr ||
+      fns->vkCreateDescriptorSetLayout == nullptr ||
+      fns->vkDestroyDescriptorSetLayout == nullptr ||
+      fns->vkCreatePipelineLayout == nullptr ||
+      fns->vkDestroyPipelineLayout == nullptr ||
+      fns->vkCreatePipelineCache == nullptr ||
+      fns->vkDestroyPipelineCache == nullptr ||
+      fns->vkCreateGraphicsPipelines == nullptr ||
+      fns->vkDestroyPipeline == nullptr || fns->vkCmdBindPipeline == nullptr ||
+      fns->vkCmdBindDescriptorSets == nullptr ||
+      fns->vkCmdBindVertexBuffers == nullptr ||
+      fns->vkCmdBindIndexBuffer == nullptr ||
+      fns->vkCmdDrawIndexed == nullptr || fns->vkCmdSetViewport == nullptr ||
+      fns->vkCmdSetScissor == nullptr ||
+      fns->vkCmdSetStencilCompareMask == nullptr ||
+      fns->vkCmdSetStencilWriteMask == nullptr ||
+      fns->vkCmdSetStencilReference == nullptr) {
+    LOGE("Failed to load Vulkan device procedures for device: {:p}",
+         reinterpret_cast<void*>(device));
+    return false;
+  }
+
+  return true;
+}
+
+void EnablePortabilityEnumerationIfAvailable(
+    const std::vector<VkExtensionProperties>& available_extensions,
+    std::vector<std::string>* enabled_extensions,
+    VkInstanceCreateFlags* instance_flags) {
+  if (enabled_extensions == nullptr || instance_flags == nullptr) {
+    return;
+  }
+
+  if (!ContainsExtension(available_extensions,
+                         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) ||
+      ContainsExtension(*enabled_extensions,
+                        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+    return;
+  }
+
+  enabled_extensions->emplace_back(
+      VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+  *instance_flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+}
+
+bool CreateVkInstance(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
+                      VkInstance* instance, VulkanFunctionPointers* functions,
+                      const VkInstanceCreateInfo* create_info,
+                      const VkAllocationCallbacks* allocator) {
+  if (instance == nullptr || get_instance_proc_addr == nullptr) {
+    LOGE("Failed to create Vulkan instance: invalid arguments");
+    return false;
+  }
+
+  *instance = VK_NULL_HANDLE;
+
+  VulkanFunctionPointers local_functions = {};
+  VulkanFunctionPointers* target_functions =
+      functions == nullptr ? &local_functions : functions;
+  target_functions->get_instance_proc_addr = get_instance_proc_addr;
+
+  if (!LoadVulkanGlobalFns(get_instance_proc_addr, &target_functions->global)) {
+    return false;
+  }
+
+  std::vector<VkExtensionProperties> available_extensions;
+  if (!QueryInstanceExtensions(target_functions->global,
+                               &available_extensions)) {
+    return false;
+  }
+  LogInstanceExtensions(available_extensions);
+
+  VkApplicationInfo app_info = {};
+  VkInstanceCreateInfo instance_info = {};
+  if (create_info == nullptr) {
+    const uint32_t supported_version =
+        ResolveInstanceApiVersion(target_functions->global);
+    LOGD("Detected Vulkan instance version: {}.{}",
+         VK_API_VERSION_MAJOR(supported_version),
+         VK_API_VERSION_MINOR(supported_version));
+    if (!IsAtLeastVulkan11(supported_version)) {
+      LOGE("Vulkan 1.1 is required, but only {}.{} is available",
+           VK_API_VERSION_MAJOR(supported_version),
+           VK_API_VERSION_MINOR(supported_version));
+      return false;
+    }
+
+    app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    app_info.pApplicationName = "skity";
+    app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.pEngineName = "skity";
+    app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.apiVersion = supported_version;
+
+    instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instance_info.pApplicationInfo = &app_info;
+    create_info = &instance_info;
+  }
+
+  VkInstanceCreateInfo effective_create_info = *create_info;
+  std::vector<std::string> enabled_extensions;
+  enabled_extensions.reserve(create_info->enabledExtensionCount + 1);
+  for (uint32_t i = 0; i < create_info->enabledExtensionCount; ++i) {
+    if (create_info->ppEnabledExtensionNames[i] != nullptr) {
+      enabled_extensions.emplace_back(create_info->ppEnabledExtensionNames[i]);
+    }
+  }
+  EnablePortabilityEnumerationIfAvailable(
+      available_extensions, &enabled_extensions, &effective_create_info.flags);
+  std::vector<const char*> enabled_extension_ptrs;
+  enabled_extension_ptrs.reserve(enabled_extensions.size());
+  for (const auto& extension : enabled_extensions) {
+    enabled_extension_ptrs.push_back(extension.c_str());
+  }
+  effective_create_info.enabledExtensionCount =
+      static_cast<uint32_t>(enabled_extension_ptrs.size());
+  effective_create_info.ppEnabledExtensionNames =
+      enabled_extension_ptrs.empty() ? nullptr : enabled_extension_ptrs.data();
+  create_info = &effective_create_info;
+
+  uint32_t api_version = VK_API_VERSION_1_0;
+  if (create_info->pApplicationInfo != nullptr) {
+    api_version = create_info->pApplicationInfo->apiVersion;
+  }
+  LOGD("Creating Vulkan instance, apiVersion: {}.{}",
+       VK_API_VERSION_MAJOR(api_version), VK_API_VERSION_MINOR(api_version));
+  VkResult result = target_functions->global.vkCreateInstance(
+      create_info, allocator, instance);
+  if (result != VK_SUCCESS || *instance == VK_NULL_HANDLE) {
+    LOGE("Failed to create Vulkan instance: result={}, instance={:p}",
+         static_cast<int32_t>(result), reinterpret_cast<void*>(*instance));
+    *instance = VK_NULL_HANDLE;
+    return false;
+  }
+
+  if (!LoadVulkanInstanceFns(get_instance_proc_addr, *instance,
+                             &target_functions->instance)) {
+    target_functions->instance.vkDestroyInstance =
+        reinterpret_cast<PFN_vkDestroyInstance>(
+            get_instance_proc_addr(*instance, "vkDestroyInstance"));
+    if (target_functions->instance.vkDestroyInstance != nullptr) {
+      target_functions->instance.vkDestroyInstance(*instance, allocator);
+    }
+    LOGE("Failed to load Vulkan instance procedures after instance creation");
+    *instance = VK_NULL_HANDLE;
+    return false;
+  }
+
+  target_functions->get_device_proc_addr =
+      target_functions->instance.vkGetDeviceProcAddr;
+  LOGD("Created Vulkan instance: {:p}", reinterpret_cast<void*>(*instance));
+  return true;
+}
+
+GPUContextVK::GPUContextVK(std::shared_ptr<VulkanContextState> state)
+    : GPUContextImpl(GPUBackendType::kVulkan), state_(std::move(state)) {}
+
+GPUContextVK::~GPUContextVK() {
+  if (state_ != nullptr) {
+    state_->CollectPendingSubmissions(true);
+  }
+  ResetOwnedResources();
+}
+
+std::unique_ptr<GPUSurface> GPUContextVK::CreateSurface(
+    GPUSurfaceDescriptor* desc) {
+  if (desc == nullptr || desc->backend != GPUBackendType::kVulkan) {
+    return nullptr;
+  }
+
+  auto* vk_desc = static_cast<GPUSurfaceDescriptorVK*>(desc);
+  if (vk_desc->surface_type != VKSurfaceType::kTexture &&
+      vk_desc->surface_type != VKSurfaceType::kSwapchainImage) {
+    LOGW(
+        "GPUContextVK::CreateSurface only supports texture-backed Vulkan "
+        "surfaces for now");
+    return nullptr;
+  }
+
+  const uint32_t target_width = static_cast<uint32_t>(
+      std::floor(static_cast<float>(vk_desc->width) * vk_desc->content_scale));
+  const uint32_t target_height = static_cast<uint32_t>(
+      std::floor(static_cast<float>(vk_desc->height) * vk_desc->content_scale));
+
+  if (vk_desc->image == VK_NULL_HANDLE ||
+      vk_desc->image_view == VK_NULL_HANDLE ||
+      vk_desc->format == VK_FORMAT_UNDEFINED || vk_desc->width == 0 ||
+      vk_desc->height == 0 || target_width == 0 || target_height == 0) {
+    LOGE("Failed to create Vulkan surface: invalid descriptor");
+    return nullptr;
+  }
+
+  GPUTextureDescriptor texture_desc = {};
+  texture_desc.width = target_width;
+  texture_desc.height = target_height;
+  texture_desc.mip_level_count = 1;
+  texture_desc.sample_count = 1;
+  texture_desc.format = ToGPUTextureFormat(vk_desc->format);
+  texture_desc.usage =
+      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment);
+  texture_desc.storage_mode = GPUTextureStorageMode::kPrivate;
+
+  if (texture_desc.format == GPUTextureFormat::kInvalid) {
+    LOGE("Failed to create Vulkan surface: unsupported VkFormat {}",
+         static_cast<int32_t>(vk_desc->format));
+    return nullptr;
+  }
+
+  auto texture = GPUTextureVK::Wrap(
+      state_, texture_desc, vk_desc->image, vk_desc->image_view,
+      vk_desc->initial_layout, vk_desc->final_layout, vk_desc->format,
+      vk_desc->owns_image, vk_desc->owns_image_view);
+  if (texture == nullptr) {
+    return nullptr;
+  }
+
+  return std::make_unique<GPUSurfaceVK>(
+      *desc, this, std::move(texture), texture_desc.format, vk_desc->sync_info);
+}
+
+std::unique_ptr<GPUDevice> GPUContextVK::CreateGPUDevice() {
+  return std::make_unique<GPUDeviceVK>(state_);
+}
+
+std::shared_ptr<GPUTexture> GPUContextVK::OnWrapTexture(
+    GPUBackendTextureInfo* info, ReleaseCallback callback,
+    ReleaseUserData user_data) {
+  (void)info;
+  (void)callback;
+  (void)user_data;
+  LOGW("GPUContextVK::OnWrapTexture is not implemented yet");
+  return {};
+}
+
+std::unique_ptr<GPURenderTarget> GPUContextVK::OnCreateRenderTarget(
+    const GPURenderTargetDescriptor& desc, std::shared_ptr<Texture> texture) {
+  (void)desc;
+  (void)texture;
+  LOGW("GPUContextVK::OnCreateRenderTarget is not implemented yet");
+  return {};
+}
+
+std::shared_ptr<Data> GPUContextVK::OnReadPixels(
+    const std::shared_ptr<GPUTexture>& texture) const {
+  (void)texture;
+  LOGW("GPUContextVK::OnReadPixels is not implemented yet");
+  return {};
+}
+
+std::unique_ptr<GPUContext> CreateGPUContextVK(const GPUContextInfoVK* info) {
+  if (info == nullptr) {
+    return nullptr;
+  }
+
+  LOGD("CreateGPUContextVK called with GPUContextInfoVK: {:p}",
+       reinterpret_cast<const void*>(info));
+  auto state = std::make_shared<VulkanContextState>();
+  if (!state->Initialize(*info)) {
+    return nullptr;
+  }
+
+  auto context = std::make_unique<GPUContextVK>(std::move(state));
+  if (!context->Init()) {
+    LOGE("Failed to initialize GPUContextVK device state");
+    return nullptr;
+  }
+
+  return context;
+}
+
+std::unique_ptr<GPUContext> CreateGPUContextVK(
+    PFN_vkGetInstanceProcAddr get_instance_proc_addr) {
+  GPUContextInfoVK info = {};
+  info.get_instance_proc_addr = get_instance_proc_addr;
+  LOGD("CreateGPUContextVK called with vkGetInstanceProcAddr: {:p}",
+       reinterpret_cast<void*>(get_instance_proc_addr));
+  return CreateGPUContextVK(&info);
+}
+
+}  // namespace skity

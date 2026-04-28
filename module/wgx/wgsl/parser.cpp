@@ -1142,6 +1142,10 @@ Parser::Result<ast::BlockStatement*> Parser::ContinuingCompoundStatement() {
   StatementList stmts{};
 
   while (!Peek().Is(TokenType::kEOF) && !has_error_) {
+    if (Peek().Is(TokenType::kBraceRight)) {
+      break;
+    }
+
     auto break_if = BreakIfStatement();
 
     if (break_if.state == State::kError) {
@@ -1163,6 +1167,13 @@ Parser::Result<ast::BlockStatement*> Parser::ContinuingCompoundStatement() {
     }
 
     stmts.emplace_back(stmt.GetValue());
+  }
+
+  if (!Consume(TokenType::kBraceRight)) {
+    diagnosis_.message = "Expected '}' after continuing block";
+    diagnosis_.line = Peek().line;
+    diagnosis_.column = Peek().column;
+    return ReturnType{State::kError};
   }
 
   auto stmt = allocator_->Allocate<ast::BlockStatement>(std::move(stmts),
@@ -1219,6 +1230,13 @@ Parser::Result<ast::LoopStatement*> Parser::LoopStatement(AttrList& attrs) {
 
   auto continuing = ContinuingStatement();
   if (continuing.state == State::kError) {
+    return ReturnType{State::kError};
+  }
+
+  if (!Consume(TokenType::kBraceRight)) {
+    diagnosis_.message = "Expected '}' after loop statement";
+    diagnosis_.line = Peek().line;
+    diagnosis_.column = Peek().column;
     return ReturnType{State::kError};
   }
 

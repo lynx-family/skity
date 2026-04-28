@@ -45,6 +45,23 @@ if (${SKITY_MTL_BACKEND})
 
 endif()
 
+if (${SKITY_VK_BACKEND})
+  if (NOT TARGET volk::volk)
+    set(VOLK_PULL_IN_VULKAN OFF CACHE BOOL "Disable Volk Vulkan lookup" FORCE)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/volk third_party/volk)
+  endif()
+
+  target_compile_definitions(skity_example_common PUBLIC -DSKITY_EXAMPLE_VK_BACKEND=1)
+
+  target_sources(skity_example_common PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/vk/window_vk.cc
+    ${CMAKE_CURRENT_LIST_DIR}/vk/window_vk.hpp
+  )
+
+  target_include_directories(skity_example_common PUBLIC ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include)
+  target_link_libraries(skity_example_common PRIVATE volk::volk)
+endif()
+
 add_library(skity::example_common ALIAS skity_example_common)
 
 target_include_directories(skity_example_common PUBLIC ${CMAKE_SOURCE_DIR}/example)

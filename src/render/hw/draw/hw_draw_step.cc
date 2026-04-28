@@ -26,6 +26,13 @@ void HWDrawStep::GenerateCommand(const HWDrawStepContext& ctx, Command* cmd,
 
   cmd->pipeline = GetPipeline(ctx.context, ctx.state, ctx.color_format,
                               ctx.sample_count, ctx.blend_mode);
+  if (RequireStencil()) {
+    const auto stencil_state = GetStencilState();
+    cmd->front_stencil_compare_mask = stencil_state.front.stencil_read_mask;
+    cmd->back_stencil_compare_mask = stencil_state.back.stencil_read_mask;
+    cmd->front_stencil_write_mask = stencil_state.front.stencil_write_mask;
+    cmd->back_stencil_write_mask = stencil_state.back.stencil_write_mask;
+  }
 
   geometry_->PrepareCMD(cmd, ctx.context, ctx.transform, ctx.clip_depth,
                         stencil_cmd);
