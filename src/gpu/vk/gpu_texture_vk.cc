@@ -348,6 +348,8 @@ void GPUTextureVK::UploadData(uint32_t offset_x, uint32_t offset_y,
     return;
   }
 
+  command_buffer->SetLabel("VkUploadTextureData");
+
   auto blit_pass =
       std::make_shared<GPUBlitPassVK>(state_, command_buffer.get());
   blit_pass->UploadTextureData(shared_from_this(), offset_x, offset_y, width,

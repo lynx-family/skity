@@ -15,6 +15,7 @@
 
 #include "spirv/unified1/spirv.h"
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
+#include "src/render/hw/draw/fragment/wgsl_solid_vertex_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/hw_wgsl_shader_writer.hpp"
@@ -1539,6 +1540,33 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   ASSERT_GE(words.size(), 5u);
   EXPECT_TRUE(ContainsInstruction(words, SpvOpConvertFToS));
   EXPECT_TRUE(ContainsInstruction(words, SpvOpConvertSToF));
+  EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsScalarCastFromI32ToU32WithBitcast) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var value: i32 = -1;
+  var bits: u32 = u32(value);
+  return vec4<f32>(f32(bits), 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_cast_i32_to_u32.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpBitcast));
+  EXPECT_FALSE(ContainsInstruction(words, SpvOpUConvert));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpConvertUToF));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
@@ -4007,6 +4035,144 @@ TEST(WgxSpirvSmokeTest, EmitsGradientLinear4WGSL) {
 
   ASSERT_TRUE(result.success);
   DumpSpirvBinary("wgx_GradientLinear4WGSL.spv", result.spirv);
+  auto words = result.spirv;
+}
+
+TEST(WgxSpirvSmokeTest, EmitPathTextureWGSL) {
+  constexpr auto fs = R"(
+fn remap_float_tile(t: f32, tile_mode: i32) -> f32 {
+  if tile_mode == 0 {
+    return clamp(t, 0.0, 1.0);
+  } else if tile_mode == 1 {
+    return fract(t);
+  } else if tile_mode == 2 {
+    var t1: f32 = t - 1.0;
+    var t2: f32 = t1 - 2.0 * floor(t1 / 2.0) - 1.0;
+
+    return abs(t2);
+  }
+  return t;
+}
+
+struct ImageColorInfo {
+  infos           : vec3<i32>,
+  global_alpha    : f32,
+};
+
+@group(1) @binding(0) var<uniform>  image_color_info    : ImageColorInfo;
+@group(1) @binding(1) var           uSampler            : sampler;
+@group(1) @binding(2) var           uTexture            : texture_2d<f32>;
+
+struct FSInput {
+  @location(0) f_frag_coord: vec2<f32>,
+};
+
+@fragment
+fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
+  var color : vec4<f32>;
+  var frag_coord: vec2<f32> = input.f_frag_coord;
+  var uv  : vec2<f32> = frag_coord;
+
+  color = textureSample(uTexture, uSampler, uv);
+
+  if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) || (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0))
+  {
+    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  }
+
+  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
+  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
+
+  if image_color_info.infos.x == 3 {
+    color = vec4<f32>(color.xyz * color.w, color.w);
+  }
+
+  color *= image_color_info.global_alpha;
+
+  return color;
+}
+  )";
+
+  auto program = wgx::Program::Parse(fs);
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_PathTextureWGSL.spv", result.spirv);
+  auto words = result.spirv;
+}
+
+TEST(WgxSpirvSmokeTest, EmitRRectGeometryWGSL) {
+  auto rrect =
+      skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(0, 0, 100, 100), 10, 10);
+  skity::Paint paint;
+  paint.SetColor(0xff00ff00);
+  std::vector<skity::BatchGroup<skity::RRect>> rrect_batch_group;
+  rrect_batch_group.push_back({rrect, paint});
+  skity::WGSLRRectGeometry geometry{rrect_batch_group};
+  skity::WGSLSolidVertexColor fragment{};
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+  std::string vs = shader_writer.GenVSSourceWGSL();
+  std::string fs = shader_writer.GenFSSourceWGSL();
+
+  std::cerr << vs << std::endl;
+
+  auto program = wgx::Program::Parse(vs);
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_RRectGeometryWGSL.spv", result.spirv);
+  auto words = result.spirv;
+
+  auto fs_program = wgx::Program::Parse(fs);
+
+  ASSERT_NE(fs_program, nullptr);
+  ASSERT_FALSE(fs_program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions fs_options;
+  auto fs_result = fs_program->WriteToSpirv("fs_main", fs_options);
+
+  ASSERT_TRUE(fs_result.success);
+  DumpSpirvBinary("wgx_fs_main_RRectGeometryWGSL.spv", fs_result.spirv);
+  auto fs_words = fs_result.spirv;
+}
+
+TEST(WgxSpirvSmokeTest, EmitRRectGeometryStrokeWGSL) {
+  auto rrect =
+      skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(0, 0, 100, 100), 10, 10);
+  skity::Paint paint;
+  paint.SetStyle(skity::Paint::Style::kStroke_Style);
+  paint.SetStrokeWidth(3.0f);
+  paint.SetColor(0xff00ff00);
+  std::vector<skity::BatchGroup<skity::RRect>> rrect_batch_group;
+  rrect_batch_group.push_back({rrect, paint});
+  skity::WGSLRRectGeometry geometry{rrect_batch_group};
+  skity::WGSLSolidVertexColor fragment{};
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+  std::string vs = shader_writer.GenVSSourceWGSL();
+  std::string fs = shader_writer.GenFSSourceWGSL();
+
+  std::cerr << vs << std::endl;
+
+  auto program = wgx::Program::Parse(vs);
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_vs_main_RRectGeometryStrokeWGSL.spv", result.spirv);
   auto words = result.spirv;
 }
 

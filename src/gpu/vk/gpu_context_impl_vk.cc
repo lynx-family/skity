@@ -659,7 +659,12 @@ bool CreateVkInstance(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
 GPUContextVK::GPUContextVK(std::shared_ptr<VulkanContextState> state)
     : GPUContextImpl(GPUBackendType::kVulkan), state_(std::move(state)) {}
 
-GPUContextVK::~GPUContextVK() = default;
+GPUContextVK::~GPUContextVK() {
+  if (state_ != nullptr) {
+    state_->CollectPendingSubmissions(true);
+  }
+  ResetOwnedResources();
+}
 
 std::unique_ptr<GPUSurface> GPUContextVK::CreateSurface(
     GPUSurfaceDescriptor* desc) {

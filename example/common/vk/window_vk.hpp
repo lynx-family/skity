@@ -41,6 +41,17 @@ class WindowVK : public Window {
   void OnTerminate() override;
 
  private:
+  struct FrameSyncObjects {
+    VkSemaphore image_available_semaphore = VK_NULL_HANDLE;
+    VkFence in_flight_fence = VK_NULL_HANDLE;
+  };
+
+  struct SwapchainImageState {
+    VkSemaphore render_finished_semaphore = VK_NULL_HANDLE;
+    VkFence in_flight_fence = VK_NULL_HANDLE;
+    std::unique_ptr<skity::GPUSurface> retired_surface;
+  };
+
   bool CreateInstance();
   bool CreateSurface();
   bool PickPhysicalDeviceAndQueueFamily();
@@ -56,6 +67,7 @@ class WindowVK : public Window {
   skity::Canvas* canvas_ = nullptr;
 
   VkInstance instance_ = VK_NULL_HANDLE;
+  VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;
   VkSurfaceKHR surface_khr_ = VK_NULL_HANDLE;
   VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
@@ -63,6 +75,7 @@ class WindowVK : public Window {
   uint32_t graphics_queue_family_index_ = 0;
 
   std::vector<const char*> enabled_instance_extensions_;
+  std::vector<const char*> enabled_instance_layers_;
   std::vector<const char*> enabled_device_extensions_;
 
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
@@ -72,11 +85,11 @@ class WindowVK : public Window {
       VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
   std::vector<VkImage> swapchain_images_;
   std::vector<VkImageView> swapchain_image_views_;
+  std::vector<SwapchainImageState> swapchain_image_states_;
   uint32_t current_image_index_ = 0;
+  uint32_t current_frame_slot_ = 0;
 
-  VkSemaphore image_available_semaphore_ = VK_NULL_HANDLE;
-  VkSemaphore render_finished_semaphore_ = VK_NULL_HANDLE;
-  VkFence in_flight_fence_ = VK_NULL_HANDLE;
+  std::vector<FrameSyncObjects> frame_sync_objects_;
   skity::GPUSurfaceSyncInfoVK surface_sync_info_ = {};
 };
 

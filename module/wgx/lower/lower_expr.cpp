@@ -486,6 +486,12 @@ bool Lowerer::EmitStore(const ir::ExprResult& source_expr,
   if (!source_value.IsValue()) {
     return false;
   }
+  if (source_value.type != target.type) {
+    source_value = ConvertValueToType(source_value, target.type, block);
+    if (!source_value.IsValue()) {
+      return false;
+    }
+  }
 
   ir::Instruction store_inst;
   store_inst.kind = ir::InstKind::kStore;
@@ -1577,6 +1583,12 @@ ir::ExprResult Lowerer::LowerBuiltinCallExpression(
            (type_table_->IsVectorType(type) &&
             type_table_->GetComponentType(type) == type_table_->GetF32Type());
   };
+  const auto is_same_type_or_scalar_for_vector =
+      [&](ir::TypeId reference_type, ir::TypeId candidate_type) {
+        return candidate_type == reference_type ||
+               (type_table_->IsVectorType(reference_type) &&
+                candidate_type == type_table_->GetF32Type());
+      };
 
   if (symbol->original_name == "atan") {
     if (call->args.size() != 1u && call->args.size() != 2u) {
@@ -2055,8 +2067,10 @@ ir::ExprResult Lowerer::LowerBuiltinCallExpression(
     ir::Value lhs_value = EnsureValue(lhs_expr, block);
     ir::Value rhs_value = EnsureValue(rhs_expr, block);
     if (!lhs_value.IsValue() || !rhs_value.IsValue() ||
-        lhs_value.type != rhs_value.type ||
         !is_f32_or_f32_vector(lhs_value.type)) {
+      return ir::ExprResult();
+    }
+    if (!is_same_type_or_scalar_for_vector(lhs_value.type, rhs_value.type)) {
       return ir::ExprResult();
     }
 
@@ -2089,8 +2103,10 @@ ir::ExprResult Lowerer::LowerBuiltinCallExpression(
     ir::Value lhs_value = EnsureValue(lhs_expr, block);
     ir::Value rhs_value = EnsureValue(rhs_expr, block);
     if (!lhs_value.IsValue() || !rhs_value.IsValue() ||
-        lhs_value.type != rhs_value.type ||
         !is_f32_or_f32_vector(lhs_value.type)) {
+      return ir::ExprResult();
+    }
+    if (!is_same_type_or_scalar_for_vector(lhs_value.type, rhs_value.type)) {
       return ir::ExprResult();
     }
 
@@ -2125,8 +2141,11 @@ ir::ExprResult Lowerer::LowerBuiltinCallExpression(
     ir::Value low = EnsureValue(low_expr, block);
     ir::Value high = EnsureValue(high_expr, block);
     if (!value.IsValue() || !low.IsValue() || !high.IsValue() ||
-        value.type != low.type || value.type != high.type ||
         !is_f32_or_f32_vector(value.type)) {
+      return ir::ExprResult();
+    }
+    if (!is_same_type_or_scalar_for_vector(value.type, low.type) ||
+        !is_same_type_or_scalar_for_vector(value.type, high.type)) {
       return ir::ExprResult();
     }
 

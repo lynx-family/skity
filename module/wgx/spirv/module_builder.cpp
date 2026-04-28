@@ -407,11 +407,11 @@ bool ResolveCastOpcode(ir::TypeId source_type, ir::TypeId result_type,
     return true;
   }
   if (source_is_u32 && result_is_i32) {
-    *out_op = SpvOpSConvert;
+    *out_op = SpvOpBitcast;
     return true;
   }
   if (source_is_i32 && result_is_u32) {
-    *out_op = SpvOpUConvert;
+    *out_op = SpvOpBitcast;
     return true;
   }
   return false;
@@ -1217,7 +1217,7 @@ bool ModuleBuilder::EmitStore(const ir::Instruction& inst) {
   if (!target.IsAddress() || !source.IsValue()) return false;
 
   uint32_t ptr_id = 0;
-  if (GetAddressPointer(target, source.type, &ptr_id) == 0) {
+  if (GetAddressPointer(target, target.type, &ptr_id) == 0) {
     return false;
   }
 
@@ -1719,11 +1719,38 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
     case ir::BuiltinCallKind::kSign:
       return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FSign));
     case ir::BuiltinCallKind::kMax:
-      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FMax));
-    case ir::BuiltinCallKind::kClamp:
-      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FClamp));
     case ir::BuiltinCallKind::kMin:
-      return emit_glsl_ext_inst(static_cast<uint32_t>(GLSLstd450FMin));
+    case ir::BuiltinCallKind::kClamp: {
+      uint32_t import_id = GetGlslStd450ImportId();
+      if (import_id == 0) {
+        return false;
+      }
+
+      const uint32_t expected_operands =
+          inst.builtin_call == ir::BuiltinCallKind::kClamp ? 3u : 2u;
+      if (inst.operands.size() != expected_operands) {
+        return false;
+      }
+
+      std::vector<uint32_t> operands = {
+          GetSpirvTypeId(inst.result_type), ids_.Allocate(), import_id,
+          inst.builtin_call == ir::BuiltinCallKind::kMax
+              ? static_cast<uint32_t>(GLSLstd450FMax)
+          : inst.builtin_call == ir::BuiltinCallKind::kMin
+              ? static_cast<uint32_t>(GLSLstd450FMin)
+              : static_cast<uint32_t>(GLSLstd450FClamp)};
+      for (const auto& operand : inst.operands) {
+        uint32_t value_id = 0;
+        if (!MaterializeBuiltinOperand(operand, inst.result_type, &value_id)) {
+          return false;
+        }
+        operands.push_back(value_id);
+      }
+
+      AppendInstruction(&sections_->functions, SpvOpExtInst, operands);
+      value_map_[inst.result_id] = operands[1];
+      return true;
+    }
     case ir::BuiltinCallKind::kStep: {
       if (inst.operands.size() != 2u) {
         return false;
