@@ -4,6 +4,7 @@
 
 #include "src/gpu/vk/gpu_context_impl_vk.hpp"
 
+#include <cmath>
 #include <skity/gpu/gpu_context_vk.hpp>
 #include <string>
 #include <vector>
@@ -681,17 +682,22 @@ std::unique_ptr<GPUSurface> GPUContextVK::CreateSurface(
     return nullptr;
   }
 
+  const uint32_t target_width = static_cast<uint32_t>(
+      std::floor(static_cast<float>(vk_desc->width) * vk_desc->content_scale));
+  const uint32_t target_height = static_cast<uint32_t>(
+      std::floor(static_cast<float>(vk_desc->height) * vk_desc->content_scale));
+
   if (vk_desc->image == VK_NULL_HANDLE ||
       vk_desc->image_view == VK_NULL_HANDLE ||
       vk_desc->format == VK_FORMAT_UNDEFINED || vk_desc->width == 0 ||
-      vk_desc->height == 0) {
+      vk_desc->height == 0 || target_width == 0 || target_height == 0) {
     LOGE("Failed to create Vulkan surface: invalid descriptor");
     return nullptr;
   }
 
   GPUTextureDescriptor texture_desc = {};
-  texture_desc.width = vk_desc->width;
-  texture_desc.height = vk_desc->height;
+  texture_desc.width = target_width;
+  texture_desc.height = target_height;
   texture_desc.mip_level_count = 1;
   texture_desc.sample_count = 1;
   texture_desc.format = ToGPUTextureFormat(vk_desc->format);

@@ -730,6 +730,42 @@ TEST_F(VulkanSharedContextTest, CreateRenderPipelineFromWGXFunctions) {
 }
 
 TEST_F(VulkanSharedContextTest,
+       CreateRenderPipelineWithDepthStencilFormatFallback) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+
+  auto vertex_function =
+      CreateWGXShaderFunction(device, kSimpleVertexWGSL, "vk_depth_pipeline_vs",
+                              "vs_main", skity::GPUShaderStage::kVertex);
+  ASSERT_NE(vertex_function, nullptr);
+  ASSERT_TRUE(vertex_function->IsValid());
+
+  auto fragment_function = CreateWGXShaderFunction(
+      device, kSimpleFragmentWGSL, "vk_depth_pipeline_fs", "fs_main",
+      skity::GPUShaderStage::kFragment);
+  ASSERT_NE(fragment_function, nullptr);
+  ASSERT_TRUE(fragment_function->IsValid());
+
+  skity::GPURenderPipelineDescriptor pipeline_desc = {};
+  pipeline_desc.vertex_function = vertex_function;
+  pipeline_desc.fragment_function = fragment_function;
+  pipeline_desc.target.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  pipeline_desc.sample_count = 1;
+  pipeline_desc.depth_stencil.format =
+      skity::GPUTextureFormat::kDepth24Stencil8;
+  pipeline_desc.depth_stencil.enable_depth = true;
+  pipeline_desc.depth_stencil.depth_state.enableWrite = true;
+  pipeline_desc.depth_stencil.depth_state.compare =
+      skity::GPUCompareFunction::kLessEqual;
+  pipeline_desc.label = skity::GPULabel("vk_depth_fallback_render_pipeline");
+
+  auto pipeline = device->CreateRenderPipeline(pipeline_desc);
+  ASSERT_NE(pipeline, nullptr);
+  ASSERT_TRUE(pipeline->IsValid());
+}
+
+TEST_F(VulkanSharedContextTest,
        CreateRenderPipelineFromWGXFunctionsWithUniformHelperVertexShader) {
   ASSERT_NE(GetContext(), nullptr);
   auto* device = GetDevice();

@@ -5,6 +5,7 @@
 #include "common/vk/window_vk.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -231,12 +232,22 @@ skity::Canvas* WindowVK::AquireCanvas() {
   surface_sync_info_.signal_semaphore = image_state.render_finished_semaphore;
   surface_sync_info_.signal_fence = frame_sync.in_flight_fence;
 
+  const int32_t logical_width = std::max(GetWidth(), 1);
+  const int32_t logical_height = std::max(GetHeight(), 1);
+
+  const float density =
+      static_cast<float>(swapchain_extent_.width * swapchain_extent_.width +
+                         swapchain_extent_.height * swapchain_extent_.height) /
+      static_cast<float>(logical_width * logical_width +
+                         logical_height * logical_height);
+  const float screen_scale = std::sqrt(density);
+
   skity::GPUSurfaceDescriptorVK desc = {};
   desc.backend = skity::GPUBackendType::kVulkan;
-  desc.width = swapchain_extent_.width;
-  desc.height = swapchain_extent_.height;
-  desc.content_scale = 1.f;
-  desc.sample_count = 1;
+  desc.width = static_cast<uint32_t>(logical_width);
+  desc.height = static_cast<uint32_t>(logical_height);
+  desc.content_scale = screen_scale;
+  desc.sample_count = 4;
   desc.surface_type = skity::VKSurfaceType::kSwapchainImage;
   desc.image = swapchain_images_[current_image_index_];
   desc.image_view = swapchain_image_views_[current_image_index_];

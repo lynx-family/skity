@@ -8,11 +8,10 @@
 
 namespace skity {
 
-VKRootLayer::VKRootLayer(std::shared_ptr<GPUTexture> texture, const Rect& bounds,
-                         GPUTextureFormat format)
-    : HWRootLayer(texture != nullptr ? texture->GetDescriptor().width : 0,
-                  texture != nullptr ? texture->GetDescriptor().height : 0,
-                  bounds, format),
+VKRootLayer::VKRootLayer(uint32_t width, uint32_t height,
+                         std::shared_ptr<GPUTexture> texture,
+                         const Rect& bounds, GPUTextureFormat format)
+    : HWRootLayer(width, height, bounds, format),
       color_attachment_(std::move(texture)) {}
 
 HWDrawState VKRootLayer::OnPrepare(HWDrawContext* context) {
