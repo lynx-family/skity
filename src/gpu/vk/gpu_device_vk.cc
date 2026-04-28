@@ -219,6 +219,48 @@ bool HasDepthStencilAttachmentFormat(skity::GPUTextureFormat format) {
   return HasDepthAttachmentFormat(format) || HasStencilAttachmentFormat(format);
 }
 
+bool IsAttachmentFormatSupported(const skity::VulkanContextState& state,
+                                 VkFormat format, VkImageUsageFlags usage,
+                                 VkSampleCountFlagBits samples) {
+  if (format == VK_FORMAT_UNDEFINED ||
+      state.InstanceFns().vkGetPhysicalDeviceImageFormatProperties == nullptr) {
+    return false;
+  }
+
+  VkImageFormatProperties properties = {};
+  const VkResult result =
+      state.InstanceFns().vkGetPhysicalDeviceImageFormatProperties(
+          state.GetPhysicalDevice(), format, VK_IMAGE_TYPE_2D,
+          VK_IMAGE_TILING_OPTIMAL, usage, 0, &properties);
+  if (result != VK_SUCCESS) {
+    return false;
+  }
+
+  return (properties.sampleCounts & samples) != 0;
+}
+
+VkFormat ResolveAttachmentFormat(const skity::VulkanContextState& state,
+                                 skity::GPUTextureFormat format,
+                                 VkSampleCountFlagBits samples) {
+  const VkImageUsageFlags usage =
+      HasDepthStencilAttachmentFormat(format)
+          ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+          : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+  const VkFormat preferred = skity::GPUTextureVK::ToVkFormat(format);
+  if (IsAttachmentFormatSupported(state, preferred, usage, samples)) {
+    return preferred;
+  }
+
+  if (format == skity::GPUTextureFormat::kDepth24Stencil8 &&
+      IsAttachmentFormatSupported(state, VK_FORMAT_D32_SFLOAT_S8_UINT, usage,
+                                  samples)) {
+    return VK_FORMAT_D32_SFLOAT_S8_UINT;
+  }
+
+  return VK_FORMAT_UNDEFINED;
+}
+
 VkSamplerMipmapMode ToVkSamplerMipmapMode(skity::GPUMipmapMode mode) {
   switch (mode) {
     case skity::GPUMipmapMode::kLinear:
@@ -275,20 +317,21 @@ bool CreateDescriptorSetLayout(const skity::VulkanContextState& state,
 }
 
 skity::VulkanContextState::LegacyRenderPassKey BuildPipelineRenderPassKey(
+    const skity::VulkanContextState& state,
     const skity::GPURenderPipelineDescriptor& desc) {
   skity::VulkanContextState::LegacyRenderPassKey key = {};
-  key.color_format = skity::GPUTextureVK::ToVkFormat(desc.target.format);
   key.color_samples = static_cast<VkSampleCountFlagBits>(desc.sample_count);
+  key.color_format =
+      ResolveAttachmentFormat(state, desc.target.format, key.color_samples);
   key.color_load_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   key.color_store_op = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
   key.has_depth = HasDepthAttachmentFormat(desc.depth_stencil.format);
   key.has_stencil = HasStencilAttachmentFormat(desc.depth_stencil.format);
   if (key.has_depth || key.has_stencil) {
-    key.depth_stencil_format =
-        skity::GPUTextureVK::ToVkFormat(desc.depth_stencil.format);
-    key.depth_stencil_samples =
-        static_cast<VkSampleCountFlagBits>(desc.sample_count);
+    key.depth_stencil_format = ResolveAttachmentFormat(
+        state, desc.depth_stencil.format, key.color_samples);
+    key.depth_stencil_samples = key.color_samples;
     key.depth_load_op = key.has_depth ? VK_ATTACHMENT_LOAD_OP_DONT_CARE
                                       : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     key.depth_store_op = key.has_depth ? VK_ATTACHMENT_STORE_OP_DONT_CARE
@@ -314,10 +357,29 @@ bool BuildPipelineTargetInfo(const skity::VulkanContextState& state,
     return false;
   }
 
-  target_info->color_format =
-      skity::GPUTextureVK::ToVkFormat(desc.target.format);
+  target_info->color_format = ResolveAttachmentFormat(
+      state, desc.target.format,
+      static_cast<VkSampleCountFlagBits>(desc.sample_count));
+  if (target_info->color_format == VK_FORMAT_UNDEFINED) {
+    LOGE("Unsupported Vulkan color attachment format for render pipeline");
+    return false;
+  }
 
   if (state.IsDynamicRenderingEnabled()) {
+    const VkFormat depth_stencil_format =
+        HasDepthStencilAttachmentFormat(desc.depth_stencil.format)
+            ? ResolveAttachmentFormat(
+                  state, desc.depth_stencil.format,
+                  static_cast<VkSampleCountFlagBits>(desc.sample_count))
+            : VK_FORMAT_UNDEFINED;
+    if (HasDepthStencilAttachmentFormat(desc.depth_stencil.format) &&
+        depth_stencil_format == VK_FORMAT_UNDEFINED) {
+      LOGE(
+          "Unsupported Vulkan depth/stencil attachment format for render "
+          "pipeline");
+      return false;
+    }
+
     target_info->uses_dynamic_rendering = true;
     target_info->rendering_info.sType =
         VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -326,16 +388,16 @@ bool BuildPipelineTargetInfo(const skity::VulkanContextState& state,
         &target_info->color_format;
     target_info->rendering_info.depthAttachmentFormat =
         HasDepthAttachmentFormat(desc.depth_stencil.format)
-            ? skity::GPUTextureVK::ToVkFormat(desc.depth_stencil.format)
+            ? depth_stencil_format
             : VK_FORMAT_UNDEFINED;
     target_info->rendering_info.stencilAttachmentFormat =
         HasStencilAttachmentFormat(desc.depth_stencil.format)
-            ? skity::GPUTextureVK::ToVkFormat(desc.depth_stencil.format)
+            ? depth_stencil_format
             : VK_FORMAT_UNDEFINED;
     return true;
   }
 
-  const auto render_pass_key = BuildPipelineRenderPassKey(desc);
+  const auto render_pass_key = BuildPipelineRenderPassKey(state, desc);
   target_info->render_pass = state.GetOrCreateLegacyRenderPass(render_pass_key);
   return target_info->render_pass != VK_NULL_HANDLE;
 }

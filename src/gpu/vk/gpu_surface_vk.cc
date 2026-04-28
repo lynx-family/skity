@@ -25,7 +25,8 @@ void GPUSurfaceVK::PrepareForSubmit(GPUCommandBuffer* command_buffer) {
 
 HWRootLayer* GPUSurfaceVK::OnBeginNextFrame(bool clear) {
   auto root_layer = GetArenaAllocator()->Make<VKRootLayer>(
-      texture_, Rect::MakeWH(GetWidth(), GetHeight()), GetGPUFormat());
+      target_width_, target_height_, texture_,
+      Rect::MakeWH(GetWidth(), GetHeight()), GetGPUFormat());
   root_layer->SetClearSurface(clear);
   root_layer->SetSampleCount(GetSampleCount());
   root_layer->SetArenaAllocator(GetArenaAllocator());

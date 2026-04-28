@@ -5,6 +5,7 @@
 #ifndef SRC_GPU_VK_GPU_SURFACE_VK_HPP
 #define SRC_GPU_VK_GPU_SURFACE_VK_HPP
 
+#include <cmath>
 #include <memory>
 #include <skity/gpu/gpu_context_vk.hpp>
 
@@ -20,6 +21,10 @@ class GPUSurfaceVK : public GPUSurfaceImpl {
                std::shared_ptr<GPUTexture> texture, GPUTextureFormat format,
                const GPUSurfaceSyncInfoVK* sync_info)
       : GPUSurfaceImpl(desc, ctx),
+        target_width_(static_cast<uint32_t>(
+            std::floor(static_cast<float>(desc.width) * desc.content_scale))),
+        target_height_(static_cast<uint32_t>(
+            std::floor(static_cast<float>(desc.height) * desc.content_scale))),
         texture_(std::move(texture)),
         format_(format),
         sync_info_(sync_info) {}
@@ -38,6 +43,8 @@ class GPUSurfaceVK : public GPUSurfaceImpl {
   void OnFlush() override {}
 
  private:
+  uint32_t target_width_ = 0;
+  uint32_t target_height_ = 0;
   std::shared_ptr<GPUTexture> texture_ = {};
   GPUTextureFormat format_ = GPUTextureFormat::kInvalid;
   const GPUSurfaceSyncInfoVK* sync_info_ = nullptr;

@@ -13,7 +13,8 @@ class GPUTexture;
 
 class VKRootLayer : public HWRootLayer {
  public:
-  VKRootLayer(std::shared_ptr<GPUTexture> texture, const Rect& bounds,
+  VKRootLayer(uint32_t width, uint32_t height,
+              std::shared_ptr<GPUTexture> texture, const Rect& bounds,
               GPUTextureFormat format);
 
   ~VKRootLayer() override = default;
