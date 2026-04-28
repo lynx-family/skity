@@ -13,6 +13,26 @@ bool SupportsSwitchType(ir::TypeId type_id, ir::TypeTable* type_table) {
   return type_table != nullptr && type_table->IsIntegerType(type_id);
 }
 
+bool IsVectorScalarCompoundAssignment(ast::BinaryOp op, ir::TypeId lhs_type,
+                                      ir::TypeId rhs_type,
+                                      ir::TypeTable* type_table) {
+  if (type_table == nullptr) {
+    return false;
+  }
+
+  if (op != ast::BinaryOp::kAdd && op != ast::BinaryOp::kSubtract &&
+      op != ast::BinaryOp::kMultiply && op != ast::BinaryOp::kDivide) {
+    return false;
+  }
+
+  if (!type_table->IsVectorType(lhs_type) ||
+      !type_table->IsScalarType(rhs_type)) {
+    return false;
+  }
+
+  return type_table->GetComponentType(lhs_type) == rhs_type;
+}
+
 }  // namespace
 
 bool Lowerer::LowerStatement(const ast::Statement* statement,
@@ -1168,7 +1188,9 @@ bool Lowerer::LowerAssignStatement(const ast::AssignStatement* assign,
       return false;
     }
 
-    if (lhs_value.type != rhs_value.type) {
+    if (lhs_value.type != rhs_value.type &&
+        !IsVectorScalarCompoundAssignment(*assign->op, lhs_value.type,
+                                          rhs_value.type, type_table_)) {
       return false;
     }
 

@@ -606,7 +606,9 @@ bool RecordDrawCommands(const std::shared_ptr<const VulkanContextState>& state,
 
   VkDescriptorPool descriptor_pool = CreateDescriptorPoolForPass(state, pass);
   if (descriptor_pool != VK_NULL_HANDLE) {
-    command_buffer.RecordCleanupAction([state, descriptor_pool]() {
+    std::weak_ptr<const VulkanContextState> weak_state = state;
+    command_buffer.RecordCleanupAction([weak_state, descriptor_pool]() {
+      auto state = weak_state.lock();
       if (state == nullptr || state->GetLogicalDevice() == VK_NULL_HANDLE ||
           state->DeviceFns().vkDestroyDescriptorPool == nullptr) {
         return;
@@ -978,7 +980,9 @@ bool RecordLegacyRenderPass(
                           depth_stencil_context.final_layout);
   }
 
-  command_buffer.RecordCleanupAction([state, framebuffer]() {
+  std::weak_ptr<const VulkanContextState> weak_state = state;
+  command_buffer.RecordCleanupAction([weak_state, framebuffer]() {
+    auto state = weak_state.lock();
     if (state == nullptr || state->GetLogicalDevice() == VK_NULL_HANDLE) {
       return;
     }

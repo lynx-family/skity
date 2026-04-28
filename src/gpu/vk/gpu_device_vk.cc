@@ -206,6 +206,19 @@ VkFilter ToVkFilter(skity::GPUFilterMode mode) {
   return VK_FILTER_NEAREST;
 }
 
+bool HasDepthAttachmentFormat(skity::GPUTextureFormat format) {
+  return format == skity::GPUTextureFormat::kDepth24Stencil8;
+}
+
+bool HasStencilAttachmentFormat(skity::GPUTextureFormat format) {
+  return format == skity::GPUTextureFormat::kStencil8 ||
+         format == skity::GPUTextureFormat::kDepth24Stencil8;
+}
+
+bool HasDepthStencilAttachmentFormat(skity::GPUTextureFormat format) {
+  return HasDepthAttachmentFormat(format) || HasStencilAttachmentFormat(format);
+}
+
 VkSamplerMipmapMode ToVkSamplerMipmapMode(skity::GPUMipmapMode mode) {
   switch (mode) {
     case skity::GPUMipmapMode::kLinear:
@@ -269,8 +282,8 @@ skity::VulkanContextState::LegacyRenderPassKey BuildPipelineRenderPassKey(
   key.color_load_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   key.color_store_op = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-  key.has_depth = desc.depth_stencil.enable_depth;
-  key.has_stencil = desc.depth_stencil.enable_stencil;
+  key.has_depth = HasDepthAttachmentFormat(desc.depth_stencil.format);
+  key.has_stencil = HasStencilAttachmentFormat(desc.depth_stencil.format);
   if (key.has_depth || key.has_stencil) {
     key.depth_stencil_format =
         skity::GPUTextureVK::ToVkFormat(desc.depth_stencil.format);
@@ -312,11 +325,11 @@ bool BuildPipelineTargetInfo(const skity::VulkanContextState& state,
     target_info->rendering_info.pColorAttachmentFormats =
         &target_info->color_format;
     target_info->rendering_info.depthAttachmentFormat =
-        desc.depth_stencil.enable_depth
+        HasDepthAttachmentFormat(desc.depth_stencil.format)
             ? skity::GPUTextureVK::ToVkFormat(desc.depth_stencil.format)
             : VK_FORMAT_UNDEFINED;
     target_info->rendering_info.stencilAttachmentFormat =
-        desc.depth_stencil.enable_stencil
+        HasStencilAttachmentFormat(desc.depth_stencil.format)
             ? skity::GPUTextureVK::ToVkFormat(desc.depth_stencil.format)
             : VK_FORMAT_UNDEFINED;
     return true;
@@ -805,7 +818,7 @@ std::unique_ptr<GPURenderPipelineVK> GPUDeviceVK::CreateRenderPipelineInternal(
   pipeline_info.pMultisampleState = &multisample_state;
   pipeline_info.pDynamicState = &dynamic_state;
   pipeline_info.pDepthStencilState =
-      (desc.depth_stencil.enable_depth || desc.depth_stencil.enable_stencil)
+      HasDepthStencilAttachmentFormat(desc.depth_stencil.format)
           ? &depth_stencil_state
           : nullptr;
   pipeline_info.pColorBlendState = &color_blend_state;

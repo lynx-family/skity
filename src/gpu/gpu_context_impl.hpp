@@ -59,6 +59,8 @@ class GPUContextImpl : public GPUContext {
   std::shared_ptr<Data> ReadPixels(const std::shared_ptr<GPUTexture>& texture);
 
  protected:
+  void ResetOwnedResources();
+
   virtual std::unique_ptr<GPUDevice> CreateGPUDevice() = 0;
 
   virtual std::shared_ptr<GPUTexture> OnWrapTexture(
