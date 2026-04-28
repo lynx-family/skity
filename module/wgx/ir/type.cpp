@@ -290,11 +290,15 @@ TypeTable::LayoutInfo TypeTable::GetLayoutInfo(TypeId id,
       uint32_t num_components = type->count;
 
       if (rule == LayoutRule::kStd140) {
-        // std140: vec2 = 8 bytes, align 8; vec3/vec4 = 16 bytes, align 16
+        // std140: vec2 = 8 bytes, align 8; vec3 = 12 bytes, align 16;
+        // vec4 = 16 bytes, align 16. Arrays/matrices round vec3 stride up to
+        // 16 separately, but a following scalar member may reuse the last
+        // component slot in the same 16-byte register.
         if (num_components == 2) {
           return LayoutInfo{8, 8};
+        } else if (num_components == 3) {
+          return LayoutInfo{12, 16};
         } else {
-          // vec3 and vec4 both use 16 bytes in std140
           return LayoutInfo{16, 16};
         }
       } else {
@@ -316,9 +320,6 @@ TypeTable::LayoutInfo TypeTable::GetLayoutInfo(TypeId id,
       uint32_t cols = type->count2;
       uint32_t vec_align = (rule == LayoutRule::kStd140 || rows >= 3) ? 16 : 8;
       uint32_t vec_size = rows * 4;
-      if (rule == LayoutRule::kStd140 && rows == 3) {
-        vec_size = 16;  // vec3 takes 16 bytes in std140
-      }
 
       // Array stride is rounded up to alignment
       uint32_t stride = AlignOffset(vec_size, vec_align);
