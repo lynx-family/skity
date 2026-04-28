@@ -502,7 +502,8 @@ struct MatrixFilterInfo
 @group(1) @binding(1) var<uniform> uMatrixFilterInfo : MatrixFilterInfo;
 fn filter_color(input_color: vec4<f32>) -> vec4<f32>{
   if input_color.a > 0.0 {
-    input_color.rgb /= input_color.a;
+    var temp: vec3<f32> = input_color.rgb / input_color.a;
+    input_color = vec4<f32>(temp, input_color.a);
   }
 
   var color: vec4<f32> = uMatrixFilterInfo.matrix_mul * input_color + uMatrixFilterInfo.matrix_add;

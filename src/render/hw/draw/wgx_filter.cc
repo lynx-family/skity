@@ -284,7 +284,8 @@ class WGXMatrixFilter : public WGXFilterFragment {
     }
     wgsl_source += R"(
             if input_color.a > 0.0 {
-               input_color.rgb /= input_color.a;
+               var temp: vec3<f32> = input_color.rgb / input_color.a;
+               input_color = vec4<f32>(temp, input_color.a);
             }
 
             var color: vec4<f32> = uMatrixFilterInfo.matrix_mul * input_color + uMatrixFilterInfo.matrix_add;
@@ -361,7 +362,7 @@ class WGXGammaFilter : public WGXFilterFragment {
     if (type_ == ColorFilterType::kLinearToSRGBGamma) {
       wgsl_source += R"(
         {
-            for (var i: int = 0; i < 3; i++) {
+            for (var i: i32 = 0; i < 3; i++) {
                 if input_color[i] <= 0.0031308 {
                     input_color[i] *= 12.92;
                 } else {
@@ -375,7 +376,7 @@ class WGXGammaFilter : public WGXFilterFragment {
     } else if (type_ == ColorFilterType::kSRGBToLinearGamma) {
       wgsl_source += R"(
         {
-            for (var i: int = 0; i < 3; i++) {
+            for (var i: i32 = 0; i < 3; i++) {
                 if input_color[i] <= 0.04045 {
                     input_color[i] /= 12.92;
                 } else {
