@@ -213,6 +213,44 @@ bool IsMatrixVectorBinary(ast::BinaryOp op, ir::TypeId lhs_type,
   return *result_type != ir::kInvalidTypeId;
 }
 
+bool IsMatrixScalarBinary(ast::BinaryOp op, ir::TypeId lhs_type,
+                          ir::TypeId rhs_type, ir::TypeTable* type_table,
+                          ir::TypeId* result_type) {
+  if (type_table == nullptr || result_type == nullptr ||
+      (op != ast::BinaryOp::kMultiply && op != ast::BinaryOp::kDivide)) {
+    return false;
+  }
+
+  const bool lhs_is_matrix = type_table->IsMatrixType(lhs_type);
+  const bool rhs_is_matrix = type_table->IsMatrixType(rhs_type);
+  const bool lhs_is_scalar = type_table->IsScalarType(lhs_type);
+  const bool rhs_is_scalar = type_table->IsScalarType(rhs_type);
+
+  if (lhs_is_matrix && rhs_is_scalar) {
+    const ir::Type* lhs_matrix_type = type_table->GetType(lhs_type);
+    if (lhs_matrix_type == nullptr ||
+        lhs_matrix_type->element_type != type_table->GetF32Type() ||
+        rhs_type != type_table->GetF32Type()) {
+      return false;
+    }
+    *result_type = lhs_type;
+    return true;
+  }
+
+  if (op == ast::BinaryOp::kMultiply && lhs_is_scalar && rhs_is_matrix) {
+    const ir::Type* rhs_matrix_type = type_table->GetType(rhs_type);
+    if (rhs_matrix_type == nullptr ||
+        rhs_matrix_type->element_type != type_table->GetF32Type() ||
+        lhs_type != type_table->GetF32Type()) {
+      return false;
+    }
+    *result_type = rhs_type;
+    return true;
+  }
+
+  return false;
+}
+
 bool IsMatrixMatrixBinary(ast::BinaryOp op, ir::TypeId lhs_type,
                           ir::TypeId rhs_type, ir::TypeTable* type_table,
                           ir::TypeId* result_type) {
@@ -1054,6 +1092,44 @@ ir::ExprResult Lowerer::LowerMatrixConstructor(ast::Expression* expression) {
     return ir::ExprResult();
   }
 
+  if (call->args.empty()) {
+    ir::Block* current_block = CurrentBlock();
+    if (current_block == nullptr) {
+      return ir::ExprResult();
+    }
+
+    std::vector<ir::Value> column_values;
+    column_values.reserve(cols);
+    for (uint32_t col = 0; col < cols; ++col) {
+      ir::Instruction column_construct;
+      column_construct.kind = ir::InstKind::kConstruct;
+      column_construct.result_type = column_type;
+      column_construct.result_id = AllocateSSAId();
+      if (column_construct.result_id == 0) {
+        return ir::ExprResult();
+      }
+      for (uint32_t row = 0; row < rows; ++row) {
+        column_construct.operands.push_back(
+            ir::Value::ConstantF32(component_type, 0.0f));
+      }
+      current_block->instructions.emplace_back(column_construct);
+      column_values.push_back(
+          ir::Value::SSA(column_type, column_construct.result_id));
+    }
+
+    ir::Instruction matrix_construct;
+    matrix_construct.kind = ir::InstKind::kConstruct;
+    matrix_construct.result_type = matrix_type;
+    matrix_construct.result_id = AllocateSSAId();
+    if (matrix_construct.result_id == 0) {
+      return ir::ExprResult();
+    }
+    matrix_construct.operands = std::move(column_values);
+    current_block->instructions.emplace_back(matrix_construct);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(matrix_type, matrix_construct.result_id));
+  }
+
   const bool scalar_form = call->args.size() == rows * cols;
   const bool column_form = call->args.size() == cols;
   if (!scalar_form && !column_form) {
@@ -1212,6 +1288,8 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
   if (lhs_value.type != rhs_value.type) {
     if (!IsVectorScalarBinary(binary->op, lhs_value.type, rhs_value.type,
                               type_table_, &result_type) &&
+        !IsMatrixScalarBinary(binary->op, lhs_value.type, rhs_value.type,
+                              type_table_, &result_type) &&
         !IsMatrixVectorBinary(binary->op, lhs_value.type, rhs_value.type,
                               type_table_, &result_type) &&
         !IsMatrixMatrixBinary(binary->op, lhs_value.type, rhs_value.type,
@@ -1334,21 +1412,6 @@ ir::ExprResult Lowerer::LowerIndexAccessorExpression(
       has_constant_index = true;
       constant_index = index_value.GetU32Unchecked();
     }
-  }
-
-  if (base_expr.IsAddress() && has_constant_index &&
-      (type_table_->IsVectorType(base_expr.GetType()) ||
-       type_table_->IsMatrixType(base_expr.GetType()))) {
-    ir::Value base_value = EnsureValue(base_expr, current_block);
-    if (!base_value.IsValue()) {
-      return ir::ExprResult();
-    }
-    access_inst.kind = ir::InstKind::kExtract;
-    access_inst.operands.push_back(base_value);
-    access_inst.access_index = constant_index;
-    current_block->instructions.emplace_back(access_inst);
-    return ir::ExprResult::ValueResult(
-        ir::Value::SSA(result_type, access_inst.result_id));
   }
 
   if (base_expr.IsAddress()) {

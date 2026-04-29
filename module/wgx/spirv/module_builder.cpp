@@ -116,6 +116,29 @@ bool IsMatrixMatrixMultiply(const ir::Instruction& inst,
          result_matrix_type->count2 == rhs_matrix_type->count2;
 }
 
+bool IsMatrixScalarBinary(const ir::Instruction& inst,
+                          ir::TypeTable* type_table) {
+  if (type_table == nullptr || inst.operands.size() != 2u ||
+      (inst.binary_op != ir::BinaryOpKind::kMultiply &&
+       inst.binary_op != ir::BinaryOpKind::kDivide) ||
+      !type_table->IsMatrixType(inst.result_type)) {
+    return false;
+  }
+
+  const ir::TypeId lhs_type = inst.operands[0].type;
+  const ir::TypeId rhs_type = inst.operands[1].type;
+  const ir::TypeId f32_type = type_table->GetF32Type();
+
+  if (type_table->IsMatrixType(lhs_type) && rhs_type == f32_type &&
+      inst.result_type == lhs_type) {
+    return true;
+  }
+
+  return inst.binary_op == ir::BinaryOpKind::kMultiply &&
+         lhs_type == f32_type && type_table->IsMatrixType(rhs_type) &&
+         inst.result_type == rhs_type;
+}
+
 bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
                          ir::TypeId result_type, ir::TypeTable* type_table,
                          SpvOp* out_op) {
@@ -1340,6 +1363,11 @@ bool ModuleBuilder::EmitBinary(const ir::Instruction& inst) {
                                   &rhs_id)) {
       return false;
     }
+  } else if (IsMatrixScalarBinary(inst, type_table)) {
+    if (!MaterializeValue(inst.operands[0], &lhs_id) ||
+        !MaterializeValue(inst.operands[1], &rhs_id)) {
+      return false;
+    }
   } else {
     if (!MaterializeValue(inst.operands[0], &lhs_id) ||
         !MaterializeValue(inst.operands[1], &rhs_id)) {
@@ -1361,6 +1389,32 @@ bool ModuleBuilder::EmitBinary(const ir::Instruction& inst) {
     AppendInstruction(
         &sections_->functions, SpvOpMatrixTimesMatrix,
         {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
+    value_map_[inst.result_id] = result_id;
+    return true;
+  }
+
+  if (IsMatrixScalarBinary(inst, type_table)) {
+    uint32_t result_id = ids_.Allocate();
+    const bool scalar_on_left =
+        type_table->IsScalarType(inst.operands[0].type) &&
+        !type_table->IsScalarType(inst.operands[1].type);
+    if (scalar_on_left) {
+      AppendInstruction(
+          &sections_->functions, SpvOpMatrixTimesScalar,
+          {GetSpirvTypeId(inst.result_type), result_id, rhs_id, lhs_id});
+    } else if (inst.binary_op == ir::BinaryOpKind::kMultiply) {
+      AppendInstruction(
+          &sections_->functions, SpvOpMatrixTimesScalar,
+          {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
+    } else {
+      uint32_t inv_id = ids_.Allocate();
+      AppendInstruction(&sections_->functions, SpvOpFDiv,
+                        {GetSpirvTypeId(inst.operands[1].type), inv_id,
+                         type_emitter_->EmitF32Constant(1.0f), rhs_id});
+      AppendInstruction(
+          &sections_->functions, SpvOpMatrixTimesScalar,
+          {GetSpirvTypeId(inst.result_type), result_id, lhs_id, inv_id});
+    }
     value_map_[inst.result_id] = result_id;
     return true;
   }

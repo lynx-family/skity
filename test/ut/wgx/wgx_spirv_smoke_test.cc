@@ -3978,6 +3978,60 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithMatrixElementAssignment) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  var m: mat3x3<f32> = mat3x3<f32>();
+  m[0][0] = 1.0;
+  m[1][2] = 2.0;
+  let xy: vec2<f32> = vec2<f32>(m[0][0], m[1][2]);
+  return vec4<f32>(xy, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpAccessChain));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpStore));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpCompositeExtract));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsSpirvWithMatrixScalarMultiply) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main() -> @builtin(position) vec4<f32> {
+  let m: mat2x2<f32> = mat2x2<f32>(1.0, 0.0, 0.0, 1.0);
+  let scaled: mat2x2<f32> = m * 0.5;
+  let xy: vec2<f32> = scaled * vec2<f32>(0.25, 0.5);
+  return vec4<f32>(xy, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpMatrixTimesScalar));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpMatrixTimesVector));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsGradientLinear4OffsetFastTextWGSL) {
   skity::Shader::GradientInfo gradient_info;
   gradient_info.color_count = 4;
@@ -4035,6 +4089,45 @@ TEST(WgxSpirvSmokeTest, EmitsGradientLinear4WGSL) {
 
   ASSERT_TRUE(result.success);
   DumpSpirvBinary("wgx_GradientLinear4WGSL.spv", result.spirv);
+  auto words = result.spirv;
+}
+
+TEST(WgxSpirvSmokeTest, EmitsGradientConic4WGSL) {
+  skity::Shader::GradientInfo gradient_info;
+  gradient_info.color_count = 4;
+  gradient_info.colors = {{0.0, 0.0, 0.0, 1.0},
+                          {1.0, 0.0, 0.0, 1.0},
+                          {0.0, 1.0, 0.0, 1.0},
+                          {0.0, 0.0, 1.0, 1.0}};
+  gradient_info.point = {skity::Point{0.5, 0.5, 0.f, 1.f},
+                         skity::Point{5.5, 0.5, 0.f, 1.f}};
+  gradient_info.radius = {0.5f, 1.5f};
+  gradient_info.color_offsets = {0.0f, 0.5f, 1.0f, 1.5f};
+  skity::WGSLGradientFragment gradient_fragment(
+      gradient_info, skity::Shader::GradientType::kConical, 1.0f, {});
+
+  skity::Paint paint;
+  auto rrect = skity::RRect::MakeOval(skity::Rect::MakeWH(100.0f, 100.0f));
+  std::vector<skity::BatchGroup<skity::RRect>> rrect_batch_group;
+  rrect_batch_group.push_back({rrect, paint});
+  skity::WGSLRRectGeometry geometry{rrect_batch_group};
+
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &gradient_fragment};
+
+  auto fs = shader_writer.GenFSSourceWGSL();
+
+  auto program = wgx::Program::Parse(fs);
+
+  std::cerr << fs << std::endl;
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_GradientConic4WGSL.spv", result.spirv);
   auto words = result.spirv;
 }
 
