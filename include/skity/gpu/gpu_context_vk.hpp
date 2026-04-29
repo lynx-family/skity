@@ -278,6 +278,62 @@ struct GPUSurfaceDescriptorVK : public GPUSurfaceDescriptor {
   const GPUSurfaceSyncInfoVK* sync_info = nullptr;
 };
 
+struct GPUPresenterDescriptorVK : public GPUPresenterDescriptor {
+  /**
+   * Vulkan presentation surface used to create the swapchain.
+   */
+  VkSurfaceKHR surface = VK_NULL_HANDLE;
+
+  /**
+   * Optional Vulkan present queue. If null, the engine will pick a preferred
+   * queue.
+   */
+  VkQueue present_queue = VK_NULL_HANDLE;
+
+  /**
+   * Queue family index matching `present_queue`. If -1, the engine will pick a
+   * preferred queue family.
+   */
+  int32_t present_queue_family_index = -1;
+
+  /**
+   * Requested minimum swapchain image count.
+   */
+  uint32_t min_image_count = 2;
+
+  /**
+   * Preferred swapchain image format.
+   */
+  VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
+
+  /**
+   * Preferred swapchain color space.
+   */
+  VkColorSpaceKHR color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+
+  /**
+   * Preferred swapchain present mode.
+   */
+  VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+
+  /**
+   * Composite alpha mode for the swapchain.
+   */
+  VkCompositeAlphaFlagBitsKHR composite_alpha =
+      VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+
+  /**
+   * Preferred swapchain transform for presented images.
+   */
+  VkSurfaceTransformFlagBitsKHR pre_transform =
+      VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+
+  /**
+   * Whether obscured pixels may be discarded by presentation.
+   */
+  bool clipped = true;
+};
+
 /**
  * Create GPUContext with Vulkan info.
  *

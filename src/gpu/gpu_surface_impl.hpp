@@ -24,6 +24,10 @@ class GPUSurfaceImpl : public GPUSurface {
 
   ~GPUSurfaceImpl() override;
 
+  GPUBackendType GetBackendType() const override {
+    return ctx_ != nullptr ? ctx_->GetBackendType() : GPUBackendType::kNone;
+  }
+
   uint32_t GetWidth() const override { return width_; }
 
   uint32_t GetHeight() const override { return height_; }
@@ -46,9 +50,7 @@ class GPUSurfaceImpl : public GPUSurface {
 
   virtual GPUTextureFormat GetGPUFormat() const = 0;
 
-  virtual void PrepareForSubmit(GPUCommandBuffer* command_buffer) {
-    (void)command_buffer;
-  }
+  virtual const GPUSubmitInfo* GetSubmitInfo() const { return nullptr; }
 
  protected:
   virtual HWRootLayer* OnBeginNextFrame(bool clear) = 0;

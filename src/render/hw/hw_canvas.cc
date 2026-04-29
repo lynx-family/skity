@@ -642,11 +642,14 @@ void HWCanvas::OnFlush() {
 
     UploadMesh(cmd.get());
 
+    cmd->HoldResource(gpu_buffer_->GetGPUBufferOwner());
+    cmd->HoldResource(gpu_buffer_->GetGPUIndexBufferOwner());
+    cmd->HoldResource(static_buffer_->GetGPUBufferOwner());
+    cmd->HoldResource(static_buffer_->GetGPUIndexBufferOwner());
+
     root_layer_->Draw(nullptr, cmd.get());
 
-    surface_->PrepareForSubmit(cmd.get());
-
-    cmd->Submit();
+    cmd->Submit(surface_->GetSubmitInfo());
   }
 
   layer_stack_.clear();

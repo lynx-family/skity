@@ -26,6 +26,9 @@ class GPUContextVK : public GPUContextImpl {
   std::unique_ptr<GPUSurface> CreateSurface(
       GPUSurfaceDescriptor* desc) override;
 
+  std::unique_ptr<GPUPresenter> CreatePresenter(
+      GPUPresenterDescriptor* desc) override;
+
   const VulkanContextState* GetState() const { return state_.get(); }
 
  protected:

@@ -57,7 +57,7 @@ void SetVkObjectDebugLabel(const VulkanContextState& state,
 
 VkResult SubmitCommandBuffer(const VulkanContextState& state, VkQueue queue,
                              VkCommandBuffer command_buffer, VkFence fence,
-                             const GPUSurfaceSyncInfoVK* sync_info) {
+                             const GPUSubmitInfoVK* submit_info) {
   const auto& device_fns = state.DeviceFns();
   if (state.IsSynchronization2Enabled() &&
       device_fns.vkQueueSubmit2 != nullptr) {
@@ -67,18 +67,20 @@ VkResult SubmitCommandBuffer(const VulkanContextState& state, VkQueue queue,
     command_buffer_info.deviceMask = 0;
 
     VkSemaphoreSubmitInfo wait_semaphore_info = {};
-    if (sync_info != nullptr && sync_info->wait_semaphore != VK_NULL_HANDLE) {
+    if (submit_info != nullptr &&
+        submit_info->wait_semaphore != VK_NULL_HANDLE) {
       wait_semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-      wait_semaphore_info.semaphore = sync_info->wait_semaphore;
-      wait_semaphore_info.stageMask = sync_info->wait_dst_stage_mask;
+      wait_semaphore_info.semaphore = submit_info->wait_semaphore;
+      wait_semaphore_info.stageMask = submit_info->wait_dst_stage_mask;
       wait_semaphore_info.deviceIndex = 0;
       wait_semaphore_info.value = 0;
     }
 
     VkSemaphoreSubmitInfo signal_semaphore_info = {};
-    if (sync_info != nullptr && sync_info->signal_semaphore != VK_NULL_HANDLE) {
+    if (submit_info != nullptr &&
+        submit_info->signal_semaphore != VK_NULL_HANDLE) {
       signal_semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-      signal_semaphore_info.semaphore = sync_info->signal_semaphore;
+      signal_semaphore_info.semaphore = submit_info->signal_semaphore;
       signal_semaphore_info.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
       signal_semaphore_info.deviceIndex = 0;
       signal_semaphore_info.value = 0;
@@ -101,23 +103,24 @@ VkResult SubmitCommandBuffer(const VulkanContextState& state, VkQueue queue,
   }
 
   VkPipelineStageFlags wait_stage_mask =
-      sync_info != nullptr ? sync_info->wait_dst_stage_mask
-                           : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  VkSubmitInfo submit_info = {};
-  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  if (sync_info != nullptr && sync_info->wait_semaphore != VK_NULL_HANDLE) {
-    submit_info.waitSemaphoreCount = 1;
-    submit_info.pWaitSemaphores = &sync_info->wait_semaphore;
-    submit_info.pWaitDstStageMask = &wait_stage_mask;
+      submit_info != nullptr ? submit_info->wait_dst_stage_mask
+                             : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  VkSubmitInfo vk_submit_info = {};
+  vk_submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  if (submit_info != nullptr && submit_info->wait_semaphore != VK_NULL_HANDLE) {
+    vk_submit_info.waitSemaphoreCount = 1;
+    vk_submit_info.pWaitSemaphores = &submit_info->wait_semaphore;
+    vk_submit_info.pWaitDstStageMask = &wait_stage_mask;
   }
-  submit_info.commandBufferCount = 1;
-  submit_info.pCommandBuffers = &command_buffer;
-  if (sync_info != nullptr && sync_info->signal_semaphore != VK_NULL_HANDLE) {
-    submit_info.signalSemaphoreCount = 1;
-    submit_info.pSignalSemaphores = &sync_info->signal_semaphore;
+  vk_submit_info.commandBufferCount = 1;
+  vk_submit_info.pCommandBuffers = &command_buffer;
+  if (submit_info != nullptr &&
+      submit_info->signal_semaphore != VK_NULL_HANDLE) {
+    vk_submit_info.signalSemaphoreCount = 1;
+    vk_submit_info.pSignalSemaphores = &submit_info->signal_semaphore;
   }
 
-  return device_fns.vkQueueSubmit(queue, 1, &submit_info, fence);
+  return device_fns.vkQueueSubmit(queue, 1, &vk_submit_info, fence);
 }
 
 GPUCommandBufferVK::GPUCommandBufferVK(
@@ -204,17 +207,32 @@ std::shared_ptr<GPUBlitPass> GPUCommandBufferVK::BeginBlitPass() {
   return std::make_shared<GPUBlitPassVK>(state_, this);
 }
 
-bool GPUCommandBufferVK::Submit() {
+void GPUCommandBufferVK::HoldResource(std::shared_ptr<void> resource) {
+  if (resource == nullptr) {
+    return;
+  }
+
+  cleanup_actions_.emplace_back([resource = std::move(resource)]() {});
+}
+
+bool GPUCommandBufferVK::Submit(const GPUSubmitInfo* submit_info) {
   if (!recording_ || submitted_ || state_ == nullptr ||
       command_buffer_ == VK_NULL_HANDLE) {
     return false;
   }
 
+  if (submit_info != nullptr &&
+      submit_info->GetBackendType() != GPUBackendType::kVulkan) {
+    LOGE("Failed to submit Vulkan command buffer: invalid submit info type");
+    return false;
+  }
+  const auto* submit_info_vk = static_cast<const GPUSubmitInfoVK*>(submit_info);
+
   ApplyDebugLabelsIfNeeded();
 
   const auto& device_fns = state_->DeviceFns();
-  VkFence fence = submit_sync_info_ != nullptr ? submit_sync_info_->signal_fence
-                                               : VK_NULL_HANDLE;
+  VkFence fence =
+      submit_info_vk != nullptr ? submit_info_vk->signal_fence : VK_NULL_HANDLE;
   bool owns_fence = false;
 
   VkResult result = device_fns.vkEndCommandBuffer(command_buffer_);
@@ -239,7 +257,7 @@ bool GPUCommandBufferVK::Submit() {
   }
 
   result = SubmitCommandBuffer(*state_, state_->GetGraphicsQueue(),
-                               command_buffer_, fence, submit_sync_info_);
+                               command_buffer_, fence, submit_info_vk);
   if (result != VK_SUCCESS) {
     LOGE("Failed to submit Vulkan command buffer: {}",
          static_cast<int32_t>(result));
@@ -257,7 +275,6 @@ bool GPUCommandBufferVK::Submit() {
   submitted_ = true;
   command_buffer_ = VK_NULL_HANDLE;
   command_pool_ = VK_NULL_HANDLE;
-  submit_sync_info_ = nullptr;
   return true;
 }
 
@@ -272,11 +289,6 @@ void GPUCommandBufferVK::RecordCleanupAction(std::function<void()> action) {
   if (action) {
     cleanup_actions_.emplace_back(std::move(action));
   }
-}
-
-void GPUCommandBufferVK::SetSubmitSyncInfo(
-    const GPUSurfaceSyncInfoVK* sync_info) {
-  submit_sync_info_ = sync_info;
 }
 
 void GPUCommandBufferVK::ApplyDebugLabelsIfNeeded() {
@@ -311,7 +323,6 @@ void GPUCommandBufferVK::Reset() {
   command_pool_ = VK_NULL_HANDLE;
   recording_ = false;
   submitted_ = false;
-  submit_sync_info_ = nullptr;
 }
 
 }  // namespace skity

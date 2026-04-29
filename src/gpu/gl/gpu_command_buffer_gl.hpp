@@ -21,7 +21,7 @@ class GPUCommandBufferGL : public GPUCommandBuffer {
 
   std::shared_ptr<GPUBlitPass> BeginBlitPass() override;
 
-  bool Submit() override;
+  bool Submit(const GPUSubmitInfo* submit_info = nullptr) override;
 
  private:
   std::shared_ptr<GPURenderPass> BeginDirectRenderPass(

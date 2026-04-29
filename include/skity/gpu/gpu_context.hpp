@@ -9,6 +9,7 @@
 #include <memory>
 #include <skity/geometry/rect.hpp>
 #include <skity/gpu/gpu_backend_type.hpp>
+#include <skity/gpu/gpu_presenter.hpp>
 #include <skity/gpu/gpu_render_target.hpp>
 #include <skity/gpu/gpu_surface.hpp>
 #include <skity/gpu/texture.hpp>
@@ -62,6 +63,19 @@ class SKITY_API GPUContext {
    */
   virtual std::unique_ptr<GPUSurface> CreateSurface(
       GPUSurfaceDescriptor* desc) = 0;
+
+  /**
+   * Create a GPU backend presenter for presenting the surface on screen
+   *
+   * @note This API is experimental. Might change in the future. Currently only
+   *       Vulkan backend supports this.
+   *
+   * @param desc describe the information to create the presenter
+   *             different backends may have different descriptor structures
+   * @return GPUPresenter instance or null if init failed
+   */
+  virtual std::unique_ptr<GPUPresenter> CreatePresenter(
+      GPUPresenterDescriptor* desc) = 0;
 
   /**
    * Create a Texture instance associated with current GPU context.

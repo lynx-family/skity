@@ -24,6 +24,12 @@ class GPUContextImpl : public GPUContext {
 
   GPUBackendType GetBackendType() const override { return backend_type_; }
 
+  std::unique_ptr<GPUPresenter> CreatePresenter(
+      GPUPresenterDescriptor* desc) override {
+    (void)desc;
+    return nullptr;
+  }
+
   std::shared_ptr<Texture> CreateTexture(TextureFormat format, uint32_t width,
                                          uint32_t height,
                                          skity::AlphaType alpha_type) override;

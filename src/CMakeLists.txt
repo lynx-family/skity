@@ -492,6 +492,8 @@ if(${SKITY_HW_RENDERER})
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_command_buffer_vk.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_device_vk.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_device_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_presenter_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_presenter_vk.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_context_impl_vk.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_context_impl_vk.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pass_vk.cc

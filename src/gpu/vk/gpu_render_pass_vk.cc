@@ -5,6 +5,7 @@
 #include "src/gpu/vk/gpu_render_pass_vk.hpp"
 
 #include <array>
+#include <unordered_set>
 
 #include "src/gpu/vk/gpu_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_command_buffer_vk.hpp"
@@ -401,6 +402,8 @@ void RecordBoundResourceCleanup(GPUCommandBufferVK& command_buffer,
                                 const GPURenderPass& pass) {
   std::vector<std::shared_ptr<GPUTexture>> textures;
   std::vector<std::shared_ptr<GPUSampler>> samplers;
+  std::unordered_set<const GPUTexture*> seen_textures;
+  std::unordered_set<const GPUSampler*> seen_samplers;
 
   for (const auto* command : pass.GetCommands()) {
     if (command == nullptr || !command->IsValid()) {
@@ -408,13 +411,15 @@ void RecordBoundResourceCleanup(GPUCommandBufferVK& command_buffer,
     }
 
     for (const auto& binding : command->texture_bindings) {
-      if (binding.texture != nullptr) {
+      if (binding.texture != nullptr &&
+          seen_textures.insert(binding.texture.get()).second) {
         textures.emplace_back(binding.texture);
       }
     }
 
     for (const auto& binding : command->sampler_bindings) {
-      if (binding.sampler != nullptr) {
+      if (binding.sampler != nullptr &&
+          seen_samplers.insert(binding.sampler.get()).second) {
         samplers.emplace_back(binding.sampler);
       }
     }

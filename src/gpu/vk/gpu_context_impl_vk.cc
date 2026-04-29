@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "src/gpu/vk/gpu_device_vk.hpp"
+#include "src/gpu/vk/gpu_presenter_vk.hpp"
 #include "src/gpu/vk/gpu_surface_vk.hpp"
 #include "src/gpu/vk/gpu_texture_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
@@ -721,6 +722,20 @@ std::unique_ptr<GPUSurface> GPUContextVK::CreateSurface(
 
   return std::make_unique<GPUSurfaceVK>(
       *desc, this, std::move(texture), texture_desc.format, vk_desc->sync_info);
+}
+
+std::unique_ptr<GPUPresenter> GPUContextVK::CreatePresenter(
+    GPUPresenterDescriptor* desc) {
+  if (desc == nullptr || desc->backend != GPUBackendType::kVulkan) {
+    return nullptr;
+  }
+
+  auto* vk_desc = static_cast<GPUPresenterDescriptorVK*>(desc);
+  auto presenter = std::make_unique<GPUPresenterVK>(this, state_, *vk_desc);
+  if (!presenter->Init()) {
+    return nullptr;
+  }
+  return presenter;
 }
 
 std::unique_ptr<GPUDevice> GPUContextVK::CreateGPUDevice() {

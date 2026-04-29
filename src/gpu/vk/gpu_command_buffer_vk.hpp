@@ -19,6 +19,19 @@ namespace skity {
 class GPUBufferVK;
 class VulkanContextState;
 
+class GPUSubmitInfoVK : public GPUSubmitInfo {
+ public:
+  GPUBackendType GetBackendType() const override {
+    return GPUBackendType::kVulkan;
+  }
+
+  VkSemaphore wait_semaphore = VK_NULL_HANDLE;
+  VkPipelineStageFlags wait_dst_stage_mask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  VkSemaphore signal_semaphore = VK_NULL_HANDLE;
+  VkFence signal_fence = VK_NULL_HANDLE;
+};
+
 class GPUCommandBufferVK : public GPUCommandBuffer {
  public:
   explicit GPUCommandBufferVK(std::shared_ptr<const VulkanContextState> state);
@@ -32,7 +45,9 @@ class GPUCommandBufferVK : public GPUCommandBuffer {
 
   std::shared_ptr<GPUBlitPass> BeginBlitPass() override;
 
-  bool Submit() override;
+  void HoldResource(std::shared_ptr<void> resource) override;
+
+  bool Submit(const GPUSubmitInfo* submit_info = nullptr) override;
 
   VkCommandBuffer GetCommandBuffer() const { return command_buffer_; }
 
@@ -41,8 +56,6 @@ class GPUCommandBufferVK : public GPUCommandBuffer {
   void RecordStageBuffer(std::unique_ptr<GPUBufferVK> buffer);
 
   void RecordCleanupAction(std::function<void()> action);
-
-  void SetSubmitSyncInfo(const GPUSurfaceSyncInfoVK* sync_info);
 
  private:
   void Reset();
@@ -54,7 +67,6 @@ class GPUCommandBufferVK : public GPUCommandBuffer {
   bool submitted_ = false;
   std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers_ = {};
   std::vector<std::function<void()>> cleanup_actions_ = {};
-  const GPUSurfaceSyncInfoVK* submit_sync_info_ = nullptr;
 };
 
 }  // namespace skity

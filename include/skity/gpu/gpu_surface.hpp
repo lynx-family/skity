@@ -35,6 +35,8 @@ class SKITY_API GPUSurface {
  public:
   virtual ~GPUSurface() = default;
 
+  virtual GPUBackendType GetBackendType() const = 0;
+
   virtual uint32_t GetWidth() const = 0;
 
   virtual uint32_t GetHeight() const = 0;

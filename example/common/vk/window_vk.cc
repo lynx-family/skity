@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
-#include <limits>
 #include <string>
 #include <utility>
 
@@ -86,51 +85,6 @@ VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   return VK_FALSE;
 }
 
-VkSurfaceFormatKHR ChooseSurfaceFormat(
-    const std::vector<VkSurfaceFormatKHR>& formats) {
-  for (const auto& format : formats) {
-    if (format.format == VK_FORMAT_B8G8R8A8_UNORM &&
-        format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-      return format;
-    }
-  }
-
-  return formats.empty() ? VkSurfaceFormatKHR{} : formats.front();
-}
-
-VkPresentModeKHR ChoosePresentMode(
-    const std::vector<VkPresentModeKHR>& present_modes) {
-  for (auto present_mode : present_modes) {
-    if (present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
-      return present_mode;
-    }
-  }
-
-  return VK_PRESENT_MODE_FIFO_KHR;
-}
-
-VkExtent2D ChooseSwapchainExtent(GLFWwindow* window,
-                                 const VkSurfaceCapabilitiesKHR& caps) {
-  if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-    return caps.currentExtent;
-  }
-
-  int framebuffer_width = 0;
-  int framebuffer_height = 0;
-  glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
-
-  VkExtent2D extent = {
-      static_cast<uint32_t>(std::max(framebuffer_width, 1)),
-      static_cast<uint32_t>(std::max(framebuffer_height, 1)),
-  };
-
-  extent.width = std::clamp(extent.width, caps.minImageExtent.width,
-                            caps.maxImageExtent.width);
-  extent.height = std::clamp(extent.height, caps.minImageExtent.height,
-                             caps.maxImageExtent.height);
-  return extent;
-}
-
 }  // namespace
 
 bool WindowVK::OnInit() {
@@ -171,97 +125,65 @@ std::unique_ptr<skity::GPUContext> WindowVK::CreateGPUContext() {
 }
 
 void WindowVK::OnShow() {
-  if (!CreateSwapchain() || !CreateSwapchainImageViews() ||
-      !CreateFrameSyncObjects()) {
-    std::cerr << "Failed to prepare Vulkan swapchain resources." << std::endl;
+  int framebuffer_width = 0;
+  int framebuffer_height = 0;
+  glfwGetFramebufferSize(GetNativeWindow(), &framebuffer_width,
+                         &framebuffer_height);
+
+  skity::GPUPresenterDescriptorVK desc = {};
+  desc.backend = skity::GPUBackendType::kVulkan;
+  desc.width = static_cast<uint32_t>(std::max(framebuffer_width, 1));
+  desc.height = static_cast<uint32_t>(std::max(framebuffer_height, 1));
+  desc.surface = surface_khr_;
+  desc.present_queue = graphics_queue_;
+  desc.present_queue_family_index =
+      static_cast<int32_t>(graphics_queue_family_index_);
+  desc.min_image_count = 2;
+  desc.format = VK_FORMAT_B8G8R8A8_UNORM;
+  desc.color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+  desc.present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+
+  presenter_ = GetGPUContext()->CreatePresenter(&desc);
+  if (presenter_ == nullptr) {
+    std::cerr << "Failed to create Vulkan presenter." << std::endl;
     glfwSetWindowShouldClose(GetNativeWindow(), GLFW_TRUE);
   }
 }
 
 skity::Canvas* WindowVK::AquireCanvas() {
-  if (swapchain_ == VK_NULL_HANDLE || frame_sync_objects_.empty() ||
-      swapchain_image_states_.size() != swapchain_images_.size()) {
+  if (presenter_ == nullptr) {
     return nullptr;
   }
-
-  FrameSyncObjects& frame_sync = frame_sync_objects_[current_frame_slot_];
-  if (frame_sync.image_available_semaphore == VK_NULL_HANDLE ||
-      frame_sync.in_flight_fence == VK_NULL_HANDLE) {
-    return nullptr;
-  }
-
-  if (vkWaitForFences(device_, 1, &frame_sync.in_flight_fence, VK_TRUE,
-                      UINT64_MAX) != VK_SUCCESS) {
-    return nullptr;
-  }
-
-  VkResult result = vkAcquireNextImageKHR(
-      device_, swapchain_, UINT64_MAX, frame_sync.image_available_semaphore,
-      VK_NULL_HANDLE, &current_image_index_);
-  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-    glfwSetWindowShouldClose(GetNativeWindow(), GLFW_TRUE);
-    return nullptr;
-  }
-
-  if (result != VK_SUCCESS) {
-    return nullptr;
-  }
-
-  SwapchainImageState& image_state =
-      swapchain_image_states_[current_image_index_];
-  if (image_state.render_finished_semaphore == VK_NULL_HANDLE) {
-    return nullptr;
-  }
-
-  if (image_state.in_flight_fence != VK_NULL_HANDLE &&
-      vkWaitForFences(device_, 1, &image_state.in_flight_fence, VK_TRUE,
-                      UINT64_MAX) != VK_SUCCESS) {
-    return nullptr;
-  }
-
-  image_state.retired_surface.reset();
-  image_state.in_flight_fence = VK_NULL_HANDLE;
-
-  if (vkResetFences(device_, 1, &frame_sync.in_flight_fence) != VK_SUCCESS) {
-    return nullptr;
-  }
-
-  surface_sync_info_.wait_semaphore = frame_sync.image_available_semaphore;
-  surface_sync_info_.wait_dst_stage_mask =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  surface_sync_info_.signal_semaphore = image_state.render_finished_semaphore;
-  surface_sync_info_.signal_fence = frame_sync.in_flight_fence;
 
   const int32_t logical_width = std::max(GetWidth(), 1);
   const int32_t logical_height = std::max(GetHeight(), 1);
 
+  int framebuffer_width = 0;
+  int framebuffer_height = 0;
+  glfwGetFramebufferSize(GetNativeWindow(), &framebuffer_width,
+                         &framebuffer_height);
   const float density =
-      static_cast<float>(swapchain_extent_.width * swapchain_extent_.width +
-                         swapchain_extent_.height * swapchain_extent_.height) /
+      static_cast<float>(
+          std::max(framebuffer_width, 1) * std::max(framebuffer_width, 1) +
+          std::max(framebuffer_height, 1) * std::max(framebuffer_height, 1)) /
       static_cast<float>(logical_width * logical_width +
                          logical_height * logical_height);
-  const float screen_scale = std::sqrt(density);
+  skity::GPUSurfaceAcquireDescriptor acquire_desc = {};
+  acquire_desc.sample_count = 4;
+  acquire_desc.content_scale = std::sqrt(density);
 
-  skity::GPUSurfaceDescriptorVK desc = {};
-  desc.backend = skity::GPUBackendType::kVulkan;
-  desc.width = static_cast<uint32_t>(logical_width);
-  desc.height = static_cast<uint32_t>(logical_height);
-  desc.content_scale = screen_scale;
-  desc.sample_count = 4;
-  desc.surface_type = skity::VKSurfaceType::kSwapchainImage;
-  desc.image = swapchain_images_[current_image_index_];
-  desc.image_view = swapchain_image_views_[current_image_index_];
-  desc.format = swapchain_format_;
-  desc.pre_transform = swapchain_transform_;
-  desc.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-  desc.final_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  desc.sync_info = &surface_sync_info_;
-
-  surface_ = GetGPUContext()->CreateSurface(&desc);
-  if (surface_ == nullptr) {
+  auto acquire_result = presenter_->AcquireNextSurface(acquire_desc);
+  if (acquire_result.status == skity::GPUPresenterStatus::kNeedRecreate) {
+    glfwSetWindowShouldClose(GetNativeWindow(), GLFW_TRUE);
     return nullptr;
   }
 
+  if (acquire_result.status != skity::GPUPresenterStatus::kSuccess ||
+      acquire_result.surface == nullptr) {
+    return nullptr;
+  }
+
+  surface_ = std::move(acquire_result.surface);
   canvas_ = surface_->LockCanvas();
   return canvas_;
 }
@@ -271,39 +193,14 @@ void WindowVK::OnPresent() {
     return;
   }
 
-  const uint32_t image_index = current_image_index_;
-  if (image_index >= swapchain_image_states_.size()) {
-    canvas_ = nullptr;
-    surface_.reset();
-    return;
-  }
-
   canvas_->Flush();
   surface_->Flush();
   canvas_ = nullptr;
-  swapchain_image_states_[image_index].retired_surface = std::move(surface_);
-  swapchain_image_states_[image_index].in_flight_fence =
-      frame_sync_objects_[current_frame_slot_].in_flight_fence;
 
-  VkSwapchainKHR swapchains[] = {swapchain_};
-  VkSemaphore wait_semaphores[] = {
-      swapchain_image_states_[image_index].render_finished_semaphore};
-  VkPresentInfoKHR present_info = {};
-  present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  present_info.waitSemaphoreCount = 1;
-  present_info.pWaitSemaphores = wait_semaphores;
-  present_info.swapchainCount = 1;
-  present_info.pSwapchains = swapchains;
-  present_info.pImageIndices = &image_index;
-
-  VkResult result = vkQueuePresentKHR(graphics_queue_, &present_info);
-  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+  const auto present_status = presenter_->Present(std::move(surface_));
+  if (present_status == skity::GPUPresenterStatus::kNeedRecreate) {
     glfwSetWindowShouldClose(GetNativeWindow(), GLFW_TRUE);
   }
-
-  current_frame_slot_ =
-      (current_frame_slot_ + 1u) %
-      static_cast<uint32_t>(std::max<size_t>(frame_sync_objects_.size(), 1u));
 }
 
 void WindowVK::OnTerminate() {
@@ -313,15 +210,9 @@ void WindowVK::OnTerminate() {
 
   canvas_ = nullptr;
   surface_.reset();
-
-  for (auto& image_state : swapchain_image_states_) {
-    image_state.retired_surface.reset();
-    image_state.in_flight_fence = VK_NULL_HANDLE;
-  }
+  presenter_.reset();
 
   ResetGPUContext();
-  DestroyFrameSyncObjects();
-  DestroySwapchain();
 
   if (device_ != VK_NULL_HANDLE) {
     vkDestroyDevice(device_, nullptr);
@@ -610,206 +501,6 @@ bool WindowVK::CreateLogicalDevice() {
   volkLoadDevice(device_);
   vkGetDeviceQueue(device_, graphics_queue_family_index_, 0, &graphics_queue_);
   return graphics_queue_ != VK_NULL_HANDLE;
-}
-
-bool WindowVK::CreateSwapchain() {
-  VkSurfaceCapabilitiesKHR caps = {};
-  if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device_, surface_khr_,
-                                                &caps) != VK_SUCCESS) {
-    return false;
-  }
-
-  uint32_t format_count = 0;
-  if (vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device_, surface_khr_,
-                                           &format_count,
-                                           nullptr) != VK_SUCCESS ||
-      format_count == 0) {
-    return false;
-  }
-
-  std::vector<VkSurfaceFormatKHR> formats(format_count);
-  if (vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device_, surface_khr_,
-                                           &format_count,
-                                           formats.data()) != VK_SUCCESS) {
-    return false;
-  }
-
-  uint32_t present_mode_count = 0;
-  if (vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device_, surface_khr_,
-                                                &present_mode_count,
-                                                nullptr) != VK_SUCCESS ||
-      present_mode_count == 0) {
-    return false;
-  }
-
-  std::vector<VkPresentModeKHR> present_modes(present_mode_count);
-  if (vkGetPhysicalDeviceSurfacePresentModesKHR(
-          physical_device_, surface_khr_, &present_mode_count,
-          present_modes.data()) != VK_SUCCESS) {
-    return false;
-  }
-
-  VkSurfaceFormatKHR surface_format = ChooseSurfaceFormat(formats);
-  VkPresentModeKHR present_mode = ChoosePresentMode(present_modes);
-  VkExtent2D extent = ChooseSwapchainExtent(GetNativeWindow(), caps);
-
-  uint32_t image_count = caps.minImageCount + 1;
-  if (caps.maxImageCount > 0) {
-    image_count = std::min(image_count, caps.maxImageCount);
-  }
-
-  VkSwapchainCreateInfoKHR create_info = {};
-  create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  create_info.surface = surface_khr_;
-  create_info.minImageCount = image_count;
-  create_info.imageFormat = surface_format.format;
-  create_info.imageColorSpace = surface_format.colorSpace;
-  create_info.imageExtent = extent;
-  create_info.imageArrayLayers = 1;
-  create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-  create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  create_info.preTransform = caps.currentTransform;
-  create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  create_info.presentMode = present_mode;
-  create_info.clipped = VK_TRUE;
-
-  if (vkCreateSwapchainKHR(device_, &create_info, nullptr, &swapchain_) !=
-          VK_SUCCESS ||
-      swapchain_ == VK_NULL_HANDLE) {
-    return false;
-  }
-
-  swapchain_format_ = surface_format.format;
-  swapchain_extent_ = extent;
-  swapchain_transform_ =
-      static_cast<VkSurfaceTransformFlagBitsKHR>(caps.currentTransform);
-
-  uint32_t swapchain_image_count = 0;
-  if (vkGetSwapchainImagesKHR(device_, swapchain_, &swapchain_image_count,
-                              nullptr) != VK_SUCCESS ||
-      swapchain_image_count == 0) {
-    return false;
-  }
-
-  swapchain_images_.resize(swapchain_image_count, VK_NULL_HANDLE);
-  if (vkGetSwapchainImagesKHR(device_, swapchain_, &swapchain_image_count,
-                              swapchain_images_.data()) != VK_SUCCESS) {
-    return false;
-  }
-
-  return true;
-}
-
-bool WindowVK::CreateSwapchainImageViews() {
-  swapchain_image_views_.clear();
-  swapchain_image_views_.reserve(swapchain_images_.size());
-
-  for (auto image : swapchain_images_) {
-    VkImageViewCreateInfo create_info = {};
-    create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    create_info.image = image;
-    create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    create_info.format = swapchain_format_;
-    create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    create_info.subresourceRange.baseMipLevel = 0;
-    create_info.subresourceRange.levelCount = 1;
-    create_info.subresourceRange.baseArrayLayer = 0;
-    create_info.subresourceRange.layerCount = 1;
-
-    VkImageView image_view = VK_NULL_HANDLE;
-    if (vkCreateImageView(device_, &create_info, nullptr, &image_view) !=
-            VK_SUCCESS ||
-        image_view == VK_NULL_HANDLE) {
-      return false;
-    }
-
-    swapchain_image_views_.push_back(image_view);
-  }
-
-  return true;
-}
-
-bool WindowVK::CreateFrameSyncObjects() {
-  frame_sync_objects_.clear();
-  swapchain_image_states_.clear();
-
-  if (swapchain_images_.empty()) {
-    return false;
-  }
-
-  VkSemaphoreCreateInfo semaphore_create_info = {};
-  semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-  VkFenceCreateInfo fence_create_info = {};
-  fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-  frame_sync_objects_.resize(swapchain_images_.size());
-  for (auto& frame_sync : frame_sync_objects_) {
-    if (vkCreateSemaphore(device_, &semaphore_create_info, nullptr,
-                          &frame_sync.image_available_semaphore) !=
-            VK_SUCCESS ||
-        vkCreateFence(device_, &fence_create_info, nullptr,
-                      &frame_sync.in_flight_fence) != VK_SUCCESS) {
-      DestroyFrameSyncObjects();
-      return false;
-    }
-  }
-
-  swapchain_image_states_.resize(swapchain_images_.size());
-  for (auto& image_state : swapchain_image_states_) {
-    if (vkCreateSemaphore(device_, &semaphore_create_info, nullptr,
-                          &image_state.render_finished_semaphore) !=
-        VK_SUCCESS) {
-      DestroyFrameSyncObjects();
-      return false;
-    }
-  }
-
-  current_frame_slot_ = 0;
-  current_image_index_ = 0;
-  return true;
-}
-
-void WindowVK::DestroySwapchain() {
-  for (auto image_view : swapchain_image_views_) {
-    if (image_view != VK_NULL_HANDLE) {
-      vkDestroyImageView(device_, image_view, nullptr);
-    }
-  }
-  swapchain_image_views_.clear();
-  swapchain_images_.clear();
-
-  if (swapchain_ != VK_NULL_HANDLE) {
-    vkDestroySwapchainKHR(device_, swapchain_, nullptr);
-    swapchain_ = VK_NULL_HANDLE;
-  }
-}
-
-void WindowVK::DestroyFrameSyncObjects() {
-  for (auto& image_state : swapchain_image_states_) {
-    image_state.retired_surface.reset();
-    image_state.in_flight_fence = VK_NULL_HANDLE;
-    if (image_state.render_finished_semaphore != VK_NULL_HANDLE) {
-      vkDestroySemaphore(device_, image_state.render_finished_semaphore,
-                         nullptr);
-      image_state.render_finished_semaphore = VK_NULL_HANDLE;
-    }
-  }
-  swapchain_image_states_.clear();
-
-  for (auto& frame_sync : frame_sync_objects_) {
-    if (frame_sync.in_flight_fence != VK_NULL_HANDLE) {
-      vkDestroyFence(device_, frame_sync.in_flight_fence, nullptr);
-      frame_sync.in_flight_fence = VK_NULL_HANDLE;
-    }
-    if (frame_sync.image_available_semaphore != VK_NULL_HANDLE) {
-      vkDestroySemaphore(device_, frame_sync.image_available_semaphore,
-                         nullptr);
-      frame_sync.image_available_semaphore = VK_NULL_HANDLE;
-    }
-  }
-  frame_sync_objects_.clear();
 }
 
 }  // namespace example
