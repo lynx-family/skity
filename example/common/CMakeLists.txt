@@ -58,6 +58,12 @@ if (${SKITY_VK_BACKEND})
     ${CMAKE_CURRENT_LIST_DIR}/vk/window_vk.hpp
   )
 
+  if (APPLE)
+    target_sources(skity_example_common PRIVATE
+      ${CMAKE_CURRENT_LIST_DIR}/vk/window_vk_native_macos.mm
+    )
+  endif()
+
   target_include_directories(skity_example_common PUBLIC ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include)
   target_link_libraries(skity_example_common PRIVATE volk::volk)
 endif()

@@ -5,11 +5,8 @@
 #ifndef SKITY_EXAMPLE_COMMON_VK_WINDOW_VK_HPP
 #define SKITY_EXAMPLE_COMMON_VK_WINDOW_VK_HPP
 
-#include <volk.h>
-
 #include <memory>
 #include <skity/gpu/gpu_context_vk.hpp>
-#include <vector>
 
 #include "common/window.hpp"
 
@@ -41,26 +38,12 @@ class WindowVK : public Window {
   void OnTerminate() override;
 
  private:
-  bool CreateInstance();
-  bool CreateSurface();
-  bool PickPhysicalDeviceAndQueueFamily();
-  bool CreateLogicalDevice();
+  bool CreateNativeWindow();
+  bool ResizeNativeWindow();
 
   std::unique_ptr<skity::GPUSurface> surface_;
-  std::unique_ptr<skity::GPUPresenter> presenter_;
+  std::unique_ptr<skity::GPUNativeWindowVK> native_window_vk_;
   skity::Canvas* canvas_ = nullptr;
-
-  VkInstance instance_ = VK_NULL_HANDLE;
-  VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;
-  VkSurfaceKHR surface_khr_ = VK_NULL_HANDLE;
-  VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
-  VkDevice device_ = VK_NULL_HANDLE;
-  VkQueue graphics_queue_ = VK_NULL_HANDLE;
-  uint32_t graphics_queue_family_index_ = 0;
-
-  std::vector<const char*> enabled_instance_extensions_;
-  std::vector<const char*> enabled_instance_layers_;
-  std::vector<const char*> enabled_device_extensions_;
 };
 
 }  // namespace example

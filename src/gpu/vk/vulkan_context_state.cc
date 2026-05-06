@@ -177,10 +177,16 @@ std::vector<std::string> CopyEnabledExtensions(const char* const* extensions,
     return result;
   }
 
+  std::set<std::string> seen_extensions;
   result.reserve(extension_count);
   for (uint32_t i = 0; i < extension_count; ++i) {
-    if (extensions[i] != nullptr) {
-      result.emplace_back(extensions[i]);
+    if (extensions[i] == nullptr) {
+      continue;
+    }
+
+    std::string extension_name = extensions[i];
+    if (seen_extensions.insert(extension_name).second) {
+      result.emplace_back(std::move(extension_name));
     }
   }
 
@@ -723,7 +729,9 @@ bool VulkanContextState::InitializeInstance(const GPUContextInfoVK& info) {
           "instance");
     }
   } else {
-    enabled_instance_extensions_.clear();
+    enabled_instance_extensions_ =
+        CopyEnabledExtensions(info.enabled_instance_extensions,
+                              info.enabled_instance_extension_count);
     TryEnableInstanceExtension(&enabled_instance_extensions_,
                                available_instance_extensions_,
                                VK_KHR_SURFACE_EXTENSION_NAME);
@@ -752,6 +760,11 @@ bool VulkanContextState::InitializeInstance(const GPUContextInfoVK& info) {
     TryEnableInstanceExtension(&enabled_instance_extensions_,
                                available_instance_extensions_,
                                VK_EXT_METAL_SURFACE_EXTENSION_NAME);
+#endif
+#if defined(VK_MVK_MACOS_SURFACE_EXTENSION_NAME)
+    TryEnableInstanceExtension(&enabled_instance_extensions_,
+                               available_instance_extensions_,
+                               VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
 #endif
 #elif defined(SKITY_LINUX)
 #if defined(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME)

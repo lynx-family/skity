@@ -452,6 +452,87 @@ TEST(VulkanProcLoaderTest, CreateGPUContextWithInfo) {
             state->HasAvailableDeviceExtension("VK_KHR_swapchain"));
 }
 
+TEST(VulkanProcLoaderTest, CreateGPUContextWithRequestedInstanceExtensions) {
+  if (SkipVulkanTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
+                    "SwiftShader in this environment";
+  }
+
+  skity::VulkanGlobalFns global_fns = {};
+  ASSERT_TRUE(skity::LoadVulkanGlobalFns(vkGetInstanceProcAddr, &global_fns));
+
+  uint32_t extension_count = 0;
+  ASSERT_EQ(global_fns.vkEnumerateInstanceExtensionProperties(
+                nullptr, &extension_count, nullptr),
+            VK_SUCCESS);
+  ASSERT_GT(extension_count, 0u);
+
+  std::vector<VkExtensionProperties> extensions(extension_count);
+  ASSERT_EQ(global_fns.vkEnumerateInstanceExtensionProperties(
+                nullptr, &extension_count, extensions.data()),
+            VK_SUCCESS);
+
+  const char* requested_extension = nullptr;
+  for (const auto& extension : extensions) {
+    if (std::string(extension.extensionName) ==
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME) {
+      requested_extension = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+      break;
+    }
+  }
+
+  if (requested_extension == nullptr) {
+    GTEST_SKIP() << "VK_EXT_debug_utils is unavailable in this environment";
+  }
+
+  skity::GPUContextInfoVK info = {};
+  info.get_instance_proc_addr = vkGetInstanceProcAddr;
+  info.enabled_instance_extensions = &requested_extension;
+  info.enabled_instance_extension_count = 1;
+
+  auto context = skity::CreateGPUContextVK(&info);
+
+  ASSERT_NE(context, nullptr);
+  auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
+  ASSERT_NE(vk_context, nullptr);
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+  EXPECT_TRUE(state->HasEnabledInstanceExtension(requested_extension));
+}
+
+TEST(VulkanProcLoaderTest, DeduplicateRequestedInstanceExtensions) {
+  if (SkipVulkanTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
+                    "SwiftShader in this environment";
+  }
+
+  const char* requested_extensions[] = {
+      VK_KHR_SURFACE_EXTENSION_NAME,
+      VK_KHR_SURFACE_EXTENSION_NAME,
+  };
+
+  skity::GPUContextInfoVK info = {};
+  info.get_instance_proc_addr = vkGetInstanceProcAddr;
+  info.enabled_instance_extensions = requested_extensions;
+  info.enabled_instance_extension_count = 2;
+
+  auto context = skity::CreateGPUContextVK(&info);
+
+  ASSERT_NE(context, nullptr);
+  auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
+  ASSERT_NE(vk_context, nullptr);
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+
+  size_t surface_extension_count = 0;
+  for (const auto& extension : state->GetEnabledInstanceExtensions()) {
+    if (extension == VK_KHR_SURFACE_EXTENSION_NAME) {
+      ++surface_extension_count;
+    }
+  }
+  EXPECT_EQ(surface_extension_count, 1u);
+}
+
 TEST(VulkanProcLoaderTest, PreserveUserProvidedExtensionInfo) {
   if (SkipVulkanTestsOnThreadSanitizer()) {
     GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
@@ -1729,6 +1810,51 @@ TEST(VulkanProcLoaderTest, LegacyRenderPassCacheReusesCompatibleRenderPass) {
   const VkRenderPass third = state->GetOrCreateLegacyRenderPass(key);
   ASSERT_NE(third, VK_NULL_HANDLE);
   EXPECT_NE(first, third);
+}
+
+TEST(GPUNativeWindowVKTest, CreateRejectsNullInfo) {
+  auto context = skity::CreateGPUNativeWindowVK(
+      static_cast<skity::GPUContext*>(nullptr), nullptr);
+  EXPECT_EQ(context, nullptr);
+}
+
+TEST(GPUNativeWindowVKTest, CreateRejectsMissingContext) {
+  skity::GPUNativeWindowInfoVK info = {};
+  info.native_window.type = skity::VKNativeWindowType::kMetalLayer;
+  info.native_window.handle = reinterpret_cast<void*>(0x1);
+  info.width = 128;
+  info.height = 128;
+
+  auto context = skity::CreateGPUNativeWindowVK(
+      static_cast<skity::GPUContext*>(nullptr), &info);
+  EXPECT_EQ(context, nullptr);
+}
+
+TEST(GPUNativeWindowVKTest, CreateRejectsInvalidDescriptor) {
+  skity::GPUNativeWindowInfoVK info = {};
+  info.native_window.type = skity::VKNativeWindowType::kInvalid;
+  info.width = 128;
+  info.height = 128;
+
+  auto gpu_context = CreateDebugGPUContext();
+  ASSERT_NE(gpu_context, nullptr);
+
+  auto context = skity::CreateGPUNativeWindowVK(gpu_context.get(), &info);
+  EXPECT_EQ(context, nullptr);
+}
+
+TEST(GPUNativeWindowVKTest, CreateRejectsZeroSizedWindow) {
+  auto gpu_context = CreateDebugGPUContext();
+  ASSERT_NE(gpu_context, nullptr);
+
+  skity::GPUNativeWindowInfoVK info = {};
+  info.native_window.type = skity::VKNativeWindowType::kMetalLayer;
+  info.native_window.handle = reinterpret_cast<void*>(0x1);
+  info.width = 0;
+  info.height = 128;
+
+  auto native_window = skity::CreateGPUNativeWindowVK(gpu_context.get(), &info);
+  EXPECT_EQ(native_window, nullptr);
 }
 
 }  // namespace
