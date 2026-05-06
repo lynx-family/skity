@@ -4,11 +4,19 @@
 
 #include <wgsl_cross.h>
 
+#include <cstdarg>
+#include <cstdio>
+
 #include "semantic/resolver.h"
 #include "wgsl/ast/node.h"
 #include "wgsl/function.h"
 #include "wgsl/parser.h"
 #include "wgsl/scanner.h"
+
+#ifdef WGX_VULKAN
+#include "lower/lower_to_ir.h"
+#include "spirv/emitter.h"
+#endif
 
 #ifdef WGX_GLSL
 #include "glsl/ast_printer.h"
@@ -19,6 +27,23 @@
 #endif
 
 namespace wgx {
+
+namespace {
+
+void LogWgxError(const char* fmt, ...) {
+#ifndef NDEBUG
+  std::fprintf(stderr, "[skity] [ERROR]");
+  va_list args;
+  va_start(args, fmt);
+  std::vfprintf(stderr, fmt, args);
+  va_end(args);
+  std::fprintf(stderr, "\n");
+#else
+  (void)fmt;
+#endif
+}
+
+}  // namespace
 
 Result Program::WriteToGlsl(const char* entry_point, const GlslOptions& options,
                             std::optional<CompilerContext> ctx) const {
@@ -85,6 +110,47 @@ Result Program::WriteToMsl(const char* entry_point, const MslOptions& options,
         },
     };
   }
+#endif
+
+  return {};
+}
+
+Result Program::WriteToSpirv(const char* entry_point,
+                             const SpirvOptions& options,
+                             std::optional<CompilerContext> ctx) const {
+  (void)options;
+  (void)ctx;
+#ifdef WGX_VULKAN
+  auto func = module_->GetFunction(entry_point);
+
+  if (func == nullptr || !func->IsEntryPoint()) {
+    LogWgxError("WGX SPIR-V emission failed: invalid entry point '%s'",
+                entry_point != nullptr ? entry_point : "<null>");
+    return {};
+  }
+
+  auto ir_module =
+      lower::LowerToIR(module_, func, ident_symbols_, decl_symbols_);
+  if (ir_module == nullptr) {
+    LogWgxError(
+        "WGX SPIR-V emission failed: LowerToIR returned null for entry '%s'",
+        entry_point != nullptr ? entry_point : "<null>");
+    return {};
+  }
+
+  spirv::Emitter emitter;
+  if (!emitter.Emit(*ir_module)) {
+    LogWgxError(
+        "WGX SPIR-V emission failed: backend emitter failed for entry '%s'",
+        entry_point != nullptr ? entry_point : "<null>");
+    return {};
+  }
+
+  return {
+      emitter.GetResult(),
+      {},
+      {},
+  };
 #endif
 
   return {};

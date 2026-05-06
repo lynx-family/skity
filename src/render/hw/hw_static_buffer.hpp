@@ -40,6 +40,14 @@ class HWStaticBuffer final {
 
   GPUBufferView GetTextIndexBufferView();
 
+  const std::shared_ptr<GPUBuffer>& GetGPUBufferOwner() const {
+    return stage_buffer_->GetGPUBufferOwner();
+  }
+
+  const std::shared_ptr<GPUBuffer>& GetGPUIndexBufferOwner() const {
+    return stage_buffer_->GetGPUIndexBufferOwner();
+  }
+
  private:
   void Initialize();
 

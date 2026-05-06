@@ -19,14 +19,18 @@ enum { STAGE_DEFAULT_BUFFER_SIZE = 1024 };
 HWStageBuffer::HWStageBuffer(GPUDevice* device)
     : gpu_device_(device),
       stage_buffer_(STAGE_DEFAULT_BUFFER_SIZE),
-      gpu_buffer_(device->CreateBuffer(GPUBufferUsage::kVertexBuffer |
-                                       GPUBufferUsage::kUniformBuffer)),
-      gpu_index_buffer_(device->CreateBuffer(GPUBufferUsage::kIndexBuffer)),
+      gpu_buffer_(std::shared_ptr<GPUBuffer>(
+          device
+              ->CreateBuffer(GPUBufferUsage::kVertexBuffer |
+                             GPUBufferUsage::kUniformBuffer)
+              .release())),
+      gpu_index_buffer_(std::shared_ptr<GPUBuffer>(
+          device->CreateBuffer(GPUBufferUsage::kIndexBuffer).release())),
       ubo_alignment_(device->GetBufferAlignment()) {}
 
 HWStageBuffer::HWStageBuffer(GPUDevice* device,
-                             std::unique_ptr<GPUBuffer> gpu_buffer,
-                             std::unique_ptr<GPUBuffer> gpu_index_buffer,
+                             std::shared_ptr<GPUBuffer> gpu_buffer,
+                             std::shared_ptr<GPUBuffer> gpu_index_buffer,
                              size_t ubo_alignment)
     : gpu_device_(device),
       stage_buffer_(STAGE_DEFAULT_BUFFER_SIZE),

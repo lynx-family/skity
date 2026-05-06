@@ -27,8 +27,8 @@ class HWStageBuffer final {
  public:
   explicit HWStageBuffer(GPUDevice* device);
 
-  HWStageBuffer(GPUDevice* device, std::unique_ptr<GPUBuffer> gpu_buffer,
-                std::unique_ptr<GPUBuffer> gpu_index_buffer,
+  HWStageBuffer(GPUDevice* device, std::shared_ptr<GPUBuffer> gpu_buffer,
+                std::shared_ptr<GPUBuffer> gpu_index_buffer,
                 size_t ubo_alignment);
 
   ~HWStageBuffer();
@@ -70,7 +70,15 @@ class HWStageBuffer final {
 
   GPUBuffer* GetGPUBuffer() const { return gpu_buffer_.get(); }
 
+  const std::shared_ptr<GPUBuffer>& GetGPUBufferOwner() const {
+    return gpu_buffer_;
+  }
+
   GPUBuffer* GetGPUIndexBuffer() const { return gpu_index_buffer_.get(); }
+
+  const std::shared_ptr<GPUBuffer>& GetGPUIndexBufferOwner() const {
+    return gpu_index_buffer_;
+  }
 
  private:
   static void ResizeIfNeed(std::vector<uint8_t>& buffer, uint32_t curr_pos,
@@ -84,8 +92,8 @@ class HWStageBuffer final {
   uint32_t stage_pos_ = 0;
   std::vector<uint8_t> stage_index_buffer_;
   uint32_t stage_index_pos_ = 0;
-  std::unique_ptr<GPUBuffer> gpu_buffer_;
-  std::unique_ptr<GPUBuffer> gpu_index_buffer_;
+  std::shared_ptr<GPUBuffer> gpu_buffer_;
+  std::shared_ptr<GPUBuffer> gpu_index_buffer_;
   uint32_t ubo_alignment_;
   std::optional<uint32_t> writing_offset_ = std::nullopt;
 };

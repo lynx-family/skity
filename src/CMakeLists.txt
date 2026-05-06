@@ -478,6 +478,48 @@ if(${SKITY_HW_RENDERER})
       "-framework Foundation"
     )
   endif()
+
+  # Vulkan backend
+  if(${SKITY_VK_BACKEND})
+    target_sources(
+      skity
+      PRIVATE
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_blit_pass_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_blit_pass_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_buffer_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_buffer_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_command_buffer_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_command_buffer_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_device_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_device_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_presenter_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_presenter_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_context_impl_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_context_impl_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_native_window_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pass_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pass_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pipeline_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_render_pipeline_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_sampler_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_sampler_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_shader_function_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_shader_function_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_surface_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_surface_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_texture_vk.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_texture_vk.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_debug_runtime_state.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_render_pass_cache.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_render_pass_cache.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_pending_submission.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_pending_submission.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_context_state.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_context_state.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/render/hw/vk/vk_root_layer.cc
+      ${CMAKE_CURRENT_LIST_DIR}/render/hw/vk/vk_root_layer.hpp
+    )
+  endif()
 endif()
 
 if(${SKITY_SW_RENDERER})

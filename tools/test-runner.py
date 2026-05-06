@@ -76,6 +76,36 @@ class TestRunner:
         env = os.environ.copy()
         env["AGENT_OUT_DIR"] = os.path.abspath(self.golden_failures_dir)
 
+        vk_test_loader = os.environ.get("SKITY_VK_TEST_USE_SYSTEM_LOADER", "")
+        use_vulkan_system_loader = vk_test_loader.upper() not in (
+            "",
+            "0",
+            "OFF",
+            "FALSE",
+            "NO",
+        )
+        if self.suite == "unit" and use_vulkan_system_loader:
+            swiftshader_icd = os.path.join(
+                self.repo_root,
+                "third_party",
+                "libSwAngle",
+                "lib",
+                "vk_swiftshader_icd.json",
+            )
+            if not os.path.isfile(swiftshader_icd):
+                return None, f"SwiftShader Vulkan ICD not found: {swiftshader_icd}"
+
+            # Unit tests are expected to run against bundled SwiftShader. Vulkan
+            # SDK setup-env.sh points these variables at MoltenVK on macOS.
+            env["VK_ICD_FILENAMES"] = swiftshader_icd
+            env["VK_DRIVER_FILES"] = swiftshader_icd
+
+            vulkan_sdk = env.get("VULKAN_SDK", "")
+            if vulkan_sdk:
+                layer_dir = os.path.join(vulkan_sdk, "share", "vulkan", "explicit_layer.d")
+                if os.path.isdir(layer_dir):
+                    self._prepend_env_path(env, "VK_ADD_LAYER_PATH", layer_dir)
+
         if not self.suite.startswith("golden"):
             return env, None
 
@@ -102,6 +132,11 @@ class TestRunner:
         self.print_status(Colors.YELLOW, "🔧 Configuring with CMake...")
         os.makedirs(self.build_dir, exist_ok=True)
         cmd = ["cmake", "-B", self.build_dir, "-DSKITY_TEST=ON", "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"]
+        vk_test_loader = os.environ.get("SKITY_VK_TEST_USE_SYSTEM_LOADER", "")
+        if vk_test_loader.upper() not in ("", "0", "OFF", "FALSE", "NO"):
+            cmd.append("-DSKITY_VK_TEST_USE_SYSTEM_LOADER=ON")
+        else:
+            cmd.append("-DSKITY_VK_TEST_USE_SYSTEM_LOADER=OFF")
         
         if self.suite.startswith("golden"):
             cmd.extend([
@@ -152,47 +187,95 @@ class TestRunner:
                     return os.path.join(root, file)
         return None
 
-    def run_gtest_suite(self) -> Dict[str, Any]:
+    def find_test_executables(self) -> List[str]:
         test_executable = self.find_test_executable()
         if not test_executable:
+            return []
+
+        executables = [test_executable]
+        if self.suite == "unit":
+            vulkan_executable = self._find_named_test_executable("skity_vulkan_unit_test")
+            if vulkan_executable:
+                executables.append(vulkan_executable)
+        return executables
+
+    def _find_named_test_executable(self, target_exe: str) -> Optional[str]:
+        test_paths = [
+            os.path.join(self.build_dir, "test", "ut", target_exe),
+            os.path.join(self.build_dir, "test", target_exe),
+            os.path.join(self.build_dir, target_exe),
+        ]
+        for path in test_paths:
+            if os.path.exists(path) and os.access(path, os.X_OK):
+                return path
+
+        for root, dirs, files in os.walk(self.build_dir):
+            for file in files:
+                if file == target_exe and os.access(os.path.join(root, file), os.X_OK):
+                    return os.path.join(root, file)
+        return None
+
+    def run_gtest_suite(self) -> Dict[str, Any]:
+        test_executables = self.find_test_executables()
+        if not test_executables:
             return self._create_infra_error("missing_executable", "Test executable not found!")
 
         self.print_status(Colors.YELLOW, f"🚀 Running {self.suite} tests...")
-        
-        gtest_json_path = os.path.join(self.build_dir, "gtest_report.json")
-        if os.path.exists(gtest_json_path):
-            os.remove(gtest_json_path)
 
-        cmd = [test_executable, f"--gtest_output=json:{gtest_json_path}"]
         env, env_error = self.prepare_test_environment()
         if env_error:
             return self._create_infra_error("missing_runtime_dependency", env_error)
 
-        if self.suite.startswith("golden") and self.backend != "metal":
-            cmd.extend(["--backend", self.backend])
-        
-        if self.test_filter:
-            cmd.append(f"--gtest_filter={self.test_filter}")
-            self.print_status(Colors.YELLOW, f"🎯 Filter: {self.test_filter}")
-
-        try:
-            result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
-            
-            # Crash or abnormal exit without JSON generated
-            if result.returncode != 0 and not os.path.exists(gtest_json_path):
-                return self._create_infra_error(
-                    "runtime_crash", 
-                    f"Test process crashed with exit code {result.returncode}.\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
-                )
-            
-            # Parse the JSON if it exists
+        reports = []
+        for index, test_executable in enumerate(test_executables):
+            gtest_json_path = os.path.join(self.build_dir, f"gtest_report_{index}.json")
             if os.path.exists(gtest_json_path):
-                return self._parse_gtest_json(gtest_json_path, result.returncode, result.stdout)
-            else:
-                return self._create_infra_error("missing_gtest_report", "Tests ran but gtest_report.json was not generated.")
+                os.remove(gtest_json_path)
 
-        except Exception as e:
-            return self._create_infra_error("infra_error", f"Failed to execute tests: {e}")
+            cmd = [test_executable, f"--gtest_output=json:{gtest_json_path}"]
+
+            if self.suite.startswith("golden") and self.backend != "metal":
+                cmd.extend(["--backend", self.backend])
+
+            if self.test_filter:
+                cmd.append(f"--gtest_filter={self.test_filter}")
+                if index == 0:
+                    self.print_status(Colors.YELLOW, f"🎯 Filter: {self.test_filter}")
+
+            try:
+                result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
+
+                # Crash or abnormal exit without JSON generated
+                if result.returncode != 0 and not os.path.exists(gtest_json_path):
+                    return self._create_infra_error(
+                        "runtime_crash",
+                        f"Test process crashed with exit code {result.returncode}.\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+                    )
+
+                # Parse the JSON if it exists
+                if os.path.exists(gtest_json_path):
+                    reports.append(self._parse_gtest_json(gtest_json_path, result.returncode, result.stdout))
+                else:
+                    return self._create_infra_error("missing_gtest_report", "Tests ran but gtest_report.json was not generated.")
+
+            except Exception as e:
+                return self._create_infra_error("infra_error", f"Failed to execute tests: {e}")
+
+        if len(reports) == 1:
+            return reports[0]
+
+        merged_report = {
+            "summary": {
+                "total": sum(report["summary"]["total"] for report in reports),
+                "passed": sum(report["summary"]["passed"] for report in reports),
+                "failed": sum(report["summary"]["failed"] for report in reports),
+                "duration_ms": int((time.time() - self.started) * 1000),
+            },
+            "failures": [],
+        }
+        for report in reports:
+            merged_report["failures"].extend(report["failures"])
+        return merged_report
 
     def _parse_gtest_json(self, json_path: str, exit_code: int, stdout: str) -> Dict[str, Any]:
         try:

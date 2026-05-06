@@ -24,6 +24,12 @@ class GPUContextImpl : public GPUContext {
 
   GPUBackendType GetBackendType() const override { return backend_type_; }
 
+  std::unique_ptr<GPUPresenter> CreatePresenter(
+      GPUPresenterDescriptor* desc) override {
+    (void)desc;
+    return nullptr;
+  }
+
   std::shared_ptr<Texture> CreateTexture(TextureFormat format, uint32_t width,
                                          uint32_t height,
                                          skity::AlphaType alpha_type) override;
@@ -59,6 +65,8 @@ class GPUContextImpl : public GPUContext {
   std::shared_ptr<Data> ReadPixels(const std::shared_ptr<GPUTexture>& texture);
 
  protected:
+  void ResetOwnedResources();
+
   virtual std::unique_ptr<GPUDevice> CreateGPUDevice() = 0;
 
   virtual std::shared_ptr<GPUTexture> OnWrapTexture(

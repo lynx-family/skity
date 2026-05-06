@@ -34,7 +34,10 @@ std::shared_ptr<GPUBlitPass> GPUCommandBufferGL::BeginBlitPass() {
   return std::make_shared<GPUBlitPassGL>();
 }
 
-bool GPUCommandBufferGL::Submit() { return true; }
+bool GPUCommandBufferGL::Submit(const GPUSubmitInfo* submit_info) {
+  (void)submit_info;
+  return true;
+}
 
 std::shared_ptr<GPURenderPass> GPUCommandBufferGL::BeginDirectRenderPass(
     const skity::GPURenderPassDescriptor& desc) {
