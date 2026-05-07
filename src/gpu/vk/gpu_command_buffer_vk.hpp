@@ -65,8 +65,8 @@ class GPUCommandBufferVK : public GPUCommandBuffer {
   VkCommandBuffer command_buffer_ = VK_NULL_HANDLE;
   bool recording_ = false;
   bool submitted_ = false;
-  std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers_ = {};
-  std::vector<std::function<void()>> cleanup_actions_ = {};
+  std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers_;
+  std::vector<std::function<void()>> cleanup_actions_;
 };
 
 }  // namespace skity

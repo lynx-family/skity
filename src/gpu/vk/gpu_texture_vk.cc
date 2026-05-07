@@ -13,6 +13,29 @@ namespace skity {
 
 namespace {
 
+bool CreateImageWithAllocation(const VulkanContextState& state,
+                               const VkImageCreateInfo& image_info,
+                               const VmaAllocationCreateInfo& allocation_info,
+                               VkImage* image, VmaAllocation* allocation) {
+  if (image == nullptr || allocation == nullptr) {
+    return false;
+  }
+
+  *image = VK_NULL_HANDLE;
+  *allocation = nullptr;
+  const VkResult create_result =
+      vmaCreateImage(state.GetAllocator(), &image_info, &allocation_info, image,
+                     allocation, nullptr);
+  if (create_result != VK_SUCCESS || *image == VK_NULL_HANDLE ||
+      *allocation == nullptr) {
+    LOGE("Failed to create Vulkan image {}x{}: {}", image_info.extent.width,
+         image_info.extent.height, static_cast<int32_t>(create_result));
+    return false;
+  }
+
+  return true;
+}
+
 VkFormat ConvertToVkFormat(GPUTextureFormat format) {
   switch (format) {
     case GPUTextureFormat::kR8Unorm:
@@ -208,7 +231,7 @@ GPUTextureVK::~GPUTextureVK() {
   }
 
   if (state_ != nullptr && state_->GetAllocator() != nullptr && owns_image_ &&
-      image_ != VK_NULL_HANDLE && allocation_ != VK_NULL_HANDLE) {
+      image_ != VK_NULL_HANDLE && allocation_ != nullptr) {
     vmaDestroyImage(state_->GetAllocator(), image_, allocation_);
   }
 }
@@ -226,7 +249,7 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Wrap(
   }
 
   auto texture = std::make_shared<GPUTextureVK>(
-      std::move(state), descriptor, image, VK_NULL_HANDLE, image_view,
+      std::move(state), descriptor, image, nullptr, image_view,
       preferred_layout, format, owns_image, owns_image_view);
   texture->SetCurrentLayout(initial_layout);
   return texture;
@@ -290,15 +313,22 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Create(
   }
 
   VkImage image = VK_NULL_HANDLE;
-  VmaAllocation allocation = VK_NULL_HANDLE;
-  const VkResult create_result =
-      vmaCreateImage(state->GetAllocator(), &image_info, &allocation_info,
-                     &image, &allocation, nullptr);
-  if (create_result != VK_SUCCESS || image == VK_NULL_HANDLE ||
-      allocation == VK_NULL_HANDLE) {
-    LOGE("Failed to create Vulkan image {}x{}: {}", descriptor.width,
-         descriptor.height, static_cast<int32_t>(create_result));
-    return {};
+  VmaAllocation allocation = nullptr;
+  if (!CreateImageWithAllocation(*state, image_info, allocation_info, &image,
+                                 &allocation)) {
+    if (descriptor.storage_mode != GPUTextureStorageMode::kMemoryless) {
+      return {};
+    }
+
+    // Some Android Vulkan drivers reject lazily allocated transient
+    // attachments. Fall back to a regular device-local image so rendering can
+    // still proceed in debug/demo scenarios.
+    image_info.usage &= ~VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+    allocation_info.requiredFlags = 0;
+    if (!CreateImageWithAllocation(*state, image_info, allocation_info, &image,
+                                   &allocation)) {
+      return {};
+    }
   }
 
   VkImageViewCreateInfo view_info = {};

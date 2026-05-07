@@ -11,7 +11,13 @@
 #include <string_view>
 #include <vector>
 
+#include "src/gpu/vk/vulkan_platform_extensions.hpp"
 #include "src/logging.hpp"
+
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+#endif
 
 namespace skity {
 
@@ -75,6 +81,68 @@ const char* VulkanVendorName(uint32_t vendor_id) {
     default:
       return "Unknown";
   }
+}
+
+const char* MemoryPropertyFlagName(VkMemoryPropertyFlagBits flag) {
+  switch (flag) {
+    case VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT:
+      return "DEVICE_LOCAL";
+    case VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT:
+      return "HOST_VISIBLE";
+    case VK_MEMORY_PROPERTY_HOST_COHERENT_BIT:
+      return "HOST_COHERENT";
+    case VK_MEMORY_PROPERTY_HOST_CACHED_BIT:
+      return "HOST_CACHED";
+    case VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT:
+      return "LAZILY_ALLOCATED";
+    case VK_MEMORY_PROPERTY_PROTECTED_BIT:
+      return "PROTECTED";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+void LogPhysicalDeviceMemoryProperties(const VulkanInstanceFns& instance_fns,
+                                       VkPhysicalDevice physical_device) {
+#ifdef SKITY_RELEASE
+  (void)instance_fns;
+  (void)physical_device;
+#else
+  if (physical_device == VK_NULL_HANDLE ||
+      instance_fns.vkGetPhysicalDeviceMemoryProperties == nullptr) {
+    return;
+  }
+
+  VkPhysicalDeviceMemoryProperties memory_properties = {};
+  instance_fns.vkGetPhysicalDeviceMemoryProperties(physical_device,
+                                                   &memory_properties);
+  LOGD("Vulkan memory heaps: {}", memory_properties.memoryHeapCount);
+  for (uint32_t i = 0; i < memory_properties.memoryHeapCount; ++i) {
+    const auto& heap = memory_properties.memoryHeaps[i];
+    LOGD("Vulkan memory heap[{}]: size={} flags=0x{:x}", i,
+         static_cast<unsigned long long>(heap.size), heap.flags);
+  }
+
+  LOGD("Vulkan memory types: {}", memory_properties.memoryTypeCount);
+  constexpr VkMemoryPropertyFlagBits kKnownFlags[] = {
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+      VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+      VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT,
+      VK_MEMORY_PROPERTY_PROTECTED_BIT,
+  };
+  for (uint32_t i = 0; i < memory_properties.memoryTypeCount; ++i) {
+    const auto& type = memory_properties.memoryTypes[i];
+    LOGD("Vulkan memory type[{}]: heap={} flags=0x{:x}", i, type.heapIndex,
+         type.propertyFlags);
+    for (auto flag : kKnownFlags) {
+      if ((type.propertyFlags & flag) != 0) {
+        LOGD("  - {}", MemoryPropertyFlagName(flag));
+      }
+    }
+  }
+#endif
 }
 
 bool ContainsExtension(const std::vector<std::string>& extensions,
@@ -151,11 +219,16 @@ bool ContainsLayer(const std::vector<VkLayerProperties>& layers,
 
 void LogExtensions(const char* label,
                    const std::vector<VkExtensionProperties>& extensions) {
+#ifdef SKITY_RELEASE
+  (void)label;
+  (void)extensions;
+#else
   LOGD("Enumerated {} Vulkan {} extension(s)", extensions.size(), label);
   for (const auto& extension : extensions) {
     LOGD("Vulkan {} extension: {} (spec version {})", label,
          extension.extensionName, extension.specVersion);
   }
+#endif
 }
 
 void LogLayers(const std::vector<VkLayerProperties>& layers) {
@@ -204,6 +277,10 @@ std::vector<const char*> BuildNamePtrs(const std::vector<std::string>& names) {
 
 void LogEnabledExtensions(const char* label,
                           const std::vector<std::string>& extensions) {
+#ifdef SKITY_RELEASE
+  (void)label;
+  (void)extensions;
+#else
   if (extensions.empty()) {
     LOGD("Enabled 0 Vulkan {} extension(s)", label);
     return;
@@ -213,6 +290,7 @@ void LogEnabledExtensions(const char* label,
   for (const auto& extension : extensions) {
     LOGD("Enabled Vulkan {} extension: {}", label, extension);
   }
+#endif
 }
 
 void LogEnabledLayers(const std::vector<std::string>& layers) {
@@ -399,7 +477,7 @@ void MarkDebugRuntimeKnownAndLog(VulkanDebugRuntimeState* debug_runtime) {
   LogEnabledLayers(debug_runtime->enabled_instance_layers);
 }
 
-VkBool32 VKAPI_CALL VulkanDebugUtilsMessengerCallback(
+VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugUtilsMessengerCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
     VkDebugUtilsMessageTypeFlagsEXT message_types,
     const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
@@ -494,6 +572,14 @@ void ApplyDebugRuntimeToInstanceCreateInfo(
 }
 
 void MarkDebugRuntimeKnownAndLog(VulkanDebugRuntimeState* debug_runtime) {
+  (void)debug_runtime;
+}
+
+void TryCreateDebugUtilsMessenger(VkInstance instance,
+                                  const VulkanInstanceFns& instance_fns,
+                                  VulkanDebugRuntimeState* debug_runtime) {
+  (void)instance;
+  (void)instance_fns;
   (void)debug_runtime;
 }
 
@@ -743,46 +829,8 @@ bool VulkanContextState::InitializeInstance(const GPUContextInfoVK& info) {
                                             &enabled_instance_extensions_,
                                             &instance_flags);
 
-#if defined(SKITY_ANDROID)
-#if defined(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)
-    TryEnableInstanceExtension(&enabled_instance_extensions_,
-                               available_instance_extensions_,
-                               VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
-#endif
-#elif defined(SKITY_WIN)
-#if defined(VK_KHR_WIN32_SURFACE_EXTENSION_NAME)
-    TryEnableInstanceExtension(&enabled_instance_extensions_,
-                               available_instance_extensions_,
-                               VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-#endif
-#elif defined(SKITY_MACOS) || defined(SKITY_IOS)
-#if defined(VK_EXT_METAL_SURFACE_EXTENSION_NAME)
-    TryEnableInstanceExtension(&enabled_instance_extensions_,
-                               available_instance_extensions_,
-                               VK_EXT_METAL_SURFACE_EXTENSION_NAME);
-#endif
-#if defined(VK_MVK_MACOS_SURFACE_EXTENSION_NAME)
-    TryEnableInstanceExtension(&enabled_instance_extensions_,
-                               available_instance_extensions_,
-                               VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
-#endif
-#elif defined(SKITY_LINUX)
-#if defined(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME)
-    TryEnableInstanceExtension(&enabled_instance_extensions_,
-                               available_instance_extensions_,
-                               VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
-#endif
-#if defined(VK_KHR_XCB_SURFACE_EXTENSION_NAME)
-    TryEnableInstanceExtension(&enabled_instance_extensions_,
-                               available_instance_extensions_,
-                               VK_KHR_XCB_SURFACE_EXTENSION_NAME);
-#endif
-#if defined(VK_KHR_XLIB_SURFACE_EXTENSION_NAME)
-    TryEnableInstanceExtension(&enabled_instance_extensions_,
-                               available_instance_extensions_,
-                               VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
-#endif
-#endif
+    EnablePlatformSurfaceInstanceExtensions(available_instance_extensions_,
+                                            &enabled_instance_extensions_);
 
     ConfigureDebugRuntimeForOwnedInstance(info, available_instance_extensions_,
                                           &enabled_instance_extensions_,
@@ -905,6 +953,8 @@ bool VulkanContextState::InitializePhysicalDevice(
   if (physical_device_ == VK_NULL_HANDLE) {
     return false;
   }
+
+  LogPhysicalDeviceMemoryProperties(functions_.instance, physical_device_);
 
   uint32_t queue_family_count = 0;
   functions_.instance.vkGetPhysicalDeviceQueueFamilyProperties(
@@ -1450,3 +1500,7 @@ void VulkanContextState::Reset() {
 }
 
 }  // namespace skity
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif

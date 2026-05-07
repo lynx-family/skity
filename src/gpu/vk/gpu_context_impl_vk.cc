@@ -27,7 +27,15 @@
 #ifndef VMA_DYNAMIC_VULKAN_FUNCTIONS
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnullability-completeness"
+#pragma clang diagnostic ignored "-Wunused-variable"
+#endif
 #include <vk_mem_alloc.h>
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 namespace skity {
 
@@ -169,11 +177,15 @@ bool QueryInstanceExtensions(const VulkanGlobalFns& global_fns,
 
 void LogInstanceExtensions(
     const std::vector<VkExtensionProperties>& extensions) {
+#ifdef SKITY_RELEASE
+  (void)extensions;
+#else
   LOGD("Enumerated {} Vulkan instance extension(s)", extensions.size());
   for (const auto& extension : extensions) {
     LOGD("Vulkan instance extension: {} (spec version {})",
          extension.extensionName, extension.specVersion);
   }
+#endif
 }
 
 }  // namespace

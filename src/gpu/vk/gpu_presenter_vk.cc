@@ -17,6 +17,29 @@ namespace skity {
 
 namespace {
 
+VkCompositeAlphaFlagBitsKHR ResolveCompositeAlpha(
+    VkCompositeAlphaFlagBitsKHR preferred,
+    VkCompositeAlphaFlagsKHR supported_flags) {
+  if ((supported_flags & preferred) != 0) {
+    return preferred;
+  }
+
+  constexpr VkCompositeAlphaFlagBitsKHR kFallbackOrder[] = {
+      VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+      VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+      VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
+      VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+  };
+
+  for (auto candidate : kFallbackOrder) {
+    if ((supported_flags & candidate) != 0) {
+      return candidate;
+    }
+  }
+
+  return preferred;
+}
+
 VkImageView CreateSwapchainImageView(const VulkanContextState& state,
                                      VkImage image, VkFormat format) {
   VkImageViewCreateInfo view_info = {};
@@ -57,6 +80,49 @@ GPUTextureFormat ToGPUTextureFormat(VkFormat format) {
     default:
       return GPUTextureFormat::kInvalid;
   }
+}
+
+void LogSurfaceCapabilities(const VkSurfaceCapabilitiesKHR& capabilities) {
+#ifdef SKITY_RELEASE
+  (void)capabilities;
+#else
+  LOGD(
+      "Vulkan surface capabilities: minImages={} maxImages={} "
+      "currentExtent={}x{} "
+      "minExtent={}x{} maxExtent={}x{} supportedTransforms=0x{:x} "
+      "currentTransform=0x{:x} supportedCompositeAlpha=0x{:x} "
+      "supportedUsage=0x{:x}",
+      capabilities.minImageCount, capabilities.maxImageCount,
+      capabilities.currentExtent.width, capabilities.currentExtent.height,
+      capabilities.minImageExtent.width, capabilities.minImageExtent.height,
+      capabilities.maxImageExtent.width, capabilities.maxImageExtent.height,
+      static_cast<uint32_t>(capabilities.supportedTransforms),
+      static_cast<uint32_t>(capabilities.currentTransform),
+      capabilities.supportedCompositeAlpha, capabilities.supportedUsageFlags);
+#endif
+}
+
+void LogSurfaceFormats(const std::vector<VkSurfaceFormatKHR>& formats) {
+#ifdef SKITY_RELEASE
+  (void)formats;
+#else
+  LOGD("Vulkan surface formats: {}", formats.size());
+  for (const auto& format : formats) {
+    LOGD("  - format={} colorSpace={}", static_cast<int32_t>(format.format),
+         static_cast<int32_t>(format.colorSpace));
+  }
+#endif
+}
+
+void LogPresentModes(const std::vector<VkPresentModeKHR>& present_modes) {
+#ifdef SKITY_RELEASE
+  (void)present_modes;
+#else
+  LOGD("Vulkan present modes: {}", present_modes.size());
+  for (auto present_mode : present_modes) {
+    LOGD("  - presentMode={}", static_cast<int32_t>(present_mode));
+  }
+#endif
 }
 
 }  // namespace
@@ -344,6 +410,7 @@ bool GPUPresenterVK::CreateSwapchain() {
     LOGE("Failed to query Vulkan surface capabilities");
     return false;
   }
+  LogSurfaceCapabilities(capabilities);
 
   uint32_t format_count = 0;
   if (fns_.vkGetPhysicalDeviceSurfaceFormatsKHR(state_->GetPhysicalDevice(),
@@ -360,6 +427,7 @@ bool GPUPresenterVK::CreateSwapchain() {
     LOGE("Failed to load Vulkan surface formats");
     return false;
   }
+  LogSurfaceFormats(formats);
 
   uint32_t present_mode_count = 0;
   if (fns_.vkGetPhysicalDeviceSurfacePresentModesKHR(
@@ -376,6 +444,7 @@ bool GPUPresenterVK::CreateSwapchain() {
     LOGE("Failed to load Vulkan present modes");
     return false;
   }
+  LogPresentModes(present_modes);
 
   VkSurfaceFormatKHR selected_format = formats.front();
   for (const auto& surface_format : formats) {
@@ -410,6 +479,8 @@ bool GPUPresenterVK::CreateSwapchain() {
       (capabilities.supportedTransforms & desc_.pre_transform) != 0
           ? desc_.pre_transform
           : capabilities.currentTransform;
+  const VkCompositeAlphaFlagBitsKHR composite_alpha = ResolveCompositeAlpha(
+      desc_.composite_alpha, capabilities.supportedCompositeAlpha);
 
   uint32_t image_count =
       std::max(desc_.min_image_count, capabilities.minImageCount);
@@ -439,10 +510,21 @@ bool GPUPresenterVK::CreateSwapchain() {
   create_info.pQueueFamilyIndices =
       shared_present_queue ? queue_family_indices : nullptr;
   create_info.preTransform = swapchain_transform_;
-  create_info.compositeAlpha = desc_.composite_alpha;
+  create_info.compositeAlpha = composite_alpha;
   create_info.presentMode = selected_present_mode;
   create_info.clipped = desc_.clipped ? VK_TRUE : VK_FALSE;
   create_info.oldSwapchain = VK_NULL_HANDLE;
+  LOGD(
+      "Creating Vulkan swapchain: extent={}x{} imageCount={} format={} "
+      "colorSpace={} "
+      "presentMode={} preTransform=0x{:x} compositeAlpha=0x{:x} usage=0x{:x}",
+      create_info.imageExtent.width, create_info.imageExtent.height,
+      create_info.minImageCount, static_cast<int32_t>(create_info.imageFormat),
+      static_cast<int32_t>(create_info.imageColorSpace),
+      static_cast<int32_t>(create_info.presentMode),
+      static_cast<uint32_t>(create_info.preTransform),
+      static_cast<uint32_t>(create_info.compositeAlpha),
+      static_cast<uint32_t>(create_info.imageUsage));
 
   const VkResult result = fns_.vkCreateSwapchainKHR(
       state_->GetLogicalDevice(), &create_info, nullptr, &swapchain_);

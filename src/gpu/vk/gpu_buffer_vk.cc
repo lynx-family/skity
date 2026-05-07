@@ -34,9 +34,7 @@ VkBufferUsageFlags ConvertGPUBufferUsageMask(GPUBufferUsageMask usage) {
 GPUBufferVK::GPUBufferVK(GPUBufferUsageMask usage,
                          std::shared_ptr<const VulkanContextState> state,
                          GPUBufferVKMemoryType memory_type)
-    : GPUBuffer(usage),
-      state_(std::move(state)),
-      memory_type_(memory_type) {}
+    : GPUBuffer(usage), state_(std::move(state)), memory_type_(memory_type) {}
 
 GPUBufferVK::~GPUBufferVK() { DestroyBuffer(); }
 
@@ -63,19 +61,20 @@ bool GPUBufferVK::UploadData(const void* data, size_t size) {
   }
 
   if (state_ == nullptr || state_->GetAllocator() == nullptr ||
-      allocation_ == VK_NULL_HANDLE) {
+      allocation_ == nullptr) {
     LOGE("Failed to upload Vulkan buffer data: allocator is unavailable");
     return false;
   }
 
   if (memory_type_ != GPUBufferVKMemoryType::kHostVisible) {
-    LOGE("Failed to upload Vulkan buffer data: destination buffer is not "
-         "host visible");
+    LOGE(
+        "Failed to upload Vulkan buffer data: destination buffer is not "
+        "host visible");
     return false;
   }
 
-  const VkResult result = vmaCopyMemoryToAllocation(
-      state_->GetAllocator(), data, allocation_, 0, size);
+  const VkResult result = vmaCopyMemoryToAllocation(state_->GetAllocator(),
+                                                    data, allocation_, 0, size);
   if (result != VK_SUCCESS) {
     LOGE("Failed to upload {} bytes to Vulkan buffer: {}", size,
          static_cast<int32_t>(result));
@@ -121,7 +120,7 @@ bool GPUBufferVK::CreateBuffer(VkDeviceSize size) {
       vmaCreateBuffer(state_->GetAllocator(), &buffer_info, &allocation_info,
                       &buffer_, &allocation_, &vma_info);
   if (result != VK_SUCCESS || buffer_ == VK_NULL_HANDLE ||
-      allocation_ == VK_NULL_HANDLE) {
+      allocation_ == nullptr) {
     LOGE("Failed to create Vulkan buffer with size {}: {}",
          static_cast<uint64_t>(size), static_cast<int32_t>(result));
     DestroyBuffer();
@@ -135,12 +134,12 @@ bool GPUBufferVK::CreateBuffer(VkDeviceSize size) {
 
 void GPUBufferVK::DestroyBuffer() {
   if (state_ != nullptr && state_->GetAllocator() != nullptr &&
-      buffer_ != VK_NULL_HANDLE && allocation_ != VK_NULL_HANDLE) {
+      buffer_ != VK_NULL_HANDLE && allocation_ != nullptr) {
     vmaDestroyBuffer(state_->GetAllocator(), buffer_, allocation_);
   }
 
   buffer_ = VK_NULL_HANDLE;
-  allocation_ = VK_NULL_HANDLE;
+  allocation_ = nullptr;
   mapped_data_ = nullptr;
   size_ = 0;
 }

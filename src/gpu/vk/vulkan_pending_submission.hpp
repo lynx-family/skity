@@ -16,7 +16,7 @@ namespace skity {
 class GPUBufferVK;
 
 struct VulkanPendingSubmission {
-  VulkanPendingSubmission() = default;
+  VulkanPendingSubmission();
   VulkanPendingSubmission(
       VkFence fence, VkCommandPool command_pool,
       std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers,
@@ -31,8 +31,8 @@ struct VulkanPendingSubmission {
 
   VkFence fence = VK_NULL_HANDLE;
   VkCommandPool command_pool = VK_NULL_HANDLE;
-  std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers = {};
-  std::vector<std::function<void()>> cleanup_actions = {};
+  std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers;
+  std::vector<std::function<void()>> cleanup_actions;
   bool owns_fence = true;
 };
 

@@ -8,6 +8,8 @@
 
 namespace skity {
 
+VulkanPendingSubmission::VulkanPendingSubmission() = default;
+
 VulkanPendingSubmission::VulkanPendingSubmission(
     VkFence fence_in, VkCommandPool command_pool_in,
     std::vector<std::unique_ptr<GPUBufferVK>> stage_buffers_in,

@@ -22,10 +22,9 @@ enum class GPUBufferVKMemoryType {
 
 class GPUBufferVK : public GPUBuffer {
  public:
-  GPUBufferVK(GPUBufferUsageMask usage,
-              std::shared_ptr<const VulkanContextState> state,
-              GPUBufferVKMemoryType memory_type =
-                  GPUBufferVKMemoryType::kDeviceLocal);
+  GPUBufferVK(
+      GPUBufferUsageMask usage, std::shared_ptr<const VulkanContextState> state,
+      GPUBufferVKMemoryType memory_type = GPUBufferVKMemoryType::kDeviceLocal);
 
   ~GPUBufferVK() override;
 
@@ -54,7 +53,7 @@ class GPUBufferVK : public GPUBuffer {
   std::shared_ptr<const VulkanContextState> state_ = {};
   GPUBufferVKMemoryType memory_type_ = GPUBufferVKMemoryType::kDeviceLocal;
   VkBuffer buffer_ = VK_NULL_HANDLE;
-  VmaAllocation allocation_ = VK_NULL_HANDLE;
+  VmaAllocation allocation_ = nullptr;
   void* mapped_data_ = nullptr;
   VkDeviceSize size_ = 0;
 };

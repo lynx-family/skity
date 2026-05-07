@@ -66,7 +66,7 @@ class GPUTextureVK : public GPUTexture,
  private:
   std::shared_ptr<const VulkanContextState> state_ = {};
   VkImage image_ = VK_NULL_HANDLE;
-  VmaAllocation allocation_ = VK_NULL_HANDLE;
+  VmaAllocation allocation_ = nullptr;
   VkImageView image_view_ = VK_NULL_HANDLE;
   VkImageLayout preferred_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
   VkImageLayout current_layout_ = VK_IMAGE_LAYOUT_UNDEFINED;

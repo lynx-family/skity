@@ -68,6 +68,9 @@ elseif(ANDROID)
   else()
     message("build without asan")
     target_compile_options(skity PRIVATE -fomit-frame-pointer -fno-sanitize=safe-stack -Werror -Wunused-variable -Wunused-function)
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      target_compile_options(skity PRIVATE -Wno-nullability-completeness)
+    endif()
   endif()
 
   # arm64
