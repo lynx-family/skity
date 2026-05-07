@@ -13,6 +13,31 @@ namespace skity {
 
 namespace {
 
+const char* VkFormatToString(VkFormat format) {
+  switch (format) {
+    case VK_FORMAT_R8_UNORM:
+      return "VK_FORMAT_R8_UNORM";
+    case VK_FORMAT_R8G8B8_UNORM:
+      return "VK_FORMAT_R8G8B8_UNORM";
+    case VK_FORMAT_R5G6B5_UNORM_PACK16:
+      return "VK_FORMAT_R5G6B5_UNORM_PACK16";
+    case VK_FORMAT_R8G8B8A8_UNORM:
+      return "VK_FORMAT_R8G8B8A8_UNORM";
+    case VK_FORMAT_B8G8R8A8_UNORM:
+      return "VK_FORMAT_B8G8R8A8_UNORM";
+    case VK_FORMAT_S8_UINT:
+      return "VK_FORMAT_S8_UINT";
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+      return "VK_FORMAT_D24_UNORM_S8_UINT";
+    case VK_FORMAT_D32_SFLOAT_S8_UINT:
+      return "VK_FORMAT_D32_SFLOAT_S8_UINT";
+    case VK_FORMAT_UNDEFINED:
+      return "VK_FORMAT_UNDEFINED";
+    default:
+      return "VK_FORMAT_UNKNOWN";
+  }
+}
+
 bool CreateImageWithAllocation(const VulkanContextState& state,
                                const VkImageCreateInfo& image_info,
                                const VmaAllocationCreateInfo& allocation_info,
@@ -133,6 +158,12 @@ bool IsImageFormatSupported(const VulkanContextState& state, VkFormat format,
           state.GetPhysicalDevice(), format, VK_IMAGE_TYPE_2D,
           VK_IMAGE_TILING_OPTIMAL, usage, 0, &properties);
   if (result != VK_SUCCESS) {
+    LOGD(
+        "Vulkan image format unsupported: format={} usage=0x{:x} "
+        "samples=0x{:x} "
+        "result={}",
+        VkFormatToString(format), static_cast<uint32_t>(usage),
+        static_cast<uint32_t>(samples), static_cast<int32_t>(result));
     return false;
   }
 
@@ -151,7 +182,37 @@ VkFormat ResolveVkFormat(const VulkanContextState& state,
   if (texture_format == GPUTextureFormat::kDepth24Stencil8 &&
       IsImageFormatSupported(state, VK_FORMAT_D32_SFLOAT_S8_UINT, usage,
                              samples)) {
+    LOGD(
+        "Vulkan texture format fallback: logical_format={} preferred={} "
+        "resolved={} usage=0x{:x} samples=0x{:x}",
+        static_cast<uint32_t>(texture_format), VkFormatToString(preferred),
+        VkFormatToString(VK_FORMAT_D32_SFLOAT_S8_UINT),
+        static_cast<uint32_t>(usage), static_cast<uint32_t>(samples));
     return VK_FORMAT_D32_SFLOAT_S8_UINT;
+  }
+
+  if (texture_format == GPUTextureFormat::kStencil8) {
+    if (IsImageFormatSupported(state, VK_FORMAT_D24_UNORM_S8_UINT, usage,
+                               samples)) {
+      LOGD(
+          "Vulkan texture format fallback: logical_format={} preferred={} "
+          "resolved={} usage=0x{:x} samples=0x{:x}",
+          static_cast<uint32_t>(texture_format), VkFormatToString(preferred),
+          VkFormatToString(VK_FORMAT_D24_UNORM_S8_UINT),
+          static_cast<uint32_t>(usage), static_cast<uint32_t>(samples));
+      return VK_FORMAT_D24_UNORM_S8_UINT;
+    }
+
+    if (IsImageFormatSupported(state, VK_FORMAT_D32_SFLOAT_S8_UINT, usage,
+                               samples)) {
+      LOGD(
+          "Vulkan texture format fallback: logical_format={} preferred={} "
+          "resolved={} usage=0x{:x} samples=0x{:x}",
+          static_cast<uint32_t>(texture_format), VkFormatToString(preferred),
+          VkFormatToString(VK_FORMAT_D32_SFLOAT_S8_UINT),
+          static_cast<uint32_t>(usage), static_cast<uint32_t>(samples));
+      return VK_FORMAT_D32_SFLOAT_S8_UINT;
+    }
   }
 
   return VK_FORMAT_UNDEFINED;
@@ -298,9 +359,22 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Create(
   image_info.format = ResolveVkFormat(*state, descriptor.format,
                                       image_info.usage, image_info.samples);
   if (image_info.format == VK_FORMAT_UNDEFINED) {
-    LOGE("Failed to create Vulkan texture: unsupported format");
+    LOGE(
+        "Failed to create Vulkan texture: unsupported format={} usage=0x{:x} "
+        "samples=0x{:x}",
+        static_cast<uint32_t>(descriptor.format),
+        static_cast<uint32_t>(image_info.usage),
+        static_cast<uint32_t>(image_info.samples));
     return {};
   }
+
+  LOGD(
+      "Creating Vulkan texture: logical_format={} resolved_format={} "
+      "size={}x{} usage=0x{:x} samples=0x{:x}",
+      static_cast<uint32_t>(descriptor.format),
+      VkFormatToString(image_info.format), descriptor.width, descriptor.height,
+      static_cast<uint32_t>(image_info.usage),
+      static_cast<uint32_t>(image_info.samples));
 
   VmaAllocationCreateInfo allocation_info = {};
   if (descriptor.storage_mode == GPUTextureStorageMode::kMemoryless) {

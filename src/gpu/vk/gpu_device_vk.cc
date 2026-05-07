@@ -258,6 +258,18 @@ VkFormat ResolveAttachmentFormat(const skity::VulkanContextState& state,
     return VK_FORMAT_D32_SFLOAT_S8_UINT;
   }
 
+  if (format == skity::GPUTextureFormat::kStencil8) {
+    if (IsAttachmentFormatSupported(state, VK_FORMAT_D24_UNORM_S8_UINT, usage,
+                                    samples)) {
+      return VK_FORMAT_D24_UNORM_S8_UINT;
+    }
+
+    if (IsAttachmentFormatSupported(state, VK_FORMAT_D32_SFLOAT_S8_UINT, usage,
+                                    samples)) {
+      return VK_FORMAT_D32_SFLOAT_S8_UINT;
+    }
+  }
+
   return VK_FORMAT_UNDEFINED;
 }
 
