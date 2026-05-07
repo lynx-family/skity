@@ -352,18 +352,7 @@ bool ShouldEnableVulkanDebugRuntime(const GPUContextInfoVK& info) {
   (void)info;
   return false;
 #else
-  if (info.enable_debug_runtime) {
-    return true;
-  }
-
-  const char* value = std::getenv("SKITY_VK_DEBUG_RUNTIME");
-  if (value == nullptr || *value == '\0') {
-    return false;
-  }
-
-  const std::string_view flag(value);
-  return flag == "1" || flag == "true" || flag == "TRUE" || flag == "on" ||
-         flag == "ON" || flag == "yes" || flag == "YES";
+  return info.enable_debug_runtime;
 #endif
 }
 

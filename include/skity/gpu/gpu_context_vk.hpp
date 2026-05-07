@@ -166,6 +166,9 @@ struct GPUContextInfoVK {
    *
    * In non-Debug builds this hint is compiled out and has no effect.
    *
+   * When false, skity will not request Vulkan debug runtime layers or
+   * extensions for owned instances, even in Debug builds.
+   *
    * This flag is ignored for user provided Vulkan instances because those
    * layers and extensions must already be chosen during instance creation.
    */
