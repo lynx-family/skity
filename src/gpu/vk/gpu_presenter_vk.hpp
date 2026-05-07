@@ -29,6 +29,8 @@ class GPUPresenterVK : public GPUPresenter {
 
   bool Init();
 
+  int32_t GetPresentMode() const override;
+
   GPUSurfaceAcquireResult AcquireNextSurface(
       const GPUSurfaceAcquireDescriptor& desc) override;
 
@@ -83,6 +85,7 @@ class GPUPresenterVK : public GPUPresenter {
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
   VkExtent2D swapchain_extent_ = {};
   VkFormat swapchain_format_ = VK_FORMAT_UNDEFINED;
+  VkPresentModeKHR swapchain_present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
   VkSurfaceTransformFlagBitsKHR swapchain_transform_ =
       VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
   std::vector<VkImage> swapchain_images_ = {};

@@ -177,6 +177,10 @@ bool GPUPresenterVK::Init() {
   return true;
 }
 
+int32_t GPUPresenterVK::GetPresentMode() const {
+  return static_cast<int32_t>(swapchain_present_mode_);
+}
+
 GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
     const GPUSurfaceAcquireDescriptor& acquire_desc) {
   GPUSurfaceAcquireResult result = {};
@@ -475,6 +479,7 @@ bool GPUPresenterVK::CreateSwapchain() {
   }
 
   swapchain_format_ = selected_format.format;
+  swapchain_present_mode_ = selected_present_mode;
   swapchain_transform_ =
       (capabilities.supportedTransforms & desc_.pre_transform) != 0
           ? desc_.pre_transform

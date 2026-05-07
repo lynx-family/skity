@@ -5,6 +5,7 @@
 #ifndef INCLUDE_SKITY_GPU_GPU_PRESENTER_HPP
 #define INCLUDE_SKITY_GPU_GPU_PRESENTER_HPP
 
+#include <cstdint>
 #include <memory>
 #include <skity/gpu/gpu_backend_type.hpp>
 #include <skity/gpu/gpu_surface.hpp>
@@ -105,6 +106,14 @@ struct GPUSurfaceAcquireResult {
 class SKITY_API GPUPresenter {
  public:
   virtual ~GPUPresenter() = default;
+
+  /**
+   * @brief Actual presentation mode in use.
+   *
+   * @details Backends that do not expose a meaningful presentation mode may
+   *          return 0.
+   */
+  virtual int32_t GetPresentMode() const { return 0; }
 
   /**
    * @brief Acquire the next surface from the GPU.
