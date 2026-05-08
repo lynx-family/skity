@@ -462,9 +462,18 @@ void ScalerContextFreetype::GenerateImage(GlyphData* glyph,
     if (FT_Get_Color_Glyph_Paint(face_, glyph->Id(),
                                  FT_COLOR_INCLUDE_ROOT_TRANSFORM,
                                  &opaqueLayerPaint)) {
-      color_utils_->DrawColorV1Glyph(face_, *glyph);
+      if (!color_utils_->DrawColorV1Glyph(face_, *glyph)) {
+        glyph->image_ = {};
+        return;
+      }
+
       GlyphBitmapData& info = glyph->image_;
       Bitmap* bitmap = color_utils_->GetBitmap();
+      if (bitmap == nullptr || bitmap->Width() == 0 || bitmap->Height() == 0) {
+        info = {};
+        return;
+      }
+
       info.buffer = bitmap->GetPixelAddr();
       info.width = bitmap->Width();
       info.height = bitmap->Height();

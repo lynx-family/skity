@@ -13,11 +13,14 @@
 
 #include <freetype/ftsizes.h>
 
+#include <cmath>
+#include <limits>
 #include <skity/effect/shader.hpp>
 #include <unordered_set>
 
 #include "src/base/fixed_types.hpp"
 #include "src/geometry/math.hpp"
+#include "src/logging.hpp"
 #include "src/render/auto_canvas.hpp"
 #include "src/utils/function_wrapper.hpp"
 
@@ -774,7 +777,10 @@ Path clip_box_path(ColorContext context, GlyphID glyph_id, bool untransformed) {
 
 bool ColorFreeType::DrawColorV1Glyph(FT_Face face, const GlyphData& glyph) {
   PreparePalette(face);
-  PrepareCanvas(glyph);
+  if (!PrepareCanvas(glyph)) {
+    return false;
+  }
+
   VisitedSet visited_set;
   ColorContext context{this,      path_unitls_,      canvas_.get(), face,
                        &palette_, foreground_color_, &visited_set};
@@ -812,13 +818,31 @@ void ColorFreeType::PreparePalette(FT_Face face) {
   }
 }
 
-void ColorFreeType::PrepareCanvas(const GlyphData& glyph) {
-  if (bitmap_) {
-    // release previous bitmap
+bool ColorFreeType::PrepareCanvas(const GlyphData& glyph) {
+  canvas_.reset();
+  bitmap_.reset();
+
+  float width = glyph.GetWidth();
+  float height = glyph.GetHeight();
+  constexpr float kMaxBitmapSize =
+      static_cast<float>(std::numeric_limits<uint32_t>::max());
+
+  if (!std::isfinite(width) || !std::isfinite(height) || width <= 0.f ||
+      height <= 0.f || width > kMaxBitmapSize || height > kMaxBitmapSize) {
+    DEBUG_CHECK(false);  // Find matching glyph
+    return false;
   }
-  bitmap_ = std::make_unique<Bitmap>(glyph.GetWidth(), glyph.GetHeight(),
+
+  bitmap_ = std::make_unique<Bitmap>(static_cast<uint32_t>(std::ceil(width)),
+                                     static_cast<uint32_t>(std::ceil(height)),
                                      skity::AlphaType::kPremul_AlphaType);
   canvas_ = skity::Canvas::MakeSoftwareCanvas(bitmap_.get());
+  if (!canvas_) {
+    bitmap_.reset();
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace skity

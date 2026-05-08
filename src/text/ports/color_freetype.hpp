@@ -31,7 +31,7 @@ class ColorFreeType {
 
  private:
   void PreparePalette(FT_Face face);
-  void PrepareCanvas(const GlyphData& glyph);
+  bool PrepareCanvas(const GlyphData& glyph);
 
   [[maybe_unused]] PathFreeType* path_unitls_ = nullptr;
 
