@@ -36,7 +36,7 @@ glm::ivec4 AtlasBitmap::GetGlyphRegion(GlyphKey key) {
 
 glm::ivec4 AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
                                             const GlyphBitmapData& bitmap) {
-  if (static_cast<uint32_t>(bitmap.height) == 0 ||
+  if (static_cast<uint32_t>(bitmap.width) == 0 ||
       static_cast<uint32_t>(bitmap.height) == 0) {
     return {0, 0, 0, 0};
   }
