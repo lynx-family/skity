@@ -235,6 +235,10 @@ bool LoadVulkanInstanceFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
   fns->vkGetPhysicalDeviceProperties =
       reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
           get_instance_proc_addr(instance, "vkGetPhysicalDeviceProperties"));
+  fns->vkGetPhysicalDeviceFormatProperties =
+      reinterpret_cast<PFN_vkGetPhysicalDeviceFormatProperties>(
+          get_instance_proc_addr(instance,
+                                 "vkGetPhysicalDeviceFormatProperties"));
   fns->vkGetPhysicalDeviceMemoryProperties =
       reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties>(
           get_instance_proc_addr(instance,
@@ -275,6 +279,7 @@ bool LoadVulkanInstanceFns(PFN_vkGetInstanceProcAddr get_instance_proc_addr,
   if (fns->vkDestroyInstance == nullptr ||
       fns->vkEnumeratePhysicalDevices == nullptr ||
       fns->vkGetPhysicalDeviceProperties == nullptr ||
+      fns->vkGetPhysicalDeviceFormatProperties == nullptr ||
       fns->vkGetPhysicalDeviceMemoryProperties == nullptr ||
       fns->vkGetPhysicalDeviceImageFormatProperties == nullptr ||
       fns->vkGetPhysicalDeviceFeatures2 == nullptr ||
@@ -399,6 +404,8 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkCmdBeginRenderPass"));
   fns->vkCmdEndRenderPass = reinterpret_cast<PFN_vkCmdEndRenderPass>(
       get_device_proc_addr(device, "vkCmdEndRenderPass"));
+  fns->vkCmdBlitImage = reinterpret_cast<PFN_vkCmdBlitImage>(
+      get_device_proc_addr(device, "vkCmdBlitImage"));
   fns->vkCmdCopyBufferToImage = reinterpret_cast<PFN_vkCmdCopyBufferToImage>(
       get_device_proc_addr(device, "vkCmdCopyBufferToImage"));
   fns->vkCmdPipelineBarrier = reinterpret_cast<PFN_vkCmdPipelineBarrier>(
@@ -507,7 +514,7 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       fns->vkDestroyRenderPass == nullptr ||
       fns->vkCreateImageView == nullptr || fns->vkDestroyImageView == nullptr ||
       fns->vkCmdBeginRenderPass == nullptr ||
-      fns->vkCmdEndRenderPass == nullptr ||
+      fns->vkCmdEndRenderPass == nullptr || fns->vkCmdBlitImage == nullptr ||
       fns->vkCmdCopyBufferToImage == nullptr ||
       fns->vkCmdPipelineBarrier == nullptr ||
       fns->vkCreateShaderModule == nullptr ||

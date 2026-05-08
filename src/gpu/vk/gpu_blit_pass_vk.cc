@@ -101,6 +101,49 @@ void TransitionImageLayout(const VulkanContextState& state,
   texture.SetCurrentLayout(new_layout);
 }
 
+void TransitionMipRangeLayout(const VulkanContextState& state,
+                              VkCommandBuffer command_buffer,
+                              GPUTextureVK& texture, uint32_t base_mip_level,
+                              uint32_t level_count, VkImageLayout old_layout,
+                              VkImageLayout new_layout) {
+  if (old_layout == new_layout || level_count == 0) {
+    return;
+  }
+
+  VkImageMemoryBarrier barrier = {};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.oldLayout = old_layout;
+  barrier.newLayout = new_layout;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = texture.GetImage();
+  barrier.subresourceRange.aspectMask =
+      GetImageAspectMask(texture.GetDescriptor().format);
+  barrier.subresourceRange.baseMipLevel = base_mip_level;
+  barrier.subresourceRange.levelCount = level_count;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+  barrier.srcAccessMask = AccessMaskForLayout(old_layout);
+  barrier.dstAccessMask = AccessMaskForLayout(new_layout);
+
+  state.DeviceFns().vkCmdPipelineBarrier(
+      command_buffer, StageMaskForLayout(old_layout),
+      StageMaskForLayout(new_layout), 0, 0, nullptr, 0, nullptr, 1, &barrier);
+}
+
+bool SupportsLinearBlit(const VulkanContextState& state, VkFormat format) {
+  if (format == VK_FORMAT_UNDEFINED ||
+      state.InstanceFns().vkGetPhysicalDeviceFormatProperties == nullptr) {
+    return false;
+  }
+
+  VkFormatProperties format_properties = {};
+  state.InstanceFns().vkGetPhysicalDeviceFormatProperties(
+      state.GetPhysicalDevice(), format, &format_properties);
+  return (format_properties.optimalTilingFeatures &
+          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
+}
+
 }  // namespace
 
 GPUBlitPassVK::GPUBlitPassVK(std::shared_ptr<const VulkanContextState> state,
@@ -206,8 +249,101 @@ void GPUBlitPassVK::UploadBufferData(GPUBuffer* buffer, void* data,
 
 void GPUBlitPassVK::GenerateMipmaps(
     const std::shared_ptr<GPUTexture>& texture) {
-  (void)texture;
-  LOGW("GPUBlitPassVK::GenerateMipmaps is not implemented yet");
+  const auto texture_ref = texture;
+  auto* texture_vk = GPUTextureVK::Cast(texture.get());
+  if (texture_vk == nullptr || state_ == nullptr ||
+      command_buffer_ == nullptr) {
+    LOGE("Failed to generate Vulkan mipmaps: invalid blit pass state");
+    return;
+  }
+
+  if (texture_vk->GetImage() == VK_NULL_HANDLE ||
+      command_buffer_->GetCommandBuffer() == VK_NULL_HANDLE) {
+    LOGE(
+        "Failed to generate Vulkan mipmaps: image or command buffer is "
+        "unavailable");
+    return;
+  }
+
+  const auto& desc = texture_vk->GetDescriptor();
+  if (desc.mip_level_count <= 1) {
+    return;
+  }
+
+  if (desc.sample_count != 1) {
+    LOGW("Skipping Vulkan mipmap generation for multisampled texture");
+    return;
+  }
+
+  if (GetImageAspectMask(desc.format) != VK_IMAGE_ASPECT_COLOR_BIT) {
+    LOGW("Skipping Vulkan mipmap generation for non-color texture format");
+    return;
+  }
+
+  if (!SupportsLinearBlit(*state_, texture_vk->GetVkFormat())) {
+    LOGW(
+        "Skipping Vulkan mipmap generation: format does not support linear "
+        "blit");
+    return;
+  }
+
+  const VkCommandBuffer command_buffer = command_buffer_->GetCommandBuffer();
+  const VkImageLayout initial_layout = texture_vk->GetCurrentLayout();
+
+  TransitionMipRangeLayout(*state_, command_buffer, *texture_vk, 0, 1,
+                           initial_layout,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  TransitionMipRangeLayout(*state_, command_buffer, *texture_vk, 1,
+                           desc.mip_level_count - 1, initial_layout,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+  int32_t mip_width = static_cast<int32_t>(desc.width);
+  int32_t mip_height = static_cast<int32_t>(desc.height);
+
+  for (uint32_t mip_level = 1; mip_level < desc.mip_level_count; ++mip_level) {
+    const int32_t next_width = std::max(1, mip_width / 2);
+    const int32_t next_height = std::max(1, mip_height / 2);
+
+    VkImageBlit blit_region = {};
+    blit_region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit_region.srcSubresource.mipLevel = mip_level - 1;
+    blit_region.srcSubresource.baseArrayLayer = 0;
+    blit_region.srcSubresource.layerCount = 1;
+    blit_region.srcOffsets[0] = {0, 0, 0};
+    blit_region.srcOffsets[1] = {mip_width, mip_height, 1};
+    blit_region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit_region.dstSubresource.mipLevel = mip_level;
+    blit_region.dstSubresource.baseArrayLayer = 0;
+    blit_region.dstSubresource.layerCount = 1;
+    blit_region.dstOffsets[0] = {0, 0, 0};
+    blit_region.dstOffsets[1] = {next_width, next_height, 1};
+
+    state_->DeviceFns().vkCmdBlitImage(command_buffer, texture_vk->GetImage(),
+                                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                       texture_vk->GetImage(),
+                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                                       &blit_region, VK_FILTER_LINEAR);
+
+    TransitionMipRangeLayout(
+        *state_, command_buffer, *texture_vk, mip_level - 1, 1,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, texture_vk->GetPreferredLayout());
+
+    if (mip_level < desc.mip_level_count - 1) {
+      TransitionMipRangeLayout(*state_, command_buffer, *texture_vk, mip_level,
+                               1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    } else {
+      TransitionMipRangeLayout(*state_, command_buffer, *texture_vk, mip_level,
+                               1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               texture_vk->GetPreferredLayout());
+    }
+
+    mip_width = next_width;
+    mip_height = next_height;
+  }
+
+  texture_vk->SetCurrentLayout(texture_vk->GetPreferredLayout());
+  command_buffer_->RecordCleanupAction([texture_ref]() {});
 }
 
 void GPUBlitPassVK::End() { InsertDebugLabelIfNeeded(); }

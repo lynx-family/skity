@@ -25,6 +25,8 @@ struct VulkanInstanceFns {
   PFN_vkDestroyInstance vkDestroyInstance = nullptr;
   PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
   PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = nullptr;
+  PFN_vkGetPhysicalDeviceFormatProperties vkGetPhysicalDeviceFormatProperties =
+      nullptr;
   PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties =
       nullptr;
   PFN_vkGetPhysicalDeviceImageFormatProperties
@@ -92,6 +94,7 @@ struct VulkanDeviceFns {
   PFN_vkDestroyImageView vkDestroyImageView = nullptr;
   PFN_vkCmdBeginRenderPass vkCmdBeginRenderPass = nullptr;
   PFN_vkCmdEndRenderPass vkCmdEndRenderPass = nullptr;
+  PFN_vkCmdBlitImage vkCmdBlitImage = nullptr;
   PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage = nullptr;
   PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier = nullptr;
   PFN_vkCmdBeginRendering vkCmdBeginRendering = nullptr;

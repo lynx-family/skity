@@ -1274,6 +1274,64 @@ TEST_F(VulkanSharedContextTest, CreateTextureAndUploadData) {
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
+TEST_F(VulkanSharedContextTest, GenerateTextureMipmapsWithBlitPass) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+  ASSERT_NE(GetState(), nullptr);
+
+  VkFormatProperties format_properties = {};
+  GetState()->InstanceFns().vkGetPhysicalDeviceFormatProperties(
+      GetState()->GetPhysicalDevice(), VK_FORMAT_R8G8B8A8_UNORM,
+      &format_properties);
+  if ((format_properties.optimalTilingFeatures &
+       VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) == 0) {
+    GTEST_SKIP() << "RGBA8 linear blit mipmap generation is unsupported";
+  }
+
+  skity::GPUTextureDescriptor desc = {};
+  desc.width = 8;
+  desc.height = 8;
+  desc.mip_level_count = 4;
+  desc.sample_count = 1;
+  desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  desc.usage =
+      static_cast<skity::GPUTextureUsageMask>(
+          skity::GPUTextureUsage::kTextureBinding) |
+      static_cast<skity::GPUTextureUsageMask>(skity::GPUTextureUsage::kCopyDst);
+  desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  auto texture = device->CreateTexture(desc);
+  ASSERT_NE(texture, nullptr);
+
+  auto* vk_texture = skity::GPUTextureVK::Cast(texture.get());
+  ASSERT_NE(vk_texture, nullptr);
+  ASSERT_TRUE(vk_texture->IsValid());
+  EXPECT_EQ(vk_texture->GetPreferredLayout(), VK_IMAGE_LAYOUT_GENERAL);
+
+  uint32_t pixels[64] = {};
+  for (size_t i = 0; i < std::size(pixels); ++i) {
+    pixels[i] = 0xFF000000u | static_cast<uint32_t>(i);
+  }
+
+  texture->UploadData(0, 0, 8, 8, pixels);
+  GetState()->CollectPendingSubmissions(true);
+  EXPECT_EQ(vk_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_GENERAL);
+
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  auto blit_pass = command_buffer->BeginBlitPass();
+  ASSERT_NE(blit_pass, nullptr);
+  blit_pass->GenerateMipmaps(texture);
+  blit_pass->End();
+
+  ASSERT_TRUE(command_buffer->Submit());
+  GetState()->CollectPendingSubmissions(true);
+
+  EXPECT_EQ(vk_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_GENERAL);
+}
+
 TEST_F(VulkanSharedContextTest, CollectPendingSubmissionsRunsCleanupActions) {
   ASSERT_NE(GetState(), nullptr);
 
@@ -1381,6 +1439,44 @@ TEST_F(VulkanSharedContextTest, RejectTextureWithInvalidDescriptor) {
   invalid_desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
 
   EXPECT_EQ(device->CreateTexture(invalid_desc), nullptr);
+}
+
+TEST_F(VulkanSharedContextTest,
+       RejectMipmappedTextureWithoutLinearBlitSupport) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+  ASSERT_NE(GetState(), nullptr);
+
+  auto format_lacks_linear_blit = [this](VkFormat format) {
+    VkFormatProperties format_properties = {};
+    GetState()->InstanceFns().vkGetPhysicalDeviceFormatProperties(
+        GetState()->GetPhysicalDevice(), format, &format_properties);
+    return (format_properties.optimalTilingFeatures &
+            VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) == 0;
+  };
+
+  skity::GPUTextureFormat rejected_format = skity::GPUTextureFormat::kInvalid;
+  if (format_lacks_linear_blit(VK_FORMAT_S8_UINT)) {
+    rejected_format = skity::GPUTextureFormat::kStencil8;
+  } else if (format_lacks_linear_blit(VK_FORMAT_D24_UNORM_S8_UINT) &&
+             format_lacks_linear_blit(VK_FORMAT_D32_SFLOAT_S8_UINT)) {
+    rejected_format = skity::GPUTextureFormat::kDepth24Stencil8;
+  } else {
+    GTEST_SKIP() << "No depth/stencil test format without linear blit support";
+  }
+
+  skity::GPUTextureDescriptor desc = {};
+  desc.width = 8;
+  desc.height = 8;
+  desc.mip_level_count = 2;
+  desc.sample_count = 1;
+  desc.format = rejected_format;
+  desc.usage = static_cast<skity::GPUTextureUsageMask>(
+      skity::GPUTextureUsage::kRenderAttachment);
+  desc.storage_mode = skity::GPUTextureStorageMode::kPrivate;
+
+  EXPECT_EQ(device->CreateTexture(desc), nullptr);
 }
 
 TEST_F(VulkanSharedContextTest, BeginAndEndRenderPassWithoutCommands) {

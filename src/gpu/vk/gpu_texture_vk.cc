@@ -99,7 +99,8 @@ VkImageUsageFlags ToVkImageUsage(GPUTextureUsageMask usage) {
 
   if ((usage & static_cast<GPUTextureUsageMask>(
                    GPUTextureUsage::kTextureBinding)) != 0) {
-    flags |= VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    flags |= VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+             VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   }
 
   if ((usage & static_cast<GPUTextureUsageMask>(
@@ -168,6 +169,19 @@ bool IsImageFormatSupported(const VulkanContextState& state, VkFormat format,
   }
 
   return (properties.sampleCounts & samples) != 0;
+}
+
+bool SupportsLinearBlit(const VulkanContextState& state, VkFormat format) {
+  if (format == VK_FORMAT_UNDEFINED ||
+      state.InstanceFns().vkGetPhysicalDeviceFormatProperties == nullptr) {
+    return false;
+  }
+
+  VkFormatProperties properties = {};
+  state.InstanceFns().vkGetPhysicalDeviceFormatProperties(
+      state.GetPhysicalDevice(), format, &properties);
+  return (properties.optimalTilingFeatures &
+          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
 }
 
 VkFormat ResolveVkFormat(const VulkanContextState& state,
@@ -365,6 +379,15 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Create(
         static_cast<uint32_t>(descriptor.format),
         static_cast<uint32_t>(image_info.usage),
         static_cast<uint32_t>(image_info.samples));
+    return {};
+  }
+
+  if (descriptor.mip_level_count > 1 &&
+      !SupportsLinearBlit(*state, image_info.format)) {
+    LOGE(
+        "Failed to create Vulkan texture: mipmapped texture requires linear "
+        "blit support format={} mip_levels={}",
+        VkFormatToString(image_info.format), descriptor.mip_level_count);
     return {};
   }
 
