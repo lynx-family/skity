@@ -181,6 +181,10 @@ int32_t GPUPresenterVK::GetPresentMode() const {
   return static_cast<int32_t>(swapchain_present_mode_);
 }
 
+uint32_t GPUPresenterVK::GetImageCount() const {
+  return static_cast<uint32_t>(swapchain_images_.size());
+}
+
 GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
     const GPUSurfaceAcquireDescriptor& acquire_desc) {
   GPUSurfaceAcquireResult result = {};

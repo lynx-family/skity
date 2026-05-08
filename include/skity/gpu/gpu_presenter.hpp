@@ -116,6 +116,13 @@ class SKITY_API GPUPresenter {
   virtual int32_t GetPresentMode() const { return 0; }
 
   /**
+   * @brief Actual number of presentation images in use.
+   *
+   * @details Backends that do not expose swapchain-like images may return 0.
+   */
+  virtual uint32_t GetImageCount() const { return 0; }
+
+  /**
    * @brief Acquire the next surface from the GPU.
    *
    * @param desc describe per-surface rendering parameters such as sample count

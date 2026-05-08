@@ -30,6 +30,7 @@ class GPUPresenterVK : public GPUPresenter {
   bool Init();
 
   int32_t GetPresentMode() const override;
+  uint32_t GetImageCount() const override;
 
   GPUSurfaceAcquireResult AcquireNextSurface(
       const GPUSurfaceAcquireDescriptor& desc) override;
