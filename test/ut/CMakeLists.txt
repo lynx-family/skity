@@ -121,5 +121,19 @@ endif()
 target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
 target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
 
+if (${SKITY_VK_BACKEND})
+    target_sources(skity_unit_test PRIVATE
+        wgx/wgx_value_test.cc
+        wgx/wgx_spirv_smoke_test.cc
+    )
+    target_compile_definitions(skity_unit_test PRIVATE
+        -DWGX_VULKAN=1
+        -DWGX_SPIRV_DUMP_DEFAULT_DIR="${CMAKE_BINARY_DIR}"
+    )
+    target_include_directories(skity_unit_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include
+    )
+    target_link_libraries(skity_unit_test PRIVATE SPIRV-Headers::SPIRV-Headers)
+endif()
 
 gtest_add_tests(skity_unit_test "" AUTO)
