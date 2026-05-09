@@ -42,6 +42,13 @@ cmake_dependent_option(
 )
 
 cmake_dependent_option(
+  SKITY_VK_TEST_USE_SYSTEM_LOADER "option for linking vulkan unit tests with system loader"
+  OFF
+  [[SKITY_VK_BACKEND AND SKITY_TEST_UT]]
+  OFF
+)
+
+cmake_dependent_option(
   SKITY_TEST_BENCH "option for building benchmark test"
   ON
   [[SKITY_TEST]]

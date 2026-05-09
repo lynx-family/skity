@@ -24,20 +24,18 @@ if(${SKITY_LOG})
   target_link_libraries(skity PRIVATE fmt::fmt-header-only)
 endif()
 
-# Vulkan deps
-if(${SKITY_VK_BACKEND})
-  target_include_directories(skity PRIVATE third_party/Vulkan-Headers/include)
-endif()
 
 # OpenGL header file
 if(${SKITY_GL_BACKEND})
   target_include_directories(skity PRIVATE third_party/OpenGL)
 endif()
 
-# Vulkan memory allocator
+# Vulkan deps
 if(${SKITY_VK_BACKEND})
+  target_include_directories(skity PRIVATE third_party/Vulkan-Headers/include)
   # set vulkan headers
   target_include_directories(skity PRIVATE third_party/VulkanMemoryAllocator/include)
+  add_subdirectory(third_party/SPIRV-Headers)
 endif()
 
 # json parser

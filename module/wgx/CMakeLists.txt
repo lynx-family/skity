@@ -5,6 +5,12 @@
 option(WGX_GLSL_BACKEND "Generate GLSL shader" ON)
 option(WGX_MSL_BACKEND "Generate MSL shader" ON)
 
+if (${SKITY_VK_BACKEND})
+    set(WGX_VULKAN_BACKEND ON)
+else()
+    set(WGX_VULKAN_BACKEND OFF)
+endif()
+
 add_library(wgsl-cross STATIC
     ${CMAKE_CURRENT_LIST_DIR}/include/wgsl_cross.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/attribute.cpp
@@ -66,6 +72,32 @@ if (WGX_MSL_BACKEND)
         ${CMAKE_CURRENT_LIST_DIR}/msl/uniform_capture.cpp
         ${CMAKE_CURRENT_LIST_DIR}/msl/uniform_capture.h
     )
+endif()
+
+if (WGX_VULKAN_BACKEND)
+    target_compile_definitions(wgsl-cross PRIVATE -DWGX_VULKAN=1)
+    target_sources(wgsl-cross PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/ir/module.h
+        ${CMAKE_CURRENT_LIST_DIR}/ir/type.h
+        ${CMAKE_CURRENT_LIST_DIR}/ir/type.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/ir/value.h
+        ${CMAKE_CURRENT_LIST_DIR}/ir/value.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/ir/verifier.h
+        ${CMAKE_CURRENT_LIST_DIR}/ir/verifier.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lower/lower_core.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lower/lower_expr.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lower/lower_internal.h
+        ${CMAKE_CURRENT_LIST_DIR}/lower/lower_stmt.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lower/lower_to_ir.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lower/lower_to_ir.h
+        ${CMAKE_CURRENT_LIST_DIR}/spirv/emitter.h
+        ${CMAKE_CURRENT_LIST_DIR}/spirv/emitter_internal.h
+        ${CMAKE_CURRENT_LIST_DIR}/spirv/emitter_support.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/spirv/module_builder.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/spirv/type_emitter.cpp
+    )
+
+    target_link_libraries(wgsl-cross PRIVATE SPIRV-Headers::SPIRV-Headers)
 endif()
 
 target_include_directories(wgsl-cross PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
