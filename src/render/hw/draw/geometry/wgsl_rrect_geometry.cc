@@ -144,7 +144,7 @@ void WGSLRRectGeometry::WriteVSUniforms(std::stringstream& ss) const {
 void WGSLRRectGeometry::WriteVSInput(std::stringstream& ss) const {
   ss << R"(
 struct VSInput {
-  @location(0)  packed        :   vec4<f32>,
+  @location(0)  packed_data   :   vec4<f32>,
   @location(1)  rect          :   vec4<f32>,
   @location(2)  radii         :   vec2<f32>,
   @location(3)  stroke        :   vec2<f32>,
@@ -158,11 +158,11 @@ struct VSInput {
 
 void WGSLRRectGeometry::WriteVSMain(std::stringstream& ss) const {
   ss << R"(
-  var offset: vec2<f32> = input.packed.xy;
-  var corner_and_outside: i32 = i32(input.packed.z);
+  var offset: vec2<f32> = input.packed_data.xy;
+  var corner_and_outside: i32 = i32(input.packed_data.z);
   var corner_idx: i32 = corner_and_outside & 0x3;
   var outside: f32 = f32(corner_and_outside >> 2);
-  var region: f32 = input.packed.w;
+  var region: f32 = input.packed_data.w;
 
   var corner_sign: vec2<f32> = get_corner_sign(corner_idx);
   var rect_x: vec4<f32> = input.rect.xzzx;
