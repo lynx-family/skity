@@ -855,7 +855,7 @@ fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
 @group(0) @binding(0) var<uniform> common_slot  : CommonSlot;
 
 struct VSInput {
-  @location(0)  packed        :   vec4<f32>,
+  @location(0)  packed_data   :   vec4<f32>,
   @location(1)  rect          :   vec4<f32>,
   @location(2)  radii         :   vec2<f32>,
   @location(3)  stroke        :   vec2<f32>,
@@ -882,11 +882,11 @@ fn vs_main(input: VSInput) -> VSOutput {
   var output: VSOutput;
   var local_pos: vec2<f32>;
 
-  var offset: vec2<f32> = input.packed.xy;
-  var corner_and_outside: i32 = i32(input.packed.z);
+  var offset: vec2<f32> = input.packed_data.xy;
+  var corner_and_outside: i32 = i32(input.packed_data.z);
   var corner_idx: i32 = corner_and_outside & 0x3;
   var outside: f32 = f32(corner_and_outside >> 2);
-  var region: f32 = input.packed.w;
+  var region: f32 = input.packed_data.w;
 
   var corner_sign: vec2<f32> = get_corner_sign(corner_idx);
   var rect_x: vec4<f32> = input.rect.xzzx;
@@ -1105,7 +1105,7 @@ fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
 @group(0) @binding(0) var<uniform> common_slot  : CommonSlot;
 @group(0) @binding(1) var<uniform> inv_matrix   : mat4x4<f32>;
 struct VSInput {
-  @location(0)  packed        :   vec4<f32>,
+  @location(0)  packed_data   :   vec4<f32>,
   @location(1)  rect          :   vec4<f32>,
   @location(2)  radii         :   vec2<f32>,
   @location(3)  stroke        :   vec2<f32>,
@@ -1131,11 +1131,11 @@ fn vs_main(input: VSInput) -> VSOutput {
   var output: VSOutput;
   var local_pos: vec2<f32>;
 
-  var offset: vec2<f32> = input.packed.xy;
-  var corner_and_outside: i32 = i32(input.packed.z);
+  var offset: vec2<f32> = input.packed_data.xy;
+  var corner_and_outside: i32 = i32(input.packed_data.z);
   var corner_idx: i32 = corner_and_outside & 0x3;
   var outside: f32 = f32(corner_and_outside >> 2);
-  var region: f32 = input.packed.w;
+  var region: f32 = input.packed_data.w;
 
   var corner_sign: vec2<f32> = get_corner_sign(corner_idx);
   var rect_x: vec4<f32> = input.rect.xzzx;
@@ -1419,7 +1419,7 @@ struct ImageBoundsInfo {
 @group(0) @binding(1) var<uniform> image_bounds : ImageBoundsInfo;
 
 struct VSInput {
-  @location(0)  packed        :   vec4<f32>,
+  @location(0)  packed_data   :   vec4<f32>,
   @location(1)  rect          :   vec4<f32>,
   @location(2)  radii         :   vec2<f32>,
   @location(3)  stroke        :   vec2<f32>,
@@ -1445,11 +1445,11 @@ fn vs_main(input: VSInput) -> VSOutput {
   var output: VSOutput;
   var local_pos: vec2<f32>;
 
-  var offset: vec2<f32> = input.packed.xy;
-  var corner_and_outside: i32 = i32(input.packed.z);
+  var offset: vec2<f32> = input.packed_data.xy;
+  var corner_and_outside: i32 = i32(input.packed_data.z);
   var corner_idx: i32 = corner_and_outside & 0x3;
   var outside: f32 = f32(corner_and_outside >> 2);
-  var region: f32 = input.packed.w;
+  var region: f32 = input.packed_data.w;
 
   var corner_sign: vec2<f32> = get_corner_sign(corner_idx);
   var rect_x: vec4<f32> = input.rect.xzzx;
