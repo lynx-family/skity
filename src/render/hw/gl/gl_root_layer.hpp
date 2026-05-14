@@ -39,8 +39,8 @@ class GLDirectRootLayer : public GLRootLayer {
                     GLuint vao, GLuint fbo);
 
  protected:
-  std::shared_ptr<GPURenderPass> OnBeginRenderPass(
-      GPUCommandBuffer *cmd) override;
+  std::shared_ptr<GPURenderPass> OnBeginRenderPass(GPUCommandBuffer *cmd,
+                                                   bool force_load) override;
 
  private:
   GLuint fbo_id_;
@@ -56,8 +56,18 @@ class GLExternTextureLayer : public GLRootLayer {
  protected:
   HWDrawState OnPrepare(HWDrawContext *context) override;
 
-  std::shared_ptr<GPURenderPass> OnBeginRenderPass(
-      GPUCommandBuffer *cmd) override;
+  std::shared_ptr<GPURenderPass> OnBeginRenderPass(GPUCommandBuffer *cmd,
+                                                   bool force_load) override;
+
+  bool OnCopyToDstTexture(GPUCommandBuffer *cmd,
+                          std::shared_ptr<GPUTexture> dst_texture,
+                          GPURegion copy_region) const override;
+
+  bool SupportsTextureCopyDstRead() const override { return true; }
+
+  std::shared_ptr<GPUTexture> GetResolveColorTexture() const override {
+    return ext_texture_;
+  }
 
  private:
   std::shared_ptr<GPUTexture> ext_texture_;
@@ -78,8 +88,8 @@ class GLDrawTextureLayer : public GLRootLayer {
 
   void OnGenerateCommand(HWDrawContext *context, HWDrawState state) override;
 
-  std::shared_ptr<GPURenderPass> OnBeginRenderPass(
-      GPUCommandBuffer *cmd) override;
+  std::shared_ptr<GPURenderPass> OnBeginRenderPass(GPUCommandBuffer *cmd,
+                                                   bool force_load) override;
 
   void OnPostDraw(GPURenderPass *render_pass, GPUCommandBuffer *cmd) override;
 

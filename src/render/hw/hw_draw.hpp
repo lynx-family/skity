@@ -11,7 +11,9 @@
 #include <utility>
 #include <vector>
 
+#include "skity/graphic/image.hpp"
 #include "src/render/hw/draw/wgx_programmable_blending.hpp"
+#include "src/render/hw/hw_draw_pass.hpp"
 #include "src/render/hw/hw_render_target_cache.hpp"
 #include "src/render/hw/hw_static_buffer.hpp"
 #include "src/utils/arena_allocator.hpp"
@@ -48,6 +50,7 @@ struct HWDrawContext {
   ArenaAllocator* arena_allocator = nullptr;
   Vec2 scale = {1.f, 1.f};
   HWStaticBuffer* static_buffer = nullptr;
+  const DstTextureCopyInfo* dst_read_texture_copy_info = nullptr;
 };
 
 enum HWDrawState : uint32_t {

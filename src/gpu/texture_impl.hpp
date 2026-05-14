@@ -16,6 +16,14 @@ namespace skity {
 
 class TextureImpl;
 
+constexpr TextureFormat FromGPUTextureFormat(GPUTextureFormat gpu_format) {
+  return static_cast<TextureFormat>(gpu_format);
+}
+
+constexpr GPUTextureFormat ToGPUTextureFormat(TextureFormat format) {
+  return static_cast<GPUTextureFormat>(format);
+}
+
 class TextureImplDelegate {
  public:
   virtual ~TextureImplDelegate() = default;

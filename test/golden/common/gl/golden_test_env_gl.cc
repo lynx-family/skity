@@ -115,7 +115,7 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvGL::RenderToTexture(
   surface_desc.backend = GPUBackendType::kOpenGL;
   surface_desc.width = width;
   surface_desc.height = height;
-  surface_desc.sample_count = 4;
+  surface_desc.sample_count = GetSampleCount();
   surface_desc.surface_type = GLSurfaceType::kFramebuffer;
   surface_desc.gl_id = fbo;
   surface_desc.has_stencil_attachment = false;

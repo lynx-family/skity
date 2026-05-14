@@ -4,11 +4,23 @@
 
 #include "src/render/hw/hw_layer.hpp"
 
+#include <algorithm>
+#include <cassert>
+#include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
+#include <memory>
 #include <skity/effect/shader.hpp>
+#include <utility>
 
 #include "src/geometry/glm_helper.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
+#include "src/gpu/gpu_render_pass.hpp"
+#include "src/gpu/gpu_sampler.hpp"
+#include "src/gpu/gpu_texture.hpp"
+#include "src/gpu/texture_impl.hpp"
+#include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
+#include "src/render/hw/hw_draw.hpp"
+#include "src/render/hw/hw_draw_pass.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -30,26 +42,36 @@ HWLayer::HWLayer(Matrix matrix, int32_t depth, Rect bounds, uint32_t width,
 void HWLayer::Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {
   SKITY_TRACE_EVENT(HWLayer_Draw);
 
-  auto self_pass = OnBeginRenderPass(cmd);
+  bool force_load = false;
+  for (auto pass : draw_passes_) {
+    auto self_pass = OnBeginRenderPass(cmd, force_load);
 
-  self_pass->SetArenaAllocator(arena_allocator_);
-  for (auto draw : draw_ops_) {
-    draw->Draw(self_pass.get(), cmd);
+    self_pass->SetArenaAllocator(arena_allocator_);
+    for (auto draw : pass->draw_ops) {
+      draw->Draw(self_pass.get(), cmd);
+    }
+
+    self_pass->EncodeCommands(GetViewport());
+
+    /**
+     * FIXME: avoid crash on VIVO Y77
+     *
+     * Didn't know why, but it seems that if delete framebuffer before draw to
+     * scrren, will avoid crash on VIVO Y77
+     */
+    self_pass = nullptr;
+
+    if (pass->dst_texture_copy_info) {
+      const auto& copy_info = pass->dst_texture_copy_info.value();
+      OnCopyToDstTexture(cmd, copy_info.texture, copy_info.copy_region);
+    }
+
+    force_load = true;
   }
-
-  self_pass->EncodeCommands(GetViewport());
-
-  /**
-   * FIXME: avoid crash on VIVO Y77
-   *
-   * Didn't know why, but it seems that if delete framebuffer before draw to
-   * scrren, will avoid crash on VIVO Y77
-   */
-  self_pass = nullptr;
 
   OnPostDraw(render_pass, cmd);
 
-  draw_ops_.clear();
+  draw_passes_.clear();
 }
 
 HWLayerState* HWLayer::GetState() { return &state_; }
@@ -63,7 +85,6 @@ void HWLayer::AddDraw(HWDraw* draw) {
   draw->SetScissorBox(clip_bounds);
 
   draw->SetClipDraw(state_.LastClipDraw());
-  draw->SetClipDepth(state_.GetNextDrawDepth());
 
   Rect rect = draw->GetLayerSpaceBounds();
   if (!rect.Intersect(Rect::MakeWH(width_, height_))) {
@@ -71,21 +92,51 @@ void HWLayer::AddDraw(HWDraw* draw) {
   }
   draw->SetLayerSpaceBounds(rect);
 
-  if (enable_merging_draw_call_) {
-    bool merged = TryMerge(draw);
-    if (merged) {
+  if (draw->GetDstReadStrategy() == DstReadStrategy::kTextureCopy) {
+    auto dst_texture_copy_info = BuildDstTextureCopyInfo(rect);
+    if (!dst_texture_copy_info) {
       return;
+    }
+
+    auto copy_source_pass = draw_passes_.back();
+    auto& copy_info = copy_source_pass->dst_texture_copy_info.emplace(
+        std::move(dst_texture_copy_info.value()));
+    auto new_draw_pass = arena_allocator_->Make<HWDrawPass>();
+    new_draw_pass->dst_read_texture_copy_info = &copy_info;
+    draw_passes_.push_back(new_draw_pass);
+    if (GetSampleCount() > 1) {
+      // TODO(texture-copy): replace this draw-based emulated load with a
+      // pass-level load/restore abstraction for split MSAA render passes.
+      auto load_info = CreateEmulatedLoadInfo();
+      if (!load_info) {
+        return;
+      }
+
+      new_draw_pass->emulated_load_info = load_info;
+      HWDraw* load_draw = load_info->draw;
+      load_draw->SetClipDepth(state_.GetNextDrawDepth());
+      load_draw->SetScissorBox(clip_bounds);
+      load_draw->SetLayerSpaceBounds(Rect::MakeSize(Vec2{width_, height_}));
+      new_draw_pass->draw_ops.emplace_back(load_draw);
+    }
+  } else {
+    if (enable_merging_draw_call_) {
+      bool merged = TryMerge(draw);
+      if (merged) {
+        return;
+      }
     }
   }
 
-  draw_ops_.emplace_back(draw);
+  draw->SetClipDepth(state_.GetNextDrawDepth());
+  draw_passes_.back()->draw_ops.emplace_back(draw);
 }
 
 bool HWLayer::TryMerge(HWDraw* draw) {
-  size_t max_count = std::min(draw_ops_.size(), size_t(5));
+  auto& draw_ops = draw_passes_.back()->draw_ops;
+  size_t max_count = std::min(draw_ops.size(), size_t(5));
 
-  for (auto it = draw_ops_.rbegin(); it != draw_ops_.rbegin() + max_count;
-       it++) {
+  for (auto it = draw_ops.rbegin(); it != draw_ops.rbegin() + max_count; it++) {
     auto cadidate = *it;
     bool merged = cadidate->MergeIfPossible(draw);
     if (merged) {
@@ -99,6 +150,58 @@ bool HWLayer::TryMerge(HWDraw* draw) {
   }
 
   return false;
+}
+
+std::optional<DstTextureCopyInfo> HWLayer::BuildDstTextureCopyInfo(
+    const Rect& layer_space_bounds) const {
+  if (layer_space_bounds.IsEmpty()) {
+    return std::nullopt;
+  }
+
+  const auto left =
+      std::max(0, static_cast<int32_t>(std::floor(layer_space_bounds.Left())));
+  const auto top =
+      std::max(0, static_cast<int32_t>(std::floor(layer_space_bounds.Top())));
+  const auto right =
+      std::min(static_cast<int32_t>(width_),
+               static_cast<int32_t>(std::ceil(layer_space_bounds.Right())));
+  const auto bottom =
+      std::min(static_cast<int32_t>(height_),
+               static_cast<int32_t>(std::ceil(layer_space_bounds.Bottom())));
+
+  const auto width = right - left;
+  const auto height = bottom - top;
+  if (width <= 0 || height <= 0) {
+    return std::nullopt;
+  }
+
+  DstTextureCopyInfo copy_info;
+  copy_info.copy_rect = Rect::MakeLTRB(left, top, right, bottom);
+  copy_info.copy_region = GPURegion{
+      .x = static_cast<uint32_t>(left),
+      .y = static_cast<uint32_t>(top),
+      .width = static_cast<uint32_t>(width),
+      .height = static_cast<uint32_t>(height),
+  };
+  copy_info.uv_mapping = BuildDstUVMapping(copy_info.copy_rect);
+  return copy_info;
+}
+
+Vec4 HWLayer::BuildDstUVMapping(const Rect& copy_rect) const {
+  if (copy_rect.IsEmpty()) {
+    return {};
+  }
+
+  const auto width = copy_rect.Width();
+  const auto height = copy_rect.Height();
+  auto left = copy_rect.Left();
+  auto top = copy_rect.Top();
+
+  if (rt_origin_ == LayerRTOrigin::kBottomLeft) {
+    top = height_ - copy_rect.Top() - copy_rect.Height();
+  }
+
+  return Vec4{1.f / width, 1.f / height, -left / width, -top / height};
 }
 
 void HWLayer::AddClip(HWDraw* draw) {
@@ -121,7 +224,9 @@ void HWLayer::Restore() { state_.Restore(); }
 void HWLayer::RestoreToCount(int32_t count) { state_.RestoreToCount(count); }
 
 void HWLayer::FlushPendingClip() {
-  draw_ops_.insert(draw_ops_.end(), pending_clip_.begin(), pending_clip_.end());
+  draw_passes_.back()->draw_ops.insert(draw_passes_.back()->draw_ops.end(),
+                                       pending_clip_.begin(),
+                                       pending_clip_.end());
 
   pending_clip_.clear();
 }
@@ -148,9 +253,32 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
   sub_context.arena_allocator = context->arena_allocator;
   sub_context.scale = scale_;
 
-  // if one draw needs stencil we need create a stencil attachment
-  for (auto draw : draw_ops_) {
-    layer_state_ |= draw->Prepare(&sub_context);
+  for (auto pass : draw_passes_) {
+    if (pass->emulated_load_info) {
+      pass->emulated_load_info->resolve_image->SetTexture(
+          std::make_shared<InternalTexture>(GetResolveColorTexture(),
+                                            AlphaType::kPremul_AlphaType));
+    }
+
+    for (auto draw : pass->draw_ops) {
+      layer_state_ |= draw->Prepare(&sub_context);
+    }
+
+    if (pass->dst_texture_copy_info) {
+      auto& copy_info = pass->dst_texture_copy_info.value();
+      GPUTextureDescriptor desc;
+      desc.width = copy_info.copy_region.width;
+      desc.height = copy_info.copy_region.height;
+      desc.format = GetColorFormat();
+      desc.sample_count = 1;
+      desc.usage =
+          static_cast<GPUTextureUsageMask>(GPUTextureUsage::kCopyDst) |
+          static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
+      desc.storage_mode = GPUTextureStorageMode::kPrivate;
+      copy_info.texture = gpu_device_->CreateTexture(desc);
+      GPUSamplerDescriptor sampler_desc;
+      copy_info.sampler = gpu_device_->CreateSampler(sampler_desc);
+    }
   }
 
   // abstract layer no need stencil test and depth for itself
@@ -175,9 +303,16 @@ void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
   sub_context.arena_allocator = context->arena_allocator;
   sub_context.scale = scale_;
 
-  for (auto draw : draw_ops_) {
-    draw->GenerateCommand(&sub_context, layer_state_);
+  for (auto pass : draw_passes_) {
+    for (auto draw : pass->draw_ops) {
+      sub_context.dst_read_texture_copy_info =
+          draw->GetDstReadStrategy() == DstReadStrategy::kTextureCopy
+              ? pass->dst_read_texture_copy_info
+              : nullptr;
+      draw->GenerateCommand(&sub_context, layer_state_);
+    }
   }
+  sub_context.dst_read_texture_copy_info = nullptr;
 }
 
 Matrix HWLayer::GetLayerPhysicalMatrix(const Matrix& matrix) const {
@@ -194,28 +329,63 @@ Rect HWLayer::CalculateLayerSpaceBounds(const Rect& local_rect,
 std::shared_ptr<Shader> HWLayer::CreateDrawLayerShader(
     GPUContext* gpu_context, std::shared_ptr<GPUTexture> gpu_texture,
     const Rect& bounds) const {
+  (void)gpu_context;
   auto texture = std::make_shared<InternalTexture>(
       gpu_texture, AlphaType::kPremul_AlphaType);
 
   auto image = Image::MakeHWImage(texture);
+  return CreateDrawLayerShader(image, bounds);
+}
 
+std::shared_ptr<Shader> HWLayer::CreateDrawLayerShader(
+    std::shared_ptr<Image> image, const Rect& bounds) const {
   Matrix local_matrix;
-  // FIXME: GL/GLES fbo texture need to flip the Y coordinate when drawing
-  // back to screen
-  if (gpu_context->GetBackendType() == GPUBackendType::kOpenGL ||
-      gpu_context->GetBackendType() == GPUBackendType::kWebGL2) {
+  if (rt_origin_ == LayerRTOrigin::kBottomLeft) {
     local_matrix =
         Matrix::Translate(bounds.Left(), bounds.Height() + bounds.Top()) *
-        Matrix::Scale(bounds.Width() / texture->Width(),
-                      -(bounds.Height() / texture->Height()));
+        Matrix::Scale(bounds.Width() / image->Width(),
+                      -(bounds.Height() / image->Height()));
   } else {
     local_matrix = Matrix::Translate(bounds.Left(), bounds.Top()) *
-                   Matrix::Scale(bounds.Width() / texture->Width(),
-                                 bounds.Height() / texture->Height());
+                   Matrix::Scale(bounds.Width() / image->Width(),
+                                 bounds.Height() / image->Height());
   }
 
-  return Shader::MakeShader(image, SamplingOptions{}, TileMode::kClamp,
-                            TileMode::kClamp, local_matrix);
+  return Shader::MakeShader(image, SamplingOptions{}, TileMode::kDecal,
+                            TileMode::kDecal, local_matrix);
+}
+
+std::optional<EmulatedLoadInfo> HWLayer::CreateEmulatedLoadInfo() {
+  // prepare layer back draw
+  const auto& bounds = GetBounds();
+  Path path;
+  path.AddRect(bounds);
+
+  Paint paint;
+  paint.SetStyle(Paint::kFill_Style);
+  std::shared_ptr<DeferredTextureImage> image =
+      DeferredTextureImage::MakeDeferredTextureImage(
+          FromGPUTextureFormat(GetColorFormat()), width_, height_,
+          AlphaType::kPremul_AlphaType);
+  paint.SetShader(CreateDrawLayerShader(image, bounds));
+  paint.SetBlendMode(BlendMode::kSrc);
+  auto draw = arena_allocator_->Make<HWDynamicPathDraw>(
+      GetTransform(), std::move(path), std::move(paint), false, false);
+
+  // If layer_back_draw_ is null means user want open WGSL pipeline
+  // but the library does not open dynamic shader during compile time
+  if (draw == nullptr) {
+    return std::nullopt;
+  }
+
+  draw->SetSampleCount(GetSampleCount());
+  draw->SetColorFormat(GetColorFormat());
+  draw->SetScissorBox(GetScissorBox());
+
+  EmulatedLoadInfo load_info;
+  load_info.draw = draw;
+  load_info.resolve_image = image;
+  return load_info;
 }
 
 }  // namespace skity

@@ -25,10 +25,20 @@ class MTLRootLayer : public HWRootLayer {
 
   void OnPostDraw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) override {}
 
-  std::shared_ptr<GPURenderPass> OnBeginRenderPass(
-      GPUCommandBuffer* cmd) override;
+  std::shared_ptr<GPURenderPass> OnBeginRenderPass(GPUCommandBuffer* cmd,
+                                                   bool force_load) override;
+
+  bool OnCopyToDstTexture(GPUCommandBuffer* cmd,
+                          std::shared_ptr<GPUTexture> dst_texture,
+                          GPURegion copy_region) const override;
 
   bool IsValid() const override { return color_texture_ != nil; }
+
+  bool SupportsTextureCopyDstRead() const override { return true; }
+
+  std::shared_ptr<GPUTexture> GetResolveColorTexture() const override {
+    return color_attachment_;
+  }
 
  private:
   void PrepareAttachments(HWDrawContext* context);
@@ -41,6 +51,7 @@ class MTLRootLayer : public HWRootLayer {
   std::shared_ptr<GPUTexture> color_attachment_ = {};
 
   GPURenderPassDescriptor render_pass_desc_ = {};
+  bool first_render_pass_ = true;
 };
 
 }  // namespace skity

@@ -45,7 +45,7 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvMTL::RenderToTexture(
   surface_descriptor.backend = skity::GPUBackendType::kMetal;
   surface_descriptor.width = width;
   surface_descriptor.height = height;
-  surface_descriptor.sample_count = 4;
+  surface_descriptor.sample_count = GetSampleCount();
   surface_descriptor.content_scale = 1.f;
   surface_descriptor.texture = texture;
   surface_descriptor.surface_type = skity::MTLSurfaceType::kTexture;

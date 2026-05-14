@@ -22,7 +22,9 @@ namespace skity {
 GLRootLayer::GLRootLayer(uint32_t width, uint32_t height, const Rect &bounds,
                          GLuint vao)
     : HWRootLayer(width, height, bounds, GPUTextureFormat::kRGBA8Unorm),
-      vao_(vao) {}
+      vao_(vao) {
+  SetRTOrigin(LayerRTOrigin::kBottomLeft);
+}
 
 void GLRootLayer::Draw(GPURenderPass *render_pass, GPUCommandBuffer *cmd) {
   BindVAO();
@@ -62,7 +64,8 @@ GLDirectRootLayer::GLDirectRootLayer(uint32_t width, uint32_t height,
     : GLRootLayer(width, height, bounds, vao), fbo_id_(fbo) {}
 
 std::shared_ptr<GPURenderPass> GLDirectRootLayer::OnBeginRenderPass(
-    GPUCommandBuffer *cmd) {
+    GPUCommandBuffer *cmd, bool force_load) {
+  (void)force_load;
   GPUTextureDescriptor texture_desc{};
 
   texture_desc.width = GetWidth();
@@ -111,10 +114,13 @@ HWDrawState GLExternTextureLayer::OnPrepare(HWDrawContext *context) {
 }
 
 std::shared_ptr<GPURenderPass> GLExternTextureLayer::OnBeginRenderPass(
-    GPUCommandBuffer *cmd) {
+    GPUCommandBuffer *cmd, bool force_load) {
+  if (force_load) {
+    render_pass_desc_.color_attachment.load_op = GPULoadOp::kLoad;
+  }
   auto gpu_render_pass = cmd->BeginRenderPass(render_pass_desc_);
 
-  if (src_fbo_ > 0) {
+  if (src_fbo_ > 0 && !force_load) {
     auto gpu_render_pass_gl =
         static_cast<GPURenderPassGL *>(gpu_render_pass.get());
     gpu_render_pass_gl->SetAfterCleanupAction([this, gpu_render_pass_gl]() {
@@ -129,6 +135,23 @@ std::shared_ptr<GPURenderPass> GLExternTextureLayer::OnBeginRenderPass(
   }
 
   return gpu_render_pass;
+}
+
+bool GLExternTextureLayer::OnCopyToDstTexture(
+    GPUCommandBuffer *cmd, std::shared_ptr<GPUTexture> dst_texture,
+    GPURegion copy_region) const {
+  auto blit_pass = cmd->BeginBlitPass();
+  blit_pass->CopyTextureToTexture(ext_texture_, dst_texture,
+                                  GPUBlitPass::TextureCopyRegion{
+                                      .src_x = copy_region.x,
+                                      .src_y = copy_region.y,
+                                      .dst_x = 0,
+                                      .dst_y = 0,
+                                      .width = copy_region.width,
+                                      .height = copy_region.height,
+                                  });
+  blit_pass->End();
+  return true;
 }
 
 GLDrawTextureLayer::GLDrawTextureLayer(std::shared_ptr<GPUTexture> texture,
@@ -197,7 +220,8 @@ void GLDrawTextureLayer::OnGenerateCommand(HWDrawContext *context,
 }
 
 std::shared_ptr<GPURenderPass> GLDrawTextureLayer::OnBeginRenderPass(
-    GPUCommandBuffer *cmd) {
+    GPUCommandBuffer *cmd, bool force_load) {
+  (void)force_load;
   auto gpu_render_pass = cmd->BeginRenderPass(render_pass_desc_);
   if (can_blit_from_target_fbo_ && resolve_fbo_ > 0) {
     auto gpu_render_pass_gl =

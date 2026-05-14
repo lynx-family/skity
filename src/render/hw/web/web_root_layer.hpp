@@ -24,7 +24,7 @@ class WebRootLayer : public HWRootLayer {
   void OnPostDraw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) override {}
 
   std::shared_ptr<GPURenderPass> OnBeginRenderPass(
-      GPUCommandBuffer* cmd) override;
+      GPUCommandBuffer* cmd, bool force_load) override;
 
   bool IsValid() const override { return texture_ != nullptr; }
 

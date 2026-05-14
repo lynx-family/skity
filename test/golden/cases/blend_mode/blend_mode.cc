@@ -42,9 +42,55 @@ static void RunBlendModeTest(skity::BlendMode mode, const char* name) {
                                .gpu_tess_path = golden_path.c_str()}));
 }
 
+static skity::testing::GoldenTestEnvConfig TextureCopyConfig(
+    uint32_t sample_count) {
+  skity::testing::GoldenTestEnvConfig config;
+  config.supports_framebuffer_fetch = false;
+  config.sample_count = sample_count;
+  config.use_backend_specific_golden = true;
+  return config;
+}
+
+static skity::testing::GoldenTestEnvConfig FramebufferFetchConfig(
+    uint32_t sample_count) {
+  skity::testing::GoldenTestEnvConfig config;
+  config.supports_framebuffer_fetch = true;
+  config.sample_count = sample_count;
+  config.use_backend_specific_golden = true;
+  return config;
+}
+
+static void RunBlendModeTextureCopyTest(skity::BlendMode mode,
+                                        const char* name,
+                                        uint32_t sample_count) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(100.f, 100.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendMode(canvas, mode);
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append(std::string("blend_mode_texture_copy_sample_count_") +
+                     std::to_string(sample_count) + "_" + name + ".png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 100.f, 100.f, golden_path.c_str(),
+      TextureCopyConfig(sample_count)));
+}
+
 #define BLEND_MODE_TEST(mode_name)                                \
   TEST(BlendModeGolden, mode_name) {                              \
     RunBlendModeTest(skity::BlendMode::k##mode_name, #mode_name); \
+  }
+
+#define BLEND_MODE_TEXTURE_COPY_TEST(mode_name)                         \
+  TEST(BlendModeGolden, TextureCopySampleCount1_##mode_name) {          \
+    RunBlendModeTextureCopyTest(skity::BlendMode::k##mode_name,         \
+                                #mode_name, 1);                         \
+  }                                                                     \
+  TEST(BlendModeGolden, TextureCopySampleCount4_##mode_name) {          \
+    RunBlendModeTextureCopyTest(skity::BlendMode::k##mode_name,         \
+                                #mode_name, 4);                         \
   }
 
 BLEND_MODE_TEST(Modulate)
@@ -63,6 +109,23 @@ BLEND_MODE_TEST(Hue)
 BLEND_MODE_TEST(Saturation)
 BLEND_MODE_TEST(Color)
 BLEND_MODE_TEST(Luminosity)
+
+BLEND_MODE_TEXTURE_COPY_TEST(Modulate)
+BLEND_MODE_TEXTURE_COPY_TEST(Screen)
+BLEND_MODE_TEXTURE_COPY_TEST(Overlay)
+BLEND_MODE_TEXTURE_COPY_TEST(Darken)
+BLEND_MODE_TEXTURE_COPY_TEST(Lighten)
+BLEND_MODE_TEXTURE_COPY_TEST(ColorDodge)
+BLEND_MODE_TEXTURE_COPY_TEST(ColorBurn)
+BLEND_MODE_TEXTURE_COPY_TEST(HardLight)
+BLEND_MODE_TEXTURE_COPY_TEST(SoftLight)
+BLEND_MODE_TEXTURE_COPY_TEST(Difference)
+BLEND_MODE_TEXTURE_COPY_TEST(Exclusion)
+BLEND_MODE_TEXTURE_COPY_TEST(Multiply)
+BLEND_MODE_TEXTURE_COPY_TEST(Hue)
+BLEND_MODE_TEXTURE_COPY_TEST(Saturation)
+BLEND_MODE_TEXTURE_COPY_TEST(Color)
+BLEND_MODE_TEXTURE_COPY_TEST(Luminosity)
 
 static void DrawBlendModeSaveLayer(skity::Canvas* canvas,
                                    skity::BlendMode mode) {
@@ -99,9 +162,38 @@ static void RunBlendModeSaveLayerTest(skity::BlendMode mode, const char* name) {
                                .gpu_tess_path = golden_path.c_str()}));
 }
 
+static void RunBlendModeSaveLayerTextureCopyTest(skity::BlendMode mode,
+                                                 const char* name,
+                                                 uint32_t sample_count) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(100.f, 100.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendModeSaveLayer(canvas, mode);
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append(
+      std::string("blend_mode_savelayer_texture_copy_sample_count_") +
+      std::to_string(sample_count) + "_" + name + ".png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 100.f, 100.f, golden_path.c_str(),
+      TextureCopyConfig(sample_count)));
+}
+
 #define BLEND_MODE_SAVE_LAYER_TEST(mode_name)                              \
   TEST(BlendModeGolden, SaveLayer_##mode_name) {                           \
     RunBlendModeSaveLayerTest(skity::BlendMode::k##mode_name, #mode_name); \
+  }
+
+#define BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(mode_name)                \
+  TEST(BlendModeGolden, SaveLayer_TextureCopySampleCount1_##mode_name) {  \
+    RunBlendModeSaveLayerTextureCopyTest(skity::BlendMode::k##mode_name,  \
+                                         #mode_name, 1);                  \
+  }                                                                       \
+  TEST(BlendModeGolden, SaveLayer_TextureCopySampleCount4_##mode_name) {  \
+    RunBlendModeSaveLayerTextureCopyTest(skity::BlendMode::k##mode_name,  \
+                                         #mode_name, 4);                  \
   }
 
 BLEND_MODE_SAVE_LAYER_TEST(Modulate)
@@ -120,3 +212,81 @@ BLEND_MODE_SAVE_LAYER_TEST(Hue)
 BLEND_MODE_SAVE_LAYER_TEST(Saturation)
 BLEND_MODE_SAVE_LAYER_TEST(Color)
 BLEND_MODE_SAVE_LAYER_TEST(Luminosity)
+
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Modulate)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Screen)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Overlay)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Darken)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Lighten)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(ColorDodge)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(ColorBurn)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(HardLight)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(SoftLight)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Difference)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Exclusion)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Multiply)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Hue)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Saturation)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Color)
+BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Luminosity)
+
+static void DrawBlendModeComposite(skity::Canvas* canvas) {
+  skity::Paint paint;
+  paint.SetColor(skity::ColorSetARGB(255, 250, 250, 250));
+  canvas->DrawRect(skity::Rect::MakeWH(128.f, 128.f), paint);
+
+  canvas->SaveLayer(skity::Rect::MakeWH(128.f, 128.f), skity::Paint{});
+
+  paint.SetBlendMode(skity::BlendMode::kSrcOver);
+  paint.SetColor(skity::ColorSetARGB(255, 233, 30, 99));
+  canvas->DrawRect(skity::Rect::MakeLTRB(12.f, 12.f, 116.f, 116.f), paint);
+
+  paint.SetBlendMode(skity::BlendMode::kOverlay);
+  paint.SetColor(skity::ColorSetARGB(220, 22, 150, 243));
+  canvas->DrawRect(skity::Rect::MakeLTRB(22.f, 22.f, 84.f, 84.f), paint);
+
+  paint.SetBlendMode(skity::BlendMode::kHardLight);
+  paint.SetColor(skity::ColorSetARGB(210, 76, 175, 80));
+  canvas->DrawRect(skity::Rect::MakeLTRB(50.f, 50.f, 122.f, 122.f), paint);
+
+  canvas->Restore();
+}
+
+static void RunBlendModeCompositeTest(
+    const char* path_name, skity::testing::GoldenTestEnvConfig config) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(128.f, 128.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendModeComposite(canvas);
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append(path_name);
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 128.f, 128.f, golden_path.c_str(), config));
+}
+
+#define BLEND_MODE_COMPOSITE_TEST(path, config)                  \
+  RunBlendModeCompositeTest("blend_mode_composite_" path ".png", \
+                            config)
+
+TEST(BlendModeGolden, CompositeFramebufferFetchSampleCount1) {
+  BLEND_MODE_COMPOSITE_TEST("framebuffer_fetch_sample_count_1",
+                            FramebufferFetchConfig(1));
+}
+
+TEST(BlendModeGolden, CompositeFramebufferFetchSampleCount4) {
+  BLEND_MODE_COMPOSITE_TEST("framebuffer_fetch_sample_count_4",
+                            FramebufferFetchConfig(4));
+}
+
+TEST(BlendModeGolden, CompositeTextureCopySampleCount1) {
+  BLEND_MODE_COMPOSITE_TEST("texture_copy_sample_count_1",
+                            TextureCopyConfig(1));
+}
+
+TEST(BlendModeGolden, CompositeTextureCopySampleCount4) {
+  BLEND_MODE_COMPOSITE_TEST("texture_copy_sample_count_4",
+                            TextureCopyConfig(4));
+}

@@ -23,6 +23,23 @@ class GPUBlitPass {
 
   virtual void GenerateMipmaps(const std::shared_ptr<GPUTexture>& texture) = 0;
 
+  struct TextureCopyRegion {
+    uint32_t src_x = 0;
+    uint32_t src_y = 0;
+    uint32_t dst_x = 0;
+    uint32_t dst_y = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+  };
+
+  virtual void CopyTextureToTexture(std::shared_ptr<GPUTexture> src,
+                                    std::shared_ptr<GPUTexture> dst,
+                                    const TextureCopyRegion& region) {
+    (void)src;
+    (void)dst;
+    (void)region;
+  }
+
   virtual void End() = 0;
 };
 

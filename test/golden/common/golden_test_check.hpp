@@ -5,6 +5,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 #include <skity/recorder/display_list.hpp>
 #include <skity/skity.hpp>
 #include <vector>
@@ -16,6 +17,20 @@ struct PathList {
   const char* cpu_tess_path = nullptr;
   const char* gpu_tess_path = nullptr;
   const char* simple_shape_path = nullptr;
+};
+
+struct GoldenTestEnvConfig {
+  static GoldenTestEnvConfig GPUTessellation() {
+    GoldenTestEnvConfig config;
+    config.enable_gpu_tessellation = true;
+    return config;
+  }
+
+  bool enable_gpu_tessellation = false;
+  bool enable_simple_shape_pipeline = false;
+  std::optional<bool> supports_framebuffer_fetch = std::nullopt;
+  uint32_t sample_count = 4;
+  bool use_backend_specific_golden = false;
 };
 
 /**
@@ -36,6 +51,9 @@ struct PathList {
  */
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
                           const char* path);
+
+bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
+                          const char* path, GoldenTestEnvConfig config);
 
 bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
                           const std::function<void(Canvas*)>& render);

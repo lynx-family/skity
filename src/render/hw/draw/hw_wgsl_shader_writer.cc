@@ -109,12 +109,17 @@ void HWWGSLShaderWriter::WriteFSUniforms(std::stringstream& ss) const {
 
 void HWWGSLShaderWriter::WriteFSInput(std::stringstream& ss) const {
   DEBUG_CHECK(fragment_);
-  if (!HasVarings()) {
+  if (!HasVarings() && !NeedsTextureCopy()) {
     return;
   }
   ss << R"(
 struct FSInput {
 )";
+  if (NeedsTextureCopy()) {
+    ss << R"(
+  @builtin(position) frag_pos: vec4<f32>,
+)";
+  }
   WriteVaryings(ss);
   ss << R"(
 };
@@ -126,7 +131,7 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
   ss << "@fragment\n";
   ss << "fn fs_main(";
   std::vector<std::string> fs_params;
-  if (HasVarings()) {
+  if (HasVarings() || NeedsTextureCopy()) {
     fs_params.push_back("input: FSInput");
   }
   if (NeedsFramebufferFetch()) {
@@ -160,6 +165,12 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
 
   if (NeedsFramebufferFetch()) {
     ss << R"(
+  color = blending(color, dst_color);
+)";
+  } else if (NeedsTextureCopy()) {
+    ss << R"(
+  var dst_uv : vec2<f32> = input.frag_pos.xy * uDstUVMapping.xy + uDstUVMapping.zw;
+  var dst_color: vec4<f32> = textureSample(uDstTexture, uDstSampler, dst_uv);
   color = blending(color, dst_color);
 )";
   }

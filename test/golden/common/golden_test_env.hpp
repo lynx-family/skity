@@ -43,6 +43,10 @@ class GoldenTestEnv : public ::testing::Environment {
       uint32_t width, uint32_t height,
       const std::function<void(Canvas*)>& render) = 0;
 
+  void SetSampleCount(uint32_t sample_count) { sample_count_ = sample_count; }
+
+  uint32_t GetSampleCount() const { return sample_count_; }
+
   bool SaveGoldenImage(std::shared_ptr<Pixmap> image, const char* path);
 
   static GoldenTestEnv* CreateInstance(Backend backend);
@@ -56,6 +60,7 @@ class GoldenTestEnv : public ::testing::Environment {
 
  private:
   std::unique_ptr<skity::GPUContext> gpu_context_ = nullptr;
+  uint32_t sample_count_ = 4;
 };
 
 }  // namespace testing

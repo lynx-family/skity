@@ -5,7 +5,10 @@
 #ifndef SRC_RENDER_HW_LAYER_HW_SUB_LAYER_HPP
 #define SRC_RENDER_HW_LAYER_HW_SUB_LAYER_HPP
 
+#include <memory>
+
 #include "src/geometry/math.hpp"
+#include "src/gpu/gpu_texture.hpp"
 #include "src/render/hw/hw_layer.hpp"
 
 namespace skity {
@@ -58,8 +61,18 @@ class HWSubLayer : public HWLayer {
 
   void OnGenerateCommand(HWDrawContext* context, HWDrawState state) override;
 
-  std::shared_ptr<GPURenderPass> OnBeginRenderPass(
-      GPUCommandBuffer* cmd) override;
+  std::shared_ptr<GPURenderPass> OnBeginRenderPass(GPUCommandBuffer* cmd,
+                                                   bool force_load) override;
+
+  bool OnCopyToDstTexture(GPUCommandBuffer* cmd,
+                          std::shared_ptr<GPUTexture> dst_texture,
+                          GPURegion copy_region) const override;
+
+  bool SupportsTextureCopyDstRead() const override { return true; }
+
+  std::shared_ptr<GPUTexture> GetResolveColorTexture() const override {
+    return layer_back_draw_texture_;
+  }
 
   void OnPostDraw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) override;
 

@@ -34,6 +34,10 @@ void HWDrawStep::GenerateCommand(const HWDrawStepContext& ctx, Command* cmd,
                               stencil_cmd);
   }
   fragment_->PrepareCMD(cmd, ctx.context);
+
+  if (fragment_->GetProgrammableBlending()) {
+    fragment_->GetProgrammableBlending()->SetupBindGroup(cmd, ctx.context);
+  }
 }
 
 GPURenderPipeline* HWDrawStep::GetPipeline(HWDrawContext* context,

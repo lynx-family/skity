@@ -13,11 +13,11 @@
 
 #include "src/effect/image_filter_base.hpp"
 #include "src/gpu/gpu_surface_impl.hpp"
-#include "src/graphic/blend_mode_priv.hpp"
 #include "src/render/canvas_state.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_clip.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
+#include "src/render/hw/dst_read_strategy.hpp"
 #include "src/render/hw/filters/hw_filters.hpp"
 #include "src/render/hw/layer/hw_filter_layer.hpp"
 #include "src/render/shape.hpp"
@@ -26,6 +26,18 @@
 #include "src/utils/arena_allocator.hpp"
 
 namespace skity {
+
+namespace {
+
+LayerRTOrigin ResolveLayerRTOrigin(GPUBackendType backend_type) {
+  if (backend_type == GPUBackendType::kOpenGL) {
+    return LayerRTOrigin::kBottomLeft;
+  }
+
+  return LayerRTOrigin::kTopLeft;
+}
+
+}  // namespace
 
 HWCanvas::HWCanvas(GPUSurfaceImpl* surface)
     : Canvas(Rect::MakeWH(surface->GetWidth(), surface->GetHeight())),
@@ -366,6 +378,9 @@ void HWCanvas::DrawGlyphsInternal(uint32_t count, const GlyphID* glyphs,
       draw->SetSampleCount(GetCanvasSampleCount());
       SetupLayerSpaceBoundsForDraw(
           draw, paint.ComputeFastBounds(glyph_run->GetBounds()), false);
+      // TODO(texture-copy): create glyph draw fragments after dst-read strategy
+      // is known, or let glyph draws rebuild programmable blending state here.
+      SetupDstReadStrategyForDraw(draw, paint.GetBlendMode());
       CurrentLayer()->AddDraw(draw);
     }
   }
@@ -788,6 +803,8 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
   layer->SetEnableMergingDrawCall(
       surface_->GetGPUContext()->IsEnableMergingDrawCall());
   SetupDstReadStrategyForDraw(layer, paint.GetBlendMode());
+  layer->SetRTOrigin(
+      ResolveLayerRTOrigin(surface_->GetGPUContext()->GetBackendType()));
 
   return layer;
 }
@@ -811,17 +828,9 @@ bool HWCanvas::NeesOffScreenLayer(const Paint& paint) const {
 }
 
 void HWCanvas::SetupDstReadStrategyForDraw(HWDraw* draw, BlendMode blend_mode) {
-  if (IsAdvancedBlendMode(blend_mode)) {
-    bool supports_framebuffer_fetch = surface_->GetGPUContext()
-                                          ->GetGPUDevice()
-                                          ->GetCaps()
-                                          .supports_framebuffer_fetch;
-    draw->SetDstReadStrategy(supports_framebuffer_fetch
-                                 ? DstReadStrategy::kFramebufferFetch
-                                 : DstReadStrategy::kTextureCopy);
-  } else {
-    draw->SetDstReadStrategy(DstReadStrategy::kNonRequired);
-  }
+  const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
+  draw->SetDstReadStrategy(ResolveDstReadStrategy(
+      blend_mode, caps, CurrentLayer()->SupportsTextureCopyDstRead()));
 }
 
 }  // namespace skity

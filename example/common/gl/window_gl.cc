@@ -54,12 +54,12 @@ void WindowGL::OnShow() {
   desc.backend = skity::GPUBackendType::kOpenGL;
   desc.width = logical_width;
   desc.height = logical_height;
-  desc.sample_count = 4;
+  desc.sample_count = 1;
   desc.content_scale = screen_scale;
 
   desc.surface_type = skity::GLSurfaceType::kFramebuffer;
   desc.gl_id = 0;
-  desc.has_stencil_attachment = true;
+  desc.has_stencil_attachment = false;
 
   surface_ = GetGPUContext()->CreateSurface(&desc);
 }
