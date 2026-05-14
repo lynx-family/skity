@@ -47,7 +47,18 @@ void HWLayer::Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {
     auto self_pass = OnBeginRenderPass(cmd, force_load);
 
     self_pass->SetArenaAllocator(arena_allocator_);
+    const HWDraw* emulated_load_draw =
+        pass->emulated_load_info ? pass->emulated_load_info->draw : nullptr;
+    if (emulated_load_draw) {
+      pass->emulated_load_info->draw->Draw(self_pass.get(), cmd);
+    }
+    for (auto draw : pass->clip_replay_draws) {
+      draw->Draw(self_pass.get(), cmd);
+    }
     for (auto draw : pass->draw_ops) {
+      if (draw == emulated_load_draw) {
+        continue;
+      }
       draw->Draw(self_pass.get(), cmd);
     }
 
@@ -103,6 +114,7 @@ void HWLayer::AddDraw(HWDraw* draw) {
         std::move(dst_texture_copy_info.value()));
     auto new_draw_pass = arena_allocator_->Make<HWDrawPass>();
     new_draw_pass->dst_read_texture_copy_info = &copy_info;
+    new_draw_pass->clip_replay_count = state_.GetRecordedClipCount();
     draw_passes_.push_back(new_draw_pass);
     if (GetSampleCount() > 1) {
       // TODO(texture-copy): replace this draw-based emulated load with a
@@ -115,7 +127,9 @@ void HWLayer::AddDraw(HWDraw* draw) {
       new_draw_pass->emulated_load_info = load_info;
       HWDraw* load_draw = load_info->draw;
       load_draw->SetClipDepth(state_.GetNextDrawDepth());
-      load_draw->SetScissorBox(clip_bounds);
+      // Emulated load must restore the full layer color contents before clip
+      // replay runs, otherwise clip-outside pixels remain transparent.
+      load_draw->SetScissorBox(Rect::MakeWH(width_, height_));
       load_draw->SetLayerSpaceBounds(Rect::MakeSize(Vec2{width_, height_}));
       new_draw_pass->draw_ops.emplace_back(load_draw);
     }
@@ -254,13 +268,26 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
   sub_context.scale = scale_;
 
   for (auto pass : draw_passes_) {
+    PrepareReplayDraws(pass, &sub_context);
+
     if (pass->emulated_load_info) {
       pass->emulated_load_info->resolve_image->SetTexture(
           std::make_shared<InternalTexture>(GetResolveColorTexture(),
                                             AlphaType::kPremul_AlphaType));
     }
 
+    const HWDraw* emulated_load_draw =
+        pass->emulated_load_info ? pass->emulated_load_info->draw : nullptr;
+    if (emulated_load_draw) {
+      layer_state_ |= pass->emulated_load_info->draw->Prepare(&sub_context);
+    }
+    for (auto draw : pass->clip_replay_draws) {
+      layer_state_ |= draw->Prepare(&sub_context);
+    }
     for (auto draw : pass->draw_ops) {
+      if (draw == emulated_load_draw) {
+        continue;
+      }
       layer_state_ |= draw->Prepare(&sub_context);
     }
 
@@ -304,7 +331,20 @@ void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
   sub_context.scale = scale_;
 
   for (auto pass : draw_passes_) {
+    const HWDraw* emulated_load_draw =
+        pass->emulated_load_info ? pass->emulated_load_info->draw : nullptr;
+    if (emulated_load_draw) {
+      sub_context.dst_read_texture_copy_info = nullptr;
+      pass->emulated_load_info->draw->GenerateCommand(&sub_context, layer_state_);
+    }
+    for (auto draw : pass->clip_replay_draws) {
+      sub_context.dst_read_texture_copy_info = nullptr;
+      draw->GenerateCommand(&sub_context, layer_state_);
+    }
     for (auto draw : pass->draw_ops) {
+      if (draw == emulated_load_draw) {
+        continue;
+      }
       sub_context.dst_read_texture_copy_info =
           draw->GetDstReadStrategy() == DstReadStrategy::kTextureCopy
               ? pass->dst_read_texture_copy_info
@@ -313,6 +353,46 @@ void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
     }
   }
   sub_context.dst_read_texture_copy_info = nullptr;
+}
+
+void HWLayer::PrepareReplayDraws(HWDrawPass* pass, HWDrawContext* context) {
+  pass->clip_replay_draws.clear();
+  if (pass->clip_replay_count == 0 || context == nullptr ||
+      context->arena_allocator == nullptr) {
+    return;
+  }
+
+  const auto& replay_records = state_.GetClipReplayRecords();
+  const auto replay_count =
+      std::min(static_cast<size_t>(pass->clip_replay_count), replay_records.size());
+  if (replay_count == 0) {
+    return;
+  }
+
+  pass->clip_replay_draws.reserve(replay_count);
+  HWDraw* replay_parent = nullptr;
+  for (size_t i = 0; i < replay_count; ++i) {
+    auto* source_draw = replay_records[i].source_draw;
+    if (source_draw == nullptr) {
+      replay_parent = nullptr;
+      continue;
+    }
+
+    auto* replay_draw = source_draw->MakeClipReplay(context->arena_allocator);
+    if (replay_draw == nullptr) {
+      replay_parent = nullptr;
+      continue;
+    }
+
+    replay_draw->SetSampleCount(source_draw->GetSampleCount());
+    replay_draw->SetColorFormat(source_draw->GetColorFormat());
+    replay_draw->SetScissorBox(source_draw->GetScissorBox());
+    replay_draw->SetLayerSpaceBounds(source_draw->GetLayerSpaceBounds());
+    replay_draw->SetClipDraw(replay_parent);
+    replay_draw->SetClipDepth(source_draw->GetClipDepth());
+    pass->clip_replay_draws.push_back(replay_draw);
+    replay_parent = replay_draw;
+  }
 }
 
 Matrix HWLayer::GetLayerPhysicalMatrix(const Matrix& matrix) const {

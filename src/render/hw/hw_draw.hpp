@@ -139,6 +139,11 @@ class HWDraw {
 
   virtual HWDrawType GetDrawType() const { return HWDrawType::kUnknow; }
 
+  virtual HWDraw* MakeClipReplay(ArenaAllocator* arena_allocator) const {
+    (void)arena_allocator;
+    return nullptr;
+  }
+
   void SetClipDepth(uint32_t clip_depth) { clip_depth_ = clip_depth; }
 
   DstReadStrategy GetDstReadStrategy() const { return dst_read_strategy_; }
@@ -168,7 +173,7 @@ class HWDraw {
   HWDrawState draw_state_ = HWDrawState::kDrawStateNone;
   Rect scissor_rect_ = {};
   Rect layer_space_bounds_ = Rect::MakeLTRB(-1E9F, -1E9F, 1E9F, 1E9F);
-  HWDraw* clip_draw_;
+  HWDraw* clip_draw_ = nullptr;
   DstReadStrategy dst_read_strategy_ = DstReadStrategy::kNonRequired;
 };
 

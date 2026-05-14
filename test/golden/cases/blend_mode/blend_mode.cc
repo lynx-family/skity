@@ -290,3 +290,243 @@ TEST(BlendModeGolden, CompositeTextureCopySampleCount4) {
   BLEND_MODE_COMPOSITE_TEST("texture_copy_sample_count_4",
                             TextureCopyConfig(4));
 }
+
+static void DrawBlendModeClipReplay(skity::Canvas* canvas) {
+  skity::Paint paint;
+  paint.SetColor(skity::ColorSetARGB(255, 250, 250, 250));
+  canvas->DrawRect(skity::Rect::MakeWH(128.f, 128.f), paint);
+
+  paint.SetColor(skity::ColorSetARGB(255, 233, 30, 99));
+  canvas->DrawRect(skity::Rect::MakeLTRB(12.f, 12.f, 116.f, 116.f), paint);
+
+  skity::Path clip_path;
+  clip_path.AddCircle(64.f, 64.f, 38.f);
+  canvas->ClipPath(clip_path, skity::Canvas::ClipOp::kIntersect);
+
+  paint.SetBlendMode(skity::BlendMode::kOverlay);
+  paint.SetColor(skity::ColorSetARGB(220, 22, 150, 243));
+  canvas->DrawRect(skity::Rect::MakeLTRB(18.f, 18.f, 92.f, 92.f), paint);
+
+  paint.SetBlendMode(skity::BlendMode::kHardLight);
+  paint.SetColor(skity::ColorSetARGB(220, 76, 175, 80));
+  canvas->DrawRect(skity::Rect::MakeLTRB(42.f, 42.f, 120.f, 120.f), paint);
+}
+
+static void RunBlendModeClipReplayTest(
+    const char* path_name, skity::testing::GoldenTestEnvConfig config) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(128.f, 128.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendModeClipReplay(canvas);
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append(path_name);
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 128.f, 128.f, golden_path.c_str(), config));
+}
+
+static void DrawBlendModeSaveLayerClipReplay(skity::Canvas* canvas) {
+  skity::Paint paint;
+  paint.SetColor(skity::ColorSetARGB(255, 250, 250, 250));
+  canvas->DrawRect(skity::Rect::MakeWH(128.f, 128.f), paint);
+
+  canvas->SaveLayer(skity::Rect::MakeWH(128.f, 128.f), skity::Paint{});
+
+  paint.SetColor(skity::ColorSetARGB(255, 233, 30, 99));
+  canvas->DrawRect(skity::Rect::MakeLTRB(12.f, 12.f, 116.f, 116.f), paint);
+
+  skity::Path clip_path;
+  clip_path.AddCircle(64.f, 64.f, 38.f);
+  canvas->ClipPath(clip_path, skity::Canvas::ClipOp::kIntersect);
+
+  paint.SetBlendMode(skity::BlendMode::kOverlay);
+  paint.SetColor(skity::ColorSetARGB(220, 22, 150, 243));
+  canvas->DrawRect(skity::Rect::MakeLTRB(18.f, 18.f, 92.f, 92.f), paint);
+
+  paint.SetBlendMode(skity::BlendMode::kHardLight);
+  paint.SetColor(skity::ColorSetARGB(220, 76, 175, 80));
+  canvas->DrawRect(skity::Rect::MakeLTRB(42.f, 42.f, 120.f, 120.f), paint);
+
+  canvas->Restore();
+}
+
+static void RunBlendModeSaveLayerClipReplayTest(
+    const char* path_name, skity::testing::GoldenTestEnvConfig config) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(128.f, 128.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendModeSaveLayerClipReplay(canvas);
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append(path_name);
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 128.f, 128.f, golden_path.c_str(), config));
+}
+
+static void DrawBlendModeClipRect(skity::Canvas* canvas) {
+  skity::Paint paint;
+  paint.SetColor(skity::ColorSetARGB(255, 250, 250, 250));
+  canvas->DrawRect(skity::Rect::MakeWH(128.f, 128.f), paint);
+
+  paint.SetColor(skity::ColorSetARGB(255, 233, 30, 99));
+  canvas->DrawRect(skity::Rect::MakeLTRB(12.f, 12.f, 116.f, 116.f), paint);
+
+  canvas->ClipRect(skity::Rect::MakeLTRB(26.f, 42.f, 102.f, 92.f),
+                   skity::Canvas::ClipOp::kIntersect);
+
+  paint.SetBlendMode(skity::BlendMode::kOverlay);
+  paint.SetColor(skity::ColorSetARGB(220, 22, 150, 243));
+  canvas->DrawRect(skity::Rect::MakeLTRB(18.f, 18.f, 92.f, 92.f), paint);
+
+  paint.SetBlendMode(skity::BlendMode::kHardLight);
+  paint.SetColor(skity::ColorSetARGB(220, 76, 175, 80));
+  canvas->DrawRect(skity::Rect::MakeLTRB(42.f, 42.f, 120.f, 120.f), paint);
+}
+
+static void RunBlendModeClipRectTest(
+    const char* path_name, skity::testing::GoldenTestEnvConfig config) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(128.f, 128.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendModeClipRect(canvas);
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append(path_name);
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 128.f, 128.f, golden_path.c_str(), config));
+}
+
+static void DrawBlendModeSaveLayerClipRect(skity::Canvas* canvas) {
+  skity::Paint paint;
+  paint.SetColor(skity::ColorSetARGB(255, 250, 250, 250));
+  canvas->DrawRect(skity::Rect::MakeWH(128.f, 128.f), paint);
+
+  canvas->SaveLayer(skity::Rect::MakeWH(128.f, 128.f), skity::Paint{});
+
+  paint.SetColor(skity::ColorSetARGB(255, 233, 30, 99));
+  canvas->DrawRect(skity::Rect::MakeLTRB(12.f, 12.f, 116.f, 116.f), paint);
+
+  canvas->ClipRect(skity::Rect::MakeLTRB(26.f, 42.f, 102.f, 92.f),
+                   skity::Canvas::ClipOp::kIntersect);
+
+  paint.SetBlendMode(skity::BlendMode::kOverlay);
+  paint.SetColor(skity::ColorSetARGB(220, 22, 150, 243));
+  canvas->DrawRect(skity::Rect::MakeLTRB(18.f, 18.f, 92.f, 92.f), paint);
+
+  paint.SetBlendMode(skity::BlendMode::kHardLight);
+  paint.SetColor(skity::ColorSetARGB(220, 76, 175, 80));
+  canvas->DrawRect(skity::Rect::MakeLTRB(42.f, 42.f, 120.f, 120.f), paint);
+
+  canvas->Restore();
+}
+
+static void RunBlendModeSaveLayerClipRectTest(
+    const char* path_name, skity::testing::GoldenTestEnvConfig config) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(128.f, 128.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendModeSaveLayerClipRect(canvas);
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append(path_name);
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 128.f, 128.f, golden_path.c_str(), config));
+}
+
+TEST(BlendModeGolden, ClipReplayFramebufferFetchSampleCount1) {
+  RunBlendModeClipReplayTest("blend_mode_clip_replay_framebuffer_fetch_sample_count_1.png",
+                             FramebufferFetchConfig(1));
+}
+
+TEST(BlendModeGolden, ClipReplayFramebufferFetchSampleCount4) {
+  RunBlendModeClipReplayTest("blend_mode_clip_replay_framebuffer_fetch_sample_count_4.png",
+                             FramebufferFetchConfig(4));
+}
+
+TEST(BlendModeGolden, ClipReplayTextureCopySampleCount1) {
+  RunBlendModeClipReplayTest("blend_mode_clip_replay_texture_copy_sample_count_1.png",
+                             TextureCopyConfig(1));
+}
+
+TEST(BlendModeGolden, ClipReplayTextureCopySampleCount4) {
+  RunBlendModeClipReplayTest("blend_mode_clip_replay_texture_copy_sample_count_4.png",
+                             TextureCopyConfig(4));
+}
+
+TEST(BlendModeGolden, SaveLayerClipReplayFramebufferFetchSampleCount1) {
+  RunBlendModeSaveLayerClipReplayTest(
+      "blend_mode_savelayer_clip_replay_framebuffer_fetch_sample_count_1.png",
+      FramebufferFetchConfig(1));
+}
+
+TEST(BlendModeGolden, SaveLayerClipReplayFramebufferFetchSampleCount4) {
+  RunBlendModeSaveLayerClipReplayTest(
+      "blend_mode_savelayer_clip_replay_framebuffer_fetch_sample_count_4.png",
+      FramebufferFetchConfig(4));
+}
+
+TEST(BlendModeGolden, SaveLayerClipReplayTextureCopySampleCount1) {
+  RunBlendModeSaveLayerClipReplayTest(
+      "blend_mode_savelayer_clip_replay_texture_copy_sample_count_1.png",
+      TextureCopyConfig(1));
+}
+
+TEST(BlendModeGolden, SaveLayerClipReplayTextureCopySampleCount4) {
+  RunBlendModeSaveLayerClipReplayTest(
+      "blend_mode_savelayer_clip_replay_texture_copy_sample_count_4.png",
+      TextureCopyConfig(4));
+}
+
+TEST(BlendModeGolden, ClipRectFramebufferFetchSampleCount1) {
+  RunBlendModeClipRectTest(
+      "blend_mode_clip_rect_framebuffer_fetch_sample_count_1.png",
+      FramebufferFetchConfig(1));
+}
+
+TEST(BlendModeGolden, ClipRectFramebufferFetchSampleCount4) {
+  RunBlendModeClipRectTest(
+      "blend_mode_clip_rect_framebuffer_fetch_sample_count_4.png",
+      FramebufferFetchConfig(4));
+}
+
+TEST(BlendModeGolden, ClipRectTextureCopySampleCount1) {
+  RunBlendModeClipRectTest("blend_mode_clip_rect_texture_copy_sample_count_1.png",
+                           TextureCopyConfig(1));
+}
+
+TEST(BlendModeGolden, ClipRectTextureCopySampleCount4) {
+  RunBlendModeClipRectTest("blend_mode_clip_rect_texture_copy_sample_count_4.png",
+                           TextureCopyConfig(4));
+}
+
+TEST(BlendModeGolden, SaveLayerClipRectFramebufferFetchSampleCount1) {
+  RunBlendModeSaveLayerClipRectTest(
+      "blend_mode_savelayer_clip_rect_framebuffer_fetch_sample_count_1.png",
+      FramebufferFetchConfig(1));
+}
+
+TEST(BlendModeGolden, SaveLayerClipRectFramebufferFetchSampleCount4) {
+  RunBlendModeSaveLayerClipRectTest(
+      "blend_mode_savelayer_clip_rect_framebuffer_fetch_sample_count_4.png",
+      FramebufferFetchConfig(4));
+}
+
+TEST(BlendModeGolden, SaveLayerClipRectTextureCopySampleCount1) {
+  RunBlendModeSaveLayerClipRectTest(
+      "blend_mode_savelayer_clip_rect_texture_copy_sample_count_1.png",
+      TextureCopyConfig(1));
+}
+
+TEST(BlendModeGolden, SaveLayerClipRectTextureCopySampleCount4) {
+  RunBlendModeSaveLayerClipRectTest(
+      "blend_mode_savelayer_clip_rect_texture_copy_sample_count_4.png",
+      TextureCopyConfig(4));
+}

@@ -19,6 +19,10 @@ class HWDynamicPathClip : public HWDynamicDraw {
 
   ~HWDynamicPathClip() override = default;
 
+  HWDrawType GetDrawType() const override { return HWDrawType::kClip; }
+
+  HWDraw* MakeClipReplay(ArenaAllocator* arena_allocator) const override;
+
  protected:
   void OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
                           HWDrawContext *context) override;
