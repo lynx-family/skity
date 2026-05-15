@@ -93,6 +93,16 @@ class GLDrawTextureLayer : public GLRootLayer {
 
   void OnPostDraw(GPURenderPass *render_pass, GPUCommandBuffer *cmd) override;
 
+  bool OnCopyToDstTexture(GPUCommandBuffer *cmd,
+                          std::shared_ptr<GPUTexture> dst_texture,
+                          GPURegion copy_region) const override;
+
+  bool SupportsTextureCopyDstRead() const override { return true; }
+
+  std::shared_ptr<GPUTexture> GetResolveColorTexture() const override {
+    return color_texture_;
+  }
+
  protected:
   std::shared_ptr<GPUTexture> color_texture_;
   GLuint resolve_fbo_;

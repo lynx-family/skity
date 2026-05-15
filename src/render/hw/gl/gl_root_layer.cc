@@ -221,7 +221,9 @@ void GLDrawTextureLayer::OnGenerateCommand(HWDrawContext *context,
 
 std::shared_ptr<GPURenderPass> GLDrawTextureLayer::OnBeginRenderPass(
     GPUCommandBuffer *cmd, bool force_load) {
-  (void)force_load;
+  if (force_load) {
+    render_pass_desc_.color_attachment.load_op = GPULoadOp::kLoad;
+  }
   auto gpu_render_pass = cmd->BeginRenderPass(render_pass_desc_);
   if (can_blit_from_target_fbo_ && resolve_fbo_ > 0) {
     auto gpu_render_pass_gl =
@@ -237,6 +239,23 @@ std::shared_ptr<GPURenderPass> GLDrawTextureLayer::OnBeginRenderPass(
     });
   }
   return gpu_render_pass;
+}
+
+bool GLDrawTextureLayer::OnCopyToDstTexture(
+    GPUCommandBuffer *cmd, std::shared_ptr<GPUTexture> dst_texture,
+    GPURegion copy_region) const {
+  auto blit_pass = cmd->BeginBlitPass();
+  blit_pass->CopyTextureToTexture(color_texture_, dst_texture,
+                                  GPUBlitPass::TextureCopyRegion{
+                                      .src_x = copy_region.x,
+                                      .src_y = copy_region.y,
+                                      .dst_x = 0,
+                                      .dst_y = 0,
+                                      .width = copy_region.width,
+                                      .height = copy_region.height,
+                                  });
+  blit_pass->End();
+  return true;
 }
 
 void GLDrawTextureLayer::OnPostDraw(GPURenderPass *, GPUCommandBuffer *cmd) {

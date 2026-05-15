@@ -4,7 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <filesystem>
+#include <string_view>
 #include <skity/graphic/blend_mode.hpp>
 #include <skity/graphic/color.hpp>
 #include <skity/graphic/paint.hpp>
@@ -14,6 +16,93 @@
 #include "common/golden_test_check.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
+
+static bool HasPrefix(std::string_view value, std::string_view prefix) {
+  return value.size() >= prefix.size() &&
+         value.substr(0, prefix.size()) == prefix;
+}
+
+static bool IsBasicSaveLayerBlendModeFileName(std::string_view file_name) {
+  static constexpr std::array<std::string_view, 16> kSaveLayerBlendModeFiles = {
+      "Modulate.png",   "Screen.png",     "Overlay.png",   "Darken.png",
+      "Lighten.png",    "ColorDodge.png", "ColorBurn.png", "HardLight.png",
+      "SoftLight.png",  "Difference.png", "Exclusion.png", "Multiply.png",
+      "Hue.png",        "Saturation.png", "Color.png",     "Luminosity.png",
+  };
+
+  for (auto name : kSaveLayerBlendModeFiles) {
+    if (file_name == name) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static std::string ResolveBlendModeGoldenFileName(std::string_view file_name) {
+  if (file_name == "blend_mode_composite_framebuffer_fetch_sample_count_4.png" ||
+      file_name == "blend_mode_composite_texture_copy_sample_count_1.png" ||
+      file_name == "blend_mode_composite_texture_copy_sample_count_4.png") {
+    return "blend_mode_composite_framebuffer_fetch_sample_count_1.png";
+  }
+
+  if (file_name == "blend_mode_clip_rect_framebuffer_fetch_sample_count_4.png" ||
+      file_name == "blend_mode_clip_rect_texture_copy_sample_count_1.png" ||
+      file_name == "blend_mode_clip_rect_texture_copy_sample_count_4.png" ||
+      file_name ==
+          "blend_mode_savelayer_clip_rect_framebuffer_fetch_sample_count_1.png" ||
+      file_name ==
+          "blend_mode_savelayer_clip_rect_framebuffer_fetch_sample_count_4.png" ||
+      file_name ==
+          "blend_mode_savelayer_clip_rect_texture_copy_sample_count_1.png" ||
+      file_name ==
+          "blend_mode_savelayer_clip_rect_texture_copy_sample_count_4.png") {
+    return "blend_mode_clip_rect_framebuffer_fetch_sample_count_1.png";
+  }
+
+  if (file_name == "blend_mode_clip_replay_texture_copy_sample_count_1.png" ||
+      file_name ==
+          "blend_mode_savelayer_clip_replay_framebuffer_fetch_sample_count_1.png" ||
+      file_name ==
+          "blend_mode_savelayer_clip_replay_texture_copy_sample_count_1.png") {
+    return "blend_mode_clip_replay_framebuffer_fetch_sample_count_1.png";
+  }
+
+  if (file_name == "blend_mode_clip_replay_texture_copy_sample_count_4.png" ||
+      file_name ==
+          "blend_mode_savelayer_clip_replay_framebuffer_fetch_sample_count_4.png" ||
+      file_name ==
+          "blend_mode_savelayer_clip_replay_texture_copy_sample_count_4.png") {
+    return "blend_mode_clip_replay_framebuffer_fetch_sample_count_4.png";
+  }
+
+  constexpr std::string_view kSaveLayerPrefix = "blend_mode_savelayer_";
+  if (HasPrefix(file_name, kSaveLayerPrefix)) {
+    auto suffix = file_name.substr(kSaveLayerPrefix.size());
+    if (IsBasicSaveLayerBlendModeFileName(suffix)) {
+      return "blend_mode_savelayer_texture_copy_sample_count_1_" +
+             std::string(suffix);
+    }
+  }
+
+  constexpr std::string_view kSaveLayerTextureCopySampleCount4Prefix =
+      "blend_mode_savelayer_texture_copy_sample_count_4_";
+  if (HasPrefix(file_name, kSaveLayerTextureCopySampleCount4Prefix)) {
+    auto suffix = file_name.substr(kSaveLayerTextureCopySampleCount4Prefix.size());
+    if (IsBasicSaveLayerBlendModeFileName(suffix)) {
+      return "blend_mode_savelayer_texture_copy_sample_count_1_" +
+             std::string(suffix);
+    }
+  }
+
+  return std::string(file_name);
+}
+
+static std::filesystem::path MakeBlendModeGoldenPath(std::string_view file_name) {
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append(ResolveBlendModeGoldenFileName(file_name));
+  return golden_path;
+}
 
 static void DrawBlendMode(skity::Canvas* canvas, skity::BlendMode mode) {
   // Draw destination (a circle)
@@ -34,8 +123,8 @@ static void RunBlendModeTest(skity::BlendMode mode, const char* name) {
 
   DrawBlendMode(canvas, mode);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append(std::string("blend_mode_") + name + ".png");
+  auto golden_path =
+      MakeBlendModeGoldenPath(std::string("blend_mode_") + name + ".png");
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 100.f, 100.f,
@@ -59,6 +148,28 @@ static skity::testing::GoldenTestEnvConfig DrawTextureSurfaceConfig(
   return config;
 }
 
+static void RunBlendModeDrawTextureModeRootTextureCopyTest(
+    skity::BlendMode mode, const char* name, uint32_t sample_count) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  if (env == nullptr || env->GetBackend() != skity::testing::Backend::kGL) {
+    GTEST_SKIP() << "DrawTextureSurfaceGL mode override is only validated on GL";
+  }
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(100.f, 100.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendMode(canvas, mode);
+
+  auto golden_path = MakeBlendModeGoldenPath(
+      std::string("blend_mode_texture_copy_sample_count_") +
+      std::to_string(sample_count) + "_" + name + ".png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 100.f, 100.f, golden_path.c_str(),
+      DrawTextureSurfaceConfig(sample_count)));
+}
+
 static skity::testing::GoldenTestEnvConfig FramebufferFetchConfig(
     uint32_t sample_count) {
   skity::testing::GoldenTestEnvConfig config;
@@ -77,9 +188,9 @@ static void RunBlendModeTextureCopyTest(skity::BlendMode mode,
 
   DrawBlendMode(canvas, mode);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append(std::string("blend_mode_texture_copy_sample_count_") +
-                     std::to_string(sample_count) + "_" + name + ".png");
+  auto golden_path = MakeBlendModeGoldenPath(
+      std::string("blend_mode_texture_copy_sample_count_") +
+      std::to_string(sample_count) + "_" + name + ".png");
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 100.f, 100.f, golden_path.c_str(),
@@ -99,6 +210,16 @@ static void RunBlendModeTextureCopyTest(skity::BlendMode mode,
   TEST(BlendModeGolden, TextureCopySampleCount4_##mode_name) {          \
     RunBlendModeTextureCopyTest(skity::BlendMode::k##mode_name,         \
                                 #mode_name, 4);                         \
+  }
+
+#define BLEND_MODE_DRAW_TEXTURE_MODE_TEXTURE_COPY_TEST(mode_name)        \
+  TEST(BlendModeGolden, DrawTextureMode_TextureCopySampleCount1_##mode_name) { \
+    RunBlendModeDrawTextureModeRootTextureCopyTest(                      \
+        skity::BlendMode::k##mode_name, #mode_name, 1);                 \
+  }                                                                     \
+  TEST(BlendModeGolden, DrawTextureMode_TextureCopySampleCount4_##mode_name) { \
+    RunBlendModeDrawTextureModeRootTextureCopyTest(                      \
+        skity::BlendMode::k##mode_name, #mode_name, 4);                 \
   }
 
 BLEND_MODE_TEST(Modulate)
@@ -135,6 +256,8 @@ BLEND_MODE_TEXTURE_COPY_TEST(Saturation)
 BLEND_MODE_TEXTURE_COPY_TEST(Color)
 BLEND_MODE_TEXTURE_COPY_TEST(Luminosity)
 
+BLEND_MODE_DRAW_TEXTURE_MODE_TEXTURE_COPY_TEST(Overlay)
+
 static void DrawBlendModeSaveLayer(skity::Canvas* canvas,
                                    skity::BlendMode mode) {
   skity::Paint paint;
@@ -161,8 +284,9 @@ static void RunBlendModeSaveLayerTest(skity::BlendMode mode, const char* name) {
 
   DrawBlendModeSaveLayer(canvas, mode);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append(std::string("blend_mode_savelayer_") + name + ".png");
+  auto golden_path =
+      MakeBlendModeGoldenPath(std::string("blend_mode_savelayer_") + name +
+                              ".png");
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 100.f, 100.f,
@@ -179,8 +303,7 @@ static void RunBlendModeSaveLayerTextureCopyTest(skity::BlendMode mode,
 
   DrawBlendModeSaveLayer(canvas, mode);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append(
+  auto golden_path = MakeBlendModeGoldenPath(
       std::string("blend_mode_savelayer_texture_copy_sample_count_") +
       std::to_string(sample_count) + "_" + name + ".png");
   auto dl = recorder.FinishRecording();
@@ -268,8 +391,7 @@ static void RunBlendModeCompositeTest(
 
   DrawBlendModeComposite(canvas);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append(path_name);
+  auto golden_path = MakeBlendModeGoldenPath(path_name);
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 128.f, 128.f, golden_path.c_str(), config));
@@ -348,8 +470,7 @@ static void RunBlendModeClipReplayTest(
 
   DrawBlendModeClipReplay(canvas);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append(path_name);
+  auto golden_path = MakeBlendModeGoldenPath(path_name);
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 128.f, 128.f, golden_path.c_str(), config));
@@ -388,8 +509,7 @@ static void RunBlendModeSaveLayerClipReplayTest(
 
   DrawBlendModeSaveLayerClipReplay(canvas);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append(path_name);
+  auto golden_path = MakeBlendModeGoldenPath(path_name);
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 128.f, 128.f, golden_path.c_str(), config));
@@ -423,8 +543,7 @@ static void RunBlendModeClipRectTest(
 
   DrawBlendModeClipRect(canvas);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append(path_name);
+  auto golden_path = MakeBlendModeGoldenPath(path_name);
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 128.f, 128.f, golden_path.c_str(), config));
@@ -462,8 +581,7 @@ static void RunBlendModeSaveLayerClipRectTest(
 
   DrawBlendModeSaveLayerClipRect(canvas);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append(path_name);
+  auto golden_path = MakeBlendModeGoldenPath(path_name);
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 128.f, 128.f, golden_path.c_str(), config));
