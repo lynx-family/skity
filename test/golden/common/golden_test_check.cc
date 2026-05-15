@@ -174,9 +174,11 @@ struct AutoRestoreConfig {
     restore_config.enable_simple_shape_pipeline =
         gpu_context->IsEnableSimpleShapePipeline();
     restore_config.supports_framebuffer_fetch = std::nullopt;
+    restore_config.gl_surface_mode = env->GetGLSurfaceMode();
     restore_config.sample_count = env->GetSampleCount();
 
     env->SetSampleCount(config.sample_count);
+    env->SetGLSurfaceMode(config.gl_surface_mode);
     gpu_context->SetEnableGPUTessellation(config.enable_gpu_tessellation);
     gpu_context->SetEnableSimpleShapePipeline(
         config.enable_simple_shape_pipeline);
@@ -193,6 +195,7 @@ struct AutoRestoreConfig {
 
   ~AutoRestoreConfig() {
     env->SetSampleCount(restore_config.sample_count);
+    env->SetGLSurfaceMode(restore_config.gl_surface_mode);
     gpu_context->SetEnableGPUTessellation(
         restore_config.enable_gpu_tessellation);
     gpu_context->SetEnableSimpleShapePipeline(

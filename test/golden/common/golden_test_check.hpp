@@ -6,6 +6,7 @@
 
 #include <functional>
 #include <optional>
+#include <skity/gpu/gpu_context_gl.hpp>
 #include <skity/recorder/display_list.hpp>
 #include <skity/skity.hpp>
 #include <vector>
@@ -29,6 +30,7 @@ struct GoldenTestEnvConfig {
   bool enable_gpu_tessellation = false;
   bool enable_simple_shape_pipeline = false;
   std::optional<bool> supports_framebuffer_fetch = std::nullopt;
+  std::optional<GLSurfaceMode> gl_surface_mode = std::nullopt;
   uint32_t sample_count = 4;
   bool use_backend_specific_golden = false;
 };

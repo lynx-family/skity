@@ -4,6 +4,8 @@
 
 #include "src/gpu/gl/gpu_context_impl_gl.hpp"
 
+#include <optional>
+
 #include <skity/gpu/gpu_context_gl.hpp>
 #include <skity/io/data.hpp>
 
@@ -14,6 +16,59 @@
 #include "src/gpu/gl/gpu_texture_gl.hpp"
 
 namespace skity {
+
+namespace {
+
+bool RequiresOffscreenSurface(const GPUSurfaceDescriptorGL& desc) {
+  return !desc.has_stencil_attachment || desc.sample_count > 1;
+}
+
+const char* GLSurfaceModeName(GLSurfaceMode mode) {
+  switch (mode) {
+    case GLSurfaceMode::kAuto:
+      return "kAuto";
+    case GLSurfaceMode::kDirect:
+      return "kDirect";
+    case GLSurfaceMode::kBlit:
+      return "kBlit";
+    case GLSurfaceMode::kDrawTexture:
+      return "kDrawTexture";
+  }
+
+  return "Unknown";
+}
+
+void ReportUnsupportedExplicitSurfaceMode(const GPUSurfaceDescriptorGL& desc) {
+  LOGW("Explicit GL surface mode {} is unsupported for framebuffer surface. "
+       "sample_count={}, has_stencil_attachment={}",
+       GLSurfaceModeName(desc.surface_mode), desc.sample_count,
+       desc.has_stencil_attachment);
+  DEBUG_CHECK(false);
+}
+
+std::optional<GLSurfaceMode> ResolveFramebufferSurfaceMode(
+    const GPUSurfaceDescriptorGL& desc) {
+  if (desc.surface_mode == GLSurfaceMode::kAuto) {
+    if (RequiresOffscreenSurface(desc)) {
+#ifdef SKITY_ANDROID
+      return GLSurfaceMode::kDrawTexture;
+#else
+      return GLSurfaceMode::kBlit;
+#endif
+    }
+
+    return GLSurfaceMode::kDirect;
+  }
+
+  if (desc.surface_mode == GLSurfaceMode::kDirect &&
+      RequiresOffscreenSurface(desc)) {
+    return std::nullopt;
+  }
+
+  return desc.surface_mode;
+}
+
+}  // namespace
 
 std::unique_ptr<GPUContext> GLContextCreate(void* proc_loader) {
   GLInterface::InitGlobalInterface(proc_loader);
@@ -40,22 +95,32 @@ std::unique_ptr<GPUSurface> GPUContextImplGL::CreateSurface(
     return CreateTextureSurface(*desc, gl_desc->gl_id);
   }
 
-  if (!gl_desc->has_stencil_attachment || gl_desc->sample_count > 1) {
-    bool can_blit_from_target_fbo =
-        gl_desc->sample_count == 1 ? gl_desc->can_blit_from_target_fbo : false;
-#ifdef SKITY_ANDROID
-    // Blit to the default framebuffer has issues on many devices
-    // So All android device use draw to flush the final image
-    // If GL_EXT_multisampled_render_to_texture is present will use
-    // special GPUSurface implementation
-    return CreateDrawTextureSurface(*desc, gl_desc->gl_id,
-                                    can_blit_from_target_fbo);
-#else
-    return CreateBlitSurface(*desc, gl_desc->gl_id, can_blit_from_target_fbo);
-#endif
+  if (gl_desc->surface_type != GLSurfaceType::kFramebuffer) {
+    return std::unique_ptr<GPUSurface>();
   }
 
-  return CreateDirectSurface(*desc, gl_desc->gl_id, false);
+  bool can_blit_from_target_fbo =
+      gl_desc->sample_count == 1 ? gl_desc->can_blit_from_target_fbo : false;
+
+  auto surface_mode = ResolveFramebufferSurfaceMode(*gl_desc);
+  if (!surface_mode.has_value()) {
+    ReportUnsupportedExplicitSurfaceMode(*gl_desc);
+    return std::unique_ptr<GPUSurface>();
+  }
+
+  switch (surface_mode.value()) {
+    case GLSurfaceMode::kDirect:
+      return CreateDirectSurface(*desc, gl_desc->gl_id, false);
+    case GLSurfaceMode::kBlit:
+      return CreateBlitSurface(*desc, gl_desc->gl_id, can_blit_from_target_fbo);
+    case GLSurfaceMode::kDrawTexture:
+      return CreateDrawTextureSurface(*desc, gl_desc->gl_id,
+                                      can_blit_from_target_fbo);
+    default:
+      break;
+  }
+
+  return std::unique_ptr<GPUSurface>();
 }
 
 std::unique_ptr<GPURenderTarget> GPUContextImplGL::OnCreateRenderTarget(
@@ -178,8 +243,6 @@ std::unique_ptr<GPUSurface> GPUContextImplGL::CreateTextureSurface(
   return surface;
 }
 
-#ifdef SKITY_ANDROID
-
 std::unique_ptr<GPUSurface> GPUContextImplGL::CreateDrawTextureSurface(
     const GPUSurfaceDescriptor& desc, uint32_t fbo_id,
     bool can_blit_from_target_fbo) {
@@ -201,7 +264,5 @@ std::unique_ptr<GPUSurface> GPUContextImplGL::CreateDrawTextureSurface(
 
   return surface;
 }
-
-#endif
 
 }  // namespace skity

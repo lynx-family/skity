@@ -10,6 +10,7 @@
 #include <skity/graphic/paint.hpp>
 #include <skity/recorder/picture_recorder.hpp>
 
+#include "common/golden_test_env.hpp"
 #include "common/golden_test_check.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
@@ -48,6 +49,13 @@ static skity::testing::GoldenTestEnvConfig TextureCopyConfig(
   config.supports_framebuffer_fetch = false;
   config.sample_count = sample_count;
   config.use_backend_specific_golden = true;
+  return config;
+}
+
+static skity::testing::GoldenTestEnvConfig DrawTextureSurfaceConfig(
+    uint32_t sample_count) {
+  auto config = TextureCopyConfig(sample_count);
+  config.gl_surface_mode = skity::GLSurfaceMode::kDrawTexture;
   return config;
 }
 
@@ -289,6 +297,26 @@ TEST(BlendModeGolden, CompositeTextureCopySampleCount1) {
 TEST(BlendModeGolden, CompositeTextureCopySampleCount4) {
   BLEND_MODE_COMPOSITE_TEST("texture_copy_sample_count_4",
                             TextureCopyConfig(4));
+}
+
+TEST(BlendModeGolden, CompositeTextureCopyDrawTextureModeSampleCount1) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  if (env == nullptr || env->GetBackend() != skity::testing::Backend::kGL) {
+    GTEST_SKIP() << "DrawTextureSurfaceGL mode override is only validated on GL";
+  }
+
+  BLEND_MODE_COMPOSITE_TEST("texture_copy_sample_count_1",
+                            DrawTextureSurfaceConfig(1));
+}
+
+TEST(BlendModeGolden, CompositeTextureCopyDrawTextureModeSampleCount4) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  if (env == nullptr || env->GetBackend() != skity::testing::Backend::kGL) {
+    GTEST_SKIP() << "DrawTextureSurfaceGL mode override is only validated on GL";
+  }
+
+  BLEND_MODE_COMPOSITE_TEST("texture_copy_sample_count_4",
+                            DrawTextureSurfaceConfig(4));
 }
 
 static void DrawBlendModeClipReplay(skity::Canvas* canvas) {

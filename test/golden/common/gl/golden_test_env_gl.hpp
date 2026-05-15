@@ -27,6 +27,14 @@ class GoldenTestEnvGL : public GoldenTestEnv {
       uint32_t width, uint32_t height,
       const std::function<void(Canvas*)>& render) override;
 
+  void SetGLSurfaceMode(std::optional<GLSurfaceMode> mode) override {
+    surface_mode_ = mode;
+  }
+
+  std::optional<GLSurfaceMode> GetGLSurfaceMode() const override {
+    return surface_mode_;
+  }
+
  protected:
   std::unique_ptr<skity::GPUContext> CreateGPUContext() override;
 
@@ -34,6 +42,7 @@ class GoldenTestEnvGL : public GoldenTestEnv {
   EGLDisplay display_ = EGL_NO_DISPLAY;
   EGLSurface surface_ = EGL_NO_SURFACE;
   EGLContext context_ = EGL_NO_CONTEXT;
+  std::optional<GLSurfaceMode> surface_mode_ = std::nullopt;
 };
 
 }  // namespace testing

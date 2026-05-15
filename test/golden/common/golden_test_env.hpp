@@ -7,7 +7,9 @@
 #include <gtest/gtest.h>
 
 #include <functional>
+#include <optional>
 #include <skity/gpu/gpu_context.hpp>
+#include <skity/gpu/gpu_context_gl.hpp>
 #include <skity/gpu/texture.hpp>
 #include <skity/recorder/display_list.hpp>
 
@@ -46,6 +48,12 @@ class GoldenTestEnv : public ::testing::Environment {
   void SetSampleCount(uint32_t sample_count) { sample_count_ = sample_count; }
 
   uint32_t GetSampleCount() const { return sample_count_; }
+
+  virtual void SetGLSurfaceMode(std::optional<GLSurfaceMode> mode) {}
+
+  virtual std::optional<GLSurfaceMode> GetGLSurfaceMode() const {
+    return std::nullopt;
+  }
 
   bool SaveGoldenImage(std::shared_ptr<Pixmap> image, const char* path);
 

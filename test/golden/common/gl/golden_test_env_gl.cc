@@ -119,6 +119,7 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvGL::RenderToTexture(
   surface_desc.surface_type = GLSurfaceType::kFramebuffer;
   surface_desc.gl_id = fbo;
   surface_desc.has_stencil_attachment = false;
+  surface_desc.surface_mode = surface_mode_.value_or(GLSurfaceMode::kAuto);
 
   auto surface = GetGPUContext()->CreateSurface(&surface_desc);
 

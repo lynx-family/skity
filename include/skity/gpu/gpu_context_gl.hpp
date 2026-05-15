@@ -30,6 +30,30 @@ enum class GLSurfaceType {
   kFramebuffer,
 };
 
+/**
+ * @enum GLSurfaceMode indicate how a framebuffer-backed GL surface presents
+ * its final color contents.
+ */
+enum class GLSurfaceMode {
+  /**
+   * Use the backend default selection logic.
+   */
+  kAuto,
+  /**
+   * Render directly into the target framebuffer.
+   */
+  kDirect,
+  /**
+   * Render into an offscreen texture and blit to the target framebuffer.
+   */
+  kBlit,
+  /**
+   * Render into an offscreen texture and draw the final texture into the target
+   * framebuffer.
+   */
+  kDrawTexture,
+};
+
 struct GPUSurfaceDescriptorGL : public GPUSurfaceDescriptor {
   GLSurfaceType surface_type = GLSurfaceType::kInvalid;
   /**
@@ -49,6 +73,12 @@ struct GPUSurfaceDescriptorGL : public GPUSurfaceDescriptor {
    * Ignored. If surface_type is not GLSurfaceType::kFramebuffer
    */
   bool has_stencil_attachment = false;
+
+  /**
+   * Control how a framebuffer-backed GL surface presents to the target
+   * framebuffer. Ignored when surface_type is not GLSurfaceType::kFramebuffer.
+   */
+  GLSurfaceMode surface_mode = GLSurfaceMode::kAuto;
 
   /*
    * If 'enable_blit_from_fbo' is 'true', then skity will blit from the target
