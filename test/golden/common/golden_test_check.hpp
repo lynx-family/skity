@@ -5,6 +5,8 @@
 #pragma once
 
 #include <functional>
+#include <optional>
+#include <skity/gpu/gpu_context_gl.hpp>
 #include <skity/recorder/display_list.hpp>
 #include <skity/skity.hpp>
 #include <vector>
@@ -18,6 +20,22 @@ struct PathList {
   const char* simple_shape_path = nullptr;
 };
 
+struct GoldenTestEnvConfig {
+  static GoldenTestEnvConfig GPUTessellation() {
+    GoldenTestEnvConfig config;
+    config.enable_gpu_tessellation = true;
+    return config;
+  }
+
+  bool enable_gpu_tessellation = false;
+  bool enable_simple_shape_pipeline = false;
+  std::optional<bool> supports_framebuffer_fetch = std::nullopt;
+  std::optional<GLSurfaceMode> gl_surface_mode = std::nullopt;
+  std::optional<bool> gl_has_stencil_attachment = std::nullopt;
+  uint32_t sample_count = 4;
+  bool use_backend_specific_golden = false;
+};
+
 /**
  * @brief compare the display list with the golden texture. If the golden_test
  * is compiled with SKITY_GOLDEN_GUI, a window will be opened to show the
@@ -26,9 +44,9 @@ struct PathList {
  * @param dl    the display list to be compared.
  * @param width the width of the target image list.
  * @param height the height of the target image list.
- * @param path  the path of the expected golden image. If the image does not
- *              exist, the image will be saved to the path. And the test will
- *              be treated as passed.
+ * @param path  the path of the expected golden image. Missing golden images
+ *              fail the test by default. Set
+ *              SKITY_UPDATE_MISSING_GOLDEN=1 to generate them explicitly.
  *
  * @return true  the display list is the same as the golden texture.
  * @return false the display list is different from the golden texture.
@@ -36,6 +54,9 @@ struct PathList {
  */
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
                           const char* path);
+
+bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
+                          const char* path, GoldenTestEnvConfig config);
 
 bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
                           const std::function<void(Canvas*)>& render);
@@ -48,9 +69,9 @@ bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
  * @param dl         the display list to be compared.
  * @param width      the width of the target image list.
  * @param height     the height of the target image list.
- * @param path_list  the path list of the expected golden images. If the image
- *                   does not exist, the image will be saved to the path. And
- *                   the test will be treated as passed.
+ * @param path_list  the path list of the expected golden images. Missing
+ *                   golden images fail the test by default. Set
+ *                   SKITY_UPDATE_MISSING_GOLDEN=1 to generate them explicitly.
  *
  * @return true  the display list is the same as the golden texture.
  * @return false the display list is different from the golden texture.

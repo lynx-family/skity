@@ -95,7 +95,8 @@ std::shared_ptr<Image> GPUContextImpl::MakeSnapshot(
 
   auto canvas = render_target->surface_->LockCanvas();
 
-  if (GetBackendType() == GPUBackendType::kOpenGL) {
+  if (GetBackendType() == GPUBackendType::kOpenGL ||
+      GetBackendType() == GPUBackendType::kWebGL2) {
     // GL framebuffer is flipped, so we need to flip it back
     canvas->Translate(0, render_target->surface_->GetHeight());
     canvas->Scale(1, -1);

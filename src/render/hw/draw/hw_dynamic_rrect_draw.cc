@@ -5,9 +5,11 @@
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
 
 #include "src/effect/pixmap_shader.hpp"
+#include "src/graphic/blend_mode_priv.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/step/color_step.hpp"
 #include "src/render/hw/draw/wgx_filter.hpp"
+#include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 
 namespace skity {
@@ -60,6 +62,11 @@ void HWDynamicRRectDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
 
   if (paint.GetColorFilter()) {
     frag->SetFilter(WGXFilterFragment::Make(paint.GetColorFilter().get()));
+  }
+
+  if (IsAdvancedBlendMode(paint.GetBlendMode())) {
+    frag->SetProgrammableBlending(WGXProgrammableBlending::Make(
+        paint.GetBlendMode(), GetDstReadStrategy()));
   }
 
   steps.emplace_back(context->arena_allocator->Make<ColorStep>(

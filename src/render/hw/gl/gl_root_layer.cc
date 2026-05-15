@@ -22,7 +22,9 @@ namespace skity {
 GLRootLayer::GLRootLayer(uint32_t width, uint32_t height, const Rect &bounds,
                          GLuint vao)
     : HWRootLayer(width, height, bounds, GPUTextureFormat::kRGBA8Unorm),
-      vao_(vao) {}
+      vao_(vao) {
+  SetRTOrigin(LayerRTOrigin::kBottomLeft);
+}
 
 void GLRootLayer::Draw(GPURenderPass *render_pass, GPUCommandBuffer *cmd) {
   BindVAO();
@@ -62,7 +64,7 @@ GLDirectRootLayer::GLDirectRootLayer(uint32_t width, uint32_t height,
     : GLRootLayer(width, height, bounds, vao), fbo_id_(fbo) {}
 
 std::shared_ptr<GPURenderPass> GLDirectRootLayer::OnBeginRenderPass(
-    GPUCommandBuffer *cmd) {
+    GPUCommandBuffer *cmd, bool force_load) {
   GPUTextureDescriptor texture_desc{};
 
   texture_desc.width = GetWidth();
@@ -79,7 +81,8 @@ std::shared_ptr<GPURenderPass> GLDirectRootLayer::OnBeginRenderPass(
   render_pass_desc.depth_attachment.texture = mock_texture;
 
   render_pass_desc.color_attachment.load_op =
-      NeedClearSurface() ? GPULoadOp::kClear : GPULoadOp::kLoad;
+      (force_load || !NeedClearSurface()) ? GPULoadOp::kLoad
+                                          : GPULoadOp::kClear;
   render_pass_desc.stencil_attachment.load_op = GPULoadOp::kClear;
   render_pass_desc.stencil_attachment.store_op = GPUStoreOp::kDiscard;
   render_pass_desc.stencil_attachment.clear_value = 0;
@@ -88,6 +91,21 @@ std::shared_ptr<GPURenderPass> GLDirectRootLayer::OnBeginRenderPass(
   render_pass_desc.depth_attachment.clear_value = 0.f;
 
   return std::make_shared<GPURenderPassGL>(render_pass_desc, fbo_id_);
+}
+
+bool GLDirectRootLayer::OnCopyToDstTexture(
+    GPUCommandBuffer *cmd, std::shared_ptr<GPUTexture> dst_texture,
+    GPURegion copy_region) const {
+  GPUTextureDescriptor texture_desc{};
+  texture_desc.width = GetWidth();
+  texture_desc.height = GetHeight();
+  texture_desc.format = GetColorFormat();
+
+  auto src_texture = std::make_shared<GPUTexturePlaceholderGL>(texture_desc);
+  src_texture->SetFramebuffer(fbo_id_, false);
+
+  return CopyRegionToDstTexture(cmd, std::move(src_texture),
+                                std::move(dst_texture), copy_region);
 }
 
 GLExternTextureLayer::GLExternTextureLayer(std::shared_ptr<GPUTexture> texture,
@@ -111,10 +129,13 @@ HWDrawState GLExternTextureLayer::OnPrepare(HWDrawContext *context) {
 }
 
 std::shared_ptr<GPURenderPass> GLExternTextureLayer::OnBeginRenderPass(
-    GPUCommandBuffer *cmd) {
+    GPUCommandBuffer *cmd, bool force_load) {
+  if (force_load) {
+    render_pass_desc_.color_attachment.load_op = GPULoadOp::kLoad;
+  }
   auto gpu_render_pass = cmd->BeginRenderPass(render_pass_desc_);
 
-  if (src_fbo_ > 0) {
+  if (src_fbo_ > 0 && !force_load) {
     auto gpu_render_pass_gl =
         static_cast<GPURenderPassGL *>(gpu_render_pass.get());
     gpu_render_pass_gl->SetAfterCleanupAction([this, gpu_render_pass_gl]() {
@@ -129,6 +150,13 @@ std::shared_ptr<GPURenderPass> GLExternTextureLayer::OnBeginRenderPass(
   }
 
   return gpu_render_pass;
+}
+
+bool GLExternTextureLayer::OnCopyToDstTexture(
+    GPUCommandBuffer *cmd, std::shared_ptr<GPUTexture> dst_texture,
+    GPURegion copy_region) const {
+  return CopyRegionToDstTexture(cmd, ext_texture_, std::move(dst_texture),
+                                copy_region);
 }
 
 GLDrawTextureLayer::GLDrawTextureLayer(std::shared_ptr<GPUTexture> texture,
@@ -197,7 +225,10 @@ void GLDrawTextureLayer::OnGenerateCommand(HWDrawContext *context,
 }
 
 std::shared_ptr<GPURenderPass> GLDrawTextureLayer::OnBeginRenderPass(
-    GPUCommandBuffer *cmd) {
+    GPUCommandBuffer *cmd, bool force_load) {
+  if (force_load) {
+    render_pass_desc_.color_attachment.load_op = GPULoadOp::kLoad;
+  }
   auto gpu_render_pass = cmd->BeginRenderPass(render_pass_desc_);
   if (can_blit_from_target_fbo_ && resolve_fbo_ > 0) {
     auto gpu_render_pass_gl =
@@ -213,6 +244,13 @@ std::shared_ptr<GPURenderPass> GLDrawTextureLayer::OnBeginRenderPass(
     });
   }
   return gpu_render_pass;
+}
+
+bool GLDrawTextureLayer::OnCopyToDstTexture(
+    GPUCommandBuffer *cmd, std::shared_ptr<GPUTexture> dst_texture,
+    GPURegion copy_region) const {
+  return CopyRegionToDstTexture(cmd, color_texture_, std::move(dst_texture),
+                                copy_region);
 }
 
 void GLDrawTextureLayer::OnPostDraw(GPURenderPass *, GPUCommandBuffer *cmd) {

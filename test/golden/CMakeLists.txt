@@ -41,6 +41,9 @@ target_include_directories(skity_golden_test
 
 target_include_directories(skity_golden_test
   PRIVATE
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/module/wgx/include
+  ${CMAKE_SOURCE_DIR}/third_party/glm
   ${CMAKE_SOURCE_DIR}/third_party/libSwAngle/include
 )
 

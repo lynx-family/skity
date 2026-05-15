@@ -25,6 +25,7 @@ void HWLayerState::RestoreToCount(int save_count) {
 
 void HWLayerState::SaveClipOp(skity::HWDraw *clip) {
   clip_stack_.back().clip_draws.emplace_back(clip);
+  clip_history_.push_back({clip});
 }
 
 void HWLayerState::SaveClipBounds(const Rect &bounds, bool reset) {
