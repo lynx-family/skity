@@ -18,11 +18,11 @@ class GPUCommandBufferWEB : public GPUCommandBuffer {
   ~GPUCommandBufferWEB() override;
 
   std::shared_ptr<GPURenderPass> BeginRenderPass(
-      const GPURenderPassDescriptor &desc) override;
+      const GPURenderPassDescriptor& desc) override;
 
   std::shared_ptr<GPUBlitPass> BeginBlitPass() override;
 
-  bool Submit() override;
+  bool Submit(const GPUSubmitInfo* submit_info = nullptr) override;
 
   void RecordStageBuffer(WGPUBuffer buffer);
   void RecordBindGroup(WGPUBindGroup bind_group);

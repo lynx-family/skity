@@ -36,6 +36,23 @@ if(${SKITY_VK_BACKEND})
   # set vulkan headers
   target_include_directories(skity PRIVATE third_party/VulkanMemoryAllocator/include)
   add_subdirectory(third_party/SPIRV-Headers)
+
+  # Detect Linux display server headers for Vulkan platform extensions
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    include(CheckIncludeFile)
+    check_include_file("xcb/xcb.h" SKITY_VK_HAS_XCB)
+    check_include_file("X11/Xlib.h" SKITY_VK_HAS_XLIB)
+    check_include_file("wayland-client.h" SKITY_VK_HAS_WAYLAND)
+    if(SKITY_VK_HAS_XCB)
+      target_compile_definitions(skity PRIVATE SKITY_VK_USE_XCB)
+    endif()
+    if(SKITY_VK_HAS_XLIB)
+      target_compile_definitions(skity PRIVATE SKITY_VK_USE_XLIB)
+    endif()
+    if(SKITY_VK_HAS_WAYLAND)
+      target_compile_definitions(skity PRIVATE SKITY_VK_USE_WAYLAND)
+    endif()
+  endif()
 endif()
 
 # json parser

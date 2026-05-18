@@ -226,6 +226,10 @@ struct Command {
   ArrayList<TextureBinding, 4> texture_bindings;
   ArrayList<SamplerBinding, 4> sampler_bindings;
   uint32_t stencil_reference = 0u;
+  uint32_t front_stencil_compare_mask = 0xFFFFFFFFu;
+  uint32_t back_stencil_compare_mask = 0xFFFFFFFFu;
+  uint32_t front_stencil_write_mask = 0xFFFFFFFFu;
+  uint32_t back_stencil_write_mask = 0xFFFFFFFFu;
   uint32_t index_count = 0u;
   uint32_t instance_count = 0u;
 
