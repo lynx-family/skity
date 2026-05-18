@@ -39,5 +39,12 @@ deps = {
         "ignore_in_git": True,
         "decompress": True,
         "condition": system in ["darwin"]
+    },
+    "third_party/libSwiftShader": {
+        "type": "http",
+        "url":  "https://lf-lynx.tiktok-cdns.com/obj/lynx-artifacts-oss-sg/skity/libSwiftShader_f9d5d49.zip",
+        "ignore_in_git": True,
+        "decompress": True,
+        "condition": system in [ 'linux' ]
     }
 }

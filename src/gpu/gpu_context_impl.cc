@@ -119,4 +119,12 @@ std::shared_ptr<Data> GPUContextImpl::ReadPixels(
   return OnReadPixels(texture);
 }
 
+void GPUContextImpl::ResetOwnedResources() {
+  pipeline_lib_.reset();
+  render_target_cache_.reset();
+  atlas_manager_.reset();
+  texture_manager_.reset();
+  gpu_device_.reset();
+}
+
 }  // namespace skity

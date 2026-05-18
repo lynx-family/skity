@@ -16,12 +16,17 @@ namespace skity {
 class HWCanvas;
 class HWRootLayer;
 class HWStageBuffer;
+class GPUCommandBuffer;
 
 class GPUSurfaceImpl : public GPUSurface {
  public:
   GPUSurfaceImpl(const GPUSurfaceDescriptor& desc, GPUContextImpl* ctx);
 
   ~GPUSurfaceImpl() override;
+
+  GPUBackendType GetBackendType() const override {
+    return ctx_ != nullptr ? ctx_->GetBackendType() : GPUBackendType::kNone;
+  }
 
   uint32_t GetWidth() const override { return width_; }
 
@@ -44,6 +49,8 @@ class GPUSurfaceImpl : public GPUSurface {
   ArenaAllocator* GetArenaAllocator() const { return arena_allocator_.get(); }
 
   virtual GPUTextureFormat GetGPUFormat() const = 0;
+
+  virtual const GPUSubmitInfo* GetSubmitInfo() const { return nullptr; }
 
  protected:
   virtual HWRootLayer* OnBeginNextFrame(bool clear) = 0;

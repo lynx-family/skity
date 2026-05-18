@@ -47,11 +47,17 @@ jobs:
             run: |
                 export PATH=$PWD/buildtools/llvm/bin:$PATH
                 cmake -B out/cmake_host_build -DSKITY_TEST=ON -DSKITY_VK_BACKEND=ON -DSKITY_TEST_COVERAGE=OFF -DSKITY_CODEC_MODULE=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS="-fPIC"
-                cmake --build out/cmake_host_build --target skity_unit_test
+                cmake --build out/cmake_host_build --target skity_unit_test skity_vulkan_unit_test
           - name: Unit Test
             run: |
                 cd out/cmake_host_build/test/ut/
                 ctest --output-junit test.xml --rerun-failed --output-on-failure
+          - name: Vulkan Unit Test
+            env:
+              VK_ICD_FILENAMES: ${{ github.workspace }}/third_party/libSwiftShader/vk_swiftshader_icd.json
+            run: |
+                cd out/cmake_host_build/test/ut/
+                ctest --output-junit vk_test.xml -R skity_vulkan_unit_test --rerun-failed --output-on-failure
     unittest_coverage:
         runs-on: ubuntu-22.04
         timeout-minutes: 30
@@ -74,11 +80,14 @@ jobs:
             run: |
                 export PATH=$PWD/buildtools/llvm/bin:$PATH
                 cmake -B out/cmake_host_build -DSKITY_TEST=ON -DSKITY_VK_BACKEND=ON -DSKITY_TEST_COVERAGE=ON -DSKITY_CODEC_MODULE=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS="-fPIC"
-                cmake --build out/cmake_host_build --target skity_unit_test
+                cmake --build out/cmake_host_build --target skity_unit_test skity_vulkan_unit_test
           - name: Test and Generate Coverage Report
+            env:
+              VK_ICD_FILENAMES: ${{ github.workspace }}/third_party/libSwiftShader/vk_swiftshader_icd.json
             run: |
                 cd out/cmake_host_build/test/ut/
                 ctest --output-junit test.xml --rerun-failed --output-on-failure
+                ctest --output-junit vk_test.xml -R skity_vulkan_unit_test --rerun-failed --output-on-failure
                 cd ../../
                 lcov --capture --directory . --output-file coverage.info
                 lcov --remove coverage.info '/usr/**/*' 'test/ut/**/*' 'third_party/**/*' 'Library/*' '**/clipper2/*' --output-file coverage.filtered.info
@@ -95,7 +104,7 @@ jobs:
             with:
               token: ${{ secrets.CODECOV_TOKEN }}
               directory: "out/cmake_host_build/test/ut"
-              files: out/cmake_host_build/test/ut/test.xml
+              files: out/cmake_host_build/test/ut/test.xml out/cmake_host_build/test/ut/vk_test.xml
     android_build_check:
         runs-on: lynx-ubuntu-22.04-medium
         timeout-minutes: 30

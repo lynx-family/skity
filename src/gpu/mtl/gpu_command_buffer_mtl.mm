@@ -27,7 +27,8 @@ std::shared_ptr<GPUBlitPass> GPUCommandBufferMTL::BeginBlitPass() {
   return std::make_shared<GPUBlitPassMTL>(mtl_device_, blit_encoder);
 }
 
-bool GPUCommandBufferMTL::Submit() {
+bool GPUCommandBufferMTL::Submit(const GPUSubmitInfo* submit_info) {
+  (void)submit_info;
   mtl_command_buffer_.label = [NSString stringWithUTF8String:GetLabel().c_str()];
   [mtl_command_buffer_ addCompletedHandler:^(id<MTLCommandBuffer> cmd) {
     if (cmd.error == nil) {

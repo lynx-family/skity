@@ -71,7 +71,8 @@ void GPUCommandBufferWEB::RecordBindGroup(WGPUBindGroup bind_group) {
   bind_groups_.emplace_back(bind_group);
 }
 
-bool GPUCommandBufferWEB::Submit() {
+bool GPUCommandBufferWEB::Submit(const GPUSubmitInfo* submit_info) {
+  (void)submit_info;
   WGPUCommandBufferDescriptor desc = {};
 
   WGPUCommandBuffer command_buffer = wgpuCommandEncoderFinish(encoder_, &desc);
