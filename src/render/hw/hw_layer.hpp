@@ -5,20 +5,30 @@
 #ifndef SRC_RENDER_HW_HW_LAYER_HPP
 #define SRC_RENDER_HW_HW_LAYER_HPP
 
+#include <memory>
+#include <optional>
 #include <skity/geometry/rect.hpp>
 #include <skity/graphic/paint.hpp>
 #include <vector>
 
+#include "skity/graphic/image.hpp"
 #include "src/gpu/gpu_command_buffer.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
+#include "src/gpu/gpu_texture.hpp"
 #include "src/render/canvas_state.hpp"
 #include "src/render/hw/hw_draw.hpp"
+#include "src/render/hw/hw_draw_pass.hpp"
 #include "src/render/hw/hw_layer_state.hpp"
 
 namespace skity {
 
 class GPUDevice;
 class GPUContext;
+
+enum class LayerRTOrigin {
+  kTopLeft,
+  kBottomLeft,
+};
 
 class HWLayer : public HWDraw {
  public:
@@ -77,9 +87,15 @@ class HWLayer : public HWDraw {
 
   void SetArenaAllocator(ArenaAllocator* arena_allocator) {
     arena_allocator_ = arena_allocator;
+    auto pass = arena_allocator_->Make<HWDrawPass>();
+    draw_passes_.push_back(pass);
   }
 
   ArenaAllocator* GetArenaAllocator() const { return arena_allocator_; }
+
+  void SetRTOrigin(LayerRTOrigin origin) { rt_origin_ = origin; }
+
+  virtual bool SupportsTextureCopyDstRead() const { return false; }
 
  protected:
   HWDrawState OnPrepare(skity::HWDrawContext* context) override;
@@ -87,13 +103,29 @@ class HWLayer : public HWDraw {
   void OnGenerateCommand(HWDrawContext* context, HWDrawState state) override;
 
   virtual std::shared_ptr<GPURenderPass> OnBeginRenderPass(
-      GPUCommandBuffer* cmd) = 0;
+      GPUCommandBuffer* cmd, bool force_load) = 0;
+
+  virtual bool OnCopyToDstTexture(GPUCommandBuffer* cmd,
+                                  std::shared_ptr<GPUTexture> dst_texture,
+                                  GPURegion copy_region) const {
+    (void)cmd;
+    (void)dst_texture;
+    (void)copy_region;
+    return false;
+  }
 
   virtual void OnPostDraw(GPURenderPass* render_pass,
                           GPUCommandBuffer* cmd) = 0;
 
+  virtual std::shared_ptr<GPUTexture> GetResolveColorTexture() const {
+    return nullptr;
+  }
+
  protected:
-  std::vector<HWDraw*>& GetDrawOps() { return draw_ops_; }
+  bool CopyRegionToDstTexture(GPUCommandBuffer* cmd,
+                              std::shared_ptr<GPUTexture> src_texture,
+                              std::shared_ptr<GPUTexture> dst_texture,
+                              GPURegion copy_region) const;
 
   HWDrawState GetLayerDrawState() const { return layer_state_; }
 
@@ -107,10 +139,26 @@ class HWLayer : public HWDraw {
       GPUContext* gpu_context, std::shared_ptr<GPUTexture> texture,
       const Rect& bounds) const;
 
+  std::shared_ptr<Shader> CreateDrawLayerShader(std::shared_ptr<Image> image,
+                                                const Rect& bounds) const;
+
+  /**
+   * Generates a draw call that emulates load action for an MSAA target by
+   * re-rendering the resolve texture back into the MSAA attachment.
+   */
+  EmulatedLoadInfo CreateEmulatedLoadInfo();
+
  private:
   void FlushPendingClip();
 
   bool TryMerge(HWDraw* draw);
+
+  void PrepareReplayDraws(HWDrawPass* pass, HWDrawContext* context);
+
+  std::optional<DstTextureCopyInfo> BuildDstTextureCopyInfo(
+      const Rect& layer_space_bounds) const;
+
+  Vec4 BuildDstUVMapping(const Rect& copy_rect) const;
 
  private:
   HWLayerState state_;
@@ -125,13 +173,14 @@ class HWLayer : public HWDraw {
    * to get the total transform and calculate the physical size of SubLayer
    */
   Matrix world_matrix_ = {};
-  std::vector<HWDraw*> draw_ops_ = {};
+  std::vector<HWDrawPass*> draw_passes_ = {};
   std::vector<HWDraw*> pending_clip_ = {};
   GPUDevice* gpu_device_ = {};
   Matrix bounds_to_physical_matrix_ = {};
   bool enable_merging_draw_call_ = {};
   ArenaAllocator* arena_allocator_ = nullptr;
   Vec2 scale_ = {1.f, 1.f};
+  LayerRTOrigin rt_origin_ = LayerRTOrigin::kTopLeft;
 };
 
 }  // namespace skity

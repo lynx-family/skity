@@ -8,9 +8,33 @@
 
 #include <sstream>
 
+#include "src/gpu/gpu_render_pass.hpp"
+#include "src/logging.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
+#include "src/render/hw/hw_draw.hpp"
+#include "src/render/hw/hw_draw_pass.hpp"
+
 namespace skity {
 
 namespace {
+constexpr uint32_t kDstReadTextureCopyGroup = 2;
+constexpr uint32_t kDstUVMappingBinding = 0;
+constexpr uint32_t kDstSamplerBinding = 1;
+constexpr uint32_t kDstTextureBinding = 2;
+constexpr char kWGSLVec4F32Type[] = "vec4<f32>";
+
+void AppendDstReadTextureCopyLayout(std::stringstream& ss) {
+  ss << "\n";
+  ss << "  @group(" << kDstReadTextureCopyGroup << ") @binding("
+     << kDstUVMappingBinding
+     << ") var<uniform>  uDstUVMapping    : " << kWGSLVec4F32Type << ";\n";
+  ss << "  @group(" << kDstReadTextureCopyGroup << ") @binding("
+     << kDstSamplerBinding << ") var           uDstSampler      : sampler;\n";
+  ss << "  @group(" << kDstReadTextureCopyGroup << ") @binding("
+     << kDstTextureBinding
+     << ") var           uDstTexture      : texture_2d<f32>;\n";
+}
+
 void AppendHelperFunction(BlendMode blend_mode, std::stringstream& ss) {
   switch (blend_mode) {
     case BlendMode::kOverlay:
@@ -278,7 +302,58 @@ std::string WGXProgrammableBlending::GenSourceWGSL() const {
   ss << "return result;\n";
   ss << "}\n";
 
+  if (dst_read_strategy_ == DstReadStrategy::kTextureCopy) {
+    AppendDstReadTextureCopyLayout(ss);
+  }
   return ss.str();
+}
+
+void WGXProgrammableBlending::SetupBindGroup(Command* cmd,
+                                             HWDrawContext* context) {
+  if (dst_read_strategy_ != DstReadStrategy::kTextureCopy) {
+    return;
+  }
+
+  if (cmd->pipeline == nullptr) {
+    return;
+  }
+
+  auto group = cmd->pipeline->GetBindingGroup(kDstReadTextureCopyGroup);
+  if (group == nullptr) {
+    return;
+  }
+
+  DEBUG_CHECK(context->dst_read_texture_copy_info);
+  auto* copy_info = context->dst_read_texture_copy_info;
+  if (copy_info == nullptr || copy_info->sampler == nullptr ||
+      copy_info->texture == nullptr) {
+    return;
+  }
+
+  // uv mapping
+  {
+    auto uv_mapping_entry = group->GetEntry(kDstUVMappingBinding);
+
+    if (uv_mapping_entry == nullptr ||
+        uv_mapping_entry->type_definition->name != kWGSLVec4F32Type) {
+      return;
+    }
+    auto dst_uv_mapping = copy_info->uv_mapping;
+    uv_mapping_entry->type_definition->SetData(&dst_uv_mapping,
+                                               sizeof(float) * 4);
+    UploadBindGroup(group->group, uv_mapping_entry, cmd, context);
+  }
+
+  auto sampler_binding = group->GetEntry(kDstSamplerBinding);
+  auto texture_binding = group->GetEntry(kDstTextureBinding);
+  if (sampler_binding == nullptr ||
+      sampler_binding->type != wgx::BindingType::kSampler ||
+      texture_binding == nullptr ||
+      texture_binding->type != wgx::BindingType::kTexture) {
+    return;
+  }
+  UploadBindGroup(group->group, sampler_binding, cmd, copy_info->sampler);
+  UploadBindGroup(group->group, texture_binding, cmd, copy_info->texture);
 }
 
 }  // namespace skity

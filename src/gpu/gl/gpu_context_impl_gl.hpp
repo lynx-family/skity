@@ -43,12 +43,9 @@ class GPUContextImplGL : public GPUContextImpl {
   std::unique_ptr<GPUSurface> CreateTextureSurface(
       const GPUSurfaceDescriptor& desc, uint32_t tex_id);
 
-#ifdef SKITY_ANDROID
   std::unique_ptr<GPUSurface> CreateDrawTextureSurface(
       const GPUSurfaceDescriptor& desc, uint32_t fbo_id,
       bool can_blit_from_target_fbo);
-
-#endif
 };
 
 }  // namespace skity

@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -17,6 +18,8 @@
 #include <sstream>
 
 #include "common/golden_test_env.hpp"
+#include "src/gpu/gpu_context_impl.hpp"
+#include "src/gpu/gpu_device.hpp"
 
 #ifdef SKITY_GOLDEN_GUI
 #include "playground/playground.hpp"
@@ -45,7 +48,8 @@ std::string BuildGLGoldenImagePath(const char* path) {
       .string();
 }
 
-std::string ResolveGoldenReadPath(const char* path) {
+std::string ResolveGoldenReadPath(const char* path,
+                                  bool use_backend_specific_golden) {
   if (path == nullptr) {
     return {};
   }
@@ -56,7 +60,7 @@ std::string ResolveGoldenReadPath(const char* path) {
 
   auto gl_path = BuildGLGoldenImagePath(path);
 
-  if (std::filesystem::exists(gl_path)) {
+  if (use_backend_specific_golden || std::filesystem::exists(gl_path)) {
     return gl_path;
   }
 
@@ -73,6 +77,19 @@ std::string ResolveGoldenWritePath(const char* path) {
   }
 
   return BuildGLGoldenImagePath(path);
+}
+
+bool ShouldAutoGenerateMissingGolden() {
+  const char* value = std::getenv("SKITY_UPDATE_MISSING_GOLDEN");
+  if (value == nullptr) {
+    return false;
+  }
+
+  std::string opt_in(value);
+  std::transform(
+      opt_in.begin(), opt_in.end(), opt_in.begin(),
+      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return opt_in == "1" || opt_in == "true" || opt_in == "yes";
 }
 
 uint8_t GetComparableChannel(const std::shared_ptr<Pixmap>& pixmap,
@@ -162,30 +179,50 @@ static std::string EscapeJSONString(const std::string& input) {
 }
 namespace testing {
 
-struct GoldenTestEnvConfig {
-  static GoldenTestEnvConfig GPUTessellation() {
-    return GoldenTestEnvConfig{true};
-  }
-
-  bool enable_gpu_tessellation = false;
-  bool enable_simple_shape_pipeline = false;
-};
-
 struct AutoRestoreConfig {
-  AutoRestoreConfig(GPUContext* gpu_context, GoldenTestEnvConfig config)
-      : gpu_context(gpu_context),
-        restore_config{gpu_context->IsEnableGPUTessellation(),
-                       gpu_context->IsEnableSimpleShapePipeline()} {
+  AutoRestoreConfig(GoldenTestEnv* env, GoldenTestEnvConfig config)
+      : env(env), gpu_context(env->GetGPUContext()) {
+    restore_config.enable_gpu_tessellation =
+        gpu_context->IsEnableGPUTessellation();
+    restore_config.enable_simple_shape_pipeline =
+        gpu_context->IsEnableSimpleShapePipeline();
+    restore_config.supports_framebuffer_fetch = std::nullopt;
+    restore_config.gl_surface_mode = env->GetGLSurfaceMode();
+    restore_config.gl_has_stencil_attachment = env->GetGLHasStencilAttachment();
+    restore_config.sample_count = env->GetSampleCount();
+
+    env->SetSampleCount(config.sample_count);
+    env->SetGLSurfaceMode(config.gl_surface_mode);
+    env->SetGLHasStencilAttachment(config.gl_has_stencil_attachment);
     gpu_context->SetEnableGPUTessellation(config.enable_gpu_tessellation);
     gpu_context->SetEnableSimpleShapePipeline(
         config.enable_simple_shape_pipeline);
+
+    if (config.supports_framebuffer_fetch.has_value()) {
+      auto* gpu_context_impl = static_cast<GPUContextImpl*>(gpu_context);
+      auto* gpu_device = gpu_context_impl->GetGPUDevice();
+      restore_config.supports_framebuffer_fetch =
+          gpu_device->GetCaps().supports_framebuffer_fetch;
+      const_cast<GPUCaps&>(gpu_device->GetCaps()).supports_framebuffer_fetch =
+          config.supports_framebuffer_fetch.value();
+    }
   }
 
   ~AutoRestoreConfig() {
+    env->SetSampleCount(restore_config.sample_count);
+    env->SetGLSurfaceMode(restore_config.gl_surface_mode);
+    env->SetGLHasStencilAttachment(restore_config.gl_has_stencil_attachment);
     gpu_context->SetEnableGPUTessellation(
         restore_config.enable_gpu_tessellation);
     gpu_context->SetEnableSimpleShapePipeline(
         restore_config.enable_simple_shape_pipeline);
+
+    if (restore_config.supports_framebuffer_fetch.has_value()) {
+      auto* gpu_context_impl = static_cast<GPUContextImpl*>(gpu_context);
+      auto* gpu_device = gpu_context_impl->GetGPUDevice();
+      const_cast<GPUCaps&>(gpu_device->GetCaps()).supports_framebuffer_fetch =
+          restore_config.supports_framebuffer_fetch.value();
+    }
   }
 
   std::string GetNameSuffix() const {
@@ -200,7 +237,8 @@ struct AutoRestoreConfig {
   }
 
  private:
-  GPUContext* gpu_context = gpu_context;
+  GoldenTestEnv* env = nullptr;
+  GPUContext* gpu_context = nullptr;
   GoldenTestEnvConfig restore_config;
 };
 
@@ -243,20 +281,43 @@ static bool CompareGoldenTextureImpl(
   std::cout << "test suite name: " << test_info->test_suite_name() << std::endl;
 
   auto env = GoldenTestEnv::GetInstance();
-  AutoRestoreConfig auto_restore_config(env->GetGPUContext(), config);
+  AutoRestoreConfig auto_restore_config(env, config);
   auto texture = env->RenderToTexture(width, height, render);
-  auto expected_image_read_path = ResolveGoldenReadPath(path);
+  auto expected_image_read_path =
+      ResolveGoldenReadPath(path, config.use_backend_specific_golden);
   auto expected_image_write_path = ResolveGoldenWritePath(path);
 
   EXPECT_TRUE(texture != nullptr)
       << "Failed to generate rendering result texture";
+  if (texture == nullptr) {
+    return false;
+  }
 
   auto source = texture->ReadPixels();
 
   EXPECT_TRUE(source != nullptr)
       << "Failed to read rendering result texture pixels";
+  if (source == nullptr) {
+    return false;
+  }
 
   auto target = ReadImage(expected_image_read_path.c_str());
+
+  if (target == nullptr) {
+    if (!expected_image_write_path.empty() &&
+        ShouldAutoGenerateMissingGolden()) {
+      EXPECT_TRUE(
+          env->SaveGoldenImage(source, expected_image_write_path.c_str()))
+          << "Failed to save missing golden image: "
+          << expected_image_write_path;
+      return true;
+    }
+
+    ADD_FAILURE() << "Missing golden image: " << expected_image_read_path
+                  << ". Set SKITY_UPDATE_MISSING_GOLDEN=1 to generate it at "
+                  << expected_image_write_path;
+    return false;
+  }
 
   if (target != nullptr && (source->Width() != target->Width() ||
                             source->Height() != target->Height())) {
@@ -363,6 +424,11 @@ static bool CompareGoldenTextureImpl(
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
                           const char* path) {
   return CompareGoldenTextureImpl(dl, width, height, path, {});
+}
+
+bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
+                          const char* path, GoldenTestEnvConfig config) {
+  return CompareGoldenTextureImpl(dl, width, height, path, config);
 }
 
 bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,

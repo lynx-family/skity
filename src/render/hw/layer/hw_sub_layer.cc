@@ -5,7 +5,6 @@
 #include "src/render/hw/layer/hw_sub_layer.hpp"
 
 #include "src/gpu/gpu_context_impl.hpp"
-#include "src/graphic/blend_mode_priv.hpp"
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/hw_render_pass_builder.hpp"
@@ -37,14 +36,7 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
   layer_back_draw_->SetColorFormat(GetColorFormat());
   layer_back_draw_->SetScissorBox(GetScissorBox());
 
-  if (IsAdvancedBlendMode(blend_mode_)) {
-    bool supports_framebuffer_fetch = context->gpuContext->GetGPUDevice()
-                                          ->GetCaps()
-                                          .supports_framebuffer_fetch;
-    layer_back_draw_->SetDstReadStrategy(
-        supports_framebuffer_fetch ? DstReadStrategy::kFramebufferFetch
-                                   : DstReadStrategy::kTextureCopy);
-  }
+  layer_back_draw_->SetDstReadStrategy(GetDstReadStrategy());
 
   auto state = layer_back_draw_->Prepare(context);
 
@@ -64,8 +56,18 @@ void HWSubLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
 }
 
 std::shared_ptr<GPURenderPass> HWSubLayer::OnBeginRenderPass(
-    GPUCommandBuffer* cmd) {
+    GPUCommandBuffer* cmd, bool force_load) {
+  if (force_load && GetSampleCount() == 1) {
+    render_pass_desc_.color_attachment.load_op = GPULoadOp::kLoad;
+  }
   return cmd->BeginRenderPass(render_pass_desc_);
+}
+
+bool HWSubLayer::OnCopyToDstTexture(GPUCommandBuffer* cmd,
+                                    std::shared_ptr<GPUTexture> dst_texture,
+                                    GPURegion copy_region) const {
+  return CopyRegionToDstTexture(cmd, layer_back_draw_texture_,
+                                std::move(dst_texture), copy_region);
 }
 
 void HWSubLayer::OnPostDraw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {

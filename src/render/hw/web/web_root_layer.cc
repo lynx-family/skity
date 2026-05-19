@@ -51,7 +51,10 @@ void WebRootLayer::PrepareRenderPassDesc(HWDrawContext *context) {
 }
 
 std::shared_ptr<GPURenderPass> WebRootLayer::OnBeginRenderPass(
-    GPUCommandBuffer *cmd) {
+    GPUCommandBuffer *cmd, bool force_load) {
+  if (force_load) {
+    render_pass_desc_.color_attachment.load_op = GPULoadOp::kLoad;
+  }
   return cmd->BeginRenderPass(render_pass_desc_);
 }
 

@@ -11,6 +11,9 @@
 
 namespace skity {
 
+struct Command;
+struct HWDrawContext;
+
 enum class DstReadStrategy {
   kNonRequired,
   kFramebufferFetch,
@@ -35,11 +38,13 @@ class WGXProgrammableBlending {
            static_cast<uint32_t>(dst_read_strategy_) << 8;
   }
 
-  bool SupportsFramebufferFetch() const {
+  bool UsesFramebufferFetch() const {
     return dst_read_strategy_ == DstReadStrategy::kFramebufferFetch;
   }
 
   DstReadStrategy GetReadDstStrategy() const { return dst_read_strategy_; }
+
+  void SetupBindGroup(Command* cmd, HWDrawContext* context);
 
   static std::unique_ptr<WGXProgrammableBlending> Make(
       BlendMode blend_mode, DstReadStrategy dst_read_strategy) {

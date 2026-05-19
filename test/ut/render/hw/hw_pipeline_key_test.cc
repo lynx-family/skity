@@ -620,6 +620,24 @@ TEST(HWPipelineKey, ProgrammableBlendingHash) {
   EXPECT_NE(hasher(key1), hasher(key3));
 }
 
+TEST(HWPipelineKey, ProgrammableBlendingKeyIncludesDstReadStrategy) {
+  auto framebuffer_fetch = skity::WGXProgrammableBlending::Make(
+      skity::BlendMode::kOverlay, skity::DstReadStrategy::kFramebufferFetch);
+  auto texture_copy = skity::WGXProgrammableBlending::Make(
+      skity::BlendMode::kOverlay, skity::DstReadStrategy::kTextureCopy);
+  auto texture_copy_hard_light = skity::WGXProgrammableBlending::Make(
+      skity::BlendMode::kHardLight, skity::DstReadStrategy::kTextureCopy);
+
+  ASSERT_NE(framebuffer_fetch, nullptr);
+  ASSERT_NE(texture_copy, nullptr);
+  ASSERT_NE(texture_copy_hard_light, nullptr);
+
+  EXPECT_NE(framebuffer_fetch->GetProgrammableBlendingKey(),
+            texture_copy->GetProgrammableBlendingKey());
+  EXPECT_NE(texture_copy->GetProgrammableBlendingKey(),
+            texture_copy_hard_light->GetProgrammableBlendingKey());
+}
+
 TEST(HWPipelineKey, Text) {
   {
     auto geometry = WGSLTextSolidColorGeometry(Matrix{}, {}, Paint{});

@@ -16,6 +16,10 @@ namespace skity {
 
 class HWLayerState {
  public:
+  struct ClipReplayRecord {
+    HWDraw* source_draw = nullptr;
+  };
+
   struct ClipStackValue {
     std::vector<HWDraw*> clip_draws;
     // clip bounds in physical pixel size in this layer
@@ -39,6 +43,12 @@ class HWLayerState {
 
   HWDraw* LastClipDraw() const;
 
+  uint32_t GetRecordedClipCount() const { return clip_history_.size(); }
+
+  const std::vector<ClipReplayRecord>& GetClipReplayRecords() const {
+    return clip_history_;
+  }
+
   int32_t GetCurrentDepth() const {
     return start_depth + clip_stack_.size() - 1;
   }
@@ -60,6 +70,7 @@ class HWLayerState {
  private:
   int32_t start_depth = 1;
   std::vector<ClipStackValue> clip_stack_ = {};
+  std::vector<ClipReplayRecord> clip_history_ = {};
   uint32_t draw_depth_ = 0;
 };
 

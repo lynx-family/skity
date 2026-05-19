@@ -66,6 +66,32 @@ void GPUBlitPassMTL::GenerateMipmaps(const std::shared_ptr<GPUTexture>& texture)
   [blit_encoder_ generateMipmapsForTexture:mtl_texture];
 }
 
+void GPUBlitPassMTL::CopyTextureToTexture(std::shared_ptr<GPUTexture> src,
+                                          std::shared_ptr<GPUTexture> dst,
+                                          const GPUBlitPass::TextureCopyRegion& region) {
+  if (!src || !dst) {
+    LOGE("CopyTextureToTexture called with empty src or dst");
+    return;
+  }
+
+  if (region.width == 0 || region.height == 0) {
+    LOGE("CopyTextureToTexture called with empty width or height");
+    return;
+  }
+
+  id<MTLTexture> mtl_src_texture = static_cast<GPUTextureMTL*>(src.get())->GetMTLTexture();
+  id<MTLTexture> mtl_dst_texture = static_cast<GPUTextureMTL*>(dst.get())->GetMTLTexture();
+  [blit_encoder_ copyFromTexture:mtl_src_texture
+                     sourceSlice:0
+                     sourceLevel:0
+                    sourceOrigin:MTLOriginMake(region.src_x, region.src_y, 0)
+                      sourceSize:MTLSizeMake(region.width, region.height, 1)
+                       toTexture:mtl_dst_texture
+                destinationSlice:0
+                destinationLevel:0
+               destinationOrigin:MTLOriginMake(region.dst_x, region.dst_y, 0)];
+}
+
 void GPUBlitPassMTL::End() { [blit_encoder_ endEncoding]; }
 
 }  // namespace skity

@@ -11,7 +11,9 @@
 #include <utility>
 #include <vector>
 
+#include "skity/graphic/image.hpp"
 #include "src/render/hw/draw/wgx_programmable_blending.hpp"
+#include "src/render/hw/hw_draw_pass.hpp"
 #include "src/render/hw/hw_render_target_cache.hpp"
 #include "src/render/hw/hw_static_buffer.hpp"
 #include "src/utils/arena_allocator.hpp"
@@ -48,6 +50,7 @@ struct HWDrawContext {
   ArenaAllocator* arena_allocator = nullptr;
   Vec2 scale = {1.f, 1.f};
   HWStaticBuffer* static_buffer = nullptr;
+  const DstTextureCopyInfo* dst_read_texture_copy_info = nullptr;
 };
 
 enum HWDrawState : uint32_t {
@@ -136,6 +139,11 @@ class HWDraw {
 
   virtual HWDrawType GetDrawType() const { return HWDrawType::kUnknow; }
 
+  virtual HWDraw* MakeClipReplay(ArenaAllocator* arena_allocator) const {
+    (void)arena_allocator;
+    return nullptr;
+  }
+
   void SetClipDepth(uint32_t clip_depth) { clip_depth_ = clip_depth; }
 
   DstReadStrategy GetDstReadStrategy() const { return dst_read_strategy_; }
@@ -165,7 +173,7 @@ class HWDraw {
   HWDrawState draw_state_ = HWDrawState::kDrawStateNone;
   Rect scissor_rect_ = {};
   Rect layer_space_bounds_ = Rect::MakeLTRB(-1E9F, -1E9F, 1E9F, 1E9F);
-  HWDraw* clip_draw_;
+  HWDraw* clip_draw_ = nullptr;
   DstReadStrategy dst_read_strategy_ = DstReadStrategy::kNonRequired;
 };
 

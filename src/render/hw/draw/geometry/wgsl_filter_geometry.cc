@@ -116,7 +116,8 @@ void WGSLFilterGeometry::PrepareCMD(Command *cmd, HWDrawContext *context,
 
   // TODO(zhangzhijian): Need to find a way to do the following work without
   // being aware of the backend.
-  if (context->gpuContext->GetBackendType() == GPUBackendType::kOpenGL) {
+  if (context->gpuContext->GetBackendType() == GPUBackendType::kOpenGL ||
+      context->gpuContext->GetBackendType() == GPUBackendType::kWebGL2) {
     raw_vertex[3] = 1 - raw_vertex[3];
     raw_vertex[7] = 1 - raw_vertex[7];
     raw_vertex[11] = 1 - raw_vertex[11];

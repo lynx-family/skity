@@ -9,12 +9,57 @@
 #include <unordered_map>
 
 #include "src/gpu/gpu_texture.hpp"
+#include "src/logging.hpp"
 #include "src/utils/annotation_mutex.hpp"
 #include "src/utils/unique_id.hpp"
 
 namespace skity {
 
 class TextureImpl;
+
+inline TextureFormat FromGPUTextureFormat(GPUTextureFormat gpu_format) {
+  switch (gpu_format) {
+    case GPUTextureFormat::kR8Unorm:
+      return TextureFormat::kR;
+    case GPUTextureFormat::kRGB8Unorm:
+      return TextureFormat::kRGB;
+    case GPUTextureFormat::kRGB565Unorm:
+      return TextureFormat::kRGB565;
+    case GPUTextureFormat::kRGBA8Unorm:
+      return TextureFormat::kRGBA;
+    case GPUTextureFormat::kBGRA8Unorm:
+      return TextureFormat::kBGRA;
+    case GPUTextureFormat::kStencil8:
+      return TextureFormat::kS;
+    case GPUTextureFormat::kDepth24Stencil8:
+    case GPUTextureFormat::kInvalid:
+      DEBUG_CHECK(false);
+      return TextureFormat::kS;
+    default:
+      DEBUG_CHECK(false);
+      return TextureFormat::kS;
+  }
+}
+
+inline GPUTextureFormat ToGPUTextureFormat(TextureFormat format) {
+  switch (format) {
+    case TextureFormat::kR:
+      return GPUTextureFormat::kR8Unorm;
+    case TextureFormat::kRGB:
+      return GPUTextureFormat::kRGB8Unorm;
+    case TextureFormat::kRGB565:
+      return GPUTextureFormat::kRGB565Unorm;
+    case TextureFormat::kRGBA:
+      return GPUTextureFormat::kRGBA8Unorm;
+    case TextureFormat::kBGRA:
+      return GPUTextureFormat::kBGRA8Unorm;
+    case TextureFormat::kS:
+      return GPUTextureFormat::kStencil8;
+    default:
+      DEBUG_CHECK(false);
+      return GPUTextureFormat::kInvalid;
+  }
+}
 
 class TextureImplDelegate {
  public:

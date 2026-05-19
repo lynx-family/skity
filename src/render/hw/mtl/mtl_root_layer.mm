@@ -29,7 +29,8 @@ void MTLRootLayer::PrepareAttachments(HWDrawContext *context) {
   desc.width = color_texture_.width;
   desc.height = color_texture_.height;
   desc.format = GetColorFormat();
-  desc.usage = static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment);
+  desc.usage = static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment) |
+               static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
   desc.sample_count = 1;
   desc.storage_mode = GPUTextureStorageMode::kPrivate;
 
@@ -48,8 +49,18 @@ void MTLRootLayer::PrepareRenderPassDesc(HWDrawContext *context) {
   render_pass_desc_.label = "MTLRootLayer";
 }
 
-std::shared_ptr<GPURenderPass> MTLRootLayer::OnBeginRenderPass(GPUCommandBuffer *cmd) {
+std::shared_ptr<GPURenderPass> MTLRootLayer::OnBeginRenderPass(GPUCommandBuffer *cmd,
+                                                               bool force_load) {
+  if (force_load && GetSampleCount() == 1) {
+    render_pass_desc_.color_attachment.load_op = GPULoadOp::kLoad;
+  }
   return cmd->BeginRenderPass(render_pass_desc_);
+}
+
+bool MTLRootLayer::OnCopyToDstTexture(GPUCommandBuffer *cmd,
+                                      std::shared_ptr<GPUTexture> dst_texture,
+                                      GPURegion copy_region) const {
+  return CopyRegionToDstTexture(cmd, color_attachment_, std::move(dst_texture), copy_region);
 }
 
 }  // namespace skity

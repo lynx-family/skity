@@ -76,6 +76,7 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvGL::RenderToTexture(
   // create off screen fbo and texture
   GLuint fbo = 0;
   GLuint texture = 0;
+  GLuint stencil_rbo = 0;
   glGenFramebuffers(1, &fbo);
   glGenTextures(1, &texture);
 
@@ -100,6 +101,18 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvGL::RenderToTexture(
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                          texture, 0);
 
+  bool has_stencil_attachment = has_stencil_attachment_.value_or(false);
+  if (has_stencil_attachment) {
+    glGenRenderbuffers(1, &stencil_rbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, stencil_rbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT,
+                              GL_RENDERBUFFER, stencil_rbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                              GL_RENDERBUFFER, stencil_rbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+  }
+
   auto status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 
   if (status != GL_FRAMEBUFFER_COMPLETE) {
@@ -115,10 +128,11 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvGL::RenderToTexture(
   surface_desc.backend = GPUBackendType::kOpenGL;
   surface_desc.width = width;
   surface_desc.height = height;
-  surface_desc.sample_count = 4;
+  surface_desc.sample_count = GetSampleCount();
   surface_desc.surface_type = GLSurfaceType::kFramebuffer;
   surface_desc.gl_id = fbo;
-  surface_desc.has_stencil_attachment = false;
+  surface_desc.has_stencil_attachment = has_stencil_attachment;
+  surface_desc.surface_mode = surface_mode_.value_or(GLSurfaceMode::kAuto);
 
   auto surface = GetGPUContext()->CreateSurface(&surface_desc);
 
@@ -145,6 +159,9 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvGL::RenderToTexture(
 
   glDeleteFramebuffers(1, &fbo);
   glDeleteTextures(1, &texture);
+  if (stencil_rbo != 0) {
+    glDeleteRenderbuffers(1, &stencil_rbo);
+  }
 
   // flip Y in-place
   std::vector<uint8_t> rowTmpVec(width * 4);
