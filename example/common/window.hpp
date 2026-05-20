@@ -73,6 +73,8 @@ class Window {
 
   skity::GPUContext* GetGPUContext() const { return gpu_context_.get(); }
 
+  void ResetGPUContext() { gpu_context_.reset(); }
+
   bool Init();
 
   virtual bool OnInit() = 0;
