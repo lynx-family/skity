@@ -15,6 +15,10 @@
 #include "common/mtl/window_mtl.hpp"
 #endif
 
+#ifdef SKITY_EXAMPLE_VK_BACKEND
+#include "common/vk/window_vk.hpp"
+#endif
+
 #ifdef SKITY_EXAMPLE_SW_BACKEND
 #include "common/sw/window_sw.hpp"
 #endif
@@ -40,6 +44,12 @@ std::unique_ptr<Window> Window::CreateWindow(Backend backend, uint32_t width,
     window = std::make_unique<WindowMTL>(width, height, std::move(title));
 #else
     std::cerr << "Metal backend is not supported." << std::endl;
+#endif
+  } else if (backend == Backend::kVulkan) {
+#ifdef SKITY_EXAMPLE_VK_BACKEND
+    window = std::make_unique<WindowVK>(width, height, std::move(title));
+#else
+    std::cerr << "Vulkan backend is not supported." << std::endl;
 #endif
   } else if (backend == Backend::kSoftware) {
 #ifdef SKITY_EXAMPLE_SW_BACKEND
@@ -86,7 +96,7 @@ bool Window::Init() {
   return true;
 }
 
-void Window::Show(WindowClient &client) {
+void Window::Show(WindowClient& client) {
   skity::FontManager::RefDefault()->SetDefaultTypeface(
       skity::Typeface::MakeFromFile(EXAMPLE_DEFAULT_FONT));
 
@@ -120,7 +130,7 @@ void Window::Show(WindowClient &client) {
   glfwTerminate();
 }
 
-void Window::GetCursorPos(double &x, double &y) const {
+void Window::GetCursorPos(double& x, double& y) const {
   double mx, my;
 
   glfwGetCursorPos(native_window_, &mx, &my);

@@ -521,6 +521,8 @@ if(${SKITY_HW_RENDERER})
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_platform_extensions.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_context_state.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/vulkan_context_state.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/render/hw/vk/vk_root_layer.cc
+      ${CMAKE_CURRENT_LIST_DIR}/render/hw/vk/vk_root_layer.hpp
     )
   endif()
 endif()

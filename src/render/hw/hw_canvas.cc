@@ -13,6 +13,7 @@
 
 #include "src/effect/image_filter_base.hpp"
 #include "src/gpu/gpu_surface_impl.hpp"
+#include "src/graphic/blend_mode_priv.hpp"
 #include "src/render/canvas_state.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_clip.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
@@ -659,9 +660,14 @@ void HWCanvas::OnFlush() {
 
     UploadMesh(cmd.get());
 
+    cmd->HoldResource(gpu_buffer_->GetGPUBufferOwner());
+    cmd->HoldResource(gpu_buffer_->GetGPUIndexBufferOwner());
+    cmd->HoldResource(static_buffer_->GetGPUBufferOwner());
+    cmd->HoldResource(static_buffer_->GetGPUIndexBufferOwner());
+
     root_layer_->Draw(nullptr, cmd.get());
 
-    cmd->Submit();
+    cmd->Submit(surface_->GetSubmitInfo());
   }
 
   layer_stack_.clear();
