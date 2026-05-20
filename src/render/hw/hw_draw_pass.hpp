@@ -36,6 +36,8 @@ struct HWDrawPass {
   std::vector<HWDraw*> draw_ops;
   uint32_t clip_replay_count = 0;
   uint32_t first_draw_depth = 0;
+  // Aliases to original clip draws. Their generated commands are replayed into
+  // split render passes without re-running draw preparation or command setup.
   std::vector<HWDraw*> clip_replay_draws;
   std::optional<DstTextureCopyInfo> dst_texture_copy_info = std::nullopt;
   const DstTextureCopyInfo* dst_read_texture_copy_info = nullptr;

@@ -139,11 +139,6 @@ class HWDraw {
 
   virtual HWDrawType GetDrawType() const { return HWDrawType::kUnknow; }
 
-  virtual HWDraw* MakeClipReplay(ArenaAllocator* arena_allocator) const {
-    (void)arena_allocator;
-    return nullptr;
-  }
-
   void SetClipDepth(uint32_t clip_depth) { clip_depth_ = clip_depth; }
 
   DstReadStrategy GetDstReadStrategy() const { return dst_read_strategy_; }
