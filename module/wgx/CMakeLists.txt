@@ -74,7 +74,19 @@ target_compile_options(wgsl-cross PRIVATE -fno-rtti)
 set_property(TARGET wgsl-cross PROPERTY CXX_STANDARD 17)
 
 if (ANDROID)
-    if (${SKITY_USE_ASAN})
+    if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        if (NOT SKITY_USE_ASAN)
+            target_compile_options(wgsl-cross PRIVATE
+                "-Oz"
+                "-flto"
+                "-fomit-frame-pointer"
+                "-fvisibility=hidden"
+                "-fvisibility-inlines-hidden"
+            )
+        endif()
+    endif()
+
+    if (SKITY_USE_ASAN)
        target_compile_options(wgsl-cross PRIVATE -fsanitize=address -fno-omit-frame-pointer)
        target_link_options(wgsl-cross PRIVATE -fsanitize=address)
     endif()

@@ -30,6 +30,8 @@ android {
                             "-DSKITY_LOG=ON",
                             "-DSKITY_CODEC_MODULE=ON",
                             "-DSKITY_IO_MODULE=ON",
+                            "-DWGX_GLSL_BACKEND=ON",
+                            "-DWGX_MSL_BACKEND=OFF",
                             "-DSKITY_BUILD_INSTALL=OFF"
             }
         }
