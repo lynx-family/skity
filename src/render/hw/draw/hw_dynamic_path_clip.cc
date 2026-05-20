@@ -24,14 +24,6 @@ HWDynamicPathClip::HWDynamicPathClip(Matrix transform, Path path,
   bounds_.AddRect(bounds);
 }
 
-HWDraw *HWDynamicPathClip::MakeClipReplay(
-    ArenaAllocator *arena_allocator) const {
-  DEBUG_CHECK(arena_allocator != nullptr);
-
-  return arena_allocator->Make<HWDynamicPathClip>(
-      GetTransform(), path_, op_, bounds_.GetBounds(), use_gpu_tessellation_);
-}
-
 void HWDynamicPathClip::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
                                            HWDrawContext *context) {
   auto arena_allocator = context->arena_allocator;

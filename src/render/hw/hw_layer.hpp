@@ -153,7 +153,7 @@ class HWLayer : public HWDraw {
 
   bool TryMerge(HWDraw* draw);
 
-  void PrepareReplayDraws(HWDrawPass* pass, HWDrawContext* context);
+  void CollectClipReplayDraws(HWDrawPass* pass);
 
   std::optional<DstTextureCopyInfo> BuildDstTextureCopyInfo(
       const Rect& layer_space_bounds) const;

@@ -18,6 +18,7 @@
 #include "src/gpu/gpu_sampler.hpp"
 #include "src/gpu/gpu_texture.hpp"
 #include "src/gpu/texture_impl.hpp"
+#include "src/logging.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_draw_pass.hpp"
@@ -241,7 +242,7 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
   sub_context.scale = scale_;
 
   for (auto pass : draw_passes_) {
-    PrepareReplayDraws(pass, &sub_context);
+    CollectClipReplayDraws(pass);
 
     if (pass->emulated_load_info) {
       auto resolve_color_texture = GetResolveColorTexture();
@@ -255,9 +256,6 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
         pass->emulated_load_info ? pass->emulated_load_info->draw : nullptr;
     if (emulated_load_draw) {
       layer_state_ |= pass->emulated_load_info->draw->Prepare(&sub_context);
-    }
-    for (auto draw : pass->clip_replay_draws) {
-      layer_state_ |= draw->Prepare(&sub_context);
     }
     for (auto draw : pass->draw_ops) {
       layer_state_ |= draw->Prepare(&sub_context);
@@ -310,10 +308,6 @@ void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
       pass->emulated_load_info->draw->GenerateCommand(&sub_context,
                                                       layer_state_);
     }
-    for (auto draw : pass->clip_replay_draws) {
-      sub_context.dst_read_texture_copy_info = nullptr;
-      draw->GenerateCommand(&sub_context, layer_state_);
-    }
     for (auto draw : pass->draw_ops) {
       sub_context.dst_read_texture_copy_info =
           draw->GetDstReadStrategy() == DstReadStrategy::kTextureCopy
@@ -325,10 +319,7 @@ void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
   sub_context.dst_read_texture_copy_info = nullptr;
 }
 
-void HWLayer::PrepareReplayDraws(HWDrawPass* pass, HWDrawContext* context) {
-  DEBUG_CHECK(context != nullptr);
-  DEBUG_CHECK(context->arena_allocator != nullptr);
-
+void HWLayer::CollectClipReplayDraws(HWDrawPass* pass) {
   if (pass->clip_replay_count == 0) {
     return;
   }
@@ -349,15 +340,7 @@ void HWLayer::PrepareReplayDraws(HWDrawPass* pass, HWDrawContext* context) {
       continue;
     }
 
-    auto* replay_draw = source_draw->MakeClipReplay(context->arena_allocator);
-    DEBUG_CHECK(replay_draw != nullptr);
-
-    replay_draw->SetSampleCount(source_draw->GetSampleCount());
-    replay_draw->SetColorFormat(source_draw->GetColorFormat());
-    replay_draw->SetScissorBox(source_draw->GetScissorBox());
-    replay_draw->SetLayerSpaceBounds(source_draw->GetLayerSpaceBounds());
-    replay_draw->SetClipDepth(source_draw->GetClipDepth());
-    pass->clip_replay_draws.push_back(replay_draw);
+    pass->clip_replay_draws.push_back(source_draw);
   }
 }
 
