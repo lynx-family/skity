@@ -99,7 +99,7 @@ Windows user can find the executable in `<build_dir>/<Debug/Release>/` directory
 You can run the example code like this:
 ```bash
 # run the basic example
-<build_dir>/example/case/basic_example <backend>
+<build_dir>/example/case/basic_example <backend> [--aa=<mode>]
 ```
 
 The available backend name for `<backend>` is:
@@ -107,6 +107,14 @@ The available backend name for `<backend>` is:
 * `metal` - Metal backend
 * `software` - Software renderer backend
 
+The optional AA mode can be:
+* `native` - Use the platform-native display configuration. This is the same
+  behavior as omitting `--aa`.
+* `none` - Render at 1x with no MSAA and nearest presentation, useful for
+  inspecting raw pixel edges.
+* `contour` - Use the same 1x nearest presentation as `none`, but enable
+  contour AA.
+* `msaa` - Use the same 1x nearest presentation as `none`, but enable MSAA.
 
 ## Run Tests
 

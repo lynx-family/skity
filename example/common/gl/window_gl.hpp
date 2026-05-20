@@ -12,8 +12,8 @@ namespace example {
 
 class WindowGL : public Window {
  public:
-  WindowGL(int width, int height, std::string title)
-      : Window(width, height, title) {}
+  WindowGL(int width, int height, std::string title, AAMode aa_mode)
+      : Window(width, height, std::move(title), aa_mode) {}
 
   ~WindowGL() override = default;
 

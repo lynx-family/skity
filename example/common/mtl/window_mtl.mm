@@ -19,6 +19,18 @@
 namespace skity {
 namespace example {
 
+namespace {
+
+void ConfigureDebugMetalLayer(CAMetalLayer* metal_layer, CGSize drawable_size) {
+  metal_layer.contentsScale = 1.f;
+  metal_layer.drawableSize = drawable_size;
+  metal_layer.magnificationFilter = kCAFilterNearest;
+  metal_layer.minificationFilter = kCAFilterNearest;
+  metal_layer.allowsEdgeAntialiasing = NO;
+}
+
+}  // namespace
+
 bool WindowMTL::OnInit() {
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
@@ -39,7 +51,12 @@ GLFWwindow* WindowMTL::CreateWindowHandler() {
   metal_layer.device = MTLCreateSystemDefaultDevice();
   metal_layer.opaque = YES;
   metal_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-  metal_layer.contentsScale = [[NSScreen mainScreen] backingScaleFactor];
+  if (UseDebugAAPresent()) {
+    ConfigureDebugMetalLayer(metal_layer, CGSizeMake(oc_window.contentView.bounds.size.width,
+                                                     oc_window.contentView.bounds.size.height));
+  } else {
+    metal_layer.contentsScale = [[NSScreen mainScreen] backingScaleFactor];
+  }
   metal_layer.colorspace = oc_window.colorSpace.CGColorSpace;
   metal_layer.framebufferOnly = NO;
 
@@ -63,13 +80,17 @@ void WindowMTL::OnShow() {
   NSWindow* oc_window = glfwGetCocoaWindow(GetNativeWindow());
 
   CAMetalLayer* metal_layer = (CAMetalLayer*)oc_window.contentView.layer;
+  if (UseDebugAAPresent()) {
+    ConfigureDebugMetalLayer(
+        metal_layer, CGSizeMake(metal_layer.frame.size.width, metal_layer.frame.size.height));
+  }
 
   skity::GPUSurfaceDescriptorMTL desc{};
   desc.backend = skity::GPUBackendType::kMetal;
   desc.width = metal_layer.frame.size.width;
   desc.height = metal_layer.frame.size.height;
-  desc.content_scale = metal_layer.contentsScale;
-  desc.sample_count = 4;
+  desc.content_scale = UseDebugAAPresent() ? 1.f : metal_layer.contentsScale;
+  desc.sample_count = UseDebugAAPresent() ? GetAASampleCount() : 4;
   desc.surface_type = skity::MTLSurfaceType::kLayer;
   desc.layer = metal_layer;
 

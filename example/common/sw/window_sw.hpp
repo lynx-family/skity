@@ -12,8 +12,8 @@ namespace example {
 
 class WindowSW : public Window {
  public:
-  WindowSW(int width, int height, std::string title)
-      : Window(width, height, std::move(title)) {}
+  WindowSW(int width, int height, std::string title, AAMode aa_mode)
+      : Window(width, height, std::move(title), aa_mode) {}
   ~WindowSW() override = default;
 
   Backend GetBackend() const override { return Backend::kSoftware; }
