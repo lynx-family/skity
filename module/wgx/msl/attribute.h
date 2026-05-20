@@ -5,15 +5,16 @@
 #pragma once
 
 #include <optional>
-#include <sstream>
+#include <ostream>
+#include <string>
 #include <string_view>
 
 namespace wgx {
 namespace msl {
 
 struct Attribute {
-  std::string_view name;
-  std::optional<std::string_view> prefix;
+  std::string name;
+  std::optional<std::string> prefix;
   std::optional<uint32_t> location;
 
   Attribute(std::string_view name) : name(name), prefix(), location() {}

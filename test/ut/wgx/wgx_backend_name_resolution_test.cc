@@ -133,6 +133,8 @@ fn vs_main(input: Payload) -> @builtin(position) vec4<f32> {
   auto msl_second = program->WriteToMsl("vs_main", msl_options);
   ASSERT_TRUE(msl_first.success);
   ASSERT_TRUE(msl_second.success);
+  EXPECT_NE(msl_first.content.find("[[vertex]]"), std::string::npos);
+  EXPECT_NE(msl_second.content.find("[[vertex]]"), std::string::npos);
   EXPECT_EQ(msl_first.content, msl_second.content);
 }
 
