@@ -20,6 +20,8 @@ class GPUSurfaceImplWEB : public GPUSurfaceImpl {
 
   GPUTextureFormat GetGPUFormat() const override;
 
+  GPUBackendType GetBackendType() const override;
+
   std::shared_ptr<Pixmap> ReadPixels(const skity::Rect& rect) override {
     return {};
   }

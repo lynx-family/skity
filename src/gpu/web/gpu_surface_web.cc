@@ -28,6 +28,10 @@ GPUTextureFormat GPUSurfaceImplWEB::GetGPUFormat() const {
   }
 }
 
+GPUBackendType GPUSurfaceImplWEB::GetBackendType() const {
+  return GPUBackendType::kWebGPU;
+}
+
 HWRootLayer* GPUSurfaceImplWEB::OnBeginNextFrame(bool) {
   auto root_layer = GetArenaAllocator()->Make<WebRootLayer>(
       static_cast<uint32_t>(GetWidth() * ContentScale()),
