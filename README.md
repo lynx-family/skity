@@ -43,6 +43,18 @@ cmake --build out/debug
 
 ```
 
+Examples accept an optional AA inspection mode:
+
+```shell
+./out/debug/example/case/basic_example gl --aa=native
+./out/debug/example/case/basic_example gl --aa=none
+./out/debug/example/case/basic_example gl --aa=contour
+./out/debug/example/case/basic_example gl --aa=msaa
+```
+
+`native` is the same behavior as omitting `--aa`; the other modes render with a
+1x nearest presentation path to make AA differences easier to inspect.
+
 Pass `SKITY_EXAMPLE=ON` to cmake to enable build example code. More options can visit [cmake/Options.cmake](./cmake/Options.cmake).
 
 More details can visit [BUILD_AND_RUN.md](./docs/BUILD_AND_RUN.md).
@@ -150,5 +162,4 @@ We appreciate the efforts of the developers and the open-source community behind
 - [GLFW](https://www.glfw.org/) Used for window and input in example and test.
 - [googletest](https://github.com/google/googletest) Used for testing.
 - [google/benchmark](https://github.com/google/benchmark) Used for testing benchmark.
-
 

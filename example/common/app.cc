@@ -9,10 +9,55 @@
 namespace skity {
 namespace example {
 
-int StartExampleApp(int argc, const char **argv, WindowClient &client,
+namespace {
+
+constexpr const char* kAAModePrefix = "--aa=";
+
+const char* AAModeName(Window::AAMode mode) {
+  switch (mode) {
+    case Window::AAMode::kDefault:
+      return "default";
+    case Window::AAMode::kNone:
+      return "none";
+    case Window::AAMode::kContour:
+      return "contour";
+    case Window::AAMode::kMSAA:
+      return "msaa";
+  }
+
+  return "unknown";
+}
+
+bool ParseAAMode(const std::string& arg, Window::AAMode* aa_mode) {
+  if (arg.rfind(kAAModePrefix, 0) != 0) {
+    return true;
+  }
+
+  auto value = arg.substr(std::string(kAAModePrefix).size());
+  if (value == "native") {
+    *aa_mode = Window::AAMode::kDefault;
+  } else if (value == "none") {
+    *aa_mode = Window::AAMode::kNone;
+  } else if (value == "contour") {
+    *aa_mode = Window::AAMode::kContour;
+  } else if (value == "msaa") {
+    *aa_mode = Window::AAMode::kMSAA;
+  } else {
+    std::cerr << "Unknown AA mode: " << value << std::endl;
+    std::cerr << "Available AA modes: native, none, contour, msaa" << std::endl;
+    return false;
+  }
+
+  return true;
+}
+
+}  // namespace
+
+int StartExampleApp(int argc, const char** argv, WindowClient& client,
                     int width, int height, std::string title) {
   if (argc < 2) {
-    std::cerr << "Usage: " << argv[0] << " <backend>" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " <backend> [--aa=<mode>]"
+              << std::endl;
     // available backends:
     // software
     // gl
@@ -26,11 +71,23 @@ int StartExampleApp(int argc, const char **argv, WindowClient &client,
     std::cerr << "  metal" << std::endl;
     std::cerr << "  vulkan" << std::endl;
     std::cerr << "  directx" << std::endl;
+    std::cerr << "Available AA modes:" << std::endl;
+    std::cerr << "  native" << std::endl;
+    std::cerr << "  none" << std::endl;
+    std::cerr << "  contour" << std::endl;
+    std::cerr << "  msaa" << std::endl;
 
     return -1;
   }
 
   std::string backend = argv[1];
+  Window::AAMode aa_mode = Window::AAMode::kDefault;
+
+  for (int i = 2; i < argc; i++) {
+    if (!ParseAAMode(argv[i], &aa_mode)) {
+      return -1;
+    }
+  }
 
   Window::Backend window_backend = Window::Backend::kNone;
 
@@ -58,7 +115,14 @@ int StartExampleApp(int argc, const char **argv, WindowClient &client,
     return -1;
   }
 
-  auto window = Window::CreateWindow(window_backend, width, height, title);
+  if (aa_mode != Window::AAMode::kDefault) {
+    title += " [ AA: ";
+    title += AAModeName(aa_mode);
+    title += " ] ";
+  }
+
+  auto window =
+      Window::CreateWindow(window_backend, width, height, title, aa_mode);
 
   if (window == nullptr) {
     return -1;

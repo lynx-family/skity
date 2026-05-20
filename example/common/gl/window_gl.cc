@@ -4,6 +4,7 @@
 
 #include "common/gl/window_gl.hpp"
 
+#include <cmath>
 #include <iostream>
 #include <skity/gpu/gpu_context_gl.hpp>
 
@@ -15,6 +16,12 @@ bool WindowGL::OnInit() {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+  if (UseDebugAAPresent()) {
+    glfwWindowHint(GLFW_SAMPLES, 0);
+#ifdef __APPLE__
+    glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
+#endif
+  }
 
   return true;
 }
@@ -54,8 +61,8 @@ void WindowGL::OnShow() {
   desc.backend = skity::GPUBackendType::kOpenGL;
   desc.width = logical_width;
   desc.height = logical_height;
-  desc.sample_count = 4;
-  desc.content_scale = screen_scale;
+  desc.sample_count = UseDebugAAPresent() ? GetAASampleCount() : 4;
+  desc.content_scale = UseDebugAAPresent() ? 1.f : screen_scale;
 
   desc.surface_type = skity::GLSurfaceType::kFramebuffer;
   desc.gl_id = 0;

@@ -196,6 +196,7 @@ void draw_even_odd_fill(skity::Canvas* canvas) {
   skity::Paint paint;
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetColor(skity::ColorSetA(skity::Color_RED, 64));
+  paint.SetAntiAlias(true);
 
   skity::Path path;
   path.MoveTo(100, 10);

@@ -29,19 +29,21 @@ namespace skity {
 namespace example {
 
 std::unique_ptr<Window> Window::CreateWindow(Backend backend, uint32_t width,
-                                             uint32_t height,
-                                             std::string title) {
+                                             uint32_t height, std::string title,
+                                             AAMode aa_mode) {
   std::unique_ptr<Window> window;
 
   if (backend == Backend::kOpenGL) {
 #ifdef SKITY_EXAMPLE_GL_BACKEND
-    window = std::make_unique<WindowGL>(width, height, std::move(title));
+    window =
+        std::make_unique<WindowGL>(width, height, std::move(title), aa_mode);
 #else
     std::cerr << "OpenGL backend is not supported." << std::endl;
 #endif
   } else if (backend == Backend::kMetal) {
 #ifdef SKITY_EXAMPLE_MTL_BACKEND
-    window = std::make_unique<WindowMTL>(width, height, std::move(title));
+    window =
+        std::make_unique<WindowMTL>(width, height, std::move(title), aa_mode);
 #else
     std::cerr << "Metal backend is not supported." << std::endl;
 #endif
@@ -53,7 +55,8 @@ std::unique_ptr<Window> Window::CreateWindow(Backend backend, uint32_t width,
 #endif
   } else if (backend == Backend::kSoftware) {
 #ifdef SKITY_EXAMPLE_SW_BACKEND
-    window = std::make_unique<WindowSW>(width, height, std::move(title));
+    window =
+        std::make_unique<WindowSW>(width, height, std::move(title), aa_mode);
 #else
     std::cerr << "Software backend is not supported." << std::endl;
 #endif
@@ -92,6 +95,10 @@ bool Window::Init() {
   }
 
   gpu_context_ = CreateGPUContext();
+
+  if (gpu_context_ != nullptr && GetAAMode() == AAMode::kContour) {
+    gpu_context_->SetEnableContourAA(true);
+  }
 
   return true;
 }

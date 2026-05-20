@@ -26,11 +26,11 @@ class WindowClient {
  public:
   virtual ~WindowClient() = default;
 
-  virtual void OnStart(skity::GPUContext* context){};
+  virtual void OnStart(skity::GPUContext* context) {}
 
   virtual void OnDraw(skity::GPUContext* context, skity::Canvas* canvas) = 0;
 
-  virtual void OnTerminate(){};
+  virtual void OnTerminate() {}
 
   const Window* GetWindow() const { return window_; }
 
@@ -49,14 +49,25 @@ class Window {
     kDirectX,
   };
 
-  Window(int width, int height, std::string title)
-      : width_(width), height_(height), title_(std::move(title)) {}
+  enum class AAMode {
+    kDefault,
+    kNone,
+    kContour,
+    kMSAA,
+  };
+
+  Window(int width, int height, std::string title, AAMode aa_mode)
+      : title_(std::move(title)),
+        width_(width),
+        height_(height),
+        aa_mode_(aa_mode) {}
 
   virtual ~Window() = default;
 
   static std::unique_ptr<Window> CreateWindow(Backend backend, uint32_t width,
                                               uint32_t height,
-                                              std::string title);
+                                              std::string title,
+                                              AAMode aa_mode);
 
   void Show(WindowClient& client);
 
@@ -68,6 +79,14 @@ class Window {
   const std::string& GetTitle() const { return title_; }
   int GetWidth() const { return width_; }
   int GetHeight() const { return height_; }
+  AAMode GetAAMode() const { return aa_mode_; }
+  bool UseDebugAAPresent() const {
+    return aa_mode_ == AAMode::kNone || aa_mode_ == AAMode::kContour ||
+           aa_mode_ == AAMode::kMSAA;
+  }
+  uint32_t GetAASampleCount() const {
+    return aa_mode_ == AAMode::kMSAA ? 4 : 1;
+  }
 
   GLFWwindow* GetNativeWindow() const { return native_window_; }
 
@@ -95,6 +114,7 @@ class Window {
   std::string title_;
   int width_ = 0;
   int height_ = 0;
+  AAMode aa_mode_ = AAMode::kDefault;
   GLFWwindow* native_window_ = nullptr;
 
   std::unique_ptr<skity::GPUContext> gpu_context_;

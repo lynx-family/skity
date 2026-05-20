@@ -12,8 +12,8 @@ namespace example {
 
 class WindowMTL : public Window {
  public:
-  WindowMTL(int width, int height, std::string title)
-      : Window(width, height, std::move(title)) {}
+  WindowMTL(int width, int height, std::string title, AAMode aa_mode)
+      : Window(width, height, std::move(title), aa_mode) {}
 
   ~WindowMTL() override = default;
 
