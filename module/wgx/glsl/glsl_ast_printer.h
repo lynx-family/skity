@@ -10,28 +10,32 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "msl/attribute.h"
 #include "semantic/symbol.h"
+#include "wgsl/ast/node.h"
 #include "wgsl/ast/visitor.h"
-#include "wgsl/function.h"
+#include "wgsl/wgsl_function.h"
 
 namespace wgx {
-namespace msl {
+namespace glsl {
 
 class AstPrinter : public ast::AstVisitor {
-  enum class AttrTarget {
-    kStructMember,
-    kFunction,
-    kParameter,
-  };
-
  public:
-  AstPrinter(const MslOptions& options, Function* func,
+  AstPrinter(const GlslOptions& options, Function* func,
              const std::optional<CompilerContext>& ctx,
              const std::unordered_map<const ast::IdentifierExp*,
                                       semantic::Symbol*>& ident_symbols,
              const std::unordered_map<const ast::Identifier*,
-                                      semantic::Symbol*>& declaration_symbols);
+                                      semantic::Symbol*>& declaration_symbols)
+      : options_(options),
+        func_(func),
+        ident_symbols_(ident_symbols),
+        declaration_symbols_(declaration_symbols),
+        ss_() {
+    if (ctx) {
+      ubo_index_ = ctx->last_ubo_binding;
+      texture_index_ = ctx->last_texture_binding;
+    }
+  }
 
   ~AstPrinter() override = default;
 
@@ -57,19 +61,21 @@ class AstPrinter : public ast::AstVisitor {
 
   bool Write();
 
-  std::string GetResult() const { return ss_.str(); }
+  std::string GetResult() const;
 
-  uint32_t GetBufferIndex() const { return buffer_index_; }
+  uint32_t GetUboIndex() const { return ubo_index_; }
 
   uint32_t GetTextureIndex() const { return texture_index_; }
-
-  uint32_t GetSamplerIndex() const { return sampler_index_; }
 
  private:
   std::string GetOutputName(std::string_view name) const;
 
   std::string GetOutputName(const semantic::Symbol* symbol,
                             std::string_view fallback_name) const;
+
+  std::string GetInterfaceVariableName(const ast::Identifier* identifier,
+                                       ast::Attribute* location_attr,
+                                       bool input) const;
 
   const semantic::Symbol* FindSymbol(
       const ast::IdentifierExp* identifier) const;
@@ -81,26 +87,37 @@ class AstPrinter : public ast::AstVisitor {
 
   void WriteType(const ast::Type& type);
 
-  void WriteAttributes(const std::vector<ast::Attribute*>& attributes,
-                       const ast::Type& type, AttrTarget target,
-                       bool entry_point_input, bool entry_point_output);
+  void WriteAttribute(ast::Variable* variable, bool input);
 
-  std::vector<Attribute> GetAttributes(
-      const std::vector<ast::Attribute*>& attributes, const ast::Type& type,
-      AttrTarget target, bool entry_point_input, bool entry_point_output);
+  void WriteAttribute(ast::StructMember* struct_member, bool input);
 
-  uint32_t GetIndex(const ast::Type& type, uint32_t index);
+  void WriteLocation(ast::Attribute* location, ast::PipelineStage stage,
+                     bool input);
 
-  std::string_view GetAttributeName(const ast::Type& type);
+  void WriteUniformVariable(ast::Var* var);
 
-  bool IsEntryPointInput(const std::string_view& type);
+  void WriteInput();
 
-  bool IsEntryPointOutput(const std::string_view& type);
+  void WriteOutput();
+
+  void WriteMainFunc();
+
+  bool CanUseSlotBinding() const;
+
+  ast::BuiltinAttribute* GetBuiltinAttribute(
+      const std::vector<ast::Attribute*>& attrs, const std::string_view& name);
+
+  void RegisterBindGroupEntry(ast::Var* var);
+
+  void RegisterSampler(ast::Expression* texture, ast::Expression* sampler);
 
   ShaderStage GetShaderStage() const;
 
+  void WriteBuiltinVariable(ast::Parameter*,
+                            ast::BuiltinAttribute* builtin_attr);
+
  private:
-  MslOptions options_;
+  GlslOptions options_;
   Function* func_;
   const std::unordered_map<const ast::IdentifierExp*, semantic::Symbol*>&
       ident_symbols_;
@@ -112,15 +129,11 @@ class AstPrinter : public ast::AstVisitor {
   mutable std::unordered_map<const semantic::Symbol*, std::string>
       symbol_names_{};
   std::stringstream ss_;
-  bool has_error_;
-  uint32_t buffer_index_;
-  uint32_t texture_index_;
-  uint32_t sampler_index_;
-  std::vector<ast::Var*> addtional_inputs_;
-
-  std::unordered_map<std::string_view, std::vector<ast::Var*>>
-      function_inputs_{};
+  bool has_error_ = false;
+  uint32_t ubo_index_ = 0;
+  uint32_t texture_index_ = 0;
+  bool needs_fb_fetch_ = false;
 };
 
-}  // namespace msl
+}  // namespace glsl
 }  // namespace wgx

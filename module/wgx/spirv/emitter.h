@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "ir/module.h"
+#include "ir/ir_module.h"
 
 namespace wgx {
 namespace spirv {

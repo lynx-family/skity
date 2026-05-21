@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "ir/module.h"
+#include "ir/ir_module.h"
 
 namespace wgx {
 namespace ir {

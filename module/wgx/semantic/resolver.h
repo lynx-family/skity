@@ -9,7 +9,7 @@
 
 #include "semantic/bind_result.h"
 #include "semantic/scope.h"
-#include "wgsl/ast/module.h"
+#include "wgsl/ast/ast_module.h"
 #include "wgsl/ast/visitor.h"
 
 namespace wgx {

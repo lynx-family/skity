@@ -31,48 +31,44 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#pragma once
+#include "wgsl/ast/ast_function.h"
 
-#include <vector>
-
-#include "wgsl/ast/node.h"
-#include "wgsl/ast/pipeline_stage.h"
-#include "wgsl/ast/type.h"
+#include "wgsl/ast/ast_attribute.h"
+#include "wgsl/ast/visitor.h"
 
 namespace wgx {
 namespace ast {
 
-struct BlockStatement;
-struct Parameter;
-struct Attribute;
-struct Identifier;
+Function::Function(Identifier *name, std::vector<Parameter *> params,
+                   Type return_type, BlockStatement *body,
+                   std::vector<Attribute *> attributes,
+                   std::vector<Attribute *> return_type_attrs)
+    : name(name),
+      params(std::move(params)),
+      return_type(return_type),
+      body(body),
+      attributes(std::move(attributes)),
+      return_type_attrs(std::move(return_type_attrs)) {}
 
-struct Function : public Node {
-  Function(Identifier* name, std::vector<Parameter*> params, Type return_type,
-           BlockStatement* body, std::vector<Attribute*> attributes,
-           std::vector<Attribute*> return_type_attrs);
+ast::PipelineStage Function::GetPipelineStage() const {
+  for (auto attr : attributes) {
+    if (attr->GetType() == AttributeType::kVertex) {
+      return PipelineStage::kVertex;
+    }
 
-  ~Function() override = default;
+    if (attr->GetType() == AttributeType::kFragment) {
+      return PipelineStage::kFragment;
+    }
 
-  ast::PipelineStage GetPipelineStage() const;
-
-  void Accept(AstVisitor* visitor) override;
-
-  bool IsEntryPoint() const {
-    return GetPipelineStage() != PipelineStage::kNone;
+    if (attr->GetType() == AttributeType::kCompute) {
+      return PipelineStage::kCompute;
+    }
   }
 
-  Identifier* name;
+  return PipelineStage::kNone;
+}
 
-  std::vector<Parameter*> params;
-
-  Type return_type;
-
-  BlockStatement* body;
-
-  std::vector<Attribute*> attributes;
-  std::vector<Attribute*> return_type_attrs;
-};
+void Function::Accept(AstVisitor *visitor) { visitor->Visit(this); }
 
 }  // namespace ast
 }  // namespace wgx

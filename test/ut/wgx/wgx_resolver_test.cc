@@ -5,9 +5,9 @@
 #include <gtest/gtest.h>
 
 #include "module/wgx/semantic/resolver.h"
+#include "module/wgx/wgsl/ast/ast_function.h"
+#include "module/wgx/wgsl/ast/ast_module.h"
 #include "module/wgx/wgsl/ast/expression.h"
-#include "module/wgx/wgsl/ast/function.h"
-#include "module/wgx/wgsl/ast/module.h"
 #include "module/wgx/wgsl/ast/node.h"
 #include "module/wgx/wgsl/ast/statement.h"
 #include "module/wgx/wgsl/ast/variable.h"

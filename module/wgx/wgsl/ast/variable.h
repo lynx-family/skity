@@ -36,8 +36,8 @@
 #include <string>
 #include <vector>
 
+#include "wgsl/ast/ast_type.h"
 #include "wgsl/ast/node.h"
-#include "wgsl/ast/type.h"
 
 namespace wgx {
 namespace ast {

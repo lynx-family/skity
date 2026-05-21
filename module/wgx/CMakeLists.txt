@@ -13,22 +13,22 @@ endif()
 
 add_library(wgsl-cross STATIC
     ${CMAKE_CURRENT_LIST_DIR}/include/wgsl_cross.h
-    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/attribute.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/attribute.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/ast_attribute.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/ast_attribute.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/expression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/expression.h
-    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/function.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/function.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/ast_function.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/ast_function.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/identifier.cpp
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/identifier.h
-    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/module.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/module.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/ast_module.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/ast_module.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/node.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/pipeline_stage.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/statement.cpp
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/statement.h
-    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/type.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/type.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/ast_type.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/ast_type.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/type_decl.cpp
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/type_decl.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/variable.cpp
@@ -41,8 +41,8 @@ add_library(wgsl-cross STATIC
     ${CMAKE_CURRENT_LIST_DIR}/semantic/scope.h
     ${CMAKE_CURRENT_LIST_DIR}/semantic/symbol.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/bind_group.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/wgsl/function.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/wgsl/function.h
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/wgsl_function.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/wgsl/wgsl_function.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/parser.cpp
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/parser.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/program.cpp
@@ -57,18 +57,18 @@ add_library(wgsl-cross STATIC
 if (WGX_GLSL_BACKEND)
     target_compile_definitions(wgsl-cross PRIVATE -DWGX_GLSL=1)
     target_sources(wgsl-cross PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/glsl/ast_printer.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/glsl/ast_printer.h
+        ${CMAKE_CURRENT_LIST_DIR}/glsl/glsl_ast_printer.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/glsl/glsl_ast_printer.h
     )
 endif()
 
 if (WGX_MSL_BACKEND)
     target_compile_definitions(wgsl-cross PRIVATE -DWGX_MSL=1)
     target_sources(wgsl-cross PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/msl/ast_printer.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/msl/ast_printer.h
-        ${CMAKE_CURRENT_LIST_DIR}/msl/attribute.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/msl/attribute.h
+        ${CMAKE_CURRENT_LIST_DIR}/msl/msl_ast_printer.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/msl/msl_ast_printer.h
+        ${CMAKE_CURRENT_LIST_DIR}/msl/msl_attribute.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/msl/msl_attribute.h
         ${CMAKE_CURRENT_LIST_DIR}/msl/uniform_capture.cpp
         ${CMAKE_CURRENT_LIST_DIR}/msl/uniform_capture.h
     )
@@ -77,9 +77,9 @@ endif()
 if (WGX_VULKAN_BACKEND)
     target_compile_definitions(wgsl-cross PRIVATE -DWGX_VULKAN=1)
     target_sources(wgsl-cross PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/ir/module.h
-        ${CMAKE_CURRENT_LIST_DIR}/ir/type.h
-        ${CMAKE_CURRENT_LIST_DIR}/ir/type.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/ir/ir_module.h
+        ${CMAKE_CURRENT_LIST_DIR}/ir/ir_type.h
+        ${CMAKE_CURRENT_LIST_DIR}/ir/ir_type.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ir/value.h
         ${CMAKE_CURRENT_LIST_DIR}/ir/value.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ir/verifier.h

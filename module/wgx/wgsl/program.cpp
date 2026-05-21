@@ -9,9 +9,9 @@
 
 #include "semantic/resolver.h"
 #include "wgsl/ast/node.h"
-#include "wgsl/function.h"
 #include "wgsl/parser.h"
 #include "wgsl/scanner.h"
+#include "wgsl/wgsl_function.h"
 
 #ifdef WGX_VULKAN
 #include "lower/lower_to_ir.h"
@@ -19,11 +19,11 @@
 #endif
 
 #ifdef WGX_GLSL
-#include "glsl/ast_printer.h"
+#include "glsl/glsl_ast_printer.h"
 #endif
 
 #ifdef WGX_MSL
-#include "msl/ast_printer.h"
+#include "msl/msl_ast_printer.h"
 #endif
 
 namespace wgx {

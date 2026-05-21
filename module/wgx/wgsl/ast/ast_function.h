@@ -31,54 +31,48 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include "wgsl/ast/module.h"
+#pragma once
 
-#include "wgsl/ast/visitor.h"
+#include <vector>
+
+#include "wgsl/ast/ast_type.h"
+#include "wgsl/ast/node.h"
+#include "wgsl/ast/pipeline_stage.h"
 
 namespace wgx {
 namespace ast {
 
-void Module::Accept(AstVisitor *visitor) { visitor->Visit(this); }
+struct BlockStatement;
+struct Parameter;
+struct Attribute;
+struct Identifier;
 
-void Module::AddGlobalDeclaration(Variable *decl) {
-  global_declarations.emplace_back(decl);
-}
+struct Function : public Node {
+  Function(Identifier* name, std::vector<Parameter*> params, Type return_type,
+           BlockStatement* body, std::vector<Attribute*> attributes,
+           std::vector<Attribute*> return_type_attrs);
 
-void Module::AddGlobalTypeDecl(TypeDecl *decl) {
-  type_decls.emplace_back(decl);
-}
+  ~Function() override = default;
 
-void Module::AddFunction(Function *func) { functions.emplace_back(func); }
+  ast::PipelineStage GetPipelineStage() const;
 
-Variable *Module::GetGlobalVariable(const std::string_view &name) const {
-  for (auto *var : global_declarations) {
-    if (var->name->name == name) {
-      return var;
-    }
+  void Accept(AstVisitor* visitor) override;
+
+  bool IsEntryPoint() const {
+    return GetPipelineStage() != PipelineStage::kNone;
   }
 
-  return nullptr;
-}
+  Identifier* name;
 
-TypeDecl *Module::GetGlobalTypeDecl(const std::string_view &name) const {
-  for (auto *decl : type_decls) {
-    if (decl->name->name == name) {
-      return decl;
-    }
-  }
+  std::vector<Parameter*> params;
 
-  return nullptr;
-}
+  Type return_type;
 
-Function *Module::GetFunction(const std::string_view &name) const {
-  for (auto *func : functions) {
-    if (func->name->name == name) {
-      return func;
-    }
-  }
+  BlockStatement* body;
 
-  return nullptr;
-}
+  std::vector<Attribute*> attributes;
+  std::vector<Attribute*> return_type_attrs;
+};
 
 }  // namespace ast
 }  // namespace wgx

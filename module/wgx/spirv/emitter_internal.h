@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "ir/module.h"
+#include "ir/ir_module.h"
 #include "spirv/unified1/spirv.h"
 
 namespace wgx {

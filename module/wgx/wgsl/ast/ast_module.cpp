@@ -31,83 +31,53 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include "wgsl/ast/type.h"
+#include "wgsl/ast/ast_module.h"
 
-#include "wgsl/ast/expression.h"
+#include "wgsl/ast/visitor.h"
 
 namespace wgx {
 namespace ast {
 
-bool Type::IsBuiltin() const {
-  if (expr == nullptr) {
-    return false;
-  }
+void Module::Accept(AstVisitor *visitor) { visitor->Visit(this); }
 
-  switch (expr->GetType()) {
-    case ExpressionType::kIntLiteral:
-    case ExpressionType::kFloatLiteral:
-    case ExpressionType::kBoolLiteral:
-      return true;
-    case ExpressionType::kIdentifier: {
-      // need to check if is vector or matrix
-      auto* ident = static_cast<IdentifierExp*>(expr);
-      if (ident->ident->name == "vec2" || ident->ident->name == "vec3" ||
-          ident->ident->name == "vec4") {
-        return true;
-      }
+void Module::AddGlobalDeclaration(Variable *decl) {
+  global_declarations.emplace_back(decl);
+}
 
-      if (ident->ident->name == "mat2x2" || ident->ident->name == "mat2x3" ||
-          ident->ident->name == "mat2x4" || ident->ident->name == "mat3x2" ||
-          ident->ident->name == "mat3x3" || ident->ident->name == "mat3x4" ||
-          ident->ident->name == "mat4x2" || ident->ident->name == "mat4x3" ||
-          ident->ident->name == "mat4x4") {
-        return true;
-      }
+void Module::AddGlobalTypeDecl(TypeDecl *decl) {
+  type_decls.emplace_back(decl);
+}
 
-      if (ident->ident->name == "bool" || ident->ident->name == "f32" ||
-          ident->ident->name == "i32" || ident->ident->name == "u32") {
-        return true;
-      }
+void Module::AddFunction(Function *func) { functions.emplace_back(func); }
 
-      return false;
+Variable *Module::GetGlobalVariable(const std::string_view &name) const {
+  for (auto *var : global_declarations) {
+    if (var->name->name == name) {
+      return var;
     }
-    default:
-      return false;
   }
+
+  return nullptr;
 }
 
-bool Type::IsArray() const {
-  if (expr == nullptr) {
-    return false;
+TypeDecl *Module::GetGlobalTypeDecl(const std::string_view &name) const {
+  for (auto *decl : type_decls) {
+    if (decl->name->name == name) {
+      return decl;
+    }
   }
 
-  if (expr->ident->name != "array") {
-    return false;
-  }
-
-  const auto& args = expr->ident->args;
-
-  if (args.size() != 2) {
-    return false;
-  }
-
-  if (args[0]->GetType() != ExpressionType::kIdentifier ||
-      args[1]->GetType() != ExpressionType::kIntLiteral) {
-    return false;
-  }
-
-  return true;
+  return nullptr;
 }
 
-Array Type::AsArray() const {
-  if (!IsArray()) {
-    return {};
+Function *Module::GetFunction(const std::string_view &name) const {
+  for (auto *func : functions) {
+    if (func->name->name == name) {
+      return func;
+    }
   }
 
-  const auto& args = expr->ident->args;
-
-  return {static_cast<IdentifierExp*>(args[0]),
-          static_cast<IntLiteralExp*>(args[1])};
+  return nullptr;
 }
 
 }  // namespace ast

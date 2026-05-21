@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "ir/type.h"
+#include "ir/ir_type.h"
 #include "ir/value.h"
 
 namespace wgx {

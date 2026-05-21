@@ -5,7 +5,7 @@
 #pragma once
 
 #include "wgsl/ast/visitor.h"
-#include "wgsl/function.h"
+#include "wgsl/wgsl_function.h"
 
 namespace wgx {
 namespace msl {
