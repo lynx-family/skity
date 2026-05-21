@@ -35,7 +35,12 @@ class SKITY_API GPUSurface {
  public:
   virtual ~GPUSurface() = default;
 
-  virtual GPUBackendType GetBackendType() const = 0;
+  virtual GPUBackendType GetBackendType() const {
+    // subclass should override this function to return the backend type
+    // Currently this function only used in vulkan backend to do extra command
+    // submission check
+    return GPUBackendType::kNone;
+  }
 
   virtual uint32_t GetWidth() const = 0;
 
