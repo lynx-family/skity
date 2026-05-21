@@ -33,7 +33,7 @@
 
 #include "wgsl/ast/type_decl.h"
 
-#include "wgsl/ast/attribute.h"
+#include "wgsl/ast/ast_attribute.h"
 #include "wgsl/ast/visitor.h"
 
 namespace wgx {

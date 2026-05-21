@@ -7,7 +7,7 @@
 #include "wgsl/ast/expression.h"
 #include "wgsl/ast/type_decl.h"
 #include "wgsl/ast/variable.h"
-#include "wgsl/function.h"
+#include "wgsl/wgsl_function.h"
 
 namespace wgx {
 

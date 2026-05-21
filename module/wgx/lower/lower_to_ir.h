@@ -7,10 +7,10 @@
 #include <memory>
 #include <unordered_map>
 
-#include "ir/module.h"
+#include "ir/ir_module.h"
 #include "semantic/symbol.h"
-#include "wgsl/ast/function.h"
-#include "wgsl/ast/module.h"
+#include "wgsl/ast/ast_function.h"
+#include "wgsl/ast/ast_module.h"
 
 namespace wgx {
 namespace lower {

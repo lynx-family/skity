@@ -7,13 +7,13 @@
 #include <optional>
 #include <vector>
 
-#include "wgsl/ast/attribute.h"
+#include "wgsl/ast/ast_attribute.h"
+#include "wgsl/ast/ast_function.h"
+#include "wgsl/ast/ast_module.h"
+#include "wgsl/ast/ast_type.h"
 #include "wgsl/ast/expression.h"
-#include "wgsl/ast/function.h"
-#include "wgsl/ast/module.h"
 #include "wgsl/ast/node.h"
 #include "wgsl/ast/statement.h"
-#include "wgsl/ast/type.h"
 #include "wgsl/ast/type_decl.h"
 #include "wgsl/ast/variable.h"
 #include "wgsl/token.h"

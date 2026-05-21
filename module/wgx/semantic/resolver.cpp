@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "wgsl/ast/function.h"
+#include "wgsl/ast/ast_function.h"
 #include "wgsl/ast/statement.h"
 #include "wgsl/ast/type_decl.h"
 #include "wgsl/ast/variable.h"

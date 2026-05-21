@@ -11,13 +11,13 @@
 #include <unordered_set>
 #include <vector>
 
-#include "ir/module.h"
+#include "ir/ir_module.h"
 #include "semantic/symbol.h"
-#include "wgsl/ast/attribute.h"
+#include "wgsl/ast/ast_attribute.h"
+#include "wgsl/ast/ast_function.h"
+#include "wgsl/ast/ast_module.h"
 #include "wgsl/ast/expression.h"
-#include "wgsl/ast/function.h"
 #include "wgsl/ast/identifier.h"
-#include "wgsl/ast/module.h"
 #include "wgsl/ast/statement.h"
 #include "wgsl/ast/type_decl.h"
 #include "wgsl/ast/variable.h"

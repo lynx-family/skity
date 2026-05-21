@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <optional>
 
-#include "ir/type.h"
+#include "ir/ir_type.h"
 
 namespace wgx {
 namespace ir {

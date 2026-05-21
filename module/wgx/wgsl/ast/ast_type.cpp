@@ -31,44 +31,84 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include "wgsl/ast/function.h"
+#include "wgsl/ast/ast_type.h"
 
-#include "wgsl/ast/attribute.h"
-#include "wgsl/ast/visitor.h"
+#include "wgsl/ast/expression.h"
 
 namespace wgx {
 namespace ast {
 
-Function::Function(Identifier *name, std::vector<Parameter *> params,
-                   Type return_type, BlockStatement *body,
-                   std::vector<Attribute *> attributes,
-                   std::vector<Attribute *> return_type_attrs)
-    : name(name),
-      params(std::move(params)),
-      return_type(return_type),
-      body(body),
-      attributes(std::move(attributes)),
-      return_type_attrs(std::move(return_type_attrs)) {}
-
-ast::PipelineStage Function::GetPipelineStage() const {
-  for (auto attr : attributes) {
-    if (attr->GetType() == AttributeType::kVertex) {
-      return PipelineStage::kVertex;
-    }
-
-    if (attr->GetType() == AttributeType::kFragment) {
-      return PipelineStage::kFragment;
-    }
-
-    if (attr->GetType() == AttributeType::kCompute) {
-      return PipelineStage::kCompute;
-    }
+bool Type::IsBuiltin() const {
+  if (expr == nullptr) {
+    return false;
   }
 
-  return PipelineStage::kNone;
+  switch (expr->GetType()) {
+    case ExpressionType::kIntLiteral:
+    case ExpressionType::kFloatLiteral:
+    case ExpressionType::kBoolLiteral:
+      return true;
+    case ExpressionType::kIdentifier: {
+      // need to check if is vector or matrix
+      auto* ident = static_cast<IdentifierExp*>(expr);
+      if (ident->ident->name == "vec2" || ident->ident->name == "vec3" ||
+          ident->ident->name == "vec4") {
+        return true;
+      }
+
+      if (ident->ident->name == "mat2x2" || ident->ident->name == "mat2x3" ||
+          ident->ident->name == "mat2x4" || ident->ident->name == "mat3x2" ||
+          ident->ident->name == "mat3x3" || ident->ident->name == "mat3x4" ||
+          ident->ident->name == "mat4x2" || ident->ident->name == "mat4x3" ||
+          ident->ident->name == "mat4x4") {
+        return true;
+      }
+
+      if (ident->ident->name == "bool" || ident->ident->name == "f32" ||
+          ident->ident->name == "i32" || ident->ident->name == "u32") {
+        return true;
+      }
+
+      return false;
+    }
+    default:
+      return false;
+  }
 }
 
-void Function::Accept(AstVisitor *visitor) { visitor->Visit(this); }
+bool Type::IsArray() const {
+  if (expr == nullptr) {
+    return false;
+  }
+
+  if (expr->ident->name != "array") {
+    return false;
+  }
+
+  const auto& args = expr->ident->args;
+
+  if (args.size() != 2) {
+    return false;
+  }
+
+  if (args[0]->GetType() != ExpressionType::kIdentifier ||
+      args[1]->GetType() != ExpressionType::kIntLiteral) {
+    return false;
+  }
+
+  return true;
+}
+
+Array Type::AsArray() const {
+  if (!IsArray()) {
+    return {};
+  }
+
+  const auto& args = expr->ident->args;
+
+  return {static_cast<IdentifierExp*>(args[0]),
+          static_cast<IntLiteralExp*>(args[1])};
+}
 
 }  // namespace ast
 }  // namespace wgx
