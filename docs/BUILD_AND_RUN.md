@@ -12,13 +12,13 @@ Although Skity supports CPU rendering, it is recommended to ensure that the GPU 
 This is the support GPU backends on different platforms:
 * Windows and Linux:
     * OpenGL at least version 3.3
-    * Vulkan in planning
+    * Vulkan (experimental) at least version 1.1
 * MacOS:
     * Metal (recommend to use Metal since OpenGL is deprecated by Apple)
     * OpenGL at least version 3.3
 * Android:
     * OpenGL ES at least version 3.0
-    * Vulkan in planning
+    * Vulkan (experimental) at least version 1.1
 * iOS (11.0 +):
     * Metal (recommend to use Metal since OpenGLES is deprecated by Apple)
     * OpenGL ES at least version 3.0
@@ -75,6 +75,7 @@ There are several options you can use to configure the build:
     * `SKITY_SW_RENDERER` - Option for CPU raster. Default is ON. Pass `-DSKITY_SW_RENDERER=OFF` in command line to disable it if does not needs the CPU raster pipeline.
     * `SKITY_GL_BACKEND` - Option for OpenGL backend. Default is ON. Pass `-DSKITY_GL_BACKEND=OFF` in command line to disable it. (OpenGL/GLES is almost supported by all platforms, so it is recommended not to turn this option off.)
     * `SKITY_MTL_BACKEND` - Option for Metal backend. Not available on Windows and Linux but open by default on Apple platform.
+    * `SKITY_VK_BACKEND` - Option for Vulkan backend (experimental). Default is OFF. Pass `-DSKITY_VK_BACKEND=ON` in command line to enable it. Requires Vulkan at least version 1.1. Skity will attempt to create the highest available Vulkan version and leverage extensions such as dynamic rendering when supported.
     * `SKITY_LOG` - Option for logging. Default is OFF since print log may slow down the performance. Pass `-DSKITY_LOG=ON` in command line to enable it.
 
 * Options for build optional modules:
@@ -104,6 +105,7 @@ You can run the example code like this:
 
 The available backend name for `<backend>` is:
 * `gl` - OpenGL backend
+* `vulkan` - Vulkan backend (experimental)
 * `metal` - Metal backend
 * `software` - Software renderer backend
 

@@ -6,7 +6,8 @@
 
 `Skity` is an open-source 2D graphics library developed in C++. 
 It focuses on GPU rendering, providing developers with efficient graphics drawing and rendering capabilities. 
-Currently, Skity supports mainstream graphics APIs such as OpenGL, OpenGL ES, and Metal. 
+Currently, Skity supports mainstream graphics APIs such as OpenGL, OpenGL ES, and Metal.
+Experimental Vulkan backend is also available.
 Meanwhile, it offers a functional working software rendering backend as a fallback solution, ensuring stable graphics rendering in various environments.
 
 ## Getting Started
@@ -159,6 +160,9 @@ We appreciate the efforts of the developers and the open-source community behind
 - [jsoncpp](https://github.com/open-source-parsers/jsoncpp) Used to parse json file.
 - [pugixml](https://github.com/zeux/pugixml) Used to parse xml file.
 - [fmt](https://github.com/fmtlib/fmt) Used for string formatting and logging.
+- [volk](https://github.com/zeux/volk) Used for dynamically loading Vulkan entrypoints in example and test.
+- [SPIRV-Headers](https://github.com/KhronosGroup/SPIRV-Headers) Used for SPIR-V instruction set headers.
+- [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator) Used for Vulkan GPU memory allocation.
 - [GLFW](https://www.glfw.org/) Used for window and input in example and test.
 - [googletest](https://github.com/google/googletest) Used for testing.
 - [google/benchmark](https://github.com/google/benchmark) Used for testing benchmark.
