@@ -178,6 +178,27 @@ UniqueCTFontRef ct_font_copy_with_size(CTFontRef base, CGFloat text_size) {
       kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
       &kCFTypeDictionaryValueCallBacks));
 
+  CFStringRef optical_size_attribute = CFSTR("NSCTFontOpticalSizeAttribute");
+  UniqueCFRef<CFTypeRef> optical_size(
+      CTFontCopyAttribute(base, optical_size_attribute));
+  double optical_size_value = 0.0;
+  if (!optical_size || CFGetTypeID(optical_size.get()) != CFNumberGetTypeID() ||
+      !CFNumberGetValue(static_cast<CFNumberRef>(optical_size.get()),
+                        kCFNumberDoubleType, &optical_size_value) ||
+      optical_size_value <= 0.0) {
+    optical_size_value = CTFontGetSize(base);
+  }
+  UniqueCFRef<CFNumberRef> optical_size_number(CFNumberCreate(
+      kCFAllocatorDefault, kCFNumberDoubleType, &optical_size_value));
+  CFDictionarySetValue(attr.get(), optical_size_attribute,
+                       optical_size_number.get());
+
+  int zero_tracking = 0;
+  UniqueCFRef<CFNumberRef> tracking_number(
+      CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &zero_tracking));
+  CFDictionarySetValue(attr.get(), CFSTR("NSCTFontUnscaledTrackingAttribute"),
+                       tracking_number.get());
+
   UniqueCFRef<CTFontDescriptorRef> desc(
       CTFontDescriptorCreateWithAttributes(attr.get()));
 
