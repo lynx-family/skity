@@ -22,11 +22,14 @@
 #include <winsdkver.h>
 
 #include <cassert>
+#include <cstring>
 #include <mutex>
 #include <skity/io/data.hpp>
 #include <skity/text/font_arguments.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/utf.hpp>
+#include <utility>
+#include <vector>
 
 #include "src/logging.hpp"
 #include "src/text/ports/typeface_freetype.hpp"
@@ -97,6 +100,179 @@ bool HasBitmapStrikes(const ScopedComPtr<IDWriteFont>& font) {
                             EndianSwap32(SetFourByteTag('E', 'B', 'D', 'T')));
   return ebdtTable.exists;
 }
+
+template <typename T, typename U>
+bool SameCOMObject(T* lhs, U* rhs) {
+  if (!lhs || !rhs) {
+    return lhs == rhs;
+  }
+
+  ScopedComPtr<IUnknown> lhsUnknown;
+  if (FAILED(lhs->QueryInterface(&lhsUnknown))) {
+    return false;
+  }
+
+  ScopedComPtr<IUnknown> rhsUnknown;
+  if (FAILED(rhs->QueryInterface(&rhsUnknown))) {
+    return false;
+  }
+
+  return lhsUnknown.get() == rhsUnknown.get();
+}
+
+bool GetDWriteFontFiles(IDWriteFontFace* font_face,
+                        std::vector<ScopedComPtr<IDWriteFontFile>>& files) {
+  files.clear();
+
+  uint32_t number_of_files = 0;
+  if (FAILED(font_face->GetFiles(&number_of_files, nullptr))) {
+    return false;
+  }
+
+  files.resize(number_of_files);
+  if (files.empty()) {
+    return true;
+  }
+
+  return SUCCEEDED(font_face->GetFiles(
+      &number_of_files, reinterpret_cast<IDWriteFontFile**>(files.data())));
+}
+
+bool DWriteFontFileEqual(IDWriteFontFile* lhs, IDWriteFontFile* rhs) {
+  if (SameCOMObject(lhs, rhs)) {
+    return true;
+  }
+
+  if (!lhs || !rhs) {
+    return false;
+  }
+
+  ScopedComPtr<IDWriteFontFileLoader> lhsLoader;
+  ScopedComPtr<IDWriteFontFileLoader> rhsLoader;
+  if (FAILED(lhs->GetLoader(&lhsLoader)) ||
+      FAILED(rhs->GetLoader(&rhsLoader))) {
+    return false;
+  }
+
+  if (!SameCOMObject(lhsLoader.get(), rhsLoader.get())) {
+    return false;
+  }
+
+  const void* lhsKey = nullptr;
+  const void* rhsKey = nullptr;
+  UINT32 lhsKeySize = 0;
+  UINT32 rhsKeySize = 0;
+  lhs->GetReferenceKey(&lhsKey, &lhsKeySize);
+  rhs->GetReferenceKey(&rhsKey, &rhsKeySize);
+
+  if (lhsKeySize != rhsKeySize) {
+    return false;
+  }
+
+  if (lhsKeySize == 0) {
+    return true;
+  }
+
+  return lhsKey && rhsKey && std::memcmp(lhsKey, rhsKey, lhsKeySize) == 0;
+}
+
+bool DWriteFontFaceEqualByFiles(IDWriteFontFace* lhs, IDWriteFontFace* rhs) {
+  if (lhs->GetIndex() != rhs->GetIndex() ||
+      lhs->GetSimulations() != rhs->GetSimulations()) {
+    return false;
+  }
+
+  std::vector<ScopedComPtr<IDWriteFontFile>> lhsFiles;
+  std::vector<ScopedComPtr<IDWriteFontFile>> rhsFiles;
+  if (!GetDWriteFontFiles(lhs, lhsFiles) ||
+      !GetDWriteFontFiles(rhs, rhsFiles)) {
+    return false;
+  }
+
+  if (lhsFiles.size() != rhsFiles.size()) {
+    return false;
+  }
+
+  for (size_t index = 0; index < lhsFiles.size(); index++) {
+    if (!DWriteFontFileEqual(lhsFiles[index].get(), rhsFiles[index].get())) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool DWriteFontFaceEqual(IDWriteFontFace* lhs, IDWriteFontFace* rhs) {
+  if (SameCOMObject(lhs, rhs)) {
+    return true;
+  }
+
+  if (!lhs || !rhs) {
+    return false;
+  }
+
+  // IDWriteFontFace5::Equals accounts for newer face identity such as variation
+  // axis values. Older DirectWrite versions can only compare file identity.
+#if defined(__IDWriteFontFace5_INTERFACE_DEFINED__)
+  ScopedComPtr<IDWriteFontFace5> lhsFace5;
+  if (SUCCEEDED(lhs->QueryInterface(&lhsFace5))) {
+    return lhsFace5->Equals(rhs);
+  }
+
+  ScopedComPtr<IDWriteFontFace5> rhsFace5;
+  if (SUCCEEDED(rhs->QueryInterface(&rhsFace5))) {
+    return rhsFace5->Equals(lhs);
+  }
+#endif
+
+  return DWriteFontFaceEqualByFiles(lhs, rhs);
+}
+
+class DWriteTypefaceCache {
+ public:
+  std::shared_ptr<Typeface> Find(IDWriteFontFace* font_face) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return FindLocked(font_face);
+  }
+
+  std::shared_ptr<Typeface> AddOrGetExisting(
+      IDWriteFontFace* font_face, std::shared_ptr<Typeface> typeface) {
+    if (!typeface) {
+      return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto cached_typeface = FindLocked(font_face);
+    if (cached_typeface) {
+      return cached_typeface;
+    }
+
+    entries_.emplace_back(font_face, std::move(typeface));
+    return entries_.back().typeface;
+  }
+
+ private:
+  struct Entry {
+    Entry(IDWriteFontFace* font_face, std::shared_ptr<Typeface> typeface)
+        : font_face(RefComPtr(font_face)), typeface(std::move(typeface)) {}
+
+    ScopedComPtr<IDWriteFontFace> font_face;
+    std::shared_ptr<Typeface> typeface;
+  };
+
+  std::shared_ptr<Typeface> FindLocked(IDWriteFontFace* font_face) {
+    for (auto& entry : entries_) {
+      if (DWriteFontFaceEqual(entry.font_face.get(), font_face)) {
+        return entry.typeface;
+      }
+    }
+
+    return nullptr;
+  }
+
+  std::mutex mutex_;
+  std::vector<Entry> entries_;
+};
 
 // Iterate calls to GetFirstMatchingFont incrementally removing bold or italic
 // styling that can trigger the simulations. Implementing it this way gets us a
@@ -315,6 +491,7 @@ class FontManagerWin : public FontManager {
   ScopedComPtr<IDWriteFontCollection> font_collection_;
   ScopedComPtr<IDWriteFontFallback> fallback_;
   std::wstring locale_name_;
+  mutable DWriteTypefaceCache typeface_cache_;
 
   std::shared_ptr<Typeface> fallback(const WCHAR* dwFamilyName, DWriteStyle,
                                      const WCHAR* dwBcp47,
@@ -699,18 +876,24 @@ static std::wstring GetFontFilePath(IDWriteFontFile* fontFile) {
 std::shared_ptr<Typeface> FontManagerWin::MakeTypefaceFromDWriteFont(
     IDWriteFontFace* font_face, IDWriteFont* font,
     IDWriteFontFamily* font_family) const {
-  uint32_t number_of_files = 0;
-  HRNM(font_face->GetFiles(&number_of_files, nullptr),
-       "Could not get number of files from font face.");
-  if (number_of_files == 0) {
-    LOGE("{}\n", "Get 0 files from font face.");
+  (void)font;
+  (void)font_family;
+
+  auto cached_typeface = typeface_cache_.Find(font_face);
+  if (cached_typeface) {
+    return cached_typeface;
+  }
+
+  std::vector<ScopedComPtr<IDWriteFontFile>> files;
+  if (!GetDWriteFontFiles(font_face, files)) {
+    LOGE("{}\n", "Could not get files from font face.");
     return nullptr;
   }
 
-  std::vector<ScopedComPtr<IDWriteFontFile>> files(number_of_files);
-  HRNM(font_face->GetFiles(&number_of_files,
-                           reinterpret_cast<IDWriteFontFile**>(files.data()));
-       , "Could not get files from font face.");
+  if (files.empty()) {
+    LOGE("{}\n", "Get 0 files from font face.");
+    return nullptr;
+  }
 
   for (auto& file : files) {
     std::wstring w_path = GetFontFilePath(file.get());
@@ -721,8 +904,9 @@ std::shared_ptr<Typeface> FontManagerWin::MakeTypefaceFromDWriteFont(
       LOGE("Font file path: {}\n", path);
       std::shared_ptr<Data> data = Data::MakeFromFileMapping(path.c_str());
       UINT32 ttc_index = font_face->GetIndex();
-      return TypefaceFreeType::Make(
+      auto typeface = TypefaceFreeType::Make(
           data, FontArguments().SetCollectionIndex(ttc_index));
+      return typeface_cache_.AddOrGetExisting(font_face, std::move(typeface));
     } else {
       LOGE("Font file path not available (maybe custom loader)");
     }
