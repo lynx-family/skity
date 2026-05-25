@@ -49,7 +49,8 @@ std::unique_ptr<Window> Window::CreateWindow(Backend backend, uint32_t width,
 #endif
   } else if (backend == Backend::kVulkan) {
 #ifdef SKITY_EXAMPLE_VK_BACKEND
-    window = std::make_unique<WindowVK>(width, height, std::move(title));
+    window =
+        std::make_unique<WindowVK>(width, height, std::move(title), aa_mode);
 #else
     std::cerr << "Vulkan backend is not supported." << std::endl;
 #endif
