@@ -1613,7 +1613,7 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
       uint32_t result_id = ids_.Allocate();
       AppendInstruction(&sections_->functions, SpvOpSelect,
                         {GetSpirvTypeId(inst.result_type), result_id, cond_id,
-                         false_id, true_id});
+                         true_id, false_id});
       value_map_[inst.result_id] = result_id;
       return true;
     }
