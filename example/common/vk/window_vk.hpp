@@ -15,8 +15,8 @@ namespace example {
 
 class WindowVK : public Window {
  public:
-  WindowVK(int width, int height, std::string title)
-      : Window(width, height, std::move(title)) {}
+  WindowVK(int width, int height, std::string title, AAMode aa_mode)
+      : Window(width, height, std::move(title), aa_mode) {}
 
   ~WindowVK() override = default;
 
