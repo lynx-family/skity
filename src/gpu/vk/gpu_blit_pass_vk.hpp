@@ -27,6 +27,10 @@ class GPUBlitPassVK : public GPUBlitPass {
 
   void GenerateMipmaps(const std::shared_ptr<GPUTexture>& texture) override;
 
+  void CopyTextureToTexture(std::shared_ptr<GPUTexture> src,
+                            std::shared_ptr<GPUTexture> dst,
+                            const TextureCopyRegion& region) override;
+
   void End() override;
 
  private:
