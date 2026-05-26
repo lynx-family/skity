@@ -346,6 +346,72 @@ void GPUBlitPassVK::GenerateMipmaps(
   command_buffer_->RecordCleanupAction([texture_ref]() {});
 }
 
+void GPUBlitPassVK::CopyTextureToTexture(std::shared_ptr<GPUTexture> src,
+                                         std::shared_ptr<GPUTexture> dst,
+                                         const TextureCopyRegion& region) {
+  if (!src || !dst) {
+    LOGE("CopyTextureToTexture called with empty src or dst");
+    return;
+  }
+
+  if (region.width == 0 || region.height == 0) {
+    LOGE("CopyTextureToTexture called with empty width or height");
+    return;
+  }
+
+  auto* src_vk = GPUTextureVK::Cast(src.get());
+  auto* dst_vk = GPUTextureVK::Cast(dst.get());
+
+  if (!src_vk || !dst_vk || !state_ || !command_buffer_) {
+    LOGE("CopyTextureToTexture: invalid state");
+    return;
+  }
+
+  if (src_vk->GetImage() == VK_NULL_HANDLE ||
+      dst_vk->GetImage() == VK_NULL_HANDLE ||
+      command_buffer_->GetCommandBuffer() == VK_NULL_HANDLE) {
+    LOGE("CopyTextureToTexture: image or command buffer unavailable");
+    return;
+  }
+
+  const auto src_ref = src;
+  const auto dst_ref = dst;
+  const VkCommandBuffer cmd_buf = command_buffer_->GetCommandBuffer();
+
+  TransitionImageLayout(*state_, cmd_buf, *src_vk,
+                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  TransitionImageLayout(*state_, cmd_buf, *dst_vk,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+  VkImageCopy copy_region = {};
+  copy_region.srcSubresource.aspectMask =
+      GetImageAspectMask(src_vk->GetDescriptor().format);
+  copy_region.srcSubresource.mipLevel = 0;
+  copy_region.srcSubresource.baseArrayLayer = 0;
+  copy_region.srcSubresource.layerCount = 1;
+  copy_region.srcOffset = {static_cast<int32_t>(region.src_x),
+                           static_cast<int32_t>(region.src_y), 0};
+  copy_region.dstSubresource.aspectMask =
+      GetImageAspectMask(dst_vk->GetDescriptor().format);
+  copy_region.dstSubresource.mipLevel = 0;
+  copy_region.dstSubresource.baseArrayLayer = 0;
+  copy_region.dstSubresource.layerCount = 1;
+  copy_region.dstOffset = {static_cast<int32_t>(region.dst_x),
+                           static_cast<int32_t>(region.dst_y), 0};
+  copy_region.extent = {region.width, region.height, 1};
+
+  state_->DeviceFns().vkCmdCopyImage(
+      cmd_buf, src_vk->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+      dst_vk->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+      &copy_region);
+
+  TransitionImageLayout(*state_, cmd_buf, *src_vk,
+                        src_vk->GetPreferredLayout());
+  TransitionImageLayout(*state_, cmd_buf, *dst_vk,
+                        dst_vk->GetPreferredLayout());
+  command_buffer_->RecordCleanupAction([src_ref, dst_ref]() {});
+}
+
 void GPUBlitPassVK::End() { InsertDebugLabelIfNeeded(); }
 
 void GPUBlitPassVK::InsertDebugLabelIfNeeded() {

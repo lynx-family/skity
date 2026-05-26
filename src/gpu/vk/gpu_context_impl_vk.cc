@@ -404,6 +404,8 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkCmdBeginRenderPass"));
   fns->vkCmdEndRenderPass = reinterpret_cast<PFN_vkCmdEndRenderPass>(
       get_device_proc_addr(device, "vkCmdEndRenderPass"));
+  fns->vkCmdCopyImage = reinterpret_cast<PFN_vkCmdCopyImage>(
+      get_device_proc_addr(device, "vkCmdCopyImage"));
   fns->vkCmdBlitImage = reinterpret_cast<PFN_vkCmdBlitImage>(
       get_device_proc_addr(device, "vkCmdBlitImage"));
   fns->vkCmdCopyBufferToImage = reinterpret_cast<PFN_vkCmdCopyBufferToImage>(
