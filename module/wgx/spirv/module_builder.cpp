@@ -719,10 +719,11 @@ void ModuleBuilder::WriteDebugSection() {
 }
 
 namespace {
-SpvBuiltIn ConvertBuiltin(ir::BuiltinType builtin) {
+SpvBuiltIn ConvertBuiltin(ir::BuiltinType builtin, ir::PipelineStage stage) {
   switch (builtin) {
     case ir::BuiltinType::kPosition:
-      return SpvBuiltInPosition;
+      return stage == ir::PipelineStage::kFragment ? SpvBuiltInFragCoord
+                                                   : SpvBuiltInPosition;
     case ir::BuiltinType::kVertexIndex:
       return SpvBuiltInVertexIndex;
     case ir::BuiltinType::kInstanceIndex:
@@ -823,7 +824,8 @@ void DecorateBufferStructMembers(
 void ModuleBuilder::WriteAnnotationSection() {
   for (const auto& input : input_vars_) {
     if (input.decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
-      SpvBuiltIn spirv_builtin = ConvertBuiltin(input.GetBuiltin());
+      SpvBuiltIn spirv_builtin =
+          ConvertBuiltin(input.GetBuiltin(), module_.stage);
       AppendInstruction(
           &sections_->annotations, SpvOpDecorate,
           {input.spirv_var_id, static_cast<uint32_t>(SpvDecorationBuiltIn),
@@ -843,7 +845,8 @@ void ModuleBuilder::WriteAnnotationSection() {
   }
   for (const auto& output : output_vars_) {
     if (output.decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
-      SpvBuiltIn spirv_builtin = ConvertBuiltin(output.GetBuiltin());
+      SpvBuiltIn spirv_builtin =
+          ConvertBuiltin(output.GetBuiltin(), module_.stage);
       AppendInstruction(
           &sections_->annotations, SpvOpDecorate,
           {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationBuiltIn),

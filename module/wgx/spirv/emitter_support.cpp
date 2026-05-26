@@ -165,13 +165,17 @@ bool SupportsCurrentIR(const ir::Function& function) {
   if (function.stage != ir::PipelineStage::kUnknown) {
     for (const auto& input : function.input_vars) {
       if (input.decoration_kind == ir::InterfaceDecorationKind::kBuiltin) {
-        if (function.stage != ir::PipelineStage::kVertex) {
-          return false;
-        }
-
-        if (input.GetBuiltin() != ir::BuiltinType::kVertexIndex &&
-            input.GetBuiltin() != ir::BuiltinType::kInstanceIndex &&
-            input.GetBuiltin() != ir::BuiltinType::kPosition) {
+        if (function.stage == ir::PipelineStage::kVertex) {
+          if (input.GetBuiltin() != ir::BuiltinType::kVertexIndex &&
+              input.GetBuiltin() != ir::BuiltinType::kInstanceIndex &&
+              input.GetBuiltin() != ir::BuiltinType::kPosition) {
+            return false;
+          }
+        } else if (function.stage == ir::PipelineStage::kFragment) {
+          if (input.GetBuiltin() != ir::BuiltinType::kPosition) {
+            return false;
+          }
+        } else {
           return false;
         }
       }
