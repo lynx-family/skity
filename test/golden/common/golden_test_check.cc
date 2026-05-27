@@ -32,19 +32,31 @@ namespace {
 constexpr uint8_t kIgnoredChannelDiff = 2;
 constexpr uint8_t kIgnoredSoftEdgeChannelDiff = 8;
 
-bool ShouldUseGLGoldenPath() {
+std::string GetBackendGoldenSuffix() {
   auto* env = skity::testing::GoldenTestEnv::GetInstance();
-  return env != nullptr && env->GetBackend() == skity::testing::Backend::kGL;
+  if (env == nullptr) {
+    return {};
+  }
+
+  switch (env->GetBackend()) {
+    case skity::testing::Backend::kGL:
+      return "_gl";
+    case skity::testing::Backend::kVulkan:
+      return "_vk";
+    default:
+      return {};
+  }
 }
 
-std::string BuildGLGoldenImagePath(const char* path) {
+std::string BuildBackendGoldenImagePath(const char* path,
+                                        const std::string& suffix) {
   if (path == nullptr) {
     return {};
   }
 
   std::filesystem::path base_path(path);
   return (base_path.parent_path() /
-          (base_path.stem().string() + "_gl" + base_path.extension().string()))
+          (base_path.stem().string() + suffix + base_path.extension().string()))
       .string();
 }
 
@@ -54,14 +66,15 @@ std::string ResolveGoldenReadPath(const char* path,
     return {};
   }
 
-  if (!ShouldUseGLGoldenPath()) {
+  auto suffix = GetBackendGoldenSuffix();
+  if (suffix.empty()) {
     return path;
   }
 
-  auto gl_path = BuildGLGoldenImagePath(path);
+  auto backend_path = BuildBackendGoldenImagePath(path, suffix);
 
-  if (use_backend_specific_golden || std::filesystem::exists(gl_path)) {
-    return gl_path;
+  if (use_backend_specific_golden || std::filesystem::exists(backend_path)) {
+    return backend_path;
   }
 
   return path;
@@ -72,11 +85,12 @@ std::string ResolveGoldenWritePath(const char* path) {
     return {};
   }
 
-  if (!ShouldUseGLGoldenPath()) {
+  auto suffix = GetBackendGoldenSuffix();
+  if (suffix.empty()) {
     return path;
   }
 
-  return BuildGLGoldenImagePath(path);
+  return BuildBackendGoldenImagePath(path, suffix);
 }
 
 bool ShouldAutoGenerateMissingGolden() {

@@ -16,6 +16,10 @@ namespace testing {
 GoldenTestEnv* CreateGoldenTestEnvMTL();
 GoldenTestEnv* CreateGoldenTestEnvGL();
 
+#ifdef SKITY_GOLDEN_VK
+GoldenTestEnv* CreateGoldenTestEnvVK();
+#endif
+
 GoldenTestEnv* g_golden_test_env = nullptr;
 
 GoldenTestEnv* GoldenTestEnv::CreateInstance(Backend backend) {
@@ -24,6 +28,9 @@ GoldenTestEnv* GoldenTestEnv::CreateInstance(Backend backend) {
       g_golden_test_env = CreateGoldenTestEnvGL();
       break;
     case Backend::kVulkan:
+#ifdef SKITY_GOLDEN_VK
+      g_golden_test_env = CreateGoldenTestEnvVK();
+#endif
       break;
     case Backend::kMetal:
       g_golden_test_env = CreateGoldenTestEnvMTL();
