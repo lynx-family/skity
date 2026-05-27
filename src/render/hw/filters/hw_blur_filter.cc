@@ -16,7 +16,8 @@ HWFilterOutput HWBlurFilter::Prepare(const HWFilterContext &context) {
   Vec2 input_texture_size = Vec2{child_output.texture->GetDescriptor().width,
                                  child_output.texture->GetDescriptor().height};
   std::shared_ptr<GPUTexture> input_texture = child_output.texture;
-  auto transformed_radius = radius_ * context.scale * direction_;
+  auto filter_radius = radius_ * downsample_scale_;
+  auto transformed_radius = filter_radius * context.scale * direction_;
   auto output_texture_size = input_texture_size + Vec2{2} * transformed_radius;
   auto output_texture = CreateOutputTexture(
       input_texture->GetDescriptor().format, output_texture_size, context);

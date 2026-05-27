@@ -14,13 +14,16 @@ namespace skity {
 
 class HWBlurFilter : public HWFilter {
  public:
-  HWBlurFilter(float radius, Vec2 direction, std::shared_ptr<HWFilter> inputs)
+  HWBlurFilter(float radius, Vec2 direction, std::shared_ptr<HWFilter> inputs,
+               float downsample_scale = 1.f)
       : HWFilter({inputs}, "HWBlurFilter"),
         radius_(radius),
-        direction_(direction) {}
+        direction_(direction),
+        downsample_scale_(downsample_scale) {}
 
   float radius_;
   Vec2 direction_;
+  float downsample_scale_;
 
   HWFilterOutput Prepare(const HWFilterContext &context) override;
 
