@@ -14,7 +14,7 @@ endif()
 
 set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -fobjc-arc", "-std=c++17")
 
-add_library(skity_golden_test OBJECT
+set(SKITY_GOLDEN_TEST_SOURCES
   ${CMAKE_CURRENT_LIST_DIR}/common/golden_test_check.cc
   ${CMAKE_CURRENT_LIST_DIR}/common/golden_test_check.hpp
   ${CMAKE_CURRENT_LIST_DIR}/common/golden_test_env.cc
@@ -32,6 +32,19 @@ add_library(skity_golden_test OBJECT
   ${CMAKE_CURRENT_LIST_DIR}/common/gl/golden_test_env_gl.hpp
   ${CMAKE_CURRENT_LIST_DIR}/common/gl/golden_test_env_gl.cc
   ${CMAKE_CURRENT_LIST_DIR}/common/gl/golden_texture_gl.hpp
+)
+
+# Vulkan backend code
+if (${SKITY_VK_BACKEND})
+  list(APPEND SKITY_GOLDEN_TEST_SOURCES
+    ${CMAKE_CURRENT_LIST_DIR}/common/vk/golden_test_env_vk.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/vk/golden_test_env_vk.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/vk/golden_texture_vk.hpp
+  )
+endif()
+
+add_library(skity_golden_test OBJECT
+  ${SKITY_GOLDEN_TEST_SOURCES}
 )
 
 target_include_directories(skity_golden_test
@@ -65,7 +78,46 @@ target_link_libraries(skity_golden_test
   GLESv2
 )
 
+# Vulkan backend dependencies
+if (${SKITY_VK_BACKEND})
+  set(SKITY_GOLDEN_VK_LOADER_LIBRARIES)
+  set(SKITY_GOLDEN_VK_RPATH)
+  if (${SKITY_VK_TEST_USE_SYSTEM_LOADER})
+    find_package(Vulkan REQUIRED)
+    list(APPEND SKITY_GOLDEN_VK_LOADER_LIBRARIES Vulkan::Vulkan)
+  else()
+    list(APPEND SKITY_GOLDEN_VK_LOADER_LIBRARIES
+      ${CMAKE_SOURCE_DIR}/third_party/libSwAngle/lib/libvk_swiftshader.dylib
+    )
+    set(SKITY_GOLDEN_VK_RPATH "${CMAKE_SOURCE_DIR}/third_party/libSwAngle/lib")
+  endif()
+
+  target_include_directories(skity_golden_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include
+    ${CMAKE_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include
+  )
+  target_compile_definitions(skity_golden_test PUBLIC -DSKITY_GOLDEN_VK=1)
+  target_link_libraries(skity_golden_test
+    ${SKITY_GOLDEN_VK_LOADER_LIBRARIES}
+    SPIRV-Headers::SPIRV-Headers
+    wgsl-cross
+  )
+
+  if (SKITY_GOLDEN_VK_RPATH)
+    set_target_properties(skity_golden_test PROPERTIES
+      BUILD_RPATH "${SKITY_GOLDEN_VK_RPATH}"
+    )
+  endif()
+endif()
+
 target_compile_definitions(skity_golden_test PUBLIC -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
+
+# no-rtti
+if (MSVC)
+  target_compile_options(skity_golden_test PUBLIC /EHsc /GR-)
+else()
+  target_compile_options(skity_golden_test PUBLIC -fno-rtti)
+endif()
 
 
 if (${SKITY_GOLDEN_GUI})
