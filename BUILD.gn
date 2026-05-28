@@ -89,7 +89,7 @@ config("skity_private_config") {
 }
 
 static_library("wgsl_cross_ast") {
-  sources = [ "$_skity_root/module/wgx/wgsl/ast/function.cpp" ]
+  sources = [ "$_skity_root/module/wgx/wgsl/ast/ast_function.cpp" ]
 
   include_dirs = wgsl_cross_include_dirs
   defines = wgsl_cross_compile_definitions
@@ -98,7 +98,7 @@ static_library("wgsl_cross_ast") {
 }
 
 static_library("wgsl_cross_glsl") {
-  sources = [ "$_skity_root/module/wgx/glsl/ast_printer.cpp" ]
+  sources = [ "$_skity_root/module/wgx/glsl/glsl_ast_printer.cpp" ]
 
   include_dirs = wgsl_cross_include_dirs
   defines = wgsl_cross_compile_definitions
@@ -108,8 +108,8 @@ static_library("wgsl_cross_glsl") {
 
 static_library("wgsl_cross_msl") {
   sources = [
-    "$_skity_root/module/wgx/msl/ast_printer.cpp",
-    "$_skity_root/module/wgx/msl/attribute.cpp",
+    "$_skity_root/module/wgx/msl/msl_ast_printer.cpp",
+    "$_skity_root/module/wgx/msl/msl_attribute.cpp",
     "$_skity_root/module/wgx/msl/uniform_capture.cpp",
   ]
 
@@ -122,11 +122,11 @@ static_library("wgsl_cross_msl") {
 static_library("wgsl_cross") {
   sources = wgsl_cross_sources
   sources -= [
-    "$_skity_root/module/wgx/glsl/ast_printer.cpp",
-    "$_skity_root/module/wgx/msl/ast_printer.cpp",
-    "$_skity_root/module/wgx/msl/attribute.cpp",
+    "$_skity_root/module/wgx/glsl/glsl_ast_printer.cpp",
+    "$_skity_root/module/wgx/msl/msl_ast_printer.cpp",
+    "$_skity_root/module/wgx/msl/msl_attribute.cpp",
     "$_skity_root/module/wgx/msl/uniform_capture.cpp",
-    "$_skity_root/module/wgx/wgsl/ast/function.cpp",
+    "$_skity_root/module/wgx/wgsl/ast/ast_function.cpp",
   ]
 
   include_dirs = wgsl_cross_include_dirs
