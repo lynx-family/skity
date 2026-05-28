@@ -118,6 +118,36 @@ TEST(ShapeGolden, TinyStrokeWidth) {
                                .gpu_tess_path = expected_image_path.c_str()}));
 }
 
+TEST(ShapeGolden, ScaledBlurMaskFilter) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(500.f, 500.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  skity::Paint paint;
+  paint.SetColor(skity::Color_WHITE);
+  canvas->DrawPaint(paint);
+
+  paint.SetColor(skity::Color_RED);
+  paint.SetMaskFilter(
+      skity::MaskFilter::MakeBlur(skity::BlurStyle::kNormal, 20.f));
+  canvas->Save();
+  canvas->Scale(2.f, 2.f);
+  canvas->DrawRect(skity::Rect::MakeLTRB(100.f, 100.f, 200.f, 200.f), paint);
+
+  paint.SetColor(skity::Color_GREEN);
+  paint.SetMaskFilter(nullptr);
+  canvas->DrawRect(skity::Rect::MakeLTRB(100.f, 100.f, 200.f, 200.f), paint);
+  canvas->Restore();
+
+  std::filesystem::path expected_image_path(kGoldenTestImageDir);
+  expected_image_path.append("scaled_blur_mask_filter.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 500, 500,
+      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
+                               .gpu_tess_path = expected_image_path.c_str()}));
+}
+
 TEST(ShapeGolden, StrokeJoinAndCap) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(500.f, 200.f));

@@ -173,21 +173,16 @@ std::shared_ptr<HWFilter> HWFilters::Blur(float radius_x, float radius_y,
    * For now we restrict the condition to trigger this downsampler pass to make
    * sure most blur case is rendered correct.
    */
-  auto down_sampler = [max_scaled_radius, &radius_x,
-                       &radius_y](std::shared_ptr<HWFilter> input) {
-    auto scale = calculate_blur_scale(radial_to_sigma(max_scaled_radius));
+  auto downsample_scale =
+      calculate_blur_scale(radial_to_sigma(max_scaled_radius));
+  if (downsample_scale != 1.f) {
+    input = std::make_shared<HWDownSamplerFilter>(input, downsample_scale);
+  }
 
-    if (scale != 1.f) {
-      input = std::make_shared<HWDownSamplerFilter>(input, scale);
-      radius_x *= scale;
-      radius_y *= scale;
-    }
-    return input;
-  };
-
-  input = down_sampler(input);
-  input = std::make_shared<HWBlurFilter>(radius_x, Vec2{1, 0}, input);
-  input = std::make_shared<HWBlurFilter>(radius_y, Vec2{0, 1}, input);
+  input = std::make_shared<HWBlurFilter>(radius_x, Vec2{1, 0}, input,
+                                         downsample_scale);
+  input = std::make_shared<HWBlurFilter>(radius_y, Vec2{0, 1}, input,
+                                         downsample_scale);
 
   return input;
 }
