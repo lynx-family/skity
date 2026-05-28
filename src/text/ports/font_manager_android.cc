@@ -2,6 +2,8 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <android/api-level.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <memory>
@@ -25,6 +27,8 @@
 namespace skity {
 
 namespace {
+
+constexpr int kAndroid16ApiLevel = 36;
 
 std::pair<float, float> find_interval_interpolated(
     const std::vector<std::pair<float, float>>& v, float key) {
@@ -72,6 +76,81 @@ std::pair<float, float> find_interval_interpolated(
 
   return {key, y};
 }
+
+// Android 16 Khmer fonts.xml can map CSS weight 400 to an out-of-range
+// variable font wght axis value. Keep XML mappings unless that incompatibility
+// is detected for the Khmer family on Android 16.
+class Android16KhmerXmlWeightAxisFix {
+ public:
+  Android16KhmerXmlWeightAxisFix(
+      const FontFamily& family, const std::string& variation_url,
+      const std::unordered_map<std::string, std::shared_ptr<TypefaceFreeType>>&
+          base_typeface_map) {
+    if (!ShouldInspectFamily(family) || variation_url.empty()) {
+      return;
+    }
+
+    auto typeface_iter = base_typeface_map.find(variation_url);
+    if (typeface_iter == base_typeface_map.end()) {
+      return;
+    }
+
+    bool has_wght_axis = false;
+    for (const auto& axis :
+         typeface_iter->second->GetVariationDesignParameters()) {
+      if (axis.tag == SetFourByteTag('w', 'g', 'h', 't')) {
+        min_wght_ = axis.min;
+        max_wght_ = axis.max;
+        has_wght_axis = true;
+        break;
+      }
+    }
+    if (!has_wght_axis) {
+      return;
+    }
+
+    for (const auto& font_file : family.fonts) {
+      if (family.base_path + font_file.file_name != variation_url) {
+        continue;
+      }
+      auto axis_iter = font_file.axis_tags.find("wght");
+      if (axis_iter == font_file.axis_tags.end()) {
+        continue;
+      }
+      if (axis_iter->second < min_wght_ || axis_iter->second > max_wght_) {
+        enabled_ = true;
+        return;
+      }
+    }
+  }
+
+  float ResolveAxisValue(const FontFileInfo& font_file, const std::string& tag,
+                         float xml_value) const {
+    if (!enabled_ || tag != "wght" || font_file.weight == 0) {
+      return xml_value;
+    }
+    float requested_weight = static_cast<float>(font_file.weight);
+    return std::max(min_wght_, std::min(requested_weight, max_wght_));
+  }
+
+ private:
+  static bool ShouldInspectFamily(const FontFamily& family) {
+    if (android_get_device_api_level() != kAndroid16ApiLevel) {
+      return false;
+    }
+
+    return std::any_of(family.languages.begin(), family.languages.end(),
+                       [](const std::string& language) {
+                         return language == "km" || language == "und-Khmr" ||
+                                language.rfind("km-", 0) == 0 ||
+                                language.find("-Khmr") != std::string::npos;
+                       });
+  }
+
+  bool enabled_ = false;
+  float min_wght_ = 0.f;
+  float max_wght_ = 0.f;
+};
 
 class TypefaceFreeTypeAndroid : public TypefaceFreeType {
  public:
@@ -151,6 +230,8 @@ class FontStyleSetAndroid : public FontStyleSet {
 
     // check axes
     bool has_same_axes = false;  // except for weight
+    Android16KhmerXmlWeightAxisFix weight_axis_fix(family, variation_url,
+                                                   base_typeface_map_);
     if (Settings::GetSettings().IsAnyWeightEnabled() && variation_count == 1 &&
         !variation_url.empty()) {
       std::array<std::vector<VariationPosition>, 2> position_lists;
@@ -191,9 +272,12 @@ class FontStyleSetAndroid : public FontStyleSet {
               const char* chars = axis.first.c_str();
               position.AddCoordinate(
                   SetFourByteTag(chars[0], chars[1], chars[2], chars[3]),
-                  axis.second);
+                  weight_axis_fix.ResolveAxisValue(font_file, axis.first,
+                                                   axis.second));
             } else {
-              weight_mapping_ptr->emplace_back(font_file.weight, axis.second);
+              weight_mapping_ptr->emplace_back(
+                  font_file.weight, weight_axis_fix.ResolveAxisValue(
+                                        font_file, axis.first, axis.second));
             }
           }
           positions_ptr->emplace_back(position);
@@ -265,7 +349,8 @@ class FontStyleSetAndroid : public FontStyleSet {
             const char* chars = axis.first.c_str();
             position.AddCoordinate(
                 SetFourByteTag(chars[0], chars[1], chars[2], chars[3]),
-                axis.second);
+                weight_axis_fix.ResolveAxisValue(font_file, axis.first,
+                                                 axis.second));
           }
           font_args.SetVariationDesignPosition(position);
           variation_base_ = std::make_shared<TypefaceFreeTypeAndroid>(
@@ -302,7 +387,8 @@ class FontStyleSetAndroid : public FontStyleSet {
               const char* chars = axis.first.c_str();
               position.AddCoordinate(
                   SetFourByteTag(chars[0], chars[1], chars[2], chars[3]),
-                  axis.second);
+                  weight_axis_fix.ResolveAxisValue(font_file, axis.first,
+                                                   axis.second));
             }
             font_args.SetVariationDesignPosition(position);
             auto variation_face = typeface->MakeVariation(font_args);
