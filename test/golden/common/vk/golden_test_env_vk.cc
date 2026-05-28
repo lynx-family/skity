@@ -190,7 +190,8 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvVK::RenderToTexture(
   color_desc.format = GPUTextureFormat::kRGBA8Unorm;
   color_desc.usage =
       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment) |
-      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kCopySrc);
+      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kCopySrc) |
+      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
   color_desc.storage_mode = GPUTextureStorageMode::kPrivate;
 
   auto color_texture = device->CreateTexture(color_desc);
@@ -226,8 +227,11 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvVK::RenderToTexture(
   surface_desc.image = vk_texture->GetImage();
   surface_desc.image_view = vk_texture->GetImageView();
   surface_desc.format = VK_FORMAT_R8G8B8A8_UNORM;
+  surface_desc.image_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                             VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                             VK_IMAGE_USAGE_SAMPLED_BIT;
   surface_desc.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-  surface_desc.final_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  surface_desc.final_layout = VK_IMAGE_LAYOUT_GENERAL;
   surface_desc.owns_image = false;
   surface_desc.owns_image_view = false;
 
@@ -248,7 +252,7 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvVK::RenderToTexture(
   // Read pixels from the rendered texture
   std::vector<uint8_t> pixels;
   if (!ReadPixelsFromVulkanImage(state, vk_texture->GetImage(),
-                                 vk_texture->GetCurrentLayout(), width, height,
+                                 surface_desc.final_layout, width, height,
                                  &pixels)) {
     std::cerr << "Failed to read pixels from Vulkan texture" << std::endl;
     return {};

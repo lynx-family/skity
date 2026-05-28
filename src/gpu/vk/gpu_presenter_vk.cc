@@ -266,6 +266,7 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   surface_desc.image = swapchain_images_[image_index];
   surface_desc.image_view = swapchain_image_views_[image_index];
   surface_desc.format = swapchain_format_;
+  surface_desc.image_usage = swapchain_image_usage_;
   surface_desc.pre_transform = swapchain_transform_;
   surface_desc.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
   surface_desc.final_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -277,10 +278,18 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   texture_desc.width = desc_.width;
   texture_desc.height = desc_.height;
   texture_desc.mip_level_count = 1;
-  texture_desc.sample_count = acquire_desc.sample_count;
+  texture_desc.sample_count = 1;
   texture_desc.format = ToGPUTextureFormat(swapchain_format_);
   texture_desc.usage =
       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment);
+  if ((swapchain_image_usage_ & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0) {
+    texture_desc.usage |=
+        static_cast<GPUTextureUsageMask>(GPUTextureUsage::kCopySrc);
+  }
+  if ((swapchain_image_usage_ & VK_IMAGE_USAGE_SAMPLED_BIT) != 0) {
+    texture_desc.usage |=
+        static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
+  }
   texture_desc.storage_mode = GPUTextureStorageMode::kPrivate;
   if (texture_desc.format == GPUTextureFormat::kInvalid) {
     LOGE("Failed to acquire Vulkan surface: unsupported swapchain format");
@@ -512,6 +521,13 @@ bool GPUPresenterVK::CreateSwapchain() {
   create_info.imageExtent = swapchain_extent_;
   create_info.imageArrayLayers = 1;
   create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  if ((capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) !=
+      0) {
+    create_info.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  }
+  if ((capabilities.supportedUsageFlags & VK_IMAGE_USAGE_SAMPLED_BIT) != 0) {
+    create_info.imageUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+  }
   create_info.imageSharingMode = shared_present_queue
                                      ? VK_SHARING_MODE_CONCURRENT
                                      : VK_SHARING_MODE_EXCLUSIVE;
@@ -535,6 +551,8 @@ bool GPUPresenterVK::CreateSwapchain() {
       static_cast<uint32_t>(create_info.preTransform),
       static_cast<uint32_t>(create_info.compositeAlpha),
       static_cast<uint32_t>(create_info.imageUsage));
+
+  swapchain_image_usage_ = create_info.imageUsage;
 
   const VkResult result = fns_.vkCreateSwapchainKHR(
       state_->GetLogicalDevice(), &create_info, nullptr, &swapchain_);

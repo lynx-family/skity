@@ -288,9 +288,18 @@ VulkanContextState::LegacyRenderPassKey BuildLegacyRenderPassKey(
 
 VkImageLayout GetSampledImageLayout(const GPUTextureVK& texture) {
   const auto current_layout = texture.GetCurrentLayout();
-  return current_layout != VK_IMAGE_LAYOUT_UNDEFINED
-             ? current_layout
-             : texture.GetPreferredLayout();
+  if (current_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ||
+      current_layout == VK_IMAGE_LAYOUT_GENERAL) {
+    return current_layout;
+  }
+
+  const auto preferred_layout = texture.GetPreferredLayout();
+  if (preferred_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ||
+      preferred_layout == VK_IMAGE_LAYOUT_GENERAL) {
+    return preferred_layout;
+  }
+
+  return VK_IMAGE_LAYOUT_GENERAL;
 }
 
 struct DescriptorPoolRequirements {
@@ -389,7 +398,7 @@ bool PrepareSampledTextures(const VulkanContextState& state,
       }
 
       if (!TransitionImageLayout(state, command_buffer.GetCommandBuffer(),
-                                 *texture, texture->GetPreferredLayout())) {
+                                 *texture, GetSampledImageLayout(*texture))) {
         return false;
       }
     }

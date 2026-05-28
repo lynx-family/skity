@@ -204,7 +204,7 @@ jobs:
           - name: Build And Test
             run: |
                 export PATH=$PATH:$PWD/buildtools/cmake/CMake.app/Contents/bin
-                cmake -B out/cmake_golden_test -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSKITY_MTL_BACKEND=ON -DSKITY_TEST=ON -DSKITY_GOLDEN_GUI=OFF
+                cmake -B out/cmake_golden_test -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSKITY_MTL_BACKEND=ON -DSKITY_VK_BACKEND=ON -DSKITY_TEST=ON -DSKITY_GOLDEN_GUI=OFF -DSKITY_VK_TEST_USE_SYSTEM_LOADER=OFF
                 cmake --build out/cmake_golden_test --target skity_golden_test_shape skity_golden_test_text
                 export MTL_DEBUG_LAYER=1
                 export METAL_DEBUG_ERROR_MODE=1
@@ -213,6 +213,10 @@ jobs:
           - name: Run Experimental GL Golden Test
             run: |
                 ./out/cmake_golden_test/test/golden/skity_golden_test_shape --backend gl
+          - name: Run Vulkan Golden Test
+            run: |
+                ./out/cmake_golden_test/test/golden/skity_golden_test_shape --backend vulkan
+                ./out/cmake_golden_test/test/golden/skity_golden_test_text --backend vulkan
 
     osx_metal_golden_test_ct:
         runs-on: lynx-darwin-14-medium

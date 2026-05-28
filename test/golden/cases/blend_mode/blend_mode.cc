@@ -27,6 +27,12 @@ static bool IsGLBackend() {
   return env != nullptr && env->GetBackend() == skity::testing::Backend::kGL;
 }
 
+static bool IsFramebufferFetchUnsupported() {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  return env != nullptr &&
+         env->GetBackend() == skity::testing::Backend::kVulkan;
+}
+
 static bool IsBasicSaveLayerBlendModeFileName(std::string_view file_name) {
   static constexpr std::array<std::string_view, 16> kSaveLayerBlendModeFiles = {
       "Modulate.png",  "Screen.png",     "Overlay.png",   "Darken.png",
@@ -461,11 +467,19 @@ static void RunBlendModeCompositeTest(
   RunBlendModeCompositeTest("blend_mode_composite_" path ".png", config)
 
 TEST(BlendModeGolden, CompositeFramebufferFetchSampleCount1) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP()
+        << "Framebuffer fetch golden cases are not supported on Vulkan";
+  }
   BLEND_MODE_COMPOSITE_TEST("framebuffer_fetch_sample_count_1",
                             FramebufferFetchConfig(1));
 }
 
 TEST(BlendModeGolden, CompositeFramebufferFetchSampleCount4) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP()
+        << "Framebuffer fetch golden cases are not supported on Vulkan";
+  }
   BLEND_MODE_COMPOSITE_TEST("framebuffer_fetch_sample_count_4",
                             FramebufferFetchConfig(4));
 }
@@ -686,12 +700,20 @@ static void RunBlendModeSaveLayerClipRectTest(
 }
 
 TEST(BlendModeGolden, ClipReplayFramebufferFetchSampleCount1) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP()
+        << "Framebuffer fetch golden cases are not supported on Vulkan";
+  }
   RunBlendModeClipReplayTest(
       "blend_mode_clip_replay_framebuffer_fetch_sample_count_1.png",
       FramebufferFetchConfig(1));
 }
 
 TEST(BlendModeGolden, ClipReplayFramebufferFetchSampleCount4) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP()
+        << "Framebuffer fetch golden cases are not supported on Vulkan";
+  }
   RunBlendModeClipReplayTest(
       "blend_mode_clip_replay_framebuffer_fetch_sample_count_4.png",
       FramebufferFetchConfig(4));
@@ -716,12 +738,20 @@ TEST(BlendModeGolden, RestoredClipPathTextureCopySampleCount1) {
 }
 
 TEST(BlendModeGolden, SaveLayerClipReplayFramebufferFetchSampleCount1) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP()
+        << "Framebuffer fetch golden cases are not supported on Vulkan";
+  }
   RunBlendModeSaveLayerClipReplayTest(
       "blend_mode_savelayer_clip_replay_framebuffer_fetch_sample_count_1.png",
       FramebufferFetchConfig(1));
 }
 
 TEST(BlendModeGolden, SaveLayerClipReplayFramebufferFetchSampleCount4) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP()
+        << "Framebuffer fetch golden cases are not supported on Vulkan";
+  }
   RunBlendModeSaveLayerClipReplayTest(
       "blend_mode_savelayer_clip_replay_framebuffer_fetch_sample_count_4.png",
       FramebufferFetchConfig(4));
@@ -740,12 +770,20 @@ TEST(BlendModeGolden, SaveLayerClipReplayTextureCopySampleCount4) {
 }
 
 TEST(BlendModeGolden, ClipRectFramebufferFetchSampleCount1) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP()
+        << "Framebuffer fetch golden cases are not supported on Vulkan";
+  }
   RunBlendModeClipRectTest(
       "blend_mode_clip_rect_framebuffer_fetch_sample_count_1.png",
       FramebufferFetchConfig(1));
 }
 
 TEST(BlendModeGolden, ClipRectFramebufferFetchSampleCount4) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP()
+        << "Framebuffer fetch golden cases are not supported on Vulkan";
+  }
   RunBlendModeClipRectTest(
       "blend_mode_clip_rect_framebuffer_fetch_sample_count_4.png",
       FramebufferFetchConfig(4));
@@ -764,12 +802,20 @@ TEST(BlendModeGolden, ClipRectTextureCopySampleCount4) {
 }
 
 TEST(BlendModeGolden, SaveLayerClipRectFramebufferFetchSampleCount1) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP()
+        << "Framebuffer fetch golden cases are not supported on Vulkan";
+  }
   RunBlendModeSaveLayerClipRectTest(
       "blend_mode_savelayer_clip_rect_framebuffer_fetch_sample_count_1.png",
       FramebufferFetchConfig(1));
 }
 
 TEST(BlendModeGolden, SaveLayerClipRectFramebufferFetchSampleCount4) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP()
+        << "Framebuffer fetch golden cases are not supported on Vulkan";
+  }
   RunBlendModeSaveLayerClipRectTest(
       "blend_mode_savelayer_clip_rect_framebuffer_fetch_sample_count_4.png",
       FramebufferFetchConfig(4));
