@@ -1,0 +1,153 @@
+# Copyright 2026 The Lynx Authors. All rights reserved.
+# Licensed under the Apache License Version 2.0 that can be found in the
+# LICENSE file in the root directory of this source tree.
+
+import("pugixml-static.gni")
+import("skity.gni")
+import("wgsl-cross.gni")
+
+_skity_root = get_path_info(".", "abspath")
+
+config("skity_public_config") {
+  include_dirs = [
+    ".",
+    "include",
+    "module/codec/include",
+    "module/wgx",
+    "module/wgx/include",
+    "third_party/glm",
+    "third_party/pugixml/src",
+  ]
+
+  defines = skity_compile_definitions
+}
+
+config("skity_private_config") {
+  cflags = [
+    "-fvisibility=hidden",
+    "-fvisibility-inlines-hidden",
+  ]
+
+  cflags_cc = [
+    "-include",
+    "cstdlib",
+    "-include",
+    "type_traits",
+    "-fno-exceptions",
+    "-fno-rtti",
+  ]
+
+  cflags_objcc = [
+    "-include",
+    "cstdlib",
+    "-include",
+    "type_traits",
+    "-fobjc-arc",
+  ]
+}
+
+static_library("wgsl_cross_ast") {
+  sources = [ "$_skity_root/module/wgx/wgsl/ast/function.cpp" ]
+
+  include_dirs = wgsl_cross_include_dirs
+  defines = wgsl_cross_compile_definitions
+
+  configs += [ ":skity_private_config" ]
+}
+
+static_library("wgsl_cross_glsl") {
+  sources = [ "$_skity_root/module/wgx/glsl/ast_printer.cpp" ]
+
+  include_dirs = wgsl_cross_include_dirs
+  defines = wgsl_cross_compile_definitions
+
+  configs += [ ":skity_private_config" ]
+}
+
+static_library("wgsl_cross_msl") {
+  sources = [
+    "$_skity_root/module/wgx/msl/ast_printer.cpp",
+    "$_skity_root/module/wgx/msl/attribute.cpp",
+    "$_skity_root/module/wgx/msl/uniform_capture.cpp",
+  ]
+
+  include_dirs = wgsl_cross_include_dirs
+  defines = wgsl_cross_compile_definitions
+
+  configs += [ ":skity_private_config" ]
+}
+
+static_library("wgsl_cross") {
+  sources = wgsl_cross_sources
+  sources -= [
+    "$_skity_root/module/wgx/glsl/ast_printer.cpp",
+    "$_skity_root/module/wgx/msl/ast_printer.cpp",
+    "$_skity_root/module/wgx/msl/attribute.cpp",
+    "$_skity_root/module/wgx/msl/uniform_capture.cpp",
+    "$_skity_root/module/wgx/wgsl/ast/function.cpp",
+  ]
+
+  include_dirs = wgsl_cross_include_dirs
+  defines = wgsl_cross_compile_definitions
+
+  configs += [ ":skity_private_config" ]
+
+  deps = [
+    ":wgsl_cross_ast",
+    ":wgsl_cross_glsl",
+    ":wgsl_cross_msl",
+  ]
+}
+
+static_library("pugixml_static") {
+  sources = pugixml_static_sources
+
+  include_dirs = pugixml_static_include_dirs
+  defines = [ "PUGIXML_NO_EXCEPTIONS" ]
+
+  configs += [ ":skity_private_config" ]
+}
+
+static_library("skity") {
+  sources = skity_sources
+
+  public_configs = [ ":skity_public_config" ]
+  configs += [ ":skity_private_config" ]
+
+  deps = [
+    ":pugixml_static",
+    ":wgsl_cross",
+  ]
+
+  if (is_mac) {
+    frameworks = [
+      "AppKit.framework",
+      "CoreGraphics.framework",
+      "CoreText.framework",
+      "Foundation.framework",
+      "Metal.framework",
+      "QuartzCore.framework",
+    ]
+  }
+}
+
+static_library("skity_codec_apple") {
+  sources = [
+    "module/codec/include/skity/codec/codec.hpp",
+    "module/codec/src/codec/apple/codec_apple.mm",
+  ]
+
+  public_configs = [ ":skity_public_config" ]
+  configs += [ ":skity_private_config" ]
+
+  deps = [ ":skity" ]
+
+  if (is_mac) {
+    frameworks = [
+      "CoreGraphics.framework",
+      "CoreServices.framework",
+      "Foundation.framework",
+      "ImageIO.framework",
+    ]
+  }
+}
