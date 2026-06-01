@@ -128,4 +128,37 @@ void GPUContextImpl::ResetOwnedResources() {
   gpu_device_.reset();
 }
 
+bool IsGPUBackendSupported(GPUBackendType type) {
+  switch (type) {
+    case GPUBackendType::kOpenGL:
+    case GPUBackendType::kWebGL2:
+#if defined(SKITY_OPENGL)
+      return true;
+#else
+      return false;
+#endif
+    case GPUBackendType::kVulkan:
+#if defined(SKITY_VULKAN)
+      return true;
+#else
+      return false;
+#endif
+    case GPUBackendType::kMetal:
+#if defined(SKITY_METAL)
+      return true;
+#else
+      return false;
+#endif
+    case GPUBackendType::kWebGPU:
+#if defined(__EMSCRIPTEN__)
+      return true;
+#else
+      return false;
+#endif
+    case GPUBackendType::kNone:
+      return false;
+  }
+  return false;
+}
+
 }  // namespace skity

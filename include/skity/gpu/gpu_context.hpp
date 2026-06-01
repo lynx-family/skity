@@ -18,6 +18,20 @@
 namespace skity {
 
 /**
+ * Query whether a specific GPU backend type is supported by this build.
+ *
+ * This is a compile-time check based on CMake configuration options
+ * (SKITY_GL_BACKEND, SKITY_VK_BACKEND, SKITY_MTL_BACKEND). The result
+ * does not reflect runtime device capabilities — for example,
+ * IsGPUBackendSupported(GPUBackendType::kVulkan) may return true even
+ * if the device has no Vulkan driver installed.
+ *
+ * @param type  The GPU backend type to query
+ * @return      true if the backend was compiled into this build
+ */
+bool SKITY_API IsGPUBackendSupported(GPUBackendType type);
+
+/**
  * @enum GPUError indicate the internal state about Skity engine
  */
 enum class GPUError {
