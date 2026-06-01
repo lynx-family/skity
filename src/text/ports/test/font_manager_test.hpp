@@ -75,8 +75,7 @@ class FontStyleSetTest : public FontStyleSet {
   friend std::shared_ptr<Typeface> find_family_style_character(
       const std::string& family_name,
       const std::vector<NameToFamily>& fallback_map, const FontStyle& style,
-      bool elegant, const std::vector<std::string>& lang_patterns,
-      Unichar character);
+      bool elegant, const std::string& lang_pattern, Unichar character);
 };
 
 struct NameToFamily {

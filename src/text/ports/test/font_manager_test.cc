@@ -103,6 +103,36 @@ static std::vector<FontFamily> LoadFontFamiliesFromJsonFile(
   return result;
 }
 
+std::vector<std::string> BuildLanguagePatternAndParents(const char* pattern) {
+  std::vector<std::string> lang_patterns;
+  if (pattern == nullptr) {
+    return lang_patterns;
+  }
+
+  std::string language_pattern(pattern);
+  if (language_pattern.empty()) {
+    return lang_patterns;
+  }
+
+  lang_patterns.emplace_back(language_pattern);
+  while (true) {
+    size_t parent_pos = language_pattern.rfind('-');
+    if (parent_pos == std::string::npos) {
+      break;
+    }
+
+    language_pattern.resize(parent_pos);
+    lang_patterns.emplace_back(language_pattern);
+  }
+  return lang_patterns;
+}
+
+bool FontVariantMatchesElegantSearch(FontVariants variant, bool elegant) {
+  bool variant_is_elegant = variant == FontVariants::kDefault_FontVariant ||
+                            variant == FontVariants::kElegant_FontVariant;
+  return variant_is_elegant == elegant;
+}
+
 FaceData TypefaceFreeTypeTest::OnGetFaceData() const {
   FaceData face_data;
   face_data.data = Data::MakeFromFileMapping(font_file_.c_str());
@@ -291,28 +321,16 @@ std::shared_ptr<Typeface> FontManagerTest::OnMatchFamilyStyle(
 std::shared_ptr<Typeface> find_family_style_character(
     const std::string& family_name,
     const std::vector<NameToFamily>& fallback_map, const FontStyle& style,
-    bool elegant, const std::vector<std::string>& lang_patterns,
-    Unichar character) {
+    bool elegant, const std::string& lang_pattern, Unichar character) {
   auto match_language = [](const std::vector<std::string>& font_langs,
-                           const std::vector<std::string>& patterns) -> bool {
-    if (patterns.empty()) {
+                           const std::string& pattern) -> bool {
+    if (pattern.empty()) {
       return true;
     }
-    bool match = false;
-    for (const auto& pattern : patterns) {
-      if (pattern.empty()) {
-        match = true;
-        break;
-      }
-      if (std::any_of(font_langs.begin(), font_langs.end(),
-                      [&pattern](const std::string& lang) {
-                        return lang.rfind(pattern.c_str(), 0) == 0;
-                      })) {
-        match = true;
-        break;
-      }
-    }
-    return match;
+    return std::any_of(font_langs.begin(), font_langs.end(),
+                       [&pattern](const std::string& lang) {
+                         return lang.rfind(pattern.c_str(), 0) == 0;
+                       });
   };
   for (size_t i = 0; i < fallback_map.size(); ++i) {
     std::shared_ptr<FontStyleSetTest> style_set = fallback_map[i].styleSet;
@@ -323,12 +341,12 @@ std::shared_ptr<Typeface> find_family_style_character(
     std::shared_ptr<TypefaceFreeTypeTest> typeface_android =
         std::static_pointer_cast<TypefaceFreeTypeTest>(typeface);
 
-    if (!match_language(typeface_android->GetFontLanguages(), lang_patterns)) {
+    if (!match_language(typeface_android->GetFontLanguages(), lang_pattern)) {
       continue;
     }
 
-    if ((typeface_android->GetFontVariants() ==
-         FontVariants::kElegant_FontVariant) != elegant) {
+    if (!FontVariantMatchesElegantSearch(typeface_android->GetFontVariants(),
+                                         elegant)) {
       continue;
     }
 
@@ -342,24 +360,6 @@ std::shared_ptr<Typeface> find_family_style_character(
 std::shared_ptr<Typeface> FontManagerTest::OnMatchFamilyStyleCharacter(
     const char familyName[], const FontStyle& style, const char* bcp47[],
     int bcp47_count, Unichar character) const {
-  // split language pattern
-  std::vector<std::string> lang_patterns;
-  for (int bcp47_index = bcp47_count; bcp47_index-- > 0;) {
-    const char* pattern = bcp47[bcp47_index];
-    if (pattern == nullptr) {
-      continue;
-    }
-    size_t pattern_len = strlen(pattern);
-    lang_patterns.emplace_back(pattern, pattern_len);
-
-    const char* parent = pattern;
-    while (auto parent_pos = strrchr(parent, '-')) {
-      size_t parent_len = parent_pos - parent;
-      lang_patterns.emplace_back(pattern, parent_len);
-      parent = lang_patterns.back().c_str();
-    }
-  }
-
   std::vector<std::string> family_names;
   if (familyName && strlen(familyName) > 0) {
     family_names.emplace_back(familyName);
@@ -368,9 +368,26 @@ std::shared_ptr<Typeface> FontManagerTest::OnMatchFamilyStyleCharacter(
 
   for (const auto& family_name : family_names) {
     for (int elegant = 2; elegant-- > 0;) {
+      // Match Skia's Android fallback order: try each BCP47 tag and its
+      // parents as separate passes before falling back to any language.
+      if (bcp47) {
+        for (int bcp47_index = bcp47_count; bcp47_index-- > 0;) {
+          for (const auto& lang_pattern :
+               BuildLanguagePatternAndParents(bcp47[bcp47_index])) {
+            std::shared_ptr<Typeface> matching_typeface =
+                find_family_style_character(
+                    family_name, fallback_name_to_family_map_, style,
+                    static_cast<bool>(elegant), lang_pattern, character);
+            if (matching_typeface) {
+              return std::move(matching_typeface);
+            }
+          }
+        }
+      }
+
       std::shared_ptr<Typeface> matching_typeface = find_family_style_character(
           family_name, fallback_name_to_family_map_, style,
-          static_cast<bool>(elegant), lang_patterns, character);
+          static_cast<bool>(elegant), std::string(), character);
       if (matching_typeface) {
         return std::move(matching_typeface);
       }
