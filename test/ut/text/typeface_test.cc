@@ -106,6 +106,24 @@ TEST_F(TypefaceTest, TypefaceIdIsStable) {
   EXPECT_EQ(cjk_typeface1->TypefaceId(), cjk_typeface2->TypefaceId());
 }
 
+TEST_F(TypefaceTest, MatchFamilyStyleCharacterFallsBackWhenBcp47Misses) {
+  const char* bcp47[] = {"zz-Zzzz"};
+  auto typeface = FontManager::RefDefault()->MatchFamilyStyleCharacter(
+      nullptr, FontStyle(), bcp47, 1, 23383);
+
+  ASSERT_NE(typeface, nullptr);
+  EXPECT_NE(typeface->UnicharToGlyph(23383), 0);
+}
+
+TEST_F(TypefaceTest, MatchFamilyStyleCharacterFindsEmojiBcp47) {
+  const char* bcp47[] = {"und-Zsye"};
+  auto typeface = FontManager::RefDefault()->MatchFamilyStyleCharacter(
+      nullptr, FontStyle(), bcp47, 1, 0x1F60A);
+
+  ASSERT_NE(typeface, nullptr);
+  EXPECT_NE(typeface->UnicharToGlyph(0x1F60A), 0);
+}
+
 TEST_F(TypefaceTest, UnicharToGlyphBasic) {
   GlyphID g1 = default_typeface->UnicharToGlyph('A');
   GlyphID g2 = default_typeface->UnicharToGlyph('B');
