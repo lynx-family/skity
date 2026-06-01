@@ -47,8 +47,12 @@ endif()
 
 if (${SKITY_VK_BACKEND})
   if (NOT TARGET volk::volk)
+    set(VULKAN_HEADERS_INSTALL_DIR ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers
+        CACHE PATH "Use bundled Vulkan headers for examples" FORCE)
     set(VOLK_PULL_IN_VULKAN OFF CACHE BOOL "Disable Volk Vulkan lookup" FORCE)
     add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/volk third_party/volk)
+    target_include_directories(volk PUBLIC
+      ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include)
   endif()
 
   target_compile_definitions(skity_example_common PUBLIC -DSKITY_EXAMPLE_VK_BACKEND=1)

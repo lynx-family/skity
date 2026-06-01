@@ -249,6 +249,16 @@ struct GPUSurfaceDescriptorVK : public GPUSurfaceDescriptor {
   VkFormat format = VK_FORMAT_UNDEFINED;
 
   /**
+   * Usage flags that the user provided image was created with.
+   *
+   * Skity uses this to expose matching GPUTextureUsage capabilities for the
+   * wrapped image. For example, root-layer texture-copy dst read requires
+   * `VK_IMAGE_USAGE_TRANSFER_SRC_BIT`, and MSAA emulated load additionally
+   * requires `VK_IMAGE_USAGE_SAMPLED_BIT`.
+   */
+  VkImageUsageFlags image_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+  /**
    * Optional pre-transform for the current frame target.
    *
    * This is especially useful when `image` comes from a swapchain image whose

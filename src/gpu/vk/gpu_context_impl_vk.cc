@@ -136,6 +136,34 @@ bool ContainsExtension(const std::vector<std::string>& extensions,
   return false;
 }
 
+GPUTextureUsageMask ToGPUTextureUsageMask(VkImageUsageFlags image_usage) {
+  GPUTextureUsageMask usage = 0;
+
+  if ((image_usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                      VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) != 0) {
+    usage |=
+        static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment);
+  }
+
+  if ((image_usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0) {
+    usage |= static_cast<GPUTextureUsageMask>(GPUTextureUsage::kCopySrc);
+  }
+
+  if ((image_usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0) {
+    usage |= static_cast<GPUTextureUsageMask>(GPUTextureUsage::kCopyDst);
+  }
+
+  if ((image_usage & VK_IMAGE_USAGE_SAMPLED_BIT) != 0) {
+    usage |= static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
+  }
+
+  if ((image_usage & VK_IMAGE_USAGE_STORAGE_BIT) != 0) {
+    usage |= static_cast<GPUTextureUsageMask>(GPUTextureUsage::kStorageBinding);
+  }
+
+  return usage;
+}
+
 bool QueryInstanceExtensions(const VulkanGlobalFns& global_fns,
                              std::vector<VkExtensionProperties>* extensions) {
   if (extensions == nullptr) {
@@ -723,8 +751,7 @@ std::unique_ptr<GPUSurface> GPUContextVK::CreateSurface(
   texture_desc.mip_level_count = 1;
   texture_desc.sample_count = 1;
   texture_desc.format = ToGPUTextureFormat(vk_desc->format);
-  texture_desc.usage =
-      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment);
+  texture_desc.usage = ToGPUTextureUsageMask(vk_desc->image_usage);
   texture_desc.storage_mode = GPUTextureStorageMode::kPrivate;
 
   if (texture_desc.format == GPUTextureFormat::kInvalid) {

@@ -87,6 +87,8 @@ class GPUPresenterVK : public GPUPresenter {
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
   VkExtent2D swapchain_extent_ = {};
   VkFormat swapchain_format_ = VK_FORMAT_UNDEFINED;
+  VkImageUsageFlags swapchain_image_usage_ =
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
   VkPresentModeKHR swapchain_present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
   VkSurfaceTransformFlagBitsKHR swapchain_transform_ =
       VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;

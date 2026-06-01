@@ -27,7 +27,17 @@ class VKRootLayer : public HWRootLayer {
   std::shared_ptr<GPURenderPass> OnBeginRenderPass(GPUCommandBuffer* cmd,
                                                    bool force_load) override;
 
+  bool OnCopyToDstTexture(GPUCommandBuffer* cmd,
+                          std::shared_ptr<GPUTexture> dst_texture,
+                          GPURegion copy_region) const override;
+
   bool IsValid() const override { return color_attachment_ != nullptr; }
+
+  bool SupportsTextureCopyDstRead() const override;
+
+  std::shared_ptr<GPUTexture> GetResolveColorTexture() const override {
+    return color_attachment_;
+  }
 
  private:
   std::shared_ptr<GPUTexture> color_attachment_ = {};

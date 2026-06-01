@@ -199,8 +199,8 @@ skity::Canvas* WindowVK::AquireCanvas() {
       static_cast<float>(logical_width * logical_width +
                          logical_height * logical_height);
   skity::GPUSurfaceAcquireDescriptor acquire_desc = {};
-  acquire_desc.sample_count = 4;
-  acquire_desc.content_scale = std::sqrt(density);
+  acquire_desc.sample_count = UseDebugAAPresent() ? GetAASampleCount() : 4;
+  acquire_desc.content_scale = UseDebugAAPresent() ? 1.f : std::sqrt(density);
 
   auto acquire_result = presenter->AcquireNextSurface(acquire_desc);
   if (acquire_result.status == skity::GPUPresenterStatus::kNeedRecreate) {
