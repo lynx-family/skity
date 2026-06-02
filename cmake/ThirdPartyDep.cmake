@@ -53,6 +53,9 @@ if(${SKITY_VK_BACKEND})
       target_compile_definitions(skity PRIVATE SKITY_VK_USE_WAYLAND)
     endif()
   endif()
+elseif(${SKITY_HW_RENDERER})
+  # Only Vulkan headers are needed for stub compilation when VK backend is off
+  target_include_directories(skity PRIVATE third_party/Vulkan-Headers/include)
 endif()
 
 # json parser

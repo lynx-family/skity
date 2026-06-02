@@ -524,6 +524,14 @@ if(${SKITY_HW_RENDERER})
       ${CMAKE_CURRENT_LIST_DIR}/render/hw/vk/vk_root_layer.cc
       ${CMAKE_CURRENT_LIST_DIR}/render/hw/vk/vk_root_layer.hpp
     )
+  else()
+    # Stub implementations so Vulkan symbols remain available when the backend
+    # is disabled, preventing link errors and runtime SO loading failures.
+    target_sources(
+      skity
+      PRIVATE
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/vk/gpu_context_vk_stub.cc
+    )
   endif()
 endif()
 
