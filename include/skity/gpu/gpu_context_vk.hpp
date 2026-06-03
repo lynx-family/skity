@@ -298,6 +298,51 @@ struct GPUSurfaceDescriptorVK : public GPUSurfaceDescriptor {
   const GPUSurfaceSyncInfoVK* sync_info = nullptr;
 };
 
+struct GPUBackendTextureInfoVK : public GPUBackendTextureInfo {
+  /**
+   * User provided Vulkan image to wrap.
+   */
+  VkImage image = VK_NULL_HANDLE;
+
+  /**
+   * User provided image view matching `image`.
+   */
+  VkImageView image_view = VK_NULL_HANDLE;
+
+  /**
+   * Vulkan format of the image.
+   */
+  VkFormat vk_format = VK_FORMAT_UNDEFINED;
+
+  /**
+   * Usage flags that the user provided image was created with.
+   *
+   * Skity uses this to expose matching GPUTextureUsage capabilities for the
+   * wrapped image.
+   */
+  VkImageUsageFlags image_usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+
+  /**
+   * Current image layout when the engine begins using this texture.
+   */
+  VkImageLayout initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  /**
+   * Image layout the engine should transition to after use.
+   */
+  VkImageLayout final_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+  /**
+   * Whether the engine owns `image` and should destroy it on release.
+   */
+  bool owns_image = false;
+
+  /**
+   * Whether the engine owns `image_view` and should destroy it on release.
+   */
+  bool owns_image_view = false;
+};
+
 struct GPUPresenterDescriptorVK : public GPUPresenterDescriptor {
   /**
    * Vulkan presentation surface used to create the swapchain.

@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "src/gpu/vk/gpu_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_device_vk.hpp"
 #include "src/gpu/vk/gpu_presenter_vk.hpp"
 #include "src/gpu/vk/gpu_surface_vk.hpp"
@@ -214,6 +215,94 @@ void LogInstanceExtensions(
          extension.extensionName, extension.specVersion);
   }
 #endif
+}
+
+VkImageAspectFlags GetImageAspectMaskForReadPixels(GPUTextureFormat format) {
+  switch (format) {
+    case GPUTextureFormat::kStencil8:
+      return VK_IMAGE_ASPECT_STENCIL_BIT;
+    case GPUTextureFormat::kDepth24Stencil8:
+      return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    case GPUTextureFormat::kInvalid:
+      return 0;
+    default:
+      return VK_IMAGE_ASPECT_COLOR_BIT;
+  }
+}
+
+VkAccessFlags AccessMaskForLayout(VkImageLayout layout) {
+  switch (layout) {
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+      return VK_ACCESS_TRANSFER_WRITE_BIT;
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+      return VK_ACCESS_TRANSFER_READ_BIT;
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+      return VK_ACCESS_SHADER_READ_BIT;
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+      return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+      return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    case VK_IMAGE_LAYOUT_GENERAL:
+      return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
+             VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    default:
+      return 0;
+  }
+}
+
+VkPipelineStageFlags StageMaskForLayout(VkImageLayout layout) {
+  switch (layout) {
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+      return VK_PIPELINE_STAGE_TRANSFER_BIT;
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+      return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+      return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+      return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+             VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    case VK_IMAGE_LAYOUT_GENERAL:
+      return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    default:
+      return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+  }
+}
+
+void TransitionImageLayoutForReadPixels(const VulkanContextState& state,
+                                        VkCommandBuffer command_buffer,
+                                        GPUTextureVK& texture,
+                                        VkImageLayout new_layout) {
+  const VkImageLayout old_layout = texture.GetCurrentLayout();
+  if (old_layout == new_layout) {
+    return;
+  }
+
+  VkImageMemoryBarrier barrier = {};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.oldLayout = old_layout;
+  barrier.newLayout = new_layout;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = texture.GetImage();
+  barrier.subresourceRange.aspectMask =
+      GetImageAspectMaskForReadPixels(texture.GetDescriptor().format);
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = texture.GetDescriptor().mip_level_count;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+  barrier.srcAccessMask = AccessMaskForLayout(old_layout);
+  barrier.dstAccessMask = AccessMaskForLayout(new_layout);
+
+  state.DeviceFns().vkCmdPipelineBarrier(
+      command_buffer, StageMaskForLayout(old_layout),
+      StageMaskForLayout(new_layout), 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+  texture.SetCurrentLayout(new_layout);
 }
 
 }  // namespace
@@ -438,6 +527,8 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkCmdBlitImage"));
   fns->vkCmdCopyBufferToImage = reinterpret_cast<PFN_vkCmdCopyBufferToImage>(
       get_device_proc_addr(device, "vkCmdCopyBufferToImage"));
+  fns->vkCmdCopyImageToBuffer = reinterpret_cast<PFN_vkCmdCopyImageToBuffer>(
+      get_device_proc_addr(device, "vkCmdCopyImageToBuffer"));
   fns->vkCmdPipelineBarrier = reinterpret_cast<PFN_vkCmdPipelineBarrier>(
       get_device_proc_addr(device, "vkCmdPipelineBarrier"));
   fns->vkCmdBeginRendering = LoadDeviceProcByName<PFN_vkCmdBeginRendering>(
@@ -576,7 +667,7 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
   }
 
   return true;
-}
+}  // NOLINT(readability/fn_size)
 
 void EnablePortabilityEnumerationIfAvailable(
     const std::vector<VkExtensionProperties>& available_extensions,
@@ -793,26 +884,187 @@ std::unique_ptr<GPUDevice> GPUContextVK::CreateGPUDevice() {
 std::shared_ptr<GPUTexture> GPUContextVK::OnWrapTexture(
     GPUBackendTextureInfo* info, ReleaseCallback callback,
     ReleaseUserData user_data) {
-  (void)info;
-  (void)callback;
-  (void)user_data;
-  LOGW("GPUContextVK::OnWrapTexture is not implemented yet");
-  return {};
+  if (info->backend != GPUBackendType::kVulkan) {
+    return nullptr;
+  }
+
+  auto* vk_info = static_cast<GPUBackendTextureInfoVK*>(info);
+
+  if (vk_info->image == VK_NULL_HANDLE ||
+      vk_info->image_view == VK_NULL_HANDLE ||
+      vk_info->vk_format == VK_FORMAT_UNDEFINED || vk_info->width == 0 ||
+      vk_info->height == 0) {
+    LOGE("GPUContextVK::OnWrapTexture: invalid descriptor");
+    return nullptr;
+  }
+
+  GPUTextureFormat gpu_format = ToGPUTextureFormat(vk_info->vk_format);
+  if (gpu_format == GPUTextureFormat::kInvalid) {
+    LOGE("GPUContextVK::OnWrapTexture: unsupported VkFormat {}",
+         static_cast<int32_t>(vk_info->vk_format));
+    return nullptr;
+  }
+
+  GPUTextureDescriptor desc = {};
+  desc.width = vk_info->width;
+  desc.height = vk_info->height;
+  desc.mip_level_count = 1;
+  desc.sample_count = 1;
+  desc.format = gpu_format;
+  desc.usage = ToGPUTextureUsageMask(vk_info->image_usage);
+  desc.storage_mode = GPUTextureStorageMode::kPrivate;
+
+  auto texture = GPUTextureVK::Wrap(
+      state_, desc, vk_info->image, vk_info->image_view,
+      vk_info->initial_layout, vk_info->final_layout, vk_info->vk_format,
+      vk_info->owns_image, vk_info->owns_image_view);
+  if (texture == nullptr) {
+    return nullptr;
+  }
+
+  texture->SetRelease(callback, user_data);
+  return texture;
 }
 
 std::unique_ptr<GPURenderTarget> GPUContextVK::OnCreateRenderTarget(
     const GPURenderTargetDescriptor& desc, std::shared_ptr<Texture> texture) {
-  (void)desc;
-  (void)texture;
-  LOGW("GPUContextVK::OnCreateRenderTarget is not implemented yet");
-  return {};
+  if (texture == nullptr) {
+    return nullptr;
+  }
+
+  auto gpu_texture = texture->GetGPUTexture();
+  if (gpu_texture == nullptr) {
+    return nullptr;
+  }
+
+  auto* vk_texture = GPUTextureVK::Cast(gpu_texture.get());
+  if (vk_texture == nullptr || !vk_texture->IsValid()) {
+    return nullptr;
+  }
+
+  GPUTextureDescriptor texture_desc = {};
+  texture_desc.width = desc.width;
+  texture_desc.height = desc.height;
+  texture_desc.mip_level_count = 1;
+  texture_desc.sample_count = desc.sample_count;
+  texture_desc.format = ToGPUTextureFormat(vk_texture->GetVkFormat());
+  texture_desc.usage = ToGPUTextureUsageMask(
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+  texture_desc.storage_mode = GPUTextureStorageMode::kPrivate;
+
+  if (texture_desc.format == GPUTextureFormat::kInvalid) {
+    LOGE("GPUContextVK::OnCreateRenderTarget: unsupported VkFormat {}",
+         static_cast<int32_t>(vk_texture->GetVkFormat()));
+    return nullptr;
+  }
+
+  // Wrap the existing Vulkan handles without taking ownership. The original
+  // GPUTextureVK (managed by TextureManager) owns the handles and controls
+  // their lifecycle.
+  auto wrapped_texture = GPUTextureVK::Wrap(
+      state_, texture_desc, vk_texture->GetImage(), vk_texture->GetImageView(),
+      vk_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      vk_texture->GetVkFormat(), false, false);
+  if (wrapped_texture == nullptr) {
+    return nullptr;
+  }
+
+  GPUSurfaceDescriptorVK surface_desc = {};
+  surface_desc.backend = GPUBackendType::kVulkan;
+  surface_desc.width = desc.width;
+  surface_desc.height = desc.height;
+  surface_desc.content_scale = 1.0f;
+  surface_desc.sample_count = desc.sample_count;
+  surface_desc.surface_type = VKSurfaceType::kTexture;
+
+  auto surface = std::make_unique<GPUSurfaceVK>(surface_desc, this,
+                                                std::move(wrapped_texture),
+                                                texture_desc.format, nullptr);
+
+  return std::make_unique<GPURenderTarget>(std::move(surface), texture);
 }
 
 std::shared_ptr<Data> GPUContextVK::OnReadPixels(
     const std::shared_ptr<GPUTexture>& texture) const {
-  (void)texture;
-  LOGW("GPUContextVK::OnReadPixels is not implemented yet");
-  return {};
+  auto* vk_texture = GPUTextureVK::Cast(texture.get());
+  if (vk_texture == nullptr || !vk_texture->IsValid()) {
+    return nullptr;
+  }
+
+  const auto& desc = vk_texture->GetDescriptor();
+  const size_t bytes_per_pixel = GetTextureFormatBytesPerPixel(desc.format);
+  if (bytes_per_pixel == 0) {
+    LOGE("GPUContextVK::OnReadPixels: unsupported texture format");
+    return nullptr;
+  }
+
+  const size_t total_bytes =
+      static_cast<size_t>(desc.width) * desc.height * bytes_per_pixel;
+
+  // Create a host-visible staging buffer as the copy destination.
+  auto staging_buffer = std::make_unique<GPUBufferVK>(
+      0u, state_, GPUBufferVKMemoryType::kHostVisible);
+  if (!staging_buffer->ResizeIfNeeded(total_bytes)) {
+    LOGE("GPUContextVK::OnReadPixels: failed to create staging buffer");
+    return nullptr;
+  }
+
+  // Record and submit an image-to-buffer copy command.
+  auto command_buffer = std::make_shared<GPUCommandBufferVK>(state_);
+  if (!command_buffer->Init()) {
+    return nullptr;
+  }
+
+  command_buffer->SetLabel("VkReadPixels");
+
+  // Transition image to TRANSFER_SRC_OPTIMAL for reading.
+  TransitionImageLayoutForReadPixels(
+      *state_, command_buffer->GetCommandBuffer(), *vk_texture,
+      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+  VkBufferImageCopy copy_region = {};
+  copy_region.bufferOffset = 0;
+  copy_region.bufferRowLength = 0;
+  copy_region.bufferImageHeight = 0;
+  copy_region.imageSubresource.aspectMask =
+      GetImageAspectMaskForReadPixels(desc.format);
+  copy_region.imageSubresource.mipLevel = 0;
+  copy_region.imageSubresource.baseArrayLayer = 0;
+  copy_region.imageSubresource.layerCount = 1;
+  copy_region.imageOffset = {0, 0, 0};
+  copy_region.imageExtent = {desc.width, desc.height, 1};
+
+  state_->DeviceFns().vkCmdCopyImageToBuffer(
+      command_buffer->GetCommandBuffer(), vk_texture->GetImage(),
+      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging_buffer->GetBuffer(), 1,
+      &copy_region);
+
+  // Transition image back to its preferred layout.
+  TransitionImageLayoutForReadPixels(
+      *state_, command_buffer->GetCommandBuffer(), *vk_texture,
+      vk_texture->GetPreferredLayout());
+
+  // Keep the command buffer alive through the cleanup action so the staging
+  // buffer remains valid after CollectPendingSubmissions destroys the pending
+  // submission objects. The shared_ptr prevents early destruction.
+  command_buffer->RecordCleanupAction([command_buffer] {});
+
+  if (!command_buffer->Submit()) {
+    LOGE("GPUContextVK::OnReadPixels: failed to submit command buffer");
+    return nullptr;
+  }
+
+  // Wait for GPU to finish before reading back.
+  state_->CollectPendingSubmissions(true);
+
+  // Copy from mapped staging buffer into a Data object.
+  void* mapped = staging_buffer->GetMappedData();
+  if (mapped == nullptr) {
+    LOGE("GPUContextVK::OnReadPixels: staging buffer is not mapped");
+    return nullptr;
+  }
+
+  return Data::MakeWithCopy(mapped, total_bytes);
 }
 
 std::unique_ptr<GPUContext> CreateGPUContextVK(const GPUContextInfoVK* info) {
