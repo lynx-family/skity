@@ -97,6 +97,7 @@ struct VulkanDeviceFns {
   PFN_vkCmdCopyImage vkCmdCopyImage = nullptr;
   PFN_vkCmdBlitImage vkCmdBlitImage = nullptr;
   PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage = nullptr;
+  PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer = nullptr;
   PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier = nullptr;
   PFN_vkCmdBeginRendering vkCmdBeginRendering = nullptr;
   PFN_vkCmdEndRendering vkCmdEndRendering = nullptr;
