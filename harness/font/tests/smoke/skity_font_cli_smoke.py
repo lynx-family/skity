@@ -1,0 +1,294 @@
+# Copyright 2021 The Lynx Authors. All rights reserved.
+# Licensed under the Apache License Version 2.0 that can be found in the
+# LICENSE file in the root directory of this source tree.
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+CASE_ID = "font.synthetic.typeface"
+BACKEND = "coretext"
+
+
+def write_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def read_json(path):
+    return json.loads(path.read_text())
+
+
+def make_case():
+    return {
+        "schema_version": 1,
+        "id": CASE_ID,
+        "category": "typeface_probe",
+        "status": "active",
+        "backend": BACKEND,
+        "platforms": ["darwin-ct"],
+        "font_files": [
+            {
+                "id": "synthetic",
+                "uri": "repo://fonts/synthetic.ttf",
+                "collection_index": 0,
+            }
+        ],
+        "typeface_request": {
+            "entry": "MakeFromFile",
+            "font_file": "synthetic",
+        },
+        "glyphs": {"chars": ["U+0041"]},
+        "compare": {
+            "typeface_identity": "normalized_descriptor",
+            "font_style": "exact",
+        },
+    }
+
+
+def make_manifest():
+    return {
+        "schema_version": 1,
+        "id": "font.synthetic.smoke",
+        "backend": BACKEND,
+        "platforms": ["darwin-ct"],
+        "case_root": "cases",
+        "cases": ["typeface.json"],
+        "artifacts": {
+            "skia_dir": "artifacts/skia",
+            "skity_dir": "artifacts/skity",
+            "compare_dir": "artifacts/compare",
+        },
+    }
+
+
+def make_probe_artifact(glyph_id):
+    return {
+        "schema_version": 1,
+        "artifact_type": "font_probe_result",
+        "case_id": CASE_ID,
+        "backend": BACKEND,
+        "ok": True,
+        "typeface_result": {
+            "typeface": {
+                "family_name": "Synthetic",
+                "post_script_name": "Synthetic-Regular",
+                "collection_index": 0,
+                "style": {
+                    "weight": 400,
+                    "width": 5,
+                    "slant": "upright",
+                },
+            }
+        },
+        "typeface_probe": {
+            "units_per_em": 1000,
+            "table_count": 1,
+            "glyphs": [
+                {
+                    "label": "U+0041",
+                    "code_point": 65,
+                    "glyph_id": glyph_id,
+                }
+            ],
+            "tables": [
+                {
+                    "tag": "head",
+                    "tag_value": 1751474532,
+                    "size": 54,
+                }
+            ],
+        },
+    }
+
+
+def run_command(args):
+    return subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+def fail(label, result):
+    print(f"{label} failed", file=sys.stderr)
+    print("command:", " ".join(str(arg) for arg in result.args), file=sys.stderr)
+    print("exit:", result.returncode, file=sys.stderr)
+    print("stdout:", result.stdout, file=sys.stderr)
+    print("stderr:", result.stderr, file=sys.stderr)
+    return 1
+
+
+def expect_exit(label, result, expected_exit):
+    if result.returncode != expected_exit:
+        return fail(label, result)
+    return 0
+
+
+def expect_report_field(path, field, expected):
+    report = read_json(path)
+    value = report
+    for part in field.split("."):
+        if isinstance(value, list):
+            value = value[int(part)]
+        else:
+            value = value[part]
+    if value != expected:
+        print(
+            f"{path}: expected {field}={expected!r}, got {value!r}",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def main():
+    if len(sys.argv) != 2:
+        print("usage: skity_font_cli_smoke.py <skity-font>", file=sys.stderr)
+        return 2
+
+    skity_font = Path(sys.argv[1])
+    if not skity_font.is_file():
+        print(f"skity-font binary does not exist: {skity_font}", file=sys.stderr)
+        return 2
+
+    with tempfile.TemporaryDirectory(prefix="skity-font-cli-smoke-") as tmp:
+        tmp_dir = Path(tmp)
+        repo_root = tmp_dir / "repo"
+        case_path = repo_root / "cases/typeface.json"
+        manifest_path = repo_root / "manifests/smoke.json"
+        expected_path = tmp_dir / "expected.skia.json"
+        actual_path = tmp_dir / "actual.skity.json"
+        mismatch_path = tmp_dir / "actual-mismatch.skity.json"
+        report_dir = tmp_dir / "reports"
+
+        (repo_root / "fonts").mkdir(parents=True)
+        (repo_root / "fonts/synthetic.ttf").write_bytes(b"synthetic font bytes")
+        write_json(case_path, make_case())
+        write_json(manifest_path, make_manifest())
+        write_json(expected_path, make_probe_artifact(1))
+        write_json(actual_path, make_probe_artifact(1))
+        write_json(mismatch_path, make_probe_artifact(2))
+
+        case_info_report = report_dir / "case-info.json"
+        result = run_command(
+            [
+                skity_font,
+                "case-info",
+                "--case",
+                case_path,
+                "--repo-root",
+                repo_root,
+                "--report",
+                case_info_report,
+            ]
+        )
+        if expect_exit("case-info", result, 0):
+            return 1
+        if expect_report_field(case_info_report, "valid", True):
+            return 1
+
+        compare_report = report_dir / "compare-pass.json"
+        result = run_command(
+            [
+                skity_font,
+                "compare",
+                "--case",
+                case_path,
+                "--expected",
+                expected_path,
+                "--actual",
+                actual_path,
+                "--backend",
+                BACKEND,
+                "--repo-root",
+                repo_root,
+                "--report",
+                compare_report,
+            ]
+        )
+        if expect_exit("compare pass", result, 0):
+            return 1
+        if expect_report_field(compare_report, "passed", True):
+            return 1
+
+        mismatch_report = report_dir / "compare-mismatch.json"
+        result = run_command(
+            [
+                skity_font,
+                "compare",
+                "--case",
+                case_path,
+                "--expected",
+                expected_path,
+                "--actual",
+                mismatch_path,
+                "--backend",
+                BACKEND,
+                "--repo-root",
+                repo_root,
+                "--report",
+                mismatch_report,
+            ]
+        )
+        if expect_exit("compare mismatch", result, 1):
+            return 1
+        if expect_report_field(mismatch_report, "reason_code", "glyph_id_mismatch"):
+            return 1
+
+        missing_oracle_report = report_dir / "compare-missing-oracle.json"
+        result = run_command(
+            [
+                skity_font,
+                "compare",
+                "--case",
+                case_path,
+                "--expected",
+                tmp_dir / "missing.skia.json",
+                "--actual",
+                actual_path,
+                "--backend",
+                BACKEND,
+                "--repo-root",
+                repo_root,
+                "--report",
+                missing_oracle_report,
+            ]
+        )
+        if expect_exit("compare missing oracle", result, 6):
+            return 1
+        if expect_report_field(
+            missing_oracle_report, "reason_code", "oracle_unavailable"
+        ):
+            return 1
+
+        run_report = report_dir / "run-missing-oracle.json"
+        result = run_command(
+            [
+                skity_font,
+                "run",
+                "--manifest",
+                manifest_path,
+                "--backend",
+                BACKEND,
+                "--skia-dir",
+                tmp_dir / "missing-skia",
+                "--skity-dir",
+                tmp_dir / "skity",
+                "--repo-root",
+                repo_root,
+                "--report",
+                run_report,
+            ]
+        )
+        if expect_exit("run missing oracle", result, 6):
+            return 1
+        if expect_report_field(run_report, "input_failure_count", 1):
+            return 1
+        if expect_report_field(run_report, "cases.0.reason_code", "missing_oracle"):
+            return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

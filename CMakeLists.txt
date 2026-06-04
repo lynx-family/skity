@@ -194,6 +194,10 @@ if(${SKITY_EXAMPLE})
   add_subdirectory(example)
 endif()
 
+if(${SKITY_ENABLE_FONT_HARNESS})
+  add_subdirectory(harness/font)
+endif()
+
 if(${SKITY_TEST})
   add_subdirectory(test)
 endif()

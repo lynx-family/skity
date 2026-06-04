@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "pc_macos_coretext_smoke",
+  "backend": "coretext",
+  "platforms": [
+    "darwin-ct"
+  ],
+  "case_root": "harness/font/cases",
+  "cases": [
+    "typeface_probe/roboto_regular_file_coretext.json",
+    "typeface_probe/roboto_regular_data_coretext.json",
+    "font_metrics/roboto_regular_64_coretext.json",
+    "glyph_metrics/roboto_regular_latin_coretext.json",
+    "glyph_path/roboto_regular_latin_A_coretext.json",
+    "scaler_context/roboto_regular_64_coretext.json",
+    "family_style_set/helvetica_coretext.json",
+    "font_manager/default_typeface_coretext.json",
+    "font_manager/match_family_style_helvetica_regular_coretext.json"
+  ],
+  "artifacts": {
+    "skia_dir": "local/font-harness/artifacts/skia",
+    "skity_dir": "local/font-harness/artifacts/skity",
+    "compare_dir": "local/font-harness/artifacts/compare"
+  }
+}
