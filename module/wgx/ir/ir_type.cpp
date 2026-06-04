@@ -349,6 +349,12 @@ TypeTable::LayoutInfo TypeTable::GetLayoutInfo(TypeId id,
         offset = member_offset + member_info.size;
       }
 
+      // std140 rule 9: struct alignment is rounded up to the base alignment of
+      // a vec4 (16 bytes)
+      if (rule == LayoutRule::kStd140) {
+        max_align = AlignOffset(max_align, 16);
+      }
+
       // Round up struct size to its alignment
       uint32_t struct_size = AlignOffset(offset, max_align);
       return LayoutInfo{struct_size, max_align};

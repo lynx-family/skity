@@ -154,7 +154,8 @@ struct WGX_API Field {
 struct WGX_API StructDefinition : public TypeDefinition {
   std::vector<Field*> members = {};
 
-  StructDefinition(const std::string_view& name, std::vector<Field*> members);
+  StructDefinition(const std::string_view& name, std::vector<Field*> members,
+                   size_t min_alignment = 1);
 
   ~StructDefinition() override {
     for (auto* member : members) {
