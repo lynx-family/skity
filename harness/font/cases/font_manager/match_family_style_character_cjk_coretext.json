@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "id": "font.font_manager.coretext.match_family_style_character_cjk",
+  "category": "font_manager",
+  "status": "active",
+  "backend": "coretext",
+  "platforms": [
+    "darwin-ct"
+  ],
+  "font_manager_request": {
+    "entry": "MatchFamilyStyleCharacter",
+    "family_name": "Helvetica",
+    "style": {
+      "weight": 400,
+      "width": 5,
+      "slant": "upright"
+    },
+    "character": "U+4E00",
+    "bcp47": [
+      "zh-Hans"
+    ],
+    "sample_limit": 8
+  },
+  "font_request": {
+    "size": 64,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "normal"
+  },
+  "glyphs": {
+    "chars": [
+      "U+0041",
+      "U+4E00"
+    ]
+  },
+  "compare": {
+    "typeface_identity": "normalized_descriptor",
+    "font_style": "exact",
+    "font_metrics": {
+      "mode": "epsilon",
+      "epsilon": 0.001
+    }
+  }
+}

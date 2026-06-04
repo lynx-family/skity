@@ -123,6 +123,13 @@ endif()
 target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
 target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
 
+if(SKITY_ENABLE_FONT_HARNESS AND TARGET skity_font_harness)
+    target_sources(skity_unit_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/harness/font/tests/unit/font_harness_self_test.cc
+    )
+    target_link_libraries(skity_unit_test PRIVATE skity_font_harness)
+endif()
+
 if (${SKITY_VK_BACKEND})
     set(SKITY_VK_TEST_LOADER_LIBRARIES)
     set(SKITY_VK_TEST_RPATH)

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "font.typeface_probe.coretext.roboto_regular_data",
+  "category": "typeface_probe",
+  "status": "active",
+  "backend": "coretext",
+  "platforms": [
+    "darwin-ct"
+  ],
+  "font_files": [
+    {
+      "id": "roboto_regular",
+      "uri": "repo://test/fonts/resources/Roboto-Regular.ttf",
+      "collection_index": 0
+    }
+  ],
+  "typeface_request": {
+    "entry": "MakeFromData",
+    "font_file": "roboto_regular"
+  },
+  "glyphs": {
+    "chars": [
+      "U+0041",
+      "U+0061",
+      "U+0030"
+    ]
+  },
+  "compare": {
+    "typeface_identity": "normalized_descriptor",
+    "font_style": "exact"
+  }
+}

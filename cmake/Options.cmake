@@ -75,6 +75,8 @@ cmake_dependent_option(
 option(SKITY_LOG "option for logging" OFF)
 option(SKITY_CT_FONT "option for open CoreText font backend on Darwin" OFF)
 
+option(SKITY_ENABLE_FONT_HARNESS "option for building font harness CLI and tests" OFF)
+
 option(SKITY_USE_SELF_LIBCXX "option to force skity use self libcxx" OFF)
 option(SKITY_TRACE "option for enable skity tracing" OFF)
 option(SKITY_BENCH_ENABLE_PERFETTO "option for enable perfetto tracing for benchmark" OFF)
