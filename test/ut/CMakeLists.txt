@@ -32,6 +32,7 @@ add_executable(skity_unit_test
     render/hw/draw/hw_wgsl_shader_writer_test.cc
     wgx/wgx_backend_name_resolution_test.cc
     wgx/wgx_resolver_test.cc
+    wgx/wgx_uniform_layout_test.cc
     render/resource_cache_test.cc
     render/shape_test.cc
     recorder/display_list_test.cc

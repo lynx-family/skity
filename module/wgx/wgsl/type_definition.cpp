@@ -165,14 +165,18 @@ std::unique_ptr<TypeDefinition> CreateTypeDefinition(const ast::Type& type,
       return {};
     }
 
-    return std::make_unique<StructDefinition>(type_name, members);
+    // std140 and WGSL uniform require struct alignment >= 16
+    size_t min_align =
+        (layout == MemoryLayout::kStd140 || layout == MemoryLayout::kWGSL) ? 16
+                                                                           : 1;
+    return std::make_unique<StructDefinition>(type_name, members, min_align);
   }
 
   return {};
 }
 
 /**
- * calculate the struct alignment based on std140 layout rules
+ * calculate the struct alignment based on layout rules
  * @ref https://www.w3.org/TR/WGSL/#alignment-and-size
  *
  * AlignOf(S) = max(AlignOf(S.m0), ..., AlignOf(S.mN))
@@ -193,9 +197,18 @@ static size_t calculate_alignment(const std::vector<Field*>& members) {
 size_t round_up(size_t k, size_t n) { return (n + k - 1) / k * k; }
 
 StructDefinition::StructDefinition(const std::string_view& name,
-                                   std::vector<Field*> members)
-    : TypeDefinition(name, 0, calculate_alignment(members)),
-      members(std::move(members)) {
+                                   std::vector<Field*> members,
+                                   size_t min_alignment)
+    : TypeDefinition(name, 0, 0), members(std::move(members)) {
+  size_t align = calculate_alignment(this->members);
+
+  // For std140 / WGSL uniform: struct alignment must be at least 16 bytes
+  // per std140 rule 9 and WGSL uniform address space requirements.
+  if (min_alignment > align) {
+    align = min_alignment;
+  }
+  this->alignment = align;
+
   size_t offset = 0;
   for (auto* member : this->members) {
     offset = round_up(member->type->alignment, offset);
@@ -205,9 +218,8 @@ StructDefinition::StructDefinition(const std::string_view& name,
     offset += member->type->size;
   }
 
-  // round up size to 16 bytes to make sure buffer is big enough for all GPU
-  // validations
-  this->size = round_up(16, offset);
+  // Round up struct size to its alignment
+  this->size = round_up(align, offset);
 }
 
 bool StructDefinition::SetData(const void* data, size_t size) {
