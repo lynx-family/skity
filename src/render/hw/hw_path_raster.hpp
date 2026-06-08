@@ -12,6 +12,7 @@
 
 #include "src/geometry/wangs_formula.hpp"
 #include "src/render/hw/hw_path_visitor.hpp"
+#include "src/render/hw/hw_stroke_utils.hpp"
 
 namespace skity {
 
@@ -64,7 +65,8 @@ class HWPathStrokeRaster : public HWPathVisitor {
                      VectorCache<uint32_t>* index_vector_cache)
       : HWPathVisitor(paint, false, matrix, vertex_vector_cache,
                       index_vector_cache),
-        stroke_radius_(std::max(0.5f, paint.GetStrokeWidth()) * 0.5f),
+        stroke_radius_(
+            ComputeDeviceMinStrokeRadius(matrix, paint.GetStrokeWidth())),
         stroke_miter_(paint.GetStrokeMiter()),
         cap_(paint.GetStrokeCap()),
         join_(paint.GetStrokeJoin()),

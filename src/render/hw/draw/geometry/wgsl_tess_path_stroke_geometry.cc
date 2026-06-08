@@ -17,6 +17,7 @@
 #include "src/render/hw/hw_path_aa_outline.hpp"
 #include "src/render/hw/hw_path_raster.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
+#include "src/render/hw/hw_stroke_utils.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -100,7 +101,8 @@ struct TessPathStrokeVisitor {
                                  HWStageBuffer* stage_buffer)
       : matrix_(matrix),
         xform_(wangs_formula::VectorXform(matrix)),
-        stroke_radius_(std::max(0.5f, paint.GetStrokeWidth()) * 0.5f),
+        stroke_radius_(
+            ComputeDeviceMinStrokeRadius(matrix, paint.GetStrokeWidth())),
         stroke_miter_(paint.GetStrokeMiter()),
         join_(paint.GetStrokeJoin()),
         cap_(paint.GetStrokeCap()),
