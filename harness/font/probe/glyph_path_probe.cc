@@ -430,7 +430,7 @@ Json::Value BuildPathItem(const GlyphRequest& glyph, const Path& path,
   item["path_empty"] = path_empty;
   item["path_finite"] = path_finite;
   item["expectation"] = PathExpectationToJson(expectation);
-  item["normalized_path"] = BuildNormalizedPathJson(path, normalize_options);
+  item["path"] = BuildNormalizedPathJson(path, normalize_options);
 
   if (!path_finite) {
     errors->push_back(path_prefix + ".path is not finite");

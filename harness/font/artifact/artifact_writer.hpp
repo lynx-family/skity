@@ -22,6 +22,7 @@ enum class ArtifactKind {
   kCompareReport,
   kRunSummary,
   kPathDump,
+  kMatchResult,
 };
 
 struct ArtifactDescriptor {

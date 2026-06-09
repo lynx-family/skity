@@ -144,8 +144,8 @@ bool ParseCodePoint(const std::string& value, uint32_t* code_point) {
   }
   try {
     size_t consumed = 0;
-    unsigned long parsed = std::stoul(value.substr(2), &consumed, 16);
-    if (consumed != value.size() - 2 || parsed > 0x10FFFFul) {
+    const std::uint64_t parsed = std::stoull(value.substr(2), &consumed, 16);
+    if (consumed != value.size() - 2 || parsed > 0x10FFFFu) {
       return false;
     }
     *code_point = static_cast<uint32_t>(parsed);
@@ -477,7 +477,6 @@ Json::Value BuildTypefaceSummary(const std::string& label,
   value["label"] = label;
   value["available"] = typeface != nullptr;
   if (typeface == nullptr) {
-    errors->push_back(path + ".typeface is missing");
     return value;
   }
 

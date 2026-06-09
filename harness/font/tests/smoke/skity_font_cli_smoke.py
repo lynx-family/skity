@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 CASE_ID = "font.synthetic.typeface"
+FONT_MANAGER_CASE_ID = "font.synthetic.font_manager.default_typeface"
 BACKEND = "coretext"
 
 
@@ -49,18 +50,53 @@ def make_case():
     }
 
 
-def make_manifest():
+def make_manifest(cases=None):
     return {
         "schema_version": 1,
         "id": "font.synthetic.smoke",
         "backend": BACKEND,
         "platforms": ["darwin-ct"],
         "case_root": "cases",
-        "cases": ["typeface.json"],
+        "cases": cases or ["typeface.json"],
         "artifacts": {
             "skia_dir": "artifacts/skia",
             "skity_dir": "artifacts/skity",
             "compare_dir": "artifacts/compare",
+        },
+    }
+
+
+def make_font_manager_case():
+    return {
+        "schema_version": 1,
+        "id": FONT_MANAGER_CASE_ID,
+        "category": "font_manager",
+        "status": "active",
+        "backend": BACKEND,
+        "platforms": ["darwin-ct"],
+        "font_manager_request": {
+            "entry": "GetDefaultTypeface",
+            "style": {
+                "weight": 400,
+                "width": 5,
+                "slant": "upright",
+            },
+            "sample_limit": 1,
+        },
+        "font_request": {
+            "size": 16,
+            "scale_x": 1,
+            "skew_x": 0,
+            "linear_metrics": False,
+            "subpixel": True,
+            "embolden": False,
+            "hinting": "normal",
+        },
+        "glyphs": {"chars": ["U+0041"]},
+        "compare": {
+            "typeface_identity": "normalized_descriptor",
+            "font_style": "exact",
+            "font_metrics": {"mode": "ignore"},
         },
     }
 
@@ -105,6 +141,64 @@ def make_probe_artifact(glyph_id):
     }
 
 
+def make_font_manager_probe_artifact(post_script_name, glyph_id):
+    return {
+        "schema_version": 1,
+        "artifact_type": "font_probe_result",
+        "case_id": FONT_MANAGER_CASE_ID,
+        "backend": BACKEND,
+        "ok": True,
+        "font_manager_probe": {
+            "category": "font_manager",
+            "operation": {"entry": "GetDefaultTypeface"},
+            "matched_typefaces": [
+                {
+                    "available": True,
+                    "descriptor": {
+                        "family_name": "Synthetic",
+                        "post_script_name": post_script_name,
+                        "collection_index": 0,
+                        "style": {
+                            "weight": 400,
+                            "width": 5,
+                            "slant": "upright",
+                        },
+                    },
+                    "font_style": {
+                        "weight": 400,
+                        "width": 5,
+                        "slant": "upright",
+                    },
+                    "units_per_em": 1000,
+                    "probe_summary": {
+                        "glyphs": [
+                            {
+                                "label": "U+0041",
+                                "code_point": 65,
+                                "glyph_id": glyph_id,
+                            }
+                        ],
+                        "font_result": {
+                            "font_metrics": {
+                                "ascent": -10.0,
+                                "descent": 3.0,
+                                "leading": 1.0,
+                            }
+                        },
+                        "scaler_context_result": {
+                            "font_metrics": {
+                                "ascent": -10.0,
+                                "descent": 3.0,
+                                "leading": 1.0,
+                            }
+                        },
+                    },
+                }
+            ],
+        },
+    }
+
+
 def run_command(args):
     return subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -141,6 +235,24 @@ def expect_report_field(path, field, expected):
     return 0
 
 
+def expect_report_has(path, field):
+    report = read_json(path)
+    value = report
+    for part in field.split("."):
+        if isinstance(value, list):
+            index = int(part)
+            if index >= len(value):
+                print(f"{path}: missing {field}", file=sys.stderr)
+                return 1
+            value = value[index]
+        elif part in value:
+            value = value[part]
+        else:
+            print(f"{path}: missing {field}", file=sys.stderr)
+            return 1
+    return 0
+
+
 def main():
     if len(sys.argv) != 2:
         print("usage: skity_font_cli_smoke.py <skity-font>", file=sys.stderr)
@@ -155,19 +267,36 @@ def main():
         tmp_dir = Path(tmp)
         repo_root = tmp_dir / "repo"
         case_path = repo_root / "cases/typeface.json"
+        font_manager_case_path = repo_root / "cases/font_manager_default.json"
         manifest_path = repo_root / "manifests/smoke.json"
+        full_manifest_path = repo_root / "manifests/full.json"
         expected_path = tmp_dir / "expected.skia.json"
         actual_path = tmp_dir / "actual.skity.json"
         mismatch_path = tmp_dir / "actual-mismatch.skity.json"
+        font_manager_expected_path = tmp_dir / "font-manager-expected.skia.json"
+        font_manager_mismatch_path = tmp_dir / "font-manager-mismatch.skity.json"
         report_dir = tmp_dir / "reports"
 
         (repo_root / "fonts").mkdir(parents=True)
         (repo_root / "fonts/synthetic.ttf").write_bytes(b"synthetic font bytes")
         write_json(case_path, make_case())
+        write_json(font_manager_case_path, make_font_manager_case())
         write_json(manifest_path, make_manifest())
+        write_json(
+            full_manifest_path,
+            make_manifest(["typeface.json", "font_manager_default.json"]),
+        )
         write_json(expected_path, make_probe_artifact(1))
         write_json(actual_path, make_probe_artifact(1))
         write_json(mismatch_path, make_probe_artifact(2))
+        write_json(
+            font_manager_expected_path,
+            make_font_manager_probe_artifact("Synthetic-Regular", 1),
+        )
+        write_json(
+            font_manager_mismatch_path,
+            make_font_manager_probe_artifact("Synthetic-Bold", 2),
+        )
 
         case_info_report = report_dir / "case-info.json"
         result = run_command(
@@ -186,6 +315,67 @@ def main():
             return 1
         if expect_report_field(case_info_report, "valid", True):
             return 1
+
+        result = run_command([skity_font, "match", "--help"])
+        if expect_exit("match help", result, 0):
+            return 1
+
+        match_reject_report = report_dir / "match-reject-typeface.json"
+        result = run_command(
+            [
+                skity_font,
+                "match",
+                "--case",
+                case_path,
+                "--backend",
+                BACKEND,
+                "--repo-root",
+                repo_root,
+                "--out",
+                match_reject_report,
+            ]
+        )
+        if expect_exit("match rejects non-font-manager case", result, 3):
+            return 1
+        if expect_report_field(
+            match_reject_report, "reason_code", "schema_validation_failed"
+        ):
+            return 1
+        if expect_report_field(match_reject_report, "ok", False):
+            return 1
+
+        match_report = report_dir / "match-font-manager.json"
+        result = run_command(
+            [
+                skity_font,
+                "match",
+                "--case",
+                font_manager_case_path,
+                "--backend",
+                BACKEND,
+                "--repo-root",
+                repo_root,
+                "--out",
+                match_report,
+            ]
+        )
+        if result.returncode == 0:
+            if expect_report_field(match_report, "ok", True):
+                return 1
+            if expect_report_has(match_report, "font_manager_probe.matched_typefaces.0"):
+                return 1
+            if expect_report_has(
+                match_report,
+                "font_manager_probe.matched_typefaces.0.probe_summary",
+            ):
+                return 1
+        else:
+            if expect_exit("match font_manager", result, 5):
+                return 1
+            if expect_report_field(match_report, "reason_code", "backend_unavailable"):
+                return 1
+            if expect_report_field(match_report, "ok", False):
+                return 1
 
         compare_report = report_dir / "compare-pass.json"
         result = run_command(
@@ -233,6 +423,40 @@ def main():
         if expect_exit("compare mismatch", result, 1):
             return 1
         if expect_report_field(mismatch_report, "reason_code", "glyph_id_mismatch"):
+            return 1
+
+        selection_mismatch_report = report_dir / "compare-selection-mismatch.json"
+        result = run_command(
+            [
+                skity_font,
+                "compare",
+                "--case",
+                font_manager_case_path,
+                "--expected",
+                font_manager_expected_path,
+                "--actual",
+                font_manager_mismatch_path,
+                "--backend",
+                BACKEND,
+                "--repo-root",
+                repo_root,
+                "--report",
+                selection_mismatch_report,
+            ]
+        )
+        if expect_exit("compare selection mismatch", result, 1):
+            return 1
+        if expect_report_field(
+            selection_mismatch_report, "reason_code", "selection_mismatch"
+        ):
+            return 1
+        if expect_report_field(selection_mismatch_report, "diff_count", 1):
+            return 1
+        if expect_report_field(
+            selection_mismatch_report,
+            "diff_path",
+            "font_manager_probe.matched_typefaces[0].descriptor.post_script_name",
+        ):
             return 1
 
         missing_oracle_report = report_dir / "compare-missing-oracle.json"
@@ -285,6 +509,44 @@ def main():
         if expect_report_field(run_report, "input_failure_count", 1):
             return 1
         if expect_report_field(run_report, "cases.0.reason_code", "missing_oracle"):
+            return 1
+
+        full_run_report = report_dir / "run-full-missing-oracle.json"
+        result = run_command(
+            [
+                skity_font,
+                "run",
+                "--manifest",
+                full_manifest_path,
+                "--backend",
+                BACKEND,
+                "--skia-dir",
+                tmp_dir / "missing-full-skia",
+                "--skity-dir",
+                tmp_dir / "full-skity",
+                "--repo-root",
+                repo_root,
+                "--report",
+                full_run_report,
+            ]
+        )
+        if expect_exit("run synthetic full missing oracle", result, 6):
+            return 1
+        if expect_report_field(full_run_report, "case_count", 2):
+            return 1
+        if expect_report_field(full_run_report, "input_failure_count", 2):
+            return 1
+        if expect_report_field(full_run_report, "schema_failure_count", 0):
+            return 1
+        if expect_report_field(full_run_report, "probe_failure_count", 0):
+            return 1
+        if expect_report_field(full_run_report, "io_failure_count", 0):
+            return 1
+        if expect_report_field(full_run_report, "backend_unavailable_count", 0):
+            return 1
+        if expect_report_field(full_run_report, "cases.0.reason_code", "missing_oracle"):
+            return 1
+        if expect_report_field(full_run_report, "cases.1.reason_code", "missing_oracle"):
             return 1
 
     return 0

@@ -1,25 +1,24 @@
 {
   "schema_version": 1,
-  "id": "font.font_manager.coretext.css_generic_sans_serif",
+  "id": "font.font_manager.coretext.apple_system_ui_font_character_zh_hans",
   "category": "font_manager",
   "status": "active",
-  "known_issue": {
-    "id": "coretext-css-generic-sans-serif",
-    "reason_code": "selection_mismatch",
-    "summary": "Skia CoreText matchFamilyStyle(\"sans-serif\", Regular) returns unavailable, while Skity currently maps the CSS generic family to Helvetica. Keep this case active until the font matching harness work is complete."
-  },
   "backend": "coretext",
   "platforms": [
     "darwin-ct"
   ],
   "font_manager_request": {
-    "entry": "MatchFamilyStyle",
-    "family_name": "sans-serif",
+    "entry": "MatchFamilyStyleCharacter",
+    "family_name": ".AppleSystemUIFont",
     "style": {
       "weight": 400,
       "width": 5,
       "slant": "upright"
     },
+    "character": "U+6C49",
+    "bcp47": [
+      "zh-Hans"
+    ],
     "sample_limit": 8
   },
   "font_request": {
@@ -33,7 +32,8 @@
   },
   "glyphs": {
     "chars": [
-      "U+0041"
+      "U+0041",
+      "U+6C49"
     ]
   },
   "compare": {

@@ -1,25 +1,29 @@
 {
   "schema_version": 1,
-  "id": "font.font_manager.coretext.css_generic_sans_serif",
+  "id": "font.font_manager.coretext.apple_system_ui_font_character_ja_hiragana",
   "category": "font_manager",
   "status": "active",
   "known_issue": {
-    "id": "coretext-css-generic-sans-serif",
+    "id": "coretext-fallback-ja-locale",
     "reason_code": "selection_mismatch",
-    "summary": "Skia CoreText matchFamilyStyle(\"sans-serif\", Regular) returns unavailable, while Skity currently maps the CSS generic family to Helvetica. Keep this case active until the font matching harness work is complete."
+    "summary": "Skia CoreText honors the ja locale and selects .Hiragino Kaku Gothic Interface for U+3042, while Skity Darwin MatchFamilyStyleCharacter currently falls back to .CJK Symbols Fallback SC. Keep this active as a fixable Skity runtime matching gap."
   },
   "backend": "coretext",
   "platforms": [
     "darwin-ct"
   ],
   "font_manager_request": {
-    "entry": "MatchFamilyStyle",
-    "family_name": "sans-serif",
+    "entry": "MatchFamilyStyleCharacter",
+    "family_name": ".AppleSystemUIFont",
     "style": {
       "weight": 400,
       "width": 5,
       "slant": "upright"
     },
+    "character": "U+3042",
+    "bcp47": [
+      "ja"
+    ],
     "sample_limit": 8
   },
   "font_request": {
@@ -33,15 +37,15 @@
   },
   "glyphs": {
     "chars": [
-      "U+0041"
+      "U+0041",
+      "U+3042"
     ]
   },
   "compare": {
     "typeface_identity": "normalized_descriptor",
     "font_style": "exact",
     "font_metrics": {
-      "mode": "epsilon",
-      "epsilon": 0.001
+      "mode": "ignore"
     }
   }
 }

@@ -60,6 +60,25 @@ struct CompareInvocationResult {
   std::string backend;
 };
 
+struct ManifestRunPaths {
+  std::filesystem::path case_root;
+  std::filesystem::path repo_root;
+  std::filesystem::path resolved_skia_dir;
+  std::filesystem::path resolved_skity_dir;
+  std::filesystem::path resolved_compare_dir;
+  std::string backend;
+};
+
+struct ManifestRunCounts {
+  int pass_count = 0;
+  int mismatch_count = 0;
+  int input_failure_count = 0;
+  int probe_failure_count = 0;
+  int schema_failure_count = 0;
+  int backend_unavailable_count = 0;
+  int io_failure_count = 0;
+};
+
 void PrintUsage(std::ostream& out) {
   out << "skity-font - Skity font harness CLI\n"
       << "\n"
@@ -70,6 +89,7 @@ void PrintUsage(std::ostream& out) {
       << "Commands planned for the font harness:\n"
       << "  env-info      collect platform and backend information\n"
       << "  case-info     validate and normalize a case file\n"
+      << "  match         run a Skity system font match probe\n"
       << "  probe         run a Skity font probe and write result JSON\n"
       << "  compare       compare Skia oracle and Skity result JSON\n"
       << "  run           run a manifest with existing Skia oracle data\n"
@@ -79,6 +99,12 @@ void PrintUsage(std::ostream& out) {
       << "case-info options:\n"
       << "  --case <path>       input case JSON\n"
       << "  --report <path>     optional output report JSON\n"
+      << "  --repo-root <path>  optional repository root override\n"
+      << "\n"
+      << "match options:\n"
+      << "  --case <path>       input font_manager/family_style_set case JSON\n"
+      << "  --backend <name>    backend to use\n"
+      << "  --out <path>        optional output JSON\n"
       << "  --repo-root <path>  optional repository root override\n"
       << "\n"
       << "env-info/list-fonts options:\n"
@@ -271,6 +297,20 @@ std::string ReadCaseCategory(const std::filesystem::path& case_path) {
   return category;
 }
 
+Json::Value BuildMatchSchemaErrorReport(const std::string& case_id,
+                                        const std::string& backend,
+                                        const std::string& path,
+                                        const std::string& message) {
+  Json::Value report = skity::font_harness::BuildProbeResultReport(
+      case_id, backend, "schema_validation_failed");
+  Json::Value error(Json::objectValue);
+  error["path"] = path;
+  error["message"] = message;
+  report["validation_errors"] = Json::Value(Json::arrayValue);
+  report["validation_errors"].append(std::move(error));
+  return report;
+}
+
 int ExitCodeForProbeStatus(skity::font_harness::TypefaceProbeStatus status) {
   switch (status) {
     case skity::font_harness::TypefaceProbeStatus::kSuccess:
@@ -440,6 +480,246 @@ bool WriteArtifactSilently(
     *stable_path = write_result.stable_path;
   }
   return true;
+}
+
+Json::Value RunManifestCase(Json::ArrayIndex index,
+                            const std::string& case_relative_path,
+                            const ManifestRunPaths& paths,
+                            skity::font_harness::RepoUriResolver* resolver,
+                            ManifestRunCounts* counts) {
+  const std::filesystem::path case_path =
+      (paths.case_root / case_relative_path).lexically_normal();
+
+  Json::Value item(Json::objectValue);
+  item["index"] = index;
+  item["case"] = case_relative_path;
+  item["case_path"] = StablePathForRun(case_path, paths.repo_root);
+  item["backend"] = paths.backend;
+  item["status"] = "running";
+  item["artifacts"] = Json::Value(Json::objectValue);
+
+  Json::Value case_root_json;
+  std::string case_error;
+  if (!skity::font_harness::LoadJsonFile(case_path, &case_root_json,
+                                         &case_error)) {
+    item["status"] = "schema_validation_failed";
+    item["reason_code"] = "schema_validation_failed";
+    item["message"] = case_error;
+    counts->schema_failure_count += 1;
+    return item;
+  }
+
+  skity::font_harness::CaseValidationResult case_validation =
+      skity::font_harness::ValidateCaseDocument(case_root_json, *resolver);
+  const std::string case_id = case_validation.case_id.empty()
+                                  ? StemOrFallback(case_path, "case")
+                                  : case_validation.case_id;
+  item["case_id"] = case_id;
+  std::string category;
+  std::string status;
+  ReadStringField(case_root_json, "category", &category);
+  ReadStringField(case_root_json, "status", &status);
+  item["category"] = category;
+  item["case_status"] = status;
+
+  if (!case_validation.valid) {
+    item["status"] = "schema_validation_failed";
+    item["reason_code"] = "schema_validation_failed";
+    item["validation_errors"] = case_validation.errors.ToJson();
+    counts->schema_failure_count += 1;
+    return item;
+  }
+  if (case_validation.backend != paths.backend) {
+    item["status"] = "schema_validation_failed";
+    item["reason_code"] = "backend_mismatch";
+    item["message"] = "case backend does not match manifest run backend";
+    counts->schema_failure_count += 1;
+    return item;
+  }
+  if (status != "active") {
+    item["status"] = "schema_validation_failed";
+    item["reason_code"] = "non_active_case_in_smoke";
+    item["message"] = "smoke manifest entries must be active cases";
+    counts->schema_failure_count += 1;
+    return item;
+  }
+
+  const std::string safe_case_id = SanitizeFileComponent(case_id, "case");
+  const std::string safe_backend =
+      SanitizeFileComponent(paths.backend, "backend");
+  const std::filesystem::path expected_path =
+      paths.resolved_skia_dir / (safe_case_id + ".skia.json");
+  const std::filesystem::path actual_path =
+      paths.resolved_skity_dir / (safe_case_id + "." + safe_backend + ".json");
+  const std::filesystem::path compare_path =
+      paths.resolved_compare_dir /
+      (safe_case_id + "." + safe_backend + ".compare.json");
+
+  item["artifacts"]["expected"] =
+      StablePathForRun(expected_path, paths.repo_root);
+  item["artifacts"]["actual"] = StablePathForRun(actual_path, paths.repo_root);
+  item["artifacts"]["compare"] =
+      StablePathForRun(compare_path, paths.repo_root);
+
+  std::error_code exists_error;
+  if (!std::filesystem::is_regular_file(expected_path, exists_error)) {
+    item["status"] = "input_failed";
+    item["reason_code"] = "missing_oracle";
+    item["message"] = "Skia oracle is missing for manifest case";
+    item["compare_exit_code"] = kExitCompareInputFailure;
+    counts->input_failure_count += 1;
+    return item;
+  }
+
+  ProbeInvocationResult probe_invocation =
+      RunSkityProbeForCase(paths.repo_root, case_path, paths.backend);
+  item["probe_exit_code"] = probe_invocation.exit_code;
+  skity::font_harness::ArtifactDescriptor probe_descriptor;
+  probe_descriptor.kind = skity::font_harness::ArtifactKind::kSkityResult;
+  probe_descriptor.command = "probe";
+  probe_descriptor.output_flag = "--out";
+  probe_descriptor.case_id =
+      probe_invocation.case_id.empty() ? case_id : probe_invocation.case_id;
+  probe_descriptor.backend = probe_invocation.backend.empty()
+                                 ? paths.backend
+                                 : probe_invocation.backend;
+  probe_descriptor.input_path = case_path;
+  probe_descriptor.explicit_output_path = actual_path;
+  probe_descriptor.repro_args = {"--case",
+                                 StablePathForRun(case_path, paths.repo_root),
+                                 "--backend", paths.backend};
+
+  std::string write_error;
+  std::string stable_probe_path;
+  if (!WriteArtifactSilently(paths.repo_root, probe_descriptor,
+                             &probe_invocation.report, &stable_probe_path,
+                             &write_error)) {
+    item["status"] = "io_failure";
+    item["reason_code"] = "io_failure";
+    item["message"] = write_error;
+    counts->io_failure_count += 1;
+    return item;
+  }
+  item["artifacts"]["actual"] = stable_probe_path;
+
+  if (probe_invocation.exit_code != kExitSuccess) {
+    item["status"] = probe_invocation.exit_code == kExitBackendUnavailable
+                         ? "backend_unavailable"
+                         : "probe_failed";
+    item["reason_code"] =
+        probe_invocation.report.isMember("reason_code")
+            ? probe_invocation.report["reason_code"].asString()
+            : "probe_failed";
+    if (probe_invocation.exit_code == kExitBackendUnavailable) {
+      counts->backend_unavailable_count += 1;
+    } else {
+      counts->probe_failure_count += 1;
+    }
+    return item;
+  }
+
+  CompareInvocationResult compare_invocation = RunCompareForArtifacts(
+      paths.repo_root, case_path, expected_path, actual_path, paths.backend);
+  item["compare_exit_code"] = compare_invocation.exit_code;
+
+  skity::font_harness::ArtifactDescriptor compare_descriptor;
+  compare_descriptor.kind = skity::font_harness::ArtifactKind::kCompareReport;
+  compare_descriptor.command = "compare";
+  compare_descriptor.case_id =
+      compare_invocation.case_id.empty() ? case_id : compare_invocation.case_id;
+  compare_descriptor.backend = compare_invocation.backend.empty()
+                                   ? paths.backend
+                                   : compare_invocation.backend;
+  compare_descriptor.input_path = case_path;
+  compare_descriptor.explicit_output_path = compare_path;
+  compare_descriptor.repro_args = {
+      "--case",     StablePathForRun(case_path, paths.repo_root),
+      "--expected", StablePathForRun(expected_path, paths.repo_root),
+      "--actual",   StablePathForRun(actual_path, paths.repo_root),
+      "--backend",  paths.backend};
+
+  std::string stable_compare_path;
+  if (!WriteArtifactSilently(paths.repo_root, compare_descriptor,
+                             &compare_invocation.report, &stable_compare_path,
+                             &write_error)) {
+    item["status"] = "io_failure";
+    item["reason_code"] = "io_failure";
+    item["message"] = write_error;
+    counts->io_failure_count += 1;
+    return item;
+  }
+  item["artifacts"]["compare"] = stable_compare_path;
+  item["diff_count"] = compare_invocation.report.isMember("diff_count")
+                           ? compare_invocation.report["diff_count"].asInt()
+                           : 0;
+
+  if (compare_invocation.exit_code == kExitSuccess) {
+    item["status"] = "pass";
+    item["reason_code"] = "pass";
+    item["passed"] = true;
+    counts->pass_count += 1;
+  } else if (compare_invocation.exit_code == kExitCompareMismatch) {
+    item["status"] = "mismatch";
+    item["reason_code"] =
+        compare_invocation.report.isMember("reason_code")
+            ? compare_invocation.report["reason_code"].asString()
+            : "compare_mismatch";
+    item["passed"] = false;
+    counts->mismatch_count += 1;
+  } else {
+    item["status"] = "input_failed";
+    item["reason_code"] =
+        compare_invocation.report.isMember("reason_code")
+            ? compare_invocation.report["reason_code"].asString()
+            : "compare_input_failed";
+    item["passed"] = false;
+    counts->input_failure_count += 1;
+  }
+  return item;
+}
+
+int FinalizeManifestRunReport(Json::Value* report,
+                              const ManifestRunCounts& counts) {
+  (*report)["pass_count"] = counts.pass_count;
+  (*report)["mismatch_count"] = counts.mismatch_count;
+  (*report)["input_failure_count"] = counts.input_failure_count;
+  (*report)["probe_failure_count"] = counts.probe_failure_count;
+  (*report)["schema_failure_count"] = counts.schema_failure_count;
+  (*report)["backend_unavailable_count"] = counts.backend_unavailable_count;
+  (*report)["io_failure_count"] = counts.io_failure_count;
+
+  int exit_code = kExitSuccess;
+  std::string run_status = "pass";
+  std::string reason_code = "pass";
+  if (counts.schema_failure_count > 0) {
+    exit_code = kExitSchemaValidationFailed;
+    run_status = "failed";
+    reason_code = "schema_validation_failed";
+  } else if (counts.io_failure_count > 0) {
+    exit_code = kExitIOFailure;
+    run_status = "failed";
+    reason_code = "io_failure";
+  } else if (counts.backend_unavailable_count > 0) {
+    exit_code = kExitBackendUnavailable;
+    run_status = "failed";
+    reason_code = "backend_unavailable";
+  } else if (counts.input_failure_count > 0) {
+    exit_code = kExitCompareInputFailure;
+    run_status = "failed";
+    reason_code = "compare_input_failed";
+  } else if (counts.probe_failure_count > 0) {
+    exit_code = kExitSkityProbeFailure;
+    run_status = "failed";
+    reason_code = "probe_failed";
+  } else if (counts.mismatch_count > 0) {
+    exit_code = kExitCompareMismatch;
+    run_status = "mismatch";
+    reason_code = "compare_mismatch";
+  }
+  (*report)["status"] = run_status;
+  (*report)["reason_code"] = reason_code;
+  (*report)["passed"] = exit_code == kExitSuccess;
+  return exit_code;
 }
 
 int RunCaseInfo(int argc, char** argv) {
@@ -731,6 +1011,121 @@ int RunProbeCommand(int argc, char** argv) {
                             invocation.exit_code);
 }
 
+int RunMatchCommand(int argc, char** argv) {
+  std::filesystem::path case_path;
+  std::filesystem::path output_path;
+  std::filesystem::path repo_root(SKITY_FONT_HARNESS_REPO_ROOT);
+  std::string backend;
+
+  for (int i = 2; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--case") {
+      if (i + 1 >= argc) {
+        std::cerr << "--case requires a path\n";
+        return kExitUsageError;
+      }
+      case_path = argv[++i];
+    } else if (arg == "--backend") {
+      if (i + 1 >= argc) {
+        std::cerr << "--backend requires a value\n";
+        return kExitUsageError;
+      }
+      backend = argv[++i];
+    } else if (arg == "--out" || arg == "--report") {
+      if (i + 1 >= argc) {
+        std::cerr << arg << " requires a path\n";
+        return kExitUsageError;
+      }
+      output_path = argv[++i];
+    } else if (arg == "--repo-root") {
+      if (i + 1 >= argc) {
+        std::cerr << "--repo-root requires a path\n";
+        return kExitUsageError;
+      }
+      repo_root = argv[++i];
+    } else if (IsHelpArgument(arg)) {
+      PrintUsage(std::cout);
+      return kExitSuccess;
+    } else {
+      std::cerr << "Unknown match option: " << arg << "\n";
+      return kExitUsageError;
+    }
+  }
+
+  if (case_path.empty()) {
+    std::cerr << "match requires --case <path>\n";
+    return kExitUsageError;
+  }
+  if (backend.empty()) {
+    std::cerr << "match requires --backend <backend>\n";
+    return kExitUsageError;
+  }
+
+  Json::Value case_root;
+  std::string error;
+  std::string case_id = StemOrFallback(case_path, "case");
+  if (!skity::font_harness::LoadJsonFile(case_path, &case_root, &error)) {
+    Json::Value report =
+        BuildMatchSchemaErrorReport(case_id, backend, "--case", error);
+
+    skity::font_harness::ArtifactDescriptor descriptor;
+    descriptor.kind = skity::font_harness::ArtifactKind::kMatchResult;
+    descriptor.command = "match";
+    descriptor.output_flag = "--out";
+    descriptor.case_id = case_id;
+    descriptor.backend = backend;
+    descriptor.input_path = case_path;
+    descriptor.explicit_output_path = output_path;
+    descriptor.repro_args = {"--case", PathArg(case_path), "--backend",
+                             backend};
+    return WriteCommandReport(std::move(report), repo_root, descriptor,
+                              kExitSchemaValidationFailed);
+  }
+
+  ReadStringField(case_root, "id", &case_id);
+  std::string category;
+  ReadStringField(case_root, "category", &category);
+  if (!IsFontManagerProbeCategory(category)) {
+    Json::Value report = BuildMatchSchemaErrorReport(
+        case_id, backend, "$.category",
+        "match supports only font_manager and family_style_set cases");
+
+    skity::font_harness::ArtifactDescriptor descriptor;
+    descriptor.kind = skity::font_harness::ArtifactKind::kMatchResult;
+    descriptor.command = "match";
+    descriptor.output_flag = "--out";
+    descriptor.case_id = case_id;
+    descriptor.backend = backend;
+    descriptor.input_path = case_path;
+    descriptor.explicit_output_path = output_path;
+    descriptor.repro_args = {"--case", PathArg(case_path), "--backend",
+                             backend};
+    return WriteCommandReport(std::move(report), repo_root, descriptor,
+                              kExitSchemaValidationFailed);
+  }
+
+  skity::font_harness::FontManagerProbeRequest request;
+  request.repo_root = repo_root;
+  request.case_path = case_path;
+  request.backend = backend;
+  skity::font_harness::FontManagerProbeResult result =
+      skity::font_harness::RunFontManagerProbe(request);
+  const int exit_code = ExitCodeForProbeStatus(result.status);
+
+  skity::font_harness::ArtifactDescriptor descriptor;
+  descriptor.kind = skity::font_harness::ArtifactKind::kMatchResult;
+  descriptor.command = "match";
+  descriptor.output_flag = "--out";
+  descriptor.case_id = result.case_id.empty() ? case_id : result.case_id;
+  descriptor.backend = result.backend.empty() ? backend : result.backend;
+  descriptor.input_path = case_path;
+  descriptor.explicit_output_path = output_path;
+  descriptor.repro_args = {"--case", PathArg(case_path), "--backend", backend};
+
+  return WriteCommandReport(std::move(result.report), repo_root, descriptor,
+                            exit_code);
+}
+
 int RunCompareCommand(int argc, char** argv) {
   std::filesystem::path case_path;
   std::filesystem::path expected_path;
@@ -979,256 +1374,27 @@ int RunManifestCommand(int argc, char** argv) {
       StablePathForRun(resolved_compare_dir, repo_root);
 
   const std::string case_root_value = manifest_root["case_root"].asString();
-  const std::filesystem::path case_root =
-      ResolveRunPath(repo_root, case_root_value);
   const Json::Value& cases = manifest_root["cases"];
-  int pass_count = 0;
-  int mismatch_count = 0;
-  int input_failure_count = 0;
-  int probe_failure_count = 0;
-  int schema_failure_count = 0;
-  int backend_unavailable_count = 0;
-  int io_failure_count = 0;
 
+  ManifestRunPaths paths;
+  paths.case_root = ResolveRunPath(repo_root, case_root_value);
+  paths.repo_root = repo_root;
+  paths.resolved_skia_dir = resolved_skia_dir;
+  paths.resolved_skity_dir = resolved_skity_dir;
+  paths.resolved_compare_dir = resolved_compare_dir;
+  paths.backend = backend;
+
+  ManifestRunCounts counts;
   Json::Value case_reports(Json::arrayValue);
   for (Json::ArrayIndex i = 0; i < cases.size(); ++i) {
     const std::string case_relative_path = cases[i].asString();
-    const std::filesystem::path case_path =
-        (case_root / case_relative_path).lexically_normal();
-
-    Json::Value item(Json::objectValue);
-    item["index"] = i;
-    item["case"] = case_relative_path;
-    item["case_path"] = StablePathForRun(case_path, repo_root);
-    item["backend"] = backend;
-    item["status"] = "running";
-    item["artifacts"] = Json::Value(Json::objectValue);
-
-    Json::Value case_root_json;
-    std::string case_error;
-    if (!skity::font_harness::LoadJsonFile(case_path, &case_root_json,
-                                           &case_error)) {
-      item["status"] = "schema_validation_failed";
-      item["reason_code"] = "schema_validation_failed";
-      item["message"] = case_error;
-      schema_failure_count += 1;
-      case_reports.append(std::move(item));
-      continue;
-    }
-
-    skity::font_harness::CaseValidationResult case_validation =
-        skity::font_harness::ValidateCaseDocument(case_root_json, resolver);
-    const std::string case_id = case_validation.case_id.empty()
-                                    ? StemOrFallback(case_path, "case")
-                                    : case_validation.case_id;
-    item["case_id"] = case_id;
-    std::string category;
-    std::string status;
-    ReadStringField(case_root_json, "category", &category);
-    ReadStringField(case_root_json, "status", &status);
-    item["category"] = category;
-    item["case_status"] = status;
-
-    if (!case_validation.valid) {
-      item["status"] = "schema_validation_failed";
-      item["reason_code"] = "schema_validation_failed";
-      item["validation_errors"] = case_validation.errors.ToJson();
-      schema_failure_count += 1;
-      case_reports.append(std::move(item));
-      continue;
-    }
-    if (case_validation.backend != backend) {
-      item["status"] = "schema_validation_failed";
-      item["reason_code"] = "backend_mismatch";
-      item["message"] = "case backend does not match manifest run backend";
-      schema_failure_count += 1;
-      case_reports.append(std::move(item));
-      continue;
-    }
-    if (status != "active") {
-      item["status"] = "schema_validation_failed";
-      item["reason_code"] = "non_active_case_in_smoke";
-      item["message"] = "smoke manifest entries must be active cases";
-      schema_failure_count += 1;
-      case_reports.append(std::move(item));
-      continue;
-    }
-
-    const std::string safe_case_id = SanitizeFileComponent(case_id, "case");
-    const std::string safe_backend = SanitizeFileComponent(backend, "backend");
-    const std::filesystem::path expected_path =
-        resolved_skia_dir / (safe_case_id + ".skia.json");
-    const std::filesystem::path actual_path =
-        resolved_skity_dir / (safe_case_id + "." + safe_backend + ".json");
-    const std::filesystem::path compare_path =
-        resolved_compare_dir /
-        (safe_case_id + "." + safe_backend + ".compare.json");
-
-    item["artifacts"]["expected"] = StablePathForRun(expected_path, repo_root);
-    item["artifacts"]["actual"] = StablePathForRun(actual_path, repo_root);
-    item["artifacts"]["compare"] = StablePathForRun(compare_path, repo_root);
-
-    std::error_code exists_error;
-    if (!std::filesystem::is_regular_file(expected_path, exists_error)) {
-      item["status"] = "input_failed";
-      item["reason_code"] = "missing_oracle";
-      item["message"] = "Skia oracle is missing for manifest case";
-      item["compare_exit_code"] = kExitCompareInputFailure;
-      input_failure_count += 1;
-      case_reports.append(std::move(item));
-      continue;
-    }
-
-    ProbeInvocationResult probe_invocation =
-        RunSkityProbeForCase(repo_root, case_path, backend);
-    item["probe_exit_code"] = probe_invocation.exit_code;
-    skity::font_harness::ArtifactDescriptor probe_descriptor;
-    probe_descriptor.kind = skity::font_harness::ArtifactKind::kSkityResult;
-    probe_descriptor.command = "probe";
-    probe_descriptor.output_flag = "--out";
-    probe_descriptor.case_id =
-        probe_invocation.case_id.empty() ? case_id : probe_invocation.case_id;
-    probe_descriptor.backend =
-        probe_invocation.backend.empty() ? backend : probe_invocation.backend;
-    probe_descriptor.input_path = case_path;
-    probe_descriptor.explicit_output_path = actual_path;
-    probe_descriptor.repro_args = {
-        "--case", StablePathForRun(case_path, repo_root), "--backend", backend};
-
-    std::string write_error;
-    std::string stable_probe_path;
-    if (!WriteArtifactSilently(repo_root, probe_descriptor,
-                               &probe_invocation.report, &stable_probe_path,
-                               &write_error)) {
-      item["status"] = "io_failure";
-      item["reason_code"] = "io_failure";
-      item["message"] = write_error;
-      io_failure_count += 1;
-      case_reports.append(std::move(item));
-      continue;
-    }
-    item["artifacts"]["actual"] = stable_probe_path;
-
-    if (probe_invocation.exit_code != kExitSuccess) {
-      item["status"] = probe_invocation.exit_code == kExitBackendUnavailable
-                           ? "backend_unavailable"
-                           : "probe_failed";
-      item["reason_code"] =
-          probe_invocation.report.isMember("reason_code")
-              ? probe_invocation.report["reason_code"].asString()
-              : "probe_failed";
-      if (probe_invocation.exit_code == kExitBackendUnavailable) {
-        backend_unavailable_count += 1;
-      } else {
-        probe_failure_count += 1;
-      }
-      case_reports.append(std::move(item));
-      continue;
-    }
-
-    CompareInvocationResult compare_invocation = RunCompareForArtifacts(
-        repo_root, case_path, expected_path, actual_path, backend);
-    item["compare_exit_code"] = compare_invocation.exit_code;
-
-    skity::font_harness::ArtifactDescriptor compare_descriptor;
-    compare_descriptor.kind = skity::font_harness::ArtifactKind::kCompareReport;
-    compare_descriptor.command = "compare";
-    compare_descriptor.case_id = compare_invocation.case_id.empty()
-                                     ? case_id
-                                     : compare_invocation.case_id;
-    compare_descriptor.backend = compare_invocation.backend.empty()
-                                     ? backend
-                                     : compare_invocation.backend;
-    compare_descriptor.input_path = case_path;
-    compare_descriptor.explicit_output_path = compare_path;
-    compare_descriptor.repro_args = {
-        "--case",     StablePathForRun(case_path, repo_root),
-        "--expected", StablePathForRun(expected_path, repo_root),
-        "--actual",   StablePathForRun(actual_path, repo_root),
-        "--backend",  backend};
-
-    std::string stable_compare_path;
-    if (!WriteArtifactSilently(repo_root, compare_descriptor,
-                               &compare_invocation.report, &stable_compare_path,
-                               &write_error)) {
-      item["status"] = "io_failure";
-      item["reason_code"] = "io_failure";
-      item["message"] = write_error;
-      io_failure_count += 1;
-      case_reports.append(std::move(item));
-      continue;
-    }
-    item["artifacts"]["compare"] = stable_compare_path;
-    item["diff_count"] = compare_invocation.report.isMember("diff_count")
-                             ? compare_invocation.report["diff_count"].asInt()
-                             : 0;
-
-    if (compare_invocation.exit_code == kExitSuccess) {
-      item["status"] = "pass";
-      item["reason_code"] = "pass";
-      item["passed"] = true;
-      pass_count += 1;
-    } else if (compare_invocation.exit_code == kExitCompareMismatch) {
-      item["status"] = "mismatch";
-      item["reason_code"] =
-          compare_invocation.report.isMember("reason_code")
-              ? compare_invocation.report["reason_code"].asString()
-              : "compare_mismatch";
-      item["passed"] = false;
-      mismatch_count += 1;
-    } else {
-      item["status"] = "input_failed";
-      item["reason_code"] =
-          compare_invocation.report.isMember("reason_code")
-              ? compare_invocation.report["reason_code"].asString()
-              : "compare_input_failed";
-      item["passed"] = false;
-      input_failure_count += 1;
-    }
-    case_reports.append(std::move(item));
+    case_reports.append(
+        RunManifestCase(i, case_relative_path, paths, &resolver, &counts));
   }
 
   report["cases"] = std::move(case_reports);
   report["case_count"] = static_cast<int>(cases.size());
-  report["pass_count"] = pass_count;
-  report["mismatch_count"] = mismatch_count;
-  report["input_failure_count"] = input_failure_count;
-  report["probe_failure_count"] = probe_failure_count;
-  report["schema_failure_count"] = schema_failure_count;
-  report["backend_unavailable_count"] = backend_unavailable_count;
-  report["io_failure_count"] = io_failure_count;
-
-  int exit_code = kExitSuccess;
-  std::string run_status = "pass";
-  std::string reason_code = "pass";
-  if (schema_failure_count > 0) {
-    exit_code = kExitSchemaValidationFailed;
-    run_status = "failed";
-    reason_code = "schema_validation_failed";
-  } else if (io_failure_count > 0) {
-    exit_code = kExitIOFailure;
-    run_status = "failed";
-    reason_code = "io_failure";
-  } else if (backend_unavailable_count > 0) {
-    exit_code = kExitBackendUnavailable;
-    run_status = "failed";
-    reason_code = "backend_unavailable";
-  } else if (input_failure_count > 0) {
-    exit_code = kExitCompareInputFailure;
-    run_status = "failed";
-    reason_code = "compare_input_failed";
-  } else if (probe_failure_count > 0) {
-    exit_code = kExitSkityProbeFailure;
-    run_status = "failed";
-    reason_code = "probe_failed";
-  } else if (mismatch_count > 0) {
-    exit_code = kExitCompareMismatch;
-    run_status = "mismatch";
-    reason_code = "compare_mismatch";
-  }
-  report["status"] = run_status;
-  report["reason_code"] = reason_code;
-  report["passed"] = exit_code == kExitSuccess;
+  const int exit_code = FinalizeManifestRunReport(&report, counts);
 
   skity::font_harness::ArtifactDescriptor descriptor;
   descriptor.kind = skity::font_harness::ArtifactKind::kRunSummary;
@@ -1276,6 +1442,9 @@ int main(int argc, char** argv) {
   }
   if (command == "probe") {
     return RunProbeCommand(argc, argv);
+  }
+  if (command == "match") {
+    return RunMatchCommand(argc, argv);
   }
   if (command == "dump-path") {
     return RunDumpPathCommand(argc, argv);
