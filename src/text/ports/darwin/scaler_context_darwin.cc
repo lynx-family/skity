@@ -4,11 +4,61 @@
 
 #include "src/text/ports/darwin/scaler_context_darwin.hpp"
 
+#include <algorithm>
+#include <array>
+#include <cstdint>
 #include <skity/geometry/stroke.hpp>
 
 #include "src/text/ports/darwin/typeface_darwin.hpp"
 
 namespace {
+
+uint16_t ReadBigEndianUInt16(const uint8_t *data) {
+  return static_cast<uint16_t>((static_cast<uint16_t>(data[0]) << 8) |
+                               static_cast<uint16_t>(data[1]));
+}
+
+void ApplyOS2StrikeoutMetrics(skity::Typeface *typeface, CTFontRef ct_font,
+                              skity::FontMetrics *metrics) {
+  if (typeface == nullptr || ct_font == nullptr || metrics == nullptr) {
+    return;
+  }
+
+  static constexpr skity::FontTableTag kOS2TableTag =
+      skity::SetFourByteTag('O', 'S', '/', '2');
+  static constexpr size_t kStrikeoutSizeOffset = 26;
+  static constexpr size_t kStrikeoutPositionOffset = 28;
+  static constexpr size_t kStrikeoutFieldSize = 2;
+  static constexpr size_t kRequiredOS2TableSize =
+      kStrikeoutPositionOffset + kStrikeoutFieldSize;
+
+  std::array<uint8_t, kRequiredOS2TableSize> os2_table{};
+  size_t copied = typeface->GetTableData(kOS2TableTag, 0, os2_table.size(),
+                                         os2_table.data());
+  if (copied < os2_table.size()) {
+    return;
+  }
+
+  uint32_t upem = CTFontGetUnitsPerEm(ct_font);
+  if (upem == 0) {
+    return;
+  }
+
+  CGFloat font_size = CTFontGetSize(ct_font);
+  uint32_t max_sane_height = upem * 2;
+
+  uint16_t strikeout_size =
+      ReadBigEndianUInt16(os2_table.data() + kStrikeoutSizeOffset);
+  if (strikeout_size != 0 && strikeout_size < max_sane_height) {
+    metrics->strikeout_thickness_ = strikeout_size * font_size / upem;
+  }
+
+  uint16_t strikeout_position =
+      ReadBigEndianUInt16(os2_table.data() + kStrikeoutPositionOffset);
+  if (strikeout_position != 0 && strikeout_position < max_sane_height) {
+    metrics->strikeout_position_ = -strikeout_position * font_size / upem;
+  }
+}
 
 float compute_fake_bold_scale(float text_size, float text_scale) {
   static const std::array<float, 2> keys = {9.0f, 36.0f};
@@ -477,7 +527,10 @@ void ScalerContextDarwin::GenerateFontMetrics(FontMetrics *metrics) {
   metrics->x_height_ = CTFontGetXHeight(ct_font_.get());
   metrics->cap_height_ = CTFontGetCapHeight(ct_font_.get());
   metrics->underline_thickness_ = CTFontGetUnderlineThickness(ct_font_.get());
-  metrics->underline_position_ = CTFontGetUnderlinePosition(ct_font_.get());
+  metrics->underline_position_ = -CTFontGetUnderlinePosition(ct_font_.get());
+  metrics->strikeout_thickness_ = 0;
+  metrics->strikeout_position_ = 0;
+  ApplyOS2StrikeoutMetrics(GetTypeface().get(), ct_font_.get(), metrics);
 }
 
 }  // namespace skity
