@@ -509,6 +509,8 @@ Json::Value NormalizePathGlyphItem(const Json::Value& item) {
   Json::Value value = NormalizeGlyphItem(item);
   if (item.isObject() && item.isMember("path")) {
     value["path"] = item["path"];
+  } else if (item.isObject() && item.isMember("normalized_path")) {
+    value["path"] = item["normalized_path"];
   }
   return value;
 }
@@ -522,6 +524,11 @@ Json::Value NormalizePathGlyphArray(const Json::Value& glyphs) {
     value.append(NormalizePathGlyphItem(glyph));
   }
   return value;
+}
+
+bool IsUnavailableResult(const Json::Value& value) {
+  return value.isObject() && value.isMember("available") &&
+         value["available"].isBool() && !value["available"].asBool();
 }
 
 Json::Value NormalizePathProbe(const Json::Value& root) {
@@ -542,8 +549,12 @@ Json::Value NormalizePathProbe(const Json::Value& root) {
   const Json::Value* scaler = ObjectMember(*probe, "scaler_context_result");
   if (scaler != nullptr) {
     Json::Value scaler_result(Json::objectValue);
-    scaler_result["glyph_paths"] =
-        NormalizePathGlyphArray(OptionalValue(*scaler, "glyph_paths"));
+    if (IsUnavailableResult(*scaler)) {
+      scaler_result["available"] = false;
+    } else {
+      scaler_result["glyph_paths"] =
+          NormalizePathGlyphArray(OptionalValue(*scaler, "glyph_paths"));
+    }
     value["scaler_context_result"] = std::move(scaler_result);
   }
   return value;
@@ -758,6 +769,19 @@ std::string FirstDiffReason(const std::vector<Diff>& diffs,
   return diffs.front().reason_code;
 }
 
+bool HasNewDiffs(size_t diff_count, const std::vector<Diff>& diffs) {
+  return diffs.size() > diff_count;
+}
+
+bool CompareSelectionSubset(const Json::Value& expected,
+                            const Json::Value& actual, const std::string& path,
+                            const std::string& rule, std::vector<Diff>* diffs) {
+  const size_t diff_count = diffs->size();
+  CompareJsonSubset(expected, actual, path, "selection_mismatch", rule, 0.0,
+                    false, diffs);
+  return HasNewDiffs(diff_count, *diffs);
+}
+
 void CompareDescriptor(const Json::Value& expected, const Json::Value& actual,
                        const std::string& path, const std::string& reason_code,
                        const CompareConfig& config, std::vector<Diff>* diffs) {
@@ -906,10 +930,12 @@ void CompareGlyphPathProbe(const Json::Value& expected_root,
                  actual["font_result"]["glyph_paths"],
                  "glyph_path_probe.font_result.glyph_paths",
                  config.glyph_path_epsilon, diffs);
-  ComparePathSet(expected["scaler_context_result"]["glyph_paths"],
-                 actual["scaler_context_result"]["glyph_paths"],
-                 "glyph_path_probe.scaler_context_result.glyph_paths",
-                 config.glyph_path_epsilon, diffs);
+  if (!IsUnavailableResult(expected["scaler_context_result"])) {
+    ComparePathSet(expected["scaler_context_result"]["glyph_paths"],
+                   actual["scaler_context_result"]["glyph_paths"],
+                   "glyph_path_probe.scaler_context_result.glyph_paths",
+                   config.glyph_path_epsilon, diffs);
+  }
 }
 
 void CompareFontManagerProbe(const Json::Value& expected_root,
@@ -918,23 +944,29 @@ void CompareFontManagerProbe(const Json::Value& expected_root,
                              std::vector<Diff>* diffs) {
   Json::Value expected = NormalizeFontManagerProbe(expected_root);
   Json::Value actual = NormalizeFontManagerProbe(actual_root);
-  CompareJsonSubset(OptionalValue(expected, "entry"),
-                    OptionalValue(actual, "entry"),
-                    "font_manager_probe.operation.entry", "selection_mismatch",
-                    "exact", 0.0, false, diffs);
-
-  CompareJsonSubset(OptionalValue(expected, "create_style_set"),
-                    OptionalValue(actual, "create_style_set"),
-                    "font_manager_probe.operation.create_style_set",
-                    "selection_mismatch", "style_set_exact", 0.0, false, diffs);
-  CompareJsonSubset(OptionalValue(expected, "style_set"),
-                    OptionalValue(actual, "style_set"),
-                    "font_manager_probe.operation.style_set",
-                    "selection_mismatch", "style_set_exact", 0.0, false, diffs);
-  CompareJsonSubset(OptionalValue(expected, "match_family"),
-                    OptionalValue(actual, "match_family"),
-                    "font_manager_probe.operation.match_family",
-                    "selection_mismatch", "style_set_exact", 0.0, false, diffs);
+  if (CompareSelectionSubset(
+          OptionalValue(expected, "entry"), OptionalValue(actual, "entry"),
+          "font_manager_probe.operation.entry", "exact", diffs)) {
+    return;
+  }
+  if (CompareSelectionSubset(OptionalValue(expected, "create_style_set"),
+                             OptionalValue(actual, "create_style_set"),
+                             "font_manager_probe.operation.create_style_set",
+                             "style_set_exact", diffs)) {
+    return;
+  }
+  if (CompareSelectionSubset(OptionalValue(expected, "style_set"),
+                             OptionalValue(actual, "style_set"),
+                             "font_manager_probe.operation.style_set",
+                             "style_set_exact", diffs)) {
+    return;
+  }
+  if (CompareSelectionSubset(OptionalValue(expected, "match_family"),
+                             OptionalValue(actual, "match_family"),
+                             "font_manager_probe.operation.match_family",
+                             "style_set_exact", diffs)) {
+    return;
+  }
 
   const Json::Value& expected_typefaces = expected["matched_typefaces"];
   const Json::Value& actual_typefaces = actual["matched_typefaces"];
@@ -949,9 +981,21 @@ void CompareFontManagerProbe(const Json::Value& expected_root,
   for (Json::ArrayIndex i = 0; i < expected_typefaces.size(); ++i) {
     const std::string path =
         IndexJsonPath("font_manager_probe.matched_typefaces", i);
+    if (CompareSelectionSubset(
+            OptionalValue(expected_typefaces[i], "available"),
+            OptionalValue(actual_typefaces[i], "available"),
+            ChildJsonPath(path, "available"), "selection_exact", diffs)) {
+      return;
+    }
+
+    const size_t descriptor_diff_count = diffs->size();
     CompareDescriptor(
         expected_typefaces[i]["descriptor"], actual_typefaces[i]["descriptor"],
         ChildJsonPath(path, "descriptor"), "selection_mismatch", config, diffs);
+    if (HasNewDiffs(descriptor_diff_count, *diffs)) {
+      return;
+    }
+
     if (expected_typefaces[i].isMember("font_style") &&
         actual_typefaces[i].isMember("font_style")) {
       CompareFontStyle(expected_typefaces[i]["font_style"],

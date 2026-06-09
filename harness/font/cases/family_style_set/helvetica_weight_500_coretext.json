@@ -1,22 +1,17 @@
 {
   "schema_version": 1,
-  "id": "font.font_manager.coretext.css_generic_sans_serif",
-  "category": "font_manager",
+  "id": "font.family_style_set.coretext.helvetica_weight_500",
+  "category": "family_style_set",
   "status": "active",
-  "known_issue": {
-    "id": "coretext-css-generic-sans-serif",
-    "reason_code": "selection_mismatch",
-    "summary": "Skia CoreText matchFamilyStyle(\"sans-serif\", Regular) returns unavailable, while Skity currently maps the CSS generic family to Helvetica. Keep this case active until the font matching harness work is complete."
-  },
   "backend": "coretext",
   "platforms": [
     "darwin-ct"
   ],
   "font_manager_request": {
-    "entry": "MatchFamilyStyle",
-    "family_name": "sans-serif",
+    "entry": "CreateStyleSet",
+    "family_name": "Helvetica",
     "style": {
-      "weight": 400,
+      "weight": 500,
       "width": 5,
       "slant": "upright"
     },
@@ -40,8 +35,7 @@
     "typeface_identity": "normalized_descriptor",
     "font_style": "exact",
     "font_metrics": {
-      "mode": "epsilon",
-      "epsilon": 0.001
+      "mode": "ignore"
     }
   }
 }

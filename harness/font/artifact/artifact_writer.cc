@@ -100,6 +100,9 @@ std::filesystem::path DefaultArtifactPath(
               ".fonts.json");
     case ArtifactKind::kSkityResult:
       return local_root / "artifacts" / "skity" / (name + backend + ".json");
+    case ArtifactKind::kMatchResult:
+      return local_root / "artifacts" / "skity" /
+             (name + backend + ".match.json");
     case ArtifactKind::kCompareReport:
       return local_root / "artifacts" / "compare" /
              (name + backend + ".compare.json");
