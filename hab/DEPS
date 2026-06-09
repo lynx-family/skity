@@ -5,7 +5,7 @@ deps = {
         "type": "git",
         "url": "https://github.com/freetype/freetype.git",
         "commit": "42608f77f20749dd6ddc9e0536788eaad70ea4b5",
-        "patches": os.path.join(root_dir, 'patches', 'freetype', '0001-Adapt-freetype-to-the-Skity-project.patch'),
+        "patches": os.path.join(root_dir, 'patches', 'freetype', '*.patch'),
         "ignore_in_git": True,
     },
     "third_party/nanopng": {
