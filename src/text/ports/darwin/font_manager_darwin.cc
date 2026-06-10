@@ -16,6 +16,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <skity/macros.hpp>
 

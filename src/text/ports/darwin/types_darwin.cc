@@ -14,6 +14,7 @@
 #include <array>
 #include <mutex>
 #include <skity/macros.hpp>
+#include <string>
 
 namespace skity {
 

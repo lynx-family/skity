@@ -18,6 +18,7 @@
 #include <freetype/ftstroke.h>
 #include <freetype/tttables.h>
 
+#include <cstdlib>
 #include <cstring>
 #include <skity/geometry/stroke.hpp>
 

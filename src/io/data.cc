@@ -3,6 +3,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <cassert>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <functional>

@@ -5,6 +5,7 @@
 #ifndef INCLUDE_SKITY_RECORDER_DISPLAY_LIST_HPP
 #define INCLUDE_SKITY_RECORDER_DISPLAY_LIST_HPP
 
+#include <cstdlib>
 #include <memory>
 #include <skity/macros.hpp>
 #include <skity/render/canvas.hpp>

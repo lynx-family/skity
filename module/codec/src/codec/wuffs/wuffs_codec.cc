@@ -4,6 +4,7 @@
 
 #include "src/codec/wuffs/wuffs_codec.hpp"
 
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <skity/io/pixmap.hpp>

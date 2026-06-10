@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <type_traits>
 #include <vector>
 
 #include "src/gpu/gpu_buffer.hpp"

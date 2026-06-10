@@ -4,6 +4,8 @@
 
 #include "src/utils/arena_allocator.hpp"
 
+#include <cstdlib>
+
 #include "src/logging.hpp"
 
 namespace skity {

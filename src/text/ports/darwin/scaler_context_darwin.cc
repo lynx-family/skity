@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <skity/geometry/stroke.hpp>
 
 #include "src/text/ports/darwin/typeface_darwin.hpp"

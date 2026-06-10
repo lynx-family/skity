@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iterator>
+#include <type_traits>
 #include <vector>
 
 namespace skity::Clipper2Lib {
