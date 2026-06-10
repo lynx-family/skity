@@ -32,6 +32,7 @@ add_library(skity_font_harness STATIC
   ${CMAKE_CURRENT_LIST_DIR}/probe/font_manager_probe.cc
   ${CMAKE_CURRENT_LIST_DIR}/probe/glyph_path_probe.cc
   ${CMAKE_CURRENT_LIST_DIR}/probe/metrics_probe.cc
+  ${CMAKE_CURRENT_LIST_DIR}/probe/typeface_identity.cc
   ${CMAKE_CURRENT_LIST_DIR}/probe/typeface_probe.cc
   ${CMAKE_SOURCE_DIR}/src/render/text/text_transform.cc
   ${CMAKE_SOURCE_DIR}/src/base/hash.cc

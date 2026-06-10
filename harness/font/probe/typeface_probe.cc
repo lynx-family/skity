@@ -19,6 +19,7 @@
 
 #include "harness/font/artifact/json_io.hpp"
 #include "harness/font/case/case_document.hpp"
+#include "harness/font/probe/typeface_identity.hpp"
 
 #ifndef SKITY_FONT_HARNESS_HAS_CORETEXT
 #define SKITY_FONT_HARNESS_HAS_CORETEXT 0
@@ -82,46 +83,6 @@ Json::Value FontStyleToJson(const FontStyle& style) {
   return value;
 }
 
-Json::Value VariationPositionToJson(const VariationPosition& position) {
-  std::vector<VariationPosition::Coordinate> coordinates(
-      position.GetCoordinates().begin(), position.GetCoordinates().end());
-  std::sort(coordinates.begin(), coordinates.end(),
-            [](const auto& lhs, const auto& rhs) {
-              if (lhs.axis != rhs.axis) {
-                return lhs.axis < rhs.axis;
-              }
-              return lhs.value < rhs.value;
-            });
-
-  Json::Value value(Json::arrayValue);
-  for (const auto& coordinate : coordinates) {
-    Json::Value item(Json::objectValue);
-    item["axis"] = TagToString(coordinate.axis);
-    item["axis_value"] = static_cast<Json::UInt64>(coordinate.axis);
-    item["value"] = coordinate.value;
-    value.append(std::move(item));
-  }
-  return value;
-}
-
-Json::Value VariationAxesToJson(std::vector<VariationAxis> axes) {
-  std::sort(axes.begin(), axes.end(),
-            [](const auto& lhs, const auto& rhs) { return lhs.tag < rhs.tag; });
-
-  Json::Value value(Json::arrayValue);
-  for (const auto& axis : axes) {
-    Json::Value item(Json::objectValue);
-    item["tag"] = TagToString(axis.tag);
-    item["tag_value"] = static_cast<Json::UInt64>(axis.tag);
-    item["min"] = axis.min;
-    item["default"] = axis.def;
-    item["max"] = axis.max;
-    item["hidden"] = axis.hidden;
-    value.append(std::move(item));
-  }
-  return value;
-}
-
 Json::Value FontDescriptorToJson(const FontDescriptor& descriptor,
                                  const std::string& font_uri) {
   Json::Value value(Json::objectValue);
@@ -132,7 +93,7 @@ Json::Value FontDescriptorToJson(const FontDescriptor& descriptor,
   value["collection_index"] = descriptor.collection_index;
   value["font_file"] = font_uri;
   value["variation_position"] =
-      VariationPositionToJson(descriptor.variation_position);
+      TypefaceVariationPositionToJson(descriptor.variation_position);
   value["factory_id"] = TagToString(descriptor.factory_id);
   value["factory_id_value"] = static_cast<Json::UInt64>(descriptor.factory_id);
   return value;
@@ -308,6 +269,8 @@ Json::Value BuildSuccessReport(const Json::Value& root,
   typeface_result["collection_index"] = font_file.collection_index;
   typeface_result["typeface"] =
       FontDescriptorToJson(typeface->GetFontDescriptor(), font_file.uri);
+  typeface_result["identity"] =
+      TypefaceIdentityToJson(typeface, typeface->GetFontDescriptor());
   report["typeface_result"] = std::move(typeface_result);
 
   Json::Value probe(Json::objectValue);
@@ -324,9 +287,9 @@ Json::Value BuildSuccessReport(const Json::Value& root,
   probe["table_count"] = table_count;
   probe["copied_table_tag_count"] = copied_tag_count;
   probe["variation_position"] =
-      VariationPositionToJson(typeface->GetVariationDesignPosition());
+      TypefaceVariationPositionToJson(typeface->GetVariationDesignPosition());
   probe["variation_axes"] =
-      VariationAxesToJson(typeface->GetVariationDesignParameters());
+      TypefaceVariationAxesToJson(typeface->GetVariationDesignParameters());
   probe["glyphs"] = GlyphsToJson(root, typeface);
   report["typeface_probe"] = std::move(probe);
 

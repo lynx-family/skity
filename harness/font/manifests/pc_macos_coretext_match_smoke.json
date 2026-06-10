@@ -13,6 +13,7 @@
     "family_style_set/arial_italic_coretext.json",
     "font_manager/default_typeface_coretext.json",
     "font_manager/apple_system_ui_font_regular_coretext.json",
+    "font_manager/apple_system_ui_font_weight_500_coretext.json",
     "font_manager/match_family_style_helvetica_regular_coretext.json",
     "font_manager/match_family_style_character_cjk_coretext.json",
     "font_manager/apple_system_ui_font_character_zh_hans_coretext.json",

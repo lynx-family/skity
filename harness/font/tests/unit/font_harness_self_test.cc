@@ -463,8 +463,8 @@ TEST(FontHarnessCompareEngineTest,
 }
 
 TEST(FontHarnessCompareEngineTest,
-     ShortCircuitsFontManagerCompareWhenDescriptorDiffers) {
-  TempDir temp("font_manager_descriptor");
+     ShortCircuitsFontManagerCompareWhenIdentityDiffers) {
+  TempDir temp("font_manager_identity");
   CompareResult result;
   RunFontManagerCompare(
       &temp,
@@ -478,7 +478,7 @@ TEST(FontHarnessCompareEngineTest,
 
   ExpectSingleDiff(
       result, "selection_mismatch",
-      "font_manager_probe.matched_typefaces[0].descriptor.post_script_name");
+      "font_manager_probe.matched_typefaces[0].identity.post_script_name");
 }
 
 TEST(FontHarnessCompareEngineTest,
