@@ -292,12 +292,62 @@ Json::Value NormalizeDescriptor(const Json::Value& descriptor,
   return value;
 }
 
+Json::Value NormalizeTypefaceIdentity(const Json::Value& identity,
+                                      const Json::Value* owner = nullptr) {
+  Json::Value value(Json::objectValue);
+  if (!identity.isObject()) {
+    return value;
+  }
+
+  AddIfPresent(&value, "family_name",
+               OptionalStringValue(identity, "family_name"));
+  AddIfPresent(&value, "post_script_name",
+               OptionalStringValue(identity, "post_script_name"));
+  AddIfPresent(&value, "full_name", OptionalStringValue(identity, "full_name"));
+  AddIfPresent(&value, "collection_index",
+               OptionalValue(identity, "collection_index"));
+  if (!value.isMember("collection_index") && owner != nullptr) {
+    AddIfPresent(&value, "collection_index",
+                 OptionalValue(*owner, "collection_index"));
+  }
+  if (identity.isMember("style")) {
+    value["style"] = NormalizeStyle(identity["style"]);
+  }
+  AddIfPresent(&value, "units_per_em", OptionalValue(identity, "units_per_em"));
+  AddIfPresent(&value, "glyph_count", OptionalValue(identity, "glyph_count"));
+  AddIfPresent(&value, "table_count", OptionalValue(identity, "table_count"));
+  AddIfPresent(&value, "variation_position",
+               OptionalValue(identity, "variation_position"));
+  AddIfPresent(&value, "variation_axes",
+               OptionalValue(identity, "variation_axes"));
+  return value;
+}
+
+Json::Value NormalizeTypefaceSelectionIdentity(const Json::Value& typeface) {
+  const Json::Value* identity = ObjectMember(typeface, "identity");
+  if (identity != nullptr && identity->isObject()) {
+    Json::Value normalized = NormalizeTypefaceIdentity(*identity, &typeface);
+    if (!normalized.empty()) {
+      return normalized;
+    }
+  }
+  return NormalizeDescriptor(OptionalValue(typeface, "descriptor"), &typeface);
+}
+
 const Json::Value* FindTypefaceDescriptor(const Json::Value& root) {
   const Json::Value* typeface_result = ObjectMember(root, "typeface_result");
   if (typeface_result == nullptr || !typeface_result->isObject()) {
     return nullptr;
   }
   return ObjectMember(*typeface_result, "typeface");
+}
+
+const Json::Value* FindTypefaceIdentity(const Json::Value& root) {
+  const Json::Value* typeface_result = ObjectMember(root, "typeface_result");
+  if (typeface_result == nullptr || !typeface_result->isObject()) {
+    return nullptr;
+  }
+  return ObjectMember(*typeface_result, "identity");
 }
 
 Json::Value NormalizeTypefaceDescriptor(const Json::Value& root) {
@@ -307,6 +357,15 @@ Json::Value NormalizeTypefaceDescriptor(const Json::Value& root) {
     return Json::Value(Json::objectValue);
   }
   return NormalizeDescriptor(*descriptor, typeface_result);
+}
+
+Json::Value NormalizeTypefaceProbeIdentity(const Json::Value& root) {
+  const Json::Value* typeface_result = ObjectMember(root, "typeface_result");
+  const Json::Value* identity = FindTypefaceIdentity(root);
+  if (identity != nullptr) {
+    return NormalizeTypefaceIdentity(*identity, typeface_result);
+  }
+  return NormalizeTypefaceDescriptor(root);
 }
 
 Json::Value NormalizeGlyphItem(const Json::Value& item) {
@@ -493,6 +552,7 @@ Json::Value NormalizeMetricsProbe(const Json::Value& root) {
 Json::Value NormalizeTypefaceProbe(const Json::Value& root) {
   Json::Value value(Json::objectValue);
   value["descriptor"] = NormalizeTypefaceDescriptor(root);
+  value["identity"] = NormalizeTypefaceProbeIdentity(root);
 
   const Json::Value* probe = ObjectMember(root, "typeface_probe");
   if (probe == nullptr || !probe->isObject()) {
@@ -568,6 +628,7 @@ Json::Value NormalizeMatchedTypeface(const Json::Value& typeface) {
   AddIfPresent(&value, "available", OptionalValue(typeface, "available"));
   value["descriptor"] =
       NormalizeDescriptor(OptionalValue(typeface, "descriptor"), &typeface);
+  value["identity"] = NormalizeTypefaceSelectionIdentity(typeface);
   if (typeface.isMember("font_style")) {
     value["font_style"] = NormalizeStyle(typeface["font_style"]);
   }
@@ -601,6 +662,7 @@ Json::Value NormalizeTypefaceSelection(const Json::Value& typeface) {
   AddIfPresent(&value, "available", OptionalValue(typeface, "available"));
   value["descriptor"] =
       NormalizeDescriptor(OptionalValue(typeface, "descriptor"), &typeface);
+  value["identity"] = NormalizeTypefaceSelectionIdentity(typeface);
   if (typeface.isMember("font_style")) {
     value["font_style"] = NormalizeStyle(typeface["font_style"]);
   }
@@ -782,14 +844,16 @@ bool CompareSelectionSubset(const Json::Value& expected,
   return HasNewDiffs(diff_count, *diffs);
 }
 
-void CompareDescriptor(const Json::Value& expected, const Json::Value& actual,
-                       const std::string& path, const std::string& reason_code,
-                       const CompareConfig& config, std::vector<Diff>* diffs) {
+void CompareTypefaceIdentity(const Json::Value& expected,
+                             const Json::Value& actual, const std::string& path,
+                             const std::string& reason_code,
+                             const CompareConfig& config,
+                             std::vector<Diff>* diffs) {
   if (config.typeface_identity == "none") {
     return;
   }
-  CompareJsonSubset(expected, actual, path, reason_code,
-                    "normalized_descriptor", 0.0, false, diffs);
+  CompareJsonSubset(expected, actual, path, reason_code, "normalized_identity",
+                    0.0, false, diffs);
 }
 
 void CompareFontStyle(const Json::Value& expected, const Json::Value& actual,
@@ -860,9 +924,9 @@ void CompareTypefaceProbe(const Json::Value& expected_root,
                           std::vector<Diff>* diffs) {
   Json::Value expected = NormalizeTypefaceProbe(expected_root);
   Json::Value actual = NormalizeTypefaceProbe(actual_root);
-  CompareDescriptor(expected["descriptor"], actual["descriptor"],
-                    "typeface_result.typeface", "descriptor_mismatch", config,
-                    diffs);
+  CompareTypefaceIdentity(expected["identity"], actual["identity"],
+                          "typeface_result.identity", "descriptor_mismatch",
+                          config, diffs);
 
   if (expected["descriptor"].isMember("style") &&
       actual["descriptor"].isMember("style")) {
@@ -989,9 +1053,9 @@ void CompareFontManagerProbe(const Json::Value& expected_root,
     }
 
     const size_t descriptor_diff_count = diffs->size();
-    CompareDescriptor(
-        expected_typefaces[i]["descriptor"], actual_typefaces[i]["descriptor"],
-        ChildJsonPath(path, "descriptor"), "selection_mismatch", config, diffs);
+    CompareTypefaceIdentity(
+        expected_typefaces[i]["identity"], actual_typefaces[i]["identity"],
+        ChildJsonPath(path, "identity"), "selection_mismatch", config, diffs);
     if (HasNewDiffs(descriptor_diff_count, *diffs)) {
       return;
     }

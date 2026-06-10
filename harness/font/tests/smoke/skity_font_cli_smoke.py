@@ -455,7 +455,7 @@ def main():
         if expect_report_field(
             selection_mismatch_report,
             "diff_path",
-            "font_manager_probe.matched_typefaces[0].descriptor.post_script_name",
+            "font_manager_probe.matched_typefaces[0].identity.post_script_name",
         ):
             return 1
 

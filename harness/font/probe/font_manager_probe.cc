@@ -22,6 +22,7 @@
 
 #include "harness/font/artifact/json_io.hpp"
 #include "harness/font/case/case_document.hpp"
+#include "harness/font/probe/typeface_identity.hpp"
 #include "src/render/text/text_transform.hpp"
 #include "src/text/scaler_context.hpp"
 #include "src/text/scaler_context_desc.hpp"
@@ -481,8 +482,10 @@ Json::Value BuildTypefaceSummary(const std::string& label,
   }
 
   value["typeface_id"] = static_cast<Json::UInt64>(typeface->TypefaceId());
+  const FontDescriptor descriptor = typeface->GetFontDescriptor();
   value["font_style"] = FontStyleToJson(typeface->GetFontStyle());
-  value["descriptor"] = FontDescriptorToJson(typeface->GetFontDescriptor());
+  value["descriptor"] = FontDescriptorToJson(descriptor);
+  value["identity"] = TypefaceIdentityToJson(typeface, descriptor);
   value["units_per_em"] = static_cast<Json::UInt64>(typeface->GetUnitsPerEm());
   value["contains_color_table"] = typeface->ContainsColorTable();
   value["table_count"] = typeface->CountTables();
