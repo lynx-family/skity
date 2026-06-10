@@ -3,11 +3,6 @@
   "id": "font.font_manager.coretext.apple_system_ui_font_character_zh_hant",
   "category": "font_manager",
   "status": "active",
-  "known_issue": {
-    "id": "coretext-fallback-zh-hant-locale",
-    "reason_code": "selection_mismatch",
-    "summary": "Skia CoreText honors the zh-Hant locale and selects .PingFang UI TC for U+6F22, while Skity Darwin MatchFamilyStyleCharacter currently does not consume bcp47 and selects .PingFang UI SC. Keep this active as a fixable Skity runtime matching gap."
-  },
   "backend": "coretext",
   "platforms": [
     "darwin-ct"

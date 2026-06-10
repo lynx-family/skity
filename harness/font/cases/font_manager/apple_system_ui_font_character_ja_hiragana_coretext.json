@@ -3,11 +3,6 @@
   "id": "font.font_manager.coretext.apple_system_ui_font_character_ja_hiragana",
   "category": "font_manager",
   "status": "active",
-  "known_issue": {
-    "id": "coretext-fallback-ja-locale",
-    "reason_code": "selection_mismatch",
-    "summary": "Skia CoreText honors the ja locale and selects .Hiragino Kaku Gothic Interface for U+3042, while Skity Darwin MatchFamilyStyleCharacter currently falls back to .CJK Symbols Fallback SC. Keep this active as a fixable Skity runtime matching gap."
-  },
   "backend": "coretext",
   "platforms": [
     "darwin-ct"

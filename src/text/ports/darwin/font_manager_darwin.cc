@@ -17,8 +17,10 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <skity/macros.hpp>
+#include <vector>
 
 #include "src/logging.hpp"
 #include "src/text/ports/darwin/types_darwin.hpp"
@@ -67,6 +69,23 @@ std::shared_ptr<TypefaceDarwin> typeface_from_desc(CTFontDescriptorRef desc) {
   ct_desc_to_font_style(desc, &style);
 
   return TypefaceDarwin::Make(style, UniqueCTFontRef(ct_font));
+}
+
+bool has_string(CTFontRef ct_font, CFStringRef string) {
+  if (ct_font == nullptr || string == nullptr) {
+    return false;
+  }
+
+  CFIndex length = CFStringGetLength(string);
+  if (length <= 0) {
+    return false;
+  }
+
+  std::vector<UniChar> characters(length);
+  std::vector<CGGlyph> glyphs(length);
+  CFStringGetCharacters(string, CFRangeMake(0, length), characters.data());
+  return CTFontGetGlyphsForCharacters(ct_font, characters.data(), glyphs.data(),
+                                      length);
 }
 
 int32_t compute_metric(const FontStyle& a, const FontStyle& b) {
@@ -327,7 +346,11 @@ std::shared_ptr<Typeface> FontManagerDarwin::OnMatchFamilyStyleCharacter(
   if (!desc) {
     return nullptr;
   }
-  auto typeface = typeface_from_desc(desc.get());
+  UniqueCFRef<CTFontRef> family_font(
+      CTFontCreateWithFontDescriptor(desc.get(), 0, nullptr));
+  if (!family_font) {
+    return nullptr;
+  }
 
   UniqueCFRef<CFStringRef> cf_string(CFStringCreateWithBytes(
       kCFAllocatorDefault, reinterpret_cast<const UInt8*>(&character),
@@ -339,11 +362,32 @@ std::shared_ptr<Typeface> FontManagerDarwin::OnMatchFamilyStyleCharacter(
 
   CFRange cf_range = CFRangeMake(0, CFStringGetLength(cf_string.get()));
 
-  UniqueCFRef<CTFontRef> ct_font(
-      CTFontCreateForString(typeface->GetCTFont(), cf_string.get(), cf_range));
+  const char* locale =
+      bcp47 != nullptr && bcp47Count > 0 && bcp47[0] != nullptr ? bcp47[0] : "";
+  UniqueCFRef<CFStringRef> cf_locale(
+      CFStringCreateWithCString(nullptr, locale, kCFStringEncodingUTF8));
+  if (!cf_locale) {
+    return nullptr;
+  }
 
-  if (typeface->GetCTFont() == ct_font.get()) {
-    return typeface;
+  UniqueCFRef<CTFontRef> ct_font(CTFontCreateForStringWithLanguage(
+      family_font.get(), cf_string.get(), cf_range, cf_locale.get()));
+  if (!ct_font || !has_string(ct_font.get(), cf_string.get())) {
+    return nullptr;
+  }
+
+  UniqueCFRef<CFStringRef> fallback_family(CTFontCopyFamilyName(ct_font.get()));
+  if (fallback_family && CFStringGetLength(fallback_family.get()) > 0 &&
+      CFStringGetCharacterAtIndex(fallback_family.get(), 0) != '.') {
+    UniqueCFRef<CTFontDescriptorRef> styled_desc =
+        create_descriptor(fallback_family.get(), style);
+    if (styled_desc) {
+      UniqueCFRef<CTFontRef> styled_font(
+          CTFontCreateWithFontDescriptor(styled_desc.get(), 0, nullptr));
+      if (styled_font && has_string(styled_font.get(), cf_string.get())) {
+        ct_font = std::move(styled_font);
+      }
+    }
   }
 
   return TypefaceDarwin::Make(style, std::move(ct_font));
