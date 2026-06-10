@@ -4,6 +4,7 @@
 
 #include "src/render/text/atlas/atlas_manager.hpp"
 
+#include <cstdlib>
 #include <skity/text/font.hpp>
 
 #include "src/geometry/math.hpp"

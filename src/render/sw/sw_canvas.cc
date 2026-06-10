@@ -5,6 +5,7 @@
 #include "src/render/sw/sw_canvas.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <skity/effect/mask_filter.hpp>
 #include <skity/effect/path_effect.hpp>

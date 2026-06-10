@@ -4,6 +4,7 @@
 
 #include "src/render/text/atlas/atlas_bitmap.hpp"
 
+#include <cstdlib>
 #include <cstring>
 #include <skity/text/font.hpp>
 

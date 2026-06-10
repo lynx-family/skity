@@ -3,6 +3,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <skity/io/data.hpp>
 #include <skity/io/pixmap.hpp>

@@ -13,6 +13,7 @@
 #define SRC_GPU_GL_GL_INTERFACE_HPP
 
 #include <skity/macros.hpp>
+#include <type_traits>
 
 #ifdef __GNUC__
 #pragma clang diagnostic push

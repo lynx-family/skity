@@ -18,6 +18,7 @@
 #include "src/graphic/pathop/clipper2/engine.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace skity::Clipper2Lib {
 
