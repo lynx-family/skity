@@ -14,8 +14,11 @@
 #include <skity/gpu/gpu_surface.hpp>
 #include <skity/gpu/texture.hpp>
 #include <skity/macros.hpp>
+#include <skity/render/precompile_context.hpp>
 
 namespace skity {
+
+class Paint;
 
 /**
  * Query whether a specific GPU backend type is supported by this build.
@@ -187,6 +190,18 @@ class SKITY_API GPUContext {
    */
   SKITY_EXPERIMENTAL
   virtual void SetResourceCacheLimit(size_t size_in_bytes) = 0;
+
+  /**
+   * Create a precompile context bound to this GPUContext. The returned context
+   * can warm up common graphics, image, and text pipelines before drawing, and
+   * should be used on the same thread that owns this GPUContext.
+   *
+   * @param color_type  target surface color type used by the pipelines.
+   * @param enable_msaa whether the target surface uses MSAA. When enabled,
+   *                    precompile uses sample count 4.
+   */
+  std::unique_ptr<PrecompileContext> CreatePrecompileContext(
+      PrecompileColorType color_type, bool enable_msaa);
 
   /**
    * Register a error callback for outside user.

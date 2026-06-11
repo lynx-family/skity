@@ -278,6 +278,10 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
     }
   }
 
+  if (context->gpuContext->IsForceDepthStencilPipelineState()) {
+    layer_state_ |= kDrawStateDepth | kDrawStateStencil;
+  }
+
   // abstract layer no need stencil test and depth for itself
   return HWDrawState::kDrawStateNone;
 }

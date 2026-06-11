@@ -47,6 +47,14 @@ void HWDrawStep::GenerateCommand(const HWDrawStepContext& ctx, Command* cmd,
   }
 }
 
+bool HWDrawStep::PrecompilePipeline(HWDrawContext* context, HWDrawState state,
+                                    GPUTextureFormat target_format,
+                                    uint32_t sample_count,
+                                    BlendMode blend_mode) {
+  return GetPipeline(context, state, target_format, sample_count, blend_mode) !=
+         nullptr;
+}
+
 GPURenderPipeline* HWDrawStep::GetPipeline(HWDrawContext* context,
                                            HWDrawState state,
                                            GPUTextureFormat target_format,

@@ -64,6 +64,17 @@ class GPUContextImpl : public GPUContext {
 
   std::shared_ptr<Data> ReadPixels(const std::shared_ptr<GPUTexture>& texture);
 
+  // Use depth-stencil capable pipeline state for stable pipeline variants.
+  // Draw steps still decide whether they actually use depth or stencil
+  // tests/writes.
+  void SetForceDepthStencilPipelineState(bool force) {
+    force_depth_stencil_pipeline_state_ = force;
+  }
+
+  bool IsForceDepthStencilPipelineState() const {
+    return force_depth_stencil_pipeline_state_;
+  }
+
  protected:
   void ResetOwnedResources();
 
@@ -87,6 +98,7 @@ class GPUContextImpl : public GPUContext {
   std::unique_ptr<HWRenderTargetCache> render_target_cache_ = {};
   std::unique_ptr<HWPipelineLib> pipeline_lib_ = {};
   std::unique_ptr<AtlasManager> atlas_manager_ = {};
+  bool force_depth_stencil_pipeline_state_ = false;
 };
 
 }  // namespace skity
