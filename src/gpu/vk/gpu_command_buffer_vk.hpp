@@ -25,9 +25,22 @@ class GPUSubmitInfoVK : public GPUSubmitInfo {
     return GPUBackendType::kVulkan;
   }
 
-  VkSemaphore wait_semaphore = VK_NULL_HANDLE;
-  VkPipelineStageFlags wait_dst_stage_mask =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  /**
+   * Add a wait semaphore to the submit info.
+   * For swapchain acquire, this is called at surface creation time.
+   * For external texture sync (e.g. GL fence), this is called per-frame
+   * before canvas->Flush().
+   */
+  void AddWaitSemaphore(VkSemaphore semaphore,
+                        VkPipelineStageFlags stage_mask) {
+    wait_semaphores.push_back(semaphore);
+    wait_stage_masks.push_back(stage_mask);
+  }
+
+  // Wait semaphores: acquire semaphore + any external semaphores
+  std::vector<VkSemaphore> wait_semaphores = {};
+  std::vector<VkPipelineStageFlags> wait_stage_masks = {};
+
   VkSemaphore signal_semaphore = VK_NULL_HANDLE;
   VkFence signal_fence = VK_NULL_HANDLE;
 };
