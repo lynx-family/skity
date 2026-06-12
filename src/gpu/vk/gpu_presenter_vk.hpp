@@ -40,8 +40,7 @@ class GPUPresenterVK : public GPUPresenter {
 
  private:
   struct FrameSlot {
-    VkSemaphore image_available = VK_NULL_HANDLE;
-    VkSemaphore render_finished = VK_NULL_HANDLE;
+    VkSemaphore acquire_semaphore = VK_NULL_HANDLE;
     VkFence in_flight = VK_NULL_HANDLE;
   };
 
@@ -95,6 +94,7 @@ class GPUPresenterVK : public GPUPresenter {
   std::vector<VkImage> swapchain_images_ = {};
   std::vector<VkImageView> swapchain_image_views_ = {};
   std::vector<FrameSlot> frame_slots_ = {};
+  std::vector<VkSemaphore> image_present_semaphores_ = {};
   std::vector<VkFence> image_in_flight_fences_ = {};
   uint32_t current_frame_ = 0;
   bool has_outstanding_surface_ = false;
