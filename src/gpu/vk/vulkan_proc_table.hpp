@@ -7,6 +7,11 @@
 
 #include <vulkan/vulkan.h>
 
+#if defined(SKITY_ANDROID)
+#include <vulkan/vulkan_android.h>
+#endif
+
+#include <skity/macros.hpp>
 #include <string>
 #include <vector>
 
@@ -69,6 +74,8 @@ struct VulkanDeviceFns {
   PFN_vkInvalidateMappedMemoryRanges vkInvalidateMappedMemoryRanges = nullptr;
   PFN_vkBindBufferMemory vkBindBufferMemory = nullptr;
   PFN_vkBindImageMemory vkBindImageMemory = nullptr;
+  PFN_vkCreateSemaphore vkCreateSemaphore = nullptr;
+  PFN_vkDestroySemaphore vkDestroySemaphore = nullptr;
   PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements = nullptr;
   PFN_vkGetImageMemoryRequirements vkGetImageMemoryRequirements = nullptr;
   PFN_vkCreateBuffer vkCreateBuffer = nullptr;
@@ -128,6 +135,9 @@ struct VulkanDeviceFns {
   PFN_vkCmdSetStencilWriteMask vkCmdSetStencilWriteMask = nullptr;
   PFN_vkCmdSetStencilReference vkCmdSetStencilReference = nullptr;
   PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
+#if defined(SKITY_ANDROID)
+  PFN_vkImportSemaphoreFdKHR vkImportSemaphoreFdKHR = nullptr;
+#endif
 #if defined(SKITY_VK_DEBUG_RUNTIME)
   PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT = nullptr;
   PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT = nullptr;
