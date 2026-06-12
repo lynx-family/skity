@@ -15,6 +15,7 @@ struct ManifestValidationResult {
   bool valid = false;
   std::string manifest_id;
   std::string backend;
+  std::string target_platform;
   Json::Value normalized_manifest;
   ValidationContext errors;
 };

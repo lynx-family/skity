@@ -15,6 +15,7 @@
 #include "harness/font/artifact/json_io.hpp"
 #include "harness/font/case/case_document.hpp"
 #include "harness/font/case/manifest_document.hpp"
+#include "harness/font/case/platform_target.hpp"
 #include "harness/font/case/repo_uri.hpp"
 #include "harness/font/compare/compare_engine.hpp"
 #include "harness/font/compare/path/path_normalizer.hpp"
@@ -28,6 +29,7 @@ constexpr const char* kMetricsCaseId = "font.synthetic.metrics";
 constexpr const char* kGlyphPathCaseId = "font.synthetic.glyph_path";
 constexpr const char* kFontManagerCaseId = "font.synthetic.font_manager";
 constexpr const char* kBackend = "coretext";
+constexpr const char* kTargetPlatform = "macos-coretext";
 
 class TempDir {
  public:
@@ -104,14 +106,14 @@ Json::Value MakeManifest() {
   root["id"] = "font.synthetic.smoke";
   root["backend"] = kBackend;
   root["platforms"] = Json::Value(Json::arrayValue);
-  root["platforms"].append("darwin-ct");
+  root["platforms"].append(kTargetPlatform);
+  root["target_platform"] = kTargetPlatform;
   root["case_root"] = "cases";
   root["cases"] = Json::Value(Json::arrayValue);
   root["cases"].append("typeface.json");
   root["artifacts"] = Json::Value(Json::objectValue);
-  root["artifacts"]["skia_dir"] = "artifacts/skia";
-  root["artifacts"]["skity_dir"] = "artifacts/skity";
-  root["artifacts"]["compare_dir"] = "artifacts/compare";
+  root["artifacts"]["root"] = "artifacts/macos-coretext";
+  root["artifacts"]["report_root"] = "reports/macos-coretext";
   return root;
 }
 
@@ -519,6 +521,51 @@ TEST(FontHarnessCaseDocumentTest, ValidatesSyntheticTypefaceCase) {
       result.resolved_font_files[0].absolute_path);
 }
 
+TEST(FontHarnessCaseDocumentTest, AcceptsIosSimulatorCoreTextPlatform) {
+  TempDir temp("case_ios_sim_coretext");
+  WriteTextFile(temp.root() / "fonts/synthetic.ttf", "synthetic font bytes");
+
+  Json::Value root = MakeTypefaceCase();
+  root["platforms"] = Json::Value(Json::arrayValue);
+  root["platforms"].append("ios-sim-coretext");
+
+  RepoUriResolver resolver(temp.root());
+  CaseValidationResult result = ValidateCaseDocument(root, resolver);
+
+  EXPECT_TRUE(result.valid) << WriteJsonString(result.errors.ToJson());
+}
+
+TEST(FontHarnessCaseDocumentTest, AcceptsReservedFuturePlatformTargets) {
+  TempDir temp("case_future_platforms");
+  WriteTextFile(temp.root() / "fonts/synthetic.ttf", "synthetic font bytes");
+
+  RepoUriResolver resolver(temp.root());
+
+  Json::Value ios_device = MakeTypefaceCase();
+  ios_device["platforms"] = Json::Value(Json::arrayValue);
+  ios_device["platforms"].append("ios-device-coretext");
+  CaseValidationResult ios_device_result =
+      ValidateCaseDocument(ios_device, resolver);
+  EXPECT_TRUE(ios_device_result.valid)
+      << WriteJsonString(ios_device_result.errors.ToJson());
+
+  Json::Value android = MakeTypefaceCase();
+  android["backend"] = "freetype";
+  android["platforms"] = Json::Value(Json::arrayValue);
+  android["platforms"].append("android-freetype");
+  CaseValidationResult android_result = ValidateCaseDocument(android, resolver);
+  EXPECT_TRUE(android_result.valid)
+      << WriteJsonString(android_result.errors.ToJson());
+
+  Json::Value windows = MakeTypefaceCase();
+  windows["backend"] = "directwrite";
+  windows["platforms"] = Json::Value(Json::arrayValue);
+  windows["platforms"].append("windows-directwrite");
+  CaseValidationResult windows_result = ValidateCaseDocument(windows, resolver);
+  EXPECT_TRUE(windows_result.valid)
+      << WriteJsonString(windows_result.errors.ToJson());
+}
+
 TEST(FontHarnessCaseDocumentTest, RejectsRepoUriTraversal) {
   TempDir temp("case_traversal");
   WriteTextFile(temp.root() / "fonts/synthetic.ttf", "synthetic font bytes");
@@ -543,6 +590,7 @@ TEST(FontHarnessManifestDocumentTest, ValidatesSyntheticManifest) {
   EXPECT_TRUE(result.valid) << WriteJsonString(result.errors.ToJson());
   EXPECT_EQ("font.synthetic.smoke", result.manifest_id);
   EXPECT_EQ(kBackend, result.backend);
+  EXPECT_EQ(kTargetPlatform, result.target_platform);
 }
 
 TEST(FontHarnessManifestDocumentTest, RejectsUnsafeCasePath) {
@@ -555,6 +603,54 @@ TEST(FontHarnessManifestDocumentTest, RejectsUnsafeCasePath) {
 
   EXPECT_FALSE(result.valid);
   EXPECT_FALSE(result.errors.ToJson().empty());
+}
+
+TEST(FontHarnessManifestDocumentTest, RejectsTargetPlatformOutsidePlatforms) {
+  TempDir temp("manifest_target_platform");
+  Json::Value root = MakeManifest();
+  root["target_platform"] = "ios-sim-coretext";
+
+  RepoUriResolver resolver(temp.root());
+  ManifestValidationResult result = ValidateManifestDocument(root, resolver);
+
+  EXPECT_FALSE(result.valid);
+  EXPECT_FALSE(result.errors.ToJson().empty());
+}
+
+TEST(FontHarnessManifestDocumentTest, AcceptsReservedFuturePlatformTargets) {
+  TempDir temp("manifest_future_platforms");
+  RepoUriResolver resolver(temp.root());
+
+  Json::Value android = MakeManifest();
+  android["backend"] = "freetype";
+  android["platforms"] = Json::Value(Json::arrayValue);
+  android["platforms"].append("android-freetype");
+  android["target_platform"] = "android-freetype";
+  ManifestValidationResult android_result =
+      ValidateManifestDocument(android, resolver);
+  EXPECT_TRUE(android_result.valid)
+      << WriteJsonString(android_result.errors.ToJson());
+  EXPECT_EQ("android-freetype", android_result.target_platform);
+
+  Json::Value windows = MakeManifest();
+  windows["backend"] = "directwrite";
+  windows["platforms"] = Json::Value(Json::arrayValue);
+  windows["platforms"].append("windows-directwrite");
+  windows["target_platform"] = "windows-directwrite";
+  ManifestValidationResult windows_result =
+      ValidateManifestDocument(windows, resolver);
+  EXPECT_TRUE(windows_result.valid)
+      << WriteJsonString(windows_result.errors.ToJson());
+  EXPECT_EQ("windows-directwrite", windows_result.target_platform);
+}
+
+TEST(FontHarnessPlatformTargetTest, CanonicalizesLegacyAliases) {
+  EXPECT_EQ("macos-coretext", CanonicalPlatformTarget("darwin-ct"));
+  EXPECT_EQ("windows-directwrite", CanonicalPlatformTarget("windows-dwrite"));
+
+  Json::Value platforms(Json::arrayValue);
+  platforms.append("darwin-ct");
+  EXPECT_TRUE(PlatformArrayContainsTarget(platforms, "macos-coretext"));
 }
 
 TEST(FontHarnessCompareEngineTest, ReportsPassMismatchAndInputFailure) {

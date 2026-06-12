@@ -5,7 +5,9 @@
   "status": "active",
   "backend": "coretext",
   "platforms": [
-    "darwin-ct"
+    "macos-coretext",
+    "ios-sim-coretext",
+    "ios-device-coretext"
   ],
   "font_manager_request": {
     "entry": "MatchFamilyStyle",

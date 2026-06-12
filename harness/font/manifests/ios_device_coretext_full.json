@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "id": "pc_macos_coretext_full",
+  "id": "ios_device_coretext_full",
   "backend": "coretext",
   "platforms": [
-    "macos-coretext"
+    "ios-device-coretext"
   ],
-  "target_platform": "macos-coretext",
+  "target_platform": "ios-device-coretext",
   "case_root": "harness/font/cases",
   "cases": [
     "typeface_probe/roboto_regular_file_coretext.json",
@@ -38,7 +38,7 @@
     "font_manager/css_generic_sans_serif_coretext.json"
   ],
   "artifacts": {
-    "root": "local/font-harness/artifacts/macos-coretext",
-    "report_root": "local/font-harness/reports/macos-coretext"
+    "root": "local/font-harness/artifacts/ios-device-coretext",
+    "report_root": "local/font-harness/reports/ios-device-coretext"
   }
 }

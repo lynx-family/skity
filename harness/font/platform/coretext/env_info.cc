@@ -43,13 +43,17 @@
 #define SKITY_FONT_HARNESS_HAS_CORETEXT 0
 #endif
 
+#ifndef SKITY_FONT_HARNESS_TARGET_PLATFORM
+#define SKITY_FONT_HARNESS_TARGET_PLATFORM "unknown"
+#endif
+
 namespace skity {
 namespace font_harness {
 
 namespace {
 
 constexpr const char* kBackend = "coretext";
-constexpr const char* kPlatformId = "darwin-ct";
+constexpr const char* kTargetPlatform = SKITY_FONT_HARNESS_TARGET_PLATFORM;
 
 std::string Trim(std::string value) {
   while (!value.empty() && (value.back() == '\n' || value.back() == '\r' ||
@@ -136,6 +140,14 @@ std::string ResolveSkityCommit(const std::filesystem::path& repo_root) {
 }
 
 std::string DetectPlatformName() {
+  const std::string target_platform = kTargetPlatform;
+  if (target_platform.rfind("ios-", 0) == 0) {
+    return "iOS";
+  }
+  if (target_platform.rfind("macos-", 0) == 0) {
+    return "macOS";
+  }
+
   const std::string system_name = SKITY_FONT_HARNESS_CMAKE_SYSTEM_NAME;
   if (system_name == "Darwin") {
     return "macOS";
@@ -181,7 +193,10 @@ Json::Value BuildBaseReport(const CoreTextEnvRequest& request,
   report["schema_version"] = 1;
   report["artifact_type"] = artifact_type;
   report["platform"] = DetectPlatformName();
-  report["platform_id"] = kPlatformId;
+  report["platform_id"] = std::string(kTargetPlatform) == "macos-coretext"
+                              ? "darwin-ct"
+                              : kTargetPlatform;
+  report["target_platform"] = kTargetPlatform;
   report["backend"] = kBackend;
   report["os_version"] = DetectOSVersion();
   const std::string commit = ResolveSkityCommit(request.repo_root);

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "ios_device_coretext_explicit_source_smoke",
+  "backend": "coretext",
+  "platforms": [
+    "ios-device-coretext"
+  ],
+  "target_platform": "ios-device-coretext",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "typeface_probe/roboto_regular_file_coretext.json",
+    "typeface_probe/roboto_regular_data_coretext.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/ios-device-coretext",
+    "report_root": "local/font-harness/reports/ios-device-coretext"
+  }
+}
