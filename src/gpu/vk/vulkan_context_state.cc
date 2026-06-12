@@ -14,6 +14,11 @@
 #include "src/gpu/vk/vulkan_platform_extensions.hpp"
 #include "src/logging.hpp"
 
+#if defined(SKITY_ANDROID)
+#include <android/hardware_buffer.h>
+#include <dlfcn.h>
+#endif
+
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
@@ -610,6 +615,10 @@ bool VulkanContextState::Initialize(const GPUContextInfoVK& info) {
   Reset();
   LOGD("Initializing VulkanContextState");
 
+#if defined(SKITY_ANDROID)
+  LoadAndroidFns();
+#endif
+
   if (!InitializeInstance(info) || !InitializePhysicalDevice(info) ||
       !InitializeQueues(info) || !InitializeDevice(info)) {
     LOGE("Failed to initialize VulkanContextState");
@@ -1183,6 +1192,18 @@ bool VulkanContextState::InitializeOwnedDevice() {
         VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
   }
 #if defined(SKITY_ANDROID)
+  if (HasAvailableDeviceExtension(
+          VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME)) {
+    enabled_device_extensions_.emplace_back(
+        VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME);
+    // VK_ANDROID_external_memory_android_hardware_buffer requires
+    // VK_EXT_queue_family_foreign as a prerequisite.
+    if (HasAvailableDeviceExtension(
+            VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME)) {
+      enabled_device_extensions_.emplace_back(
+          VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
+    }
+  }
   if (HasAvailableDeviceExtension(VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME)) {
     enabled_device_extensions_.emplace_back(
         VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME);
@@ -1523,6 +1544,25 @@ void VulkanContextState::Reset() {
   own_instance_ = false;
   own_device_ = false;
 }
+
+#if defined(SKITY_ANDROID)
+void VulkanContextState::LoadAndroidFns() {
+  void* lib = dlopen("libandroid.so", RTLD_NOW);
+  if (!lib) {
+    LOGW("VulkanContextState: failed to open libandroid.so");
+    return;
+  }
+  fn_ahb_describe_ = reinterpret_cast<Fn_AHardwareBuffer_describe>(
+      dlsym(lib, "AHardwareBuffer_describe"));
+  if (fn_ahb_describe_) {
+    LOGD("VulkanContextState: AHardwareBuffer_describe loaded");
+  } else {
+    LOGW(
+        "VulkanContextState: AHardwareBuffer_describe not available (requires "
+        "API 26+)");
+  }
+}
+#endif
 
 }  // namespace skity
 

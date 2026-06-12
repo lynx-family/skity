@@ -10,6 +10,10 @@
 #include <skity/gpu/gpu_context_vk.hpp>
 #include <vector>
 
+#if defined(SKITY_ANDROID)
+#include <android/hardware_buffer.h>
+#endif
+
 #include "src/gpu/vk/vulkan_debug_runtime_state.hpp"
 #include "src/gpu/vk/vulkan_pending_submission.hpp"
 #include "src/gpu/vk/vulkan_proc_table.hpp"
@@ -81,6 +85,19 @@ class VulkanContextState {
 
   bool IsDynamicRenderingEnabled() const { return dynamic_rendering_enabled_; }
 
+#if defined(SKITY_ANDROID)
+  using Fn_AHardwareBuffer_describe = void (*)(const ::AHardwareBuffer*,
+                                               AHardwareBuffer_Desc*);
+
+  bool IsAHardwareBufferAvailable() const {
+    return fn_ahb_describe_ != nullptr;
+  }
+
+  Fn_AHardwareBuffer_describe GetAHardwareBufferDescribeFn() const {
+    return fn_ahb_describe_;
+  }
+#endif
+
   const std::vector<VkExtensionProperties>& GetAvailableInstanceExtensions()
       const {
     return available_instance_extensions_;
@@ -124,6 +141,9 @@ class VulkanContextState {
   bool LoadAvailableDeviceExtensions();
   bool LoadDeviceFns();
   void Reset();
+#if defined(SKITY_ANDROID)
+  void LoadAndroidFns();
+#endif
 
   VulkanFunctionPointers functions_ = {};
   VkInstance instance_ = VK_NULL_HANDLE;
@@ -150,6 +170,9 @@ class VulkanContextState {
   bool synchronization2_enabled_ = false;
   bool dynamic_rendering_enabled_ = false;
   VulkanDebugRuntimeState debug_runtime_ = {};
+#if defined(SKITY_ANDROID)
+  Fn_AHardwareBuffer_describe fn_ahb_describe_ = nullptr;
+#endif
   mutable std::vector<VulkanPendingSubmission> pending_submissions_ = {};
   mutable VulkanRenderPassCache render_pass_cache_ = {};
 };
