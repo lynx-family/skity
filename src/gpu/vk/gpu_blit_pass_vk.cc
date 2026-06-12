@@ -86,7 +86,7 @@ void TransitionImageLayout(const VulkanContextState& state,
   barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.image = texture.GetImage();
   barrier.subresourceRange.aspectMask =
-      GetImageAspectMask(texture.GetDescriptor().format);
+      VkFormatAspectMaskForBarrier(texture.GetVkFormat());
   barrier.subresourceRange.baseMipLevel = 0;
   barrier.subresourceRange.levelCount = texture.GetDescriptor().mip_level_count;
   barrier.subresourceRange.baseArrayLayer = 0;
@@ -118,7 +118,7 @@ void TransitionMipRangeLayout(const VulkanContextState& state,
   barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.image = texture.GetImage();
   barrier.subresourceRange.aspectMask =
-      GetImageAspectMask(texture.GetDescriptor().format);
+      VkFormatAspectMaskForBarrier(texture.GetVkFormat());
   barrier.subresourceRange.baseMipLevel = base_mip_level;
   barrier.subresourceRange.levelCount = level_count;
   barrier.subresourceRange.baseArrayLayer = 0;
