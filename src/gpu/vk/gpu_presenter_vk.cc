@@ -208,7 +208,7 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   uint32_t image_index = 0;
   const VkResult acquire_result = fns_.vkAcquireNextImageKHR(
       state_->GetLogicalDevice(), swapchain_, UINT64_MAX,
-      frame_slot.image_available, VK_NULL_HANDLE, &image_index);
+      frame_slot.acquire_semaphore, VK_NULL_HANDLE, &image_index);
   if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR ||
       acquire_result == VK_SUBOPTIMAL_KHR) {
     result.status = GPUPresenterStatus::kNeedRecreate;
@@ -242,9 +242,9 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   image_fence = frame_slot.in_flight;
 
   GPUSurfaceSyncInfoVK sync_info = {};
-  sync_info.wait_semaphore = frame_slot.image_available;
+  sync_info.wait_semaphore = frame_slot.acquire_semaphore;
   sync_info.wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  sync_info.signal_semaphore = frame_slot.render_finished;
+  sync_info.signal_semaphore = image_present_semaphores_[image_index];
   sync_info.signal_fence = frame_slot.in_flight;
 
   const uint32_t target_width = static_cast<uint32_t>(
@@ -326,14 +326,12 @@ GPUPresenterStatus GPUPresenterVK::Present(
 
   auto* surface_vk = static_cast<GPUSurfaceVK*>(surface.get());
   const auto* present_info = surface_vk->GetPresentInfo();
-  const auto* submit_info =
-      static_cast<const GPUSubmitInfoVK*>(surface_vk->GetSubmitInfo());
-  if (present_info == nullptr || present_info->owner != this ||
-      submit_info == nullptr) {
+  if (present_info == nullptr || present_info->owner != this) {
     return GPUPresenterStatus::kError;
   }
 
-  VkSemaphore wait_semaphore = submit_info->signal_semaphore;
+  VkSemaphore wait_semaphore =
+      image_present_semaphores_[present_info->image_index];
   VkPresentInfoKHR present_info_vk = {};
   present_info_vk.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   if (wait_semaphore != VK_NULL_HANDLE) {
@@ -598,17 +596,15 @@ bool GPUPresenterVK::CreateSwapchainImageViews() {
 }
 
 bool GPUPresenterVK::CreateFrameSlots() {
-  frame_slots_.resize(std::max<size_t>(2, swapchain_images_.size()));
+  size_t slot_count = std::max<size_t>(2, swapchain_images_.size());
+  frame_slots_.resize(slot_count);
   for (auto& frame_slot : frame_slots_) {
     VkSemaphoreCreateInfo semaphore_info = {};
     semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     if (fns_.vkCreateSemaphore(state_->GetLogicalDevice(), &semaphore_info,
                                nullptr,
-                               &frame_slot.image_available) != VK_SUCCESS ||
-        fns_.vkCreateSemaphore(state_->GetLogicalDevice(), &semaphore_info,
-                               nullptr,
-                               &frame_slot.render_finished) != VK_SUCCESS) {
-      LOGE("Failed to create Vulkan presenter semaphores");
+                               &frame_slot.acquire_semaphore) != VK_SUCCESS) {
+      LOGE("Failed to create Vulkan presenter acquire semaphore");
       return false;
     }
 
@@ -622,25 +618,35 @@ bool GPUPresenterVK::CreateFrameSlots() {
       return false;
     }
   }
+
+  // Per-image present semaphores: one per swapchain image, indexed by
+  // image_index. Safe to reuse because the same swapchain image can only be
+  // re-acquired after the presentation engine releases it.
+  image_present_semaphores_.resize(swapchain_images_.size());
+  for (auto& sem : image_present_semaphores_) {
+    VkSemaphoreCreateInfo semaphore_info = {};
+    semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    if (fns_.vkCreateSemaphore(state_->GetLogicalDevice(), &semaphore_info,
+                               nullptr, &sem) != VK_SUCCESS) {
+      LOGE("Failed to create Vulkan presenter present semaphore");
+      return false;
+    }
+  }
   return true;
 }
 
 void GPUPresenterVK::DestroyFrameSlots() {
   if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE) {
     frame_slots_.clear();
+    image_present_semaphores_.clear();
     return;
   }
 
   for (auto& frame_slot : frame_slots_) {
-    if (frame_slot.image_available != VK_NULL_HANDLE &&
+    if (frame_slot.acquire_semaphore != VK_NULL_HANDLE &&
         fns_.vkDestroySemaphore != nullptr) {
       fns_.vkDestroySemaphore(state_->GetLogicalDevice(),
-                              frame_slot.image_available, nullptr);
-    }
-    if (frame_slot.render_finished != VK_NULL_HANDLE &&
-        fns_.vkDestroySemaphore != nullptr) {
-      fns_.vkDestroySemaphore(state_->GetLogicalDevice(),
-                              frame_slot.render_finished, nullptr);
+                              frame_slot.acquire_semaphore, nullptr);
     }
     if (frame_slot.in_flight != VK_NULL_HANDLE &&
         state_->DeviceFns().vkDestroyFence != nullptr) {
@@ -649,6 +655,13 @@ void GPUPresenterVK::DestroyFrameSlots() {
     }
   }
   frame_slots_.clear();
+
+  for (auto& sem : image_present_semaphores_) {
+    if (sem != VK_NULL_HANDLE && fns_.vkDestroySemaphore != nullptr) {
+      fns_.vkDestroySemaphore(state_->GetLogicalDevice(), sem, nullptr);
+    }
+  }
+  image_present_semaphores_.clear();
 }
 
 void GPUPresenterVK::DestroySwapchainImageViews() {
