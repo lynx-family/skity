@@ -59,6 +59,17 @@ VkResult SubmitCommandBuffer(const VulkanContextState& state, VkQueue queue,
                              VkCommandBuffer command_buffer, VkFence fence,
                              const GPUSubmitInfoVK* submit_info) {
   const auto& device_fns = state.DeviceFns();
+
+  uint32_t wait_count =
+      submit_info != nullptr
+          ? static_cast<uint32_t>(submit_info->wait_semaphores.size())
+          : 0;
+
+  VkSemaphore signal_semaphore = VK_NULL_HANDLE;
+  if (submit_info != nullptr) {
+    signal_semaphore = submit_info->signal_semaphore;
+  }
+
   if (state.IsSynchronization2Enabled() &&
       device_fns.vkQueueSubmit2 != nullptr) {
     VkCommandBufferSubmitInfo command_buffer_info = {};
@@ -66,21 +77,19 @@ VkResult SubmitCommandBuffer(const VulkanContextState& state, VkQueue queue,
     command_buffer_info.commandBuffer = command_buffer;
     command_buffer_info.deviceMask = 0;
 
-    VkSemaphoreSubmitInfo wait_semaphore_info = {};
-    if (submit_info != nullptr &&
-        submit_info->wait_semaphore != VK_NULL_HANDLE) {
-      wait_semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-      wait_semaphore_info.semaphore = submit_info->wait_semaphore;
-      wait_semaphore_info.stageMask = submit_info->wait_dst_stage_mask;
-      wait_semaphore_info.deviceIndex = 0;
-      wait_semaphore_info.value = 0;
+    std::vector<VkSemaphoreSubmitInfo> wait_semaphore_infos(wait_count);
+    for (uint32_t i = 0; i < wait_count; i++) {
+      wait_semaphore_infos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+      wait_semaphore_infos[i].semaphore = submit_info->wait_semaphores[i];
+      wait_semaphore_infos[i].stageMask = submit_info->wait_stage_masks[i];
+      wait_semaphore_infos[i].deviceIndex = 0;
+      wait_semaphore_infos[i].value = 0;
     }
 
     VkSemaphoreSubmitInfo signal_semaphore_info = {};
-    if (submit_info != nullptr &&
-        submit_info->signal_semaphore != VK_NULL_HANDLE) {
+    if (signal_semaphore != VK_NULL_HANDLE) {
       signal_semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-      signal_semaphore_info.semaphore = submit_info->signal_semaphore;
+      signal_semaphore_info.semaphore = signal_semaphore;
       signal_semaphore_info.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
       signal_semaphore_info.deviceIndex = 0;
       signal_semaphore_info.value = 0;
@@ -88,13 +97,13 @@ VkResult SubmitCommandBuffer(const VulkanContextState& state, VkQueue queue,
 
     VkSubmitInfo2 vk_submit_info2 = {};
     vk_submit_info2.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-    if (wait_semaphore_info.semaphore != VK_NULL_HANDLE) {
-      vk_submit_info2.waitSemaphoreInfoCount = 1;
-      vk_submit_info2.pWaitSemaphoreInfos = &wait_semaphore_info;
+    if (wait_count > 0) {
+      vk_submit_info2.waitSemaphoreInfoCount = wait_count;
+      vk_submit_info2.pWaitSemaphoreInfos = wait_semaphore_infos.data();
     }
     vk_submit_info2.commandBufferInfoCount = 1;
     vk_submit_info2.pCommandBufferInfos = &command_buffer_info;
-    if (signal_semaphore_info.semaphore != VK_NULL_HANDLE) {
+    if (signal_semaphore != VK_NULL_HANDLE) {
       vk_submit_info2.signalSemaphoreInfoCount = 1;
       vk_submit_info2.pSignalSemaphoreInfos = &signal_semaphore_info;
     }
@@ -102,22 +111,19 @@ VkResult SubmitCommandBuffer(const VulkanContextState& state, VkQueue queue,
     return device_fns.vkQueueSubmit2(queue, 1, &vk_submit_info2, fence);
   }
 
-  VkPipelineStageFlags wait_stage_mask =
-      submit_info != nullptr ? submit_info->wait_dst_stage_mask
-                             : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  // Legacy vkQueueSubmit path
   VkSubmitInfo vk_submit_info = {};
   vk_submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  if (submit_info != nullptr && submit_info->wait_semaphore != VK_NULL_HANDLE) {
-    vk_submit_info.waitSemaphoreCount = 1;
-    vk_submit_info.pWaitSemaphores = &submit_info->wait_semaphore;
-    vk_submit_info.pWaitDstStageMask = &wait_stage_mask;
+  if (wait_count > 0) {
+    vk_submit_info.waitSemaphoreCount = wait_count;
+    vk_submit_info.pWaitSemaphores = submit_info->wait_semaphores.data();
+    vk_submit_info.pWaitDstStageMask = submit_info->wait_stage_masks.data();
   }
   vk_submit_info.commandBufferCount = 1;
   vk_submit_info.pCommandBuffers = &command_buffer;
-  if (submit_info != nullptr &&
-      submit_info->signal_semaphore != VK_NULL_HANDLE) {
+  if (signal_semaphore != VK_NULL_HANDLE) {
     vk_submit_info.signalSemaphoreCount = 1;
-    vk_submit_info.pSignalSemaphores = &submit_info->signal_semaphore;
+    vk_submit_info.pSignalSemaphores = &signal_semaphore;
   }
 
   return device_fns.vkQueueSubmit(queue, 1, &vk_submit_info, fence);

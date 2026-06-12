@@ -35,8 +35,10 @@ class GPUSurfaceVK : public GPUSurfaceImpl {
         format_(format),
         has_submit_info_(sync_info != nullptr) {
     if (sync_info != nullptr) {
-      submit_info_.wait_semaphore = sync_info->wait_semaphore;
-      submit_info_.wait_dst_stage_mask = sync_info->wait_dst_stage_mask;
+      if (sync_info->wait_semaphore != VK_NULL_HANDLE) {
+        submit_info_.AddWaitSemaphore(sync_info->wait_semaphore,
+                                      sync_info->wait_dst_stage_mask);
+      }
       submit_info_.signal_semaphore = sync_info->signal_semaphore;
       submit_info_.signal_fence = sync_info->signal_fence;
     }
