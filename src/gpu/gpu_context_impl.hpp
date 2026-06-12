@@ -64,6 +64,11 @@ class GPUContextImpl : public GPUContext {
 
   std::shared_ptr<Data> ReadPixels(const std::shared_ptr<GPUTexture>& texture);
 
+  std::shared_ptr<GPUSemaphore> CreateSemaphore() override { return nullptr; }
+
+  void ImportSemaphore(GPUSemaphore* semaphore,
+                       const GPUSemaphoreImportInfo& info) override {}
+
   // Use depth-stencil capable pipeline state for stable pipeline variants.
   // Draw steps still decide whether they actually use depth or stencil
   // tests/writes.
