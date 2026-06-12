@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "ios_sim_coretext_explicit_source_smoke",
+  "backend": "coretext",
+  "platforms": [
+    "ios-sim-coretext"
+  ],
+  "target_platform": "ios-sim-coretext",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "typeface_probe/roboto_regular_file_coretext.json",
+    "typeface_probe/roboto_regular_data_coretext.json",
+    "font_metrics/roboto_regular_64_coretext.json",
+    "glyph_metrics/roboto_regular_latin_coretext.json",
+    "scaler_context/roboto_regular_64_coretext.json",
+    "glyph_path/roboto_regular_latin_A_coretext.json",
+    "glyph_path/roboto_regular_missing_glyph_coretext.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/ios-sim-coretext",
+    "report_root": "local/font-harness/reports/ios-sim-coretext"
+  }
+}

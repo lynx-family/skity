@@ -12,6 +12,7 @@ from pathlib import Path
 CASE_ID = "font.synthetic.typeface"
 FONT_MANAGER_CASE_ID = "font.synthetic.font_manager.default_typeface"
 BACKEND = "coretext"
+TARGET_PLATFORM = "macos-coretext"
 
 
 def write_json(path, value):
@@ -30,7 +31,7 @@ def make_case():
         "category": "typeface_probe",
         "status": "active",
         "backend": BACKEND,
-        "platforms": ["darwin-ct"],
+        "platforms": [TARGET_PLATFORM],
         "font_files": [
             {
                 "id": "synthetic",
@@ -50,18 +51,18 @@ def make_case():
     }
 
 
-def make_manifest(cases=None):
+def make_manifest(cases=None, manifest_id="font.synthetic.smoke"):
     return {
         "schema_version": 1,
-        "id": "font.synthetic.smoke",
+        "id": manifest_id,
         "backend": BACKEND,
-        "platforms": ["darwin-ct"],
+        "platforms": [TARGET_PLATFORM],
+        "target_platform": TARGET_PLATFORM,
         "case_root": "cases",
         "cases": cases or ["typeface.json"],
         "artifacts": {
-            "skia_dir": "artifacts/skia",
-            "skity_dir": "artifacts/skity",
-            "compare_dir": "artifacts/compare",
+            "root": f"artifacts/{TARGET_PLATFORM}",
+            "report_root": f"reports/{TARGET_PLATFORM}",
         },
     }
 
@@ -73,7 +74,7 @@ def make_font_manager_case():
         "category": "font_manager",
         "status": "active",
         "backend": BACKEND,
-        "platforms": ["darwin-ct"],
+        "platforms": [TARGET_PLATFORM],
         "font_manager_request": {
             "entry": "GetDefaultTypeface",
             "style": {
@@ -284,7 +285,10 @@ def main():
         write_json(manifest_path, make_manifest())
         write_json(
             full_manifest_path,
-            make_manifest(["typeface.json", "font_manager_default.json"]),
+            make_manifest(
+                ["typeface.json", "font_manager_default.json"],
+                manifest_id="font.synthetic.full",
+            ),
         )
         write_json(expected_path, make_probe_artifact(1))
         write_json(actual_path, make_probe_artifact(1))
@@ -485,7 +489,9 @@ def main():
         ):
             return 1
 
-        run_report = report_dir / "run-missing-oracle.json"
+        run_report = (
+            repo_root / f"reports/{TARGET_PLATFORM}/font.synthetic.smoke.latest.json"
+        )
         result = run_command(
             [
                 skity_font,
@@ -494,24 +500,30 @@ def main():
                 manifest_path,
                 "--backend",
                 BACKEND,
-                "--skia-dir",
-                tmp_dir / "missing-skia",
-                "--skity-dir",
-                tmp_dir / "skity",
                 "--repo-root",
                 repo_root,
-                "--report",
-                run_report,
             ]
         )
         if expect_exit("run missing oracle", result, 6):
+            return 1
+        if expect_report_field(run_report, "target_platform", TARGET_PLATFORM):
+            return 1
+        if expect_report_field(
+            run_report, "artifacts.root", f"artifacts/{TARGET_PLATFORM}"
+        ):
+            return 1
+        if expect_report_field(
+            run_report, "artifacts.skia_dir", f"artifacts/{TARGET_PLATFORM}/skia"
+        ):
             return 1
         if expect_report_field(run_report, "input_failure_count", 1):
             return 1
         if expect_report_field(run_report, "cases.0.reason_code", "missing_oracle"):
             return 1
 
-        full_run_report = report_dir / "run-full-missing-oracle.json"
+        full_run_report = (
+            repo_root / f"reports/{TARGET_PLATFORM}/font.synthetic.full.latest.json"
+        )
         result = run_command(
             [
                 skity_font,
@@ -520,14 +532,8 @@ def main():
                 full_manifest_path,
                 "--backend",
                 BACKEND,
-                "--skia-dir",
-                tmp_dir / "missing-full-skia",
-                "--skity-dir",
-                tmp_dir / "full-skity",
                 "--repo-root",
                 repo_root,
-                "--report",
-                full_run_report,
             ]
         )
         if expect_exit("run synthetic full missing oracle", result, 6):

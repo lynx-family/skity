@@ -3,8 +3,9 @@
   "id": "pc_macos_coretext_smoke",
   "backend": "coretext",
   "platforms": [
-    "darwin-ct"
+    "macos-coretext"
   ],
+  "target_platform": "macos-coretext",
   "case_root": "harness/font/cases",
   "cases": [
     "typeface_probe/roboto_regular_file_coretext.json",
@@ -18,8 +19,7 @@
     "font_manager/match_family_style_helvetica_regular_coretext.json"
   ],
   "artifacts": {
-    "skia_dir": "local/font-harness/artifacts/skia",
-    "skity_dir": "local/font-harness/artifacts/skity",
-    "compare_dir": "local/font-harness/artifacts/compare"
+    "root": "local/font-harness/artifacts/macos-coretext",
+    "report_root": "local/font-harness/reports/macos-coretext"
   }
 }

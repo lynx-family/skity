@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "ios_device_coretext_system_match_smoke",
+  "backend": "coretext",
+  "platforms": [
+    "ios-device-coretext"
+  ],
+  "target_platform": "ios-device-coretext",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "family_style_set/helvetica_coretext.json",
+    "font_manager/default_typeface_coretext.json",
+    "font_manager/apple_system_ui_font_regular_coretext.json",
+    "font_manager/apple_system_ui_font_weight_500_coretext.json",
+    "font_manager/match_family_style_helvetica_regular_coretext.json",
+    "font_manager/match_family_style_helvetica_weight_500_coretext.json",
+    "font_manager/apple_system_ui_font_character_emoji_coretext.json",
+    "font_manager/apple_system_ui_font_character_zh_hans_coretext.json",
+    "font_manager/apple_system_ui_font_character_zh_hant_coretext.json",
+    "font_manager/apple_system_ui_font_character_ja_hiragana_coretext.json",
+    "font_manager/apple_system_ui_font_character_ko_hangul_coretext.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/ios-device-coretext",
+    "report_root": "local/font-harness/reports/ios-device-coretext"
+  }
+}

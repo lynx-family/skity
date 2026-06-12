@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <utility>
 
+#include "harness/font/case/platform_target.hpp"
+
 namespace skity {
 namespace font_harness {
 
@@ -31,12 +33,6 @@ const std::vector<std::string>& AllowedStatuses() {
   return values;
 }
 
-const std::vector<std::string>& AllowedBackends() {
-  static const std::vector<std::string> values = {"coretext", "directwrite",
-                                                  "host-ft"};
-  return values;
-}
-
 const std::vector<std::string>& AllowedTypefaceEntries() {
   static const std::vector<std::string> values = {
       "MakeFromFile", "MakeFromData", "MakeVariation",
@@ -48,26 +44,6 @@ const std::vector<std::string>& AllowedHinting() {
   static const std::vector<std::string> values = {"none", "slight", "normal",
                                                   "full"};
   return values;
-}
-
-bool BackendMatchesPlatforms(const std::string& backend,
-                             const Json::Value& platforms) {
-  for (const auto& platform : platforms) {
-    if (!platform.isString()) {
-      continue;
-    }
-    const std::string value = platform.asString();
-    if (backend == "coretext" && value == "darwin-ct") {
-      return true;
-    }
-    if (backend == "directwrite" && value == "windows-dwrite") {
-      return true;
-    }
-    if (backend == "host-ft" && value == "host-ft") {
-      return true;
-    }
-  }
-  return false;
 }
 
 bool ValidateGlyphChar(const std::string& value) {
@@ -109,7 +85,7 @@ void ValidatePlatforms(const Json::Value& root, const std::string& backend,
     }
     ValidateNonEmptyString(platform.asString(), path, context);
   }
-  if (!backend.empty() && !BackendMatchesPlatforms(backend, *platforms)) {
+  if (!backend.empty() && !PlatformArrayMatchesBackend(backend, *platforms)) {
     context->AddError("$.platforms",
                       "platforms do not match backend: " + backend);
   }
@@ -391,7 +367,7 @@ CaseValidationResult ValidateCaseDocument(const Json::Value& root,
     ValidateStringEnum(status, "$.status", AllowedStatuses(), &result.errors);
   }
   if (!result.backend.empty()) {
-    ValidateStringEnum(result.backend, "$.backend", AllowedBackends(),
+    ValidateStringEnum(result.backend, "$.backend", AllowedBackendIds(),
                        &result.errors);
   }
   ValidatePlatforms(root, result.backend, &result.errors);

@@ -24,6 +24,7 @@ add_library(skity_font_harness STATIC
   ${CMAKE_CURRENT_LIST_DIR}/artifact/json_io.cc
   ${CMAKE_CURRENT_LIST_DIR}/case/case_document.cc
   ${CMAKE_CURRENT_LIST_DIR}/case/manifest_document.cc
+  ${CMAKE_CURRENT_LIST_DIR}/case/platform_target.cc
   ${CMAKE_CURRENT_LIST_DIR}/case/repo_uri.cc
   ${CMAKE_CURRENT_LIST_DIR}/case/validation.cc
   ${CMAKE_CURRENT_LIST_DIR}/compare/compare_engine.cc
@@ -41,8 +42,29 @@ add_library(skity_font_harness STATIC
 )
 
 set(SKITY_FONT_HARNESS_HAS_CORETEXT 0)
-if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_CT_FONT)
-  set(SKITY_FONT_HARNESS_HAS_CORETEXT 1)
+set(SKITY_FONT_HARNESS_TARGET_PLATFORM "unknown")
+set(SKITY_FONT_HARNESS_IS_IOS_PLATFORM OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_OSX_SYSROOT MATCHES "iphone")
+  set(SKITY_FONT_HARNESS_IS_IOS_PLATFORM ON)
+endif()
+
+set(SKITY_FONT_HARNESS_IS_MACOS_PLATFORM OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT SKITY_FONT_HARNESS_IS_IOS_PLATFORM)
+  set(SKITY_FONT_HARNESS_IS_MACOS_PLATFORM ON)
+endif()
+
+if(SKITY_CT_FONT)
+  if(SKITY_FONT_HARNESS_IS_MACOS_PLATFORM)
+    set(SKITY_FONT_HARNESS_HAS_CORETEXT 1)
+    set(SKITY_FONT_HARNESS_TARGET_PLATFORM "macos-coretext")
+  elseif(SKITY_FONT_HARNESS_IS_IOS_PLATFORM)
+    set(SKITY_FONT_HARNESS_HAS_CORETEXT 1)
+    if(CMAKE_OSX_SYSROOT MATCHES "iphonesimulator")
+      set(SKITY_FONT_HARNESS_TARGET_PLATFORM "ios-sim-coretext")
+    else()
+      set(SKITY_FONT_HARNESS_TARGET_PLATFORM "ios-device-coretext")
+    endif()
+  endif()
 endif()
 
 target_include_directories(
@@ -61,6 +83,7 @@ target_compile_definitions(
   SKITY_FONT_HARNESS_SKITY_CT_FONT=$<BOOL:${SKITY_CT_FONT}>
   SKITY_FONT_HARNESS_ENABLE_FONT_HARNESS=$<BOOL:${SKITY_ENABLE_FONT_HARNESS}>
   SKITY_FONT_HARNESS_HAS_CORETEXT=${SKITY_FONT_HARNESS_HAS_CORETEXT}
+  SKITY_FONT_HARNESS_TARGET_PLATFORM="${SKITY_FONT_HARNESS_TARGET_PLATFORM}"
 )
 target_link_libraries(
   skity_font_harness
@@ -80,14 +103,16 @@ if(SKITY_FONT_HARNESS_HAS_CORETEXT)
   )
 endif()
 
-add_executable(skity-font
-  ${CMAKE_CURRENT_LIST_DIR}/cli/skity-font/main.cc
-)
+if(NOT SKITY_FONT_HARNESS_IS_IOS_PLATFORM)
+  add_executable(skity-font
+    ${CMAKE_CURRENT_LIST_DIR}/cli/skity-font/main.cc
+  )
 
-target_link_libraries(skity-font PRIVATE skity_font_harness)
-target_compile_features(skity-font PRIVATE cxx_std_17)
+  target_link_libraries(skity-font PRIVATE skity_font_harness)
+  target_compile_features(skity-font PRIVATE cxx_std_17)
+endif()
 
-if(${SKITY_TEST})
+if(${SKITY_TEST} AND TARGET skity-font)
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
   enable_testing()
   add_test(
@@ -98,4 +123,8 @@ if(${SKITY_TEST})
       $<TARGET_FILE:skity-font>
   )
   set_tests_properties(font_harness_cli_smoke PROPERTIES LABELS font_harness)
+endif()
+
+if(SKITY_FONT_HARNESS_IS_IOS_PLATFORM)
+  add_subdirectory(platform/ios)
 endif()

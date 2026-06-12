@@ -14,6 +14,7 @@
 #include "harness/font/artifact/json_io.hpp"
 #include "harness/font/case/case_document.hpp"
 #include "harness/font/case/manifest_document.hpp"
+#include "harness/font/case/platform_target.hpp"
 #include "harness/font/compare/compare_engine.hpp"
 #include "harness/font/platform/coretext/env_info.hpp"
 #include "harness/font/probe/font_manager_probe.hpp"
@@ -67,6 +68,7 @@ struct ManifestRunPaths {
   std::filesystem::path resolved_skity_dir;
   std::filesystem::path resolved_compare_dir;
   std::string backend;
+  std::string target_platform;
 };
 
 struct ManifestRunCounts {
@@ -467,6 +469,88 @@ std::filesystem::path ReadManifestArtifactDir(const Json::Value& manifest,
   return fallback;
 }
 
+std::filesystem::path ReadManifestArtifactRoot(const Json::Value& manifest) {
+  return ReadManifestArtifactDir(manifest, "root", "");
+}
+
+std::filesystem::path ReadManifestReportRoot(const Json::Value& manifest) {
+  return ReadManifestArtifactDir(manifest, "report_root", "");
+}
+
+std::filesystem::path ReadManifestArtifactRoleDir(
+    const Json::Value& manifest, const std::filesystem::path& artifact_root,
+    const std::string& role, const std::string& legacy_field,
+    const std::string& legacy_fallback) {
+  if (!artifact_root.empty()) {
+    return artifact_root / role;
+  }
+  return ReadManifestArtifactDir(manifest, legacy_field, legacy_fallback);
+}
+
+std::string ReadManifestTargetPlatform(const Json::Value& manifest,
+                                       const std::string& backend) {
+  std::string target_platform;
+  if (ReadStringField(manifest, "target_platform", &target_platform) &&
+      !target_platform.empty()) {
+    return skity::font_harness::CanonicalPlatformTarget(target_platform);
+  }
+  if (manifest.isObject() && manifest.isMember("platforms")) {
+    return skity::font_harness::InferTargetPlatformFromArray(
+        manifest["platforms"], backend);
+  }
+  return "";
+}
+
+bool StripPrefix(std::string* value, const std::string& prefix) {
+  if (value->rfind(prefix, 0) != 0) {
+    return false;
+  }
+  value->erase(0, prefix.size());
+  return true;
+}
+
+std::string UnderscorePlatformPrefix(const std::string& target_platform) {
+  std::string prefix = target_platform;
+  for (char& c : prefix) {
+    if (c == '-') {
+      c = '_';
+    }
+  }
+  return prefix + "_";
+}
+
+std::string ReportNameForManifestId(std::string manifest_id,
+                                    const std::string& target_platform) {
+  if (target_platform == "macos-coretext") {
+    StripPrefix(&manifest_id, "pc_macos_coretext_");
+  } else if (target_platform == "ios-sim-coretext") {
+    StripPrefix(&manifest_id, "ios_sim_coretext_");
+  } else if (target_platform == "ios-device-coretext") {
+    StripPrefix(&manifest_id, "ios_device_coretext_");
+  } else if (!target_platform.empty()) {
+    StripPrefix(&manifest_id, UnderscorePlatformPrefix(target_platform));
+  }
+
+  for (char& c : manifest_id) {
+    if (c == '_') {
+      c = '-';
+    } else if (!IsSafeFileChar(c)) {
+      c = '-';
+    }
+  }
+  return SanitizeFileComponent(manifest_id, "manifest") + ".latest.json";
+}
+
+std::filesystem::path ReadManifestReportPath(
+    const Json::Value& manifest, const std::string& manifest_id,
+    const std::string& target_platform) {
+  std::filesystem::path report_root = ReadManifestReportRoot(manifest);
+  if (report_root.empty()) {
+    return {};
+  }
+  return report_root / ReportNameForManifestId(manifest_id, target_platform);
+}
+
 bool WriteArtifactSilently(
     const std::filesystem::path& repo_root,
     const skity::font_harness::ArtifactDescriptor& descriptor,
@@ -495,6 +579,9 @@ Json::Value RunManifestCase(Json::ArrayIndex index,
   item["case"] = case_relative_path;
   item["case_path"] = StablePathForRun(case_path, paths.repo_root);
   item["backend"] = paths.backend;
+  if (!paths.target_platform.empty()) {
+    item["target_platform"] = paths.target_platform;
+  }
   item["status"] = "running";
   item["artifacts"] = Json::Value(Json::objectValue);
 
@@ -533,6 +620,15 @@ Json::Value RunManifestCase(Json::ArrayIndex index,
     item["status"] = "schema_validation_failed";
     item["reason_code"] = "backend_mismatch";
     item["message"] = "case backend does not match manifest run backend";
+    counts->schema_failure_count += 1;
+    return item;
+  }
+  if (!paths.target_platform.empty() &&
+      !skity::font_harness::PlatformArrayContainsTarget(
+          case_root_json["platforms"], paths.target_platform)) {
+    item["status"] = "schema_validation_failed";
+    item["reason_code"] = "platform_mismatch";
+    item["message"] = "case platforms do not include manifest target_platform";
     counts->schema_failure_count += 1;
     return item;
   }
@@ -1226,6 +1322,8 @@ int RunManifestCommand(int argc, char** argv) {
   std::filesystem::path report_path;
   std::filesystem::path repo_root(SKITY_FONT_HARNESS_REPO_ROOT);
   std::string backend;
+  bool skia_dir_overridden = false;
+  bool skity_dir_overridden = false;
 
   for (int i = 2; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -1247,12 +1345,14 @@ int RunManifestCommand(int argc, char** argv) {
         return kExitUsageError;
       }
       skia_dir = argv[++i];
+      skia_dir_overridden = true;
     } else if (arg == "--skity-dir") {
       if (i + 1 >= argc) {
         std::cerr << "--skity-dir requires a path\n";
         return kExitUsageError;
       }
       skity_dir = argv[++i];
+      skity_dir_overridden = true;
     } else if (arg == "--report") {
       if (i + 1 >= argc) {
         std::cerr << "--report requires a path\n";
@@ -1308,11 +1408,25 @@ int RunManifestCommand(int argc, char** argv) {
                               kExitSchemaValidationFailed);
   }
 
+  std::string target_platform =
+      ReadManifestTargetPlatform(manifest_root, backend);
+  if (report_path.empty()) {
+    report_path =
+        ReadManifestReportPath(manifest_root, manifest_id, target_platform);
+  }
+
   skity::font_harness::RepoUriResolver resolver(repo_root);
   skity::font_harness::ManifestValidationResult manifest_validation =
       skity::font_harness::ValidateManifestDocument(manifest_root, resolver);
   if (!manifest_validation.manifest_id.empty()) {
     manifest_id = manifest_validation.manifest_id;
+  }
+  if (!manifest_validation.target_platform.empty()) {
+    target_platform = manifest_validation.target_platform;
+  }
+  if (report_path.empty()) {
+    report_path =
+        ReadManifestReportPath(manifest_root, manifest_id, target_platform);
   }
 
   if (!manifest_validation.valid || manifest_validation.backend != backend) {
@@ -1320,6 +1434,11 @@ int RunManifestCommand(int argc, char** argv) {
         manifest_id, backend, "schema_validation_failed");
     report["status"] = "invalid";
     report["passed"] = false;
+    if (!target_platform.empty()) {
+      report["target_platform"] = target_platform;
+    }
+    report["manifest_path"] =
+        StablePathForRun(ResolveRunPath(repo_root, manifest_path), repo_root);
     report["normalized_manifest"] = manifest_validation.normalized_manifest;
     report["validation_errors"] = manifest_validation.errors.ToJson();
     if (manifest_validation.valid && manifest_validation.backend != backend) {
@@ -1341,16 +1460,24 @@ int RunManifestCommand(int argc, char** argv) {
                               kExitSchemaValidationFailed);
   }
 
+  const std::filesystem::path artifact_root =
+      ReadManifestArtifactRoot(manifest_root);
+  const std::filesystem::path report_root =
+      ReadManifestReportRoot(manifest_root);
+
   if (skia_dir.empty()) {
-    skia_dir = ReadManifestArtifactDir(manifest_root, "skia_dir",
-                                       "local/font-harness/artifacts/skia");
+    skia_dir = ReadManifestArtifactRoleDir(manifest_root, artifact_root, "skia",
+                                           "skia_dir",
+                                           "local/font-harness/artifacts/skia");
   }
   if (skity_dir.empty()) {
-    skity_dir = ReadManifestArtifactDir(manifest_root, "skity_dir",
-                                        "local/font-harness/artifacts/skity");
+    skity_dir = ReadManifestArtifactRoleDir(
+        manifest_root, artifact_root, "skity", "skity_dir",
+        "local/font-harness/artifacts/skity");
   }
-  std::filesystem::path compare_dir = ReadManifestArtifactDir(
-      manifest_root, "compare_dir", "local/font-harness/artifacts/compare");
+  std::filesystem::path compare_dir = ReadManifestArtifactRoleDir(
+      manifest_root, artifact_root, "compare", "compare_dir",
+      "local/font-harness/artifacts/compare");
 
   const std::filesystem::path resolved_skia_dir =
       ResolveRunPath(repo_root, skia_dir);
@@ -1358,14 +1485,36 @@ int RunManifestCommand(int argc, char** argv) {
       ResolveRunPath(repo_root, skity_dir);
   const std::filesystem::path resolved_compare_dir =
       ResolveRunPath(repo_root, compare_dir);
+  const std::filesystem::path resolved_artifact_root =
+      artifact_root.empty() ? std::filesystem::path()
+                            : ResolveRunPath(repo_root, artifact_root);
+  const std::filesystem::path resolved_report_root =
+      report_root.empty() ? std::filesystem::path()
+                          : ResolveRunPath(repo_root, report_root);
 
   Json::Value report =
       skity::font_harness::BuildRunSummaryReport(manifest_id, backend, "pass");
   report["status"] = "running";
   report["passed"] = false;
+  report["runner"] = "host-cli";
+  report["expected_runner"] = "host-cli";
+  report["actual_runner"] = "host-cli";
+  report["manifest_path"] =
+      StablePathForRun(ResolveRunPath(repo_root, manifest_path), repo_root);
+  if (!target_platform.empty()) {
+    report["target_platform"] = target_platform;
+  }
   report["artifacts"] = Json::Value(Json::objectValue);
   report["artifacts"]["manifest"] =
       StablePathForRun(ResolveRunPath(repo_root, manifest_path), repo_root);
+  if (!resolved_artifact_root.empty()) {
+    report["artifacts"]["root"] =
+        StablePathForRun(resolved_artifact_root, repo_root);
+  }
+  if (!resolved_report_root.empty()) {
+    report["artifacts"]["report_root"] =
+        StablePathForRun(resolved_report_root, repo_root);
+  }
   report["artifacts"]["skia_dir"] =
       StablePathForRun(resolved_skia_dir, repo_root);
   report["artifacts"]["skity_dir"] =
@@ -1375,6 +1524,7 @@ int RunManifestCommand(int argc, char** argv) {
 
   const std::string case_root_value = manifest_root["case_root"].asString();
   const Json::Value& cases = manifest_root["cases"];
+  report["case_root"] = case_root_value;
 
   ManifestRunPaths paths;
   paths.case_root = ResolveRunPath(repo_root, case_root_value);
@@ -1383,6 +1533,7 @@ int RunManifestCommand(int argc, char** argv) {
   paths.resolved_skity_dir = resolved_skity_dir;
   paths.resolved_compare_dir = resolved_compare_dir;
   paths.backend = backend;
+  paths.target_platform = target_platform;
 
   ManifestRunCounts counts;
   Json::Value case_reports(Json::arrayValue);
@@ -1406,11 +1557,11 @@ int RunManifestCommand(int argc, char** argv) {
   descriptor.explicit_output_path = report_path;
   descriptor.repro_args = {"--manifest", PathArg(manifest_path), "--backend",
                            backend};
-  if (!skia_dir.empty()) {
+  if (skia_dir_overridden && !skia_dir.empty()) {
     descriptor.repro_args.push_back("--skia-dir");
     descriptor.repro_args.push_back(PathArg(skia_dir));
   }
-  if (!skity_dir.empty()) {
+  if (skity_dir_overridden && !skity_dir.empty()) {
     descriptor.repro_args.push_back("--skity-dir");
     descriptor.repro_args.push_back(PathArg(skity_dir));
   }
