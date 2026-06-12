@@ -24,19 +24,6 @@ bool IsDepthStencilFormat(GPUTextureFormat format) {
          format == GPUTextureFormat::kDepth24Stencil8;
 }
 
-VkImageAspectFlags GetImageAspectMask(GPUTextureFormat format) {
-  switch (format) {
-    case GPUTextureFormat::kStencil8:
-      return VK_IMAGE_ASPECT_STENCIL_BIT;
-    case GPUTextureFormat::kDepth24Stencil8:
-      return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-    case GPUTextureFormat::kInvalid:
-      return 0;
-    default:
-      return VK_IMAGE_ASPECT_COLOR_BIT;
-  }
-}
-
 VkAccessFlags AccessMaskForLayout(VkImageLayout layout) {
   switch (layout) {
     case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
@@ -131,7 +118,7 @@ bool TransitionImageLayout(const VulkanContextState& state,
   barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.image = texture.GetImage();
   barrier.subresourceRange.aspectMask =
-      GetImageAspectMask(texture.GetDescriptor().format);
+      VkFormatAspectMaskForBarrier(texture.GetVkFormat());
   barrier.subresourceRange.baseMipLevel = 0;
   barrier.subresourceRange.levelCount = texture.GetDescriptor().mip_level_count;
   barrier.subresourceRange.baseArrayLayer = 0;
