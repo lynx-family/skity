@@ -53,6 +53,14 @@ class GPUContextVK : public GPUContextImpl {
 
  private:
   std::shared_ptr<VulkanContextState> state_;
+
+#if defined(SKITY_ANDROID)
+  std::shared_ptr<GPUTexture> OnWrapAHardwareBuffer(::AHardwareBuffer* ahb,
+                                                    uint32_t width,
+                                                    uint32_t height,
+                                                    ReleaseCallback callback,
+                                                    ReleaseUserData user_data);
+#endif
 };
 
 }  // namespace skity

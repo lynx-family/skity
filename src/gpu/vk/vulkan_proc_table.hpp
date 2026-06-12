@@ -136,6 +136,8 @@ struct VulkanDeviceFns {
   PFN_vkCmdSetStencilReference vkCmdSetStencilReference = nullptr;
   PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
 #if defined(SKITY_ANDROID)
+  PFN_vkGetAndroidHardwareBufferPropertiesANDROID
+      vkGetAndroidHardwareBufferPropertiesANDROID = nullptr;
   PFN_vkImportSemaphoreFdKHR vkImportSemaphoreFdKHR = nullptr;
 #endif
 #if defined(SKITY_VK_DEBUG_RUNTIME)
