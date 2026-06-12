@@ -6,6 +6,7 @@
 #define INCLUDE_SKITY_GPU_GPU_SURFACE_HPP
 
 #include <skity/gpu/gpu_backend_type.hpp>
+#include <skity/gpu/gpu_semaphore.hpp>
 #include <skity/macros.hpp>
 #include <skity/render/canvas.hpp>
 
@@ -78,6 +79,22 @@ class SKITY_API GPUSurface {
    */
   SKITY_EXPERIMENTAL
   virtual std::shared_ptr<Pixmap> ReadPixels(const Rect& rect) = 0;
+
+  /**
+   * Add an external wait semaphore for the next frame's flush.
+   *
+   * The semaphore will be waited on before GPU rendering begins.
+   * Typically used to synchronize with an external GPU context (e.g. GL)
+   * that produces textures consumed by this surface.
+   *
+   * Must be called between LockCanvas() and Flush(). The semaphore
+   * reference is released after Flush().
+   *
+   * @param semaphore  A semaphore created by GPUContext::CreateSemaphore()
+   *                    and imported via GPUContext::ImportSemaphore().
+   */
+  virtual void AddExternalWaitSemaphore(
+      std::shared_ptr<GPUSemaphore> semaphore) {}
 };
 
 }  // namespace skity

@@ -813,6 +813,11 @@ bool VulkanContextState::InitializeInstance(const GPUContextInfoVK& info) {
     TryEnableInstanceExtension(
         &enabled_instance_extensions_, available_instance_extensions_,
         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+#if defined(SKITY_ANDROID)
+    TryEnableInstanceExtension(
+        &enabled_instance_extensions_, available_instance_extensions_,
+        VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME);
+#endif
     VkInstanceCreateFlags instance_flags = 0;
     EnablePortabilityEnumerationIfAvailable(available_instance_extensions_,
                                             &enabled_instance_extensions_,
@@ -1177,6 +1182,17 @@ bool VulkanContextState::InitializeOwnedDevice() {
     enabled_device_extensions_.emplace_back(
         VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
   }
+#if defined(SKITY_ANDROID)
+  if (HasAvailableDeviceExtension(VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME)) {
+    enabled_device_extensions_.emplace_back(
+        VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME);
+  }
+  if (HasAvailableDeviceExtension(
+          VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME)) {
+    enabled_device_extensions_.emplace_back(
+        VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
+  }
+#endif
   if (HasAvailableDeviceExtension(kPortabilitySubsetExtensionName)) {
     enabled_device_extensions_.emplace_back(kPortabilitySubsetExtensionName);
   }

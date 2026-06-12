@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.h>
 
 #include <skity/gpu/gpu_context.hpp>
+#include <skity/gpu/gpu_semaphore.hpp>
 #include <skity/gpu/gpu_surface.hpp>
 #include <skity/gpu/texture.hpp>
 #include <skity/macros.hpp>
@@ -341,6 +342,24 @@ struct GPUBackendTextureInfoVK : public GPUBackendTextureInfo {
    * Whether the engine owns `image_view` and should destroy it on release.
    */
   bool owns_image_view = false;
+};
+
+/**
+ * Vulkan-specific import descriptor for GPUSemaphore.
+ *
+ * Supports importing a POSIX sync file descriptor (from EGLSync fence etc.)
+ * into a Vulkan semaphore via vkImportSemaphoreFdKHR.
+ *
+ * The fd ownership is transferred to the Vulkan driver.
+ */
+struct GPUSemaphoreImportInfoVK : public GPUSemaphoreImportInfo {
+  GPUSemaphoreImportInfoVK() { backend = GPUBackendType::kVulkan; }
+
+  /**
+   * POSIX sync file descriptor (e.g. from eglDupNativeFenceFDANDROID).
+   * Ownership is transferred to the GPU driver on ImportSemaphore() call.
+   */
+  int sync_fd = -1;
 };
 
 struct GPUPresenterDescriptorVK : public GPUPresenterDescriptor {

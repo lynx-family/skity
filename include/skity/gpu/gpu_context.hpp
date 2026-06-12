@@ -11,6 +11,7 @@
 #include <skity/gpu/gpu_backend_type.hpp>
 #include <skity/gpu/gpu_presenter.hpp>
 #include <skity/gpu/gpu_render_target.hpp>
+#include <skity/gpu/gpu_semaphore.hpp>
 #include <skity/gpu/gpu_surface.hpp>
 #include <skity/gpu/texture.hpp>
 #include <skity/macros.hpp>
@@ -190,6 +191,28 @@ class SKITY_API GPUContext {
    */
   SKITY_EXPERIMENTAL
   virtual void SetResourceCacheLimit(size_t size_in_bytes) = 0;
+
+  /**
+   * Create a reusable GPU semaphore for cross-GPU synchronization.
+   *
+   * @return A shared_ptr to the created semaphore, or nullptr on failure.
+   */
+  virtual std::shared_ptr<GPUSemaphore> CreateSemaphore() = 0;
+
+  /**
+   * Import a native sync handle into an existing semaphore.
+   *
+   * Pass a backend-specific GPUSemaphoreImportInfo derived struct:
+   * - Vulkan: GPUSemaphoreImportInfoVK with sync_fd
+   *
+   * The sync handle ownership is transferred to the GPU driver (consumed even
+   * on import failure, per Vulkan spec for SYNC_FD).
+   *
+   * @param semaphore  A semaphore previously created by CreateSemaphore().
+   * @param info       Backend-specific import descriptor.
+   */
+  virtual void ImportSemaphore(GPUSemaphore* semaphore,
+                               const GPUSemaphoreImportInfo& info) = 0;
 
   /**
    * Create a precompile context bound to this GPUContext. The returned context

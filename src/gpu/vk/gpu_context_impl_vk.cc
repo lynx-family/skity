@@ -12,6 +12,7 @@
 #include "src/gpu/vk/gpu_buffer_vk.hpp"
 #include "src/gpu/vk/gpu_device_vk.hpp"
 #include "src/gpu/vk/gpu_presenter_vk.hpp"
+#include "src/gpu/vk/gpu_semaphore_vk.hpp"
 #include "src/gpu/vk/gpu_surface_vk.hpp"
 #include "src/gpu/vk/gpu_texture_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
@@ -466,6 +467,10 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       get_device_proc_addr(device, "vkBindBufferMemory"));
   fns->vkBindImageMemory = reinterpret_cast<PFN_vkBindImageMemory>(
       get_device_proc_addr(device, "vkBindImageMemory"));
+  fns->vkCreateSemaphore = reinterpret_cast<PFN_vkCreateSemaphore>(
+      get_device_proc_addr(device, "vkCreateSemaphore"));
+  fns->vkDestroySemaphore = reinterpret_cast<PFN_vkDestroySemaphore>(
+      get_device_proc_addr(device, "vkDestroySemaphore"));
   fns->vkGetBufferMemoryRequirements =
       reinterpret_cast<PFN_vkGetBufferMemoryRequirements>(
           get_device_proc_addr(device, "vkGetBufferMemoryRequirements"));
@@ -599,6 +604,10 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
   fns->vkSetDebugUtilsObjectNameEXT =
       reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
           get_device_proc_addr(device, "vkSetDebugUtilsObjectNameEXT"));
+#if defined(SKITY_ANDROID)
+  fns->vkImportSemaphoreFdKHR = reinterpret_cast<PFN_vkImportSemaphoreFdKHR>(
+      get_device_proc_addr(device, "vkImportSemaphoreFdKHR"));
+#endif
 #if defined(SKITY_VK_DEBUG_RUNTIME)
   fns->vkCmdBeginDebugUtilsLabelEXT =
       reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
@@ -625,6 +634,7 @@ bool LoadVulkanDeviceFns(PFN_vkGetDeviceProcAddr get_device_proc_addr,
       fns->vkFlushMappedMemoryRanges == nullptr ||
       fns->vkInvalidateMappedMemoryRanges == nullptr ||
       fns->vkBindBufferMemory == nullptr || fns->vkBindImageMemory == nullptr ||
+      fns->vkCreateSemaphore == nullptr || fns->vkDestroySemaphore == nullptr ||
       fns->vkGetBufferMemoryRequirements == nullptr ||
       fns->vkGetImageMemoryRequirements == nullptr ||
       fns->vkCreateBuffer == nullptr || fns->vkDestroyBuffer == nullptr ||
@@ -875,6 +885,57 @@ std::unique_ptr<GPUPresenter> GPUContextVK::CreatePresenter(
     return nullptr;
   }
   return presenter;
+}
+
+std::shared_ptr<GPUSemaphore> GPUContextVK::CreateSemaphore() {
+  VkSemaphoreCreateInfo create_info = {};
+  create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+  VkSemaphore sem = VK_NULL_HANDLE;
+  auto result = state_->DeviceFns().vkCreateSemaphore(
+      state_->GetLogicalDevice(), &create_info, nullptr, &sem);
+  if (result != VK_SUCCESS) {
+    LOGE("GPUContextVK::CreateSemaphore: vkCreateSemaphore failed: {}",
+         static_cast<int32_t>(result));
+    return nullptr;
+  }
+
+  return std::shared_ptr<GPUSemaphoreVK>(new GPUSemaphoreVK(state_, sem));
+}
+
+void GPUContextVK::ImportSemaphore(GPUSemaphore* semaphore,
+                                   const GPUSemaphoreImportInfo& info) {
+  if (semaphore == nullptr || info.backend != GPUBackendType::kVulkan) {
+    return;
+  }
+
+  auto* vk_sem = static_cast<GPUSemaphoreVK*>(semaphore);
+  const auto& vk_info = static_cast<const GPUSemaphoreImportInfoVK&>(info);
+
+#if defined(SKITY_ANDROID)
+  if (state_->DeviceFns().vkImportSemaphoreFdKHR == nullptr) {
+    LOGE("GPUContextVK::ImportSemaphore: vkImportSemaphoreFdKHR not available");
+    return;
+  }
+
+  VkImportSemaphoreFdInfoKHR import_info = {};
+  import_info.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
+  import_info.semaphore = vk_sem->GetVkSemaphore();
+  import_info.flags = VK_SEMAPHORE_IMPORT_TEMPORARY_BIT;
+  import_info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
+  import_info.fd = vk_info.sync_fd;  // ownership transferred
+
+  VkResult result = state_->DeviceFns().vkImportSemaphoreFdKHR(
+      state_->GetLogicalDevice(), &import_info);
+  if (result != VK_SUCCESS) {
+    LOGE("GPUContextVK::ImportSemaphore: vkImportSemaphoreFdKHR failed: {}",
+         static_cast<int32_t>(result));
+  }
+#else
+  (void)vk_sem;
+  (void)vk_info;
+  LOGE("GPUContextVK::ImportSemaphore: not supported on this platform");
+#endif
 }
 
 std::unique_ptr<GPUDevice> GPUContextVK::CreateGPUDevice() {

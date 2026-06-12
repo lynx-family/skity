@@ -27,4 +27,26 @@ HWRootLayer* GPUSurfaceVK::OnBeginNextFrame(bool clear) {
   return root_layer;
 }
 
+void GPUSurfaceVK::AddExternalWaitSemaphore(
+    std::shared_ptr<GPUSemaphore> semaphore) {
+  auto* vk_sem = static_cast<GPUSemaphoreVK*>(semaphore.get());
+  submit_info_.AddWaitSemaphore(vk_sem->GetVkSemaphore(),
+                                vk_sem->GetStageMask());
+  external_semaphores_.push_back(std::move(semaphore));
+}
+
+void GPUSurfaceVK::OnFlush() {
+  // canvas->Flush() has completed the submit. The VkSemaphore handles have
+  // been consumed by the GPU. Remove the external semaphore entries from
+  // submit_info_ and release the shared_ptr references.
+  if (!external_semaphores_.empty()) {
+    size_t count = external_semaphores_.size();
+    submit_info_.wait_semaphores.resize(submit_info_.wait_semaphores.size() -
+                                        count);
+    submit_info_.wait_stage_masks.resize(submit_info_.wait_stage_masks.size() -
+                                         count);
+    external_semaphores_.clear();
+  }
+}
+
 }  // namespace skity

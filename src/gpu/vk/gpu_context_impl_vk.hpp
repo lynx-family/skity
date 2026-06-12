@@ -6,6 +6,7 @@
 #define SRC_GPU_VK_GPU_CONTEXT_IMPL_VK_HPP
 
 #include <memory>
+#include <skity/gpu/gpu_context_vk.hpp>
 
 #include "src/gpu/gpu_context_impl.hpp"
 
@@ -28,6 +29,11 @@ class GPUContextVK : public GPUContextImpl {
 
   std::unique_ptr<GPUPresenter> CreatePresenter(
       GPUPresenterDescriptor* desc) override;
+
+  std::shared_ptr<GPUSemaphore> CreateSemaphore() override;
+
+  void ImportSemaphore(GPUSemaphore* semaphore,
+                       const GPUSemaphoreImportInfo& info) override;
 
   const VulkanContextState* GetState() const { return state_.get(); }
 
