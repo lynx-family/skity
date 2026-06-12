@@ -272,7 +272,10 @@ void SWCanvas::LayerState::Init(SWCanvas* parent_canvas, Vec2 offset) {
   this->canvas = parent_canvas->CreateSubCanvas(
       bitmap.get(), offset + Vec2{rel_bounds.Left(), rel_bounds.Top()});
 
-  std::memset(bitmap->GetPixelAddr(), 0, bitmap->RowBytes() * bitmap->Height());
+  if (bitmap->GetPixelAddr() != nullptr) {
+    std::memset(bitmap->GetPixelAddr(), 0,
+                bitmap->RowBytes() * bitmap->Height());
+  }
 }
 
 SWCanvas::SWCanvas(Bitmap* bitmap) : Canvas(), bitmap_(bitmap) {
@@ -446,21 +449,33 @@ void SWCanvas::OnSaveLayer(const Rect& bounds, const Paint& paint) {
   work_paint.SetStyle(Paint::kFill_Style);
   auto layer_bounds = work_paint.ComputeFastBounds(bounds);
 
-  Matrix canvas_matrix;
-
-  Vec2 offset{0.0f, 0.0f};
+  SWCanvas* target_canvas = this;
   if (PeekLayerStack()) {
-    canvas_matrix = PeekLayerStack()->canvas->CurrentTransform();
-    offset = PeekLayerStack()->canvas->global_offset_;
-  } else {
-    canvas_matrix = CurrentTransform();
+    target_canvas = static_cast<SWCanvas*>(PeekLayerStack()->canvas.get());
+  }
+
+  auto canvas_matrix = target_canvas->CurrentTransform();
+  Rect device_bounds =
+      Rect::MakeWH(target_canvas->Width(), target_canvas->Height());
+  Rect scan_clip_bounds = target_canvas->GetScanClipBounds();
+  if (!device_bounds.Intersect(scan_clip_bounds)) {
+    device_bounds.SetEmpty();
+  }
+
+  Matrix device_to_local;
+  if (canvas_matrix.Invert(&device_to_local)) {
+    Rect local_clip_bounds;
+    device_to_local.MapRect(&local_clip_bounds, device_bounds);
+    if (!layer_bounds.Intersect(local_clip_bounds)) {
+      layer_bounds.SetEmpty();
+    }
   }
 
   Rect rel_bounds{};
-
   canvas_matrix.MapRect(&rel_bounds, layer_bounds);
 
-  auto layer = GenerateLayer(rel_bounds, layer_bounds, offset);
+  auto layer =
+      GenerateLayer(rel_bounds, layer_bounds, target_canvas->global_offset_);
 
   layer->paint = paint;
 }
