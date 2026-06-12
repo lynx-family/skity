@@ -4,6 +4,9 @@
 
 #include "src/gpu/gpu_context_impl.hpp"
 
+#include <skity/render/precompile_context.hpp>
+#include <utility>
+
 namespace skity {
 
 bool GPUContextImpl::Init() {
@@ -60,6 +63,12 @@ std::shared_ptr<Texture> GPUContextImpl::WrapTexture(
 
 void GPUContextImpl::SetResourceCacheLimit(size_t size_in_bytes) {
   render_target_cache_->SetMaxBytes(size_in_bytes);
+}
+
+std::unique_ptr<PrecompileContext> GPUContext::CreatePrecompileContext(
+    PrecompileColorType color_type, bool enable_msaa) {
+  return std::unique_ptr<PrecompileContext>(
+      new PrecompileContext(this, color_type, enable_msaa));
 }
 
 std::unique_ptr<GPURenderTarget> GPUContextImpl::CreateRenderTarget(

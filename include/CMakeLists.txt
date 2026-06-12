@@ -34,6 +34,7 @@ set(SKITY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/tile_mode.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/macros.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/render/canvas.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/skity/render/precompile_context.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/skity.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/text/font.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/text/font_arguments.hpp

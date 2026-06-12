@@ -277,6 +277,7 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/gpu/gpu_shader_function.hpp
     ${CMAKE_CURRENT_LIST_DIR}/gpu/gpu_surface_impl.cc
     ${CMAKE_CURRENT_LIST_DIR}/gpu/gpu_surface_impl.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/precompile_context.cc
     ${CMAKE_CURRENT_LIST_DIR}/gpu/gpu_texture.cc
     ${CMAKE_CURRENT_LIST_DIR}/gpu/gpu_texture.hpp
     ${CMAKE_CURRENT_LIST_DIR}/gpu/texture_impl.cc

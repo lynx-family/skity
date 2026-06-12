@@ -48,6 +48,10 @@ class HWDrawStep : public HWShaderGenerator {
   void GenerateCommand(const HWDrawStepContext& ctx, Command* cmd,
                        Command* stencil_cmd);
 
+  bool PrecompilePipeline(HWDrawContext* context, HWDrawState state,
+                          GPUTextureFormat target_format, uint32_t sample_count,
+                          BlendMode blend_mode);
+
   std::string GetVertexName() const override {
     if (geometry_->IsSnippet()) {
       return shader_writer_.GetVSShaderName();
