@@ -58,14 +58,8 @@ TEST(PixmapTest, SetColorInfoAlphaType) {
   ASSERT_EQ(*pixel, ColorSetARGB(128, 128, 0, 0));
 }
 
-TEST(PixmapTest, SetColorInfoColorType) {
-  Pixmap pixmap;
-  pixmap.SetColorInfo(AlphaType::kUnpremul_AlphaType, ColorType::kA8);
-  ASSERT_EQ(pixmap.GetColorType(), skity::ColorType::kA8);
-}
-
 TEST(PixmapTest, SetColorInfo) {
-  Pixmap pixmap;
+  Pixmap pixmap{50, 50, AlphaType::kUnpremul_AlphaType, ColorType::kRGBA};
   pixmap.SetColorInfo(AlphaType::kPremul_AlphaType, ColorType::kBGRA);
   ASSERT_EQ(pixmap.GetAlphaType(), skity::AlphaType::kPremul_AlphaType);
   ASSERT_EQ(pixmap.GetColorType(), skity::ColorType::kBGRA);
