@@ -12,7 +12,7 @@ Pod::Spec.new do |s|
 
     s.vendored_frameworks = 'skity.xcframework'
 
-    s.ios.frameworks = 'ImageIO', 'CoreGraphics', 'CoreServices', 'Metal', 'OpenGLES'
-    s.osx.frameworks = 'ImageIO', 'CoreGraphics', 'CoreServices', 'Metal', 'OpenGL'
+    s.ios.frameworks = 'ImageIO', 'CoreGraphics', 'CoreServices', 'CoreText', 'UIKit', 'Metal', 'OpenGLES'
+    s.osx.frameworks = 'ImageIO', 'CoreGraphics', 'CoreServices', 'CoreText', 'AppKit', 'Metal', 'OpenGL'
     s.requires_arc = true
 end

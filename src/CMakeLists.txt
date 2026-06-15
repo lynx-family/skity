@@ -211,7 +211,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/android_fonts_parser.hpp
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/font_manager_android.cc
   )
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_CT_FONT)
+elseif((CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "iOS") AND SKITY_CT_FONT)
   target_sources(
     skity
     PRIVATE
@@ -227,8 +227,13 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_CT_FONT)
   )
 
   target_link_libraries(skity PRIVATE "-framework CoreText" "-framework CoreGraphics")
-  # only macOS in cmake building system
-  target_link_libraries(skity PRIVATE "-framework AppKit")
+
+  string(TOLOWER "${CMAKE_OSX_SYSROOT}" skity_apple_sysroot)
+  if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR skity_apple_sysroot MATCHES "iphone")
+    target_link_libraries(skity PRIVATE "-framework UIKit")
+  else()
+    target_link_libraries(skity PRIVATE "-framework AppKit")
+  endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
   target_sources(
     skity
