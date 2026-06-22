@@ -22,14 +22,11 @@
 
 #include "harness/font/artifact/json_io.hpp"
 #include "harness/font/case/case_document.hpp"
+#include "harness/font/probe/backend_support.hpp"
 #include "harness/font/probe/typeface_identity.hpp"
 #include "src/render/text/text_transform.hpp"
 #include "src/text/scaler_context.hpp"
 #include "src/text/scaler_context_desc.hpp"
-
-#ifndef SKITY_FONT_HARNESS_HAS_CORETEXT
-#define SKITY_FONT_HARNESS_HAS_CORETEXT 0
-#endif
 
 namespace skity {
 namespace font_harness {
@@ -39,6 +36,7 @@ namespace {
 constexpr int kDefaultSampleLimit = 8;
 constexpr int kMaxSampleLimit = 32;
 constexpr float kDefaultProbeSize = 64.0f;
+constexpr size_t kMaxTableSampleBytes = 4096;
 
 struct GlyphProbeRequest {
   std::string label;
@@ -106,6 +104,22 @@ bool ReadBoolField(const Json::Value& root, const std::string& field,
   }
   *out = root[field].asBool();
   return true;
+}
+
+std::string DigestBytes(const uint8_t* bytes, size_t size) {
+  static constexpr uint64_t kOffsetBasis = 14695981039346656037ull;
+  static constexpr uint64_t kPrime = 1099511628211ull;
+
+  uint64_t hash = kOffsetBasis;
+  for (size_t i = 0; i < size; ++i) {
+    hash ^= static_cast<uint64_t>(bytes[i]);
+    hash *= kPrime;
+  }
+
+  std::ostringstream stream;
+  stream << "fnv1a64:" << std::hex << std::setw(16) << std::setfill('0')
+         << hash;
+  return stream.str();
 }
 
 std::string TagToString(uint32_t tag) {
@@ -468,6 +482,56 @@ Json::Value BuildProbeSummary(const std::shared_ptr<Typeface>& typeface,
   return summary;
 }
 
+Json::Value TablesToJson(const std::shared_ptr<Typeface>& typeface,
+                         int* copied_tag_count) {
+  *copied_tag_count = 0;
+  if (!typeface) {
+    return Json::Value(Json::arrayValue);
+  }
+
+  const int table_count = typeface->CountTables();
+  Json::Value tables(Json::arrayValue);
+  if (table_count <= 0) {
+    return tables;
+  }
+
+  std::vector<FontTableTag> tags(static_cast<size_t>(table_count));
+  *copied_tag_count = typeface->GetTableTags(tags.data());
+  tags.resize(static_cast<size_t>(*copied_tag_count));
+  std::sort(tags.begin(), tags.end());
+
+  for (FontTableTag tag : tags) {
+    const size_t table_size = typeface->GetTableSize(tag);
+    const size_t sample_size = std::min(table_size, kMaxTableSampleBytes);
+    std::vector<uint8_t> sample(sample_size);
+    const size_t copied_size =
+        sample_size == 0
+            ? 0
+            : typeface->GetTableData(tag, 0, sample_size, sample.data());
+    std::vector<uint8_t> full_data(table_size);
+    const size_t full_copied_size =
+        table_size == 0
+            ? 0
+            : typeface->GetTableData(tag, 0, table_size, full_data.data());
+
+    Json::Value table(Json::objectValue);
+    table["tag"] = TagToString(tag);
+    table["tag_value"] = static_cast<Json::UInt64>(tag);
+    table["size"] = static_cast<Json::UInt64>(table_size);
+    table["sample_size"] = static_cast<Json::UInt64>(sample_size);
+    table["copied_size"] = static_cast<Json::UInt64>(copied_size);
+    if (copied_size > 0 && copied_size == sample_size) {
+      table["digest"] = DigestBytes(sample.data(), copied_size);
+    }
+    table["full_copied_size"] = static_cast<Json::UInt64>(full_copied_size);
+    if (full_copied_size > 0 && full_copied_size == table_size) {
+      table["full_digest"] = DigestBytes(full_data.data(), full_copied_size);
+    }
+    tables.append(std::move(table));
+  }
+  return tables;
+}
+
 Json::Value BuildTypefaceSummary(const std::string& label,
                                  const std::shared_ptr<Typeface>& typeface,
                                  const FontProbeRequest& request,
@@ -489,6 +553,9 @@ Json::Value BuildTypefaceSummary(const std::string& label,
   value["units_per_em"] = static_cast<Json::UInt64>(typeface->GetUnitsPerEm());
   value["contains_color_table"] = typeface->ContainsColorTable();
   value["table_count"] = typeface->CountTables();
+  int copied_table_tag_count = 0;
+  value["tables"] = TablesToJson(typeface, &copied_table_tag_count);
+  value["copied_table_tag_count"] = copied_table_tag_count;
   value["probe_summary"] = BuildProbeSummary(typeface, request, glyphs,
                                              path + ".probe_summary", errors);
   return value;
@@ -865,18 +932,15 @@ FontManagerProbeResult RunFontManagerProbe(
     const FontManagerProbeRequest& request) {
   const std::string fallback_case_id =
       StemOrFallback(request.case_path, "case");
-  if (request.backend != "coretext") {
-    return BuildFailure(
-        FontManagerProbeStatus::kBackendUnavailable, fallback_case_id,
-        request.backend, "backend_unavailable",
-        "font manager probe supports only the coretext backend");
+  if (!IsHostFontProbeBackend(request.backend) ||
+      !IsHostFontProbeBackendAvailable(request.backend)) {
+    return BuildFailure(FontManagerProbeStatus::kBackendUnavailable,
+                        fallback_case_id, request.backend,
+                        "backend_unavailable",
+                        HostFontBackendUnavailableMessage(
+                            request.backend, "font manager probe"));
   }
-#if !SKITY_FONT_HARNESS_HAS_CORETEXT
-  return BuildFailure(FontManagerProbeStatus::kBackendUnavailable,
-                      fallback_case_id, request.backend, "backend_unavailable",
-                      "CoreText backend is unavailable; build on macOS with "
-                      "SKITY_CT_FONT=ON");
-#else
+
   Json::Value root;
   std::string error;
   if (!LoadJsonFile(request.case_path, &root, &error)) {
@@ -954,7 +1018,6 @@ FontManagerProbeResult RunFontManagerProbe(
 
   result.status = FontManagerProbeStatus::kSuccess;
   return result;
-#endif
 }
 
 }  // namespace font_harness

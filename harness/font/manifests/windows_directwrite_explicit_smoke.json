@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "windows_directwrite_explicit_smoke",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "target_platform": "windows-directwrite",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "typeface_probe/roboto_regular_file_directwrite.json",
+    "typeface_probe/roboto_regular_data_directwrite.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/windows-directwrite",
+    "report_root": "local/font-harness/reports/windows-directwrite"
+  }
+}

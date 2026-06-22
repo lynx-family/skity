@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "windows_directwrite_fallback_smoke",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "target_platform": "windows-directwrite",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "font_manager/match_family_style_character_latin_missing_family_directwrite.json",
+    "font_manager/match_family_style_character_emoji_directwrite.json",
+    "font_manager/match_family_style_character_cjk_directwrite.json",
+    "font_manager/match_family_style_character_japanese_hiragana_directwrite.json",
+    "font_manager/match_family_style_character_korean_hangul_directwrite.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/windows-directwrite",
+    "report_root": "local/font-harness/reports/windows-directwrite"
+  }
+}

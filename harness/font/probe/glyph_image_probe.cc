@@ -2,12 +2,16 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include "harness/font/probe/glyph_path_probe.hpp"
+#include "harness/font/probe/glyph_image_probe.hpp"
 
+#include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <iomanip>
 #include <limits>
 #include <memory>
-#include <skity/graphic/path.hpp>
+#include <skity/geometry/matrix.hpp>
+#include <skity/graphic/paint.hpp>
 #include <skity/io/data.hpp>
 #include <skity/text/font.hpp>
 #include <skity/text/font_arguments.hpp>
@@ -15,17 +19,14 @@
 #include <skity/text/font_style.hpp>
 #include <skity/text/glyph.hpp>
 #include <skity/text/typeface.hpp>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "harness/font/artifact/json_io.hpp"
 #include "harness/font/case/case_document.hpp"
-#include "harness/font/compare/path/path_normalizer.hpp"
 #include "harness/font/probe/backend_support.hpp"
-#include "src/render/text/text_transform.hpp"
-#include "src/text/scaler_context.hpp"
-#include "src/text/scaler_context_desc.hpp"
 
 namespace skity {
 namespace font_harness {
@@ -50,14 +51,16 @@ struct FontRequest {
   Font::FontHinting hinting = Font::FontHinting::kNormal;
 };
 
-struct PathExpectation {
-  bool has_empty = false;
-  bool empty = false;
+struct ImageRequest {
+  float context_scale = 1.0f;
+  Matrix transform;
 };
 
-struct PathCompareConfig {
-  std::string mode = "path_normalized";
-  double epsilon = kDefaultPathEpsilon;
+struct PaintRequest {
+  Color color = Color_BLACK;
+  std::string color_string = "#000000FF";
+  std::string style = "fill";
+  float stroke_width = 1.0f;
 };
 
 struct FontManagerTypefaceRequest {
@@ -68,11 +71,6 @@ struct FontManagerTypefaceRequest {
   uint32_t character = 0;
   std::string character_label;
   std::vector<std::string> bcp47;
-};
-
-enum class GlyphPathOutputMode {
-  kProbe,
-  kDump,
 };
 
 std::string StemOrFallback(const std::filesystem::path& path,
@@ -107,15 +105,6 @@ bool ReadIntField(const Json::Value& root, const std::string& field, int* out) {
   return true;
 }
 
-bool ReadDoubleField(const Json::Value& root, const std::string& field,
-                     double* out) {
-  if (!root.isObject() || !root.isMember(field) || !root[field].isNumeric()) {
-    return false;
-  }
-  *out = root[field].asDouble();
-  return true;
-}
-
 bool ReadBoolField(const Json::Value& root, const std::string& field,
                    bool* out) {
   if (!root.isObject() || !root.isMember(field) || !root[field].isBool()) {
@@ -123,6 +112,62 @@ bool ReadBoolField(const Json::Value& root, const std::string& field,
   }
   *out = root[field].asBool();
   return true;
+}
+
+int HexValue(char c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  }
+  if (c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  }
+  if (c >= 'A' && c <= 'F') {
+    return c - 'A' + 10;
+  }
+  return -1;
+}
+
+bool ParseHexByte(const std::string& value, size_t offset, uint8_t* out) {
+  int hi = HexValue(value[offset]);
+  int lo = HexValue(value[offset + 1]);
+  if (hi < 0 || lo < 0) {
+    return false;
+  }
+  *out = static_cast<uint8_t>((hi << 4) | lo);
+  return true;
+}
+
+bool ParseColorString(const std::string& value, Color* color) {
+  if (value.size() != 7 && value.size() != 9) {
+    return false;
+  }
+  if (value[0] != '#') {
+    return false;
+  }
+
+  uint8_t r = 0;
+  uint8_t g = 0;
+  uint8_t b = 0;
+  uint8_t a = 0xFF;
+  if (!ParseHexByte(value, 1, &r) || !ParseHexByte(value, 3, &g) ||
+      !ParseHexByte(value, 5, &b)) {
+    return false;
+  }
+  if (value.size() == 9 && !ParseHexByte(value, 7, &a)) {
+    return false;
+  }
+  *color = ColorSetARGB(a, r, g, b);
+  return true;
+}
+
+std::string ColorToString(Color color) {
+  std::ostringstream stream;
+  stream << "#" << std::uppercase << std::hex << std::setfill('0')
+         << std::setw(2) << static_cast<int>(ColorGetR(color)) << std::setw(2)
+         << static_cast<int>(ColorGetG(color)) << std::setw(2)
+         << static_cast<int>(ColorGetB(color)) << std::setw(2)
+         << static_cast<int>(ColorGetA(color));
+  return stream.str();
 }
 
 uint32_t ParseCodePoint(const std::string& value) {
@@ -136,8 +181,31 @@ uint32_t ParseCodePoint(const std::string& value) {
   }
 }
 
+std::string DigestBytes(const uint8_t* bytes, size_t size) {
+  static constexpr uint64_t kOffsetBasis = 14695981039346656037ull;
+  static constexpr uint64_t kPrime = 1099511628211ull;
+  uint64_t hash = kOffsetBasis;
+  for (size_t i = 0; i < size; ++i) {
+    hash ^= static_cast<uint64_t>(bytes[i]);
+    hash *= kPrime;
+  }
+
+  std::ostringstream stream;
+  stream << "fnv1a64:" << std::hex << std::setw(16) << std::setfill('0')
+         << hash;
+  return stream.str();
+}
+
 void AddValidationError(Json::Value* report, const std::string& path,
-                        const std::string& message);
+                        const std::string& message) {
+  Json::Value error(Json::objectValue);
+  error["path"] = path;
+  error["message"] = message;
+  if (!report->isMember("validation_errors")) {
+    (*report)["validation_errors"] = Json::Value(Json::arrayValue);
+  }
+  (*report)["validation_errors"].append(std::move(error));
+}
 
 bool ParseAxisTag(const Json::Value& value, FourByteTag* tag) {
   if (value.isString()) {
@@ -224,69 +292,11 @@ Json::Value VariationPositionRequestToJson(const VariationPosition& position) {
   return value;
 }
 
-std::string HintingToString(Font::FontHinting hinting) {
-  switch (hinting) {
-    case Font::FontHinting::kNone:
-      return "none";
-    case Font::FontHinting::kSlight:
-      return "slight";
-    case Font::FontHinting::kNormal:
-      return "normal";
-    case Font::FontHinting::kFull:
-      return "full";
-  }
-  return "unknown";
-}
-
-std::string SlantToString(FontStyle::Slant slant) {
-  switch (slant) {
-    case FontStyle::kUpright_Slant:
-      return "upright";
-    case FontStyle::kItalic_Slant:
-      return "italic";
-    case FontStyle::kOblique_Slant:
-      return "oblique";
-  }
-  return "unknown";
-}
-
-bool SlantFromString(const std::string& value, FontStyle::Slant* slant) {
-  if (value == "upright") {
-    *slant = FontStyle::kUpright_Slant;
-    return true;
-  }
-  if (value == "italic") {
-    *slant = FontStyle::kItalic_Slant;
-    return true;
-  }
-  if (value == "oblique") {
-    *slant = FontStyle::kOblique_Slant;
-    return true;
-  }
-  return false;
-}
-
-Font::FontHinting HintingFromString(const std::string& value) {
-  if (value == "none") {
-    return Font::FontHinting::kNone;
-  }
-  if (value == "slight") {
-    return Font::FontHinting::kSlight;
-  }
-  if (value == "full") {
-    return Font::FontHinting::kFull;
-  }
-  return Font::FontHinting::kNormal;
-}
-
-Json::Value BuildBaseReport(const std::string& case_id,
-                            const std::string& backend,
-                            GlyphPathOutputMode output_mode) {
+Json::Value BuildBaseProbeReport(const std::string& case_id,
+                                 const std::string& backend) {
   Json::Value report(Json::objectValue);
   report["schema_version"] = 1;
-  report["artifact_type"] = output_mode == GlyphPathOutputMode::kDump
-                                ? "font_path_dump"
-                                : "font_probe_result";
+  report["artifact_type"] = "font_probe_result";
   report["runner"] = "skity";
   report["case_id"] = case_id;
   report["backend"] = backend;
@@ -294,33 +304,21 @@ Json::Value BuildBaseReport(const std::string& case_id,
   return report;
 }
 
-GlyphPathProbeResult BuildFailure(GlyphPathProbeStatus status,
-                                  const std::string& case_id,
-                                  const std::string& backend,
-                                  const std::string& reason_code,
-                                  GlyphPathOutputMode output_mode,
-                                  const std::string& message = {}) {
-  GlyphPathProbeResult result;
+GlyphImageProbeResult BuildFailure(GlyphImageProbeStatus status,
+                                   const std::string& case_id,
+                                   const std::string& backend,
+                                   const std::string& reason_code,
+                                   const std::string& message = {}) {
+  GlyphImageProbeResult result;
   result.status = status;
   result.case_id = case_id;
   result.backend = backend;
-  result.report = BuildBaseReport(case_id, backend, output_mode);
+  result.report = BuildBaseProbeReport(case_id, backend);
   result.report["reason_code"] = reason_code;
   if (!message.empty()) {
     result.report["message"] = message;
   }
   return result;
-}
-
-void AddValidationError(Json::Value* report, const std::string& path,
-                        const std::string& message) {
-  Json::Value error(Json::objectValue);
-  error["path"] = path;
-  error["message"] = message;
-  if (!report->isMember("validation_errors")) {
-    (*report)["validation_errors"] = Json::Value(Json::arrayValue);
-  }
-  (*report)["validation_errors"].append(std::move(error));
 }
 
 const ResolvedFontFile* FindResolvedFont(
@@ -383,6 +381,34 @@ std::shared_ptr<Typeface> MakeTypeface(const std::string& entry,
     return base_typeface->MakeVariation(args);
   }
   return nullptr;
+}
+
+std::string SlantToString(FontStyle::Slant slant) {
+  switch (slant) {
+    case FontStyle::kUpright_Slant:
+      return "upright";
+    case FontStyle::kItalic_Slant:
+      return "italic";
+    case FontStyle::kOblique_Slant:
+      return "oblique";
+  }
+  return "unknown";
+}
+
+bool SlantFromString(const std::string& value, FontStyle::Slant* slant) {
+  if (value == "upright") {
+    *slant = FontStyle::kUpright_Slant;
+    return true;
+  }
+  if (value == "italic") {
+    *slant = FontStyle::kItalic_Slant;
+    return true;
+  }
+  if (value == "oblique") {
+    *slant = FontStyle::kOblique_Slant;
+    return true;
+  }
+  return false;
 }
 
 bool ParseStyle(const Json::Value& request, const std::string& path,
@@ -452,10 +478,9 @@ bool ParseFontManagerTypefaceRequest(const Json::Value& root,
                            request->entry == "MatchFamilyStyleCharacter";
   bool valid = known_entry;
   if (!known_entry) {
-    AddValidationError(
-        report, "$.font_manager_request.entry",
-        "glyph path probe supports GetDefaultTypeface, MatchFamilyStyle, and "
-        "MatchFamilyStyleCharacter");
+    AddValidationError(report, "$.font_manager_request.entry",
+                       "glyph image probe supports GetDefaultTypeface, "
+                       "MatchFamilyStyle, and MatchFamilyStyleCharacter");
   }
 
   ReadStringField(value, "family_name", &request->family_name);
@@ -538,82 +563,31 @@ std::shared_ptr<Typeface> MakeTypefaceFromFontManager(
   return nullptr;
 }
 
-Json::Value GlyphRequestToJson(const GlyphRequest& glyph) {
-  Json::Value value(Json::objectValue);
-  value["source"] = glyph.source;
-  value["label"] = glyph.label;
-  if (glyph.has_code_point) {
-    value["code_point"] = static_cast<Json::UInt64>(glyph.code_point);
+std::string HintingToString(Font::FontHinting hinting) {
+  switch (hinting) {
+    case Font::FontHinting::kNone:
+      return "none";
+    case Font::FontHinting::kSlight:
+      return "slight";
+    case Font::FontHinting::kNormal:
+      return "normal";
+    case Font::FontHinting::kFull:
+      return "full";
   }
-  value["glyph_id"] = static_cast<Json::UInt64>(glyph.glyph_id);
-  return value;
+  return "unknown";
 }
 
-Json::Value FontStyleToJson(const FontStyle& style) {
-  Json::Value value(Json::objectValue);
-  value["weight"] = style.weight();
-  value["width"] = style.width();
-  value["slant"] = SlantToString(style.slant());
-  return value;
-}
-
-Json::Value ExplicitTypefaceSourceToJson(const std::string& entry,
-                                         const std::string& font_file_id,
-                                         const ResolvedFontFile& font_file) {
-  Json::Value value(Json::objectValue);
-  value["entry"] = entry;
-  value["font_file_id"] = font_file_id;
-  value["font_file_uri"] = font_file.uri;
-  value["collection_index"] = font_file.collection_index;
-  return value;
-}
-
-Json::Value FontManagerTypefaceSourceToJson(
-    const FontManagerTypefaceRequest& request) {
-  Json::Value value(Json::objectValue);
-  value["entry"] = "FontManager." + request.entry;
-  if (!request.family_name.empty()) {
-    value["family_name"] = request.family_name;
+Font::FontHinting HintingFromString(const std::string& value) {
+  if (value == "none") {
+    return Font::FontHinting::kNone;
   }
-  value["style"] = FontStyleToJson(request.style);
-  if (request.has_character) {
-    value["character"] = request.character_label;
-    value["code_point"] = static_cast<Json::UInt64>(request.character);
+  if (value == "slight") {
+    return Font::FontHinting::kSlight;
   }
-  Json::Value bcp47(Json::arrayValue);
-  for (const auto& tag : request.bcp47) {
-    bcp47.append(tag);
+  if (value == "full") {
+    return Font::FontHinting::kFull;
   }
-  value["bcp47"] = std::move(bcp47);
-  return value;
-}
-
-Json::Value Matrix22ToJson(const Matrix22& matrix) {
-  Json::Value value(Json::objectValue);
-  value["scale_x"] = matrix.GetScaleX();
-  value["skew_x"] = matrix.GetSkewX();
-  value["skew_y"] = matrix.GetSkewY();
-  value["scale_y"] = matrix.GetScaleY();
-  return value;
-}
-
-Json::Value ScalerContextDescToJson(const ScalerContextDesc& desc) {
-  Json::Value value(Json::objectValue);
-  value["typeface_id"] = static_cast<Json::UInt64>(desc.typeface_id);
-  value["text_size"] = desc.text_size;
-  value["scale_x"] = desc.scale_x;
-  value["skew_x"] = desc.skew_x;
-  value["transform"] = Matrix22ToJson(desc.transform);
-  value["context_scale"] = desc.context_scale;
-  value["foreground_color"] = static_cast<Json::UInt64>(desc.foreground_color);
-  value["stroke_width"] = desc.stroke_width;
-  value["miter_limit"] = desc.miter_limit;
-  value["cap"] = static_cast<int>(desc.cap);
-  value["join"] = static_cast<int>(desc.join);
-  value["fake_bold"] = desc.fake_bold != 0;
-  value["hinting"] = HintingToString(desc.GetHinting());
-  value["hash"] = static_cast<Json::UInt64>(desc.hash());
-  return value;
+  return Font::FontHinting::kNormal;
 }
 
 Json::Value FontRequestToJson(const FontRequest& request) {
@@ -642,14 +616,14 @@ bool ParseFontRequest(const Json::Value& root, FontRequest* request,
                       Json::Value* report) {
   if (!root.isMember("font_request") || !root["font_request"].isObject()) {
     AddValidationError(report, "$.font_request",
-                       "font_request is required for glyph path probe");
+                       "font_request is required for glyph image probe");
     return false;
   }
 
   const Json::Value& font_request = root["font_request"];
   if (!ReadNumberField(font_request, "size", &request->size)) {
     AddValidationError(report, "$.font_request.size",
-                       "size is required for glyph path probe");
+                       "size is required for glyph image probe");
     return false;
   }
   ReadNumberField(font_request, "scale_x", &request->scale_x);
@@ -661,6 +635,124 @@ bool ParseFontRequest(const Json::Value& root, FontRequest* request,
   std::string hinting;
   if (ReadStringField(font_request, "hinting", &hinting)) {
     request->hinting = HintingFromString(hinting);
+  }
+  return true;
+}
+
+Json::Value MatrixToJson(const Matrix& matrix) {
+  Json::Value value(Json::objectValue);
+  value["scale_x"] = matrix.GetScaleX();
+  value["skew_x"] = matrix.GetSkewX();
+  value["skew_y"] = matrix.GetSkewY();
+  value["scale_y"] = matrix.GetScaleY();
+  return value;
+}
+
+bool ParseImageRequest(const Json::Value& root, ImageRequest* request,
+                       Json::Value* report) {
+  if (!root.isMember("image_request")) {
+    return true;
+  }
+  if (!root["image_request"].isObject()) {
+    AddValidationError(report, "$.image_request",
+                       "image_request must be an object");
+    return false;
+  }
+
+  const Json::Value& image_request = root["image_request"];
+  ReadNumberField(image_request, "context_scale", &request->context_scale);
+  if (request->context_scale <= 0.0f) {
+    AddValidationError(report, "$.image_request.context_scale",
+                       "context_scale must be positive");
+    return false;
+  }
+
+  if (image_request.isMember("transform")) {
+    const Json::Value& transform = image_request["transform"];
+    if (!transform.isObject()) {
+      AddValidationError(report, "$.image_request.transform",
+                         "transform must be an object");
+      return false;
+    }
+    float scale_x = 1.0f;
+    float skew_x = 0.0f;
+    float skew_y = 0.0f;
+    float scale_y = 1.0f;
+    ReadNumberField(transform, "scale_x", &scale_x);
+    ReadNumberField(transform, "skew_x", &skew_x);
+    ReadNumberField(transform, "skew_y", &skew_y);
+    ReadNumberField(transform, "scale_y", &scale_y);
+    request->transform =
+        Matrix(scale_x, skew_x, 0.0f, skew_y, scale_y, 0.0f, 0.0f, 0.0f, 1.0f);
+  }
+  return true;
+}
+
+Json::Value PaintRequestToJson(const PaintRequest& request) {
+  Json::Value value(Json::objectValue);
+  value["color"] = request.color_string;
+  value["style"] = request.style;
+  value["stroke_width"] = request.stroke_width;
+  return value;
+}
+
+Paint MakePaint(const PaintRequest& request) {
+  Paint paint;
+  paint.SetColor(request.color);
+  if (request.style == "stroke") {
+    paint.SetStyle(Paint::kStroke_Style);
+    paint.SetStrokeWidth(request.stroke_width);
+  }
+  return paint;
+}
+
+bool ParsePaintRequest(const Json::Value& root, PaintRequest* request,
+                       Json::Value* report) {
+  if (!root.isMember("paint_request")) {
+    return true;
+  }
+  if (!root["paint_request"].isObject()) {
+    AddValidationError(report, "$.paint_request",
+                       "paint_request must be an object");
+    return false;
+  }
+
+  const Json::Value& paint_request = root["paint_request"];
+  std::string color;
+  if (ReadStringField(paint_request, "color", &color)) {
+    Color parsed_color = Color_BLACK;
+    if (!ParseColorString(color, &parsed_color)) {
+      AddValidationError(report, "$.paint_request.color",
+                         "color must be #RRGGBB or #RRGGBBAA");
+      return false;
+    }
+    request->color = parsed_color;
+    request->color_string = ColorToString(parsed_color);
+  }
+
+  std::string style;
+  if (ReadStringField(paint_request, "style", &style)) {
+    if (style != "fill" && style != "stroke") {
+      AddValidationError(report, "$.paint_request.style",
+                         "style must be fill or stroke");
+      return false;
+    }
+    request->style = style;
+  }
+
+  if (paint_request.isMember("stroke_width")) {
+    if (!paint_request["stroke_width"].isNumeric()) {
+      AddValidationError(report, "$.paint_request.stroke_width",
+                         "stroke_width must be numeric");
+      return false;
+    }
+    float stroke_width = paint_request["stroke_width"].asFloat();
+    if (stroke_width <= 0.0f) {
+      AddValidationError(report, "$.paint_request.stroke_width",
+                         "stroke_width must be positive");
+      return false;
+    }
+    request->stroke_width = stroke_width;
   }
   return true;
 }
@@ -726,81 +818,140 @@ std::vector<GlyphRequest> BuildGlyphRequests(
   return glyphs;
 }
 
-PathCompareConfig ParsePathCompareConfig(const Json::Value& root) {
-  PathCompareConfig config;
-  const Json::Value& compare = root["compare"];
-  if (!compare.isObject() || !compare["glyph_path"].isObject()) {
-    return config;
+Json::Value GlyphRequestToJson(const GlyphRequest& glyph) {
+  Json::Value value(Json::objectValue);
+  value["source"] = glyph.source;
+  value["label"] = glyph.label;
+  if (glyph.has_code_point) {
+    value["code_point"] = static_cast<Json::UInt64>(glyph.code_point);
   }
-
-  const Json::Value& glyph_path = compare["glyph_path"];
-  std::string mode;
-  if (ReadStringField(glyph_path, "mode", &mode) && mode != "backend_default") {
-    config.mode = mode;
-  }
-  ReadDoubleField(glyph_path, "epsilon", &config.epsilon);
-  return config;
+  value["glyph_id"] = static_cast<Json::UInt64>(glyph.glyph_id);
+  return value;
 }
 
-bool ParsePathExpectation(const Json::Value& root, PathExpectation* expectation,
-                          Json::Value* report) {
-  if (!root.isMember("path_expectation")) {
-    return true;
-  }
+Json::Value FontStyleToJson(const FontStyle& style) {
+  Json::Value value(Json::objectValue);
+  value["weight"] = style.weight();
+  value["width"] = style.width();
+  value["slant"] = SlantToString(style.slant());
+  return value;
+}
 
-  const Json::Value& path_expectation = root["path_expectation"];
-  if (!path_expectation.isObject()) {
-    AddValidationError(report, "$.path_expectation", "expected object");
+Json::Value ExplicitTypefaceSourceToJson(const std::string& entry,
+                                         const std::string& font_file_id,
+                                         const ResolvedFontFile& font_file) {
+  Json::Value value(Json::objectValue);
+  value["entry"] = entry;
+  value["font_file_id"] = font_file_id;
+  value["font_file_uri"] = font_file.uri;
+  value["collection_index"] = font_file.collection_index;
+  return value;
+}
+
+Json::Value FontManagerTypefaceSourceToJson(
+    const FontManagerTypefaceRequest& request) {
+  Json::Value value(Json::objectValue);
+  value["entry"] = "FontManager." + request.entry;
+  if (!request.family_name.empty()) {
+    value["family_name"] = request.family_name;
+  }
+  value["style"] = FontStyleToJson(request.style);
+  if (request.has_character) {
+    value["character"] = request.character_label;
+    value["code_point"] = static_cast<Json::UInt64>(request.character);
+  }
+  Json::Value bcp47(Json::arrayValue);
+  for (const auto& tag : request.bcp47) {
+    bcp47.append(tag);
+  }
+  value["bcp47"] = std::move(bcp47);
+  return value;
+}
+
+bool PutFinite(Json::Value* object, const std::string& field, float value,
+               const std::string& path, std::vector<std::string>* errors) {
+  if (!std::isfinite(value)) {
+    errors->push_back(path + "." + field + " is not finite");
     return false;
   }
-  if (path_expectation.isMember("empty") &&
-      !path_expectation["empty"].isBool()) {
-    AddValidationError(report, "$.path_expectation.empty", "expected bool");
-    return false;
-  }
-  if (ReadBoolField(path_expectation, "empty", &expectation->empty)) {
-    expectation->has_empty = true;
-  }
+  (*object)[field] = value;
   return true;
 }
 
-Json::Value PathExpectationToJson(const PathExpectation& expectation) {
+std::string BitmapFormatToString(BitmapFormat format) {
+  switch (format) {
+    case BitmapFormat::kUnknown:
+      return "unknown";
+    case BitmapFormat::kGray8:
+      return "gray8";
+    case BitmapFormat::kBGRA8:
+      return "bgra8";
+    case BitmapFormat::kRGBA8:
+      return "rgba8";
+  }
+  return "unknown";
+}
+
+size_t BytesPerPixel(BitmapFormat format) {
+  switch (format) {
+    case BitmapFormat::kGray8:
+      return 1;
+    case BitmapFormat::kBGRA8:
+    case BitmapFormat::kRGBA8:
+      return 4;
+    case BitmapFormat::kUnknown:
+      return 0;
+  }
+  return 0;
+}
+
+Json::Value GlyphImageToJson(const GlyphData& glyph, const std::string& path,
+                             std::vector<std::string>* errors) {
+  const GlyphBitmapData& image = glyph.Image();
   Json::Value value(Json::objectValue);
-  value["has_empty"] = expectation.has_empty;
-  if (expectation.has_empty) {
-    value["empty"] = expectation.empty;
+  value["glyph_id"] = static_cast<Json::UInt64>(glyph.Id());
+  PutFinite(&value, "origin_x", image.origin_x, path, errors);
+  PutFinite(&value, "origin_y", image.origin_y, path, errors);
+  PutFinite(&value, "origin_x_for_raster", image.origin_x_for_raster, path,
+            errors);
+  PutFinite(&value, "origin_y_for_raster", image.origin_y_for_raster, path,
+            errors);
+  PutFinite(&value, "width", image.width, path, errors);
+  PutFinite(&value, "height", image.height, path, errors);
+  value["format"] = BitmapFormatToString(image.format);
+  value["format_value"] = static_cast<int>(image.format);
+  value["has_buffer"] = image.buffer != nullptr;
+  value["need_free"] = image.need_free;
+
+  const size_t width =
+      image.width > 0.0f ? static_cast<size_t>(image.width) : 0;
+  const size_t height =
+      image.height > 0.0f ? static_cast<size_t>(image.height) : 0;
+  const size_t byte_size = width * height * BytesPerPixel(image.format);
+  value["byte_size"] = static_cast<Json::UInt64>(byte_size);
+  if (image.buffer != nullptr && byte_size > 0) {
+    value["digest"] = DigestBytes(image.buffer, byte_size);
   }
   return value;
 }
 
-Json::Value BuildPathItem(const GlyphRequest& glyph, const Path& path,
-                          const std::string& path_prefix,
-                          const PathExpectation& expectation,
-                          const PathNormalizeOptions& normalize_options,
-                          std::vector<std::string>* errors) {
-  Json::Value item = GlyphRequestToJson(glyph);
-  const bool path_empty = path.IsEmpty();
-  const bool path_finite = path.IsFinite();
-  item["path_empty"] = path_empty;
-  item["path_finite"] = path_finite;
-  item["expectation"] = PathExpectationToJson(expectation);
-  item["path"] = BuildNormalizedPathJson(path, normalize_options);
+void ReleaseGlyphImage(const GlyphData& glyph) {
+  const GlyphBitmapData& image = glyph.Image();
+  if (!image.need_free) {
+    return;
+  }
 
-  if (!path_finite) {
-    errors->push_back(path_prefix + ".path is not finite");
-  }
-  if (expectation.has_empty && expectation.empty != path_empty) {
-    errors->push_back(path_prefix + ".path_empty expected " +
-                      std::string(expectation.empty ? "true" : "false"));
-  }
-  return item;
+  std::free(image.buffer);
+  GlyphBitmapData& mutable_image = const_cast<GlyphBitmapData&>(image);
+  mutable_image.buffer = nullptr;
+  mutable_image.need_free = false;
 }
 
-Json::Value BuildFontGlyphPaths(const Font& font,
-                                const std::vector<GlyphRequest>& glyphs,
-                                const PathExpectation& expectation,
-                                const PathNormalizeOptions& normalize_options,
-                                std::vector<std::string>* errors) {
+Json::Value BuildFontGlyphImages(const Font& font,
+                                 const std::vector<GlyphRequest>& glyphs,
+                                 const ImageRequest& image_request,
+                                 const PaintRequest& paint_request,
+                                 std::vector<std::string>* errors) {
   Json::Value value(Json::arrayValue);
   if (glyphs.empty()) {
     return value;
@@ -813,65 +964,56 @@ Json::Value BuildFontGlyphPaths(const Font& font,
   }
 
   std::vector<const GlyphData*> glyph_data(glyphs.size(), nullptr);
-  font.LoadGlyphPath(glyph_ids.data(), static_cast<uint32_t>(glyph_ids.size()),
-                     glyph_data.data());
+  Paint paint = MakePaint(paint_request);
+  font.LoadGlyphBitmapInfo(
+      glyph_ids.data(), static_cast<uint32_t>(glyph_ids.size()),
+      glyph_data.data(), paint, image_request.context_scale,
+      image_request.transform);
+  font.LoadGlyphBitmap(glyph_ids.data(),
+                       static_cast<uint32_t>(glyph_ids.size()),
+                       glyph_data.data(), paint, image_request.context_scale,
+                       image_request.transform);
 
   for (size_t i = 0; i < glyphs.size(); ++i) {
     const std::string item_path =
-        "$.glyph_path_probe.font_result.glyph_paths[" + std::to_string(i) + "]";
+        "$.font_result.glyph_images[" + std::to_string(i) + "]";
+    Json::Value item = GlyphRequestToJson(glyphs[i]);
     if (glyph_data[i] == nullptr) {
-      Json::Value item = GlyphRequestToJson(glyphs[i]);
-      item["path_empty"] = true;
-      item["path_finite"] = false;
-      item["expectation"] = PathExpectationToJson(expectation);
       errors->push_back(item_path + ".glyph_data is missing");
-      value.append(std::move(item));
-      continue;
+    } else {
+      item["image"] =
+          GlyphImageToJson(*glyph_data[i], item_path + ".image", errors);
+      ReleaseGlyphImage(*glyph_data[i]);
     }
-    value.append(BuildPathItem(glyphs[i], glyph_data[i]->GetPath(), item_path,
-                               expectation, normalize_options, errors));
+    value.append(std::move(item));
   }
   return value;
 }
 
-Json::Value BuildScalerGlyphPaths(ScalerContext* scaler_context,
-                                  const std::vector<GlyphRequest>& glyphs,
-                                  const PathExpectation& expectation,
-                                  const PathNormalizeOptions& normalize_options,
-                                  std::vector<std::string>* errors) {
-  Json::Value value(Json::arrayValue);
-  for (size_t i = 0; i < glyphs.size(); ++i) {
-    const std::string item_path =
-        "$.glyph_path_probe.scaler_context_result.glyph_paths[" +
-        std::to_string(i) + "]";
-    GlyphData glyph_data(glyphs[i].glyph_id);
-    scaler_context->MakeGlyph(&glyph_data);
-    scaler_context->GetPath(&glyph_data);
-    value.append(BuildPathItem(glyphs[i], glyph_data.GetPath(), item_path,
-                               expectation, normalize_options, errors));
-  }
-  return value;
-}
+Json::Value BuildImageReport(const Json::Value& root,
+                             const CaseValidationResult& validation,
+                             const std::string& category,
+                             const Json::Value& typeface_source,
+                             const FontRequest& font_request,
+                             const ImageRequest& image_request,
+                             const PaintRequest& paint_request,
+                             const std::shared_ptr<Typeface>& typeface,
+                             std::vector<std::string>* errors) {
+  Json::Value report =
+      BuildBaseProbeReport(validation.case_id, validation.backend);
+  report["ok"] = true;
 
-Json::Value BuildGlyphPathBody(const Json::Value& root,
-                               const Json::Value& typeface_source,
-                               const FontRequest& font_request,
-                               const std::shared_ptr<Typeface>& typeface,
-                               const PathCompareConfig& compare_config,
-                               const PathExpectation& expectation,
-                               const PathNormalizeOptions& normalize_options,
-                               std::vector<std::string>* errors) {
   Json::Value probe(Json::objectValue);
-  probe["category"] = "glyph_path";
-  probe["path_compare_mode"] = compare_config.mode;
-  probe["path_epsilon"] = compare_config.epsilon;
+  probe["category"] = category;
   probe["typeface_source"] = typeface_source;
   probe["font_request"] = FontRequestToJson(font_request);
-  probe["path_expectation"] = PathExpectationToJson(expectation);
+  probe["image_request"]["context_scale"] = image_request.context_scale;
+  probe["image_request"]["transform"] = MatrixToJson(image_request.transform);
+  probe["paint_request"] = PaintRequestToJson(paint_request);
 
   Font font = MakeFont(typeface, font_request);
   const std::vector<GlyphRequest> glyphs =
-      BuildGlyphRequests(root, typeface, &probe);
+      BuildGlyphRequests(root, typeface, &report);
 
   Json::Value glyph_requests(Json::arrayValue);
   for (const auto& glyph : glyphs) {
@@ -880,84 +1022,35 @@ Json::Value BuildGlyphPathBody(const Json::Value& root,
   probe["glyph_requests"] = std::move(glyph_requests);
 
   Json::Value font_result(Json::objectValue);
-  font_result["load_path_entry"] = "Font::LoadGlyphPath";
-  font_result["glyph_paths"] =
-      BuildFontGlyphPaths(font, glyphs, expectation, normalize_options, errors);
+  font_result["glyph_images"] =
+      BuildFontGlyphImages(font, glyphs, image_request, paint_request, errors);
   probe["font_result"] = std::move(font_result);
 
-  ScalerContextDesc desc = ScalerContextDesc::MakeCanonicalized(font, Paint());
-  auto scaler_context = typeface->CreateScalerContext(&desc);
-  if (scaler_context == nullptr) {
-    errors->push_back(
-        "$.glyph_path_probe.scaler_context_result.context is "
-        "missing");
-  } else {
-    Json::Value scaler_result(Json::objectValue);
-    scaler_result["desc"] = ScalerContextDescToJson(desc);
-    scaler_result["load_path_entry"] = "ScalerContext::GetPath";
-    scaler_result["glyph_paths"] = BuildScalerGlyphPaths(
-        scaler_context.get(), glyphs, expectation, normalize_options, errors);
-    probe["scaler_context_result"] = std::move(scaler_result);
-  }
-
-  return probe;
-}
-
-Json::Value BuildProbeReport(const Json::Value& root,
-                             const CaseValidationResult& validation,
-                             const Json::Value& typeface_source,
-                             const FontRequest& font_request,
-                             const std::shared_ptr<Typeface>& typeface,
-                             const PathCompareConfig& compare_config,
-                             const PathExpectation& expectation,
-                             const PathNormalizeOptions& normalize_options,
-                             std::vector<std::string>* errors) {
-  Json::Value report = BuildBaseReport(validation.case_id, validation.backend,
-                                       GlyphPathOutputMode::kProbe);
-  report["ok"] = true;
-  report["glyph_path_probe"] = BuildGlyphPathBody(
-      root, typeface_source, font_request, typeface, compare_config,
-      expectation, normalize_options, errors);
+  report["glyph_image_probe"] = std::move(probe);
   return report;
 }
 
-Json::Value BuildDumpReport(const Json::Value& root,
-                            const CaseValidationResult& validation,
-                            const Json::Value& typeface_source,
-                            const FontRequest& font_request,
-                            const std::shared_ptr<Typeface>& typeface,
-                            const PathCompareConfig& compare_config,
-                            const PathExpectation& expectation,
-                            const PathNormalizeOptions& normalize_options,
-                            std::vector<std::string>* errors) {
-  Json::Value report = BuildBaseReport(validation.case_id, validation.backend,
-                                       GlyphPathOutputMode::kDump);
-  report["ok"] = true;
-  report["path_dump"] = BuildGlyphPathBody(
-      root, typeface_source, font_request, typeface, compare_config,
-      expectation, normalize_options, errors);
-  return report;
-}
+}  // namespace
 
-GlyphPathProbeResult RunGlyphPathInternal(const GlyphPathProbeRequest& request,
-                                          GlyphPathOutputMode output_mode) {
+GlyphImageProbeResult RunGlyphImageProbe(
+    const GlyphImageProbeRequest& request) {
   const std::string fallback_case_id =
       StemOrFallback(request.case_path, "case");
   if (!IsExplicitSourceProbeBackend(request.backend) ||
       !IsExplicitSourceProbeBackendAvailable(request.backend)) {
-    return BuildFailure(GlyphPathProbeStatus::kBackendUnavailable,
+    return BuildFailure(GlyphImageProbeStatus::kBackendUnavailable,
                         fallback_case_id, request.backend,
-                        "backend_unavailable", output_mode,
+                        "backend_unavailable",
                         ExplicitSourceBackendUnavailableMessage(
-                            request.backend, "glyph path probe"));
+                            request.backend, "glyph image probe"));
   }
 
   Json::Value root;
   std::string error;
   if (!LoadJsonFile(request.case_path, &root, &error)) {
-    return BuildFailure(GlyphPathProbeStatus::kSchemaValidationFailed,
+    return BuildFailure(GlyphImageProbeStatus::kSchemaValidationFailed,
                         fallback_case_id, request.backend,
-                        "schema_validation_failed", output_mode, error);
+                        "schema_validation_failed", error);
   }
 
   RepoUriResolver resolver(request.repo_root);
@@ -970,18 +1063,18 @@ GlyphPathProbeResult RunGlyphPathInternal(const GlyphPathProbeRequest& request,
   }
 
   if (!validation.valid) {
-    GlyphPathProbeResult result = BuildFailure(
-        GlyphPathProbeStatus::kSchemaValidationFailed, validation.case_id,
-        validation.backend, "schema_validation_failed", output_mode);
+    GlyphImageProbeResult result = BuildFailure(
+        GlyphImageProbeStatus::kSchemaValidationFailed, validation.case_id,
+        validation.backend, "schema_validation_failed");
     result.report["validation_errors"] = validation.errors.ToJson();
     result.report["normalized_case"] = validation.normalized_case;
     return result;
   }
 
   if (validation.backend != request.backend) {
-    GlyphPathProbeResult result = BuildFailure(
-        GlyphPathProbeStatus::kSchemaValidationFailed, validation.case_id,
-        validation.backend, "schema_validation_failed", output_mode);
+    GlyphImageProbeResult result = BuildFailure(
+        GlyphImageProbeStatus::kSchemaValidationFailed, validation.case_id,
+        validation.backend, "schema_validation_failed");
     AddValidationError(&result.report, "$.backend",
                        "case backend does not match --backend");
     return result;
@@ -989,37 +1082,42 @@ GlyphPathProbeResult RunGlyphPathInternal(const GlyphPathProbeRequest& request,
 
   std::string category;
   ReadStringField(root, "category", &category);
-  if (category != "glyph_path") {
-    return BuildFailure(GlyphPathProbeStatus::kProbeFailed, validation.case_id,
+  if (category != "glyph_image") {
+    return BuildFailure(GlyphImageProbeStatus::kProbeFailed, validation.case_id,
                         validation.backend, "probe_category_unimplemented",
-                        output_mode,
-                        "unsupported case category for glyph path probe");
+                        "unsupported case category for glyph image probe");
   }
 
   Json::Value scratch_report =
-      BuildBaseReport(validation.case_id, validation.backend, output_mode);
+      BuildBaseProbeReport(validation.case_id, validation.backend);
   FontRequest font_request;
   if (!ParseFontRequest(root, &font_request, &scratch_report)) {
-    GlyphPathProbeResult result = BuildFailure(
-        GlyphPathProbeStatus::kSchemaValidationFailed, validation.case_id,
-        validation.backend, "schema_validation_failed", output_mode);
+    GlyphImageProbeResult result = BuildFailure(
+        GlyphImageProbeStatus::kSchemaValidationFailed, validation.case_id,
+        validation.backend, "schema_validation_failed");
+    result.report["validation_errors"] = scratch_report["validation_errors"];
+    return result;
+  }
+  ImageRequest image_request;
+  if (!ParseImageRequest(root, &image_request, &scratch_report)) {
+    GlyphImageProbeResult result = BuildFailure(
+        GlyphImageProbeStatus::kSchemaValidationFailed, validation.case_id,
+        validation.backend, "schema_validation_failed");
+    result.report["validation_errors"] = scratch_report["validation_errors"];
+    return result;
+  }
+  PaintRequest paint_request;
+  if (!ParsePaintRequest(root, &paint_request, &scratch_report)) {
+    GlyphImageProbeResult result = BuildFailure(
+        GlyphImageProbeStatus::kSchemaValidationFailed, validation.case_id,
+        validation.backend, "schema_validation_failed");
     result.report["validation_errors"] = scratch_report["validation_errors"];
     return result;
   }
 
-  PathExpectation expectation;
-  if (!ParsePathExpectation(root, &expectation, &scratch_report)) {
-    GlyphPathProbeResult result = BuildFailure(
-        GlyphPathProbeStatus::kSchemaValidationFailed, validation.case_id,
-        validation.backend, "schema_validation_failed", output_mode);
-    result.report["validation_errors"] = scratch_report["validation_errors"];
-    return result;
-  }
-
-  Json::Value typeface_source(Json::objectValue);
   std::shared_ptr<Typeface> typeface;
-  if (root.isMember("typeface_request") &&
-      root["typeface_request"].isObject()) {
+  Json::Value typeface_source(Json::objectValue);
+  if (root.isMember("typeface_request")) {
     const Json::Value& typeface_request = root["typeface_request"];
     std::string entry;
     std::string font_file_id;
@@ -1028,11 +1126,11 @@ GlyphPathProbeResult RunGlyphPathInternal(const GlyphPathProbeRequest& request,
 
     if (entry != "MakeFromFile" && entry != "MakeFromData" &&
         entry != "MakeVariation") {
-      GlyphPathProbeResult result = BuildFailure(
-          GlyphPathProbeStatus::kSchemaValidationFailed, validation.case_id,
-          validation.backend, "schema_validation_failed", output_mode);
+      GlyphImageProbeResult result = BuildFailure(
+          GlyphImageProbeStatus::kSchemaValidationFailed, validation.case_id,
+          validation.backend, "schema_validation_failed");
       AddValidationError(&result.report, "$.typeface_request.entry",
-                         "glyph path probe supports only MakeFromFile and "
+                         "glyph image probe supports only MakeFromFile, "
                          "MakeFromData, and MakeVariation");
       return result;
     }
@@ -1040,70 +1138,49 @@ GlyphPathProbeResult RunGlyphPathInternal(const GlyphPathProbeRequest& request,
     const ResolvedFontFile* font_file =
         FindResolvedFont(validation.resolved_font_files, font_file_id);
     if (font_file == nullptr) {
-      return BuildFailure(GlyphPathProbeStatus::kSchemaValidationFailed,
+      return BuildFailure(GlyphImageProbeStatus::kSchemaValidationFailed,
                           validation.case_id, validation.backend,
-                          "schema_validation_failed", output_mode,
+                          "schema_validation_failed",
                           "typeface_request.font_file was not resolved");
     }
 
-    typeface_source =
-        ExplicitTypefaceSourceToJson(entry, font_file_id, *font_file);
     typeface =
         MakeTypeface(entry, typeface_request, *font_file, &scratch_report);
-    if (scratch_report.isMember("validation_errors")) {
-      GlyphPathProbeResult result = BuildFailure(
-          GlyphPathProbeStatus::kSchemaValidationFailed, validation.case_id,
-          validation.backend, "schema_validation_failed", output_mode);
-      result.report["validation_errors"] = scratch_report["validation_errors"];
-      return result;
-    }
+    typeface_source =
+        ExplicitTypefaceSourceToJson(entry, font_file_id, *font_file);
   } else {
     FontManagerTypefaceRequest font_manager_request;
     if (!ParseFontManagerTypefaceRequest(root, &font_manager_request,
                                          &scratch_report)) {
-      GlyphPathProbeResult result = BuildFailure(
-          GlyphPathProbeStatus::kSchemaValidationFailed, validation.case_id,
-          validation.backend, "schema_validation_failed", output_mode);
+      GlyphImageProbeResult result = BuildFailure(
+          GlyphImageProbeStatus::kSchemaValidationFailed, validation.case_id,
+          validation.backend, "schema_validation_failed");
       result.report["validation_errors"] = scratch_report["validation_errors"];
       return result;
     }
     typeface_source = FontManagerTypefaceSourceToJson(font_manager_request);
     typeface = MakeTypefaceFromFontManager(font_manager_request);
   }
-
-  PathCompareConfig compare_config = ParsePathCompareConfig(root);
-  PathNormalizeOptions normalize_options;
-  normalize_options.epsilon = compare_config.epsilon;
-
-  if (compare_config.mode != "path_normalized") {
-    GlyphPathProbeResult result = BuildFailure(
-        GlyphPathProbeStatus::kSchemaValidationFailed, validation.case_id,
-        validation.backend, "schema_validation_failed", output_mode);
-    AddValidationError(&result.report, "$.compare.glyph_path.mode",
-                       "glyph path probe supports only path_normalized");
+  if (scratch_report.isMember("validation_errors")) {
+    GlyphImageProbeResult result = BuildFailure(
+        GlyphImageProbeStatus::kSchemaValidationFailed, validation.case_id,
+        validation.backend, "schema_validation_failed");
+    result.report["validation_errors"] = scratch_report["validation_errors"];
     return result;
   }
-
   if (typeface == nullptr) {
-    return BuildFailure(GlyphPathProbeStatus::kProbeFailed, validation.case_id,
+    return BuildFailure(GlyphImageProbeStatus::kProbeFailed, validation.case_id,
                         validation.backend, "typeface_create_failed",
-                        output_mode,
-                        "failed to create typeface for glyph path probe");
+                        "failed to create typeface");
   }
 
-  std::vector<std::string> path_errors;
-  GlyphPathProbeResult result;
+  std::vector<std::string> image_errors;
+  GlyphImageProbeResult result;
   result.case_id = validation.case_id;
   result.backend = validation.backend;
-  if (output_mode == GlyphPathOutputMode::kDump) {
-    result.report = BuildDumpReport(
-        root, validation, typeface_source, font_request, typeface,
-        compare_config, expectation, normalize_options, &path_errors);
-  } else {
-    result.report = BuildProbeReport(
-        root, validation, typeface_source, font_request, typeface,
-        compare_config, expectation, normalize_options, &path_errors);
-  }
+  result.report = BuildImageReport(root, validation, category, typeface_source,
+                                   font_request, image_request, paint_request,
+                                   typeface, &image_errors);
   if (scratch_report.isMember("source_data")) {
     result.report["source_data"] = scratch_report["source_data"];
   }
@@ -1111,30 +1188,20 @@ GlyphPathProbeResult RunGlyphPathInternal(const GlyphPathProbeRequest& request,
     result.report["variation_request"] = scratch_report["variation_request"];
   }
 
-  if (!path_errors.empty()) {
-    result.status = GlyphPathProbeStatus::kProbeFailed;
+  if (!image_errors.empty()) {
+    result.status = GlyphImageProbeStatus::kProbeFailed;
     result.report["ok"] = false;
-    result.report["reason_code"] = "path_invalid";
+    result.report["reason_code"] = "glyph_image_invalid";
     Json::Value errors(Json::arrayValue);
-    for (const auto& path_error : path_errors) {
-      errors.append(path_error);
+    for (const auto& image_error : image_errors) {
+      errors.append(image_error);
     }
-    result.report["path_errors"] = std::move(errors);
+    result.report["glyph_image_errors"] = std::move(errors);
     return result;
   }
 
-  result.status = GlyphPathProbeStatus::kSuccess;
+  result.status = GlyphImageProbeStatus::kSuccess;
   return result;
-}
-
-}  // namespace
-
-GlyphPathProbeResult RunGlyphPathProbe(const GlyphPathProbeRequest& request) {
-  return RunGlyphPathInternal(request, GlyphPathOutputMode::kProbe);
-}
-
-GlyphPathProbeResult RunGlyphPathDump(const GlyphPathProbeRequest& request) {
-  return RunGlyphPathInternal(request, GlyphPathOutputMode::kDump);
 }
 
 }  // namespace font_harness

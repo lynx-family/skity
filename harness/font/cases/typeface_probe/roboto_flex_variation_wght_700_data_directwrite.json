@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "id": "font.typeface_probe.directwrite.roboto_flex_variation_wght_700_data",
+  "category": "typeface_probe",
+  "status": "active",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "font_files": [
+    {
+      "id": "roboto_flex",
+      "uri": "repo://test/fonts/resources/RobotoFlex-Regular.ttf",
+      "collection_index": 0
+    }
+  ],
+  "typeface_request": {
+    "entry": "MakeVariation",
+    "source_entry": "MakeFromData",
+    "font_file": "roboto_flex",
+    "variation_position": [
+      {
+        "axis": "wght",
+        "value": 700
+      }
+    ]
+  },
+  "glyphs": {
+    "chars": [
+      "U+0041",
+      "U+0061",
+      "U+0030"
+    ]
+  },
+  "compare": {
+    "typeface_identity": "normalized_descriptor",
+    "font_style": "exact"
+  }
+}

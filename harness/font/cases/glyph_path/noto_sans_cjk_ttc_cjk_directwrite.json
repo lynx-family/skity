@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "id": "font.glyph_path.directwrite.noto_sans_cjk_ttc_cjk",
+  "category": "glyph_path",
+  "status": "active",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "font_files": [
+    {
+      "id": "noto_sans_cjk",
+      "uri": "repo://test/fonts/resources/NotoSansCJK-Regular.ttc",
+      "collection_index": 1
+    }
+  ],
+  "typeface_request": {
+    "entry": "MakeFromFile",
+    "font_file": "noto_sans_cjk"
+  },
+  "font_request": {
+    "size": 64,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "normal"
+  },
+  "glyphs": {
+    "chars": [
+      "U+4E00"
+    ]
+  },
+  "path_expectation": {
+    "empty": false
+  },
+  "compare": {
+    "glyph_path": {
+      "mode": "path_normalized",
+      "epsilon": 0.0001
+    }
+  }
+}

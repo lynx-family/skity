@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "windows_directwrite_glyph_image_smoke",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "target_platform": "windows-directwrite",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "glyph_image/roboto_regular_latin_A_directwrite.json",
+    "glyph_image/roboto_regular_latin_A_32_directwrite.json",
+    "glyph_image/roboto_regular_latin_A_context_scale_2_directwrite.json",
+    "glyph_image/roboto_regular_latin_A_blue_directwrite.json",
+    "glyph_image/roboto_regular_latin_A_blue_alpha_directwrite.json",
+    "glyph_image/roboto_regular_latin_A_transform_directwrite.json",
+    "glyph_image/roboto_regular_latin_A_no_hinting_directwrite.json",
+    "glyph_image/roboto_regular_latin_A_diaeresis_directwrite.json",
+    "glyph_image/roboto_regular_latin_A_stroke_directwrite.json",
+    "glyph_image/arial_regular_latin_A_directwrite.json",
+    "glyph_image/arial_regular_latin_A_fake_bold_directwrite.json",
+    "glyph_image/microsoft_yahei_ui_cjk_directwrite.json",
+    "glyph_image/segoe_ui_emoji_grinning_directwrite.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/windows-directwrite",
+    "report_root": "local/font-harness/reports/windows-directwrite"
+  }
+}

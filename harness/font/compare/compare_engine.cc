@@ -33,6 +33,7 @@ struct CompareConfig {
   std::string font_metrics_mode = "epsilon";
   std::string glyph_metrics_mode = "epsilon";
   std::string glyph_path_mode = "path_normalized";
+  std::string glyph_image_mode = "exact";
   double font_metrics_epsilon = kDefaultMetricEpsilon;
   double glyph_metrics_epsilon = kDefaultMetricEpsilon;
   double glyph_path_epsilon = kDefaultPathEpsilon;
@@ -409,7 +410,13 @@ Json::Value NormalizeTableArray(const Json::Value& tables) {
     AddIfPresent(&item, "tag", OptionalStringValue(table, "tag"));
     AddIfPresent(&item, "tag_value", OptionalValue(table, "tag_value"));
     AddIfPresent(&item, "size", OptionalValue(table, "size"));
+    AddIfPresent(&item, "sample_size", OptionalValue(table, "sample_size"));
+    AddIfPresent(&item, "copied_size", OptionalValue(table, "copied_size"));
     AddIfPresent(&item, "digest", OptionalStringValue(table, "digest"));
+    AddIfPresent(&item, "full_copied_size",
+                 OptionalValue(table, "full_copied_size"));
+    AddIfPresent(&item, "full_digest",
+                 OptionalStringValue(table, "full_digest"));
     items.push_back(std::move(item));
   }
   std::sort(items.begin(), items.end(),
@@ -559,6 +566,8 @@ Json::Value NormalizeTypefaceProbe(const Json::Value& root) {
     return value;
   }
   AddIfPresent(&value, "units_per_em", OptionalValue(*probe, "units_per_em"));
+  AddIfPresent(&value, "contains_color_table",
+               OptionalValue(*probe, "contains_color_table"));
   AddIfPresent(&value, "table_count", OptionalValue(*probe, "table_count"));
   value["glyphs"] = NormalizeGlyphArray(OptionalValue(*probe, "glyphs"));
   value["tables"] = NormalizeTableArray(OptionalValue(*probe, "tables"));
@@ -620,6 +629,70 @@ Json::Value NormalizePathProbe(const Json::Value& root) {
   return value;
 }
 
+Json::Value NormalizeGlyphImageItem(const Json::Value& item,
+                                    bool include_digest) {
+  Json::Value value = NormalizeGlyphItem(item);
+  const Json::Value* image = ObjectMember(item, "image");
+  if (image == nullptr || !image->isObject()) {
+    return value;
+  }
+
+  Json::Value normalized_image(Json::objectValue);
+  AddIfPresent(&normalized_image, "origin_x",
+               OptionalValue(*image, "origin_x"));
+  AddIfPresent(&normalized_image, "origin_y",
+               OptionalValue(*image, "origin_y"));
+  AddIfPresent(&normalized_image, "origin_x_for_raster",
+               OptionalValue(*image, "origin_x_for_raster"));
+  AddIfPresent(&normalized_image, "origin_y_for_raster",
+               OptionalValue(*image, "origin_y_for_raster"));
+  AddIfPresent(&normalized_image, "width", OptionalValue(*image, "width"));
+  AddIfPresent(&normalized_image, "height", OptionalValue(*image, "height"));
+  AddIfPresent(&normalized_image, "format",
+               OptionalStringValue(*image, "format"));
+  // The numeric enum value is runner-local; compare the stable format string.
+  AddIfPresent(&normalized_image, "has_buffer",
+               OptionalValue(*image, "has_buffer"));
+  AddIfPresent(&normalized_image, "byte_size",
+               OptionalValue(*image, "byte_size"));
+  if (include_digest) {
+    AddIfPresent(&normalized_image, "digest",
+                 OptionalStringValue(*image, "digest"));
+  }
+  value["image"] = std::move(normalized_image);
+  return value;
+}
+
+Json::Value NormalizeGlyphImageArray(const Json::Value& glyphs,
+                                     bool include_digest) {
+  Json::Value value(Json::arrayValue);
+  if (!glyphs.isArray()) {
+    return value;
+  }
+  for (const auto& glyph : glyphs) {
+    value.append(NormalizeGlyphImageItem(glyph, include_digest));
+  }
+  return value;
+}
+
+Json::Value NormalizeGlyphImageProbe(const Json::Value& root,
+                                     bool include_digest) {
+  Json::Value value(Json::objectValue);
+  const Json::Value* probe = ObjectMember(root, "glyph_image_probe");
+  if (probe == nullptr || !probe->isObject()) {
+    return value;
+  }
+
+  const Json::Value* font_result = ObjectMember(*probe, "font_result");
+  if (font_result != nullptr) {
+    Json::Value font(Json::objectValue);
+    font["glyph_images"] = NormalizeGlyphImageArray(
+        OptionalValue(*font_result, "glyph_images"), include_digest);
+    value["font_result"] = std::move(font);
+  }
+  return value;
+}
+
 Json::Value NormalizeMatchedTypeface(const Json::Value& typeface) {
   Json::Value value(Json::objectValue);
   if (!typeface.isObject()) {
@@ -633,6 +706,14 @@ Json::Value NormalizeMatchedTypeface(const Json::Value& typeface) {
     value["font_style"] = NormalizeStyle(typeface["font_style"]);
   }
   AddIfPresent(&value, "units_per_em", OptionalValue(typeface, "units_per_em"));
+  AddIfPresent(&value, "contains_color_table",
+               OptionalValue(typeface, "contains_color_table"));
+  AddIfPresent(&value, "table_count", OptionalValue(typeface, "table_count"));
+  AddIfPresent(&value, "copied_table_tag_count",
+               OptionalValue(typeface, "copied_table_tag_count"));
+  if (typeface.isMember("tables")) {
+    value["tables"] = NormalizeTableArray(typeface["tables"]);
+  }
 
   const Json::Value* summary = ObjectMember(typeface, "probe_summary");
   if (summary != nullptr) {
@@ -667,6 +748,8 @@ Json::Value NormalizeTypefaceSelection(const Json::Value& typeface) {
     value["font_style"] = NormalizeStyle(typeface["font_style"]);
   }
   AddIfPresent(&value, "units_per_em", OptionalValue(typeface, "units_per_em"));
+  AddIfPresent(&value, "contains_color_table",
+               OptionalValue(typeface, "contains_color_table"));
   return value;
 }
 
@@ -764,6 +847,8 @@ CompareConfig ParseCompareConfig(const Json::Value& case_root) {
       ReadCompareMode(compare, "glyph_metrics", config.glyph_metrics_mode);
   config.glyph_path_mode =
       ReadCompareMode(compare, "glyph_path", config.glyph_path_mode);
+  config.glyph_image_mode =
+      ReadCompareMode(compare, "glyph_image", config.glyph_image_mode);
   config.font_metrics_epsilon =
       ReadCompareEpsilon(compare, "font_metrics", kDefaultMetricEpsilon);
   config.glyph_metrics_epsilon =
@@ -781,6 +866,7 @@ Json::Value CompareConfigToJson(const CompareConfig& config) {
   value["font_metrics_mode"] = config.font_metrics_mode;
   value["glyph_metrics_mode"] = config.glyph_metrics_mode;
   value["glyph_path_mode"] = config.glyph_path_mode;
+  value["glyph_image_mode"] = config.glyph_image_mode;
   value["font_metrics_epsilon"] = config.font_metrics_epsilon;
   value["glyph_metrics_epsilon"] = config.glyph_metrics_epsilon;
   value["glyph_path_epsilon"] = config.glyph_path_epsilon;
@@ -1002,6 +1088,24 @@ void CompareGlyphPathProbe(const Json::Value& expected_root,
   }
 }
 
+void CompareGlyphImageProbe(const Json::Value& expected_root,
+                            const Json::Value& actual_root,
+                            const CompareConfig& config,
+                            std::vector<Diff>* diffs) {
+  if (IsIgnoreMode(config.glyph_image_mode)) {
+    return;
+  }
+  const bool include_digest = config.glyph_image_mode != "metadata";
+  Json::Value expected =
+      NormalizeGlyphImageProbe(expected_root, include_digest);
+  Json::Value actual = NormalizeGlyphImageProbe(actual_root, include_digest);
+  CompareJsonSubset(expected["font_result"]["glyph_images"],
+                    actual["font_result"]["glyph_images"],
+                    "glyph_image_probe.font_result.glyph_images",
+                    "image_mismatch", config.glyph_image_mode, 0.0, false,
+                    diffs);
+}
+
 void CompareFontManagerProbe(const Json::Value& expected_root,
                              const Json::Value& actual_root,
                              const CompareConfig& config,
@@ -1069,6 +1173,12 @@ void CompareFontManagerProbe(const Json::Value& expected_root,
     CompareGlyphIds(expected_typefaces[i]["probe_summary"]["glyphs"],
                     actual_typefaces[i]["probe_summary"]["glyphs"],
                     ChildJsonPath(path, "probe_summary.glyphs"), diffs);
+    if (expected_typefaces[i].isMember("tables")) {
+      CompareJsonSubset(expected_typefaces[i]["tables"],
+                        actual_typefaces[i]["tables"],
+                        ChildJsonPath(path, "tables"), "table_mismatch",
+                        "table_exact", 0.0, false, diffs);
+    }
     if (!IsIgnoreMode(config.font_metrics_mode)) {
       CompareMetricSet(expected_typefaces[i]["probe_summary"]["font_metrics"],
                        actual_typefaces[i]["probe_summary"]["font_metrics"],
@@ -1102,6 +1212,11 @@ void RunCategoryCompare(const Json::Value& expected, const Json::Value& actual,
 
   if (config.category == "glyph_path") {
     CompareGlyphPathProbe(expected, actual, config, diffs);
+    return;
+  }
+
+  if (config.category == "glyph_image") {
+    CompareGlyphImageProbe(expected, actual, config, diffs);
     return;
   }
 

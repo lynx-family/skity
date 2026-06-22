@@ -21,8 +21,8 @@ const std::vector<std::string>& AllowedCategories() {
       "typeface_probe", "system_match",        "family_style_set",
       "fallback_match", "typeface_descriptor", "font_metrics",
       "glyph_mapping",  "glyph_metrics",       "glyph_path",
-      "variation",      "font_tables",         "scaler_context",
-      "font_manager",
+      "glyph_image",    "variation",           "font_tables",
+      "scaler_context", "font_manager",
   };
   return values;
 }
@@ -58,11 +58,26 @@ bool ValidateGlyphChar(const std::string& value) {
   return true;
 }
 
+bool ValidateColorString(const std::string& value) {
+  if (value.size() != 7 && value.size() != 9) {
+    return false;
+  }
+  if (value[0] != '#') {
+    return false;
+  }
+  for (size_t i = 1; i < value.size(); ++i) {
+    if (!std::isxdigit(static_cast<unsigned char>(value[i]))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool RequiresTypefaceRequest(const std::string& category) {
   static const std::set<std::string> values = {
-      "typeface_probe", "typeface_descriptor", "font_metrics",
-      "glyph_mapping",  "glyph_metrics",       "glyph_path",
-      "variation",      "font_tables",         "scaler_context",
+      "typeface_probe", "typeface_descriptor", "font_metrics", "glyph_mapping",
+      "glyph_metrics",  "glyph_path",          "glyph_image",  "variation",
+      "font_tables",    "scaler_context",
   };
   return values.find(category) != values.end();
 }
@@ -118,6 +133,35 @@ void ValidateFontRequest(const Json::Value& root, ValidationContext* context) {
   if (OptionalStringField(request, "hinting", path, context, &hinting)) {
     ValidateStringEnum(hinting, ChildPath(path, "hinting"), AllowedHinting(),
                        context);
+  }
+}
+
+void ValidatePaintRequest(const Json::Value& root, ValidationContext* context) {
+  if (!root.isMember("paint_request")) {
+    return;
+  }
+  const Json::Value& request = root["paint_request"];
+  const std::string path = "$.paint_request";
+  if (!RequireObject(request, path, context)) {
+    return;
+  }
+
+  std::string color;
+  if (OptionalStringField(request, "color", path, context, &color) &&
+      !ValidateColorString(color)) {
+    context->AddError(ChildPath(path, "color"),
+                      "expected #RRGGBB or #RRGGBBAA");
+  }
+  std::string style;
+  if (OptionalStringField(request, "style", path, context, &style)) {
+    ValidateStringEnum(style, ChildPath(path, "style"), {"fill", "stroke"},
+                       context);
+  }
+  double stroke_width = 0.0;
+  if (OptionalNumberField(request, "stroke_width", path, context,
+                          &stroke_width)) {
+    ValidatePositiveNumber(stroke_width, ChildPath(path, "stroke_width"),
+                           context);
   }
 }
 
@@ -228,6 +272,11 @@ void ValidateCompare(const Json::Value& root, ValidationContext* context) {
                                "path_normalized", "path_geometry", "ignore"},
                               context);
   }
+  if (compare->isMember("glyph_image")) {
+    ValidateCompareModeObject((*compare)["glyph_image"],
+                              "$.compare.glyph_image",
+                              {"exact", "metadata", "ignore"}, context);
+  }
 }
 
 std::unordered_map<std::string, ResolvedFontFile> ValidateFontFiles(
@@ -300,7 +349,10 @@ void ValidateTypefaceRequest(
     ValidationContext* context) {
   const Json::Value* request = nullptr;
   if (!root.isMember("typeface_request")) {
-    if (RequiresTypefaceRequest(category)) {
+    const bool uses_font_manager_source =
+        (category == "glyph_path" || category == "glyph_image") &&
+        root.isMember("font_manager_request");
+    if (RequiresTypefaceRequest(category) && !uses_font_manager_source) {
       context->AddError("$.typeface_request", "required field is missing");
     }
     return;
@@ -375,6 +427,7 @@ CaseValidationResult ValidateCaseDocument(const Json::Value& root,
   const auto font_files = ValidateFontFiles(root, resolver, &result);
   ValidateTypefaceRequest(root, category, font_files, &result.errors);
   ValidateFontRequest(root, &result.errors);
+  ValidatePaintRequest(root, &result.errors);
   ValidateGlyphs(root, &result.errors);
   ValidateCompare(root, &result.errors);
 

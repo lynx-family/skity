@@ -17,7 +17,9 @@
 #include "harness/font/case/platform_target.hpp"
 #include "harness/font/compare/compare_engine.hpp"
 #include "harness/font/platform/coretext/env_info.hpp"
+#include "harness/font/platform/directwrite/env_info.hpp"
 #include "harness/font/probe/font_manager_probe.hpp"
+#include "harness/font/probe/glyph_image_probe.hpp"
 #include "harness/font/probe/glyph_path_probe.hpp"
 #include "harness/font/probe/metrics_probe.hpp"
 #include "harness/font/probe/typeface_probe.hpp"
@@ -110,7 +112,7 @@ void PrintUsage(std::ostream& out) {
       << "  --repo-root <path>  optional repository root override\n"
       << "\n"
       << "env-info/list-fonts options:\n"
-      << "  --backend coretext  backend to inspect\n"
+      << "  --backend <name>    backend to inspect (coretext, directwrite)\n"
       << "  --report <path>     optional output JSON\n"
       << "  --repo-root <path>  optional repository root override\n"
       << "\n"
@@ -283,6 +285,10 @@ bool IsGlyphPathProbeCategory(const std::string& category) {
   return category == "glyph_path";
 }
 
+bool IsGlyphImageProbeCategory(const std::string& category) {
+  return category == "glyph_image";
+}
+
 bool IsFontManagerProbeCategory(const std::string& category) {
   return category == "font_manager" || category == "family_style_set";
 }
@@ -355,6 +361,20 @@ int ExitCodeForProbeStatus(skity::font_harness::GlyphPathProbeStatus status) {
   return kExitSkityProbeFailure;
 }
 
+int ExitCodeForProbeStatus(skity::font_harness::GlyphImageProbeStatus status) {
+  switch (status) {
+    case skity::font_harness::GlyphImageProbeStatus::kSuccess:
+      return kExitSuccess;
+    case skity::font_harness::GlyphImageProbeStatus::kSchemaValidationFailed:
+      return kExitSchemaValidationFailed;
+    case skity::font_harness::GlyphImageProbeStatus::kBackendUnavailable:
+      return kExitBackendUnavailable;
+    case skity::font_harness::GlyphImageProbeStatus::kProbeFailed:
+      return kExitSkityProbeFailure;
+  }
+  return kExitSkityProbeFailure;
+}
+
 int ExitCodeForProbeStatus(skity::font_harness::FontManagerProbeStatus status) {
   switch (status) {
     case skity::font_harness::FontManagerProbeStatus::kSuccess:
@@ -404,6 +424,17 @@ ProbeInvocationResult RunSkityProbeForCase(
     request.backend = backend;
     skity::font_harness::GlyphPathProbeResult result =
         skity::font_harness::RunGlyphPathProbe(request);
+    invocation.report = std::move(result.report);
+    invocation.exit_code = ExitCodeForProbeStatus(result.status);
+    invocation.case_id = std::move(result.case_id);
+    invocation.backend = std::move(result.backend);
+  } else if (IsGlyphImageProbeCategory(category)) {
+    skity::font_harness::GlyphImageProbeRequest request;
+    request.repo_root = repo_root;
+    request.case_path = case_path;
+    request.backend = backend;
+    skity::font_harness::GlyphImageProbeResult result =
+        skity::font_harness::RunGlyphImageProbe(request);
     invocation.report = std::move(result.report);
     invocation.exit_code = ExitCodeForProbeStatus(result.status);
     invocation.case_id = std::move(result.case_id);
@@ -941,6 +972,12 @@ int RunPlatformInfoCommand(int argc, char** argv, const std::string& command) {
     report = command == "list-fonts"
                  ? skity::font_harness::BuildCoreTextFontList(request)
                  : skity::font_harness::BuildCoreTextEnvInfo(request);
+  } else if (backend == "directwrite") {
+    skity::font_harness::DirectWriteEnvRequest request;
+    request.repo_root = repo_root;
+    report = command == "list-fonts"
+                 ? skity::font_harness::BuildDirectWriteFontList(request)
+                 : skity::font_harness::BuildDirectWriteEnvInfo(request);
   } else {
     report = BuildUnsupportedBackendReport(
         backend, command == "list-fonts" ? "font_list_fonts" : "font_env_info");

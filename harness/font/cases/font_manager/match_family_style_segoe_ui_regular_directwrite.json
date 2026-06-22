@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "id": "font.font_manager.directwrite.match_family_style_segoe_ui_regular",
+  "category": "font_manager",
+  "status": "active",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "font_manager_request": {
+    "entry": "MatchFamilyStyle",
+    "family_name": "Segoe UI",
+    "style": {
+      "weight": 400,
+      "width": 5,
+      "slant": "upright"
+    },
+    "sample_limit": 4
+  },
+  "font_request": {
+    "size": 64,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "normal"
+  },
+  "glyphs": {
+    "chars": [
+      "U+0041"
+    ]
+  },
+  "compare": {
+    "typeface_identity": "normalized_descriptor",
+    "font_style": "exact",
+    "font_metrics": {
+      "mode": "epsilon",
+      "epsilon": 0.001
+    }
+  }
+}

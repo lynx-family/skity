@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "font.typeface_probe.directwrite.noto_color_emoji_glyphs",
+  "category": "typeface_probe",
+  "status": "active",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "font_files": [
+    {
+      "id": "noto_color_emoji",
+      "uri": "repo://test/fonts/resources/NotoColorEmoji.ttf",
+      "collection_index": 0
+    }
+  ],
+  "typeface_request": {
+    "entry": "MakeFromFile",
+    "font_file": "noto_color_emoji"
+  },
+  "glyphs": {
+    "chars": [
+      "U+263A",
+      "U+FE0F",
+      "U+1F600",
+      "U+0041"
+    ]
+  },
+  "compare": {
+    "typeface_identity": "none",
+    "font_style": "none"
+  }
+}
