@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "id": "font.glyph_path.directwrite.microsoft_yahei_ui_cjk",
+  "category": "glyph_path",
+  "status": "active",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "font_manager_request": {
+    "entry": "MatchFamilyStyleCharacter",
+    "family_name": "Segoe UI",
+    "style": {
+      "weight": 400,
+      "width": 5,
+      "slant": "upright"
+    },
+    "character": "U+4E00",
+    "bcp47": [
+      "zh-Hans"
+    ]
+  },
+  "font_request": {
+    "size": 64,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "normal"
+  },
+  "glyphs": {
+    "chars": [
+      "U+4E00"
+    ]
+  },
+  "path_expectation": {
+    "empty": false
+  },
+  "compare": {
+    "glyph_path": {
+      "mode": "path_normalized",
+      "epsilon": 0.0001
+    }
+  }
+}

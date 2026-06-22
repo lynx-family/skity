@@ -11,6 +11,7 @@
 #include <skity/geometry/rect.hpp>
 #include <skity/io/data.hpp>
 #include <skity/text/font.hpp>
+#include <skity/text/font_arguments.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/glyph.hpp>
 #include <skity/text/typeface.hpp>
@@ -20,13 +21,10 @@
 
 #include "harness/font/artifact/json_io.hpp"
 #include "harness/font/case/case_document.hpp"
+#include "harness/font/probe/backend_support.hpp"
 #include "src/render/text/text_transform.hpp"
 #include "src/text/scaler_context.hpp"
 #include "src/text/scaler_context_desc.hpp"
-
-#ifndef SKITY_FONT_HARNESS_HAS_CORETEXT
-#define SKITY_FONT_HARNESS_HAS_CORETEXT 0
-#endif
 
 namespace skity {
 namespace font_harness {
@@ -89,6 +87,94 @@ uint32_t ParseCodePoint(const std::string& value) {
     return 0;
   }
   return static_cast<uint32_t>(std::stoul(value.substr(2), nullptr, 16));
+}
+
+void AddValidationError(Json::Value* report, const std::string& path,
+                        const std::string& message);
+
+bool ParseAxisTag(const Json::Value& value, FourByteTag* tag) {
+  if (value.isString()) {
+    const std::string axis = value.asString();
+    if (axis.size() != 4) {
+      return false;
+    }
+    *tag = SetFourByteTag(axis[0], axis[1], axis[2], axis[3]);
+    return true;
+  }
+  if (value.isUInt()) {
+    *tag = value.asUInt();
+    return true;
+  }
+  return false;
+}
+
+bool ParseVariationPosition(const Json::Value& request,
+                            VariationPosition* position, Json::Value* report) {
+  if (!request.isMember("variation_position") ||
+      !request["variation_position"].isArray()) {
+    AddValidationError(report, "$.typeface_request.variation_position",
+                       "variation_position array is required for "
+                       "MakeVariation");
+    return false;
+  }
+
+  const Json::Value& coordinates = request["variation_position"];
+  for (Json::ArrayIndex i = 0; i < coordinates.size(); ++i) {
+    const Json::Value& coordinate = coordinates[i];
+    const std::string path =
+        "$.typeface_request.variation_position[" + std::to_string(i) + "]";
+    if (!coordinate.isObject()) {
+      AddValidationError(report, path, "coordinate must be an object");
+      return false;
+    }
+
+    FourByteTag axis = 0;
+    if (coordinate.isMember("axis")) {
+      if (!ParseAxisTag(coordinate["axis"], &axis)) {
+        AddValidationError(report, path + ".axis",
+                           "axis must be a four-character string or uint tag");
+        return false;
+      }
+    } else if (coordinate.isMember("axis_value")) {
+      if (!ParseAxisTag(coordinate["axis_value"], &axis)) {
+        AddValidationError(report, path + ".axis_value",
+                           "axis_value must be a uint tag");
+        return false;
+      }
+    } else {
+      AddValidationError(report, path + ".axis",
+                         "axis or axis_value is required");
+      return false;
+    }
+
+    if (!coordinate.isMember("value") || !coordinate["value"].isNumeric()) {
+      AddValidationError(report, path + ".value", "value must be numeric");
+      return false;
+    }
+    position->AddCoordinate(axis, coordinate["value"].asFloat());
+  }
+  return true;
+}
+
+std::string TagToString(uint32_t tag) {
+  std::string value;
+  value.push_back(static_cast<char>((tag >> 24) & 0xFF));
+  value.push_back(static_cast<char>((tag >> 16) & 0xFF));
+  value.push_back(static_cast<char>((tag >> 8) & 0xFF));
+  value.push_back(static_cast<char>(tag & 0xFF));
+  return value;
+}
+
+Json::Value VariationPositionRequestToJson(const VariationPosition& position) {
+  Json::Value value(Json::arrayValue);
+  for (const auto& coordinate : position.GetCoordinates()) {
+    Json::Value item(Json::objectValue);
+    item["axis"] = TagToString(coordinate.axis);
+    item["axis_value"] = static_cast<Json::UInt64>(coordinate.axis);
+    item["value"] = coordinate.value;
+    value.append(std::move(item));
+  }
+  return value;
 }
 
 std::string HintingToString(Font::FontHinting hinting) {
@@ -169,6 +255,7 @@ const ResolvedFontFile* FindResolvedFont(
 }
 
 std::shared_ptr<Typeface> MakeTypeface(const std::string& entry,
+                                       const Json::Value& typeface_request,
                                        const ResolvedFontFile& font_file,
                                        Json::Value* report) {
   auto font_manager = FontManager::RefDefault();
@@ -187,6 +274,34 @@ std::shared_ptr<Typeface> MakeTypeface(const std::string& entry,
       return nullptr;
     }
     return font_manager->MakeFromData(data, font_file.collection_index);
+  }
+  if (entry == "MakeVariation") {
+    std::string source_entry = "MakeFromFile";
+    ReadStringField(typeface_request, "source_entry", &source_entry);
+    if (source_entry != "MakeFromFile" && source_entry != "MakeFromData") {
+      AddValidationError(report, "$.typeface_request.source_entry",
+                         "source_entry must be MakeFromFile or MakeFromData");
+      return nullptr;
+    }
+
+    auto base_typeface =
+        MakeTypeface(source_entry, typeface_request, font_file, report);
+    if (!base_typeface) {
+      return nullptr;
+    }
+
+    VariationPosition position;
+    if (!ParseVariationPosition(typeface_request, &position, report)) {
+      return nullptr;
+    }
+
+    FontArguments args;
+    args.SetCollectionIndex(font_file.collection_index)
+        .SetVariationDesignPosition(position);
+    (*report)["variation_request"]["source_entry"] = source_entry;
+    (*report)["variation_request"]["variation_position"] =
+        VariationPositionRequestToJson(position);
+    return base_typeface->MakeVariation(args);
   }
   return nullptr;
 }
@@ -542,18 +657,15 @@ bool IsMetricsCategory(const std::string& category) {
 MetricsProbeResult RunMetricsProbe(const MetricsProbeRequest& request) {
   const std::string fallback_case_id =
       StemOrFallback(request.case_path, "case");
-  if (request.backend != "coretext") {
+  if (!IsExplicitSourceProbeBackend(request.backend) ||
+      !IsExplicitSourceProbeBackendAvailable(request.backend)) {
     return BuildFailure(MetricsProbeStatus::kBackendUnavailable,
                         fallback_case_id, request.backend,
                         "backend_unavailable",
-                        "metrics probe supports only the coretext backend");
+                        ExplicitSourceBackendUnavailableMessage(
+                            request.backend, "metrics probe"));
   }
-#if !SKITY_FONT_HARNESS_HAS_CORETEXT
-  return BuildFailure(MetricsProbeStatus::kBackendUnavailable, fallback_case_id,
-                      request.backend, "backend_unavailable",
-                      "CoreText backend is unavailable; build on macOS with "
-                      "SKITY_CT_FONT=ON");
-#else
+
   Json::Value root;
   std::string error;
   if (!LoadJsonFile(request.case_path, &root, &error)) {
@@ -603,13 +715,14 @@ MetricsProbeResult RunMetricsProbe(const MetricsProbeRequest& request) {
   ReadStringField(typeface_request, "entry", &entry);
   ReadStringField(typeface_request, "font_file", &font_file_id);
 
-  if (entry != "MakeFromFile" && entry != "MakeFromData") {
+  if (entry != "MakeFromFile" && entry != "MakeFromData" &&
+      entry != "MakeVariation") {
     MetricsProbeResult result = BuildFailure(
         MetricsProbeStatus::kSchemaValidationFailed, validation.case_id,
         validation.backend, "schema_validation_failed");
     AddValidationError(&result.report, "$.typeface_request.entry",
                        "metrics probe supports only MakeFromFile and "
-                       "MakeFromData");
+                       "MakeFromData, and MakeVariation");
     return result;
   }
 
@@ -633,7 +746,15 @@ MetricsProbeResult RunMetricsProbe(const MetricsProbeRequest& request) {
     return result;
   }
 
-  auto typeface = MakeTypeface(entry, *font_file, &scratch_report);
+  auto typeface =
+      MakeTypeface(entry, typeface_request, *font_file, &scratch_report);
+  if (scratch_report.isMember("validation_errors")) {
+    MetricsProbeResult result = BuildFailure(
+        MetricsProbeStatus::kSchemaValidationFailed, validation.case_id,
+        validation.backend, "schema_validation_failed");
+    result.report["validation_errors"] = scratch_report["validation_errors"];
+    return result;
+  }
   if (typeface == nullptr) {
     return BuildFailure(MetricsProbeStatus::kProbeFailed, validation.case_id,
                         validation.backend, "typeface_create_failed",
@@ -650,6 +771,9 @@ MetricsProbeResult RunMetricsProbe(const MetricsProbeRequest& request) {
   if (scratch_report.isMember("source_data")) {
     result.report["source_data"] = scratch_report["source_data"];
   }
+  if (scratch_report.isMember("variation_request")) {
+    result.report["variation_request"] = scratch_report["variation_request"];
+  }
 
   if (!metrics_errors.empty()) {
     result.status = MetricsProbeStatus::kProbeFailed;
@@ -665,7 +789,6 @@ MetricsProbeResult RunMetricsProbe(const MetricsProbeRequest& request) {
 
   result.status = MetricsProbeStatus::kSuccess;
   return result;
-#endif
 }
 
 }  // namespace font_harness

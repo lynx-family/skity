@@ -19,6 +19,9 @@
 #include "harness/font/case/repo_uri.hpp"
 #include "harness/font/compare/compare_engine.hpp"
 #include "harness/font/compare/path/path_normalizer.hpp"
+#if defined(_WIN32) && SKITY_FONT_HARNESS_HAS_DIRECTWRITE
+#include "harness/font/platform/directwrite/env_info.hpp"
+#endif
 
 namespace skity {
 namespace font_harness {
@@ -27,6 +30,7 @@ namespace {
 constexpr const char* kCaseId = "font.synthetic.typeface";
 constexpr const char* kMetricsCaseId = "font.synthetic.metrics";
 constexpr const char* kGlyphPathCaseId = "font.synthetic.glyph_path";
+constexpr const char* kGlyphImageCaseId = "font.synthetic.glyph_image";
 constexpr const char* kFontManagerCaseId = "font.synthetic.font_manager";
 constexpr const char* kBackend = "coretext";
 constexpr const char* kTargetPlatform = "macos-coretext";
@@ -178,6 +182,20 @@ Json::Value MakeGlyphPathCase() {
   return root;
 }
 
+Json::Value MakeGlyphImageCase() {
+  Json::Value root = MakeGlyphPathCase();
+  root["id"] = kGlyphImageCaseId;
+  root["category"] = "glyph_image";
+  root["image_request"] = Json::Value(Json::objectValue);
+  root["image_request"]["context_scale"] = 1.0;
+  root["paint_request"] = Json::Value(Json::objectValue);
+  root["paint_request"]["color"] = "#000000FF";
+  root["compare"] = Json::Value(Json::objectValue);
+  root["compare"]["glyph_image"] = Json::Value(Json::objectValue);
+  root["compare"]["glyph_image"]["mode"] = "metadata";
+  return root;
+}
+
 Json::Value MakeMetricSummary(double ascent) {
   Json::Value metrics(Json::objectValue);
   metrics["ascent"] = ascent;
@@ -278,6 +296,21 @@ Json::Value MakeFontManagerArtifact(bool available,
 
   root["font_manager_probe"]["matched_typefaces"].append(std::move(typeface));
   return root;
+}
+
+void AddMatchedTypefaceTables(Json::Value* root, int head_table_size) {
+  Json::Value table(Json::objectValue);
+  table["tag"] = "head";
+  table["tag_value"] = 1751474532;
+  table["size"] = head_table_size;
+
+  Json::Value tables(Json::arrayValue);
+  tables.append(std::move(table));
+
+  Json::Value& typeface = (*root)["font_manager_probe"]["matched_typefaces"][0];
+  typeface["table_count"] = 1;
+  typeface["copied_table_tag_count"] = 1;
+  typeface["tables"] = std::move(tables);
 }
 
 void RunFontManagerCompare(TempDir* temp, const Json::Value& expected,
@@ -503,6 +536,40 @@ TEST(FontHarnessCompareEngineTest,
       "ascent");
 }
 
+TEST(FontHarnessCompareEngineTest,
+     IgnoresFontManagerMatchedTablesWhenOracleOmitsTables) {
+  TempDir temp("font_manager_legacy_tables");
+  CompareResult result;
+  Json::Value expected = MakeFontManagerArtifact(
+      /*available=*/true, "Synthetic-Regular", /*glyph_id=*/1,
+      /*font_ascent=*/10.0, /*scaler_ascent=*/10.0);
+  Json::Value actual = expected;
+  AddMatchedTypefaceTables(&actual, /*head_table_size=*/54);
+
+  RunFontManagerCompare(&temp, expected, actual, &result);
+
+  EXPECT_EQ(CompareStatus::kPass, result.status)
+      << WriteJsonString(result.report);
+  EXPECT_TRUE(result.report["passed"].asBool());
+}
+
+TEST(FontHarnessCompareEngineTest,
+     ComparesFontManagerMatchedTablesWhenOracleDeclaresTables) {
+  TempDir temp("font_manager_declared_tables");
+  CompareResult result;
+  Json::Value expected = MakeFontManagerArtifact(
+      /*available=*/true, "Synthetic-Regular", /*glyph_id=*/1,
+      /*font_ascent=*/10.0, /*scaler_ascent=*/10.0);
+  Json::Value actual = expected;
+  AddMatchedTypefaceTables(&expected, /*head_table_size=*/54);
+  AddMatchedTypefaceTables(&actual, /*head_table_size=*/56);
+
+  RunFontManagerCompare(&temp, expected, actual, &result);
+
+  ExpectSingleDiff(result, "table_mismatch",
+                   "font_manager_probe.matched_typefaces[0].tables[0].size");
+}
+
 TEST(FontHarnessCaseDocumentTest, ValidatesSyntheticTypefaceCase) {
   TempDir temp("case_valid");
   WriteTextFile(temp.root() / "fonts/synthetic.ttf", "synthetic font bytes");
@@ -564,6 +631,17 @@ TEST(FontHarnessCaseDocumentTest, AcceptsReservedFuturePlatformTargets) {
   CaseValidationResult windows_result = ValidateCaseDocument(windows, resolver);
   EXPECT_TRUE(windows_result.valid)
       << WriteJsonString(windows_result.errors.ToJson());
+}
+
+TEST(FontHarnessCaseDocumentTest, AllowsGlyphImageFontManagerSource) {
+  RepoUriResolver resolver(".");
+  Json::Value root = MakeGlyphImageCase();
+  root.removeMember("font_files");
+  root.removeMember("typeface_request");
+  root["font_manager_request"] = MakeFontManagerCase()["font_manager_request"];
+
+  CaseValidationResult result = ValidateCaseDocument(root, resolver);
+  EXPECT_TRUE(result.valid) << WriteJsonString(result.errors.ToJson());
 }
 
 TEST(FontHarnessCaseDocumentTest, RejectsRepoUriTraversal) {
@@ -652,6 +730,26 @@ TEST(FontHarnessPlatformTargetTest, CanonicalizesLegacyAliases) {
   platforms.append("darwin-ct");
   EXPECT_TRUE(PlatformArrayContainsTarget(platforms, "macos-coretext"));
 }
+
+#if defined(_WIN32) && SKITY_FONT_HARNESS_HAS_DIRECTWRITE
+TEST(FontHarnessDirectWriteEnvInfoTest, ReportsWindowsLocaleState) {
+  DirectWriteEnvRequest request;
+  request.repo_root = std::filesystem::current_path();
+
+  Json::Value report = BuildDirectWriteEnvInfo(request);
+  if (!report.get("backend_available", false).asBool()) {
+    GTEST_SKIP() << report.get("message", "DirectWrite unavailable").asString();
+  }
+
+  ASSERT_TRUE(report.isMember("windows_locale"));
+  const Json::Value& locale = report["windows_locale"];
+  EXPECT_TRUE(locale.isMember("user_default_locale"));
+  EXPECT_TRUE(locale.isMember("system_default_locale"));
+  ASSERT_TRUE(locale["user_preferred_ui_languages"].isArray());
+  ASSERT_TRUE(locale["system_preferred_ui_languages"].isArray());
+  ASSERT_TRUE(locale["installed_ui_languages"].isArray());
+}
+#endif
 
 TEST(FontHarnessCompareEngineTest, ReportsPassMismatchAndInputFailure) {
   TempDir temp("compare");

@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "font.typeface_probe.directwrite.roboto_regular_glyphs",
+  "category": "typeface_probe",
+  "status": "active",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "font_files": [
+    {
+      "id": "roboto_regular",
+      "uri": "repo://test/fonts/resources/Roboto-Regular.ttf",
+      "collection_index": 0
+    }
+  ],
+  "typeface_request": {
+    "entry": "MakeFromFile",
+    "font_file": "roboto_regular"
+  },
+  "glyphs": {
+    "chars": [
+      "U+0041",
+      "U+0056",
+      "U+0066",
+      "U+0069",
+      "U+10FFFF"
+    ]
+  },
+  "compare": {
+    "typeface_identity": "normalized_descriptor",
+    "font_style": "exact"
+  }
+}

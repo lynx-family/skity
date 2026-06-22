@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "id": "windows_directwrite_variation_clone_smoke",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "target_platform": "windows-directwrite",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "typeface_probe/roboto_flex_variation_axes_directwrite.json",
+    "typeface_probe/roboto_flex_variation_wght_700_directwrite.json",
+    "glyph_metrics/roboto_flex_variation_wght_700_latin_directwrite.json",
+    "glyph_path/roboto_flex_variation_wght_700_latin_A_directwrite.json",
+    "typeface_probe/roboto_flex_variation_wght_700_data_directwrite.json",
+    "glyph_metrics/roboto_flex_variation_wght_700_data_latin_directwrite.json",
+    "glyph_path/roboto_flex_variation_wght_700_data_latin_A_directwrite.json",
+    "typeface_probe/roboto_flex_variation_multi_axis_directwrite.json",
+    "typeface_probe/roboto_flex_variation_multi_axis_data_directwrite.json",
+    "glyph_metrics/roboto_flex_variation_multi_axis_latin_directwrite.json",
+    "glyph_metrics/roboto_flex_variation_multi_axis_data_latin_directwrite.json",
+    "glyph_path/roboto_flex_variation_multi_axis_latin_A_directwrite.json",
+    "glyph_path/roboto_flex_variation_multi_axis_data_latin_A_directwrite.json",
+    "typeface_probe/roboto_flex_variation_hidden_axis_directwrite.json",
+    "typeface_probe/roboto_flex_variation_hidden_axis_data_directwrite.json",
+    "glyph_metrics/roboto_flex_variation_hidden_axis_latin_directwrite.json",
+    "glyph_metrics/roboto_flex_variation_hidden_axis_data_latin_directwrite.json",
+    "glyph_path/roboto_flex_variation_hidden_axis_latin_A_directwrite.json",
+    "glyph_path/roboto_flex_variation_hidden_axis_data_latin_A_directwrite.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/windows-directwrite",
+    "report_root": "local/font-harness/reports/windows-directwrite"
+  }
+}

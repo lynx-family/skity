@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "id": "font.glyph_image.directwrite.roboto_regular_latin_A_stroke",
+  "category": "glyph_image",
+  "status": "active",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "font_files": [
+    {
+      "id": "roboto_regular",
+      "uri": "repo://test/fonts/resources/Roboto-Regular.ttf",
+      "collection_index": 0
+    }
+  ],
+  "typeface_request": {
+    "entry": "MakeFromFile",
+    "font_file": "roboto_regular"
+  },
+  "font_request": {
+    "size": 64,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "normal"
+  },
+  "paint_request": {
+    "color": "#000000FF",
+    "style": "stroke",
+    "stroke_width": 2
+  },
+  "image_request": {
+    "context_scale": 1,
+    "transform": {
+      "scale_x": 1,
+      "skew_x": 0,
+      "skew_y": 0,
+      "scale_y": 1
+    }
+  },
+  "glyphs": {
+    "chars": [
+      "U+0041"
+    ]
+  },
+  "compare": {
+    "glyph_image": {
+      "mode": "metadata"
+    }
+  }
+}

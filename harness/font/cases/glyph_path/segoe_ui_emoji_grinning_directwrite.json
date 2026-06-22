@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "id": "font.glyph_path.directwrite.segoe_ui_emoji_grinning",
+  "category": "glyph_path",
+  "status": "active",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "font_manager_request": {
+    "entry": "MatchFamilyStyleCharacter",
+    "family_name": "Segoe UI",
+    "style": {
+      "weight": 400,
+      "width": 5,
+      "slant": "upright"
+    },
+    "character": "U+1F600",
+    "bcp47": [
+      "und-Zsye"
+    ]
+  },
+  "font_request": {
+    "size": 64,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "normal"
+  },
+  "glyphs": {
+    "chars": [
+      "U+1F600"
+    ]
+  },
+  "compare": {
+    "glyph_path": {
+      "mode": "path_normalized",
+      "epsilon": 0.0001
+    }
+  }
+}

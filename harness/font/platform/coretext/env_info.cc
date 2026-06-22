@@ -4,7 +4,9 @@
 
 #include "harness/font/platform/coretext/env_info.hpp"
 
+#if !defined(_WIN32)
 #include <sys/utsname.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -168,10 +170,12 @@ std::string DetectOSVersion() {
   }
 #endif
 
+#if !defined(_WIN32)
   struct utsname value;
   if (uname(&value) == 0) {
     return value.release;
   }
+#endif
   return "unknown";
 }
 

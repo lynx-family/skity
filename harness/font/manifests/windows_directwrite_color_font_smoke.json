@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "windows_directwrite_color_font_smoke",
+  "backend": "directwrite",
+  "platforms": [
+    "windows-directwrite"
+  ],
+  "target_platform": "windows-directwrite",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "font_manager/match_family_style_arial_regular_directwrite.json",
+    "font_manager/match_family_style_character_emoji_directwrite.json",
+    "glyph_image/noto_color_emoji_grinning_directwrite.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/windows-directwrite",
+    "report_root": "local/font-harness/reports/windows-directwrite"
+  }
+}

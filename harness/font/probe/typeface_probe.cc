@@ -19,11 +19,8 @@
 
 #include "harness/font/artifact/json_io.hpp"
 #include "harness/font/case/case_document.hpp"
+#include "harness/font/probe/backend_support.hpp"
 #include "harness/font/probe/typeface_identity.hpp"
-
-#ifndef SKITY_FONT_HARNESS_HAS_CORETEXT
-#define SKITY_FONT_HARNESS_HAS_CORETEXT 0
-#endif
 
 namespace skity {
 namespace font_harness {
@@ -31,6 +28,22 @@ namespace font_harness {
 namespace {
 
 constexpr size_t kMaxTableSampleBytes = 4096;
+
+std::string DigestBytes(const uint8_t* bytes, size_t size) {
+  static constexpr uint64_t kOffsetBasis = 14695981039346656037ull;
+  static constexpr uint64_t kPrime = 1099511628211ull;
+
+  uint64_t hash = kOffsetBasis;
+  for (size_t i = 0; i < size; ++i) {
+    hash ^= static_cast<uint64_t>(bytes[i]);
+    hash *= kPrime;
+  }
+
+  std::ostringstream stream;
+  stream << "fnv1a64:" << std::hex << std::setw(16) << std::setfill('0')
+         << hash;
+  return stream.str();
+}
 
 std::string StemOrFallback(const std::filesystem::path& path,
                            const std::string& fallback) {
@@ -74,6 +87,9 @@ std::string SlantToString(FontStyle::Slant slant) {
   }
   return "unknown";
 }
+
+void AddValidationError(Json::Value* report, const std::string& path,
+                        const std::string& message);
 
 Json::Value FontStyleToJson(const FontStyle& style) {
   Json::Value value(Json::objectValue);
@@ -144,6 +160,82 @@ Json::Value GlyphsToJson(const Json::Value& root,
   return glyphs;
 }
 
+bool ParseAxisTag(const Json::Value& value, FourByteTag* tag) {
+  if (value.isString()) {
+    const std::string axis = value.asString();
+    if (axis.size() != 4) {
+      return false;
+    }
+    *tag = SetFourByteTag(axis[0], axis[1], axis[2], axis[3]);
+    return true;
+  }
+  if (value.isUInt()) {
+    *tag = value.asUInt();
+    return true;
+  }
+  return false;
+}
+
+bool ParseVariationPosition(const Json::Value& request,
+                            VariationPosition* position, Json::Value* report) {
+  if (!request.isMember("variation_position") ||
+      !request["variation_position"].isArray()) {
+    AddValidationError(report, "$.typeface_request.variation_position",
+                       "variation_position array is required for "
+                       "MakeVariation");
+    return false;
+  }
+
+  const Json::Value& coordinates = request["variation_position"];
+  for (Json::ArrayIndex i = 0; i < coordinates.size(); ++i) {
+    const Json::Value& coordinate = coordinates[i];
+    const std::string path =
+        "$.typeface_request.variation_position[" + std::to_string(i) + "]";
+    if (!coordinate.isObject()) {
+      AddValidationError(report, path, "coordinate must be an object");
+      return false;
+    }
+
+    FourByteTag axis = 0;
+    if (coordinate.isMember("axis")) {
+      if (!ParseAxisTag(coordinate["axis"], &axis)) {
+        AddValidationError(report, path + ".axis",
+                           "axis must be a four-character string or uint tag");
+        return false;
+      }
+    } else if (coordinate.isMember("axis_value")) {
+      if (!ParseAxisTag(coordinate["axis_value"], &axis)) {
+        AddValidationError(report, path + ".axis_value",
+                           "axis_value must be a uint tag");
+        return false;
+      }
+    } else {
+      AddValidationError(report, path + ".axis",
+                         "axis or axis_value is required");
+      return false;
+    }
+
+    if (!coordinate.isMember("value") || !coordinate["value"].isNumeric()) {
+      AddValidationError(report, path + ".value", "value must be numeric");
+      return false;
+    }
+    position->AddCoordinate(axis, coordinate["value"].asFloat());
+  }
+  return true;
+}
+
+Json::Value VariationPositionRequestToJson(const VariationPosition& position) {
+  Json::Value value(Json::arrayValue);
+  for (const auto& coordinate : position.GetCoordinates()) {
+    Json::Value item(Json::objectValue);
+    item["axis"] = TagToString(coordinate.axis);
+    item["axis_value"] = static_cast<Json::UInt64>(coordinate.axis);
+    item["value"] = coordinate.value;
+    value.append(std::move(item));
+  }
+  return value;
+}
+
 Json::Value TablesToJson(const std::shared_ptr<Typeface>& typeface,
                          int* table_count, int* copied_tag_count) {
   *table_count = typeface->CountTables();
@@ -166,6 +258,11 @@ Json::Value TablesToJson(const std::shared_ptr<Typeface>& typeface,
         sample_size == 0
             ? 0
             : typeface->GetTableData(tag, 0, sample_size, sample.data());
+    std::vector<uint8_t> full_data(table_size);
+    const size_t full_copied_size =
+        table_size == 0
+            ? 0
+            : typeface->GetTableData(tag, 0, table_size, full_data.data());
 
     Json::Value table(Json::objectValue);
     table["tag"] = TagToString(tag);
@@ -173,6 +270,13 @@ Json::Value TablesToJson(const std::shared_ptr<Typeface>& typeface,
     table["size"] = static_cast<Json::UInt64>(table_size);
     table["sample_size"] = static_cast<Json::UInt64>(sample_size);
     table["copied_size"] = static_cast<Json::UInt64>(copied_size);
+    if (copied_size > 0 && copied_size == sample_size) {
+      table["digest"] = DigestBytes(sample.data(), copied_size);
+    }
+    table["full_copied_size"] = static_cast<Json::UInt64>(full_copied_size);
+    if (full_copied_size > 0 && full_copied_size == table_size) {
+      table["full_digest"] = DigestBytes(full_data.data(), full_copied_size);
+    }
     tables.append(std::move(table));
   }
   return tables;
@@ -229,6 +333,7 @@ const ResolvedFontFile* FindResolvedFont(
 }
 
 std::shared_ptr<Typeface> MakeTypeface(const std::string& entry,
+                                       const Json::Value& typeface_request,
                                        const ResolvedFontFile& font_file,
                                        Json::Value* report) {
   auto font_manager = FontManager::RefDefault();
@@ -247,6 +352,34 @@ std::shared_ptr<Typeface> MakeTypeface(const std::string& entry,
       return nullptr;
     }
     return font_manager->MakeFromData(data, font_file.collection_index);
+  }
+  if (entry == "MakeVariation") {
+    std::string source_entry = "MakeFromFile";
+    ReadStringField(typeface_request, "source_entry", &source_entry);
+    if (source_entry != "MakeFromFile" && source_entry != "MakeFromData") {
+      AddValidationError(report, "$.typeface_request.source_entry",
+                         "source_entry must be MakeFromFile or MakeFromData");
+      return nullptr;
+    }
+
+    auto base_typeface =
+        MakeTypeface(source_entry, typeface_request, font_file, report);
+    if (!base_typeface) {
+      return nullptr;
+    }
+
+    VariationPosition position;
+    if (!ParseVariationPosition(typeface_request, &position, report)) {
+      return nullptr;
+    }
+
+    FontArguments args;
+    args.SetCollectionIndex(font_file.collection_index)
+        .SetVariationDesignPosition(position);
+    (*report)["variation_request"]["source_entry"] = source_entry;
+    (*report)["variation_request"]["variation_position"] =
+        VariationPositionRequestToJson(position);
+    return base_typeface->MakeVariation(args);
   }
   return nullptr;
 }
@@ -301,18 +434,15 @@ Json::Value BuildSuccessReport(const Json::Value& root,
 TypefaceProbeResult RunTypefaceProbe(const TypefaceProbeRequest& request) {
   const std::string fallback_case_id =
       StemOrFallback(request.case_path, "case");
-  if (request.backend != "coretext") {
+  if (!IsExplicitSourceProbeBackend(request.backend) ||
+      !IsExplicitSourceProbeBackendAvailable(request.backend)) {
     return BuildFailure(TypefaceProbeStatus::kBackendUnavailable,
                         fallback_case_id, request.backend,
                         "backend_unavailable",
-                        "typeface probe supports only the coretext backend");
+                        ExplicitSourceBackendUnavailableMessage(
+                            request.backend, "typeface probe"));
   }
-#if !SKITY_FONT_HARNESS_HAS_CORETEXT
-  return BuildFailure(TypefaceProbeStatus::kBackendUnavailable,
-                      fallback_case_id, request.backend, "backend_unavailable",
-                      "CoreText backend is unavailable; build on macOS with "
-                      "SKITY_CT_FONT=ON");
-#else
+
   Json::Value root;
   std::string error;
   if (!LoadJsonFile(request.case_path, &root, &error)) {
@@ -362,13 +492,14 @@ TypefaceProbeResult RunTypefaceProbe(const TypefaceProbeRequest& request) {
   ReadStringField(typeface_request, "entry", &entry);
   ReadStringField(typeface_request, "font_file", &font_file_id);
 
-  if (entry != "MakeFromFile" && entry != "MakeFromData") {
+  if (entry != "MakeFromFile" && entry != "MakeFromData" &&
+      entry != "MakeVariation") {
     TypefaceProbeResult result = BuildFailure(
         TypefaceProbeStatus::kSchemaValidationFailed, validation.case_id,
         validation.backend, "schema_validation_failed");
     AddValidationError(&result.report, "$.typeface_request.entry",
-                       "typeface probe supports only MakeFromFile and "
-                       "MakeFromData");
+                       "typeface probe supports only MakeFromFile, "
+                       "MakeFromData, and MakeVariation");
     return result;
   }
 
@@ -383,7 +514,14 @@ TypefaceProbeResult RunTypefaceProbe(const TypefaceProbeRequest& request) {
 
   Json::Value report =
       BuildBaseProbeReport(validation.case_id, validation.backend);
-  auto typeface = MakeTypeface(entry, *font_file, &report);
+  auto typeface = MakeTypeface(entry, typeface_request, *font_file, &report);
+  if (report.isMember("validation_errors")) {
+    TypefaceProbeResult result = BuildFailure(
+        TypefaceProbeStatus::kSchemaValidationFailed, validation.case_id,
+        validation.backend, "schema_validation_failed");
+    result.report["validation_errors"] = report["validation_errors"];
+    return result;
+  }
   if (typeface == nullptr) {
     return BuildFailure(TypefaceProbeStatus::kProbeFailed, validation.case_id,
                         validation.backend, "typeface_create_failed",
@@ -399,8 +537,10 @@ TypefaceProbeResult RunTypefaceProbe(const TypefaceProbeRequest& request) {
   if (report.isMember("source_data")) {
     result.report["source_data"] = report["source_data"];
   }
+  if (report.isMember("variation_request")) {
+    result.report["variation_request"] = report["variation_request"];
+  }
   return result;
-#endif
 }
 
 }  // namespace font_harness

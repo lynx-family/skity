@@ -30,7 +30,9 @@ add_library(skity_font_harness STATIC
   ${CMAKE_CURRENT_LIST_DIR}/compare/compare_engine.cc
   ${CMAKE_CURRENT_LIST_DIR}/compare/path/path_normalizer.cc
   ${CMAKE_CURRENT_LIST_DIR}/platform/coretext/env_info.cc
+  ${CMAKE_CURRENT_LIST_DIR}/platform/directwrite/env_info.cc
   ${CMAKE_CURRENT_LIST_DIR}/probe/font_manager_probe.cc
+  ${CMAKE_CURRENT_LIST_DIR}/probe/glyph_image_probe.cc
   ${CMAKE_CURRENT_LIST_DIR}/probe/glyph_path_probe.cc
   ${CMAKE_CURRENT_LIST_DIR}/probe/metrics_probe.cc
   ${CMAKE_CURRENT_LIST_DIR}/probe/typeface_identity.cc
@@ -42,6 +44,7 @@ add_library(skity_font_harness STATIC
 )
 
 set(SKITY_FONT_HARNESS_HAS_CORETEXT 0)
+set(SKITY_FONT_HARNESS_HAS_DIRECTWRITE 0)
 set(SKITY_FONT_HARNESS_TARGET_PLATFORM "unknown")
 set(SKITY_FONT_HARNESS_IS_IOS_PLATFORM OFF)
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_OSX_SYSROOT MATCHES "iphone")
@@ -67,6 +70,11 @@ if(SKITY_CT_FONT)
   endif()
 endif()
 
+if(CMAKE_SYSTEM_NAME MATCHES "Windows")
+  set(SKITY_FONT_HARNESS_HAS_DIRECTWRITE 1)
+  set(SKITY_FONT_HARNESS_TARGET_PLATFORM "windows-directwrite")
+endif()
+
 target_include_directories(
   skity_font_harness
   PUBLIC
@@ -83,6 +91,7 @@ target_compile_definitions(
   SKITY_FONT_HARNESS_SKITY_CT_FONT=$<BOOL:${SKITY_CT_FONT}>
   SKITY_FONT_HARNESS_ENABLE_FONT_HARNESS=$<BOOL:${SKITY_ENABLE_FONT_HARNESS}>
   SKITY_FONT_HARNESS_HAS_CORETEXT=${SKITY_FONT_HARNESS_HAS_CORETEXT}
+  SKITY_FONT_HARNESS_HAS_DIRECTWRITE=${SKITY_FONT_HARNESS_HAS_DIRECTWRITE}
   SKITY_FONT_HARNESS_TARGET_PLATFORM="${SKITY_FONT_HARNESS_TARGET_PLATFORM}"
 )
 target_link_libraries(
