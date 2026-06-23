@@ -25,9 +25,10 @@ class GPUSurfaceVK : public GPUSurfaceImpl {
   };
 
   GPUSurfaceVK(const GPUSurfaceDescriptor& desc, GPUContextImpl* ctx,
+               std::shared_ptr<HWStaticBuffer> static_buffer,
                std::shared_ptr<GPUTexture> texture, GPUTextureFormat format,
                const GPUSurfaceSyncInfoVK* sync_info)
-      : GPUSurfaceImpl(desc, ctx),
+      : GPUSurfaceImpl(desc, ctx, std::move(static_buffer)),
         target_width_(static_cast<uint32_t>(
             std::floor(static_cast<float>(desc.width) * desc.content_scale))),
         target_height_(static_cast<uint32_t>(

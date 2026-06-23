@@ -78,6 +78,7 @@ class GPUPresenterVK : public GPUPresenter {
   void Reset();
 
   GPUContextImpl* context_ = nullptr;
+  std::shared_ptr<HWStaticBuffer> static_buffer_ = {};
   std::shared_ptr<const VulkanContextState> state_ = {};
   GPUPresenterDescriptorVK desc_ = {};
   PresenterFns fns_ = {};
