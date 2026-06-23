@@ -130,7 +130,9 @@ void LogPresentModes(const std::vector<VkPresentModeKHR>& present_modes) {
 GPUPresenterVK::GPUPresenterVK(GPUContextImpl* context,
                                std::shared_ptr<const VulkanContextState> state,
                                const GPUPresenterDescriptorVK& desc)
-    : context_(context), state_(std::move(state)), desc_(desc) {}
+    : context_(context), state_(std::move(state)), desc_(desc) {
+  static_buffer_ = std::make_shared<HWStaticBuffer>(context_->GetGPUDevice());
+}
 
 GPUPresenterVK::~GPUPresenterVK() { Reset(); }
 
@@ -305,8 +307,8 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   }
 
   auto surface = std::make_unique<GPUSurfaceVK>(
-      surface_desc, context_, std::move(texture), texture_desc.format,
-      surface_desc.sync_info);
+      surface_desc, context_, static_buffer_, std::move(texture),
+      texture_desc.format, surface_desc.sync_info);
   GPUSurfaceVK::PresentInfo present_info = {};
   present_info.owner = this;
   present_info.image_index = image_index;

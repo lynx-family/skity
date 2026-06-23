@@ -879,8 +879,9 @@ std::unique_ptr<GPUSurface> GPUContextVK::CreateSurface(
     return nullptr;
   }
 
-  return std::make_unique<GPUSurfaceVK>(
-      *desc, this, std::move(texture), texture_desc.format, vk_desc->sync_info);
+  return std::make_unique<GPUSurfaceVK>(*desc, this, nullptr,
+                                        std::move(texture), texture_desc.format,
+                                        vk_desc->sync_info);
 }
 
 std::unique_ptr<GPUPresenter> GPUContextVK::CreatePresenter(
@@ -1063,7 +1064,7 @@ std::unique_ptr<GPURenderTarget> GPUContextVK::OnCreateRenderTarget(
   surface_desc.sample_count = desc.sample_count;
   surface_desc.surface_type = VKSurfaceType::kTexture;
 
-  auto surface = std::make_unique<GPUSurfaceVK>(surface_desc, this,
+  auto surface = std::make_unique<GPUSurfaceVK>(surface_desc, this, nullptr,
                                                 std::move(wrapped_texture),
                                                 texture_desc.format, nullptr);
 

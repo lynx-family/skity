@@ -20,6 +20,18 @@ GPUSurfaceImpl::GPUSurfaceImpl(const GPUSurfaceDescriptor& desc,
       stage_buffer_(),
       canvas_() {}
 
+GPUSurfaceImpl::GPUSurfaceImpl(const GPUSurfaceDescriptor& desc,
+                               GPUContextImpl* ctx,
+                               std::shared_ptr<HWStaticBuffer> static_buffer)
+    : width_(desc.width),
+      height_(desc.height),
+      sample_count_(desc.sample_count),
+      content_scale_(desc.content_scale),
+      ctx_(ctx),
+      stage_buffer_(),
+      static_buffer_(std::move(static_buffer)),
+      canvas_() {}
+
 GPUSurfaceImpl::~GPUSurfaceImpl() {}
 
 Canvas* GPUSurfaceImpl::LockCanvas(bool clear) {

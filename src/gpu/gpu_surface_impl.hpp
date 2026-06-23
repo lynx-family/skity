@@ -21,6 +21,8 @@ class GPUCommandBuffer;
 class GPUSurfaceImpl : public GPUSurface {
  public:
   GPUSurfaceImpl(const GPUSurfaceDescriptor& desc, GPUContextImpl* ctx);
+  GPUSurfaceImpl(const GPUSurfaceDescriptor& desc, GPUContextImpl* ctx,
+                 std::shared_ptr<HWStaticBuffer> static_buffer);
 
   ~GPUSurfaceImpl() override;
 
@@ -65,7 +67,7 @@ class GPUSurfaceImpl : public GPUSurface {
 
   GPUContextImpl* ctx_;
   std::unique_ptr<HWStageBuffer> stage_buffer_;
-  std::unique_ptr<HWStaticBuffer> static_buffer_;
+  std::shared_ptr<HWStaticBuffer> static_buffer_;
   std::unique_ptr<HWCanvas> canvas_;
   std::shared_ptr<BlockCacheAllocator> block_cache_allocator_;
   std::unique_ptr<ArenaAllocator> arena_allocator_;
