@@ -13,8 +13,30 @@
 
 namespace skity {
 
+namespace {
+
+Color GetPaintTextColor(const Paint& paint) {
+  return Color4fToColor(paint.GetStyle() == Paint::kStroke_Style
+                            ? paint.GetStrokeColor()
+                            : paint.GetFillColor());
+}
+
+}  // namespace
+
 size_t ScalerContextDesc::hash() const {
   return skity::Hash32(this, sizeof(ScalerContextDesc));
+}
+
+Color ScalerContextDesc::GetGlyphImageForegroundColor(const Font& font,
+                                                      const Paint& paint) {
+#if defined(SKITY_WIN)
+  return GetPaintTextColor(paint);
+#else
+  if (font.GetTypeface()->ContainsColorTable()) {
+    return GetPaintTextColor(paint);
+  }
+  return Color_TRANSPARENT;
+#endif
 }
 
 ScalerContextDesc ScalerContextDesc::MakeCanonicalized(const Font& font,
@@ -47,13 +69,7 @@ ScalerContextDesc ScalerContextDesc::MakeTransformed(
   desc.scale_x = font.GetScaleX();
   desc.skew_x = font.GetSkewX();
   desc.transform = transform;
-  if (font.GetTypeface()->ContainsColorTable()) {
-    desc.foreground_color = paint.GetStyle() == Paint::kStroke_Style
-                                ? Color4fToColor(paint.GetStrokeColor())
-                                : Color4fToColor(paint.GetFillColor());
-  } else {
-    desc.foreground_color = Color_TRANSPARENT;
-  }
+  desc.foreground_color = GetGlyphImageForegroundColor(font, paint);
 
   desc.stroke_width =
       paint.GetStyle() == Paint::kStroke_Style ? paint.GetStrokeWidth() : 0.f;

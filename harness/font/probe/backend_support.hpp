@@ -5,6 +5,7 @@
 #ifndef HARNESS_FONT_PROBE_BACKEND_SUPPORT_HPP
 #define HARNESS_FONT_PROBE_BACKEND_SUPPORT_HPP
 
+#include <skity/utils/settings.hpp>
 #include <string>
 
 #ifndef SKITY_FONT_HARNESS_HAS_CORETEXT
@@ -27,7 +28,14 @@ inline bool IsHostFontProbeBackendAvailable(const std::string& backend) {
     return static_cast<bool>(SKITY_FONT_HARNESS_HAS_CORETEXT);
   }
   if (backend == "directwrite") {
-    return static_cast<bool>(SKITY_FONT_HARNESS_HAS_DIRECTWRITE);
+    if (!static_cast<bool>(SKITY_FONT_HARNESS_HAS_DIRECTWRITE)) {
+      return false;
+    }
+#if defined(SKITY_WIN)
+    return Settings::GetSettings().EnableDWriteFontManager();
+#else
+    return false;
+#endif
   }
   return false;
 }
@@ -39,6 +47,12 @@ inline std::string HostFontBackendUnavailableMessage(
            "SKITY_CT_FONT=ON";
   }
   if (backend == "directwrite") {
+#if defined(SKITY_WIN)
+    if (!Settings::GetSettings().EnableDWriteFontManager()) {
+      return "DirectWrite font manager is disabled; enable it before "
+             "running the DirectWrite font harness";
+    }
+#endif
     return "DirectWrite backend is unavailable; build on Windows";
   }
   return probe_name + " supports only the coretext and directwrite backends";

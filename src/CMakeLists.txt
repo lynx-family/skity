@@ -247,6 +247,9 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Windows")
     skity
     PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/win/font_manager_win.cc
+    ${CMAKE_CURRENT_LIST_DIR}/text/ports/win/font_manager_win2.cc
+    ${CMAKE_CURRENT_LIST_DIR}/text/ports/win/scaler_context_win.cc
+    ${CMAKE_CURRENT_LIST_DIR}/text/ports/win/typeface_win.cc
   )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR EMSCRIPTEN)
   target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/text/ports/test/font_manager_test.cc)

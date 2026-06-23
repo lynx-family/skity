@@ -24,4 +24,12 @@ void Settings::SetAnyWeightEnabled(bool enable) {
   enable_any_weight_.store(enable);
 }
 
+bool Settings::EnableDWriteFontManager() const {
+  return enable_dwrite_font_manager_.load();
+}
+
+void Settings::SetEnableDWriteFontManager(bool enable) {
+  enable_dwrite_font_manager_.store(enable);
+}
+
 }  // namespace skity

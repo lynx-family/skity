@@ -14,4 +14,14 @@ else()
 endif()
 
 target_link_libraries(text_example PUBLIC skity::example_common)
-target_compile_definitions(text_example PRIVATE -DEXAMPLE_IMAGE_ROOT="${CMAKE_SOURCE_DIR}/example/images/")
+target_compile_definitions(text_example PRIVATE
+    -DEXAMPLE_IMAGE_ROOT="${CMAKE_SOURCE_DIR}/example/images/")
+
+if(CMAKE_SYSTEM_NAME MATCHES "Windows")
+    add_executable(dwrite_text_example
+        win/dwrite_text_example.cc
+    )
+    target_link_libraries(dwrite_text_example PUBLIC skity::example_common)
+    target_compile_definitions(dwrite_text_example PRIVATE
+        -DEXAMPLE_IMAGE_ROOT="${CMAKE_SOURCE_DIR}/example/images/")
+endif()

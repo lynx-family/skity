@@ -100,14 +100,12 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font, GlyphID glyph_id,
   }
   scaler_context_desc.context_scale = load_sdf ? 1.f : context_scale;
 
-  if (font.GetTypeface()->ContainsColorTable()) {
-    scaler_context_desc.foreground_color =
-        paint.GetStyle() == Paint::kStroke_Style
-            ? Color4fToColor(paint.GetStrokeColor())
-            : Color4fToColor(paint.GetFillColor());
-  } else {
-    scaler_context_desc.foreground_color = Color_TRANSPARENT;
+  Paint glyph_image_paint = paint;
+  if (load_sdf) {
+    glyph_image_paint.SetStyle(Paint::kFill_Style);
   }
+  scaler_context_desc.foreground_color =
+      ScalerContextDesc::GetGlyphImageForegroundColor(font, glyph_image_paint);
 
   scaler_context_desc.stroke_width =
       paint.GetStyle() == Paint::kStroke_Style ? paint.GetStrokeWidth() : 0.f;
