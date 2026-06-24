@@ -27,9 +27,13 @@ class SKITY_API Settings {
   bool IsAnyWeightEnabled() const;
   void SetAnyWeightEnabled(bool enable);
 
+  bool EnableDWriteFontManager() const;
+  void SetEnableDWriteFontManager(bool enable);
+
  private:
   std::atomic<bool> enable_theme_font_{false};
   std::atomic<bool> enable_any_weight_{true};
+  std::atomic<bool> enable_dwrite_font_manager_{false};
 };
 
 }  // namespace skity

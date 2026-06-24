@@ -60,6 +60,9 @@ struct ScalerContextDesc {
 
   size_t hash() const;
 
+  static Color GetGlyphImageForegroundColor(const Font& font,
+                                            const Paint& paint);
+
   static ScalerContextDesc MakeCanonicalized(const Font& font,
                                              const Paint& paint);
 

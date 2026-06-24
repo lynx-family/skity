@@ -693,6 +693,35 @@ Json::Value NormalizeGlyphImageProbe(const Json::Value& root,
   return value;
 }
 
+void ConvertGlyphImageActualOriginYToSkiaMaskTop(Json::Value* actual_glyphs) {
+  if (actual_glyphs == nullptr || !actual_glyphs->isArray()) {
+    return;
+  }
+
+  for (Json::ArrayIndex i = 0; i < actual_glyphs->size(); ++i) {
+    Json::Value& actual_glyph = (*actual_glyphs)[i];
+    if (!actual_glyph.isObject() || !actual_glyph.isMember("image") ||
+        !actual_glyph["image"].isObject()) {
+      continue;
+    }
+
+    Json::Value& actual_image = actual_glyph["image"];
+    Json::Value& actual_origin_y = actual_image["origin_y"];
+    if (!actual_origin_y.isNumeric()) {
+      continue;
+    }
+
+    const double value = actual_origin_y.asDouble();
+    if (!std::isfinite(value)) {
+      continue;
+    }
+
+    // Skia oracle stores SkGlyph::top() here. Skity stores the draw origin
+    // used by runtime placement, so compare actual in mask-top coordinates.
+    actual_origin_y = -value;
+  }
+}
+
 Json::Value NormalizeMatchedTypeface(const Json::Value& typeface) {
   Json::Value value(Json::objectValue);
   if (!typeface.isObject()) {
@@ -1099,6 +1128,8 @@ void CompareGlyphImageProbe(const Json::Value& expected_root,
   Json::Value expected =
       NormalizeGlyphImageProbe(expected_root, include_digest);
   Json::Value actual = NormalizeGlyphImageProbe(actual_root, include_digest);
+  ConvertGlyphImageActualOriginYToSkiaMaskTop(
+      &actual["font_result"]["glyph_images"]);
   CompareJsonSubset(expected["font_result"]["glyph_images"],
                     actual["font_result"]["glyph_images"],
                     "glyph_image_probe.font_result.glyph_images",

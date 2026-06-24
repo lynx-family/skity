@@ -5,6 +5,7 @@
 #include <cctype>
 #include <filesystem>
 #include <iostream>
+#include <skity/utils/settings.hpp>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -38,6 +39,15 @@ constexpr int kExitIOFailure = 4;
 constexpr int kExitBackendUnavailable = 5;
 constexpr int kExitCompareInputFailure = 6;
 constexpr int kExitSkityProbeFailure = 7;
+
+void ConfigureFontManagerBackend(const std::string& backend) {
+#if defined(SKITY_WIN)
+  skity::Settings::GetSettings().SetEnableDWriteFontManager(backend ==
+                                                            "directwrite");
+#else
+  (void)backend;
+#endif
+}
 
 struct CaseMetadata {
   std::string case_id;
@@ -404,6 +414,8 @@ int ExitCodeForCompareStatus(skity::font_harness::CompareStatus status) {
 ProbeInvocationResult RunSkityProbeForCase(
     const std::filesystem::path& repo_root,
     const std::filesystem::path& case_path, const std::string& backend) {
+  ConfigureFontManagerBackend(backend);
+
   ProbeInvocationResult invocation;
   const std::string category = ReadCaseCategory(case_path);
   if (IsMetricsProbeCategory(category)) {
@@ -964,6 +976,7 @@ int RunPlatformInfoCommand(int argc, char** argv, const std::string& command) {
     std::cerr << command << " requires --backend <backend>\n";
     return kExitUsageError;
   }
+  ConfigureFontManagerBackend(backend);
 
   Json::Value report;
   if (backend == "coretext") {
@@ -1053,6 +1066,7 @@ int RunDumpPathCommand(int argc, char** argv) {
   request.repo_root = repo_root;
   request.case_path = case_path;
   request.backend = backend;
+  ConfigureFontManagerBackend(backend);
   skity::font_harness::GlyphPathProbeResult result =
       skity::font_harness::RunGlyphPathDump(request);
   Json::Value report = std::move(result.report);
@@ -1241,6 +1255,7 @@ int RunMatchCommand(int argc, char** argv) {
   request.repo_root = repo_root;
   request.case_path = case_path;
   request.backend = backend;
+  ConfigureFontManagerBackend(backend);
   skity::font_harness::FontManagerProbeResult result =
       skity::font_harness::RunFontManagerProbe(request);
   const int exit_code = ExitCodeForProbeStatus(result.status);

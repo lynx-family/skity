@@ -15,6 +15,9 @@
 #include "src/text/ports/win/dwrite_version.hpp"
 #include "src/base/platform/win/lean_windows.hpp"
 #include "src/base/platform/win/handle_result.hpp"
+#ifdef GetGlyphIndices
+#undef GetGlyphIndices
+#endif
 #include <dwrite.h>
 // clang-format on
 

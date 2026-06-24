@@ -334,6 +334,62 @@ void RunFontManagerCompare(TempDir* temp, const Json::Value& expected,
   *result = RunCompare(request);
 }
 
+Json::Value MakeGlyphImageArtifact(double origin_y) {
+  Json::Value root(Json::objectValue);
+  root["schema_version"] = 1;
+  root["artifact_type"] = "font_probe_result";
+  root["case_id"] = kGlyphImageCaseId;
+  root["backend"] = kBackend;
+  root["ok"] = true;
+
+  Json::Value image(Json::objectValue);
+  image["origin_x"] = 1.0;
+  image["origin_y"] = origin_y;
+  image["origin_x_for_raster"] = 1.0;
+  image["origin_y_for_raster"] = -46.0;
+  image["width"] = 32.0;
+  image["height"] = 48.0;
+  image["format"] = "A8";
+  image["has_buffer"] = true;
+  image["byte_size"] = 1536;
+
+  Json::Value glyph(Json::objectValue);
+  glyph["label"] = "U+0041";
+  glyph["code_point"] = 65;
+  glyph["glyph_id"] = 1;
+  glyph["image"] = std::move(image);
+
+  root["glyph_image_probe"] = Json::Value(Json::objectValue);
+  root["glyph_image_probe"]["font_result"] = Json::Value(Json::objectValue);
+  root["glyph_image_probe"]["font_result"]["glyph_images"] =
+      Json::Value(Json::arrayValue);
+  root["glyph_image_probe"]["font_result"]["glyph_images"].append(
+      std::move(glyph));
+  return root;
+}
+
+void RunGlyphImageCompare(TempDir* temp, const Json::Value& expected,
+                          const Json::Value& actual, CompareResult* result) {
+  WriteTextFile(temp->root() / "fonts/synthetic.ttf", "synthetic font bytes");
+  const std::filesystem::path case_path =
+      temp->root() / "cases/glyph_image.json";
+  const std::filesystem::path expected_path =
+      temp->root() / "artifacts/expected.json";
+  const std::filesystem::path actual_path =
+      temp->root() / "artifacts/actual.json";
+  WriteJson(case_path, MakeGlyphImageCase());
+  WriteJson(expected_path, expected);
+  WriteJson(actual_path, actual);
+
+  CompareRequest request;
+  request.repo_root = temp->root();
+  request.case_path = case_path;
+  request.expected_path = expected_path;
+  request.actual_path = actual_path;
+  request.backend = kBackend;
+  *result = RunCompare(request);
+}
+
 void ExpectSingleDiff(const CompareResult& result,
                       const std::string& reason_code,
                       const std::string& diff_path) {
@@ -568,6 +624,41 @@ TEST(FontHarnessCompareEngineTest,
 
   ExpectSingleDiff(result, "table_mismatch",
                    "font_manager_probe.matched_typefaces[0].tables[0].size");
+}
+
+TEST(FontHarnessCompareEngineTest,
+     ComparesGlyphImageOriginYInSkiaMaskTopSpace) {
+  TempDir temp("glyph_image_origin_y_mask_top");
+  CompareResult result;
+  RunGlyphImageCompare(&temp, MakeGlyphImageArtifact(-46.0),
+                       MakeGlyphImageArtifact(46.0), &result);
+
+  EXPECT_EQ(CompareStatus::kPass, result.status)
+      << WriteJsonString(result.report);
+  EXPECT_TRUE(result.report["passed"].asBool());
+}
+
+TEST(FontHarnessCompareEngineTest, ReportsGlyphImageOriginYWhenSignMatches) {
+  TempDir temp("glyph_image_origin_y_same_sign");
+  CompareResult result;
+  RunGlyphImageCompare(&temp, MakeGlyphImageArtifact(-46.0),
+                       MakeGlyphImageArtifact(-46.0), &result);
+
+  ExpectSingleDiff(
+      result, "image_mismatch",
+      "glyph_image_probe.font_result.glyph_images[0].image.origin_y");
+}
+
+TEST(FontHarnessCompareEngineTest,
+     ReportsGlyphImageOriginYWhenMagnitudeDiffers) {
+  TempDir temp("glyph_image_origin_y_magnitude");
+  CompareResult result;
+  RunGlyphImageCompare(&temp, MakeGlyphImageArtifact(-46.0),
+                       MakeGlyphImageArtifact(47.0), &result);
+
+  ExpectSingleDiff(
+      result, "image_mismatch",
+      "glyph_image_probe.font_result.glyph_images[0].image.origin_y");
 }
 
 TEST(FontHarnessCaseDocumentTest, ValidatesSyntheticTypefaceCase) {
