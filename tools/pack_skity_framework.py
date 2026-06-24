@@ -28,6 +28,7 @@ def cmake_build_and_install(out_dir: str, install_dir: str, target_version: str,
         '-DCMAKE_INSTALL_PREFIX={}'.format(install_dir),
         '-DSKITY_CT_FONT=ON',
         '-DSKITY_CODEC_MODULE=OFF',
+        '-DSKITY_IO_MODULE=OFF',
         '-DSKITY_LOG=ON',
         '-DSKITY_GENERATE_FRAMEWORK=ON',
         '-DCMAKE_OSX_DEPLOYMENT_TARGET={}'.format(target_version),
@@ -80,11 +81,11 @@ def pack_all_frameworks(version_string: str):
     # pack macos framework
     cmake_build_and_install('out/osx_framework', 'out/osx_install', '15.0', 'x86_64;arm64', 'macosx', version_string)
     # pack iOS framework
-    cmake_build_and_install('out/ios_framework', 'out/ios_install', '13.0', 'arm64', 'iphoneos', version_string)
+    cmake_build_and_install('out/ios_framework', 'out/ios_install', '12.0', 'arm64', 'iphoneos', version_string)
     # pack iOS simulator x86_64 framework
-    cmake_build_and_install('out/ios_simulator_framework_x86_64', 'out/ios_simulator_install_x86_64', '13.0', 'x86_64', 'iphonesimulator', version_string)
+    cmake_build_and_install('out/ios_simulator_framework_x86_64', 'out/ios_simulator_install_x86_64', '12.0', 'x86_64', 'iphonesimulator', version_string)
     # pack iOS simulator arm64 framework
-    cmake_build_and_install('out/ios_simulator_framework_arm64', 'out/ios_simulator_install_arm64', '13.0', 'arm64', 'iphonesimulator', version_string)
+    cmake_build_and_install('out/ios_simulator_framework_arm64', 'out/ios_simulator_install_arm64', '12.0', 'arm64', 'iphonesimulator', version_string)
     pass
 
 def pack_zip_bundle():
