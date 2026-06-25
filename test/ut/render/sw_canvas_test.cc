@@ -63,3 +63,24 @@ TEST(SWCanvas, SaveLayerHugeBoundsPreservesRotatedDraw) {
     }
   }
 }
+
+TEST(SWCanvas, StrokeThenFillDrawsFillAfterStroke) {
+  skity::Bitmap bitmap(48, 48, skity::AlphaType::kPremul_AlphaType,
+                       skity::ColorType::kRGBA);
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+  ASSERT_TRUE(canvas);
+
+  skity::Paint paint;
+  paint.SetStyle(skity::Paint::kStrokeThenFill_Style);
+  paint.SetStrokeWidth(10.f);
+  paint.SetStrokeColor(skity::Color_RED);
+  paint.SetFillColor(skity::Color_WHITE);
+  paint.SetAntiAlias(false);
+
+  skity::Path path;
+  path.AddRect(skity::Rect::MakeXYWH(10.f, 10.f, 24.f, 24.f));
+  canvas->DrawPath(path, paint);
+
+  EXPECT_EQ(bitmap.GetPixel(12, 20), skity::Color_WHITE);
+  EXPECT_EQ(bitmap.GetPixel(7, 20), skity::Color_RED);
+}
