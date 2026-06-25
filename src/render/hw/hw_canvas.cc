@@ -21,6 +21,7 @@
 #include "src/render/hw/dst_read_strategy.hpp"
 #include "src/render/hw/filters/hw_filters.hpp"
 #include "src/render/hw/layer/hw_filter_layer.hpp"
+#include "src/render/paint_order.hpp"
 #include "src/render/shape.hpp"
 #include "src/render/text/glyph_run.hpp"
 #include "src/tracing.hpp"
@@ -421,7 +422,7 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
     CurrentLayer()->AddDraw(draw);
   };
 
-  if (need_fill) {
+  auto draw_fill = [&]() {
     Paint work_paint(paint);
     work_paint.SetStyle(Paint::kFill_Style);
     work_paint.SetAntiAlias(need_contour_aa);
@@ -434,9 +435,9 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
     }
 
     draw_op_handler(*dst, work_paint, false);
-  }
+  };
 
-  if (need_stroke) {
+  auto draw_stroke = [&]() {
     Paint work_paint(paint);
     work_paint.SetStyle(Paint::kStroke_Style);
     work_paint.SetAntiAlias(need_contour_aa);
@@ -461,7 +462,10 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
     } else {
       draw_op_handler(*dst, work_paint, true);
     }
-  }
+  };
+
+  DrawFillStrokeInPaintOrder(paint.GetStyle(), need_fill, need_stroke,
+                             draw_fill, draw_stroke);
 }
 
 bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
@@ -535,17 +539,20 @@ void HWCanvas::DrawRRectInternal(const RRect& rrect, const Paint& paint,
     CurrentLayer()->AddDraw(draw);
   };
 
-  if (need_fill) {
+  auto draw_fill = [&]() {
     Paint work_paint(paint);
     work_paint.SetStyle(Paint::kFill_Style);
     draw_op_handler(rrect, work_paint, false);
-  }
+  };
 
-  if (need_stroke) {
+  auto draw_stroke = [&]() {
     Paint work_paint(paint);
     work_paint.SetStyle(Paint::kStroke_Style);
     draw_op_handler(rrect, work_paint, true);
-  }
+  };
+
+  DrawFillStrokeInPaintOrder(paint.GetStyle(), need_fill, need_stroke,
+                             draw_fill, draw_stroke);
 }
 
 void HWCanvas::OnSave() {

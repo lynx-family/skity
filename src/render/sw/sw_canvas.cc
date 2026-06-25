@@ -18,6 +18,7 @@
 #include "src/effect/image_filter_base.hpp"
 #include "src/effect/mask_filter_priv.hpp"
 #include "src/effect/pixmap_shader.hpp"
+#include "src/render/paint_order.hpp"
 #include "src/render/sw/sw_raster.hpp"
 #include "src/render/sw/sw_span_brush.hpp"
 #include "src/render/sw/sw_stack_blur.hpp"
@@ -370,8 +371,7 @@ void SWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
   bool need_fill = paint.GetStyle() != Paint::kStroke_Style;
   bool need_stroke = paint.GetStyle() != Paint::kFill_Style;
 
-  // Fill first
-  if (need_fill) {
+  auto draw_fill = [&]() {
     SWRaster raster;
 
     Path temp;
@@ -383,9 +383,9 @@ void SWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
     }
 
     DoBrush(raster, paint, false);
-  }
+  };
 
-  if (need_stroke) {
+  auto draw_stroke = [&]() {
     Stroke stroke(paint);
 
     Path temp;
@@ -404,7 +404,10 @@ void SWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
     raster.RastePath(outline, CurrentTransform(), GetScanClipBounds());
 
     DoBrush(raster, paint, true);
-  }
+  };
+
+  DrawFillStrokeInPaintOrder(paint.GetStyle(), need_fill, need_stroke,
+                             draw_fill, draw_stroke);
 }
 
 void SWCanvas::OnDrawPaint(const Paint& paint) {
@@ -550,13 +553,20 @@ void SWCanvas::DrawGlyphsInternal(uint32_t count, const GlyphID* glyphs,
     return;
   }
 
-  if (need_fill || font.GetTypeface()->ContainsColorTable()) {
-    FillGlyphs(count, glyphs, position_x, position_y, font, paint);
-  }
+  bool draw_fill = need_fill || font.GetTypeface()->ContainsColorTable();
+  auto fill_glyphs = [&]() {
+    if (draw_fill) {
+      FillGlyphs(count, glyphs, position_x, position_y, font, paint);
+    }
+  };
+  auto stroke_glyphs = [&]() {
+    if (need_stroke) {
+      StrokeGlyphs(count, glyphs, position_x, position_y, font, paint);
+    }
+  };
 
-  if (need_stroke) {
-    StrokeGlyphs(count, glyphs, position_x, position_y, font, paint);
-  }
+  DrawFillStrokeInPaintOrder(paint.GetStyle(), draw_fill, need_stroke,
+                             fill_glyphs, stroke_glyphs);
 }
 
 void SWCanvas::FillGlyphs(uint32_t count, const GlyphID* glyphs,
