@@ -53,7 +53,7 @@ bool CreateImageWithAllocation(const VulkanContextState& state,
                      allocation, nullptr);
   if (create_result != VK_SUCCESS || *image == VK_NULL_HANDLE ||
       *allocation == nullptr) {
-    LOGE("Failed to create Vulkan image {}x{}: {}", image_info.extent.width,
+    LOGD("Failed to create Vulkan image {}x{}: {}", image_info.extent.width,
          image_info.extent.height, static_cast<int32_t>(create_result));
     return false;
   }
@@ -390,14 +390,6 @@ std::shared_ptr<GPUTexture> GPUTextureVK::Create(
         VkFormatToString(image_info.format), descriptor.mip_level_count);
     return {};
   }
-
-  LOGD(
-      "Creating Vulkan texture: logical_format={} resolved_format={} "
-      "size={}x{} usage=0x{:x} samples=0x{:x}",
-      static_cast<uint32_t>(descriptor.format),
-      VkFormatToString(image_info.format), descriptor.width, descriptor.height,
-      static_cast<uint32_t>(image_info.usage),
-      static_cast<uint32_t>(image_info.samples));
 
   VmaAllocationCreateInfo allocation_info = {};
   if (descriptor.storage_mode == GPUTextureStorageMode::kMemoryless) {
