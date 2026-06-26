@@ -31,10 +31,10 @@ VkBufferUsageFlags ConvertGPUBufferUsageMask(GPUBufferUsageMask usage) {
 
 }  // namespace
 
-GPUBufferVK::GPUBufferVK(GPUBufferUsageMask usage,
+GPUBufferVK::GPUBufferVK(const GPUBufferDescriptor& desc,
                          std::shared_ptr<const VulkanContextState> state,
                          GPUBufferVKMemoryType memory_type)
-    : GPUBuffer(usage), state_(std::move(state)), memory_type_(memory_type) {}
+    : GPUBuffer(desc), state_(std::move(state)), memory_type_(memory_type) {}
 
 GPUBufferVK::~GPUBufferVK() { DestroyBuffer(); }
 

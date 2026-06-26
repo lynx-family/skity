@@ -29,7 +29,8 @@ class GPUDeviceMTL : public GPUDevice {
   id<MTLDevice> GetMTLDevice() { return mtl_device_; }
   id<MTLCommandQueue> GetMTLCommandQueue() { return mtl_command_queue_; }
 
-  std::unique_ptr<GPUBuffer> CreateBuffer(GPUBufferUsageMask usage) override;
+  std::unique_ptr<GPUBuffer> CreateBuffer(
+      const GPUBufferDescriptor& desc) override;
 
   std::shared_ptr<GPUShaderFunction> CreateShaderFunction(
       const GPUShaderFunctionDescriptor& desc) override;

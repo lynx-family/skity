@@ -1089,8 +1089,11 @@ std::shared_ptr<Data> GPUContextVK::OnReadPixels(
       static_cast<size_t>(desc.width) * desc.height * bytes_per_pixel;
 
   // Create a host-visible staging buffer as the copy destination.
+  GPUBufferDescriptor staging_desc = {};
+  staging_desc.usage = 0u;
+  staging_desc.storage_mode = GPUBufferStorageMode::kHostVisible;
   auto staging_buffer = std::make_unique<GPUBufferVK>(
-      0u, state_, GPUBufferVKMemoryType::kHostVisible);
+      staging_desc, state_, GPUBufferVKMemoryType::kHostVisible);
   if (!staging_buffer->ResizeIfNeeded(total_bytes)) {
     LOGE("GPUContextVK::OnReadPixels: failed to create staging buffer");
     return nullptr;

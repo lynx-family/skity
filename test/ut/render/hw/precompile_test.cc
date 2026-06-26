@@ -113,8 +113,9 @@ class FakeGPUDevice : public GPUDevice {
     InitCaps(std::move(caps));
   }
 
-  std::unique_ptr<GPUBuffer> CreateBuffer(GPUBufferUsageMask usage) override {
-    return std::make_unique<GPUBuffer>(usage);
+  std::unique_ptr<GPUBuffer> CreateBuffer(
+      const GPUBufferDescriptor& desc) override {
+    return std::make_unique<GPUBuffer>(desc);
   }
 
   std::shared_ptr<GPUShaderFunction> CreateShaderFunction(

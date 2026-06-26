@@ -27,16 +27,37 @@ enum GPUBufferUsage : uint32_t {
   kDefaultBufferUsage = (kVertexBuffer | kUniformBuffer | kIndexBuffer),
 };
 
+enum class GPUBufferStorageMode {
+  kPrivate,
+  kHostVisible,
+};
+
+struct GPUBufferDescriptor {
+  GPUBufferUsageMask usage = GPUBufferUsage::kDefaultBufferUsage;
+  GPUBufferStorageMode storage_mode = GPUBufferStorageMode::kPrivate;
+};
+
 class GPUBuffer {
  public:
-  explicit GPUBuffer(GPUBufferUsageMask usage) : usage_(usage) {}
+  explicit GPUBuffer(const GPUBufferDescriptor& desc)
+      : usage_(desc.usage), storage_mode_(desc.storage_mode) {}
 
   virtual ~GPUBuffer() = default;
 
   GPUBufferUsageMask GetUsage() const { return usage_; }
 
+  GPUBufferStorageMode GetStorageMode() const { return storage_mode_; }
+
+  virtual void* Map(size_t size) {
+    (void)size;
+    return nullptr;
+  }
+
+  virtual void Unmap() {}
+
  private:
   GPUBufferUsageMask usage_;
+  GPUBufferStorageMode storage_mode_;
 };
 
 }  // namespace skity

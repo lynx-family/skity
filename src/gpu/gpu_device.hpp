@@ -26,7 +26,8 @@ class GPUDevice {
 
   virtual ~GPUDevice() = default;
 
-  virtual std::unique_ptr<GPUBuffer> CreateBuffer(GPUBufferUsageMask usage) = 0;
+  virtual std::unique_ptr<GPUBuffer> CreateBuffer(
+      const GPUBufferDescriptor& desc) = 0;
 
   virtual std::shared_ptr<GPUShaderFunction> CreateShaderFunction(
       const GPUShaderFunctionDescriptor& desc) = 0;

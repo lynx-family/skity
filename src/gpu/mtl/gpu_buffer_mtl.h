@@ -14,17 +14,26 @@ namespace skity {
 
 class GPUBufferMTL : public GPUBuffer {
  public:
-  GPUBufferMTL(GPUBufferUsageMask usage, id<MTLDevice> device,
+  GPUBufferMTL(const GPUBufferDescriptor& desc, id<MTLDevice> device,
                id<MTLCommandQueue> queue);
 
   id<MTLBuffer> GetMTLBuffer() const { return mtl_buffer_; }
 
+  void* Map(size_t size) override;
+  void Unmap() override;
+
   void RecreateBufferIfNeeded(size_t size);
 
  private:
+  MTLResourceOptions GetMTLResourceOptions() const;
+
+  bool UsesManagedStorage() const;
+
   id<MTLDevice> device_;
   id<MTLCommandQueue> queue_;
   id<MTLBuffer> mtl_buffer_;
+  size_t mapped_size_ = 0;
+  bool mapped_ = false;
 };
 
 }  // namespace skity

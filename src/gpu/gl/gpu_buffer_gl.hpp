@@ -13,7 +13,7 @@ namespace skity {
 
 class GPUBufferGL : public GPUBuffer {
  public:
-  explicit GPUBufferGL(GPUBufferUsageMask usage);
+  explicit GPUBufferGL(const GPUBufferDescriptor& desc);
 
   ~GPUBufferGL() override;
 

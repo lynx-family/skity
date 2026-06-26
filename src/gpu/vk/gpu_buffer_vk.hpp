@@ -23,7 +23,8 @@ enum class GPUBufferVKMemoryType {
 class GPUBufferVK : public GPUBuffer {
  public:
   GPUBufferVK(
-      GPUBufferUsageMask usage, std::shared_ptr<const VulkanContextState> state,
+      const GPUBufferDescriptor& desc,
+      std::shared_ptr<const VulkanContextState> state,
       GPUBufferVKMemoryType memory_type = GPUBufferVKMemoryType::kDeviceLocal);
 
   ~GPUBufferVK() override;

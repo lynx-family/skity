@@ -26,8 +26,9 @@ GPUDeviceGL::GPUDeviceGL() {
 
 GPUDeviceGL::~GPUDeviceGL() = default;
 
-std::unique_ptr<GPUBuffer> GPUDeviceGL::CreateBuffer(GPUBufferUsageMask usage) {
-  return std::make_unique<GPUBufferGL>(usage);
+std::unique_ptr<GPUBuffer> GPUDeviceGL::CreateBuffer(
+    const GPUBufferDescriptor& desc) {
+  return std::make_unique<GPUBufferGL>(desc);
 }
 
 std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunction(

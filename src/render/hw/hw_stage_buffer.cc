@@ -19,10 +19,27 @@ enum { STAGE_DEFAULT_BUFFER_SIZE = 1024 };
 HWStageBuffer::HWStageBuffer(GPUDevice* device)
     : gpu_device_(device),
       stage_buffer_(STAGE_DEFAULT_BUFFER_SIZE),
-      gpu_buffer_(device->CreateBuffer(GPUBufferUsage::kVertexBuffer |
-                                       GPUBufferUsage::kUniformBuffer)),
-      gpu_index_buffer_(device->CreateBuffer(GPUBufferUsage::kIndexBuffer)),
-      ubo_alignment_(device->GetBufferAlignment()) {}
+      ubo_alignment_(device->GetBufferAlignment()) {
+  GPUBufferStorageMode storage_mode =
+      device->GetCaps().supports_host_visible_buffer
+          ? GPUBufferStorageMode::kHostVisible
+          : GPUBufferStorageMode::kPrivate;
+
+  GPUBufferDescriptor buffer_desc = {};
+  buffer_desc.usage =
+      GPUBufferUsage::kVertexBuffer | GPUBufferUsage::kUniformBuffer;
+  buffer_desc.storage_mode = storage_mode;
+  gpu_buffer_ = device->CreateBuffer(buffer_desc);
+
+  GPUBufferDescriptor index_buffer_desc = {};
+  index_buffer_desc.usage = GPUBufferUsage::kIndexBuffer;
+  index_buffer_desc.storage_mode = storage_mode;
+  gpu_index_buffer_ = device->CreateBuffer(index_buffer_desc);
+
+  use_map_upload_ =
+      gpu_buffer_ != nullptr &&
+      gpu_buffer_->GetStorageMode() == GPUBufferStorageMode::kHostVisible;
+}
 
 HWStageBuffer::HWStageBuffer(GPUDevice* device,
                              std::unique_ptr<GPUBuffer> gpu_buffer,
@@ -32,7 +49,11 @@ HWStageBuffer::HWStageBuffer(GPUDevice* device,
       stage_buffer_(STAGE_DEFAULT_BUFFER_SIZE),
       gpu_buffer_(std::move(gpu_buffer)),
       gpu_index_buffer_(std::move(gpu_index_buffer)),
-      ubo_alignment_(ubo_alignment) {}
+      ubo_alignment_(ubo_alignment) {
+  use_map_upload_ =
+      gpu_buffer_ != nullptr &&
+      gpu_buffer_->GetStorageMode() == GPUBufferStorageMode::kHostVisible;
+}
 
 HWStageBuffer::~HWStageBuffer() = default;
 
@@ -114,9 +135,56 @@ GPUBufferView HWStageBuffer::PushIndex(void* data, uint32_t size) {
 }
 
 void HWStageBuffer::Flush(GPUCommandBuffer* command_buffer) {
+  if (use_map_upload_) {
+    UploadByMap();
+  } else {
+    UploadByBlit(command_buffer);
+  }
+
+  stage_pos_ = 0;
+  stage_index_pos_ = 0;
+}
+
+void HWStageBuffer::UploadByMap() {
+  UploadBufferByMap(gpu_buffer_.get(), stage_buffer_.data(), stage_pos_);
+
+  if (stage_index_pos_ > 0) {
+    UploadBufferByMap(gpu_index_buffer_.get(), stage_index_buffer_.data(),
+                      stage_index_pos_);
+  }
+}
+
+void HWStageBuffer::UploadBufferByMap(GPUBuffer* buffer, void* data,
+                                      size_t size) {
+  if (size == 0) {
+    return;
+  }
+
+  if (buffer == nullptr || data == nullptr) {
+    LOGE("UploadBufferByMap called with empty buffer or data");
+    return;
+  }
+
+  void* mapped = buffer->Map(size);
+  if (mapped == nullptr) {
+    LOGE("Failed to map GPUBuffer for {} bytes", size);
+    return;
+  }
+
+  std::memcpy(mapped, data, size);
+  buffer->Unmap();
+}
+
+void HWStageBuffer::UploadByBlit(GPUCommandBuffer* command_buffer) {
+  if (stage_pos_ == 0 && stage_index_pos_ == 0) {
+    return;
+  }
+
   auto blit_pass = command_buffer->BeginBlitPass();
-  blit_pass->UploadBufferData(gpu_buffer_.get(), stage_buffer_.data(),
-                              stage_pos_);
+  if (stage_pos_ > 0) {
+    blit_pass->UploadBufferData(gpu_buffer_.get(), stage_buffer_.data(),
+                                stage_pos_);
+  }
 
   // The index buffer data here can be empty if all rendering in the scene
   // uses instanced rendering.
@@ -126,9 +194,6 @@ void HWStageBuffer::Flush(GPUCommandBuffer* command_buffer) {
   }
 
   blit_pass->End();
-
-  stage_pos_ = 0;
-  stage_index_pos_ = 0;
 }
 
 void HWStageBuffer::ResizeIfNeed(std::vector<uint8_t>& buffer,
