@@ -23,8 +23,8 @@ GPUDeviceWEB::GPUDeviceWEB(WGPUDevice device, WGPUQueue queue)
 }
 
 std::unique_ptr<GPUBuffer> GPUDeviceWEB::CreateBuffer(
-    GPUBufferUsageMask usage) {
-  return std::make_unique<GPUBufferWEB>(usage);
+    const GPUBufferDescriptor& desc) {
+  return std::make_unique<GPUBufferWEB>(desc);
 }
 
 std::shared_ptr<GPUShaderFunction> GPUDeviceWEB::CreateShaderFunction(

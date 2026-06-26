@@ -34,11 +34,7 @@ enum class BitmapFormat {
   kRGBA8,
 };
 
-enum class GlyphColorType {
-  kNoColor,
-  kColorV0,
-  kColorV1
-};
+enum class GlyphColorType { kNoColor, kColorV0, kColorV1 };
 
 struct SKITY_API GlyphBitmapData {
   // origin point for rendering, This value used in canvas draw

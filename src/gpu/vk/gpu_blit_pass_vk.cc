@@ -185,8 +185,11 @@ void GPUBlitPassVK::UploadTextureData(std::shared_ptr<GPUTexture> texture,
 
   const size_t upload_size =
       static_cast<size_t>(width) * height * bytes_per_pixel;
+  GPUBufferDescriptor staging_desc = {};
+  staging_desc.usage = 0u;
+  staging_desc.storage_mode = GPUBufferStorageMode::kHostVisible;
   auto staging_buffer = std::make_unique<GPUBufferVK>(
-      0u, state_, GPUBufferVKMemoryType::kHostVisible);
+      staging_desc, state_, GPUBufferVKMemoryType::kHostVisible);
   if (!staging_buffer->UploadData(data, upload_size)) {
     return;
   }
@@ -231,8 +234,11 @@ void GPUBlitPassVK::UploadBufferData(GPUBuffer* buffer, void* data,
     return;
   }
 
+  GPUBufferDescriptor staging_desc = {};
+  staging_desc.usage = 0u;
+  staging_desc.storage_mode = GPUBufferStorageMode::kHostVisible;
   auto staging_buffer = std::make_unique<GPUBufferVK>(
-      0u, state_, GPUBufferVKMemoryType::kHostVisible);
+      staging_desc, state_, GPUBufferVKMemoryType::kHostVisible);
   if (!staging_buffer->UploadData(data, size)) {
     return;
   }

@@ -930,11 +930,17 @@ TEST_F(VulkanSharedContextTest, EncodeDrawCommandWithUniformBinding) {
   ASSERT_NE(pipeline, nullptr);
   ASSERT_TRUE(pipeline->IsValid());
 
-  auto vertex_buffer =
-      device->CreateBuffer(skity::GPUBufferUsage::kVertexBuffer);
-  auto index_buffer = device->CreateBuffer(skity::GPUBufferUsage::kIndexBuffer);
-  auto uniform_buffer =
-      device->CreateBuffer(skity::GPUBufferUsage::kUniformBuffer);
+  skity::GPUBufferDescriptor vertex_buffer_desc = {};
+  vertex_buffer_desc.usage = skity::GPUBufferUsage::kVertexBuffer;
+  auto vertex_buffer = device->CreateBuffer(vertex_buffer_desc);
+
+  skity::GPUBufferDescriptor index_buffer_desc = {};
+  index_buffer_desc.usage = skity::GPUBufferUsage::kIndexBuffer;
+  auto index_buffer = device->CreateBuffer(index_buffer_desc);
+
+  skity::GPUBufferDescriptor uniform_buffer_desc = {};
+  uniform_buffer_desc.usage = skity::GPUBufferUsage::kUniformBuffer;
+  auto uniform_buffer = device->CreateBuffer(uniform_buffer_desc);
   ASSERT_NE(vertex_buffer, nullptr);
   ASSERT_NE(index_buffer, nullptr);
   ASSERT_NE(uniform_buffer, nullptr);
@@ -1044,11 +1050,17 @@ TEST(VulkanProcLoaderTest, EncodeLegacyDrawCommandWithUniformBinding) {
   ASSERT_NE(pipeline, nullptr);
   ASSERT_TRUE(pipeline->IsValid());
 
-  auto vertex_buffer =
-      device->CreateBuffer(skity::GPUBufferUsage::kVertexBuffer);
-  auto index_buffer = device->CreateBuffer(skity::GPUBufferUsage::kIndexBuffer);
-  auto uniform_buffer =
-      device->CreateBuffer(skity::GPUBufferUsage::kUniformBuffer);
+  skity::GPUBufferDescriptor vertex_buffer_desc = {};
+  vertex_buffer_desc.usage = skity::GPUBufferUsage::kVertexBuffer;
+  auto vertex_buffer = device->CreateBuffer(vertex_buffer_desc);
+
+  skity::GPUBufferDescriptor index_buffer_desc = {};
+  index_buffer_desc.usage = skity::GPUBufferUsage::kIndexBuffer;
+  auto index_buffer = device->CreateBuffer(index_buffer_desc);
+
+  skity::GPUBufferDescriptor uniform_buffer_desc = {};
+  uniform_buffer_desc.usage = skity::GPUBufferUsage::kUniformBuffer;
+  auto uniform_buffer = device->CreateBuffer(uniform_buffer_desc);
   ASSERT_NE(vertex_buffer, nullptr);
   ASSERT_NE(index_buffer, nullptr);
   ASSERT_NE(uniform_buffer, nullptr);
@@ -1200,8 +1212,10 @@ TEST_F(VulkanSharedContextTest, CreateAndUploadBufferData) {
   auto* device = GetDevice();
   ASSERT_NE(device, nullptr);
 
-  auto buffer = device->CreateBuffer(skity::GPUBufferUsage::kVertexBuffer |
-                                     skity::GPUBufferUsage::kUniformBuffer);
+  skity::GPUBufferDescriptor buffer_desc = {};
+  buffer_desc.usage = skity::GPUBufferUsage::kVertexBuffer |
+                      skity::GPUBufferUsage::kUniformBuffer;
+  auto buffer = device->CreateBuffer(buffer_desc);
   ASSERT_NE(buffer, nullptr);
 
   auto* vk_buffer = static_cast<skity::GPUBufferVK*>(buffer.get());

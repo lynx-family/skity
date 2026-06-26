@@ -31,7 +31,7 @@ WGPUBufferUsage ConvertGPUBufferUsageMask(GPUBufferUsageMask usage) {
 
 }  // namespace
 
-GPUBufferWEB::GPUBufferWEB(GPUBufferUsageMask usage) : GPUBuffer(usage) {}
+GPUBufferWEB::GPUBufferWEB(const GPUBufferDescriptor& desc) : GPUBuffer(desc) {}
 
 GPUBufferWEB::~GPUBufferWEB() {
   if (buffer_) {

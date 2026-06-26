@@ -478,14 +478,15 @@ GPUDeviceVK::GPUDeviceVK(std::shared_ptr<const VulkanContextState> state)
   max_texture_size_ = properties.limits.maxImageDimension2D;
 }
 
-std::unique_ptr<GPUBuffer> GPUDeviceVK::CreateBuffer(GPUBufferUsageMask usage) {
+std::unique_ptr<GPUBuffer> GPUDeviceVK::CreateBuffer(
+    const GPUBufferDescriptor& desc) {
   if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE ||
       state_->GetAllocator() == nullptr) {
     LOGE("GPUDeviceVK::CreateBuffer failed: Vulkan device is unavailable");
     return {};
   }
 
-  return std::make_unique<GPUBufferVK>(usage, state_);
+  return std::make_unique<GPUBufferVK>(desc, state_);
 }
 
 std::shared_ptr<GPUShaderFunction> GPUDeviceVK::CreateShaderFunction(

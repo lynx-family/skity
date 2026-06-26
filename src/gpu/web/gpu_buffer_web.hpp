@@ -13,7 +13,7 @@ namespace skity {
 
 class GPUBufferWEB : public GPUBuffer {
  public:
-  GPUBufferWEB(GPUBufferUsageMask usage);
+  explicit GPUBufferWEB(const GPUBufferDescriptor& desc);
 
   ~GPUBufferWEB() override;
 

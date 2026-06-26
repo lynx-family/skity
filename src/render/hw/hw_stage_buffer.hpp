@@ -85,6 +85,12 @@ class HWStageBuffer final {
   static void ResizeIfNeed(std::vector<uint8_t>& buffer, uint32_t curr_pos,
                            uint32_t size);
 
+  void UploadByMap();
+
+  void UploadBufferByMap(GPUBuffer* buffer, void* data, size_t size);
+
+  void UploadByBlit(GPUCommandBuffer* command_buffer);
+
   void AlignGpuOffset(uint32_t size);
 
  private:
@@ -96,6 +102,7 @@ class HWStageBuffer final {
   std::shared_ptr<GPUBuffer> gpu_buffer_;
   std::shared_ptr<GPUBuffer> gpu_index_buffer_;
   uint32_t ubo_alignment_;
+  bool use_map_upload_ = false;
   std::optional<uint32_t> writing_offset_ = std::nullopt;
 };
 

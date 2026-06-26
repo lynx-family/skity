@@ -9,10 +9,10 @@
 
 namespace skity {
 
-GPUBufferGL::GPUBufferGL(GPUBufferUsageMask usage) : GPUBuffer(usage) {
+GPUBufferGL::GPUBufferGL(const GPUBufferDescriptor& desc) : GPUBuffer(desc) {
   GL_CALL(GenBuffers, 1, &gl_buffer_);
 
-  if (usage & GPUBufferUsage::kIndexBuffer) {
+  if (desc.usage & GPUBufferUsage::kIndexBuffer) {
     target_ = GL_ELEMENT_ARRAY_BUFFER;
   } else {
     target_ = GL_ARRAY_BUFFER;

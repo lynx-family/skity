@@ -27,7 +27,8 @@ class GPUDeviceWEB : public GPUDevice {
     return limits_.maxTextureDimension2D;
   }
 
-  std::unique_ptr<GPUBuffer> CreateBuffer(GPUBufferUsageMask usage) override;
+  std::unique_ptr<GPUBuffer> CreateBuffer(
+      const GPUBufferDescriptor& desc) override;
 
   std::shared_ptr<GPUShaderFunction> CreateShaderFunction(
       const GPUShaderFunctionDescriptor& desc) override;

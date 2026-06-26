@@ -70,13 +70,18 @@ GPUDeviceMTL::GPUDeviceMTL(id<MTLDevice> device, id<MTLCommandQueue> queue)
       max_texture_size_(0) {
   auto gpu_caps = std::make_unique<GPUCaps>();
   gpu_caps->supports_framebuffer_fetch = SupportsFramebufferFetch(device);
+#if defined(SKITY_MACOS) && defined(__x86_64__)
+  // TODO(coldpalelight): Enable host-visible buffer uploads on iOS and Apple
+  // Silicon after validating the behavior across supported release targets.
+  gpu_caps->supports_host_visible_buffer = true;
+#endif
   InitCaps(std::move(gpu_caps));
 }
 
 GPUDeviceMTL::~GPUDeviceMTL() = default;
 
-std::unique_ptr<GPUBuffer> GPUDeviceMTL::CreateBuffer(GPUBufferUsageMask usage) {
-  return std::make_unique<GPUBufferMTL>(usage, mtl_device_, mtl_command_queue_);
+std::unique_ptr<GPUBuffer> GPUDeviceMTL::CreateBuffer(const GPUBufferDescriptor& desc) {
+  return std::make_unique<GPUBufferMTL>(desc, mtl_device_, mtl_command_queue_);
 }
 
 std::shared_ptr<GPUShaderFunction> GPUDeviceMTL::CreateShaderFunction(
