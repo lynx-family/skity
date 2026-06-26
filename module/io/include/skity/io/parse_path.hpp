@@ -14,6 +14,7 @@
 
 #include <optional>
 #include <skity/graphic/path.hpp>
+#include <string>
 
 namespace skity {
 
