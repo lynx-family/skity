@@ -58,6 +58,8 @@ class TestRunner:
                 cwd=cwd, 
                 capture_output=True, 
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 check=False
             )
             return result.returncode, result.stdout, result.stderr
@@ -172,28 +174,39 @@ class TestRunner:
             return False, stderr or stdout
         return True, ""
 
+    def _candidate_executable_names(self, target_exe: str) -> List[str]:
+        if os.name == "nt":
+            return [f"{target_exe}.exe"]
+        return [target_exe]
+
+    def _find_named_test_executable(self, target_exe: str) -> Optional[str]:
+        test_paths = [
+            os.path.join(self.build_dir, "test", "ut"),
+            os.path.join(self.build_dir, "test", "golden"),
+            os.path.join(self.build_dir, "test"),
+            self.build_dir,
+        ]
+        executable_names = self._candidate_executable_names(target_exe)
+        for directory in test_paths:
+            for name in executable_names:
+                path = os.path.join(directory, name)
+                if os.path.exists(path) and os.access(path, os.X_OK):
+                    return path
+                
+        for root, dirs, files in os.walk(self.build_dir):
+            for file in files:
+                if file in executable_names and os.access(os.path.join(root, file), os.X_OK):
+                    return os.path.join(root, file)
+        return None
+
     def find_test_executable(self) -> Optional[str]:
         target_exe = "skity_unit_test"
         if self.suite == "golden-shape":
             target_exe = "skity_golden_test_shape"
         elif self.suite == "golden-text":
             target_exe = "skity_golden_test_text"
-            
-        test_paths = [
-            os.path.join(self.build_dir, "test", "ut", target_exe),
-            os.path.join(self.build_dir, "test", "golden", target_exe),
-            os.path.join(self.build_dir, "test", target_exe),
-            os.path.join(self.build_dir, target_exe),
-        ]
-        for path in test_paths:
-            if os.path.exists(path) and os.access(path, os.X_OK):
-                return path
-                
-        for root, dirs, files in os.walk(self.build_dir):
-            for file in files:
-                if file == target_exe and os.access(os.path.join(root, file), os.X_OK):
-                    return os.path.join(root, file)
-        return None
+
+        return self._find_named_test_executable(target_exe)
 
     def find_test_executables(self) -> List[str]:
         test_executable = self.find_test_executable()
@@ -206,22 +219,6 @@ class TestRunner:
             if vulkan_executable:
                 executables.append(vulkan_executable)
         return executables
-
-    def _find_named_test_executable(self, target_exe: str) -> Optional[str]:
-        test_paths = [
-            os.path.join(self.build_dir, "test", "ut", target_exe),
-            os.path.join(self.build_dir, "test", target_exe),
-            os.path.join(self.build_dir, target_exe),
-        ]
-        for path in test_paths:
-            if os.path.exists(path) and os.access(path, os.X_OK):
-                return path
-
-        for root, dirs, files in os.walk(self.build_dir):
-            for file in files:
-                if file == target_exe and os.access(os.path.join(root, file), os.X_OK):
-                    return os.path.join(root, file)
-        return None
 
     def run_gtest_suite(self) -> Dict[str, Any]:
         test_executables = self.find_test_executables()
@@ -251,7 +248,15 @@ class TestRunner:
                     self.print_status(Colors.YELLOW, f"🎯 Filter: {self.test_filter}")
 
             try:
-                result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
+                result = subprocess.run(
+                    cmd,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    check=False,
+                )
 
                 # Crash or abnormal exit without JSON generated
                 if result.returncode != 0 and not os.path.exists(gtest_json_path):
