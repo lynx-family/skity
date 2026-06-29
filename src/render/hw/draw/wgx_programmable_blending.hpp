@@ -18,6 +18,11 @@ enum class DstReadStrategy {
   kNonRequired,
   kFramebufferFetch,
   kTextureCopy,
+  // Hardware-native advanced blend (GL_KHR_blend_equation_advanced /
+  // VK_EXT_blend_operation_advanced). Highest priority; never creates a
+  // programmable-blending object, so GetProgrammableBlendingKey is unused for
+  // it.
+  kNativeBlend,
 };
 
 /**

@@ -5,6 +5,7 @@
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
 
 #include "src/effect/pixmap_shader.hpp"
+#include "src/gpu/gpu_context_impl.hpp"
 #include "src/graphic/blend_mode_priv.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/step/color_step.hpp"
@@ -65,8 +66,16 @@ void HWDynamicRRectDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
   }
 
   if (IsAdvancedBlendMode(paint.GetBlendMode())) {
-    frag->SetProgrammableBlending(WGXProgrammableBlending::Make(
-        paint.GetBlendMode(), GetDstReadStrategy()));
+    if (GetDstReadStrategy() == DstReadStrategy::kNativeBlend) {
+      if (context->gpuContext->GetGPUDevice()
+              ->GetCaps()
+              .native_blend_shader_variant) {
+        frag->SetUsesNativeAdvancedBlend(true);
+      }
+    } else {
+      frag->SetProgrammableBlending(WGXProgrammableBlending::Make(
+          paint.GetBlendMode(), GetDstReadStrategy()));
+    }
   }
 
   steps.emplace_back(context->arena_allocator->Make<ColorStep>(

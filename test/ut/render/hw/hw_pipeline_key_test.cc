@@ -638,6 +638,66 @@ TEST(HWPipelineKey, ProgrammableBlendingKeyIncludesDstReadStrategy) {
             texture_copy_hard_light->GetProgrammableBlendingKey());
 }
 
+// The kNativeAdvancedBlendKey sentinel marks the GL native-blend shader
+// variant (SetUsesNativeAdvancedBlend is only set when
+// caps.native_blend_shader_variant is true, i.e. GL). These tests lock down
+// the pipeline-cache identity invariants of the sentinel so GL native draws
+// never collide with other paths at the cache-key level.
+
+TEST(HWPipelineKey, NativeAdvancedBlendKeyDiffersFromOrdinary) {
+  // The sentinel must not collide with the ordinary-blend key
+  // (programmable_blending == 0), or GL native draws would reuse a
+  // plain-blend shader.
+  HWPipelineKey native_key;
+  native_key.base_key = 1;
+  native_key.programmable_blending = kNativeAdvancedBlendKey;
+
+  HWPipelineKey ordinary_key;
+  ordinary_key.base_key = 1;  // programmable_blending defaults to 0
+
+  EXPECT_NE(native_key, ordinary_key);
+}
+
+TEST(HWPipelineKey, NativeAdvancedBlendKeyDiffersFromShaderBlending) {
+  // The sentinel must also stay distinct from a packed shader-blending key
+  // (framebuffer-fetch / texture-copy packs mode | strategy<<8 into the low
+  // bits); the top-bit sentinel never overlaps that range.
+  HWPipelineKey native_key;
+  native_key.base_key = 1;
+  native_key.programmable_blending = kNativeAdvancedBlendKey;
+
+  HWPipelineKey shader_key;
+  shader_key.base_key = 1;
+  shader_key.programmable_blending =
+      skity::WGXProgrammableBlending::Make(
+          skity::BlendMode::kOverlay, skity::DstReadStrategy::kFramebufferFetch)
+          ->GetProgrammableBlendingKey();
+
+  EXPECT_NE(native_key, shader_key);
+}
+
+TEST(HWPipelineKey, NativeAdvancedBlendKeyHashIsStable) {
+  // Two identical sentinel keys must compare equal and hash identically.
+  //
+  // Note: the Vulkan native path deliberately does NOT set the sentinel
+  // (caps.native_blend_shader_variant is false on Vulkan), so its
+  // programmable_blending stays 0 and it shares the pipeline key with ordinary
+  // blends. That cache-sharing invariant is enforced by the draw layer (which
+  // gates SetUsesNativeAdvancedBlend on the caps flag), not by the key type,
+  // so it cannot be asserted at this layer.
+  HWPipelineKey a;
+  a.base_key = 1;
+  a.programmable_blending = kNativeAdvancedBlendKey;
+
+  HWPipelineKey b;
+  b.base_key = 1;
+  b.programmable_blending = kNativeAdvancedBlendKey;
+
+  EXPECT_EQ(a, b);
+  HWPipelineKeyHash hasher;
+  EXPECT_EQ(hasher(a), hasher(b));
+}
+
 TEST(HWPipelineKey, Text) {
   {
     auto geometry = WGSLTextSolidColorGeometry(Matrix{}, {}, Paint{});

@@ -700,6 +700,27 @@ bool RecordDrawCommands(const std::shared_ptr<const VulkanContextState>& state,
         VK_STENCIL_FACE_FRONT_BIT | VK_STENCIL_FACE_BACK_BIT,
         command->stencil_reference);
 
+    // Non-coherent advanced blend reads dst incoherently: it only sees writes
+    // made available by a prior barrier (or the subpass loadOp). The barrier
+    // must PRECEDE the draw so this draw's blend read observes all prior
+    // color-attachment writes (advanced or plain). BY_REGION keeps the
+    // dependency tile-local on TBDR hardware (no main-memory round-trip).
+    const auto& blend_target = pipeline->GetDescriptor().target;
+    if (blend_target.blend_op != GPUBlendOperation::kAdd &&
+        state->IsAdvancedBlendEnabled() && !state->IsAdvancedBlendCoherent()) {
+      VkMemoryBarrier blend_barrier = {};
+      blend_barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+      blend_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+      blend_barrier.dstAccessMask =
+          VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT;
+      state->DeviceFns().vkCmdPipelineBarrier(
+          command_buffer.GetCommandBuffer(),
+          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+          VK_DEPENDENCY_BY_REGION_BIT, 1, &blend_barrier, 0, nullptr, 0,
+          nullptr);
+    }
+
     state->DeviceFns().vkCmdDrawIndexed(
         command_buffer.GetCommandBuffer(), command->index_count,
         command->instance_count == 0 ? 1 : command->instance_count, 0, 0, 0);

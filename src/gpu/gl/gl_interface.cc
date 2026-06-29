@@ -32,12 +32,12 @@ struct GLExtensions {
   }
 };
 
-GLInterface *g_interface = nullptr;
+GLInterface* g_interface = nullptr;
 
 #define GET_PROC(F) \
   g_interface->f##F = (decltype(g_interface->f##F))loader("gl" #F)
 
-void GLInterface::InitGlobalInterface(void *proc_loader) {
+void GLInterface::InitGlobalInterface(void* proc_loader) {
   static std::mutex g_mutex = {};
 
   std::lock_guard<std::mutex> lock(g_mutex);
@@ -63,6 +63,7 @@ void GLInterface::InitGlobalInterface(void *proc_loader) {
   GET_PROC(BlendColor);
   GET_PROC(BlendFunc);
   GET_PROC(BlendEquation);
+  GET_PROC(BlendEquationSeparate);
   GET_PROC(BlitFramebuffer);
   GET_PROC(BufferData);
   GET_PROC(BufferSubData);
@@ -165,7 +166,7 @@ void GLInterface::InitGlobalInterface(void *proc_loader) {
   g_interface->LoadExtensions(loader);
 }
 
-GLInterface *GLInterface::GlobalInterface() { return g_interface; }
+GLInterface* GLInterface::GlobalInterface() { return g_interface; }
 
 bool GLInterface::CanUseMSAA() {
   return ext_multisampled_render_to_texture ||
@@ -182,10 +183,10 @@ bool GLInterface::LoadExtensions(GLADloadfunc loader) {
     extensions.extensions.resize(num_extensions);
 
     for (int32_t i = 0; i < num_extensions; i++) {
-      extensions.extensions[i] = (const char *)fGetStringi(GL_EXTENSIONS, i);
+      extensions.extensions[i] = (const char*)fGetStringi(GL_EXTENSIONS, i);
     }
   } else if (fGetString != nullptr) {
-    auto extensions_str = (const char *)fGetString(GL_EXTENSIONS);
+    auto extensions_str = (const char*)fGetString(GL_EXTENSIONS);
 
     // split extensions_str
     std::string_view extensions_view{extensions_str};
@@ -232,6 +233,15 @@ bool GLInterface::LoadExtensions(GLADloadfunc loader) {
   // GL_EXT_shader_framebuffer_fetch
   ext_shader_framebuffer_fetch =
       extensions.Contains("GL_EXT_shader_framebuffer_fetch");
+
+  // GL_KHR_blend_equation_advanced
+  ext_khr_blend_equation_advanced =
+      extensions.Contains("GL_KHR_blend_equation_advanced");
+  ext_khr_blend_equation_advanced_coherent =
+      extensions.Contains("GL_KHR_blend_equation_advanced_coherent");
+  if (ext_khr_blend_equation_advanced) {
+    fBlendBarrierKHR = (PFNGLBLENDBARRIERKHRPROC)loader("glBlendBarrierKHR");
+  }
 
   return true;
 }

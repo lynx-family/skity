@@ -56,6 +56,9 @@ struct GLInterface {
   PFNGLBLENDCOLORPROC fBlendColor = nullptr;
   PFNGLBLENDEQUATIONPROC fBlendEquation = nullptr;
   PFNGLBLENDFUNCPROC fBlendFunc = nullptr;
+  PFNGLBLENDEQUATIONSEPARATEPROC fBlendEquationSeparate = nullptr;
+  // GL_KHR_blend_equation_advanced
+  PFNGLBLENDBARRIERKHRPROC fBlendBarrierKHR = nullptr;
   PFNGLBLITFRAMEBUFFERPROC fBlitFramebuffer = nullptr;
   PFNGLBUFFERDATAPROC fBufferData = nullptr;
   PFNGLBUFFERSUBDATAPROC fBufferSubData = nullptr;
@@ -170,6 +173,8 @@ struct GLInterface {
   bool ext_multisampled_render_to_texture = false;
   bool oes_egl_image_external = false;
   bool ext_shader_framebuffer_fetch = false;
+  bool ext_khr_blend_equation_advanced = false;
+  bool ext_khr_blend_equation_advanced_coherent = false;
 
  private:
   bool LoadExtensions(GLADloadfunc loader);

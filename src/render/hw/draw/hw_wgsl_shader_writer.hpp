@@ -37,7 +37,8 @@ class HWWGSLShaderWriter {
     key.programmable_blending =
         fragment_->GetProgrammableBlending()
             ? fragment_->GetProgrammableBlending()->GetProgrammableBlendingKey()
-            : 0;
+        : fragment_->UsesNativeAdvancedBlend() ? kNativeAdvancedBlendKey
+                                               : 0;
     return key;
   }
 

@@ -182,6 +182,16 @@ class HWWGSLFragment {
     return blending_ ? blending_.get() : nullptr;
   }
 
+  // Marks that this draw blends via the hardware-native advanced-blend path.
+  // No programmable-blending object is attached in that case, so this flag is
+  // what lets the pipeline key/encoder know the fragment shader must be built
+  // with GL_KHR_blend_equation_advanced support.
+  void SetUsesNativeAdvancedBlend(bool uses) {
+    uses_native_advanced_blend_ = uses;
+  }
+
+  bool UsesNativeAdvancedBlend() const { return uses_native_advanced_blend_; }
+
   WGXFilterFragment* GetFilter() const { return filter_.get(); }
 
   constexpr bool IsSnippet() const { return (flags_ & Flags::kSnippet) > 0; }
@@ -196,6 +206,7 @@ class HWWGSLFragment {
 
  private:
   uint32_t flags_;
+  bool uses_native_advanced_blend_ = false;
 };
 
 }  // namespace skity

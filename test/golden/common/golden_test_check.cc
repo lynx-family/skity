@@ -212,13 +212,31 @@ struct AutoRestoreConfig {
     gpu_context->SetEnableSimpleShapePipeline(
         config.enable_simple_shape_pipeline);
 
-    if (config.supports_framebuffer_fetch.has_value()) {
+    if (config.supports_framebuffer_fetch.has_value() ||
+        config.supports_native_advanced_blend.has_value() ||
+        config.supports_native_advanced_blend_coherent.has_value()) {
       auto* gpu_context_impl = static_cast<GPUContextImpl*>(gpu_context);
       auto* gpu_device = gpu_context_impl->GetGPUDevice();
-      restore_config.supports_framebuffer_fetch =
-          gpu_device->GetCaps().supports_framebuffer_fetch;
-      const_cast<GPUCaps&>(gpu_device->GetCaps()).supports_framebuffer_fetch =
-          config.supports_framebuffer_fetch.value();
+      auto& caps = const_cast<GPUCaps&>(gpu_device->GetCaps());
+
+      if (config.supports_framebuffer_fetch.has_value()) {
+        restore_config.supports_framebuffer_fetch =
+            caps.supports_framebuffer_fetch;
+        caps.supports_framebuffer_fetch =
+            config.supports_framebuffer_fetch.value();
+      }
+      if (config.supports_native_advanced_blend.has_value()) {
+        restore_config.supports_native_advanced_blend =
+            caps.supports_native_advanced_blend;
+        caps.supports_native_advanced_blend =
+            config.supports_native_advanced_blend.value();
+      }
+      if (config.supports_native_advanced_blend_coherent.has_value()) {
+        restore_config.supports_native_advanced_blend_coherent =
+            caps.supports_native_advanced_blend_coherent;
+        caps.supports_native_advanced_blend_coherent =
+            config.supports_native_advanced_blend_coherent.value();
+      }
     }
   }
 
@@ -231,11 +249,25 @@ struct AutoRestoreConfig {
     gpu_context->SetEnableSimpleShapePipeline(
         restore_config.enable_simple_shape_pipeline);
 
-    if (restore_config.supports_framebuffer_fetch.has_value()) {
+    if (restore_config.supports_framebuffer_fetch.has_value() ||
+        restore_config.supports_native_advanced_blend.has_value() ||
+        restore_config.supports_native_advanced_blend_coherent.has_value()) {
       auto* gpu_context_impl = static_cast<GPUContextImpl*>(gpu_context);
       auto* gpu_device = gpu_context_impl->GetGPUDevice();
-      const_cast<GPUCaps&>(gpu_device->GetCaps()).supports_framebuffer_fetch =
-          restore_config.supports_framebuffer_fetch.value();
+      auto& caps = const_cast<GPUCaps&>(gpu_device->GetCaps());
+
+      if (restore_config.supports_framebuffer_fetch.has_value()) {
+        caps.supports_framebuffer_fetch =
+            restore_config.supports_framebuffer_fetch.value();
+      }
+      if (restore_config.supports_native_advanced_blend.has_value()) {
+        caps.supports_native_advanced_blend =
+            restore_config.supports_native_advanced_blend.value();
+      }
+      if (restore_config.supports_native_advanced_blend_coherent.has_value()) {
+        caps.supports_native_advanced_blend_coherent =
+            restore_config.supports_native_advanced_blend_coherent.value();
+      }
     }
   }
 
@@ -255,6 +287,20 @@ struct AutoRestoreConfig {
   GPUContext* gpu_context = nullptr;
   GoldenTestEnvConfig restore_config;
 };
+
+bool IsNativeAdvancedBlendUnsupported() {
+  auto* env = GoldenTestEnv::GetInstance();
+  if (env == nullptr) {
+    return true;
+  }
+  auto* gpu_context_impl = static_cast<GPUContextImpl*>(env->GetGPUContext());
+  if (gpu_context_impl == nullptr) {
+    return true;
+  }
+  auto* gpu_device = gpu_context_impl->GetGPUDevice();
+  return gpu_device == nullptr ||
+         !gpu_device->GetCaps().supports_native_advanced_blend;
+}
 
 std::shared_ptr<Pixmap> ReadImage(const char* path) {
   auto data = skity::Data::MakeFromFileName(path);

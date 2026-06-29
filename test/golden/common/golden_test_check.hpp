@@ -30,11 +30,19 @@ struct GoldenTestEnvConfig {
   bool enable_gpu_tessellation = false;
   bool enable_simple_shape_pipeline = false;
   std::optional<bool> supports_framebuffer_fetch = std::nullopt;
+  std::optional<bool> supports_native_advanced_blend = std::nullopt;
+  std::optional<bool> supports_native_advanced_blend_coherent = std::nullopt;
   std::optional<GLSurfaceMode> gl_surface_mode = std::nullopt;
   std::optional<bool> gl_has_stencil_attachment = std::nullopt;
   uint32_t sample_count = 4;
   bool use_backend_specific_golden = false;
 };
+
+// True when the real (pre-override) device caps lack native advanced blend
+// (GL_KHR_blend_equation_advanced / VK_EXT_blend_operation_advanced). Native
+// cases skip on such devices, since the per-test cap override would otherwise
+// force the extension on and issue invalid GL/Vulkan calls.
+bool IsNativeAdvancedBlendUnsupported();
 
 /**
  * @brief compare the display list with the golden texture. If the golden_test

@@ -314,6 +314,7 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/layer/hw_sub_layer.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/dst_read_strategy.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/dst_read_strategy.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/native_blend.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_buffer_layout_map.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_buffer_layout_map.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_canvas.cc

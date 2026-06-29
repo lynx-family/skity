@@ -100,6 +100,43 @@ constexpr GLenum ToBlendFactor(GPUBlendFactor factor) {
   }
 }
 
+constexpr GLenum ToGLBlendEquation(GPUBlendOperation op) {
+  switch (op) {
+    case GPUBlendOperation::kAdd:
+      return GL_FUNC_ADD;
+    case GPUBlendOperation::kMultiply:
+      return GL_MULTIPLY_KHR;
+    case GPUBlendOperation::kScreen:
+      return GL_SCREEN_KHR;
+    case GPUBlendOperation::kOverlay:
+      return GL_OVERLAY_KHR;
+    case GPUBlendOperation::kDarken:
+      return GL_DARKEN_KHR;
+    case GPUBlendOperation::kLighten:
+      return GL_LIGHTEN_KHR;
+    case GPUBlendOperation::kColorDodge:
+      return GL_COLORDODGE_KHR;
+    case GPUBlendOperation::kColorBurn:
+      return GL_COLORBURN_KHR;
+    case GPUBlendOperation::kHardLight:
+      return GL_HARDLIGHT_KHR;
+    case GPUBlendOperation::kSoftLight:
+      return GL_SOFTLIGHT_KHR;
+    case GPUBlendOperation::kDifference:
+      return GL_DIFFERENCE_KHR;
+    case GPUBlendOperation::kExclusion:
+      return GL_EXCLUSION_KHR;
+    case GPUBlendOperation::kHslHue:
+      return GL_HSL_HUE_KHR;
+    case GPUBlendOperation::kHslSaturation:
+      return GL_HSL_SATURATION_KHR;
+    case GPUBlendOperation::kHslColor:
+      return GL_HSL_COLOR_KHR;
+    case GPUBlendOperation::kHslLuminosity:
+      return GL_HSL_LUMINOSITY_KHR;
+  }
+}
+
 constexpr GLint ExternalFormatFrom(GPUTextureFormat format) {
   switch (format) {
     case GPUTextureFormat::kR8Unorm:

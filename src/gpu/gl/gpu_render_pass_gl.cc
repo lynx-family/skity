@@ -91,6 +91,8 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
     SetBlendFunc(
         ToBlendFactor(pipeline->GetDescriptor().target.src_blend_factor),
         ToBlendFactor(pipeline->GetDescriptor().target.dst_blend_factor));
+    SetBlendEquation(
+        ToGLBlendEquation(pipeline->GetDescriptor().target.blend_op));
 
     // color mask
     SetColorWriteMask(pipeline->GetDescriptor().target.write_mask != 0);
@@ -196,6 +198,16 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
     BindBuffer(
         GL_ELEMENT_ARRAY_BUFFER,
         static_cast<GPUBufferGL*>(command->index_buffer.buffer)->GetBufferId());
+
+    // Non-coherent advanced blend needs a barrier so the next draw/blit reads
+    // the blended result. Coherent mode issues no barrier.
+    auto const& target = pipeline->GetDescriptor().target;
+    auto* gl = GLInterface::GlobalInterface();
+    if (target.blend_op != GPUBlendOperation::kAdd &&
+        gl->ext_khr_blend_equation_advanced &&
+        !gl->ext_khr_blend_equation_advanced_coherent && gl->fBlendBarrierKHR) {
+      gl->fBlendBarrierKHR();
+    }
 
     // Draw elements
     if (command->IsInstanced()) {
@@ -378,6 +390,27 @@ void GPURenderPassGL::SetBlendFunc(uint32_t src, uint32_t dst) {
 
   blend_src_ = src;
   blend_dst_ = dst;
+}
+
+void GPURenderPassGL::SetBlendEquation(uint32_t eq) {
+  if (eq == blend_equation_) {
+    return;
+  }
+  blend_equation_ = eq;
+
+  auto* gl = GLInterface::GlobalInterface();
+  // The GL_KHR_blend_equation_advanced spec requires the advanced equations
+  // (GL_MULTIPLY_KHR ...) to be set through glBlendEquation.
+  // glBlendEquationSeparate rejects them with GL_INVALID_ENUM (0x500): its base
+  // spec only accepts the five basic equations
+  // (ADD/SUBTRACT/REVERSE_SUBTRACT/MIN/MAX). Under an advanced equation the
+  // spec composites alpha as source-over and ignores the blend factors, so a
+  // single glBlendEquation call covers both channels and matches the shader.
+  // For the plain GL_FUNC_ADD case it is equivalent to the previous
+  // separate(FUNC_ADD, FUNC_ADD).
+  if (gl->fBlendEquation) {
+    gl->fBlendEquation(eq);
+  }
 }
 
 void GPURenderPassGL::BindBuffer(uint32_t target, uint32_t buffer) {

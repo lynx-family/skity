@@ -108,10 +108,16 @@ HWWGSLFragment* ApplyPaintEffects(HWWGSLFragment* fragment, const Paint& paint,
   }
 
   if (IsAdvancedBlendMode(paint.GetBlendMode())) {
-    auto strategy = ResolveDstReadStrategy(
-        paint.GetBlendMode(), gpu_context->GetGPUDevice()->GetCaps());
-    fragment->SetProgrammableBlending(
-        WGXProgrammableBlending::Make(paint.GetBlendMode(), strategy));
+    const auto& caps = gpu_context->GetGPUDevice()->GetCaps();
+    auto strategy = ResolveDstReadStrategy(paint.GetBlendMode(), caps);
+    if (strategy == DstReadStrategy::kNativeBlend) {
+      if (caps.native_blend_shader_variant) {
+        fragment->SetUsesNativeAdvancedBlend(true);
+      }
+    } else {
+      fragment->SetProgrammableBlending(
+          WGXProgrammableBlending::Make(paint.GetBlendMode(), strategy));
+    }
   }
 
   return fragment;
