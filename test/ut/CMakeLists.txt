@@ -30,6 +30,7 @@ add_executable(skity_unit_test
     render/hw/hw_buffer_layout_test.cc
     render/hw/hw_pipeline_key_test.cc
     render/hw/precompile_test.cc
+    render/hw/dst_read_strategy_test.cc
     render/hw/hw_texture_copy_info_test.cc
     render/hw/draw/hw_wgsl_shader_writer_test.cc
     wgx/wgx_backend_name_resolution_test.cc

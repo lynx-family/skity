@@ -19,8 +19,15 @@ namespace skity {
 
 GPUDeviceGL::GPUDeviceGL() {
   auto gpu_caps = std::make_unique<GPUCaps>();
+  auto* gl_interface = GLInterface::GlobalInterface();
   gpu_caps->supports_framebuffer_fetch =
-      GLInterface::GlobalInterface()->ext_shader_framebuffer_fetch;
+      gl_interface->ext_shader_framebuffer_fetch;
+  gpu_caps->supports_native_advanced_blend =
+      gl_interface->ext_khr_blend_equation_advanced;
+  gpu_caps->supports_native_advanced_blend_coherent =
+      gl_interface->ext_khr_blend_equation_advanced_coherent;
+  gpu_caps->native_blend_shader_variant =
+      gl_interface->ext_khr_blend_equation_advanced;
   InitCaps(std::move(gpu_caps));
 }
 
@@ -179,6 +186,9 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunctionFromModule(
                               : wgx::GlslOptions::Standard::kDesktop;
   options.major_version = gl_version_major_;
   options.minor_version = gl_version_minor_;
+  if (source->needs_native_advanced_blend) {
+    options.extensions.push_back("GL_KHR_blend_equation_advanced");
+  }
 
   auto wgx_result = source->module->GetProgram()->WriteToGlsl(
       source->entry_point, options, source->context);

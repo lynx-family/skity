@@ -45,6 +45,8 @@ class GPURenderPassGL : public GPURenderPass {
 
   void SetBlendFunc(uint32_t src, uint32_t dst);
 
+  void SetBlendEquation(uint32_t eq);
+
   void BindBuffer(uint32_t target, uint32_t buffer);
 
   void SetDepthState(bool enable, bool writable, GPUCompareFunction func);
@@ -58,6 +60,7 @@ class GPURenderPassGL : public GPURenderPass {
   uint32_t stencil_reference_ = 0;
   uint32_t blend_src_ = 0;
   uint32_t blend_dst_ = 0;
+  uint32_t blend_equation_ = 0;
   bool disable_blend_ = false;
   GPUStencilState stencil_state_ = {};
   GPUScissorRect scissor_box_ = {};

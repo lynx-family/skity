@@ -46,6 +46,9 @@ struct GPUShaderSourceWGX {
 
   const char* entry_point = nullptr;
   wgx::CompilerContext context = {};
+  // True when this fragment shader must be emitted with
+  // GL_KHR_blend_equation_advanced support (native advanced-blend path).
+  bool needs_native_advanced_blend = false;
 };
 
 }  // namespace skity

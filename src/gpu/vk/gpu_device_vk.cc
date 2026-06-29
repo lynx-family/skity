@@ -87,6 +87,45 @@ VkBlendFactor ToVkBlendFactor(GPUBlendFactor factor) {
   return VK_BLEND_FACTOR_ONE;
 }
 
+VkBlendOp ToVkBlendOp(GPUBlendOperation op) {
+  switch (op) {
+    case GPUBlendOperation::kAdd:
+      return VK_BLEND_OP_ADD;
+    case GPUBlendOperation::kMultiply:
+      return VK_BLEND_OP_MULTIPLY_EXT;
+    case GPUBlendOperation::kScreen:
+      return VK_BLEND_OP_SCREEN_EXT;
+    case GPUBlendOperation::kOverlay:
+      return VK_BLEND_OP_OVERLAY_EXT;
+    case GPUBlendOperation::kDarken:
+      return VK_BLEND_OP_DARKEN_EXT;
+    case GPUBlendOperation::kLighten:
+      return VK_BLEND_OP_LIGHTEN_EXT;
+    case GPUBlendOperation::kColorDodge:
+      return VK_BLEND_OP_COLORDODGE_EXT;
+    case GPUBlendOperation::kColorBurn:
+      return VK_BLEND_OP_COLORBURN_EXT;
+    case GPUBlendOperation::kHardLight:
+      return VK_BLEND_OP_HARDLIGHT_EXT;
+    case GPUBlendOperation::kSoftLight:
+      return VK_BLEND_OP_SOFTLIGHT_EXT;
+    case GPUBlendOperation::kDifference:
+      return VK_BLEND_OP_DIFFERENCE_EXT;
+    case GPUBlendOperation::kExclusion:
+      return VK_BLEND_OP_EXCLUSION_EXT;
+    case GPUBlendOperation::kHslHue:
+      return VK_BLEND_OP_HSL_HUE_EXT;
+    case GPUBlendOperation::kHslSaturation:
+      return VK_BLEND_OP_HSL_SATURATION_EXT;
+    case GPUBlendOperation::kHslColor:
+      return VK_BLEND_OP_HSL_COLOR_EXT;
+    case GPUBlendOperation::kHslLuminosity:
+      return VK_BLEND_OP_HSL_LUMINOSITY_EXT;
+  }
+
+  return VK_BLEND_OP_ADD;
+}
+
 VkCompareOp ToVkCompareOp(GPUCompareFunction compare) {
   switch (compare) {
     case GPUCompareFunction::kNever:
@@ -459,6 +498,15 @@ GPUDeviceVK::GPUDeviceVK(std::shared_ptr<const VulkanContextState> state)
     : state_(std::move(state)) {
   auto gpu_caps = std::make_unique<GPUCaps>();
   gpu_caps->supports_framebuffer_fetch = false;
+  // Report native advanced blend whenever the extension is enabled, including
+  // non-coherent devices. The render pass inserts a per-draw
+  // vkCmdPipelineBarrier (NONCOHERENT access) when coherent is unavailable, so
+  // non-coherent native is still correct and stays cheaper than texture_copy
+  // (no main-memory round-trip on TBDR, thanks to BY_REGION).
+  gpu_caps->supports_native_advanced_blend =
+      state_ && state_->IsAdvancedBlendEnabled();
+  gpu_caps->supports_native_advanced_blend_coherent =
+      state_ && state_->IsAdvancedBlendCoherent();
   InitCaps(std::move(gpu_caps));
 
   if (state_ == nullptr || state_->GetPhysicalDevice() == VK_NULL_HANDLE ||
@@ -835,27 +883,60 @@ std::unique_ptr<GPURenderPipelineVK> GPUDeviceVK::CreateRenderPipelineInternal(
       static_cast<VkSampleCountFlagBits>(desc.sample_count);
 
   VkPipelineColorBlendAttachmentState color_blend_attachment = {};
-  color_blend_attachment.blendEnable =
-      desc.target.src_blend_factor != GPUBlendFactor::kOne ||
-      desc.target.dst_blend_factor != GPUBlendFactor::kZero;
-  color_blend_attachment.srcColorBlendFactor =
-      ToVkBlendFactor(desc.target.src_blend_factor);
-  color_blend_attachment.dstColorBlendFactor =
-      ToVkBlendFactor(desc.target.dst_blend_factor);
-  color_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
-  color_blend_attachment.srcAlphaBlendFactor =
-      ToVkBlendFactor(desc.target.src_blend_factor);
-  color_blend_attachment.dstAlphaBlendFactor =
-      ToVkBlendFactor(desc.target.dst_blend_factor);
-  color_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
-  color_blend_attachment.colorWriteMask =
-      ToVkColorWriteMask(desc.target.write_mask);
+  VkPipelineColorBlendAdvancedStateCreateInfoEXT advanced_blend_state = {};
+  if (desc.target.blend_op != GPUBlendOperation::kAdd) {
+    // Native advanced blend: the advanced equation ignores the RGB blend
+    // factors, and the spec blends alpha "as if VK_BLEND_OP_ADD" (source-over)
+    // regardless of alphaBlendOp. VUID-...-advancedBlendAlphaBlendOp-01409
+    // still requires alphaBlendOp == colorBlendOp when an advanced op is used,
+    // so both carry the advanced op; the alpha result is unchanged. skity is
+    // premultiplied end-to-end, so srcPremultiplied/dstPremultiplied are both
+    // VK_TRUE.
+    color_blend_attachment.blendEnable = VK_TRUE;
+    color_blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    color_blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    const VkBlendOp advanced_op = ToVkBlendOp(desc.target.blend_op);
+    color_blend_attachment.colorBlendOp = advanced_op;
+    color_blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    color_blend_attachment.dstAlphaBlendFactor =
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    color_blend_attachment.alphaBlendOp = advanced_op;
+    color_blend_attachment.colorWriteMask =
+        ToVkColorWriteMask(desc.target.write_mask);
+
+    advanced_blend_state.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT;
+    advanced_blend_state.srcPremultiplied = VK_TRUE;
+    advanced_blend_state.dstPremultiplied = VK_TRUE;
+    advanced_blend_state.blendOverlap = VK_BLEND_OVERLAP_UNCORRELATED_EXT;
+  } else {
+    color_blend_attachment.blendEnable =
+        desc.target.src_blend_factor != GPUBlendFactor::kOne ||
+        desc.target.dst_blend_factor != GPUBlendFactor::kZero;
+    color_blend_attachment.srcColorBlendFactor =
+        ToVkBlendFactor(desc.target.src_blend_factor);
+    color_blend_attachment.dstColorBlendFactor =
+        ToVkBlendFactor(desc.target.dst_blend_factor);
+    color_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+    color_blend_attachment.srcAlphaBlendFactor =
+        ToVkBlendFactor(desc.target.src_blend_factor);
+    color_blend_attachment.dstAlphaBlendFactor =
+        ToVkBlendFactor(desc.target.dst_blend_factor);
+    color_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    color_blend_attachment.colorWriteMask =
+        ToVkColorWriteMask(desc.target.write_mask);
+  }
 
   VkPipelineColorBlendStateCreateInfo color_blend_state = {};
   color_blend_state.sType =
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   color_blend_state.attachmentCount = 1;
   color_blend_state.pAttachments = &color_blend_attachment;
+  // The advanced-state struct must hang off the state create-info pNext, not
+  // the attachment pNext.
+  if (desc.target.blend_op != GPUBlendOperation::kAdd) {
+    color_blend_state.pNext = &advanced_blend_state;
+  }
 
   VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {};
   depth_stencil_state.sType =

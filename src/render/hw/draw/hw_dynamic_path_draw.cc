@@ -31,8 +31,8 @@ HWDynamicPathDraw::HWDynamicPathDraw(Matrix transform, Path path, Paint paint,
       is_stroke_(is_stroke),
       use_gpu_tessellation_(use_gpu_tessellation) {}
 
-void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
-                                           HWDrawContext *context) {
+void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
+                                           HWDrawContext* context) {
   bool single_pass = !is_stroke_ && path_.IsConvex() && !paint_.IsAntiAlias();
 
   auto geom = GenGeometry(context, false);
@@ -44,8 +44,19 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
   }
 
   if (IsAdvancedBlendMode(paint_.GetBlendMode())) {
-    frag->SetProgrammableBlending(WGXProgrammableBlending::Make(
-        paint_.GetBlendMode(), GetDstReadStrategy()));
+    if (GetDstReadStrategy() == DstReadStrategy::kNativeBlend) {
+      // Only GL needs a distinct shader variant (extension injection). On
+      // Vulkan the fragment stays plain and the native equation is applied
+      // through the pipeline blend-state variant.
+      if (context->gpuContext->GetGPUDevice()
+              ->GetCaps()
+              .native_blend_shader_variant) {
+        frag->SetUsesNativeAdvancedBlend(true);
+      }
+    } else {
+      frag->SetProgrammableBlending(WGXProgrammableBlending::Make(
+          paint_.GetBlendMode(), GetDstReadStrategy()));
+    }
   }
 
   CoverageType coverage = CoverageType::kNone;
@@ -79,8 +90,16 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
     }
 
     if (IsAdvancedBlendMode(paint_.GetBlendMode())) {
-      fragment->SetProgrammableBlending(WGXProgrammableBlending::Make(
-          paint_.GetBlendMode(), GetDstReadStrategy()));
+      if (GetDstReadStrategy() == DstReadStrategy::kNativeBlend) {
+        if (context->gpuContext->GetGPUDevice()
+                ->GetCaps()
+                .native_blend_shader_variant) {
+          fragment->SetUsesNativeAdvancedBlend(true);
+        }
+      } else {
+        fragment->SetProgrammableBlending(WGXProgrammableBlending::Make(
+            paint_.GetBlendMode(), GetDstReadStrategy()));
+      }
     }
 
     steps.emplace_back(context->arena_allocator->Make<ColorAAStep>(
@@ -91,7 +110,7 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
       std::move(geom), std::move(frag), coverage));
 }
 
-HWWGSLGeometry *HWDynamicPathDraw::GenGeometry(HWDrawContext *context,
+HWWGSLGeometry* HWDynamicPathDraw::GenGeometry(HWDrawContext* context,
                                                bool aa) const {
   auto arena_allocator = context->arena_allocator;
   if (use_gpu_tessellation_) {

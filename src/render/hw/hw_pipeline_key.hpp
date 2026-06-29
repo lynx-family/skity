@@ -113,6 +113,16 @@ constexpr HWPipelineBaseKey MakePipelineBaseKey(
 struct HWPipelineKey;
 using HWFunctionKey = HWPipelineKey;
 
+// Sentinel stored in HWPipelineKey::programmable_blending to mark a draw that
+// takes the hardware-native advanced-blend path. The genuine
+// programmable-blending key packs (blend_mode | dst_read_strategy << 8) into
+// the low bits, so the top bit never collides. It reserves a distinct
+// fragment-shader cache slot: native-blend GLSL must carry
+// #extension GL_KHR_blend_equation_advanced + blend_support_all_equations,
+// which ordinary draws must not. See GetFunctionKey(kFragment), which folds
+// programmable_blending into the fragment shader key.
+constexpr uint32_t kNativeAdvancedBlendKey = 0x80000000u;
+
 struct HWPipelineKey {
   uint64_t base_key;
   std::optional<std::vector<uint32_t>> compose_keys;

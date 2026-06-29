@@ -173,6 +173,8 @@ static skity::testing::GoldenTestEnvConfig TextureCopyConfig(
     uint32_t sample_count) {
   skity::testing::GoldenTestEnvConfig config;
   config.supports_framebuffer_fetch = false;
+  config.supports_native_advanced_blend = false;
+  config.supports_native_advanced_blend_coherent = false;
   config.sample_count = sample_count;
   return config;
 }
@@ -238,6 +240,22 @@ static skity::testing::GoldenTestEnvConfig FramebufferFetchConfig(
     uint32_t sample_count) {
   skity::testing::GoldenTestEnvConfig config;
   config.supports_framebuffer_fetch = true;
+  config.supports_native_advanced_blend = false;
+  config.supports_native_advanced_blend_coherent = false;
+  config.sample_count = sample_count;
+  return config;
+}
+
+static skity::testing::GoldenTestEnvConfig NativeBlendConfig(
+    uint32_t sample_count) {
+  skity::testing::GoldenTestEnvConfig config;
+  config.supports_native_advanced_blend = true;
+  config.supports_framebuffer_fetch = false;
+  // Leave supports_native_advanced_blend_coherent unset (nullopt) so the test
+  // keeps the device's real coherent value and exercises the actual native
+  // tier it reports — coherent (tier 1) or non-coherent (tier 3, with barrier).
+  // Forcing coherent would mismatch a non-coherent backend such as Angle,
+  // which reports GL_KHR_blend_equation_advanced_coherent == false.
   config.sample_count = sample_count;
   return config;
 }
@@ -259,6 +277,48 @@ static void RunBlendModeTextureCopyTest(skity::BlendMode mode, const char* name,
       TextureCopyConfig(sample_count)));
 }
 
+// Native advanced blend (GL_KHR_blend_equation_advanced /
+// VK_EXT_blend_operation_advanced). The result is mathematically identical to
+// the texture-copy / framebuffer-fetch paths, so the baseline
+// blend_mode_<Mode>.png is reused directly under default tolerance.
+static void RunBlendModeNativeBlendTest(skity::BlendMode mode,
+                                        const char* name) {
+  if (skity::testing::IsNativeAdvancedBlendUnsupported()) {
+    GTEST_SKIP() << "Device does not expose native advanced blend";
+  }
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(100.f, 100.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendMode(canvas, mode);
+
+  auto golden_path =
+      MakeBlendModeGoldenPath(std::string("blend_mode_") + name + ".png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 100.f, 100.f, golden_path.c_str(), NativeBlendConfig(4)));
+}
+
+static void RunBlendModeFramebufferFetchTest(skity::BlendMode mode,
+                                             const char* name) {
+  if (IsFramebufferFetchUnsupported()) {
+    GTEST_SKIP() << "Framebuffer fetch is not supported on this backend";
+  }
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(100.f, 100.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendMode(canvas, mode);
+
+  auto golden_path =
+      MakeBlendModeGoldenPath(std::string("blend_mode_") + name + ".png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 100.f, 100.f, golden_path.c_str(), FramebufferFetchConfig(4)));
+}
+
 #define BLEND_MODE_TEST(mode_name)                                \
   TEST(BlendModeGolden, mode_name) {                              \
     RunBlendModeTest(skity::BlendMode::k##mode_name, #mode_name); \
@@ -272,6 +332,17 @@ static void RunBlendModeTextureCopyTest(skity::BlendMode mode, const char* name,
   TEST(BlendModeGolden, TextureCopySampleCount4_##mode_name) {              \
     RunBlendModeTextureCopyTest(skity::BlendMode::k##mode_name, #mode_name, \
                                 4);                                         \
+  }
+
+#define BLEND_MODE_NATIVE_BLEND_TEST(mode_name)                              \
+  TEST(BlendModeGolden, NativeBlend_##mode_name) {                           \
+    RunBlendModeNativeBlendTest(skity::BlendMode::k##mode_name, #mode_name); \
+  }
+
+#define BLEND_MODE_FRAMEBUFFER_FETCH_TEST(mode_name)                 \
+  TEST(BlendModeGolden, FramebufferFetch_##mode_name) {              \
+    RunBlendModeFramebufferFetchTest(skity::BlendMode::k##mode_name, \
+                                     #mode_name);                    \
   }
 
 #define BLEND_MODE_DRAW_TEXTURE_MODE_TEXTURE_COPY_TEST(mode_name)              \
@@ -317,6 +388,43 @@ BLEND_MODE_TEXTURE_COPY_TEST(Hue)
 BLEND_MODE_TEXTURE_COPY_TEST(Saturation)
 BLEND_MODE_TEXTURE_COPY_TEST(Color)
 BLEND_MODE_TEXTURE_COPY_TEST(Luminosity)
+
+// Native advanced-blend path. Modulate is excluded: ToNativeBlendOp returns
+// nullopt for it, so it never takes the native path.
+BLEND_MODE_NATIVE_BLEND_TEST(Screen)
+BLEND_MODE_NATIVE_BLEND_TEST(Overlay)
+BLEND_MODE_NATIVE_BLEND_TEST(Darken)
+BLEND_MODE_NATIVE_BLEND_TEST(Lighten)
+BLEND_MODE_NATIVE_BLEND_TEST(ColorDodge)
+BLEND_MODE_NATIVE_BLEND_TEST(ColorBurn)
+BLEND_MODE_NATIVE_BLEND_TEST(HardLight)
+BLEND_MODE_NATIVE_BLEND_TEST(SoftLight)
+BLEND_MODE_NATIVE_BLEND_TEST(Difference)
+BLEND_MODE_NATIVE_BLEND_TEST(Exclusion)
+BLEND_MODE_NATIVE_BLEND_TEST(Multiply)
+BLEND_MODE_NATIVE_BLEND_TEST(Hue)
+BLEND_MODE_NATIVE_BLEND_TEST(Saturation)
+BLEND_MODE_NATIVE_BLEND_TEST(Color)
+BLEND_MODE_NATIVE_BLEND_TEST(Luminosity)
+
+// Framebuffer-fetch path (all advanced modes, including Modulate, which has no
+// native equivalent and therefore falls through to fetch/copy).
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Modulate)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Screen)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Overlay)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Darken)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Lighten)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(ColorDodge)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(ColorBurn)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(HardLight)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(SoftLight)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Difference)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Exclusion)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Multiply)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Hue)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Saturation)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Color)
+BLEND_MODE_FRAMEBUFFER_FETCH_TEST(Luminosity)
 
 BLEND_MODE_DRAW_TEXTURE_MODE_TEXTURE_COPY_TEST(Overlay)
 

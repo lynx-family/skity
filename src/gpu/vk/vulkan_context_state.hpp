@@ -85,6 +85,12 @@ class VulkanContextState {
 
   bool IsDynamicRenderingEnabled() const { return dynamic_rendering_enabled_; }
 
+  bool IsAdvancedBlendEnabled() const { return advanced_blend_enabled_; }
+
+  // Whether advanced blend operations are coherent (no per-draw barrier
+  // needed).
+  bool IsAdvancedBlendCoherent() const { return advanced_blend_coherent_; }
+
 #if defined(SKITY_ANDROID)
   using Fn_AHardwareBuffer_describe = void (*)(const ::AHardwareBuffer*,
                                                AHardwareBuffer_Desc*);
@@ -169,6 +175,8 @@ class VulkanContextState {
   bool enabled_device_extensions_known_ = false;
   bool synchronization2_enabled_ = false;
   bool dynamic_rendering_enabled_ = false;
+  bool advanced_blend_enabled_ = false;
+  bool advanced_blend_coherent_ = false;
   VulkanDebugRuntimeState debug_runtime_ = {};
 #if defined(SKITY_ANDROID)
   Fn_AHardwareBuffer_describe fn_ahb_describe_ = nullptr;

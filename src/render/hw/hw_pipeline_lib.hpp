@@ -44,7 +44,8 @@ struct HWPipelineDescriptor {
 class HWPipeline {
  public:
   HWPipeline(GPUDevice* device, GPUBackendType backend,
-             std::unique_ptr<GPURenderPipeline> base_pipeline);
+             std::unique_ptr<GPURenderPipeline> base_pipeline,
+             bool shader_side_blending);
 
   ~HWPipeline() = default;
 
@@ -62,6 +63,12 @@ class HWPipeline {
   GPUDevice* gpu_device_;
   GPUBackendType backend_;
   std::vector<std::unique_ptr<GPURenderPipeline>> gpu_pipelines_;
+  // Fixed per key: true only when this pipeline serves shader-side blending
+  // draws (framebuffer-fetch / texture-copy, i.e. programmable_blending holds a
+  // packed key), which must keep the fixed-function equation on ADD. Ordinary
+  // blends and the GL native-blend variant are all false; their native equation
+  // (if any) is resolved per-draw from blend_mode + caps.
+  bool shader_side_blending_ = false;
 };
 
 class HWPipelineLib final {

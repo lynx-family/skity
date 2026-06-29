@@ -1096,6 +1096,8 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
   enabled_device_extensions_known_ = false;
   synchronization2_enabled_ = false;
   dynamic_rendering_enabled_ = false;
+  advanced_blend_enabled_ = false;
+  advanced_blend_coherent_ = false;
   pipeline_cache_ = VK_NULL_HANDLE;
 
   if (!LoadAvailableDeviceExtensions()) {
@@ -1122,6 +1124,17 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
           enabled_device_extensions_, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
       dynamic_rendering_enabled_ = ContainsExtension(
           enabled_device_extensions_, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+      advanced_blend_enabled_ =
+          ContainsExtension(enabled_device_extensions_,
+                            VK_EXT_BLEND_OPERATION_ADVANCED_EXTENSION_NAME);
+      // advancedBlendCoherentOperations cannot be confirmed for an
+      // already-created user device: only the extension string is known, not
+      // which features the host enabled at vkCreateDevice time. Assume
+      // non-coherent so the render pass inserts the per-draw NONCOHERENT
+      // barrier. This is correct at a small perf cost; assuming coherent on a
+      // device that did not enable the feature yields undefined results on
+      // overlapping draws.
+      advanced_blend_coherent_ = false;
       if (dynamic_rendering_enabled_ &&
           (functions_.device.vkCmdBeginRendering == nullptr ||
            functions_.device.vkCmdEndRendering == nullptr)) {
@@ -1187,6 +1200,11 @@ bool VulkanContextState::InitializeOwnedDevice() {
     enabled_device_extensions_.emplace_back(
         VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
   }
+  if (HasAvailableDeviceExtension(
+          VK_EXT_BLEND_OPERATION_ADVANCED_EXTENSION_NAME)) {
+    enabled_device_extensions_.emplace_back(
+        VK_EXT_BLEND_OPERATION_ADVANCED_EXTENSION_NAME);
+  }
   if (HasAvailableDeviceExtension(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME)) {
     enabled_device_extensions_.emplace_back(
         VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
@@ -1226,6 +1244,11 @@ bool VulkanContextState::InitializeOwnedDevice() {
   VkPhysicalDeviceSynchronization2Features synchronization2_features = {};
   synchronization2_features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+  const bool has_advanced_blend_extension = HasAvailableDeviceExtension(
+      VK_EXT_BLEND_OPERATION_ADVANCED_EXTENSION_NAME);
+  VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT adv_blend_features = {};
+  adv_blend_features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_FEATURES_EXT;
 
   void** feature_query_next = &physical_device_features.pNext;
   if (has_dynamic_rendering_extension) {
@@ -1235,6 +1258,10 @@ bool VulkanContextState::InitializeOwnedDevice() {
   if (HasAvailableDeviceExtension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
     *feature_query_next = &synchronization2_features;
     feature_query_next = &synchronization2_features.pNext;
+  }
+  if (has_advanced_blend_extension) {
+    *feature_query_next = &adv_blend_features;
+    feature_query_next = &adv_blend_features.pNext;
   }
 
   if (physical_device_features.pNext != nullptr) {
@@ -1272,6 +1299,17 @@ bool VulkanContextState::InitializeOwnedDevice() {
           "Vulkan synchronization2 extension is present but feature is not "
           "supported, disabling extension request");
     }
+  }
+
+  if (has_advanced_blend_extension) {
+    // Advanced blending itself is a core 1.1 capability; the extension only
+    // gates the advanced ops, so keep it enabled even when coherent is
+    // unsupported. advancedBlendCoherentOperations is optional: when false we
+    // still enable the extension but report coherent == false so the render
+    // pass can insert the required per-draw barrier.
+    advanced_blend_enabled_ = true;
+    advanced_blend_coherent_ =
+        adv_blend_features.advancedBlendCoherentOperations == VK_TRUE;
   }
 
   auto enabled_extension_ptrs = BuildNamePtrs(enabled_device_extensions_);
@@ -1317,6 +1355,10 @@ bool VulkanContextState::InitializeOwnedDevice() {
   if (synchronization2_enabled_) {
     *enabled_feature_next = &synchronization2_features;
     enabled_feature_next = &synchronization2_features.pNext;
+  }
+  if (has_advanced_blend_extension) {
+    *enabled_feature_next = &adv_blend_features;
+    enabled_feature_next = &adv_blend_features.pNext;
   }
   if (enabled_feature_chain != nullptr) {
     device_info.pNext = enabled_feature_chain;

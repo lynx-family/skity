@@ -132,17 +132,41 @@ enum class GPUBlendFactor {
   kSrcAlphaSaturated,
 };
 
+// Fixed-function blend equation. kAdd is the default and covers every
+// Porter-Duff mode; the advanced ops map to GL_KHR_blend_equation_advanced /
+// VK_EXT_blend_operation_advanced. kModulate has no hardware equivalent and is
+// intentionally absent (handled via the shader fallback path).
+enum class GPUBlendOperation {
+  kAdd,
+  kMultiply,
+  kScreen,
+  kOverlay,
+  kDarken,
+  kLighten,
+  kColorDodge,
+  kColorBurn,
+  kHardLight,
+  kSoftLight,
+  kDifference,
+  kExclusion,
+  kHslHue,
+  kHslSaturation,
+  kHslColor,
+  kHslLuminosity,
+};
+
 struct GPUColorTargetState {
   GPUTextureFormat format = GPUTextureFormat::kBGRA8Unorm;
   GPUBlendFactor src_blend_factor = GPUBlendFactor::kOne;
   GPUBlendFactor dst_blend_factor = GPUBlendFactor::kOneMinusSrcAlpha;
+  GPUBlendOperation blend_op = GPUBlendOperation::kAdd;
   int32_t write_mask = 0xF;
 
   bool operator==(const GPUColorTargetState& other) const {
     return format == other.format &&
            src_blend_factor == other.src_blend_factor &&
            dst_blend_factor == other.dst_blend_factor &&
-           write_mask == other.write_mask;
+           blend_op == other.blend_op && write_mask == other.write_mask;
   }
 };
 

@@ -48,6 +48,16 @@ struct WGX_API GlslOptions {
   Standard standard = Standard::kDesktop;
   uint32_t major_version = 3;
   uint32_t minor_version = 3;
+  // GL extension names to emit verbatim as
+  // `#extension <name> : require` at the top of the generated shader. This is
+  // the single entry point for extension declarations:
+  //  - Extensions that only need a declaration are listed here directly.
+  //  - GL_EXT_shader_framebuffer_fetch is added automatically when the fragment
+  //    shader has a @color input (and turns its color output into an inout).
+  //  - Listing GL_KHR_blend_equation_advanced here also marks the fragment
+  //    color output with `blend_support_all_equations`, so the fixed function
+  //    advanced blend equations can be applied to it.
+  std::vector<std::string> extensions = {};
 };
 
 struct WGX_API MslOptions {

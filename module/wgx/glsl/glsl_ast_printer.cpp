@@ -647,7 +647,9 @@ bool AstPrinter::Write() {
 
   ss_ << std::endl;
 
-  // Check if we need framebuffer fetch extension
+  // Detect framebuffer fetch from the AST: a @color fragment input means the
+  // shader reads the current pixel, which requires the extension and turns the
+  // color output into an inout (handled in WriteOutput).
   needs_fb_fetch_ = false;
   if (func_->GetFunction()->GetPipelineStage() ==
       ast::PipelineStage::kFragment) {
@@ -658,8 +660,35 @@ bool AstPrinter::Write() {
       }
     }
   }
+
+  // Gather every extension to declare: caller-requested ones
+  // (GlslOptions::extensions) plus framebuffer fetch inferred from the source.
+  std::vector<std::string> extensions = options_.extensions;
   if (needs_fb_fetch_) {
-    ss_ << "#extension GL_EXT_shader_framebuffer_fetch : require" << std::endl;
+    extensions.push_back("GL_EXT_shader_framebuffer_fetch");
+  }
+
+  // GL_KHR_blend_equation_advanced additionally requires the fragment color
+  // output to carry blend_support_all_equations (handled in WriteOutput).
+  // Detect it by name so callers only need to list the extension.
+  needs_advanced_blend_ = false;
+  if (func_->GetFunction()->GetPipelineStage() ==
+      ast::PipelineStage::kFragment) {
+    for (const auto& extension : extensions) {
+      if (extension == "GL_KHR_blend_equation_advanced") {
+        needs_advanced_blend_ = true;
+        break;
+      }
+    }
+  }
+
+  // Emit every required #extension on a single generic path. New extensions
+  // that only need a declaration can be added through GlslOptions::extensions
+  // without touching this code.
+  for (const auto& extension : extensions) {
+    ss_ << "#extension " << extension << " : require" << std::endl;
+  }
+  if (!extensions.empty()) {
     ss_ << std::endl;
   }
 
@@ -1001,7 +1030,16 @@ void AstPrinter::WriteOutput() {
       return;
     }
 
-    WriteLocation(attr, entry_point->GetPipelineStage(), false);
+    if (needs_advanced_blend_ &&
+        entry_point->GetPipelineStage() == ast::PipelineStage::kFragment) {
+      // Mark the fragment color output as supporting every advanced blend
+      // equation, which GL_KHR_blend_equation_advanced requires before any
+      // advanced blend equation can be applied to this output.
+      ss_ << "layout(blend_support_all_equations) out;" << std::endl;
+      ss_ << "layout(location = " << attr->index << ") ";
+    } else {
+      WriteLocation(attr, entry_point->GetPipelineStage(), false);
+    }
     if (needs_fb_fetch_) {
       ss_ << " inout ";
     } else {
