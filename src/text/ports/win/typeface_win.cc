@@ -157,7 +157,6 @@ int GetSfntTableTags(const std::shared_ptr<Data>& data, UINT32 face_index,
   return table_count;
 }
 
-#ifdef __IDWriteFontFace5_INTERFACE_DEFINED__
 FourByteTag DWriteAxisTagToFourByteTag(DWRITE_FONT_AXIS_TAG tag) {
   return EndianSwap32(static_cast<uint32_t>(tag));
 }
@@ -326,7 +325,6 @@ ScopedComPtr<IDWriteFontFace> MakeDWriteDefaultVariationFontFace(
   }
   return default_font_face;
 }
-#endif  // __IDWriteFontFace5_INTERFACE_DEFINED__
 
 // Korean fonts Gulim, Dotum, Batang, Gungsuh have bitmap strikes that get
 // artifically emboldened by Windows without antialiasing. Korean users prefer
@@ -457,7 +455,6 @@ bool DWriteFontFaceEqual(IDWriteFontFace* lhs, IDWriteFontFace* rhs) {
 
   // IDWriteFontFace5::Equals accounts for newer face identity such as variation
   // axis values. Older DirectWrite versions can only compare file identity.
-#ifdef __IDWriteFontFace5_INTERFACE_DEFINED__
   ScopedComPtr<IDWriteFontFace5> lhsFace5;
   if (SUCCEEDED(lhs->QueryInterface(&lhsFace5))) {
     return lhsFace5->Equals(rhs);
@@ -467,7 +464,6 @@ bool DWriteFontFaceEqual(IDWriteFontFace* lhs, IDWriteFontFace* rhs) {
   if (SUCCEEDED(rhs->QueryInterface(&rhsFace5))) {
     return rhsFace5->Equals(lhs);
   }
-#endif  // __IDWriteFontFace5_INTERFACE_DEFINED__
 
   return DWriteFontFaceEqualByFiles(lhs, rhs);
 }
@@ -882,7 +878,6 @@ int FontWidthFromVariationWidth(float width) {
 
 FontStyle ApplyVariationStyle(IDWriteFontFace* font_face,
                               const FontStyle& style) {
-#ifdef __IDWriteFontFace5_INTERFACE_DEFINED__
   ScopedComPtr<IDWriteFontFace5> font_face5;
   if (!font_face || FAILED(font_face->QueryInterface(&font_face5)) ||
       !font_face5->HasVariations()) {
@@ -918,10 +913,6 @@ FontStyle ApplyVariationStyle(IDWriteFontFace* font_face,
   }
 
   return FontStyle(weight, width, slant);
-#else
-  (void)font_face;
-  return style;
-#endif  // __IDWriteFontFace5_INTERFACE_DEFINED__
 }
 
 std::optional<FontStyle> FontStyleFromOS2Table(IDWriteFontFace* font_face) {
@@ -1243,9 +1234,7 @@ class TypefaceDWrite : public Typeface {
         source_data_(std::move(source_data)) {
     (void)font_face_->QueryInterface(&font_face2_);
     (void)font_face_->QueryInterface(&font_face3_);
-#ifdef __IDWriteFontFace5_INTERFACE_DEFINED__
     (void)font_face_->QueryInterface(&font_face5_);
-#endif  // __IDWriteFontFace5_INTERFACE_DEFINED__
   }
 
  protected:
@@ -1330,20 +1319,16 @@ class TypefaceDWrite : public Typeface {
   }
 
   VariationPosition OnGetVariationDesignPosition() const override {
-#ifdef __IDWriteFontFace5_INTERFACE_DEFINED__
     if (font_face5_ && font_face5_->HasVariations()) {
       return GetDWriteVariationDesignPosition(font_face5_.get());
     }
-#endif  // __IDWriteFontFace5_INTERFACE_DEFINED__
     return VariationPosition{};
   }
 
   std::vector<VariationAxis> OnGetVariationDesignParameters() const override {
-#ifdef __IDWriteFontFace5_INTERFACE_DEFINED__
     if (font_face5_ && font_face5_->HasVariations()) {
       return GetDWriteVariationDesignParameters(font_face5_.get());
     }
-#endif  // __IDWriteFontFace5_INTERFACE_DEFINED__
     return {};
   }
 
@@ -1363,7 +1348,6 @@ class TypefaceDWrite : public Typeface {
       return typeface ? typeface->MakeVariation(args) : nullptr;
     }
 
-#ifdef __IDWriteFontFace5_INTERFACE_DEFINED__
     if (font_face5_ && font_face5_->HasVariations()) {
       auto new_font_face = MakeDWriteVariationFontFace(font_face5_.get(), args);
       if (new_font_face) {
@@ -1382,7 +1366,6 @@ class TypefaceDWrite : public Typeface {
             source_data_);
       }
     }
-#endif  // __IDWriteFontFace5_INTERFACE_DEFINED__
     return const_cast<TypefaceDWrite*>(this)->shared_from_this();
   }
 
@@ -1472,9 +1455,7 @@ class TypefaceDWrite : public Typeface {
   ScopedComPtr<IDWriteFontFace> font_face_;
   ScopedComPtr<IDWriteFontFace2> font_face2_;
   ScopedComPtr<IDWriteFontFace3> font_face3_;
-#ifdef __IDWriteFontFace5_INTERFACE_DEFINED__
   ScopedComPtr<IDWriteFontFace5> font_face5_;
-#endif  // __IDWriteFontFace5_INTERFACE_DEFINED__
   ScopedComPtr<IDWriteFont> font_;
   ScopedComPtr<IDWriteFontFamily> font_family_;
   std::wstring locale_name_;
@@ -1513,13 +1494,11 @@ std::shared_ptr<Typeface> MakeDWriteTypefaceFromCollection(
         continue;
       }
 
-#ifdef __IDWriteFontFace5_INTERFACE_DEFINED__
       auto default_font_face =
           MakeDWriteDefaultVariationFontFace(font_face.get());
       if (default_font_face) {
         font_face = std::move(default_font_face);
       }
-#endif  // __IDWriteFontFace5_INTERFACE_DEFINED__
 
       return std::make_shared<TypefaceDWrite>(
           factory, font_face.get(), font.get(), font_family.get(), locale_name,
