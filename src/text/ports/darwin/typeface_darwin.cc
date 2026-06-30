@@ -120,7 +120,8 @@ class TypefaceCache {
 };
 
 std::shared_ptr<TypefaceDarwin> TypefaceDarwin::Make(const FontStyle& style,
-                                                     UniqueCTFontRef ct_font) {
+                                                     UniqueCTFontRef ct_font,
+                                                     int collection_index) {
   if (!ct_font) {
     return nullptr;
   }
@@ -132,7 +133,7 @@ std::shared_ptr<TypefaceDarwin> TypefaceDarwin::Make(const FontStyle& style,
   auto typeface = cache->Find(ct_font.get());
   if (!typeface) {
     auto typeface_darwin = std::shared_ptr<TypefaceDarwin>(
-        new TypefaceDarwin(style, std::move(ct_font)));
+        new TypefaceDarwin(style, std::move(ct_font), collection_index));
     if (typeface_darwin) {
       typeface = typeface_darwin;
       cache->Add(std::move(typeface_darwin));
@@ -142,17 +143,19 @@ std::shared_ptr<TypefaceDarwin> TypefaceDarwin::Make(const FontStyle& style,
 }
 
 std::shared_ptr<TypefaceDarwin> TypefaceDarwin::MakeWithoutCache(
-    const FontStyle& style, UniqueCTFontRef ct_font) {
+    const FontStyle& style, UniqueCTFontRef ct_font, int collection_index) {
   if (!ct_font) {
     return nullptr;
   }
   return std::shared_ptr<TypefaceDarwin>(
-      new TypefaceDarwin(style, std::move(ct_font)));
+      new TypefaceDarwin(style, std::move(ct_font), collection_index));
 }
 
-TypefaceDarwin::TypefaceDarwin(const FontStyle& style, UniqueCTFontRef ct_font)
+TypefaceDarwin::TypefaceDarwin(const FontStyle& style, UniqueCTFontRef ct_font,
+                               int collection_index)
     : Typeface(style),
       ct_font_(std::move(ct_font)),
+      collection_index_(collection_index),
       has_color_glyphs_(CTFontGetSymbolicTraits(ct_font_.get()) &
                         kCTFontColorGlyphsTrait) {
   variation_axes_.reset(CTFontCopyVariationAxes(ct_font_.get()));
@@ -445,6 +448,10 @@ static UniqueCFRef<CFDictionaryRef> variation_from_FontArguments(
 
 std::shared_ptr<Typeface> TypefaceDarwin::OnMakeVariation(
     const FontArguments& args) const {
+  if (args.GetCollectionIndex() != static_cast<size_t>(collection_index_)) {
+    return nullptr;
+  }
+
   UniqueCFRef<CFDictionaryRef> variation =
       variation_from_FontArguments(ct_font_.get(), variation_axes_.get(), args);
   UniqueCFRef<CTFontRef> variant_font;
@@ -468,7 +475,8 @@ std::shared_ptr<Typeface> TypefaceDarwin::OnMakeVariation(
   if (!variant_font) {
     return nullptr;
   }
-  return TypefaceDarwin::Make(font_style, std::move(variant_font));
+  return TypefaceDarwin::Make(font_style, std::move(variant_font),
+                              collection_index_);
 }
 
 void TypefaceDarwin::OnGetFontDescriptor(FontDescriptor& desc) const {
@@ -483,8 +491,7 @@ void TypefaceDarwin::OnGetFontDescriptor(FontDescriptor& desc) const {
 
   desc.factory_id = kFontFactoryID;
 
-  // always return 0 for collection index
-  desc.collection_index = 0;
+  desc.collection_index = collection_index_;
 }
 
 CTFontRef TypefaceCT::CTFontFromTypeface(
