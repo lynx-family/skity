@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <fstream>
 #include <iomanip>
 #include <memory>
 #include <skity/io/data.hpp>
@@ -57,6 +58,78 @@ bool ReadStringField(const Json::Value& root, const std::string& field,
     return false;
   }
   *out = root[field].asString();
+  return true;
+}
+
+void AddValidationError(Json::Value* report, const std::string& path,
+                        const std::string& message);
+
+uint32_t ReadBigEndian32(const std::vector<uint8_t>& bytes, size_t offset) {
+  if (bytes.size() < offset + 4) {
+    return 0;
+  }
+  return (static_cast<uint32_t>(bytes[offset]) << 24) |
+         (static_cast<uint32_t>(bytes[offset + 1]) << 16) |
+         (static_cast<uint32_t>(bytes[offset + 2]) << 8) |
+         static_cast<uint32_t>(bytes[offset + 3]);
+}
+
+bool ReadFilePrefix(const std::filesystem::path& path, size_t size,
+                    std::vector<uint8_t>* bytes) {
+  bytes->assign(size, 0);
+  std::ifstream stream(path, std::ios::binary);
+  if (!stream) {
+    return false;
+  }
+  stream.read(reinterpret_cast<char*>(bytes->data()),
+              static_cast<std::streamsize>(bytes->size()));
+  bytes->resize(static_cast<size_t>(stream.gcount()));
+  return bytes->size() >= size;
+}
+
+bool UsesAllCollectionIndices(const Json::Value& typeface_request) {
+  std::string collection_indices;
+  return ReadStringField(typeface_request, "collection_indices",
+                         &collection_indices) &&
+         collection_indices == "all";
+}
+
+bool ResolveCollectionIndices(const ResolvedFontFile& font_file,
+                              const Json::Value& typeface_request,
+                              std::vector<int>* indices, Json::Value* report) {
+  if (!UsesAllCollectionIndices(typeface_request)) {
+    indices->push_back(font_file.collection_index);
+    return true;
+  }
+
+  std::vector<uint8_t> header;
+  if (!ReadFilePrefix(font_file.absolute_path, 12, &header)) {
+    AddValidationError(report, "$.font_files[].uri",
+                       "failed to read font file header");
+    return false;
+  }
+
+  int collection_count = 1;
+  const uint32_t tag = ReadBigEndian32(header, 0);
+  if (tag == SetFourByteTag('t', 't', 'c', 'f')) {
+    collection_count = static_cast<int>(ReadBigEndian32(header, 8));
+    if (collection_count <= 0) {
+      AddValidationError(report, "$.font_files[].uri",
+                         "TTC collection count must be positive");
+      return false;
+    }
+  }
+
+  Json::Value scan(Json::objectValue);
+  scan["mode"] = "all";
+  scan["font_file_uri"] = font_file.uri;
+  scan["collection_count"] = collection_count;
+  scan["indices"] = Json::Value(Json::arrayValue);
+  for (int i = 0; i < collection_count; ++i) {
+    indices->push_back(i);
+    scan["indices"].append(i);
+  }
+  (*report)["collection_scan"] = std::move(scan);
   return true;
 }
 
@@ -384,16 +457,10 @@ std::shared_ptr<Typeface> MakeTypeface(const std::string& entry,
   return nullptr;
 }
 
-Json::Value BuildSuccessReport(const Json::Value& root,
-                               const CaseValidationResult& validation,
-                               const std::string& entry,
-                               const std::string& font_file_id,
-                               const ResolvedFontFile& font_file,
-                               const std::shared_ptr<Typeface>& typeface) {
-  Json::Value report =
-      BuildBaseProbeReport(validation.case_id, validation.backend);
-  report["ok"] = true;
-
+Json::Value BuildTypefaceResult(const std::string& entry,
+                                const std::string& font_file_id,
+                                const ResolvedFontFile& font_file,
+                                const std::shared_ptr<Typeface>& typeface) {
   Json::Value typeface_result(Json::objectValue);
   typeface_result["ok"] = true;
   typeface_result["request_entry"] = entry;
@@ -404,8 +471,11 @@ Json::Value BuildSuccessReport(const Json::Value& root,
       FontDescriptorToJson(typeface->GetFontDescriptor(), font_file.uri);
   typeface_result["identity"] =
       TypefaceIdentityToJson(typeface, typeface->GetFontDescriptor());
-  report["typeface_result"] = std::move(typeface_result);
+  return typeface_result;
+}
 
+Json::Value BuildTypefaceProbe(const Json::Value& root,
+                               const std::shared_ptr<Typeface>& typeface) {
   Json::Value probe(Json::objectValue);
   probe["units_per_em"] = static_cast<Json::UInt64>(typeface->GetUnitsPerEm());
   probe["contains_color_table"] = typeface->ContainsColorTable();
@@ -424,8 +494,58 @@ Json::Value BuildSuccessReport(const Json::Value& root,
   probe["variation_axes"] =
       TypefaceVariationAxesToJson(typeface->GetVariationDesignParameters());
   probe["glyphs"] = GlyphsToJson(root, typeface);
-  report["typeface_probe"] = std::move(probe);
+  return probe;
+}
 
+Json::Value BuildSuccessReport(const Json::Value& root,
+                               const CaseValidationResult& validation,
+                               const std::string& entry,
+                               const std::string& font_file_id,
+                               const ResolvedFontFile& font_file,
+                               const std::shared_ptr<Typeface>& typeface) {
+  Json::Value report =
+      BuildBaseProbeReport(validation.case_id, validation.backend);
+  report["ok"] = true;
+  report["typeface_result"] =
+      BuildTypefaceResult(entry, font_file_id, font_file, typeface);
+  report["typeface_probe"] = BuildTypefaceProbe(root, typeface);
+
+  return report;
+}
+
+Json::Value BuildCollectionSuccessReport(
+    const Json::Value& root, const CaseValidationResult& validation,
+    const std::string& entry, const std::string& font_file_id,
+    const ResolvedFontFile& font_file, const std::vector<int>& indices,
+    const std::vector<std::shared_ptr<Typeface>>& typefaces) {
+  Json::Value report =
+      BuildBaseProbeReport(validation.case_id, validation.backend);
+  report["ok"] = true;
+
+  Json::Value collection(Json::objectValue);
+  collection["mode"] = "all";
+  collection["request_entry"] = entry;
+  collection["font_file_id"] = font_file_id;
+  collection["font_file_uri"] = font_file.uri;
+  collection["collection_count"] = static_cast<Json::UInt64>(indices.size());
+  collection["indices"] = Json::Value(Json::arrayValue);
+
+  Json::Value results(Json::arrayValue);
+  Json::Value probes(Json::arrayValue);
+  for (size_t i = 0; i < indices.size(); ++i) {
+    ResolvedFontFile indexed_font_file = font_file;
+    indexed_font_file.collection_index = indices[i];
+    collection["indices"].append(indices[i]);
+    results.append(BuildTypefaceResult(entry, font_file_id, indexed_font_file,
+                                       typefaces[i]));
+    Json::Value probe = BuildTypefaceProbe(root, typefaces[i]);
+    probe["collection_index"] = indices[i];
+    probes.append(std::move(probe));
+  }
+
+  report["typeface_collection"] = std::move(collection);
+  report["typeface_results"] = std::move(results);
+  report["typeface_probes"] = std::move(probes);
   return report;
 }
 
@@ -514,15 +634,46 @@ TypefaceProbeResult RunTypefaceProbe(const TypefaceProbeRequest& request) {
 
   Json::Value report =
       BuildBaseProbeReport(validation.case_id, validation.backend);
-  auto typeface = MakeTypeface(entry, typeface_request, *font_file, &report);
-  if (report.isMember("validation_errors")) {
+  std::vector<int> collection_indices;
+  if (!ResolveCollectionIndices(*font_file, typeface_request,
+                                &collection_indices, &report)) {
     TypefaceProbeResult result = BuildFailure(
         TypefaceProbeStatus::kSchemaValidationFailed, validation.case_id,
         validation.backend, "schema_validation_failed");
     result.report["validation_errors"] = report["validation_errors"];
     return result;
   }
-  if (typeface == nullptr) {
+
+  std::vector<std::shared_ptr<Typeface>> typefaces;
+  typefaces.reserve(collection_indices.size());
+  for (int collection_index : collection_indices) {
+    ResolvedFontFile indexed_font_file = *font_file;
+    indexed_font_file.collection_index = collection_index;
+
+    auto typeface =
+        MakeTypeface(entry, typeface_request, indexed_font_file, &report);
+    if (report.isMember("validation_errors")) {
+      TypefaceProbeResult result = BuildFailure(
+          TypefaceProbeStatus::kSchemaValidationFailed, validation.case_id,
+          validation.backend, "schema_validation_failed");
+      result.report["validation_errors"] = report["validation_errors"];
+      return result;
+    }
+    if (typeface == nullptr) {
+      TypefaceProbeResult result =
+          BuildFailure(TypefaceProbeStatus::kProbeFailed, validation.case_id,
+                       validation.backend, "typeface_create_failed",
+                       "failed to create typeface from explicit font source");
+      result.report["collection_index"] = collection_index;
+      if (report.isMember("collection_scan")) {
+        result.report["collection_scan"] = report["collection_scan"];
+      }
+      return result;
+    }
+    typefaces.push_back(std::move(typeface));
+  }
+
+  if (typefaces.empty()) {
     return BuildFailure(TypefaceProbeStatus::kProbeFailed, validation.case_id,
                         validation.backend, "typeface_create_failed",
                         "failed to create typeface from explicit font source");
@@ -532,10 +683,19 @@ TypefaceProbeResult RunTypefaceProbe(const TypefaceProbeRequest& request) {
   result.status = TypefaceProbeStatus::kSuccess;
   result.case_id = validation.case_id;
   result.backend = validation.backend;
-  result.report = BuildSuccessReport(root, validation, entry, font_file_id,
-                                     *font_file, typeface);
+  if (UsesAllCollectionIndices(typeface_request)) {
+    result.report =
+        BuildCollectionSuccessReport(root, validation, entry, font_file_id,
+                                     *font_file, collection_indices, typefaces);
+  } else {
+    result.report = BuildSuccessReport(root, validation, entry, font_file_id,
+                                       *font_file, typefaces.front());
+  }
   if (report.isMember("source_data")) {
     result.report["source_data"] = report["source_data"];
+  }
+  if (report.isMember("collection_scan")) {
+    result.report["collection_scan"] = report["collection_scan"];
   }
   if (report.isMember("variation_request")) {
     result.report["variation_request"] = report["variation_request"];

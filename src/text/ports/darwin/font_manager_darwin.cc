@@ -12,10 +12,10 @@
 #include "src/text/ports/darwin/font_manager_darwin.hpp"
 
 #include <CoreText/CoreText.h>
-#include <dlfcn.h>
 
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
@@ -122,6 +122,106 @@ UniqueCFRef<CFDataRef> cfdata_from_skdata(std::shared_ptr<Data> const& data) {
       CFAllocatorCreate(kCFAllocatorDefault, &ctx));
   return UniqueCFRef<CFDataRef>(CFDataCreateWithBytesNoCopy(
       kCFAllocatorDefault, (const UInt8*)addr, size, alloc.get()));
+}
+
+uint32_t read_big_endian_u32(const uint8_t* bytes) {
+  return (static_cast<uint32_t>(bytes[0]) << 24) |
+         (static_cast<uint32_t>(bytes[1]) << 16) |
+         (static_cast<uint32_t>(bytes[2]) << 8) |
+         static_cast<uint32_t>(bytes[3]);
+}
+
+int font_collection_count(std::shared_ptr<Data> const& data) {
+  if (data == nullptr || data->Size() < 4) {
+    return 0;
+  }
+
+  auto bytes = static_cast<const uint8_t*>(data->RawData());
+  if (read_big_endian_u32(bytes) != SetFourByteTag('t', 't', 'c', 'f')) {
+    return 1;
+  }
+  if (data->Size() < 12) {
+    return 0;
+  }
+  return static_cast<int>(read_big_endian_u32(bytes + 8));
+}
+
+CFIndex descriptor_index_for_collection_index(CFIndex descriptor_count,
+                                              int collection_count,
+                                              int collection_index) {
+  if (descriptor_count == collection_count) {
+    return collection_index;
+  }
+
+  if (collection_count > 0 && descriptor_count > collection_count &&
+      descriptor_count % collection_count == 0) {
+    return static_cast<CFIndex>(collection_index) *
+           (descriptor_count / collection_count);
+  }
+
+  return collection_index;
+}
+
+std::shared_ptr<TypefaceDarwin> typeface_from_data_desc(
+    CTFontDescriptorRef desc, int collection_index) {
+  if (!desc) {
+    return nullptr;
+  }
+
+  UniqueCTFontRef ct_font(CTFontCreateWithFontDescriptor(desc, 0, nullptr));
+  if (!ct_font) {
+    return nullptr;
+  }
+
+  UniqueCFRef<CTFontDescriptorRef> font_desc(
+      CTFontCopyFontDescriptor(ct_font.get()));
+  FontStyle style;
+  ct_desc_to_font_style(font_desc ? font_desc.get() : desc, &style, true);
+  return TypefaceDarwin::MakeWithoutCache(style, std::move(ct_font),
+                                          collection_index);
+}
+
+std::shared_ptr<TypefaceDarwin> typeface_from_data(
+    std::shared_ptr<Data> const& data, int ttc_index) {
+  if (ttc_index < 0 || data == nullptr || data->Size() == 0) {
+    return nullptr;
+  }
+
+  int collection_count = font_collection_count(data);
+  if (collection_count <= 0 || ttc_index >= collection_count) {
+    return nullptr;
+  }
+
+  UniqueCFRef<CFDataRef> cf_data(cfdata_from_skdata(data));
+  if (!cf_data) {
+    return nullptr;
+  }
+
+  UniqueCFRef<CTFontDescriptorRef> desc;
+  if (ttc_index == 0) {
+    desc.reset(CTFontManagerCreateFontDescriptorFromData(cf_data.get()));
+    return typeface_from_data_desc(desc.get(), ttc_index);
+  }
+
+  UniqueCFRef<CFArrayRef> descriptors(
+      CTFontManagerCreateFontDescriptorsFromData(cf_data.get()));
+  if (!descriptors) {
+    return nullptr;
+  }
+  CFIndex count = CFArrayGetCount(descriptors.get());
+  CFIndex descriptor_index =
+      descriptor_index_for_collection_index(count, collection_count, ttc_index);
+  if (descriptor_index < 0 || descriptor_index >= count) {
+    return nullptr;
+  }
+  auto raw_desc = static_cast<CTFontDescriptorRef>(
+      CFArrayGetValueAtIndex(descriptors.get(), descriptor_index));
+  if (!raw_desc) {
+    return nullptr;
+  }
+  desc.reset(static_cast<CTFontDescriptorRef>(CFRetain(raw_desc)));
+
+  return typeface_from_data_desc(desc.get(), ttc_index);
 }
 
 UniqueCFRef<CTFontDescriptorRef> create_descriptor(CFStringRef cf_family_name,
@@ -395,26 +495,7 @@ std::shared_ptr<Typeface> FontManagerDarwin::OnMatchFamilyStyleCharacter(
 
 std::shared_ptr<Typeface> FontManagerDarwin::OnMakeFromData(
     std::shared_ptr<Data> const& data, int ttcIndex) const {
-  if (ttcIndex != 0) {
-    return nullptr;
-  }
-
-  if (data == nullptr || data->Size() == 0) {
-    return nullptr;
-  }
-
-  UniqueCFRef<CFDataRef> cf_data(cfdata_from_skdata(data));
-
-  UniqueCFRef<CTFontDescriptorRef> desc(
-      CTFontManagerCreateFontDescriptorFromData(cf_data.get()));
-
-  FontStyle style;
-
-  ct_desc_to_font_style(desc.get(), &style);
-
-  return TypefaceDarwin::MakeWithoutCache(
-      style,
-      UniqueCTFontRef(CTFontCreateWithFontDescriptor(desc.get(), 0, nullptr)));
+  return typeface_from_data(data, ttcIndex);
 }
 
 std::shared_ptr<Typeface> FontManagerDarwin::OnMakeFromFile(

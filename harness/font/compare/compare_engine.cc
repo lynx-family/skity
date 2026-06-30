@@ -353,6 +353,66 @@ const Json::Value* FindTypefaceIdentity(const Json::Value& root) {
 
 Json::Value NormalizeTypefaceDescriptor(const Json::Value& root) {
   const Json::Value* typeface_result = ObjectMember(root, "typeface_result");
+  if (typeface_result == nullptr) {
+    return Json::Value(Json::objectValue);
+  }
+  return NormalizeDescriptor(OptionalValue(*typeface_result, "typeface"),
+                             typeface_result);
+}
+
+Json::Value NormalizeTypefaceResultDescriptor(
+    const Json::Value& typeface_result) {
+  return NormalizeDescriptor(OptionalValue(typeface_result, "typeface"),
+                             &typeface_result);
+}
+
+Json::Value NormalizeTypefaceResultIdentity(
+    const Json::Value& typeface_result) {
+  const Json::Value* identity = ObjectMember(typeface_result, "identity");
+  if (identity != nullptr) {
+    return NormalizeTypefaceIdentity(*identity, &typeface_result);
+  }
+  return NormalizeTypefaceResultDescriptor(typeface_result);
+}
+
+Json::Value NormalizeGlyphArray(const Json::Value& glyphs);
+Json::Value NormalizeTableArray(const Json::Value& tables);
+
+Json::Value NormalizeTypefaceProbeEntry(const Json::Value& typeface_result,
+                                        const Json::Value& probe) {
+  Json::Value value(Json::objectValue);
+  value["descriptor"] = NormalizeTypefaceResultDescriptor(typeface_result);
+  value["identity"] = NormalizeTypefaceResultIdentity(typeface_result);
+
+  if (!probe.isObject()) {
+    return value;
+  }
+  AddIfPresent(&value, "collection_index",
+               OptionalValue(probe, "collection_index"));
+  AddIfPresent(&value, "units_per_em", OptionalValue(probe, "units_per_em"));
+  AddIfPresent(&value, "contains_color_table",
+               OptionalValue(probe, "contains_color_table"));
+  AddIfPresent(&value, "table_count", OptionalValue(probe, "table_count"));
+  value["glyphs"] = NormalizeGlyphArray(OptionalValue(probe, "glyphs"));
+  value["tables"] = NormalizeTableArray(OptionalValue(probe, "tables"));
+  return value;
+}
+
+Json::Value NormalizeTypefaceCollection(const Json::Value& root) {
+  Json::Value value(Json::objectValue);
+  const Json::Value* collection = ObjectMember(root, "typeface_collection");
+  if (collection == nullptr) {
+    return value;
+  }
+  AddIfPresent(&value, "mode", OptionalStringValue(*collection, "mode"));
+  AddIfPresent(&value, "collection_count",
+               OptionalValue(*collection, "collection_count"));
+  AddIfPresent(&value, "indices", OptionalValue(*collection, "indices"));
+  return value;
+}
+
+Json::Value NormalizeTypefaceDescriptorLegacy(const Json::Value& root) {
+  const Json::Value* typeface_result = ObjectMember(root, "typeface_result");
   const Json::Value* descriptor = FindTypefaceDescriptor(root);
   if (descriptor == nullptr) {
     return Json::Value(Json::objectValue);
@@ -558,6 +618,22 @@ Json::Value NormalizeMetricsProbe(const Json::Value& root) {
 
 Json::Value NormalizeTypefaceProbe(const Json::Value& root) {
   Json::Value value(Json::objectValue);
+
+  const Json::Value* typeface_results = ObjectMember(root, "typeface_results");
+  const Json::Value* typeface_probes = ObjectMember(root, "typeface_probes");
+  if (typeface_results != nullptr && typeface_results->isArray() &&
+      typeface_probes != nullptr && typeface_probes->isArray()) {
+    value["collection"] = NormalizeTypefaceCollection(root);
+    value["entries"] = Json::Value(Json::arrayValue);
+    const Json::ArrayIndex count =
+        std::min(typeface_results->size(), typeface_probes->size());
+    for (Json::ArrayIndex i = 0; i < count; ++i) {
+      value["entries"].append(NormalizeTypefaceProbeEntry(
+          (*typeface_results)[i], (*typeface_probes)[i]));
+    }
+    return value;
+  }
+
   value["descriptor"] = NormalizeTypefaceDescriptor(root);
   value["identity"] = NormalizeTypefaceProbeIdentity(root);
 
@@ -1033,35 +1109,84 @@ void ComparePathSet(const Json::Value& expected, const Json::Value& actual,
                     epsilon, true, diffs);
 }
 
+std::string CollectionEntryPath(const std::string& entry_path,
+                                const std::string& legacy_path,
+                                const std::string& field) {
+  if (entry_path.empty()) {
+    return legacy_path;
+  }
+  return ChildJsonPath(entry_path, field);
+}
+
+void CompareTypefaceProbeEntry(const Json::Value& expected,
+                               const Json::Value& actual,
+                               const CompareConfig& config,
+                               const std::string& entry_path,
+                               std::vector<Diff>* diffs) {
+  CompareTypefaceIdentity(
+      expected["identity"], actual["identity"],
+      CollectionEntryPath(entry_path, "typeface_result.identity", "identity"),
+      "descriptor_mismatch", config, diffs);
+
+  if (expected["descriptor"].isMember("style") &&
+      actual["descriptor"].isMember("style")) {
+    CompareFontStyle(
+        expected["descriptor"]["style"], actual["descriptor"]["style"],
+        CollectionEntryPath(entry_path, "typeface_result.typeface.style",
+                            "descriptor.style"),
+        config, diffs);
+  }
+  CompareJsonSubset(
+      OptionalValue(expected, "units_per_em"),
+      OptionalValue(actual, "units_per_em"),
+      CollectionEntryPath(entry_path, "typeface_probe.units_per_em",
+                          "units_per_em"),
+      "descriptor_mismatch", "exact", 0.0, false, diffs);
+  CompareJsonSubset(
+      OptionalValue(expected, "table_count"),
+      OptionalValue(actual, "table_count"),
+      CollectionEntryPath(entry_path, "typeface_probe.table_count",
+                          "table_count"),
+      "table_mismatch", "exact", 0.0, false, diffs);
+  CompareGlyphIds(
+      expected["glyphs"], actual["glyphs"],
+      CollectionEntryPath(entry_path, "typeface_probe.glyphs", "glyphs"),
+      diffs);
+  CompareJsonSubset(
+      expected["tables"], actual["tables"],
+      CollectionEntryPath(entry_path, "typeface_probe.tables", "tables"),
+      "table_mismatch", "table_exact", 0.0, false, diffs);
+}
+
 void CompareTypefaceProbe(const Json::Value& expected_root,
                           const Json::Value& actual_root,
                           const CompareConfig& config,
                           std::vector<Diff>* diffs) {
   Json::Value expected = NormalizeTypefaceProbe(expected_root);
   Json::Value actual = NormalizeTypefaceProbe(actual_root);
-  CompareTypefaceIdentity(expected["identity"], actual["identity"],
-                          "typeface_result.identity", "descriptor_mismatch",
-                          config, diffs);
 
-  if (expected["descriptor"].isMember("style") &&
-      actual["descriptor"].isMember("style")) {
-    CompareFontStyle(expected["descriptor"]["style"],
-                     actual["descriptor"]["style"],
-                     "typeface_result.typeface.style", config, diffs);
+  if (expected.isMember("entries") || actual.isMember("entries")) {
+    CompareJsonSubset(expected["collection"], actual["collection"],
+                      "typeface_collection", "descriptor_mismatch", "exact",
+                      0.0, false, diffs);
+    const Json::Value& expected_entries = expected["entries"];
+    const Json::Value& actual_entries = actual["entries"];
+    if (!expected_entries.isArray() || !actual_entries.isArray() ||
+        expected_entries.size() != actual_entries.size()) {
+      AddDiff(diffs, "typeface_collection.entries", "descriptor_mismatch",
+              "collection_entries", "collection entry counts differ",
+              expected_entries, actual_entries);
+      return;
+    }
+    for (Json::ArrayIndex i = 0; i < expected_entries.size(); ++i) {
+      CompareTypefaceProbeEntry(expected_entries[i], actual_entries[i], config,
+                                IndexJsonPath("typeface_collection.entries", i),
+                                diffs);
+    }
+    return;
   }
-  CompareJsonSubset(OptionalValue(expected, "units_per_em"),
-                    OptionalValue(actual, "units_per_em"),
-                    "typeface_probe.units_per_em", "descriptor_mismatch",
-                    "exact", 0.0, false, diffs);
-  CompareJsonSubset(OptionalValue(expected, "table_count"),
-                    OptionalValue(actual, "table_count"),
-                    "typeface_probe.table_count", "table_mismatch", "exact",
-                    0.0, false, diffs);
-  CompareGlyphIds(expected["glyphs"], actual["glyphs"], "typeface_probe.glyphs",
-                  diffs);
-  CompareJsonSubset(expected["tables"], actual["tables"],
-                    "typeface_probe.tables", "table_mismatch", "table_exact",
-                    0.0, false, diffs);
+
+  CompareTypefaceProbeEntry(expected, actual, config, "", diffs);
 }
 
 void CompareMetricsProbe(const Json::Value& expected_root,

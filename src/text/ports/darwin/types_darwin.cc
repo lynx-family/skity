@@ -73,6 +73,14 @@ CTFontWeightMapping& get_font_weight_mapping() {
   return ::skity::get_kit_font_weight_mapping();
 }
 
+CTFontWeightMapping& get_data_font_weight_mapping() {
+  // Matches Skia's fallback table for CTFont created from data providers.
+  static constexpr CGFloat weights[] = {
+      -1.00, -0.70, -0.50, -0.23, 0.00, 0.20, 0.30, 0.40, 0.60, 0.80, 1.00,
+  };
+  return weights;
+}
+
 bool find_dict_CGFloat(CFDictionaryRef dict, CFStringRef name, CGFloat* value) {
   CFNumberRef num;
   return CFDictionaryGetValueIfPresent(dict, name, (const void**)&num) &&
@@ -81,22 +89,29 @@ bool find_dict_CGFloat(CFDictionaryRef dict, CFStringRef name, CGFloat* value) {
 }
 
 // Convert the [-1, 1] CTFontDescriptor weight to [0, 1000] fontstyle weight
-int ct_weight_to_fontstyle_weight(CGFloat ct_weight) {
+int ct_weight_to_fontstyle_weight(CGFloat ct_weight, bool from_data_provider) {
   using Interpolator = LinearInterpolater<CGFloat, int, RoundCGFloatToInt>;
 
-  static Interpolator::Mapping weight_mappings[11];
+  static Interpolator::Mapping native_weight_mappings[11];
+  static Interpolator::Mapping data_weight_mappings[11];
   static std::once_flag flag;
   std::call_once(flag, [&] {
     const CGFloat(&nsFontWeights)[11] = get_font_weight_mapping();
+    const CGFloat(&dataFontWeights)[11] = get_data_font_weight_mapping();
     for (int i = 0; i < 11; ++i) {
-      weight_mappings[i].src_val = nsFontWeights[i];
-      weight_mappings[i].dst_val = i * 100;
+      native_weight_mappings[i].src_val = nsFontWeights[i];
+      native_weight_mappings[i].dst_val = i * 100;
+      data_weight_mappings[i].src_val = dataFontWeights[i];
+      data_weight_mappings[i].dst_val = i * 100;
     }
   });
-  static constexpr Interpolator interpolator(weight_mappings,
-                                             std::size(weight_mappings));
+  static constexpr Interpolator native_interpolator(
+      native_weight_mappings, std::size(native_weight_mappings));
+  static constexpr Interpolator data_interpolator(
+      data_weight_mappings, std::size(data_weight_mappings));
 
-  return interpolator.map(ct_weight);
+  return from_data_provider ? data_interpolator.map(ct_weight)
+                            : native_interpolator.map(ct_weight);
 }
 
 // Convert the [-0.5, 0.5] CTFontDescriptor width to [0, 10] fontstyle width.
@@ -159,7 +174,8 @@ CGFloat fontstyle_width_to_ct_width(int fontstyle_width) {
 
 }  // namespace
 
-void ct_desc_to_font_style(CTFontDescriptorRef desc, FontStyle* style) {
+void ct_desc_to_font_style(CTFontDescriptorRef desc, FontStyle* style,
+                           bool from_data_provider) {
   UniqueCFRef<CFDictionaryRef> ct_traits(
       (CFDictionaryRef)CTFontDescriptorCopyAttribute(desc,
                                                      kCTFontTraitsAttribute));
@@ -176,9 +192,10 @@ void ct_desc_to_font_style(CTFontDescriptorRef desc, FontStyle* style) {
   find_dict_CGFloat(ct_traits.get(), kCTFontWidthTrait, &width);
   find_dict_CGFloat(ct_traits.get(), kCTFontSlantTrait, &slant);
 
-  *style = FontStyle(
-      ct_weight_to_fontstyle_weight(weight), ct_width_to_fontstyle_width(width),
-      slant ? FontStyle::kItalic_Slant : FontStyle::kUpright_Slant);
+  *style =
+      FontStyle(ct_weight_to_fontstyle_weight(weight, from_data_provider),
+                ct_width_to_fontstyle_width(width),
+                slant ? FontStyle::kItalic_Slant : FontStyle::kUpright_Slant);
 }
 
 void font_style_to_ct_trait(const FontStyle& style,

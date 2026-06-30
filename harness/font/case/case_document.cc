@@ -382,6 +382,14 @@ void ValidateTypefaceRequest(
     context->AddError("$.typeface_request.font_file",
                       "font_file is required for " + entry);
   }
+
+  std::string collection_indices;
+  if (OptionalStringField(*request, "collection_indices", "$.typeface_request",
+                          context, &collection_indices) &&
+      collection_indices != "all") {
+    context->AddError("$.typeface_request.collection_indices",
+                      "collection_indices must be \"all\"");
+  }
 }
 
 }  // namespace

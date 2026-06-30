@@ -39,7 +39,8 @@ using UniqueCFRef =
 using UniqueCTFontRef = UniqueCFRef<CTFontRef>;
 using UniqueCTArrayRef = UniqueCFRef<CFArrayRef>;
 
-void ct_desc_to_font_style(CTFontDescriptorRef desc, FontStyle* style);
+void ct_desc_to_font_style(CTFontDescriptorRef desc, FontStyle* style,
+                           bool from_data_provider = false);
 
 void font_style_to_ct_trait(const FontStyle& style,
                             CFMutableDictionaryRef cf_dict);

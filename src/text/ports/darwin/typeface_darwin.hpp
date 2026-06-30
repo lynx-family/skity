@@ -24,16 +24,19 @@ class TypefaceDarwin : public Typeface {
       SetFourByteTag('c', 't', 'x', 't');
 
   static std::shared_ptr<TypefaceDarwin> Make(const FontStyle &style,
-                                              UniqueCTFontRef ct_font);
+                                              UniqueCTFontRef ct_font,
+                                              int collection_index = 0);
   static std::shared_ptr<TypefaceDarwin> MakeWithoutCache(
-      const FontStyle &style, UniqueCTFontRef ct_font);
+      const FontStyle &style, UniqueCTFontRef ct_font,
+      int collection_index = 0);
 
   ~TypefaceDarwin() override;
 
   CTFontRef GetCTFont() const;
 
  protected:
-  TypefaceDarwin(FontStyle const &style, UniqueCTFontRef ct_font);
+  TypefaceDarwin(FontStyle const &style, UniqueCTFontRef ct_font,
+                 int collection_index);
 
   int OnGetTableTags(FontTableTag *tags) const override;
 
@@ -65,6 +68,7 @@ class TypefaceDarwin : public Typeface {
 
  private:
   UniqueCTFontRef ct_font_;
+  int collection_index_;
   bool has_color_glyphs_;
   UniqueCFRef<CFDataRef> ct_data_;
   UniqueCFRef<CFArrayRef> variation_axes_;
