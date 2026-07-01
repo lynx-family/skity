@@ -216,7 +216,6 @@ bool DWriteFontFaceEqual(IDWriteFontFace* lhs, IDWriteFontFace* rhs) {
 
   // IDWriteFontFace5::Equals accounts for newer face identity such as variation
   // axis values. Older DirectWrite versions can only compare file identity.
-#if defined(__IDWriteFontFace5_INTERFACE_DEFINED__)
   ScopedComPtr<IDWriteFontFace5> lhsFace5;
   if (SUCCEEDED(lhs->QueryInterface(&lhsFace5))) {
     return lhsFace5->Equals(rhs);
@@ -226,7 +225,6 @@ bool DWriteFontFaceEqual(IDWriteFontFace* lhs, IDWriteFontFace* rhs) {
   if (SUCCEEDED(rhs->QueryInterface(&rhsFace5))) {
     return rhsFace5->Equals(lhs);
   }
-#endif
 
   return DWriteFontFaceEqualByFiles(lhs, rhs);
 }

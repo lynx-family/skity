@@ -23,5 +23,6 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
     )
     target_link_libraries(dwrite_text_example PUBLIC skity::example_common)
     target_compile_definitions(dwrite_text_example PRIVATE
-        -DEXAMPLE_IMAGE_ROOT="${CMAKE_SOURCE_DIR}/example/images/")
+        -DEXAMPLE_IMAGE_ROOT="${CMAKE_SOURCE_DIR}/example/images/"
+        -DTEST_FONT_ROOT="${CMAKE_SOURCE_DIR}/test/fonts/resources/")
 endif()

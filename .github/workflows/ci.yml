@@ -176,12 +176,23 @@ jobs:
           - name: Sync Dependencies
             run: |
                 powershell -File "./tools/hab.ps1" sync -f --target dev,module,ci
+          - name: Print Windows SDK Versions
+            run: |
+                Write-Host "Installed Windows SDK Include versions:"
+                Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Directory | Select-Object -ExpandProperty Name
+                Write-Host "Installed Windows SDK Lib versions:"
+                Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" -Directory | Select-Object -ExpandProperty Name
+                Write-Host "Installed Windows SDK bin versions:"
+                Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory | Select-Object -ExpandProperty Name
           - name: Run Build
             run: |
-                ./buildtools/cmake/bin/cmake -B out/cmake_host_build -DSKITY_EXAMPLE=ON -DCMAKE_BUILD_TYPE=Debug -DSKITY_CODEC_MODULE=ON -DSKITY_TEST=ON  -DCMAKE_POLICY_VERSION_MINIMUM='3.5'
+                $WindowsSdkVersion = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Directory | Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1 -ExpandProperty Name
+                Write-Host "Using Windows SDK version: $WindowsSdkVersion"
+                ./buildtools/cmake/bin/cmake -B out/cmake_host_build -DCMAKE_SYSTEM_VERSION=$WindowsSdkVersion -DSKITY_EXAMPLE=ON -DCMAKE_BUILD_TYPE=Debug -DSKITY_CODEC_MODULE=ON -DSKITY_TEST=ON  -DCMAKE_POLICY_VERSION_MINIMUM='3.5'
+                Select-String -Path out/cmake_host_build/skity.vcxproj -Pattern "WindowsTargetPlatformVersion"
                 ./buildtools/cmake/bin/cmake --build out/cmake_host_build --target skity_unit_test
                 cd out/cmake_host_build/Debug
-                ./skity_unit_test
+                ./skity_unit_test --gtest_color=no --gtest_print_time=1
 
     osx_metal_golden_test:
         runs-on: lynx-darwin-14-medium

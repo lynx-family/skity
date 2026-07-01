@@ -42,6 +42,13 @@
 #include "src/logging.hpp"
 #include "src/render/auto_canvas.hpp"
 
+#if (defined(DWRITE_CORE) && DWRITE_CORE) || \
+    (defined(NTDDI_WIN11_ZN) && NTDDI_VERSION >= NTDDI_WIN11_ZN)
+#define SKITY_DWRITE_HAS_COLOR_V1_PAINT_TREE 1
+#else
+#define SKITY_DWRITE_HAS_COLOR_V1_PAINT_TREE 0
+#endif
+
 namespace skity {
 namespace {
 
@@ -92,7 +99,6 @@ Color DWriteColorToColor(const DWRITE_COLOR_F& color) {
       DWriteColorChannelToByte(color.g), DWriteColorChannelToByte(color.b));
 }
 
-#ifdef DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE_DEFINED
 DWRITE_COLOR_F ColorToDWriteColor(Color color) {
   DWRITE_COLOR_F dwrite_color;
   dwrite_color.r = static_cast<float>(ColorGetR(color)) / 255.0f;
@@ -114,6 +120,7 @@ TileMode DWriteExtendModeToTileMode(D2D1_EXTEND_MODE mode) {
   }
 }
 
+#if SKITY_DWRITE_HAS_COLOR_V1_PAINT_TREE
 BlendMode DWriteCompositeModeToBlendMode(DWRITE_COLOR_COMPOSITE_MODE mode) {
   switch (mode) {
     case DWRITE_COLOR_COMPOSITE_CLEAR:
@@ -176,6 +183,7 @@ BlendMode DWriteCompositeModeToBlendMode(DWRITE_COLOR_COMPOSITE_MODE mode) {
       return BlendMode::kDst;
   }
 }
+#endif
 
 float Vec2Cross(const Vec2& lhs, const Vec2& rhs) {
   return lhs.x * rhs.y - lhs.y * rhs.x;
@@ -193,7 +201,6 @@ Vec2 Vec2Projection(const Vec2& lhs, const Vec2& rhs) {
 }
 
 bool Color4fHasAlpha(const Color4f& color) { return color.a > 0.0f; }
-#endif
 
 bool DWriteRectIsEmpty(const D2D_RECT_F& rect) {
   return rect.left >= rect.right || rect.top >= rect.bottom;
@@ -1264,7 +1271,7 @@ class ScalerContextDWrite : public ScalerContext {
     return true;
   }
 
-#ifdef DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE_DEFINED
+#if SKITY_DWRITE_HAS_COLOR_V1_PAINT_TREE
   bool GenerateDWriteColorV1PaintBounds(IDWritePaintReader* paint_reader,
                                         const DWRITE_PAINT_ELEMENT& element,
                                         float text_size, Matrix* ctm,
@@ -1331,11 +1338,9 @@ class ScalerContextDWrite : public ScalerContext {
         return false;
     }
   }
-#endif
 
   bool GenerateDWriteColorV1Bounds(UINT16 glyph_id, float text_size,
                                    const Matrix22& transform, Rect* bounds) {
-#ifdef DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE_DEFINED
     ScopedComPtr<IDWriteFontFace7> font_face7;
     if (FAILED(font_face_->QueryInterface(&font_face7))) {
       return false;
@@ -1369,9 +1374,6 @@ class ScalerContextDWrite : public ScalerContext {
     }
 
     return !bounds->IsEmpty();
-#else
-    return false;
-#endif
   }
 
   bool GenerateDWritePaintGlyphPath(UINT32 glyph_index, float text_size,
@@ -1394,7 +1396,6 @@ class ScalerContextDWrite : public ScalerContext {
     return true;
   }
 
-#ifdef DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE_DEFINED
   bool FetchDWriteGradientStops(IDWritePaintReader* paint_reader,
                                 UINT32 stop_count, std::vector<Color4f>* colors,
                                 std::vector<float>* positions) {
@@ -1786,11 +1787,9 @@ class ScalerContextDWrite : public ScalerContext {
         return false;
     }
   }
-#endif
 
   bool DrawDWriteColorV1Image(UINT16 glyph_id, float text_size,
                               const Matrix22& transform, Canvas* canvas) {
-#ifdef DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE_DEFINED
     ScopedComPtr<IDWriteFontFace7> font_face7;
     if (!canvas || FAILED(font_face_->QueryInterface(&font_face7))) {
       return false;
@@ -1825,10 +1824,16 @@ class ScalerContextDWrite : public ScalerContext {
     return DrawDWriteColorV1Paint(paint_reader.get(), paint_element, text_size,
                                   canvas, &did_draw) &&
            did_draw;
-#else
-    return false;
-#endif
   }
+#else
+  bool GenerateDWriteColorV1Bounds(UINT16, float, const Matrix22&, Rect*) {
+    return false;
+  }
+
+  bool DrawDWriteColorV1Image(UINT16, float, const Matrix22&, Canvas*) {
+    return false;
+  }
+#endif
 
   bool GenerateDWritePngImageBounds(UINT16 glyph_id, float text_size,
                                     const Matrix22& transform, Rect* bounds) {
@@ -2399,16 +2404,16 @@ class ScalerContextDWrite : public ScalerContext {
     Vec2 advance = transform * Vec2{advance_x, 0.0f};
 
     Rect bounds;
+    if (GenerateDWriteColorBounds(glyph_id, text_size, transform, &bounds)) {
+      GlyphDataWinAccess::SetMetrics(glyph, advance.x, advance.y, bounds,
+                                     GlyphFormat::BGRA32);
+      return true;
+    }
+
     if (desc_.fake_bold &&
         GenerateDWriteFakeBoldBounds(glyph_id, text_size, transform, &bounds)) {
       GlyphDataWinAccess::SetMetrics(glyph, advance.x, advance.y, bounds,
                                      GlyphFormat::A8);
-      return true;
-    }
-
-    if (GenerateDWriteColorBounds(glyph_id, text_size, transform, &bounds)) {
-      GlyphDataWinAccess::SetMetrics(glyph, advance.x, advance.y, bounds,
-                                     GlyphFormat::BGRA32);
       return true;
     }
 

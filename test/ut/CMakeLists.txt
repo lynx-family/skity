@@ -49,7 +49,13 @@ add_executable(skity_unit_test
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES "Windows")
-    target_sources(skity_unit_test PRIVATE base/platform/win/str_conversion_test.cc)
+    target_sources(skity_unit_test PRIVATE
+        base/platform/win/str_conversion_test.cc
+        text/dwrite_stability_test.cc
+    )
+    target_compile_definitions(skity_unit_test PRIVATE
+        -DSKITY_TEST_FONT_ROOT="${CMAKE_SOURCE_DIR}/test/fonts/resources"
+    )
 endif()
 
 # Place the cases that depend on specific fonts here.
