@@ -52,8 +52,10 @@ struct WGX_API GlslOptions {
   // `#extension <name> : require` at the top of the generated shader. This is
   // the single entry point for extension declarations:
   //  - Extensions that only need a declaration are listed here directly.
-  //  - GL_EXT_shader_framebuffer_fetch is added automatically when the fragment
-  //    shader has a @color input (and turns its color output into an inout).
+  //  - GL_EXT_shader_framebuffer_fetch must be listed here by the caller when
+  //    the fragment shader reads back the framebuffer; a @color input still
+  //    turns the color output into an inout, but the declaration is no longer
+  //    inferred automatically.
   //  - Listing GL_KHR_blend_equation_advanced here also marks the fragment
   //    color output with `blend_support_all_equations`, so the fixed function
   //    advanced blend equations can be applied to it.
