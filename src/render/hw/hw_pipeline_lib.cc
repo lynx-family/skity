@@ -10,6 +10,7 @@
 #include "src/gpu/gpu_shader_module.hpp"
 #include "src/graphic/blend_mode_priv.hpp"
 #include "src/logging.hpp"
+#include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_shader_generator.hpp"
 #include "src/render/hw/native_blend.hpp"
@@ -64,6 +65,15 @@ struct BlendState {
 static bool IsShaderSideBlending(uint32_t programmable_blending) {
   return programmable_blending != 0 &&
          programmable_blending != kNativeAdvancedBlendKey;
+}
+
+// framebuffer-fetch reads dst inside the shader via @color; texture-copy
+// samples dst from a bound texture. See GetProgrammableBlendingKey for the
+// (blend_mode | dst_read_strategy<<8) packing.
+static bool UsesFramebufferFetch(uint32_t programmable_blending) {
+  return IsShaderSideBlending(programmable_blending) &&
+         (programmable_blending >> 8) ==
+             static_cast<uint32_t>(DstReadStrategy::kFramebufferFetch);
 }
 
 // Unified blend-state resolution shared by pipeline creation and cache matching
@@ -339,13 +349,17 @@ std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
   }
   source.context = wgx_context;
 
-  // Native-blend fragment shaders must be translated with the
-  // GL_KHR_blend_equation_advanced extension injected; signal that through the
-  // source. The sentinel lives only in the fragment key (GetFunctionKey does
-  // not fold programmable_blending into the vertex key), so gate on fragment.
-  if (stage == GPUShaderStage::kFragment &&
-      pipeline_key.programmable_blending == kNativeAdvancedBlendKey) {
-    source.needs_native_advanced_blend = true;
+  // Feature flags travel on the descriptor (see GPUShaderFeature) so any
+  // backend can react to them, not just GL. The sentinels live only in the
+  // fragment key (GetFunctionKey does not fold programmable_blending into the
+  // vertex key), so gate on fragment.
+  if (stage == GPUShaderStage::kFragment) {
+    if (pipeline_key.programmable_blending == kNativeAdvancedBlendKey) {
+      desc.features.native_advanced_blend = true;
+    }
+    if (UsesFramebufferFetch(pipeline_key.programmable_blending)) {
+      desc.features.framebuffer_fetch = true;
+    }
   }
 
   desc.shader_source = &source;

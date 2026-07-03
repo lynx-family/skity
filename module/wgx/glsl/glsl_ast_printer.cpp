@@ -647,37 +647,24 @@ bool AstPrinter::Write() {
 
   ss_ << std::endl;
 
-  // Detect framebuffer fetch from the AST: a @color fragment input means the
-  // shader reads the current pixel, which requires the extension and turns the
-  // color output into an inout (handled in WriteOutput).
-  needs_fb_fetch_ = false;
-  if (func_->GetFunction()->GetPipelineStage() ==
-      ast::PipelineStage::kFragment) {
-    for (auto& param : func_->GetFunction()->params) {
-      if (param->GetAttribute(ast::AttributeType::kColor)) {
-        needs_fb_fetch_ = true;
-        break;
-      }
-    }
-  }
+  // Every extension is caller-requested through GlslOptions::extensions.
+  // Extensions that need extra source-side handling are detected by name:
+  //  - GL_KHR_blend_equation_advanced marks the output with blend_support.
+  //  - GL_EXT_shader_framebuffer_fetch turns the color output into inout; the
+  //    @color input that reads the current pixel is handled in WriteMainFunc.
+  // The two flags are inferred purely from the extension list, matching how the
+  // caller signals these paths — no AST scan needed.
+  const auto& extensions = options_.extensions;
 
-  // Gather every extension to declare: caller-requested ones
-  // (GlslOptions::extensions) plus framebuffer fetch inferred from the source.
-  std::vector<std::string> extensions = options_.extensions;
-  if (needs_fb_fetch_) {
-    extensions.push_back("GL_EXT_shader_framebuffer_fetch");
-  }
-
-  // GL_KHR_blend_equation_advanced additionally requires the fragment color
-  // output to carry blend_support_all_equations (handled in WriteOutput).
-  // Detect it by name so callers only need to list the extension.
   needs_advanced_blend_ = false;
+  needs_fb_fetch_ = false;
   if (func_->GetFunction()->GetPipelineStage() ==
       ast::PipelineStage::kFragment) {
     for (const auto& extension : extensions) {
       if (extension == "GL_KHR_blend_equation_advanced") {
         needs_advanced_blend_ = true;
-        break;
+      } else if (extension == "GL_EXT_shader_framebuffer_fetch") {
+        needs_fb_fetch_ = true;
       }
     }
   }

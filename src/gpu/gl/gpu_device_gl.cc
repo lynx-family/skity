@@ -186,8 +186,11 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunctionFromModule(
                               : wgx::GlslOptions::Standard::kDesktop;
   options.major_version = gl_version_major_;
   options.minor_version = gl_version_minor_;
-  if (source->needs_native_advanced_blend) {
+  if (desc.features.native_advanced_blend) {
     options.extensions.push_back("GL_KHR_blend_equation_advanced");
+  }
+  if (desc.features.framebuffer_fetch) {
+    options.extensions.push_back("GL_EXT_shader_framebuffer_fetch");
   }
 
   auto wgx_result = source->module->GetProgram()->WriteToGlsl(

@@ -12,6 +12,9 @@
 #include <functional>
 #include <string>
 #include <vector>
+
+#include "src/gpu/gpu_caps.hpp"
+
 namespace skity {
 
 typedef std::function<void(char const*)> GPUShaderFunctionErrorCallback;
@@ -61,6 +64,10 @@ struct GPUShaderFunctionDescriptor {
 
   GPUShaderSourceType source_type = GPUShaderSourceType::kRaw;
   void* shader_source = nullptr;
+
+  // Features this shader function requests (see GPUShaderFeature). Backends
+  // use it to declare the required extensions / pipeline state.
+  GPUShaderFeature features = {};
 };
 
 struct GPUShaderSourceRaw {

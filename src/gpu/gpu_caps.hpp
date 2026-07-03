@@ -22,6 +22,20 @@ struct GPUCaps {
   bool native_blend_shader_variant = false;
 };
 
+// Features a shader function may request at CreateShaderFunction time.
+// Each member mirrors a capability in GPUCaps (supports_*): a device must
+// advertise the matching capability before a shader may request the feature.
+// How a backend satisfies a request (extension declaration, pipeline state,
+// ...) is an implementation detail and is not described here.
+struct GPUShaderFeature {
+  // Mirrors GPUCaps::supports_framebuffer_fetch — the fragment shader reads
+  // back the current destination pixel.
+  bool framebuffer_fetch = false;
+  // Mirrors GPUCaps::supports_native_advanced_blend — the fragment shader
+  // uses the device's native advanced blend equations.
+  bool native_advanced_blend = false;
+};
+
 }  // namespace skity
 
 #endif  // SRC_GPU_GPU_CAPS_HPP
