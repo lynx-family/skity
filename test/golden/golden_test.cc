@@ -4,6 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+
 #include "common/golden_test_env.hpp"
 
 #ifdef SKITY_GOLDEN_GUI
@@ -29,7 +33,7 @@ int main(int argc, char* argv[]) {
   if (argc > 1) {
     // find the backend in the command line arguments
     for (int i = 1; i < argc; ++i) {
-      if (strcmp(argv[i], "--backend") == 0) {
+      if (strcmp(argv[i], "--backend") == 0 && i + 1 < argc) {
         if (strcmp(argv[i + 1], "gl") == 0) {
           backend = skity::testing::Backend::kGL;
           break;
@@ -47,8 +51,15 @@ int main(int argc, char* argv[]) {
 
   testing::InitGoogleTest(&argc, argv);
 
-  testing::AddGlobalTestEnvironment(
-      skity::testing::GoldenTestEnv::CreateInstance(backend));
+  auto* env = skity::testing::GoldenTestEnv::CreateInstance(backend);
+  if (env == nullptr) {
+    std::cerr << "Failed to create golden test environment. Check that the "
+                 "requested backend is enabled in CMake."
+              << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  testing::AddGlobalTestEnvironment(env);
 
 #ifdef SKITY_GOLDEN_GUI
   // GUI needs Metal compute pipeline to generate diff images

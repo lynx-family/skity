@@ -45,6 +45,11 @@ Skills are under `skills/`; structure guidance is in `skills/README.md`; skill b
   - To run golden shape tests: `python3 tools/test-runner.py --suite=golden-shape`
   - To run golden text tests: `python3 tools/test-runner.py --suite=golden-text`
   - You can run specific tests using the filter flag: `--filter="<TestName>"`
+- **Golden Test Sandbox Rule**:
+  - Always run golden tests via `python3 tools/test-runner.py`; direct
+    sandboxed runs of `skity_golden_test_shape/text` can fail at
+    `texture != nullptr` before golden comparison.
+  - To create missing goldens: `SKITY_UPDATE_MISSING_GOLDEN=1 python3 tools/test-runner.py --suite=golden-shape --filter="<TestName>"`.
 - **Test Failure Analysis**: 
   - The runner will output a `<agent-test-report>` JSON block in the terminal, and also write it to `build/agent_test_report.json` (or the corresponding build directory).
   - You MUST read this structured JSON to understand failures.

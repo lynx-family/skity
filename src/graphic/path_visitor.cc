@@ -131,11 +131,17 @@ void PathVisitor::HandleQuadTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,
   }
   DEBUG_CHECK(num < (1 << 10));
 
+  int segment_count = static_cast<int>(num);
   QuadCoeff coeff(arc);
   Vec2 prev_point = p1;
-  for (int i = 1; i <= num; i++) {
-    float t = i / num;
-    Vec2 curr_point = coeff.eval(t);
+  for (int i = 1; i <= segment_count; i++) {
+    float t = static_cast<float>(i) / segment_count;
+    Vec2 curr_point;
+    if (i == segment_count) {
+      curr_point = p3;
+    } else {
+      curr_point = coeff.eval(t);
+    }
     HandleLineTo(prev_point, curr_point);
     prev_point = curr_point;
   }
@@ -188,11 +194,17 @@ void PathVisitor::HandleCubicTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,
   }
   DEBUG_CHECK(num < (1 << 10));
 
+  int segment_count = static_cast<int>(num);
   CubicCoeff coeff(arc);
   Vec2 prev_point = p1;
-  for (int i = 1; i <= num; i++) {
-    float t = i / num;
-    Vec2 curr_point = coeff.eval(t);
+  for (int i = 1; i <= segment_count; i++) {
+    float t = static_cast<float>(i) / segment_count;
+    Vec2 curr_point;
+    if (i == segment_count) {
+      curr_point = p4;
+    } else {
+      curr_point = coeff.eval(t);
+    }
     HandleLineTo(prev_point, curr_point);
     prev_point = curr_point;
   }
