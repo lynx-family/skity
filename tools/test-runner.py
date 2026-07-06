@@ -74,6 +74,23 @@ class TestRunner:
 
         env[name] = path if not current else f"{path}{os.pathsep}{current}"
 
+    def _bundled_swiftshader_icd_path(self) -> str:
+        if sys.platform == "linux":
+            return os.path.join(
+                self.repo_root,
+                "third_party",
+                "libSwiftShader",
+                "vk_swiftshader_icd.json",
+            )
+
+        return os.path.join(
+            self.repo_root,
+            "third_party",
+            "libSwAngle",
+            "lib",
+            "vk_swiftshader_icd.json",
+        )
+
     def prepare_test_environment(self) -> Tuple[Optional[Dict[str, str]], Optional[str]]:
         env = os.environ.copy()
         env["AGENT_OUT_DIR"] = os.path.abspath(self.golden_failures_dir)
@@ -86,27 +103,16 @@ class TestRunner:
             "FALSE",
             "NO",
         )
-        if self.suite == "unit" and use_vulkan_system_loader:
-            if sys.platform == "linux":
-                swiftshader_icd = os.path.join(
-                    self.repo_root,
-                    "third_party",
-                    "libSwiftShader",
-                    "vk_swiftshader_icd.json",
-                )
-            else:
-                swiftshader_icd = os.path.join(
-                    self.repo_root,
-                    "third_party",
-                    "libSwAngle",
-                    "lib",
-                    "vk_swiftshader_icd.json",
-                )
+        uses_vulkan_backend = self.suite == "unit" or (
+            self.suite.startswith("golden") and self.backend == "vulkan"
+        )
+        if uses_vulkan_backend and use_vulkan_system_loader:
+            swiftshader_icd = self._bundled_swiftshader_icd_path()
             if not os.path.isfile(swiftshader_icd):
                 return None, f"SwiftShader Vulkan ICD not found: {swiftshader_icd}"
 
-            # Unit tests are expected to run against bundled SwiftShader. Vulkan
-            # SDK setup-env.sh points these variables at MoltenVK on macOS.
+            # Tests are expected to run against bundled SwiftShader. Vulkan SDK
+            # setup-env.sh points these variables at MoltenVK on macOS.
             env["VK_ICD_FILENAMES"] = swiftshader_icd
             env["VK_DRIVER_FILES"] = swiftshader_icd
 
@@ -154,6 +160,8 @@ class TestRunner:
                 "-DSKITY_CODEC_MODULE=ON",
                 "-DSKITY_GOLDEN_GUI=OFF"
             ])
+            if self.backend == "vulkan":
+                cmd.append("-DSKITY_VK_BACKEND=ON")
             
         exit_code, stdout, stderr = self.run_command(cmd)
         if exit_code != 0:
