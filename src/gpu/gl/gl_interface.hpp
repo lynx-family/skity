@@ -134,6 +134,7 @@ struct GLInterface {
   PFNGLTEXIMAGE2DMULTISAMPLEPROC fTexImage2DMultisample = nullptr;
   PFNGLTEXIMAGE2DPROC fTexImage2D = nullptr;
   PFNGLTEXPARAMETERIPROC fTexParameteri = nullptr;
+  PFNGLTEXSTORAGE2DPROC fTexStorage2D = nullptr;
   PFNGLTEXSUBIMAGE2DPROC fTexSubImage2D = nullptr;
   PFNGLUNIFORMBLOCKBINDINGPROC fUniformBlockBinding = nullptr;
   PFNGLUNIFORM1FPROC fUniform1f = nullptr;

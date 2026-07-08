@@ -138,6 +138,7 @@ void GLInterface::InitGlobalInterface(void* proc_loader) {
   GET_PROC(TexImage2D);
   GET_PROC(TexImage2DMultisample);
   GET_PROC(TexParameteri);
+  GET_PROC(TexStorage2D);
   GET_PROC(TexSubImage2D);
   GET_PROC(UniformBlockBinding);
   GET_PROC(Uniform1f);
