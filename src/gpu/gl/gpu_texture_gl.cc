@@ -4,6 +4,8 @@
 
 #include "src/gpu/gl/gpu_texture_gl.hpp"
 
+#include <algorithm>
+
 #include "src/gpu/gl/formats_gl.h"
 #include "src/gpu/gl/gl_interface.hpp"
 #include "src/gpu/gl/gpu_sampler_gl.hpp"
@@ -116,10 +118,30 @@ void GPUTextureGL::Initialize() {
   }
 
   if (GetDescriptor().sample_count == 1) {
-    GL_CALL(TexImage2D, texture_target_, 0, InternalFormatFrom(desc_.format),
-            desc_.width, desc_.height, 0, ExternalFormatFrom(desc_.format),
-            ExternalTypeFrom(desc_.format), nullptr);
+    if (GLInterface::GlobalInterface()->fTexStorage2D != nullptr) {
+      // Immutable storage: allocate every mip level up front. This matches the
+      // Vulkan backend (levels fixed at creation time) and finally consumes the
+      // descriptor's mip_level_count instead of only defining level 0.
+      // glTexStorage2D requires levels <= floor(log2(max(w, h))) + 1, otherwise
+      // it raises GL_INVALID_VALUE, so clamp to the bound TextureManager uses.
+      uint32_t max_levels = 1;
+      for (uint32_t largest = std::max(desc_.width, desc_.height); largest > 1;
+           largest >>= 1) {
+        max_levels++;
+      }
+      uint32_t levels = std::clamp(desc_.mip_level_count, 1u, max_levels);
+      GL_CALL(TexStorage2D, texture_target_, static_cast<GLsizei>(levels),
+              InternalFormatFrom(desc_.format), desc_.width, desc_.height);
+    } else {
+      // Fallback: mutable storage on platforms without glTexStorage2D
+      // (e.g. plain GLES2 / WebGL1).
+      GL_CALL(TexImage2D, texture_target_, 0, InternalFormatFrom(desc_.format),
+              desc_.width, desc_.height, 0, ExternalFormatFrom(desc_.format),
+              ExternalTypeFrom(desc_.format), nullptr);
+    }
   } else {
+    // MSAA color attachments are served by GPUTextureRenderBufferGL; this
+    // branch is rarely hit, keep the mutable multisample allocation as-is.
     GL_CALL(TexImage2DMultisample, texture_target_,
             GetDescriptor().sample_count, InternalFormatFrom(desc_.format),
             desc_.width, desc_.height, GL_TRUE);
