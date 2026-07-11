@@ -483,8 +483,18 @@ class FontManagerWin : public FontManager {
   }
 
   std::shared_ptr<Typeface> OnGetDefaultTypeface(
-      FontStyle const&) const override {
-    return nullptr;
+      FontStyle const& font_style) const override {
+    auto default_typeface = OnMatchFamilyStyle("Segoe UI", font_style);
+    if (default_typeface) {
+      return default_typeface;
+    }
+
+    if (font_collection_->GetFontFamilyCount() == 0) {
+      return nullptr;
+    }
+
+    auto first_style_set = OnCreateStyleSet(0);
+    return first_style_set ? first_style_set->MatchStyle(font_style) : nullptr;
   }
 
  private:
