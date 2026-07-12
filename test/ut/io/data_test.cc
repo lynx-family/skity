@@ -8,9 +8,8 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <vector>
-
 #include <skity/io/data.hpp>
+#include <vector>
 
 using namespace skity;
 
