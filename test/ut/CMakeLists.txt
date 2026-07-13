@@ -44,6 +44,7 @@ add_executable(skity_unit_test
     recorder/display_list_rtree_test.cc
     text/atlas_glyph_test.cc
     text/scaler_context_cache_test.cc
+    text/text_blob_test.cc
     text/text_run_test.cc
     text/text_test.cc
     utils/arena_allocator_test.cc
