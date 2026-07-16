@@ -29,6 +29,8 @@ target_sources(
   skity-codec
   PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/include/skity/codec/codec.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/bmp_codec.cc
+  ${CMAKE_CURRENT_LIST_DIR}/src/codec/bmp_codec.hpp
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec_priv.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec_priv.hpp
