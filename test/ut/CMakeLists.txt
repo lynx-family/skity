@@ -89,6 +89,7 @@ target_link_libraries(skity_unit_test
 if (${SKITY_CODEC_MODULE})
     target_sources(skity_unit_test
         PUBLIC
+        codec/bmp_codec_test.cc
         codec/jpeg_codec_test.cc
         codec/png_codec_test.cc
         codec/gif_codec_test.cc
