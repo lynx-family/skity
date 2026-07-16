@@ -310,22 +310,27 @@ class SKITY_API GPUContext {
   }
 
   /**
-   * Used to enable or disable render target cache during a frame.
-   * When enabled, Skity will try to reuse the render target created in the same
-   * frame when the descriptor matches. This can reduce the render target
-   * creation overhead, and save GPU memory.
+   * Controls render target cache during a frame.
    *
-   * @note This API is not stable, and may changed in the future.
+   * @warning This API currently has no effect. Render target caching remains
+   * disabled regardless of the value passed in because cached GL render targets
+   * can retain mutable FBO depth/stencil attachment state across render passes,
+   * which may cause incorrect stencil-based path rendering.
    *
-   * @param enable whether to enable render target cache, the default value is
-   * true.
+   * @note This API is not stable and may change in the future.
+   *
+   * @param enable Ignored while render target caching is forcibly disabled.
    */
   void EnableRenderTargetCache(bool enable) {
     enable_render_target_cache_ = enable;
   }
 
   bool IsRenderTargetCacheEnabled() const {
-    return enable_render_target_cache_;
+    // A cached GL render target retains an FBO whose mutable depth/stencil
+    // attachments may be reconfigured by another render pass. Reusing that FBO
+    // can therefore invalidate stencil state that is still needed for path
+    // rendering. Disable the cache until attachment state is isolated per pass.
+    return false;
   }
 
  private:
