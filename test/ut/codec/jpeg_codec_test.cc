@@ -44,6 +44,27 @@ TEST(JPEGCodecTest, Decode) {
       reinterpret_cast<const char*>(empty_jpeg), sizeof(empty_jpeg)));
 }
 
+TEST(JPEGCodecTest, DecodeCorrupted) {
+  // This JPEG has a valid header but its scan data is truncated (no EOI). A
+  // decoder that aborts on error would return nullptr; we expect a partial
+  // decode that still yields a full-size pixmap of the declared dimensions,
+  // with the corrupt/undecoded region filled in.
+  auto jpeg_data = skity::Data::MakeFromFileName(SKITY_TEST_CORRUPT_JPEG_FILE);
+  ASSERT_TRUE(jpeg_data != nullptr);
+
+  auto codec = skity::Codec::MakeFromData(jpeg_data);
+  ASSERT_TRUE(codec != nullptr);
+  codec->SetData(jpeg_data);
+
+  auto pixmap = codec->Decode();
+
+  EXPECT_TRUE(pixmap != nullptr);
+  ASSERT_TRUE(pixmap != nullptr);
+  EXPECT_EQ(pixmap->Width(), 303u);
+  EXPECT_EQ(pixmap->Height(), 455u);
+  EXPECT_EQ(pixmap->GetColorType(), skity::ColorType::kRGBA);
+}
+
 TEST(JPEGCodecTest, Encode) {
   skity::Bitmap bitmap(128, 128, skity::AlphaType::kUnpremul_AlphaType,
                        skity::ColorType::kRGBA);

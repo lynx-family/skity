@@ -98,6 +98,7 @@ if (${SKITY_CODEC_MODULE})
 
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_PNG_FILE="${CMAKE_SOURCE_DIR}/example/images/firefox_64.png")
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_JPEG_FILE="${CMAKE_SOURCE_DIR}/example/images/image1.jpg")
+    target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_CORRUPT_JPEG_FILE="${CMAKE_SOURCE_DIR}/example/images/corrupted.jpg")
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_MF_GIF_FILE="${CMAKE_SOURCE_DIR}/example/images/alphabetAnim.gif")
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_SF_GIF_FILE="${CMAKE_SOURCE_DIR}/example/images/color_wheel.gif")
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_WEBP_FILE="${CMAKE_SOURCE_DIR}/example/images/blendBG.webp")
