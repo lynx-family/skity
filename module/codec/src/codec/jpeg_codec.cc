@@ -100,6 +100,70 @@ void term_jpeg_destination(j_compress_ptr cinfo) {
   }
 }
 
+// Memory-backed source manager — a drop-in replacement for jpeg_mem_src().
+// jpeg_mem_src() is only declared in libjpeg headers >= v8 (and in
+// libjpeg-turbo), so depending on it breaks builds against legacy IJG libjpeg
+// v6b/v7. The jpeg_source_mgr callbacks used here have existed since libjpeg
+// v6b, so this works everywhere. Mirrors skity_jpeg_destination above.
+void init_jpeg_source(j_decompress_ptr cinfo);
+boolean fill_jpeg_input_buffer(j_decompress_ptr cinfo);
+// num_bytes is `long` because that is the signature libjpeg requires for the
+// skip_input_data callback (jpeg_source_mgr); it cannot be widened to int64_t.
+void skip_jpeg_input_data(j_decompress_ptr cinfo,
+                          long num_bytes);  // NOLINT(runtime/int)
+void term_jpeg_source(j_decompress_ptr cinfo);
+
+struct skity_jpeg_source : jpeg_source_mgr {
+  skity_jpeg_source(const unsigned char* data, size_t size)
+      : data_(data), size_(size) {
+    init_source = init_jpeg_source;
+    fill_input_buffer = fill_jpeg_input_buffer;
+    skip_input_data = skip_jpeg_input_data;
+    resync_to_restart = jpeg_resync_to_restart;
+    term_source = term_jpeg_source;
+    next_input_byte = nullptr;
+    bytes_in_buffer = 0;
+  }
+
+  const unsigned char* data_;
+  size_t size_;
+  const unsigned char eoi_[2] = {0xFF, 0xD9};
+};
+
+void init_jpeg_source(j_decompress_ptr cinfo) {
+  auto* src = reinterpret_cast<skity_jpeg_source*>(cinfo->src);
+  // Hand the whole in-memory buffer to libjpeg up front, like jpeg_mem_src.
+  src->next_input_byte = src->data_;
+  src->bytes_in_buffer = src->size_;
+}
+
+boolean fill_jpeg_input_buffer(j_decompress_ptr cinfo) {
+  auto* src = reinterpret_cast<skity_jpeg_source*>(cinfo->src);
+  // Reached only once the buffer is exhausted (e.g. truncated stream): feed a
+  // synthetic EOI so libjpeg finalizes gracefully and keeps what was decoded.
+  src->next_input_byte = src->eoi_;
+  src->bytes_in_buffer = sizeof(src->eoi_);
+  return TRUE;
+}
+
+void skip_jpeg_input_data(j_decompress_ptr cinfo,
+                          long num_bytes) {  // NOLINT(runtime/int)
+  auto* src = reinterpret_cast<skity_jpeg_source*>(cinfo->src);
+  if (num_bytes <= 0) {
+    return;
+  }
+  while (num_bytes >
+         static_cast<long>(src->bytes_in_buffer)) {  // NOLINT(runtime/int)
+    num_bytes -=
+        static_cast<long>(src->bytes_in_buffer);  // NOLINT(runtime/int)
+    fill_jpeg_input_buffer(cinfo);
+  }
+  src->bytes_in_buffer -= static_cast<size_t>(num_bytes);
+  src->next_input_byte += static_cast<size_t>(num_bytes);
+}
+
+void term_jpeg_source(j_decompress_ptr cinfo) { (void)cinfo; }
+
 }  // namespace
 
 bool JPEGCodec::RecognizeFileType(const char* header, size_t size) {
@@ -164,7 +228,12 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode() {
   }
 
   jpeg_create_decompress(&cinfo);
-  jpeg_mem_src(&cinfo, (const unsigned char*)data_->RawData(), data_->Size());
+
+  // Feed the encoded bytes via a custom in-memory source manager instead of
+  // jpeg_mem_src(), which is unavailable in legacy IJG libjpeg v6b/v7.
+  skity_jpeg_source jpeg_src((const unsigned char*)data_->RawData(),
+                             data_->Size());
+  cinfo.src = &jpeg_src;
 
   if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK) {
     jpeg_destroy_decompress(&cinfo);
