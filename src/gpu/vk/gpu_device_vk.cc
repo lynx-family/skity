@@ -199,6 +199,22 @@ VkFormat ToVkVertexFormat(GPUVertexFormat format) {
       return VK_FORMAT_R32G32B32_SFLOAT;
     case GPUVertexFormat::kFloat32x4:
       return VK_FORMAT_R32G32B32A32_SFLOAT;
+    case GPUVertexFormat::kUint32:
+      return VK_FORMAT_R32_UINT;
+    case GPUVertexFormat::kUint32x2:
+      return VK_FORMAT_R32G32_UINT;
+    case GPUVertexFormat::kUint32x3:
+      return VK_FORMAT_R32G32B32_UINT;
+    case GPUVertexFormat::kUint32x4:
+      return VK_FORMAT_R32G32B32A32_UINT;
+    case GPUVertexFormat::kSint32:
+      return VK_FORMAT_R32_SINT;
+    case GPUVertexFormat::kSint32x2:
+      return VK_FORMAT_R32G32_SINT;
+    case GPUVertexFormat::kSint32x3:
+      return VK_FORMAT_R32G32B32_SINT;
+    case GPUVertexFormat::kSint32x4:
+      return VK_FORMAT_R32G32B32A32_SINT;
   }
 
   return VK_FORMAT_UNDEFINED;

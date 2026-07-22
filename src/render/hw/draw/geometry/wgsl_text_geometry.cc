@@ -65,8 +65,8 @@ void WGSLTextGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
     return;
   }
 
-  cmd->vertex_buffer = context->static_buffer->GetTextVertexBufferView();
-  cmd->index_buffer = context->static_buffer->GetTextIndexBufferView();
+  cmd->vertex_buffer = context->static_buffer->GetUnitQuadVertexBufferView();
+  cmd->index_buffer = context->static_buffer->GetUnitQuadIndexBufferView();
   cmd->index_count = cmd->index_buffer.range / sizeof(uint32_t);
 
   context->stageBuffer->BeginWritingInstance(
@@ -107,42 +107,6 @@ void WGSLTextGeometry::Merge(const HWWGSLGeometry* other) {
   for (auto&& glyph_rect : o->glyph_rects_) {
     glyph_rects_.emplace_back(std::move(glyph_rect));
   }
-}
-
-namespace {
-
-struct Vertex {
-  Vec4 vertex_offset;
-};
-
-static_assert(sizeof(Vertex) == 16);
-
-}  // namespace
-
-GPUBufferView WGSLTextGeometry::CreateVertexBufferView(
-    HWStageBuffer* stage_bufer) {
-  auto vertex_array = std::array<Vertex, 4>{
-      // Top Left
-      Vertex{Vec4{1, 1, 0, 0}},
-      // Bottom Left
-      Vertex{Vec4{1, 0, 0, 1}},
-      // Top Right
-      Vertex{Vec4{0, 1, 1, 0}},
-      // Bottom Right
-      Vertex{Vec4{0, 0, 1, 1}},
-  };
-
-  return stage_bufer->Push(reinterpret_cast<float*>(vertex_array.data()),
-                           vertex_array.size() * sizeof(Vertex));
-}
-
-GPUBufferView WGSLTextGeometry::CreateIndexBufferView(
-    HWStageBuffer* stage_bufer) {
-  auto index_array = std::array<uint32_t, 6>{
-      0, 1, 2, 1, 3, 2,
-  };
-  return stage_bufer->PushIndex(const_cast<uint32_t*>(index_array.data()),
-                                index_array.size() * sizeof(uint32_t));
 }
 
 std::string WGSLTextSolidColorGeometry::GenSourceWGSL() const {

@@ -34,6 +34,8 @@ constexpr MTLPixelFormat ToMTLTextureFormat(GPUTextureFormat format) {
     case GPUTextureFormat::kRGB8Unorm:
     case GPUTextureFormat::kRGBA8Unorm:
       return MTLPixelFormatRGBA8Unorm;
+    case GPUTextureFormat::kRGBA16Uint:
+      return MTLPixelFormatRGBA16Uint;
     case GPUTextureFormat::kBGRA8Unorm:
       return MTLPixelFormatBGRA8Unorm;
     case GPUTextureFormat::kStencil8:
@@ -140,6 +142,22 @@ constexpr MTLVertexFormat ToMTLVertexFormat(GPUVertexFormat format) {
       return MTLVertexFormatFloat3;
     case GPUVertexFormat::kFloat32x4:
       return MTLVertexFormatFloat4;
+    case GPUVertexFormat::kUint32:
+      return MTLVertexFormatUInt;
+    case GPUVertexFormat::kUint32x2:
+      return MTLVertexFormatUInt2;
+    case GPUVertexFormat::kUint32x3:
+      return MTLVertexFormatUInt3;
+    case GPUVertexFormat::kUint32x4:
+      return MTLVertexFormatUInt4;
+    case GPUVertexFormat::kSint32:
+      return MTLVertexFormatInt;
+    case GPUVertexFormat::kSint32x2:
+      return MTLVertexFormatInt2;
+    case GPUVertexFormat::kSint32x3:
+      return MTLVertexFormatInt3;
+    case GPUVertexFormat::kSint32x4:
+      return MTLVertexFormatInt4;
   }
 }
 

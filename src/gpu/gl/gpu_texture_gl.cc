@@ -110,6 +110,12 @@ void GPUTextureGL::Initialize() {
       GL_CALL(TexParameteri, GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
     }
 
+    if (desc_.format == GPUTextureFormat::kRGBA16Uint) {
+      // Integer textures cannot use linear filtering.
+      GL_CALL(TexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      GL_CALL(TexParameteri, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    }
+
     // TODO(jondong): Sampling filter configs goes here.
 
     if (desc_.format == GPUTextureFormat::kR8Unorm) {

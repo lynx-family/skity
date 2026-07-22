@@ -36,9 +36,9 @@ class HWStaticBuffer final {
 
   GPUBufferView GetRRectIndexBufferView();
 
-  GPUBufferView GetTextVertexBufferView();
+  GPUBufferView GetUnitQuadVertexBufferView();
 
-  GPUBufferView GetTextIndexBufferView();
+  GPUBufferView GetUnitQuadIndexBufferView();
 
   const std::shared_ptr<GPUBuffer>& GetGPUBufferOwner() const {
     return stage_buffer_->GetGPUBufferOwner();
@@ -59,8 +59,8 @@ class HWStaticBuffer final {
   std::optional<GPUBufferView> tess_path_stroke_index_buffer_view_;
   std::optional<GPUBufferView> rrect_vertex_buffer_view_;
   std::optional<GPUBufferView> rrect_index_buffer_view_;
-  std::optional<GPUBufferView> text_vertex_buffer_view_;
-  std::optional<GPUBufferView> text_index_buffer_view_;
+  std::optional<GPUBufferView> unit_quad_vertex_buffer_view_;
+  std::optional<GPUBufferView> unit_quad_index_buffer_view_;
   bool initialized_ = false;
   bool needs_flush_ = false;
 };

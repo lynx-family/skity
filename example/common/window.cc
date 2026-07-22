@@ -100,6 +100,9 @@ bool Window::Init() {
   if (gpu_context_ != nullptr && GetAAMode() == AAMode::kContour) {
     gpu_context_->SetEnableContourAA(true);
   }
+  if (gpu_context_ != nullptr && GetAAMode() == AAMode::kCoverage) {
+    gpu_context_->SetEnableCoverageAA(true);
+  }
 
   return true;
 }

@@ -134,7 +134,7 @@ void TextureManager::UploadTextureImage(const TextureImpl& texture,
         GPUTextureDescriptor descriptor;
         descriptor.width = pixmap->Width();
         descriptor.height = pixmap->Height();
-        descriptor.format = static_cast<GPUTextureFormat>(format);
+        descriptor.format = ToGPUTextureFormat(format);
         descriptor.mip_level_count = mipmap_level_count;
         descriptor.usage =
             static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding) |

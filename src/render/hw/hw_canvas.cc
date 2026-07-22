@@ -7,14 +7,17 @@
 #include <skity/effect/mask_filter.hpp>
 #include <skity/effect/path_effect.hpp>
 #include <skity/effect/shader.hpp>
+#include <skity/geometry/matrix.hpp>
 #include <skity/geometry/stroke.hpp>
 #include <skity/text/font.hpp>
 #include <skity/text/text_blob.hpp>
 
 #include "src/effect/image_filter_base.hpp"
 #include "src/gpu/gpu_surface_impl.hpp"
-#include "src/graphic/blend_mode_priv.hpp"
+#include "src/logging.hpp"
 #include "src/render/canvas_state.hpp"
+#include "src/render/hw/coverage/coverage_aa_renderer.hpp"
+#include "src/render/hw/draw/hw_dynamic_coverage_path_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_clip.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
@@ -63,6 +66,10 @@ void HWCanvas::BeginNewFrame(HWRootLayer* root_layer) {
   layer_stack_.clear();
 
   layer_stack_.emplace_back(root_layer_);
+
+  if (coverage_aa_renderer_) {
+    coverage_aa_renderer_->BeginFrame();
+  }
 }
 
 void HWCanvas::Init() {
@@ -73,6 +80,10 @@ void HWCanvas::Init() {
 
   vertex_vector_cache_ = std::make_unique<VectorCache<float>>();
   index_vector_cache_ = std::make_unique<VectorCache<uint32_t>>();
+  auto* gpu_context = surface_->GetGPUContext();
+  if (gpu_context->IsEnableCoverageAA()) {
+    coverage_aa_renderer_ = std::make_unique<CoverageAARenderer>();
+  }
   layer_stack_.SetArenaAllocator(arena_allocator_);
 }
 
@@ -396,27 +407,38 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
 
   bool need_fill = paint.GetStyle() != Paint::kStroke_Style;
   bool need_stroke = paint.GetStyle() != Paint::kFill_Style;
-  bool need_contour_aa = false;
-  if (surface_->GetGPUContext()->IsEnableContourAA()) {
-    // Fall back to Contour AA while surface disables MSAA and paint enables AA
-    need_contour_aa = !enable_msaa_ && paint.IsAntiAlias();
-  }
+  auto analytical_aa = SelectAnalyticalAA(paint, transform);
+  bool needs_stroke_outline = analytical_aa != AnalyticalAAMode::kNone;
   bool enable_gpu_tessellation =
       surface_->GetGPUContext()->IsEnableGPUTessellation();
 
-  auto draw_op_handler = [&](const Path& path, const Paint& paint,
-                             bool use_stroke) {
+  auto add_draw = [&](const Path& path, const Paint& paint, bool is_stroke) {
     bool use_gpu_tessellation = enable_gpu_tessellation && !paint.IsAntiAlias();
-    HWDraw* draw = arena_allocator_->Make<HWDynamicPathDraw>(
-        transform, path, paint, use_stroke, use_gpu_tessellation);
-
-    if (draw == nullptr) {
-      return;
+    HWDraw* draw = nullptr;
+    if (analytical_aa == AnalyticalAAMode::kCoverage) {
+      DEBUG_CHECK(!is_stroke);
+      // Coverage AA tiles and fixed-point line coordinates are defined in
+      // physical pixels. A save layer records draws in logical coordinates
+      // but may render to a scaled texture, so tile in physical space and map
+      // the tile quads back to layer space for projection.
+      Matrix layer_to_physical =
+          CurrentLayer()->GetLayerPhysicalMatrix(Matrix{});
+      Matrix physical_to_layer;
+      layer_to_physical.Invert(&physical_to_layer);
+      auto* coverage_draw = arena_allocator_->Make<HWDynamicCoveragePathDraw>(
+          layer_to_physical * transform, physical_to_layer, path, paint);
+      // Coverage draws are not mergeable yet. If OnMergeIfPossible() is
+      // implemented, register only the draw retained by HWLayer::AddDraw();
+      // otherwise the renderer would also prepare a merged-away draw.
+      coverage_aa_renderer_->AddDraw(coverage_draw);
+      draw = coverage_draw;
+    } else {
+      draw = arena_allocator_->Make<HWDynamicPathDraw>(
+          transform, path, paint, is_stroke, use_gpu_tessellation);
     }
-
     draw->SetSampleCount(GetCanvasSampleCount());
-    auto bounds = use_stroke ? paint.ComputeFastBounds(path.GetBounds())
-                             : path.GetBounds();
+    auto bounds = is_stroke ? paint.ComputeFastBounds(path.GetBounds())
+                            : path.GetBounds();
     SetupLayerSpaceBoundsForDraw(draw, bounds);
     SetupDstReadStrategyForDraw(draw, paint.GetBlendMode());
     CurrentLayer()->AddDraw(draw);
@@ -425,7 +447,7 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
   auto draw_fill = [&]() {
     Paint work_paint(paint);
     work_paint.SetStyle(Paint::kFill_Style);
-    work_paint.SetAntiAlias(need_contour_aa);
+    work_paint.SetAntiAlias(analytical_aa != AnalyticalAAMode::kNone);
     Path effect_path;
     const Path* dst = &path;
 
@@ -434,13 +456,13 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
       dst = &effect_path;
     }
 
-    draw_op_handler(*dst, work_paint, false);
+    add_draw(*dst, work_paint, false);
   };
 
   auto draw_stroke = [&]() {
     Paint work_paint(paint);
     work_paint.SetStyle(Paint::kStroke_Style);
-    work_paint.SetAntiAlias(need_contour_aa);
+    work_paint.SetAntiAlias(analytical_aa != AnalyticalAAMode::kNone);
     Path effect_path;
     Path outline;
     const Path* dst = &path;
@@ -450,22 +472,41 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
       dst = &effect_path;
     }
 
-    if (work_paint.IsAntiAlias()) {
-      // Enable anti-aliasing will convert Stroke into Fill Draw
+    if (needs_stroke_outline) {
       work_paint.SetFillColor(work_paint.GetStrokeColor());
       Stroke stroke(work_paint);
       Path quad;
       stroke.QuadPath(*dst, &quad);
       stroke.StrokePath(quad, &outline);
       dst = &outline;
-      draw_op_handler(*dst, work_paint, false);
+      work_paint.SetStyle(Paint::kFill_Style);
+      add_draw(*dst, work_paint, false);
     } else {
-      draw_op_handler(*dst, work_paint, true);
+      add_draw(*dst, work_paint, true);
     }
   };
 
   DrawFillStrokeInPaintOrder(paint.GetStyle(), need_fill, need_stroke,
                              draw_fill, draw_stroke);
+}
+
+HWCanvas::AnalyticalAAMode HWCanvas::SelectAnalyticalAA(
+    const Paint& paint, const Matrix& transform) const {
+  if (enable_msaa_ || !paint.IsAntiAlias()) {
+    return AnalyticalAAMode::kNone;
+  }
+
+  if (surface_->GetGPUContext()->IsEnableCoverageAA()) {
+    // TODO: Support other blend modes after Coverage AA participates in
+    // blending consistently with the other rendering paths.
+    if (!transform.HasPersp() && paint.GetBlendMode() == BlendMode::kSrcOver) {
+      return AnalyticalAAMode::kCoverage;
+    }
+  } else if (surface_->GetGPUContext()->IsEnableContourAA()) {
+    return AnalyticalAAMode::kContour;
+  }
+
+  return AnalyticalAAMode::kNone;
 }
 
 bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
@@ -659,6 +700,10 @@ void HWCanvas::OnFlush() {
     draw_context.scale = root_layer_->GetScale();
 
     auto cmd = surface_->GetGPUContext()->GetGPUDevice()->CreateCommandBuffer();
+
+    if (coverage_aa_renderer_) {
+      coverage_aa_renderer_->PrepareFrame(&draw_context, cmd.get());
+    }
 
     auto state = root_layer_->Prepare(&draw_context);
 

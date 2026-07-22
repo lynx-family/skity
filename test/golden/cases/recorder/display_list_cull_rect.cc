@@ -10,8 +10,31 @@
 #include "common/golden_test_check.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
+static const char* kGoldenTestCoverageAAImageDir =
+    CASE_DIR "coverage_aa_images/";
 
 namespace {
+
+bool CompareRecorderGolden(skity::DisplayList* display_list,
+                           const skity::Rect& cull_rect, const char* name) {
+  std::filesystem::path golden_path(kGoldenTestImageDir);
+  golden_path.append(name);
+  std::filesystem::path coverage_aa_path(kGoldenTestCoverageAAImageDir);
+  coverage_aa_path.append(name);
+
+  auto render = [display_list, cull_rect](skity::Canvas* canvas) {
+    display_list->Draw(canvas, cull_rect);
+  };
+  bool result = skity::testing::CompareGoldenTexture(
+      256, 256, golden_path.c_str(), render);
+
+  skity::testing::GoldenTestEnvConfig coverage_aa_config;
+  coverage_aa_config.enable_coverage_aa = true;
+  coverage_aa_config.sample_count = 1;
+  return skity::testing::CompareGoldenTexture(
+             256, 256, coverage_aa_path.c_str(), coverage_aa_config, render) &&
+         result;
+}
 
 skity::Path MakeClipPath() {
   skity::Path path;
@@ -31,6 +54,7 @@ std::unique_ptr<skity::DisplayList> BuildClipRestoreDisplayList() {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint blue;
+  blue.SetAntiAlias(true);
   blue.SetColor(skity::Color_BLUE);
 
   const int outer = canvas->Save();
@@ -42,10 +66,12 @@ std::unique_ptr<skity::DisplayList> BuildClipRestoreDisplayList() {
   canvas->Restore();
 
   skity::Paint red;
+  red.SetAntiAlias(true);
   red.SetColor(skity::Color_RED);
   canvas->DrawRect(skity::Rect::MakeXYWH(180.f, 30.f, 50.f, 50.f), red);
 
   skity::Paint green;
+  green.SetAntiAlias(true);
   green.SetColor(skity::Color_GREEN);
   canvas->DrawRect(skity::Rect::MakeXYWH(20.f, 180.f, 40.f, 40.f), green);
 
@@ -67,10 +93,12 @@ std::unique_ptr<skity::DisplayList> BuildSaveLayerDisplayList() {
   canvas->SaveLayer(skity::Rect::MakeXYWH(0.f, 0.f, 150.f, 120.f), layer_paint);
 
   skity::Paint red;
+  red.SetAntiAlias(true);
   red.SetColor(skity::Color_RED);
   canvas->DrawRect(skity::Rect::MakeXYWH(0.f, 0.f, 100.f, 80.f), red);
 
   skity::Paint blue;
+  blue.SetAntiAlias(true);
   blue.SetColor(skity::Color_BLUE);
   blue.SetAlphaF(0.75f);
   canvas->DrawCircle(70.f, 60.f, 45.f, blue);
@@ -79,6 +107,7 @@ std::unique_ptr<skity::DisplayList> BuildSaveLayerDisplayList() {
   canvas->Restore();
 
   skity::Paint yellow;
+  yellow.SetAntiAlias(true);
   yellow.SetColor(skity::Color_YELLOW);
   canvas->DrawRect(skity::Rect::MakeXYWH(180.f, 160.f, 40.f, 40.f), yellow);
 
@@ -98,10 +127,12 @@ std::unique_ptr<skity::DisplayList> BuildClipPathTransformDisplayList() {
   canvas->ClipPath(MakeClipPath());
 
   skity::Paint blue;
+  blue.SetAntiAlias(true);
   blue.SetColor(skity::Color_BLUE);
   canvas->DrawRect(skity::Rect::MakeXYWH(-10.f, -5.f, 160.f, 120.f), blue);
 
   skity::Paint red;
+  red.SetAntiAlias(true);
   red.SetColor(skity::Color_RED);
   red.SetStyle(skity::Paint::Style::kStroke_Style);
   red.SetStrokeWidth(4.f);
@@ -109,6 +140,7 @@ std::unique_ptr<skity::DisplayList> BuildClipPathTransformDisplayList() {
   canvas->Restore();
 
   skity::Paint yellow;
+  yellow.SetAntiAlias(true);
   yellow.SetColor(skity::Color_YELLOW);
   canvas->DrawRect(skity::Rect::MakeXYWH(185.f, 160.f, 30.f, 30.f), yellow);
 
@@ -127,6 +159,7 @@ std::unique_ptr<skity::DisplayList> BuildSetResetMatrixDisplayList() {
   canvas->SetMatrix(matrix);
 
   skity::Paint green;
+  green.SetAntiAlias(true);
   green.SetColor(skity::Color_GREEN);
   canvas->DrawRRect(
       skity::RRect::MakeRectXY(skity::Rect::MakeXYWH(10.f, 12.f, 80.f, 60.f),
@@ -136,11 +169,13 @@ std::unique_ptr<skity::DisplayList> BuildSetResetMatrixDisplayList() {
   canvas->ResetMatrix();
 
   skity::Paint red;
+  red.SetAntiAlias(true);
   red.SetColor(skity::Color_RED);
   canvas->DrawRect(skity::Rect::MakeXYWH(160.f, 35.f, 45.f, 45.f), red);
 
   canvas->SetMatrix(skity::Matrix::Translate(0.f, 120.f));
   skity::Paint blue;
+  blue.SetAntiAlias(true);
   blue.SetColor(skity::Color_BLUE);
   canvas->DrawCircle(40.f, 40.f, 20.f, blue);
   canvas->ResetMatrix();
@@ -158,6 +193,7 @@ std::unique_ptr<skity::DisplayList> BuildClipDrawPaintDisplayList() {
   canvas->Save();
   canvas->ClipRect(skity::Rect::MakeXYWH(30.f, 35.f, 110.f, 85.f));
   skity::Paint blue;
+  blue.SetAntiAlias(true);
   blue.SetColor(skity::Color_BLUE);
   canvas->DrawPaint(blue);
   canvas->Restore();
@@ -166,12 +202,14 @@ std::unique_ptr<skity::DisplayList> BuildClipDrawPaintDisplayList() {
   canvas->ClipRect(skity::Rect::MakeXYWH(95.f, 70.f, 50.f, 30.f),
                    skity::Canvas::ClipOp::kDifference);
   skity::Paint green;
+  green.SetAntiAlias(true);
   green.SetColor(skity::Color_GREEN);
   green.SetAlphaF(0.45f);
   canvas->DrawPaint(green);
   canvas->Restore();
 
   skity::Paint red;
+  red.SetAntiAlias(true);
   red.SetColor(skity::Color_RED);
   canvas->DrawRect(skity::Rect::MakeXYWH(185.f, 180.f, 25.f, 25.f), red);
 
@@ -194,11 +232,13 @@ std::unique_ptr<skity::DisplayList> BuildConcatNestedSaveDisplayList() {
   canvas->Save();
   canvas->ClipRect(skity::Rect::MakeXYWH(0.f, 0.f, 110.f, 90.f));
   skity::Paint blue;
+  blue.SetAntiAlias(true);
   blue.SetColor(skity::Color_BLUE);
   canvas->DrawRect(skity::Rect::MakeXYWH(5.f, 5.f, 100.f, 70.f), blue);
 
   canvas->Save();
   skity::Paint green;
+  green.SetAntiAlias(true);
   green.SetColor(skity::Color_GREEN);
   canvas->DrawCircle(85.f, 55.f, 28.f, green);
   canvas->Restore();
@@ -207,6 +247,7 @@ std::unique_ptr<skity::DisplayList> BuildConcatNestedSaveDisplayList() {
   canvas->Restore();
 
   skity::Paint red;
+  red.SetAntiAlias(true);
   red.SetColor(skity::Color_RED);
   canvas->DrawRect(skity::Rect::MakeXYWH(185.f, 25.f, 35.f, 35.f), red);
 
@@ -226,17 +267,20 @@ std::unique_ptr<skity::DisplayList> BuildClipRRectDifferenceDisplayList() {
   canvas->ClipRRect(clip_rrect, skity::Canvas::ClipOp::kDifference);
 
   skity::Paint blue;
+  blue.SetAntiAlias(true);
   blue.SetColor(skity::Color_BLUE);
   canvas->DrawPaint(blue);
   canvas->Restore();
 
   skity::Paint red;
+  red.SetAntiAlias(true);
   red.SetColor(skity::Color_RED);
   red.SetStyle(skity::Paint::Style::kStroke_Style);
   red.SetStrokeWidth(3.f);
   canvas->DrawRRect(clip_rrect, red);
 
   skity::Paint green;
+  green.SetAntiAlias(true);
   green.SetColor(skity::Color_GREEN);
   canvas->DrawRect(skity::Rect::MakeXYWH(185.f, 180.f, 22.f, 22.f), green);
 
@@ -251,12 +295,14 @@ std::unique_ptr<skity::DisplayList> BuildDisconnectedHitsDisplayList() {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint red;
+  red.SetAntiAlias(true);
   red.SetColor(skity::Color_RED);
   canvas->DrawRect(skity::Rect::MakeXYWH(20.f, 20.f, 40.f, 40.f), red);
 
   canvas->Save();
   canvas->Translate(80.f, 60.f);
   skity::Paint blue;
+  blue.SetAntiAlias(true);
   blue.SetColor(skity::Color_BLUE);
   canvas->DrawRect(skity::Rect::MakeXYWH(0.f, 0.f, 50.f, 35.f), blue);
   canvas->Restore();
@@ -264,11 +310,13 @@ std::unique_ptr<skity::DisplayList> BuildDisconnectedHitsDisplayList() {
   canvas->Save();
   canvas->ClipRect(skity::Rect::MakeXYWH(160.f, 150.f, 55.f, 45.f));
   skity::Paint green;
+  green.SetAntiAlias(true);
   green.SetColor(skity::Color_GREEN);
   canvas->DrawPaint(green);
   canvas->Restore();
 
   skity::Paint yellow;
+  yellow.SetAntiAlias(true);
   yellow.SetColor(skity::Color_YELLOW);
   canvas->DrawCircle(210.f, 50.f, 18.f, yellow);
 
@@ -281,110 +329,62 @@ TEST(RecorderGolden, DisplayListCullRectClipRestoreToCount) {
   auto dl = BuildClipRestoreDisplayList();
   const auto cull_rect = skity::Rect::MakeXYWH(45.f, 35.f, 110.f, 80.f);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("display_list_cull_rect_clip_restore_to_count.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      256, 256, golden_path.c_str(),
-      [display_list = dl.get(), cull_rect](skity::Canvas* canvas) {
-        display_list->Draw(canvas, cull_rect);
-      }));
+  EXPECT_TRUE(CompareRecorderGolden(
+      dl.get(), cull_rect, "display_list_cull_rect_clip_restore_to_count.png"));
 }
 
 TEST(RecorderGolden, DisplayListCullRectSaveLayerBlend) {
   auto dl = BuildSaveLayerDisplayList();
   const auto cull_rect = skity::Rect::MakeXYWH(15.f, 15.f, 130.f, 110.f);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("display_list_cull_rect_save_layer_blend.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      256, 256, golden_path.c_str(),
-      [display_list = dl.get(), cull_rect](skity::Canvas* canvas) {
-        display_list->Draw(canvas, cull_rect);
-      }));
+  EXPECT_TRUE(CompareRecorderGolden(
+      dl.get(), cull_rect, "display_list_cull_rect_save_layer_blend.png"));
 }
 
 TEST(RecorderGolden, DisplayListCullRectClipPathTransform) {
   auto dl = BuildClipPathTransformDisplayList();
   const auto cull_rect = skity::Rect::MakeXYWH(50.f, 40.f, 120.f, 110.f);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("display_list_cull_rect_clip_path_transform.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      256, 256, golden_path.c_str(),
-      [display_list = dl.get(), cull_rect](skity::Canvas* canvas) {
-        display_list->Draw(canvas, cull_rect);
-      }));
+  EXPECT_TRUE(CompareRecorderGolden(
+      dl.get(), cull_rect, "display_list_cull_rect_clip_path_transform.png"));
 }
 
 TEST(RecorderGolden, DisplayListCullRectSetResetMatrix) {
   auto dl = BuildSetResetMatrixDisplayList();
   const auto cull_rect = skity::Rect::MakeXYWH(40.f, 30.f, 110.f, 70.f);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("display_list_cull_rect_set_reset_matrix.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      256, 256, golden_path.c_str(),
-      [display_list = dl.get(), cull_rect](skity::Canvas* canvas) {
-        display_list->Draw(canvas, cull_rect);
-      }));
+  EXPECT_TRUE(CompareRecorderGolden(
+      dl.get(), cull_rect, "display_list_cull_rect_set_reset_matrix.png"));
 }
 
 TEST(RecorderGolden, DisplayListCullRectClipDrawPaint) {
   auto dl = BuildClipDrawPaintDisplayList();
   const auto cull_rect = skity::Rect::MakeXYWH(25.f, 30.f, 135.f, 95.f);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("display_list_cull_rect_clip_draw_paint.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      256, 256, golden_path.c_str(),
-      [display_list = dl.get(), cull_rect](skity::Canvas* canvas) {
-        display_list->Draw(canvas, cull_rect);
-      }));
+  EXPECT_TRUE(CompareRecorderGolden(
+      dl.get(), cull_rect, "display_list_cull_rect_clip_draw_paint.png"));
 }
 
 TEST(RecorderGolden, DisplayListCullRectConcatNestedSave) {
   auto dl = BuildConcatNestedSaveDisplayList();
   const auto cull_rect = skity::Rect::MakeXYWH(30.f, 20.f, 130.f, 110.f);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("display_list_cull_rect_concat_nested_save.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      256, 256, golden_path.c_str(),
-      [display_list = dl.get(), cull_rect](skity::Canvas* canvas) {
-        display_list->Draw(canvas, cull_rect);
-      }));
+  EXPECT_TRUE(CompareRecorderGolden(
+      dl.get(), cull_rect, "display_list_cull_rect_concat_nested_save.png"));
 }
 
 TEST(RecorderGolden, DisplayListCullRectClipRRectDifference) {
   auto dl = BuildClipRRectDifferenceDisplayList();
   const auto cull_rect = skity::Rect::MakeXYWH(25.f, 20.f, 145.f, 120.f);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("display_list_cull_rect_clip_rrect_difference.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      256, 256, golden_path.c_str(),
-      [display_list = dl.get(), cull_rect](skity::Canvas* canvas) {
-        display_list->Draw(canvas, cull_rect);
-      }));
+  EXPECT_TRUE(CompareRecorderGolden(
+      dl.get(), cull_rect, "display_list_cull_rect_clip_rrect_difference.png"));
 }
 
 TEST(RecorderGolden, DisplayListCullRectDisconnectedHits) {
   auto dl = BuildDisconnectedHitsDisplayList();
   const auto cull_rect = skity::Rect::MakeXYWH(10.f, 10.f, 210.f, 190.f);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("display_list_cull_rect_disconnected_hits.png");
-
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      256, 256, golden_path.c_str(),
-      [display_list = dl.get(), cull_rect](skity::Canvas* canvas) {
-        display_list->Draw(canvas, cull_rect);
-      }));
+  EXPECT_TRUE(CompareRecorderGolden(
+      dl.get(), cull_rect, "display_list_cull_rect_disconnected_hits.png"));
 }

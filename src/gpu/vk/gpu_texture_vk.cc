@@ -23,6 +23,8 @@ const char* VkFormatToString(VkFormat format) {
       return "VK_FORMAT_R5G6B5_UNORM_PACK16";
     case VK_FORMAT_R8G8B8A8_UNORM:
       return "VK_FORMAT_R8G8B8A8_UNORM";
+    case VK_FORMAT_R16G16B16A16_UINT:
+      return "VK_FORMAT_R16G16B16A16_UINT";
     case VK_FORMAT_B8G8R8A8_UNORM:
       return "VK_FORMAT_B8G8R8A8_UNORM";
     case VK_FORMAT_S8_UINT:
@@ -71,6 +73,8 @@ VkFormat ConvertToVkFormat(GPUTextureFormat format) {
       return VK_FORMAT_R5G6B5_UNORM_PACK16;
     case GPUTextureFormat::kRGBA8Unorm:
       return VK_FORMAT_R8G8B8A8_UNORM;
+    case GPUTextureFormat::kRGBA16Uint:
+      return VK_FORMAT_R16G16B16A16_UINT;
     case GPUTextureFormat::kBGRA8Unorm:
       return VK_FORMAT_B8G8R8A8_UNORM;
     case GPUTextureFormat::kStencil8:

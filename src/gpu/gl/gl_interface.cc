@@ -156,6 +156,7 @@ void GLInterface::InitGlobalInterface(void* proc_loader) {
   GET_PROC(Uniform4iv);
   GET_PROC(UniformMatrix4fv);
   GET_PROC(UseProgram);
+  GET_PROC(VertexAttribIPointer);
   GET_PROC(VertexAttribPointer);
   GET_PROC(Viewport);
   GET_PROC(GenSamplers);

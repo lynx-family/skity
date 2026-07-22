@@ -10,8 +10,43 @@
 #include "common/golden_test_check.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
+static const char* kGoldenTestCoverageAAImageDir =
+    CASE_DIR "coverage_aa_images/";
 
 namespace {
+
+std::filesystem::path CoverageAAGoldenPath(const char* name) {
+  std::filesystem::path path(kGoldenTestCoverageAAImageDir);
+  path.append(name);
+  return path;
+}
+
+struct PathListContext {
+  explicit PathListContext(const char* name)
+      : expected_path(kGoldenTestImageDir),
+        coverage_aa_path(CoverageAAGoldenPath(name)) {
+    expected_path.append(name);
+  }
+
+  skity::testing::PathList ToPathList(bool include_gpu_tess = false) const {
+    return {
+        .cpu_tess_path = expected_path.c_str(),
+        .gpu_tess_path = include_gpu_tess ? expected_path.c_str() : nullptr,
+        .coverage_aa_path = coverage_aa_path.c_str(),
+    };
+  }
+
+  std::filesystem::path expected_path;
+  std::filesystem::path coverage_aa_path;
+};
+
+bool CompareClipGolden(skity::PictureRecorder& recorder, const char* name,
+                       bool include_gpu_tess = false) {
+  PathListContext context(name);
+  auto display_list = recorder.FinishRecording();
+  return skity::testing::CompareGoldenTexture(
+      display_list.get(), 400, 400, context.ToPathList(include_gpu_tess));
+}
 
 skity::Path MakeStarPath() {
   skity::Path path;
@@ -30,7 +65,44 @@ skity::Path MakeStarPath() {
   return path;
 }
 
+skity::Path MakeCoverageAATriangle() {
+  skity::Path path;
+  path.MoveTo(0.f, 112.f);
+  path.LineTo(64.f, 0.f);
+  path.LineTo(128.f, 112.f);
+  path.Close();
+  return path;
+}
+
 }  // namespace
+
+TEST(CoverageAACoordinatesGolden, ClipUsesGlobalBounds) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(220.f, 180.f));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Clear(skity::Color_WHITE);
+
+  canvas->ClipRect(skity::Rect::MakeXYWH(48.f, 28.f, 112.f, 112.f));
+
+  skity::Paint paint;
+  paint.SetAntiAlias(true);
+  paint.SetColor(skity::ColorSetARGB(255, 30, 136, 229));
+  paint.SetStyle(skity::Paint::Style::kFill_Style);
+
+  canvas->Save();
+  canvas->Translate(42.f, 24.f);
+  canvas->Rotate(15.f, 64.f, 56.f);
+  canvas->DrawPath(MakeCoverageAATriangle(), paint);
+  canvas->Restore();
+
+  auto expected_image_path =
+      CoverageAAGoldenPath("coverage_aa_clip_global_bounds.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 220.f, 180.f,
+      skity::testing::PathList{.coverage_aa_path =
+                                   expected_image_path.c_str()}));
+}
 
 TEST(ClipGolden, ClipRect) {
   skity::PictureRecorder recorder;
@@ -41,6 +113,7 @@ TEST(ClipGolden, ClipRect) {
   skity::Path path = MakeStarPath();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStyle(skity::Paint::Style::kStroke_Style);
 
@@ -58,11 +131,7 @@ TEST(ClipGolden, ClipRect) {
 
   canvas->DrawPath(path, paint);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("clip_rect.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400.f, 400.f,
-                                                   golden_path.c_str()));
+  EXPECT_TRUE(CompareClipGolden(recorder, "clip_rect.png"));
 }
 
 TEST(ClipGolden, ClipPath) {
@@ -73,6 +142,7 @@ TEST(ClipGolden, ClipPath) {
   auto path = MakeStarPath();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStyle(skity::Paint::Style::kStroke_Style);
   paint.SetStrokeWidth(1.f);
@@ -95,11 +165,7 @@ TEST(ClipGolden, ClipPath) {
   paint.SetStyle(skity::Paint::Style::kFill_Style);
   canvas->DrawPath(path, paint);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("clip_path.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400.f, 400.f,
-                                                   golden_path.c_str()));
+  EXPECT_TRUE(CompareClipGolden(recorder, "clip_path.png"));
 }
 
 TEST(ClipGolden, ClipPathDifference) {
@@ -110,6 +176,7 @@ TEST(ClipGolden, ClipPathDifference) {
   auto path = MakeStarPath();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStyle(skity::Paint::Style::kStroke_Style);
   paint.SetStrokeWidth(1.f);
@@ -132,13 +199,7 @@ TEST(ClipGolden, ClipPathDifference) {
   paint.SetStyle(skity::Paint::Style::kFill_Style);
   canvas->DrawPath(path, paint);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("clip_path_difference.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 400.f, 400.f,
-      skity::testing::PathList{.cpu_tess_path = golden_path.c_str(),
-                               .gpu_tess_path = golden_path.c_str()}));
+  EXPECT_TRUE(CompareClipGolden(recorder, "clip_path_difference.png", true));
 }
 
 TEST(ClipGolden, ClipRRect) {
@@ -151,14 +212,11 @@ TEST(ClipGolden, ClipRRect) {
   canvas->ClipRRect(clip_rrect);
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_BLUE);
   canvas->DrawPaint(paint);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("clip_rrect.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400.f, 400.f,
-                                                   golden_path.c_str()));
+  EXPECT_TRUE(CompareClipGolden(recorder, "clip_rrect.png"));
 }
 
 TEST(ClipGolden, ClipRRectDifference) {
@@ -171,12 +229,9 @@ TEST(ClipGolden, ClipRRectDifference) {
   canvas->ClipRRect(clip_rrect, skity::Canvas::ClipOp::kDifference);
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_BLUE);
   canvas->DrawPaint(paint);
 
-  std::filesystem::path golden_path = kGoldenTestImageDir;
-  golden_path.append("clip_rrect_difference.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400.f, 400.f,
-                                                   golden_path.c_str()));
+  EXPECT_TRUE(CompareClipGolden(recorder, "clip_rrect_difference.png"));
 }

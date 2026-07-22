@@ -171,6 +171,8 @@ skity::BenchTarget::AAType GetAAType(uint32_t index) {
       return skity::BenchTarget::AAType::kMSAA;
     case 2:
       return skity::BenchTarget::AAType::kContourAA;
+    case 3:
+      return skity::BenchTarget::AAType::kCoverageAA;
     default:
       abort();
   }
@@ -202,6 +204,9 @@ std::string GetLabel(skity::GPUBackendType backend_type,
     case skity::BenchTarget::AAType::kContourAA:
       ss << "ContourAA";
       break;
+    case skity::BenchTarget::AAType::kCoverageAA:
+      ss << "CoverageAA";
+      break;
     default:
       abort();
   }
@@ -232,7 +237,8 @@ std::vector<int64_t> GetAATypes() {
   return {
       0,  // kNoAA
       1,  // kMSAA
-      2,  // kContourAA};
+      2,  // kContourAA
+      3,  // kCoverageAA
   };
 #else
   return {
@@ -291,6 +297,8 @@ static void RunBenchmark(benchmark::State& state,
   }
   if (aa == skity::BenchTarget::AAType::kContourAA) {
     context->GetGPUContext()->SetEnableContourAA(true);
+  } else if (aa == skity::BenchTarget::AAType::kCoverageAA) {
+    context->GetGPUContext()->SetEnableCoverageAA(true);
   }
   auto benchmark = provider();
   skity::BenchTarget::Options options;

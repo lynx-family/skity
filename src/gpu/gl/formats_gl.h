@@ -11,6 +11,41 @@
 
 namespace skity {
 
+struct GLVertexFormatInfo {
+  GLint component_count;
+  GLenum component_type;
+  bool integer;
+};
+
+constexpr GLVertexFormatInfo ToGLVertexFormatInfo(GPUVertexFormat format) {
+  switch (format) {
+    case GPUVertexFormat::kFloat32:
+      return {1, GL_FLOAT, false};
+    case GPUVertexFormat::kFloat32x2:
+      return {2, GL_FLOAT, false};
+    case GPUVertexFormat::kFloat32x3:
+      return {3, GL_FLOAT, false};
+    case GPUVertexFormat::kFloat32x4:
+      return {4, GL_FLOAT, false};
+    case GPUVertexFormat::kUint32:
+      return {1, GL_UNSIGNED_INT, true};
+    case GPUVertexFormat::kUint32x2:
+      return {2, GL_UNSIGNED_INT, true};
+    case GPUVertexFormat::kUint32x3:
+      return {3, GL_UNSIGNED_INT, true};
+    case GPUVertexFormat::kUint32x4:
+      return {4, GL_UNSIGNED_INT, true};
+    case GPUVertexFormat::kSint32:
+      return {1, GL_INT, true};
+    case GPUVertexFormat::kSint32x2:
+      return {2, GL_INT, true};
+    case GPUVertexFormat::kSint32x3:
+      return {3, GL_INT, true};
+    case GPUVertexFormat::kSint32x4:
+      return {4, GL_INT, true};
+  }
+}
+
 constexpr GLint ToMinMagFilter(GPUFilterMode op) {
   switch (op) {
     case GPUFilterMode::kNearest:
@@ -146,6 +181,8 @@ constexpr GLint ExternalFormatFrom(GPUTextureFormat format) {
       return GL_RGB;
     case GPUTextureFormat::kRGBA8Unorm:
       return GL_RGBA;
+    case GPUTextureFormat::kRGBA16Uint:
+      return GL_RGBA_INTEGER;
     case GPUTextureFormat::kBGRA8Unorm:
       // return rgba here as we swizzle r and b in sampling later
       return GL_RGBA;
@@ -170,6 +207,8 @@ constexpr GLint ExternalTypeFrom(GPUTextureFormat format) {
     case GPUTextureFormat::kBGRA8Unorm:
     case GPUTextureFormat::kInvalid:
       return GL_UNSIGNED_BYTE;
+    case GPUTextureFormat::kRGBA16Uint:
+      return GL_UNSIGNED_SHORT;
   }
 }
 
@@ -184,6 +223,8 @@ constexpr GLint InternalFormatFrom(GPUTextureFormat format) {
     case GPUTextureFormat::kRGBA8Unorm:
     case GPUTextureFormat::kBGRA8Unorm:
       return GL_RGBA8;
+    case GPUTextureFormat::kRGBA16Uint:
+      return GL_RGBA16UI;
     case GPUTextureFormat::kStencil8:
     case GPUTextureFormat::kDepth24Stencil8:
       return GL_DEPTH24_STENCIL8;

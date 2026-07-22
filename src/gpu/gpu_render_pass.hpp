@@ -144,7 +144,7 @@ struct TextureSamplerBinding {
 };
 
 /**
- * Represent the `texture_2d<f32>` in WGSL shader.
+ * Represent a `texture_2d<T>` in WGSL shader.
  * Only used when enable dynamic shader pipeline.
  */
 struct TextureBinding {

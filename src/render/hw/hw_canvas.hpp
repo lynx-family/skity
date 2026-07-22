@@ -25,6 +25,7 @@ namespace skity {
 
 class GPUSurfaceImpl;
 class GPUCommandBuffer;
+class CoverageAARenderer;
 
 /**
  * @class HWCanvas
@@ -80,6 +81,12 @@ class HWCanvas : public Canvas {
   uint32_t OnGetHeight() const override;
 
  private:
+  enum class AnalyticalAAMode {
+    kNone,
+    kContour,
+    kCoverage,
+  };
+
   void Init();
 
   uint32_t GetCanvasSampleCount();
@@ -100,6 +107,9 @@ class HWCanvas : public Canvas {
 
   void DrawPathInternal(const Path& path, const Paint& paint,
                         const Matrix& transform);
+
+  AnalyticalAAMode SelectAnalyticalAA(const Paint& paint,
+                                      const Matrix& transform) const;
 
   void DrawRRectInternal(const RRect& rrect, const Paint& paint,
                          const Matrix& transform);
@@ -136,6 +146,7 @@ class HWCanvas : public Canvas {
   ArrayList<HWLayer*, 8> layer_stack_ = {};
   ArenaAllocator* arena_allocator_ = {};
   HWStaticBuffer* static_buffer_ = {};
+  std::unique_ptr<CoverageAARenderer> coverage_aa_renderer_;
 };
 
 }  // namespace skity

@@ -21,6 +21,8 @@ const char* AAModeName(Window::AAMode mode) {
       return "none";
     case Window::AAMode::kContour:
       return "contour";
+    case Window::AAMode::kCoverage:
+      return "coverage";
     case Window::AAMode::kMSAA:
       return "msaa";
   }
@@ -40,11 +42,14 @@ bool ParseAAMode(const std::string& arg, Window::AAMode* aa_mode) {
     *aa_mode = Window::AAMode::kNone;
   } else if (value == "contour") {
     *aa_mode = Window::AAMode::kContour;
+  } else if (value == "coverage") {
+    *aa_mode = Window::AAMode::kCoverage;
   } else if (value == "msaa") {
     *aa_mode = Window::AAMode::kMSAA;
   } else {
     std::cerr << "Unknown AA mode: " << value << std::endl;
-    std::cerr << "Available AA modes: native, none, contour, msaa" << std::endl;
+    std::cerr << "Available AA modes: native, none, contour, coverage, msaa"
+              << std::endl;
     return false;
   }
 
@@ -75,6 +80,7 @@ int StartExampleApp(int argc, const char** argv, WindowClient& client,
     std::cerr << "  native" << std::endl;
     std::cerr << "  none" << std::endl;
     std::cerr << "  contour" << std::endl;
+    std::cerr << "  coverage" << std::endl;
     std::cerr << "  msaa" << std::endl;
 
     return -1;

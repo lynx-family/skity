@@ -13,6 +13,7 @@
 #include "src/gpu/gl/gpu_device_gl.hpp"
 #include "src/gpu/gl/gpu_surface_gl.hpp"
 #include "src/gpu/gl/gpu_texture_gl.hpp"
+#include "src/gpu/texture_impl.hpp"
 
 namespace skity {
 
@@ -192,7 +193,7 @@ std::shared_ptr<GPUTexture> GPUContextImplGL::OnWrapTexture(
   GPUTextureDescriptor desc;
   desc.width = gl_info->width;
   desc.height = gl_info->height;
-  desc.format = static_cast<GPUTextureFormat>(gl_info->format);
+  desc.format = ToGPUTextureFormat(gl_info->format);
   desc.usage =
       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
   desc.storage_mode = GPUTextureStorageMode::kHostVisible;

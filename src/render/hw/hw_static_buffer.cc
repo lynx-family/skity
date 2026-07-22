@@ -4,6 +4,7 @@
 
 #include "src/render/hw/hw_static_buffer.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
@@ -13,9 +14,27 @@
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
-#include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 
 namespace skity {
+namespace {
+
+GPUBufferView CreateUnitQuadVertexBufferView(HWStageBuffer* stage_buffer) {
+  std::array<float, 16> vertices = {
+      1.0f, 1.0f, 0.0f, 0.0f,  // Top left
+      1.0f, 0.0f, 0.0f, 1.0f,  // Bottom left
+      0.0f, 1.0f, 1.0f, 0.0f,  // Top right
+      0.0f, 0.0f, 1.0f, 1.0f,  // Bottom right
+  };
+  return stage_buffer->Push(vertices.data(), vertices.size() * sizeof(float));
+}
+
+GPUBufferView CreateUnitQuadIndexBufferView(HWStageBuffer* stage_buffer) {
+  std::array<uint32_t, 6> indices = {0, 1, 2, 1, 3, 2};
+  return stage_buffer->PushIndex(indices.data(),
+                                 indices.size() * sizeof(uint32_t));
+}
+
+}  // namespace
 
 HWStaticBuffer::HWStaticBuffer(GPUDevice* device)
     : stage_buffer_(std::make_unique<HWStageBuffer>(device)) {}
@@ -71,18 +90,18 @@ GPUBufferView HWStaticBuffer::GetRRectIndexBufferView() {
   return rrect_index_buffer_view_.value();
 }
 
-GPUBufferView HWStaticBuffer::GetTextVertexBufferView() {
+GPUBufferView HWStaticBuffer::GetUnitQuadVertexBufferView() {
   if (!initialized_) {
     Initialize();
   }
-  return text_vertex_buffer_view_.value();
+  return unit_quad_vertex_buffer_view_.value();
 }
 
-GPUBufferView HWStaticBuffer::GetTextIndexBufferView() {
+GPUBufferView HWStaticBuffer::GetUnitQuadIndexBufferView() {
   if (!initialized_) {
     Initialize();
   }
-  return text_index_buffer_view_.value();
+  return unit_quad_index_buffer_view_.value();
 }
 
 void HWStaticBuffer::Initialize() {
@@ -98,10 +117,10 @@ void HWStaticBuffer::Initialize() {
       WGSLRRectGeometry::CreateVertexBufferView(stage_buffer_.get());
   rrect_index_buffer_view_ =
       WGSLRRectGeometry::CreateIndexBufferView(stage_buffer_.get());
-  text_vertex_buffer_view_ =
-      WGSLTextGeometry::CreateVertexBufferView(stage_buffer_.get());
-  text_index_buffer_view_ =
-      WGSLTextGeometry::CreateIndexBufferView(stage_buffer_.get());
+  unit_quad_vertex_buffer_view_ =
+      CreateUnitQuadVertexBufferView(stage_buffer_.get());
+  unit_quad_index_buffer_view_ =
+      CreateUnitQuadIndexBufferView(stage_buffer_.get());
 
   initialized_ = true;
   needs_flush_ = true;

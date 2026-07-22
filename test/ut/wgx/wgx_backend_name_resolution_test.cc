@@ -56,6 +56,102 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_NE(result.content.find("vs_main("), std::string::npos);
 }
 
+TEST(WgxBackendNameResolutionTest, LowersTextureLoadForGlslAndMsl) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(0) var tex: texture_2d<f32>;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let size: vec2<u32> = textureDimensions(tex);
+  return textureLoad(tex, vec2<i32>(i32(size.x) - 1, 2), 0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  glsl_options.major_version = 3;
+  glsl_options.minor_version = 3;
+  auto glsl_result = program->WriteToGlsl("fs_main", glsl_options);
+  ASSERT_TRUE(glsl_result.success);
+  EXPECT_NE(glsl_result.content.find("texelFetch("), std::string::npos);
+  EXPECT_NE(glsl_result.content.find("uvec2(textureSize("), std::string::npos);
+
+  wgx::GlslOptions gles_options;
+  gles_options.standard = wgx::GlslOptions::Standard::kES;
+  gles_options.major_version = 3;
+  gles_options.minor_version = 0;
+  auto gles_result = program->WriteToGlsl("fs_main", gles_options);
+  ASSERT_TRUE(gles_result.success);
+  EXPECT_NE(gles_result.content.find("#version 300 es"), std::string::npos);
+  EXPECT_NE(gles_result.content.find("precision highp float;"),
+            std::string::npos);
+  EXPECT_NE(gles_result.content.find("texelFetch("), std::string::npos);
+
+  wgx::MslOptions msl_options;
+  auto msl_result = program->WriteToMsl("fs_main", msl_options);
+  ASSERT_TRUE(msl_result.success);
+  EXPECT_NE(msl_result.content.find(".read(uint2("), std::string::npos);
+}
+
+TEST(WgxBackendNameResolutionTest, RejectsInvalidTextureBuiltinArity) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(0) var tex: texture_2d<f32>;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  return textureLoad(tex, vec2<i32>(0, 0));
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  EXPECT_FALSE(program->WriteToGlsl("fs_main", glsl_options).success);
+
+  wgx::MslOptions msl_options;
+  EXPECT_FALSE(program->WriteToMsl("fs_main", msl_options).success);
+}
+
+TEST(WgxBackendNameResolutionTest, LowersUnsignedIntegerTextureLoad) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(0) var tex: texture_2d<u32>;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let encoded: vec4<u32> = textureLoad(tex, vec2<i32>(0, 0), 0);
+  return vec4<f32>(f32(encoded.x), f32(encoded.y),
+                   f32(encoded.z), f32(encoded.w));
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  glsl_options.major_version = 3;
+  glsl_options.minor_version = 3;
+  auto glsl_result = program->WriteToGlsl("fs_main", glsl_options);
+  ASSERT_TRUE(glsl_result.success);
+  EXPECT_NE(glsl_result.content.find("uniform usampler2D"), std::string::npos);
+
+  wgx::GlslOptions gles_options;
+  gles_options.standard = wgx::GlslOptions::Standard::kES;
+  gles_options.major_version = 3;
+  auto gles_result = program->WriteToGlsl("fs_main", gles_options);
+  ASSERT_TRUE(gles_result.success);
+  EXPECT_NE(gles_result.content.find("highp usampler2D"), std::string::npos);
+
+  wgx::MslOptions msl_options;
+  auto msl_result = program->WriteToMsl("fs_main", msl_options);
+  ASSERT_TRUE(msl_result.success);
+  EXPECT_NE(msl_result.content.find("texture2d<uint>"), std::string::npos);
+}
+
 TEST(WgxBackendNameResolutionTest,
      RewritesCustomTypeNamesInFunctionParameters) {
   auto program = wgx::Program::Parse(R"(
@@ -246,6 +342,70 @@ fn fs_main(@location(0) value: vec2<f32>) -> @location(0) vec4<f32> {
   auto fs_glsl = program->WriteToGlsl("fs_main", glsl_options);
   ASSERT_TRUE(fs_glsl.success);
   EXPECT_NE(fs_glsl.content.find("in vec2 wgx_varying_0;"), std::string::npos);
+}
+
+TEST(WgxBackendNameResolutionTest, LowersFlatIntegerVaryings) {
+  const char* source = R"(
+struct VSInput {
+  @location(0) unsigned_value: vec2<u32>,
+  @location(1) signed_value: vec2<i32>,
+}
+
+struct StageOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) @interpolate(flat) unsigned_value: vec2<u32>,
+  @location(1) @interpolate(flat) signed_value: vec2<i32>,
+}
+
+@vertex
+fn vs_main(input: VSInput) -> StageOutput {
+  var output: StageOutput;
+  output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  output.unsigned_value = input.unsigned_value;
+  output.signed_value = input.signed_value;
+  return output;
+}
+
+@fragment
+fn fs_main(input: StageOutput) -> @location(0) vec4<f32> {
+  return vec4<f32>(f32(input.unsigned_value.x),
+                   f32(input.signed_value.x), 0.0, 1.0);
+}
+)";
+
+  auto program = wgx::Program::Parse(source);
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  glsl_options.major_version = 3;
+  glsl_options.minor_version = 3;
+  auto vs_glsl = program->WriteToGlsl("vs_main", glsl_options);
+  auto fs_glsl = program->WriteToGlsl("fs_main", glsl_options);
+  ASSERT_TRUE(vs_glsl.success);
+  ASSERT_TRUE(fs_glsl.success);
+  EXPECT_NE(vs_glsl.content.find("flat out uvec2"), std::string::npos);
+  EXPECT_NE(vs_glsl.content.find("flat out ivec2"), std::string::npos);
+  EXPECT_NE(fs_glsl.content.find("flat in uvec2"), std::string::npos);
+  EXPECT_NE(fs_glsl.content.find("flat in ivec2"), std::string::npos);
+
+  wgx::GlslOptions gles_options;
+  gles_options.standard = wgx::GlslOptions::Standard::kES;
+  gles_options.major_version = 3;
+  gles_options.minor_version = 0;
+  EXPECT_TRUE(program->WriteToGlsl("vs_main", gles_options).success);
+  EXPECT_TRUE(program->WriteToGlsl("fs_main", gles_options).success);
+
+  wgx::MslOptions msl_options;
+  auto vs_msl = program->WriteToMsl("vs_main", msl_options);
+  auto fs_msl = program->WriteToMsl("fs_main", msl_options);
+  ASSERT_TRUE(vs_msl.success);
+  ASSERT_TRUE(fs_msl.success);
+  EXPECT_NE(vs_msl.content.find("uint2"), std::string::npos);
+  EXPECT_NE(vs_msl.content.find("int2"), std::string::npos);
+  EXPECT_NE(vs_msl.content.find("flat"), std::string::npos);
+  EXPECT_NE(fs_msl.content.find("flat"), std::string::npos);
 }
 
 TEST(WgxBackendNameResolutionTest, UsesTextureSlotBindingInGlsl420) {

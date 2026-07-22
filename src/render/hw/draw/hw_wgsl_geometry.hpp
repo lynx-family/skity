@@ -104,8 +104,9 @@ class HWWGSLGeometry {
    * Supplies varings for vertex shader and fragment shader. This
    * method is called only when 'Flags::kSnippet' is specified.
    *
-   * According to the convention, all varying variables provided here must start
-   * with the prefix 'v_'.
+   * According to the convention, all varying variable names provided here must
+   * start with the prefix 'v_'. The '@interpolate(flat)' attribute may precede
+   * the variable name.
    */
   virtual std::optional<std::vector<std::string>> GetVarings() const {
     return std::nullopt;
@@ -116,6 +117,12 @@ class HWWGSLGeometry {
    * method is called only when 'Flags::kAffectsFragment' is specified.
    */
   virtual void WriteFSFunctionsAndStructs(std::stringstream& ss) const {}
+
+  /**
+   * Supplies uniforms used by fragment shader. This method is called only when
+   * 'Flags::kAffectsFragment' is specified.
+   */
+  virtual void WriteFSUniforms(std::stringstream& ss) const {}
 
   /**
    * Supplies mask alpha calculation used by the fragment shader. This

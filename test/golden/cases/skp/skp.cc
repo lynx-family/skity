@@ -17,26 +17,33 @@ static const char* kTigerSKP = RESOURCES_DIR "/skp/tiger.skp";
 
 static const char* kGoldenTestImageCPUTessDir = CASE_DIR "cpu_tess_images/";
 static const char* kGoldenTestImageGPUTessDir = CASE_DIR "gpu_tess_images/";
+static const char* kGoldenTestImageCoverageAADir =
+    CASE_DIR "coverage_aa_images/";
 
 namespace {
 
 struct PathListContext {
   PathListContext(std::string name)
       : expected_image_cpu_tess_path(kGoldenTestImageCPUTessDir),
-        expected_image_gpu_tess_path(kGoldenTestImageGPUTessDir) {
+        expected_image_gpu_tess_path(kGoldenTestImageGPUTessDir),
+        expected_image_coverage_aa_path(kGoldenTestImageCoverageAADir) {
     expected_image_cpu_tess_path.append(name);
     expected_image_gpu_tess_path.append(name);
+    expected_image_coverage_aa_path.append(name);
   }
 
   skity::testing::PathList ToPathList() const {
     return {
         .cpu_tess_path = expected_image_cpu_tess_path.c_str(),
         .gpu_tess_path = expected_image_gpu_tess_path.c_str(),
+        .simple_shape_path = nullptr,
+        .coverage_aa_path = expected_image_coverage_aa_path.c_str(),
     };
   }
 
   std::filesystem::path expected_image_cpu_tess_path;
   std::filesystem::path expected_image_gpu_tess_path;
+  std::filesystem::path expected_image_coverage_aa_path;
 };
 
 }  // namespace

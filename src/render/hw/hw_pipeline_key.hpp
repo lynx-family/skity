@@ -26,7 +26,8 @@ struct HWGeometryKeyType {
     kRRect = 7,
     kClip = 8,
     kFilter = 9,
-    kLast = kFilter,
+    kCoverageAA = 10,
+    kLast = kCoverageAA,
   };
 };
 static_assert(HWGeometryKeyType::Value::kLast < 0xFF);

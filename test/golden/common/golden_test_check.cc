@@ -16,6 +16,7 @@
 #include <iostream>
 #include <skity/codec/codec.hpp>
 #include <sstream>
+#include <string>
 
 #include "common/golden_test_env.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
@@ -31,6 +32,14 @@ namespace {
 
 constexpr uint8_t kIgnoredChannelDiff = 2;
 constexpr uint8_t kIgnoredSoftEdgeChannelDiff = 8;
+constexpr const char* kVariantGoldenDirSuffix = "_images";
+
+bool HasSuffix(const std::string& text, const char* suffix) {
+  std::string suffix_text(suffix);
+  return text.size() >= suffix_text.size() &&
+         text.compare(text.size() - suffix_text.size(), suffix_text.size(),
+                      suffix_text) == 0;
+}
 
 std::string GetBackendGoldenSuffix() {
   auto* env = skity::testing::GoldenTestEnv::GetInstance();
@@ -60,6 +69,47 @@ std::string BuildBackendGoldenImagePath(const char* path,
       .string();
 }
 
+std::string BuildDefaultGoldenImagePathForVariant(const char* path) {
+  if (path == nullptr) {
+    return {};
+  }
+
+  std::filesystem::path variant_path(path);
+  auto variant_dir = variant_path.parent_path();
+  if (!HasSuffix(variant_dir.filename().string(), kVariantGoldenDirSuffix)) {
+    return {};
+  }
+
+  return (variant_dir.parent_path() / variant_path.filename()).string();
+}
+
+std::string ResolveExistingGoldenPath(const std::string& path,
+                                      const std::string& suffix) {
+  if (path.empty()) {
+    return {};
+  }
+
+  if (!suffix.empty()) {
+    auto backend_path = BuildBackendGoldenImagePath(path.c_str(), suffix);
+    if (std::filesystem::exists(backend_path)) {
+      return backend_path;
+    }
+  }
+
+  if (std::filesystem::exists(path)) {
+    return path;
+  }
+
+  return {};
+}
+
+// Golden read order:
+// 1. Prefer the backend-specific image beside the requested path.
+// 2. Fall back to the requested path itself.
+// 3. If the requested path is under a variant directory named "*_images",
+//    fall back to the parent case directory using the same file name.
+// This keeps variant tests convention-based: a variant owns its baseline when
+// the image exists, and reuses the default case baseline when it does not.
 std::string ResolveGoldenReadPath(const char* path,
                                   bool use_backend_specific_golden) {
   if (path == nullptr) {
@@ -67,14 +117,19 @@ std::string ResolveGoldenReadPath(const char* path,
   }
 
   auto suffix = GetBackendGoldenSuffix();
-  if (suffix.empty()) {
-    return path;
+  if (!suffix.empty() && use_backend_specific_golden) {
+    return BuildBackendGoldenImagePath(path, suffix);
   }
 
-  auto backend_path = BuildBackendGoldenImagePath(path, suffix);
+  auto requested_path = ResolveExistingGoldenPath(path, suffix);
+  if (!requested_path.empty()) {
+    return requested_path;
+  }
 
-  if (use_backend_specific_golden || std::filesystem::exists(backend_path)) {
-    return backend_path;
+  auto default_path = BuildDefaultGoldenImagePathForVariant(path);
+  auto resolved_default_path = ResolveExistingGoldenPath(default_path, suffix);
+  if (!resolved_default_path.empty()) {
+    return resolved_default_path;
   }
 
   return path;
@@ -145,14 +200,6 @@ bool IsSignificantPixelDiffWithThreshold(const std::shared_ptr<Pixmap>& source,
   return pixel_diff;
 }
 
-bool IsSignificantPixelDiff(const std::shared_ptr<Pixmap>& source,
-                            const std::shared_ptr<Pixmap>& target,
-                            const uint8_t* src, const uint8_t* dst,
-                            float* pixel_max_diff_percent) {
-  return IsSignificantPixelDiffWithThreshold(
-      source, target, src, dst, kIgnoredChannelDiff, pixel_max_diff_percent);
-}
-
 bool IsSoftEdgePixel(const std::shared_ptr<Pixmap>& source,
                      const std::shared_ptr<Pixmap>& target, const uint8_t* src,
                      const uint8_t* dst) {
@@ -200,6 +247,8 @@ struct AutoRestoreConfig {
         gpu_context->IsEnableGPUTessellation();
     restore_config.enable_simple_shape_pipeline =
         gpu_context->IsEnableSimpleShapePipeline();
+    restore_config.enable_coverage_aa = gpu_context->IsEnableCoverageAA();
+    restore_enable_contour_aa = gpu_context->IsEnableContourAA();
     restore_config.supports_framebuffer_fetch = std::nullopt;
     restore_config.gl_surface_mode = env->GetGLSurfaceMode();
     restore_config.gl_has_stencil_attachment = env->GetGLHasStencilAttachment();
@@ -211,6 +260,7 @@ struct AutoRestoreConfig {
     gpu_context->SetEnableGPUTessellation(config.enable_gpu_tessellation);
     gpu_context->SetEnableSimpleShapePipeline(
         config.enable_simple_shape_pipeline);
+    gpu_context->SetEnableCoverageAA(config.enable_coverage_aa);
 
     if (config.supports_framebuffer_fetch.has_value() ||
         config.supports_native_advanced_blend.has_value() ||
@@ -248,6 +298,8 @@ struct AutoRestoreConfig {
         restore_config.enable_gpu_tessellation);
     gpu_context->SetEnableSimpleShapePipeline(
         restore_config.enable_simple_shape_pipeline);
+    gpu_context->SetEnableCoverageAA(restore_config.enable_coverage_aa);
+    gpu_context->SetEnableContourAA(restore_enable_contour_aa);
 
     if (restore_config.supports_framebuffer_fetch.has_value() ||
         restore_config.supports_native_advanced_blend.has_value() ||
@@ -279,6 +331,9 @@ struct AutoRestoreConfig {
     if (gpu_context->IsEnableSimpleShapePipeline()) {
       return "simple_shape";
     }
+    if (gpu_context->IsEnableCoverageAA()) {
+      return "coverage_aa";
+    }
     return "";
   }
 
@@ -286,6 +341,7 @@ struct AutoRestoreConfig {
   GoldenTestEnv* env = nullptr;
   GPUContext* gpu_context = nullptr;
   GoldenTestEnvConfig restore_config;
+  bool restore_enable_contour_aa = false;
 };
 
 bool IsNativeAdvancedBlendUnsupported() {
@@ -391,9 +447,14 @@ static bool CompareGoldenTextureImpl(
     target = nullptr;
   }
 
-  auto result = ComparePixels(source, target);
+  auto result = config.require_exact_pixel_match
+                    ? ComparePixelsExact(source, target)
+                    : ComparePixels(source, target);
+  bool result_passed = config.require_exact_pixel_match
+                           ? result.passed && result.diff_pixel_count == 0
+                           : result.Passed();
 
-  if (!result.Passed()) {
+  if (!result_passed) {
     std::string actual_path;
     std::string diff_pixels_path;
 
@@ -473,11 +534,11 @@ static bool CompareGoldenTextureImpl(
   }
 
 #ifdef SKITY_GOLDEN_GUI
-  return OpenPlayground(result.Passed(), texture, target,
+  return OpenPlayground(result_passed, texture, target,
                         expected_image_write_path.c_str(),
                         auto_restore_config.GetNameSuffix());
 #else
-  return result.Passed();
+  return result_passed;
 #endif
 }
 
@@ -494,6 +555,12 @@ bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
 bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
                           const std::function<void(Canvas*)>& render) {
   return CompareGoldenTextureImpl(width, height, path, {}, render);
+}
+
+bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
+                          GoldenTestEnvConfig config,
+                          const std::function<void(Canvas*)>& render) {
+  return CompareGoldenTextureImpl(width, height, path, config, render);
 }
 
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
@@ -520,6 +587,17 @@ bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
       result = false;
     }
   }
+
+  if (path_list.coverage_aa_path != nullptr) {
+    GoldenTestEnvConfig config;
+    config.enable_coverage_aa = true;
+    config.sample_count = 1;
+    if (!CompareGoldenTextureImpl(dl, width, height, path_list.coverage_aa_path,
+                                  config)) {
+      result = false;
+    }
+  }
+
   return result;
 }
 
@@ -548,8 +626,10 @@ bool DiffResult::Passed() const {
   return true;
 }
 
-DiffResult ComparePixels(const std::shared_ptr<Pixmap>& source,
-                         const std::shared_ptr<Pixmap>& target) {
+static DiffResult ComparePixelsImpl(const std::shared_ptr<Pixmap>& source,
+                                    const std::shared_ptr<Pixmap>& target,
+                                    uint8_t ignored_channel_diff,
+                                    uint8_t ignored_soft_edge_channel_diff) {
   DiffResult result;
 
   if (target == nullptr) {
@@ -574,12 +654,13 @@ DiffResult ComparePixels(const std::shared_ptr<Pixmap>& source,
         auto dst = dst_data + (y * width + x) * 4;
 
         float pixel_max_diff_percent = 0.f;
-        bool pixel_diff = IsSignificantPixelDiff(source, target, src, dst,
-                                                 &pixel_max_diff_percent);
+        bool pixel_diff = IsSignificantPixelDiffWithThreshold(
+            source, target, src, dst, ignored_channel_diff,
+            &pixel_max_diff_percent);
 
         if (pixel_diff && IsSoftEdgePixel(source, target, src, dst) &&
             !IsSignificantPixelDiffWithThreshold(source, target, src, dst,
-                                                 kIgnoredSoftEdgeChannelDiff,
+                                                 ignored_soft_edge_channel_diff,
                                                  &pixel_max_diff_percent)) {
           pixel_diff = false;
           pixel_max_diff_percent = 0.f;
@@ -611,6 +692,17 @@ DiffResult ComparePixels(const std::shared_ptr<Pixmap>& source,
   }
 
   return result;
+}
+
+DiffResult ComparePixels(const std::shared_ptr<Pixmap>& source,
+                         const std::shared_ptr<Pixmap>& target) {
+  return ComparePixelsImpl(source, target, kIgnoredChannelDiff,
+                           kIgnoredSoftEdgeChannelDiff);
+}
+
+DiffResult ComparePixelsExact(const std::shared_ptr<Pixmap>& source,
+                              const std::shared_ptr<Pixmap>& target) {
+  return ComparePixelsImpl(source, target, 0, 0);
 }
 
 }  // namespace testing

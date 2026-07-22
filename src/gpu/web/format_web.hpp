@@ -58,6 +58,8 @@ constexpr WGPUTextureFormat ToWGPUTextureFormat(GPUTextureFormat format) {
     case GPUTextureFormat::kRGB8Unorm:
     case GPUTextureFormat::kRGBA8Unorm:
       return WGPUTextureFormat_RGBA8Unorm;
+    case GPUTextureFormat::kRGBA16Uint:
+      return WGPUTextureFormat_RGBA16Uint;
     case GPUTextureFormat::kBGRA8Unorm:
       return WGPUTextureFormat_BGRA8Unorm;
     case GPUTextureFormat::kStencil8:
@@ -81,6 +83,22 @@ constexpr WGPUVertexFormat ToWGPUVertexFormat(GPUVertexFormat format) {
       return WGPUVertexFormat_Float32x3;
     case GPUVertexFormat::kFloat32x4:
       return WGPUVertexFormat_Float32x4;
+    case GPUVertexFormat::kUint32:
+      return WGPUVertexFormat_Uint32;
+    case GPUVertexFormat::kUint32x2:
+      return WGPUVertexFormat_Uint32x2;
+    case GPUVertexFormat::kUint32x3:
+      return WGPUVertexFormat_Uint32x3;
+    case GPUVertexFormat::kUint32x4:
+      return WGPUVertexFormat_Uint32x4;
+    case GPUVertexFormat::kSint32:
+      return WGPUVertexFormat_Sint32;
+    case GPUVertexFormat::kSint32x2:
+      return WGPUVertexFormat_Sint32x2;
+    case GPUVertexFormat::kSint32x3:
+      return WGPUVertexFormat_Sint32x3;
+    case GPUVertexFormat::kSint32x4:
+      return WGPUVertexFormat_Sint32x4;
     default:
       return WGPUVertexFormat_Float32;
   }

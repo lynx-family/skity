@@ -5,12 +5,156 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <skity/graphic/bitmap.hpp>
 #include <skity/recorder/picture_recorder.hpp>
 #include <skity/skity.hpp>
 
 #include "common/golden_test_check.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
+static const char* kGoldenTestCoverageAAImageDir =
+    CASE_DIR "coverage_aa_images/";
+
+namespace {
+
+std::filesystem::path CoverageAAGoldenPath(const char* name) {
+  std::filesystem::path path(kGoldenTestCoverageAAImageDir);
+  path.append(name);
+  return path;
+}
+
+struct PathListContext {
+  explicit PathListContext(const char* name)
+      : expected_path(kGoldenTestImageDir),
+        coverage_aa_path(CoverageAAGoldenPath(name)) {
+    expected_path.append(name);
+  }
+
+  skity::testing::PathList ToPathList() const {
+    return {
+        .cpu_tess_path = expected_path.c_str(),
+        .gpu_tess_path = expected_path.c_str(),
+        .coverage_aa_path = coverage_aa_path.c_str(),
+    };
+  }
+
+  std::filesystem::path expected_path;
+  std::filesystem::path coverage_aa_path;
+};
+
+bool CompareGradientGolden(skity::PictureRecorder& recorder, uint32_t width,
+                           uint32_t height, const char* name) {
+  PathListContext context(name);
+  auto display_list = recorder.FinishRecording();
+  return skity::testing::CompareGoldenTexture(display_list.get(), width, height,
+                                              context.ToPathList());
+}
+
+skity::Path MakeTestTriangle() {
+  skity::Path path;
+  path.MoveTo(0.f, 96.f);
+  path.LineTo(48.f, 0.f);
+  path.LineTo(96.f, 96.f);
+  path.Close();
+  return path;
+}
+
+std::shared_ptr<skity::Shader> MakeTestLinearShader() {
+  skity::Vec4 colors[] = {skity::Color4fFromColor(skity::Color_RED),
+                          skity::Color4fFromColor(skity::Color_BLUE)};
+  float positions[] = {0.f, 1.f};
+  skity::Point pts[] = {{0.f, 0.f, 0.f, 1.f}, {96.f, 0.f, 0.f, 1.f}};
+  return skity::Shader::MakeLinear(pts, colors, positions, 2);
+}
+
+std::shared_ptr<skity::Shader> MakeTestRadialShader() {
+  skity::Vec4 colors[] = {skity::Color4fFromColor(skity::Color_YELLOW),
+                          skity::Color4fFromColor(skity::Color_GREEN),
+                          skity::Color4fFromColor(skity::Color_BLUE)};
+  float positions[] = {0.f, 0.55f, 1.f};
+  return skity::Shader::MakeRadial({48.f, 48.f, 0.f, 1.f}, 58.f, colors,
+                                   positions, 3);
+}
+
+std::shared_ptr<skity::Shader> MakeTestSweepShader() {
+  skity::Vec4 colors[] = {skity::Color4fFromColor(skity::Color_RED),
+                          skity::Color4fFromColor(skity::Color_GREEN),
+                          skity::Color4fFromColor(skity::Color_BLUE),
+                          skity::Color4fFromColor(skity::Color_RED)};
+  float positions[] = {0.f, 0.33f, 0.66f, 1.f};
+  return skity::Shader::MakeSweep(48.f, 48.f, 0.f, 360.f, colors, positions, 4);
+}
+
+std::shared_ptr<skity::Image> MakeTestImage() {
+  skity::Bitmap bitmap(4, 4, skity::AlphaType::kUnpremul_AlphaType,
+                       skity::ColorType::kRGBA);
+  for (uint32_t y = 0; y < bitmap.Height(); y++) {
+    for (uint32_t x = 0; x < bitmap.Width(); x++) {
+      skity::Color color = ((x + y) % 2 == 0)
+                               ? skity::ColorSetARGB(255, 244, 67, 54)
+                               : skity::ColorSetARGB(255, 33, 150, 243);
+      if (x == y) {
+        color = skity::ColorSetARGB(255, 255, 235, 59);
+      }
+      bitmap.SetPixel(x, y, color);
+    }
+  }
+  return skity::Image::MakeImage(bitmap.GetPixmap());
+}
+
+void DrawTransformedTestPath(skity::Canvas* canvas,
+                             std::shared_ptr<skity::Shader> shader, float tx,
+                             float ty, float scale, float rotation) {
+  skity::Paint paint;
+  paint.SetStyle(skity::Paint::kFill_Style);
+  paint.SetAntiAlias(true);
+  paint.SetShader(std::move(shader));
+
+  canvas->Save();
+  canvas->Translate(tx, ty);
+  canvas->Scale(scale, scale);
+  canvas->Rotate(rotation, 48.f, 48.f);
+  canvas->DrawPath(MakeTestTriangle(), paint);
+  canvas->Restore();
+}
+
+}  // namespace
+
+TEST(GradientGolden, GradientLocalCoordinates) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(360.f, 150.f));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Clear(skity::Color_WHITE);
+
+  DrawTransformedTestPath(canvas, MakeTestLinearShader(), 28.f, 28.f, 1.f, 0.f);
+  DrawTransformedTestPath(canvas, MakeTestRadialShader(), 138.f, 20.f, 1.15f,
+                          0.f);
+  DrawTransformedTestPath(canvas, MakeTestSweepShader(), 270.f, 24.f, 1.f,
+                          28.f);
+
+  EXPECT_TRUE(CompareGradientGolden(recorder, 360, 150,
+                                    "gradient_local_coordinates.png"));
+}
+
+TEST(GradientGolden, ImageShaderLocalCoordinates) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(180.f, 160.f));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Clear(skity::Color_WHITE);
+
+  auto image = MakeTestImage();
+  auto shader = skity::Shader::MakeShader(
+      image,
+      skity::SamplingOptions{skity::FilterMode::kNearest,
+                             skity::MipmapMode::kNone},
+      skity::TileMode::kDecal, skity::TileMode::kDecal,
+      skity::Matrix::Scale(24.f, 24.f));
+
+  DrawTransformedTestPath(canvas, std::move(shader), 42.f, 28.f, 1.1f, -18.f);
+
+  EXPECT_TRUE(CompareGradientGolden(recorder, 180, 160,
+                                    "image_shader_local_coordinates.png"));
+}
 
 TEST(GradientGolden, LinearGradientTileMode) {
   skity::PictureRecorder recorder;
@@ -22,6 +166,7 @@ TEST(GradientGolden, LinearGradientTileMode) {
   canvas->Translate(50, 50);
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   std::vector<skity::Vec3> offsets = {
       {0, 0, 0}, {0, 150, 0}, {150, 0, 0}, {150, 150, 0}};
   std::vector<skity::TileMode> tile_modes = {
@@ -48,13 +193,8 @@ TEST(GradientGolden, LinearGradientTileMode) {
 
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("linear_gradient_tile_mode.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 500, 500,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(recorder, 500, 500,
+                                    "linear_gradient_tile_mode.png"));
 }
 
 TEST(GradientGolden, RadialGradient) {
@@ -70,6 +210,7 @@ TEST(GradientGolden, RadialGradient) {
                                 colors, positions, 3, skity::TileMode::kClamp);
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetShader(gs);
 
@@ -81,14 +222,7 @@ TEST(GradientGolden, RadialGradient) {
 
   canvas->DrawRect(r, paint);
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-
-  expected_image_path.append("radial_gradient.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 300, 300,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(recorder, 300, 300, "radial_gradient.png"));
 }
 
 TEST(GradientGolden, RadialGradient2) {
@@ -103,6 +237,7 @@ TEST(GradientGolden, RadialGradient2) {
                                       skity::TileMode::kClamp);
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetShader(gs);
 
@@ -114,14 +249,8 @@ TEST(GradientGolden, RadialGradient2) {
 
   canvas->DrawRect(r, paint);
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-
-  expected_image_path.append("radial_gradient2.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 300, 300,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(
+      CompareGradientGolden(recorder, 300, 300, "radial_gradient2.png"));
 }
 
 TEST(GradientGolden, RadialGradientFlags) {
@@ -132,6 +261,7 @@ TEST(GradientGolden, RadialGradientFlags) {
   float positions[] = {0.75f, 1.f};
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
 
   auto r = skity::Rect::MakeLTRB(0, 0, kCaseSize, kCaseSize);
@@ -155,14 +285,8 @@ TEST(GradientGolden, RadialGradientFlags) {
   }
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-
-  expected_image_path.append("radial_gradient_flags.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 600, 300,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(
+      CompareGradientGolden(recorder, 600, 300, "radial_gradient_flags.png"));
 }
 
 static void draw_radial_gradient(skity::Canvas* canvas, float x0, float y0,
@@ -179,6 +303,7 @@ static void draw_radial_gradient(skity::Canvas* canvas, float x0, float y0,
       sizeof(colors) / sizeof(colors[0]), skity::TileMode::kClamp);
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetShader(gs);
 
@@ -205,13 +330,8 @@ TEST(GradientGolden, TwoPointConicalGradient_0_64) {
 
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("two_point_conical_gradient_0_64.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 150, 150,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(recorder, 150, 150,
+                                    "two_point_conical_gradient_0_64.png"));
 }
 
 TEST(GradientGolden, TwoPointConicalGradient_32_64) {
@@ -228,13 +348,8 @@ TEST(GradientGolden, TwoPointConicalGradient_32_64) {
                        kCaseSize / 4.f, kCaseSize / 2.f, kCaseSize / 2.f,
                        kCaseSize / 2.f, kCaseSize);
   canvas->Restore();
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("two_point_conical_gradient_32_64.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 150, 150,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(recorder, 150, 150,
+                                    "two_point_conical_gradient_32_64.png"));
 }
 
 TEST(GradientGolden, TwoPointConicalGradient_no_center_0_64) {
@@ -253,13 +368,8 @@ TEST(GradientGolden, TwoPointConicalGradient_no_center_0_64) {
 
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("two_point_conical_gradient_no_center_0_64.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 150, 150,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(
+      recorder, 150, 150, "two_point_conical_gradient_no_center_0_64.png"));
 }
 
 TEST(GradientGolden, TwoPointConicalGradient_no_center_64_0) {
@@ -277,14 +387,8 @@ TEST(GradientGolden, TwoPointConicalGradient_no_center_64_0) {
                        kCaseSize);
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("two_point_conical_gradient_no_center_64_0.png");
-
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 150, 150,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(
+      recorder, 150, 150, "two_point_conical_gradient_no_center_64_0.png"));
 }
 
 TEST(GradientGolden, TwoPointConicalGradient_no_center_32_64) {
@@ -301,14 +405,8 @@ TEST(GradientGolden, TwoPointConicalGradient_no_center_32_64) {
                        kCaseSize / 2.f, kCaseSize);
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("two_point_conical_gradient_no_center_32_64.png");
-
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 150, 150,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(
+      recorder, 150, 150, "two_point_conical_gradient_no_center_32_64.png"));
 }
 
 TEST(GradientGolden, TwoPointConicalGradient_no_center_8_16) {
@@ -326,14 +424,8 @@ TEST(GradientGolden, TwoPointConicalGradient_no_center_8_16) {
                        kCaseSize / 8.f, kCaseSize);
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("two_point_conical_gradient_no_center_8_16.png");
-
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 150, 150,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(
+      recorder, 150, 150, "two_point_conical_gradient_no_center_8_16.png"));
 }
 
 TEST(GradientGolden, TwoPointConicalGradient_no_center_16_8) {
@@ -350,14 +442,8 @@ TEST(GradientGolden, TwoPointConicalGradient_no_center_16_8) {
                        kCaseSize / 16.f, kCaseSize);
 
   canvas->Restore();
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("two_point_conical_gradient_no_center_16_8.png");
-
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 150, 150,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(
+      recorder, 150, 150, "two_point_conical_gradient_no_center_16_8.png"));
 }
 
 TEST(GradientGolden, TwoPointConicalGradient_no_center_16_16) {
@@ -374,14 +460,8 @@ TEST(GradientGolden, TwoPointConicalGradient_no_center_16_16) {
                        kCaseSize / 8.f, kCaseSize);
 
   canvas->Restore();
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("two_point_conical_gradient_no_center_16_16.png");
-
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 150, 150,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(
+      recorder, 150, 150, "two_point_conical_gradient_no_center_16_16.png"));
 }
 
 TEST(GradientGolden, LinearGradientWithColorStops) {
@@ -405,19 +485,13 @@ TEST(GradientGolden, LinearGradientWithColorStops) {
       skity::Shader::MakeLinear(gradient_points.data(), gradient_colors,
                                 gradient_positions, 8, skity::TileMode::kClamp);
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetShader(lgs);
 
   canvas->DrawRect(skity::Rect::MakeXYWH(0.f, 0.f, 170.f, 170.f), paint);
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-
-  expected_image_path.append("linear_gradient_with_color_stops.png");
-
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 170, 170,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(recorder, 170, 170,
+                                    "linear_gradient_with_color_stops.png"));
 }
 
 TEST(GradientGolden, LinearGradientFallbackTileMode) {
@@ -430,6 +504,7 @@ TEST(GradientGolden, LinearGradientFallbackTileMode) {
   canvas->Translate(50, 50);
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   std::vector<skity::Vec3> offsets = {
       {0, 0, 0}, {0, 150, 0}, {150, 0, 0}, {150, 150, 0}};
   std::vector<skity::TileMode> tile_modes = {
@@ -454,13 +529,8 @@ TEST(GradientGolden, LinearGradientFallbackTileMode) {
 
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("gradient_fallback_tile_mode.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 500, 500,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(recorder, 500, 500,
+                                    "gradient_fallback_tile_mode.png"));
 }
 
 TEST(GradientGolden, RadialGradientFallbackTileMode) {
@@ -473,6 +543,7 @@ TEST(GradientGolden, RadialGradientFallbackTileMode) {
   canvas->Translate(50, 50);
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   std::vector<skity::Vec3> offsets = {
       {0, 0, 0}, {0, 150, 0}, {150, 0, 0}, {150, 150, 0}};
   std::vector<skity::TileMode> tile_modes = {
@@ -493,11 +564,6 @@ TEST(GradientGolden, RadialGradientFallbackTileMode) {
 
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestImageDir);
-  expected_image_path.append("gradient_fallback_tile_mode.png");
-  auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 500, 500,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(CompareGradientGolden(recorder, 500, 500,
+                                    "gradient_fallback_tile_mode.png"));
 }
