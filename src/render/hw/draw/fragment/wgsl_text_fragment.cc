@@ -282,7 +282,7 @@ std::string WGSLGradientTextFragment::GenSourceWGSL() const {
       @group(1) @binding(6) var<uniform> uRadialInfo    : vec3<f32>;
 
       fn gradient_text_color(fs_in : GradientTextFSInput) -> vec4<f32> {
-        var mixValue  : vec2<f32> = fs_in.v_pos - uRadialInfo.xy;
+        var mixValue  : f32       = distance(fs_in.v_pos, uRadialInfo.xy);
         var radius    : f32       = uRadialInfo.z;
         var t         : f32       = mixValue / radius;
         var color     : vec4<f32> = calculate_gradient_color(t);

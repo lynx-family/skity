@@ -1,0 +1,36 @@
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
+
+#include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
+
+#include <gtest/gtest.h>
+#include <wgsl_cross.h>
+
+#include "skity/effect/shader.hpp"
+#include "skity/graphic/color.hpp"
+
+namespace skity {
+
+TEST(WGSLTextFragmentTest, RadialGradient) {
+  Color4f colors[3] = {Colors::kYellow, Colors::kRed, Colors::kBlue};
+  float positions[3] = {0.0f, 0.5f, 1.0f};
+  auto shader = Shader::MakeRadial({400.0f, 250.0f, 0.0f, 1.0f}, 320.0f, colors,
+                                   positions, 3);
+  Shader::GradientInfo info;
+  auto type = shader->AsGradient(&info);
+  WGSLGradientTextFragment fragment({}, {}, info, type, 1.0f);
+
+  auto program = wgx::Program::Parse(fragment.GenSourceWGSL());
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::MslOptions msl_options;
+  EXPECT_TRUE(program->WriteToMsl("fs_main", msl_options).success);
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  EXPECT_TRUE(program->WriteToGlsl("fs_main", glsl_options).success);
+}
+
+}  // namespace skity
