@@ -12,11 +12,78 @@
 
 namespace skity {
 
+TEST(WGSLTextFragmentTest, LinearGradient) {
+  Color4f colors[3] = {Colors::kYellow, Colors::kRed, Colors::kBlue};
+  float positions[3] = {0.0f, 0.5f, 1.0f};
+  Point points[2] = {
+      {80.0f, 100.0f, 0.0f, 1.0f},
+      {320.0f, 100.0f, 0.0f, 1.0f},
+  };
+  auto shader = Shader::MakeLinear(points, colors, positions, 3);
+  Shader::GradientInfo info;
+  auto type = shader->AsGradient(&info);
+  WGSLGradientTextFragment fragment({}, {}, info, type, 1.0f);
+
+  auto program = wgx::Program::Parse(fragment.GenSourceWGSL());
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::MslOptions msl_options;
+  EXPECT_TRUE(program->WriteToMsl("fs_main", msl_options).success);
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  EXPECT_TRUE(program->WriteToGlsl("fs_main", glsl_options).success);
+}
+
 TEST(WGSLTextFragmentTest, RadialGradient) {
   Color4f colors[3] = {Colors::kYellow, Colors::kRed, Colors::kBlue};
   float positions[3] = {0.0f, 0.5f, 1.0f};
   auto shader = Shader::MakeRadial({400.0f, 250.0f, 0.0f, 1.0f}, 320.0f, colors,
                                    positions, 3);
+  Shader::GradientInfo info;
+  auto type = shader->AsGradient(&info);
+  WGSLGradientTextFragment fragment({}, {}, info, type, 1.0f);
+
+  auto program = wgx::Program::Parse(fragment.GenSourceWGSL());
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::MslOptions msl_options;
+  EXPECT_TRUE(program->WriteToMsl("fs_main", msl_options).success);
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  EXPECT_TRUE(program->WriteToGlsl("fs_main", glsl_options).success);
+}
+
+TEST(WGSLTextFragmentTest, ConicalGradient) {
+  Color4f colors[3] = {Colors::kYellow, Colors::kRed, Colors::kBlue};
+  float positions[3] = {0.0f, 0.5f, 1.0f};
+  auto shader = Shader::MakeTwoPointConical({140.0f, 100.0f, 0.0f, 1.0f}, 0.0f,
+                                            {220.0f, 100.0f, 0.0f, 1.0f},
+                                            240.0f, colors, positions, 3);
+  Shader::GradientInfo info;
+  auto type = shader->AsGradient(&info);
+  WGSLGradientTextFragment fragment({}, {}, info, type, 1.0f);
+
+  auto program = wgx::Program::Parse(fragment.GenSourceWGSL());
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::MslOptions msl_options;
+  EXPECT_TRUE(program->WriteToMsl("fs_main", msl_options).success);
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  EXPECT_TRUE(program->WriteToGlsl("fs_main", glsl_options).success);
+}
+
+TEST(WGSLTextFragmentTest, SweepGradient) {
+  Color4f colors[3] = {Colors::kYellow, Colors::kRed, Colors::kBlue};
+  float positions[3] = {0.0f, 0.5f, 1.0f};
+  auto shader =
+      Shader::MakeSweep(400.0f, 250.0f, 0.0f, 360.0f, colors, positions, 3);
   Shader::GradientInfo info;
   auto type = shader->AsGradient(&info);
   WGSLGradientTextFragment fragment({}, {}, info, type, 1.0f);
