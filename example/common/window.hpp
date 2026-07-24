@@ -53,6 +53,7 @@ class Window {
     kDefault,
     kNone,
     kContour,
+    kCoverage,
     kMSAA,
   };
 
@@ -82,7 +83,7 @@ class Window {
   AAMode GetAAMode() const { return aa_mode_; }
   bool UseDebugAAPresent() const {
     return aa_mode_ == AAMode::kNone || aa_mode_ == AAMode::kContour ||
-           aa_mode_ == AAMode::kMSAA;
+           aa_mode_ == AAMode::kCoverage || aa_mode_ == AAMode::kMSAA;
   }
   uint32_t GetAASampleCount() const {
     return aa_mode_ == AAMode::kMSAA ? 4 : 1;

@@ -51,11 +51,35 @@ SKITY_UPDATE_MISSING_GOLDEN=1 python3 tools/test-runner.py --suite=golden-shape 
 Then run the same test again without `SKITY_UPDATE_MISSING_GOLDEN` to verify
 that the checked-in baseline passes.
 
-When running with `--backend=gl`, golden comparison will first look for a
-backend-specific image with the `_gl` suffix in the same directory, such as
-`foo_gl.png`. If that file does not exist, it falls back to `foo.png` for
-comparison. When updating the baseline from the GUI, the GL backend always
-writes to `foo_gl.png`, while the Metal backend writes to `foo.png`.
+#### Golden Image Lookup
+
+Golden comparison treats the path passed to `CompareGoldenTexture` as the
+requested baseline path. When the current backend has a suffix, such as `_gl`
+or `_vk`, lookup first tries the backend-specific file beside the requested
+path. For example, requesting `foo.png` on GL tries `foo_gl.png` first, then
+falls back to `foo.png`.
+
+Some tests use a variant golden directory to store baselines for a specific
+rendering mode or algorithm. A variant directory is any directory whose name
+ends with `_images`, such as `coverage_aa_images`. When a requested baseline is
+under a variant directory and the variant image is missing, lookup falls back to
+the parent case directory using the same file name. This keeps variant tests
+convention-based: add an image under the variant directory only when that
+variant needs its own baseline; otherwise it reuses the default baseline.
+
+For a request like `coverage_aa_images/foo.png`, the read order on GL is:
+
+```text
+coverage_aa_images/foo_gl.png
+coverage_aa_images/foo.png
+foo_gl.png
+foo.png
+```
+
+When updating baselines, the write path still uses the originally requested
+path plus the backend suffix. For example, updating `coverage_aa_images/foo.png`
+on GL writes `coverage_aa_images/foo_gl.png`; updating it on Metal writes
+`coverage_aa_images/foo.png`.
 
 > Note for sandboxed agents: always use `tools/test-runner.py`. Direct
 > sandboxed runs of `skity_golden_test_shape/text` can fail at

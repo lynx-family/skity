@@ -6,6 +6,7 @@
 
 #include <skity/gpu/gpu_context_web.hpp>
 
+#include "src/gpu/texture_impl.hpp"
 #include "src/gpu/web/gpu_device_web.hpp"
 #include "src/gpu/web/gpu_surface_web.hpp"
 #include "src/gpu/web/gpu_texture_web.hpp"
@@ -71,7 +72,7 @@ std::shared_ptr<GPUTexture> GPUContextImplWEB::OnWrapTexture(
   GPUTextureDescriptor descriptor{};
   descriptor.width = web_info->width;
   descriptor.height = web_info->height;
-  descriptor.format = static_cast<GPUTextureFormat>(web_info->format);
+  descriptor.format = ToGPUTextureFormat(web_info->format);
   descriptor.usage =
       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
   descriptor.storage_mode = GPUTextureStorageMode::kPrivate;

@@ -18,6 +18,7 @@ enum class GPUTextureFormat {
   kRGB8Unorm,
   kRGB565Unorm,
   kRGBA8Unorm,
+  kRGBA16Uint,
   kBGRA8Unorm,
   kStencil8,
   kDepth24Stencil8,
@@ -34,6 +35,8 @@ constexpr unsigned int GetTextureFormatBytesPerPixel(GPUTextureFormat format) {
     case GPUTextureFormat::kRGB8Unorm:
     case GPUTextureFormat::kRGBA8Unorm:
       return 4;
+    case GPUTextureFormat::kRGBA16Uint:
+      return 8;
     case GPUTextureFormat::kBGRA8Unorm:
       return 4;
     case GPUTextureFormat::kStencil8:

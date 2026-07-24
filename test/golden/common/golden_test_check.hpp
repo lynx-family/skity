@@ -18,6 +18,7 @@ struct PathList {
   const char* cpu_tess_path = nullptr;
   const char* gpu_tess_path = nullptr;
   const char* simple_shape_path = nullptr;
+  const char* coverage_aa_path = nullptr;
 };
 
 struct GoldenTestEnvConfig {
@@ -29,6 +30,8 @@ struct GoldenTestEnvConfig {
 
   bool enable_gpu_tessellation = false;
   bool enable_simple_shape_pipeline = false;
+  bool enable_coverage_aa = false;
+  bool require_exact_pixel_match = false;
   std::optional<bool> supports_framebuffer_fetch = std::nullopt;
   std::optional<bool> supports_native_advanced_blend = std::nullopt;
   std::optional<bool> supports_native_advanced_blend_coherent = std::nullopt;
@@ -67,6 +70,10 @@ bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
                           const char* path, GoldenTestEnvConfig config);
 
 bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
+                          const std::function<void(Canvas*)>& render);
+
+bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
+                          GoldenTestEnvConfig config,
                           const std::function<void(Canvas*)>& render);
 
 /**
@@ -127,6 +134,9 @@ struct DiffResult {
  */
 DiffResult ComparePixels(const std::shared_ptr<Pixmap>& source,
                          const std::shared_ptr<Pixmap>& target);
+
+DiffResult ComparePixelsExact(const std::shared_ptr<Pixmap>& source,
+                              const std::shared_ptr<Pixmap>& target);
 
 }  // namespace testing
 }  // namespace skity

@@ -153,6 +153,7 @@ struct GLInterface {
   PFNGLUNIFORM4IVPROC fUniform4iv = nullptr;
   PFNGLUNIFORMMATRIX4FVPROC fUniformMatrix4fv = nullptr;
   PFNGLUSEPROGRAMPROC fUseProgram = nullptr;
+  PFNGLVERTEXATTRIBIPOINTERPROC fVertexAttribIPointer = nullptr;
   PFNGLVERTEXATTRIBPOINTERPROC fVertexAttribPointer = nullptr;
   PFNGLVIEWPORTPROC fViewport = nullptr;
   PFNGLGENSAMPLERSPROC fGenSamplers = nullptr;

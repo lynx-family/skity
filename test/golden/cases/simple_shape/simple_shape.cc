@@ -12,9 +12,11 @@
 
 #include "common/golden_test_check.hpp"
 
-static const char* kGoldenTestImageSimpleDir = CASE_DIR "simple_images/";
+static const char* kGoldenTestImageSimpleDir = CASE_DIR;
 static const char* kGoldenTestImageCPUTessDir = CASE_DIR "cpu_tess_images/";
 static const char* kGoldenTestImageGPUTessDir = CASE_DIR "gpu_tess_images/";
+static const char* kGoldenTestImageCoverageAADir =
+    CASE_DIR "coverage_aa_images/";
 
 namespace {
 
@@ -22,10 +24,12 @@ struct PathListContext {
   PathListContext(std::string name)
       : expected_image_cpu_tess_path(kGoldenTestImageCPUTessDir),
         expected_image_gpu_tess_path(kGoldenTestImageGPUTessDir),
-        expected_image_simple_path(kGoldenTestImageSimpleDir) {
+        expected_image_simple_path(kGoldenTestImageSimpleDir),
+        expected_image_coverage_aa_path(kGoldenTestImageCoverageAADir) {
     expected_image_cpu_tess_path.append(name);
     expected_image_gpu_tess_path.append(name);
     expected_image_simple_path.append(name);
+    expected_image_coverage_aa_path.append(name);
   }
 
   skity::testing::PathList ToPathList() const {
@@ -33,12 +37,14 @@ struct PathListContext {
         .cpu_tess_path = expected_image_cpu_tess_path.c_str(),
         .gpu_tess_path = expected_image_gpu_tess_path.c_str(),
         .simple_shape_path = expected_image_simple_path.c_str(),
+        .coverage_aa_path = expected_image_coverage_aa_path.c_str(),
     };
   }
 
   std::filesystem::path expected_image_cpu_tess_path;
   std::filesystem::path expected_image_gpu_tess_path;
   std::filesystem::path expected_image_simple_path;
+  std::filesystem::path expected_image_coverage_aa_path;
 };
 
 }  // namespace
@@ -50,6 +56,7 @@ TEST(SimpleShapeGolden, DrawFilledRect) {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
 
   canvas->Save();
@@ -73,6 +80,7 @@ TEST(SimpleShapeGolden, DrawStrokeRect) {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStrokeWidth(1);
   paint.SetStyle(skity::Paint::kStroke_Style);
@@ -105,6 +113,7 @@ TEST(SimpleShapeGolden, DrawStrokeRectWithJoins) {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStrokeWidth(20);
   paint.SetStyle(skity::Paint::kStroke_Style);
@@ -135,6 +144,7 @@ TEST(SimpleShapeGolden, DrawFilledRRect) {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   canvas->Save();
 
@@ -169,6 +179,7 @@ TEST(SimpleShapeGolden, DrawStrokeRRect) {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStrokeWidth(10);
   paint.SetStyle(skity::Paint::kStroke_Style);
@@ -206,6 +217,7 @@ TEST(SimpleShapeGolden, DrawStrokeRRect2) {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
 
   paint.SetStyle(skity::Paint::kStroke_Style);
@@ -244,6 +256,7 @@ TEST(SimpleShapeGolden, DrawStrokeRRectWithRotate) {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStrokeWidth(10);
   paint.SetStyle(skity::Paint::kStroke_Style);
@@ -283,6 +296,7 @@ TEST(SimpleShapeGolden, DrawStrokeRRectWithSkew) {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStrokeWidth(10);
   paint.SetStyle(skity::Paint::kStroke_Style);
@@ -321,6 +335,7 @@ TEST(SimpleShapeGolden, DrawStrokeRRectWithScale) {
   auto canvas = recorder.GetRecordingCanvas();
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStrokeWidth(1);
   paint.SetStyle(skity::Paint::kStroke_Style);
@@ -361,6 +376,7 @@ TEST(SimpleShapeGolden, DrawStrokeRRectBlending) {
   canvas->Clear(skity::Color_WHITE);
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStrokeWidth(10);
   paint.SetStyle(skity::Paint::kStroke_Style);
@@ -399,6 +415,7 @@ TEST(SimpleShapeGolden, DrawYinAndYang) {
   ASSERT_TRUE(dst.has_value());
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_BLACK);
   canvas->Scale(4, 4);
   canvas->DrawColor(skity::Color_WHITE);
@@ -422,6 +439,7 @@ TEST(SimpleShapeGolden, DrawDRRect) {
   skity::RRect outer = skity::RRect::MakeRect({20, 40, 210, 200});
   skity::RRect inner = skity::RRect::MakeOval({60, 70, 170, 160});
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   canvas->DrawDRRect(outer, inner, paint);
   auto dl = recorder.FinishRecording();
@@ -438,6 +456,7 @@ TEST(SimpleShapeGolden, DrawDRRect2) {
   skity::RRect outer = skity::RRect::MakeRect({20, 40, 210, 200});
   skity::RRect inner = skity::RRect::MakeRectXY({60, 70, 170, 160}, 10, 10);
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   paint.SetStyle(skity::Paint::kStroke_Style);
   paint.SetStrokeWidth(20);

@@ -7,7 +7,6 @@
 
 #include "src/render/hw/draw/hw_wgsl_geometry.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
-#include "src/render/hw/hw_stage_buffer.hpp"
 #include "src/utils/batch_group.hpp"
 
 namespace skity {
@@ -69,10 +68,6 @@ class WGSLTextGeometry : public HWWGSLGeometry {
 
   void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
                   float clip_depth, Command* stencil_cmd) override;
-
-  static GPUBufferView CreateVertexBufferView(HWStageBuffer* stage_bufer);
-
-  static GPUBufferView CreateIndexBufferView(HWStageBuffer* stage_bufer);
 
  private:
   std::vector<BatchGroup<GlyphRect>> glyph_rects_;

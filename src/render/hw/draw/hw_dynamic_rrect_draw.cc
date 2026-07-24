@@ -5,12 +5,8 @@
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
 
 #include "src/effect/pixmap_shader.hpp"
-#include "src/gpu/gpu_context_impl.hpp"
-#include "src/graphic/blend_mode_priv.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/step/color_step.hpp"
-#include "src/render/hw/draw/wgx_filter.hpp"
-#include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 
 namespace skity {
@@ -60,23 +56,7 @@ void HWDynamicRRectDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
   auto geom = arena_allocator->Make<WGSLRRectGeometry>(batch_group_);
   auto frag = GenShadingFragment(
       context, paint, paint.GetStyle() == Paint::kStroke_Style, false);
-
-  if (paint.GetColorFilter()) {
-    frag->SetFilter(WGXFilterFragment::Make(paint.GetColorFilter().get()));
-  }
-
-  if (IsAdvancedBlendMode(paint.GetBlendMode())) {
-    if (GetDstReadStrategy() == DstReadStrategy::kNativeBlend) {
-      if (context->gpuContext->GetGPUDevice()
-              ->GetCaps()
-              .native_blend_shader_variant) {
-        frag->SetUsesNativeAdvancedBlend(true);
-      }
-    } else {
-      frag->SetProgrammableBlending(WGXProgrammableBlending::Make(
-          paint.GetBlendMode(), GetDstReadStrategy()));
-    }
-  }
+  ConfigureShadingFragment(context, paint, GetDstReadStrategy(), frag);
 
   steps.emplace_back(context->arena_allocator->Make<ColorStep>(
       std::move(geom), std::move(frag), CoverageType::kNone));

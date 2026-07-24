@@ -30,6 +30,7 @@
 #include "src/gpu/gpu_shader_module.hpp"
 #include "src/gpu/gpu_surface_impl.hpp"
 #include "src/gpu/gpu_texture.hpp"
+#include "src/render/hw/draw/hw_dynamic_coverage_path_draw.hpp"
 #include "src/render/hw/layer/hw_root_layer.hpp"
 
 namespace skity {
@@ -96,6 +97,7 @@ class FakeCommandBuffer : public GPUCommandBuffer {
  public:
   std::shared_ptr<GPURenderPass> BeginRenderPass(
       const GPURenderPassDescriptor& desc) override {
+    render_pass_count_++;
     return std::make_shared<FakeRenderPass>(desc);
   }
 
@@ -104,6 +106,11 @@ class FakeCommandBuffer : public GPUCommandBuffer {
   }
 
   bool Submit(const GPUSubmitInfo* = nullptr) override { return true; }
+
+  uint32_t render_pass_count() const { return render_pass_count_; }
+
+ private:
+  uint32_t render_pass_count_ = 0;
 };
 
 class FakeGPUDevice : public GPUDevice {
@@ -162,7 +169,8 @@ class FakeGPUDevice : public GPUDevice {
   }
 
   std::shared_ptr<GPUCommandBuffer> CreateCommandBuffer() override {
-    return std::make_shared<FakeCommandBuffer>();
+    last_command_buffer_ = std::make_shared<FakeCommandBuffer>();
+    return last_command_buffer_;
   }
 
   std::shared_ptr<GPUSampler> CreateSampler(
@@ -174,6 +182,13 @@ class FakeGPUDevice : public GPUDevice {
   std::shared_ptr<GPUTexture> CreateTexture(
       const GPUTextureDescriptor& desc) override {
     texture_count_++;
+    auto texture_binding =
+        static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
+    if (desc.format == GPUTextureFormat::kRGBA16Uint &&
+        desc.storage_mode == GPUTextureStorageMode::kHostVisible &&
+        (desc.usage & texture_binding) != 0) {
+      coverage_aa_line_texture_count_++;
+    }
     if (fail_texture_creation_) {
       return nullptr;
     }
@@ -194,7 +209,17 @@ class FakeGPUDevice : public GPUDevice {
 
   uint32_t texture_count() const { return texture_count_; }
 
+  uint32_t coverage_aa_line_texture_count() const {
+    return coverage_aa_line_texture_count_;
+  }
+
   uint32_t sampler_count() const { return sampler_count_; }
+
+  uint32_t last_render_pass_count() const {
+    return last_command_buffer_ == nullptr
+               ? 0u
+               : last_command_buffer_->render_pass_count();
+  }
 
   uint32_t disallowed_shader_function_count() const {
     return disallowed_shader_function_count_;
@@ -256,9 +281,11 @@ class FakeGPUDevice : public GPUDevice {
   uint32_t disallowed_render_pipeline_count_ = 0;
   uint32_t disallowed_clone_pipeline_count_ = 0;
   uint32_t texture_count_ = 0;
+  uint32_t coverage_aa_line_texture_count_ = 0;
   uint32_t sampler_count_ = 0;
   std::vector<std::string> fragment_function_labels_;
   std::vector<std::string> vertex_function_labels_;
+  std::shared_ptr<FakeCommandBuffer> last_command_buffer_;
   bool disallow_shader_pipeline_creation_ = false;
   bool fail_render_pipeline_creation_ = false;
   bool fail_texture_creation_ = false;
@@ -607,6 +634,140 @@ TEST(PrecompileDrawTest, PrecompilePathUsesContourAAWhenEnabled) {
 
   EXPECT_TRUE(device->HasVertexFunctionLabelContaining("PathAA"));
   EXPECT_FALSE(device->HasVertexFunctionLabelContaining("TessPath"));
+}
+
+TEST(PrecompileDrawTest, AnalyticalAAModesCanBeEnabledTogether) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+
+  context.SetEnableContourAA(true);
+  EXPECT_TRUE(context.IsEnableContourAA());
+  EXPECT_FALSE(context.IsEnableCoverageAA());
+
+  context.SetEnableCoverageAA(true);
+  EXPECT_TRUE(context.IsEnableCoverageAA());
+  EXPECT_TRUE(context.IsEnableContourAA());
+}
+
+TEST(PrecompileDrawTest, AnalyticalAAModesAreMutuallyExclusiveInsideCanvas) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableCoverageAA(true);
+  context.SetEnableContourAA(true);
+  auto* device = context.device();
+  ASSERT_NE(device, nullptr);
+
+  GPUSurfaceDescriptor surface_desc{};
+  surface_desc.width = 64;
+  surface_desc.height = 64;
+  surface_desc.sample_count = 1;
+  surface_desc.content_scale = 1.0f;
+  auto surface = context.CreateSurface(&surface_desc);
+  auto* canvas = surface->LockCanvas(true);
+  ASSERT_NE(canvas, nullptr);
+
+  Matrix perspective;
+  perspective.SetPersp0(0.001f);
+  canvas->Concat(perspective);
+
+  Path path;
+  path.MoveTo(8, 8);
+  path.LineTo(56, 8);
+  path.LineTo(8, 56);
+  path.Close();
+
+  Paint paint;
+  paint.SetAntiAlias(true);
+  canvas->DrawPath(path, paint);
+  canvas->Flush();
+
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("CoverageAA"));
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("PathAA"));
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("TessPath"));
+  EXPECT_EQ(device->coverage_aa_line_texture_count(), 0u);
+}
+
+TEST(PrecompileDrawTest, CoverageAADrawUsesDirectLinesWithoutMaskPrepass) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableCoverageAA(true);
+  auto* device = context.device();
+  ASSERT_NE(device, nullptr);
+
+  GPUSurfaceDescriptor surface_desc{};
+  surface_desc.width = 64;
+  surface_desc.height = 64;
+  surface_desc.sample_count = 1;
+  surface_desc.content_scale = 1.0f;
+  auto surface = context.CreateSurface(&surface_desc);
+  auto* canvas = surface->LockCanvas(true);
+  ASSERT_NE(canvas, nullptr);
+
+  Path path;
+  path.MoveTo(16, 16);
+  path.LineTo(48, 16);
+  path.LineTo(48, 48);
+  path.LineTo(16, 48);
+  path.Close();
+  path.SetFillType(Path::PathFillType::kEvenOdd);
+
+  Paint paint;
+  paint.SetAntiAlias(true);
+  canvas->DrawPath(path, paint);
+
+  Path second_path;
+  second_path.MoveTo(8, 8);
+  second_path.LineTo(24, 8);
+  second_path.LineTo(8, 24);
+  second_path.Close();
+  second_path.SetFillType(Path::PathFillType::kEvenOdd);
+  canvas->DrawPath(second_path, paint);
+
+  canvas->Flush();
+
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("CoverageAAFill"));
+  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("CoverageAAFill"));
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("CoverageAA"));
+  EXPECT_TRUE(device->HasFragmentFunctionLabelContaining("CoverageAA"));
+  EXPECT_EQ(device->last_render_pass_count(), 1u);
+}
+
+TEST(PrecompileDrawTest, CoverageAADoesNotAddLayerMaskPasses) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableCoverageAA(true);
+  auto* device = context.device();
+  ASSERT_NE(device, nullptr);
+
+  GPUSurfaceDescriptor surface_desc{};
+  surface_desc.width = 96;
+  surface_desc.height = 96;
+  surface_desc.sample_count = 1;
+  surface_desc.content_scale = 1.0f;
+  auto surface = context.CreateSurface(&surface_desc);
+  auto* canvas = surface->LockCanvas(true);
+  ASSERT_NE(canvas, nullptr);
+
+  Path path;
+  path.MoveTo(8, 8);
+  path.LineTo(40, 8);
+  path.LineTo(8, 40);
+  path.Close();
+
+  Paint paint;
+  paint.SetAntiAlias(true);
+  canvas->DrawPath(path, paint);
+
+  canvas->SaveLayer(Rect::MakeWH(64, 64), Paint{});
+  canvas->DrawPath(path, paint);
+  canvas->Restore();
+  canvas->Flush();
+
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("CoverageAAFill"));
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("CoverageAA"));
+  EXPECT_TRUE(device->HasFragmentFunctionLabelContaining("CoverageAA"));
+  EXPECT_EQ(device->last_render_pass_count(), 2u);
+  EXPECT_EQ(device->coverage_aa_line_texture_count(), 1u);
 }
 
 TEST(PrecompileDrawTest, PrecompilePathUsesGPUTessellationWithMSAA) {

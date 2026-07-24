@@ -19,6 +19,7 @@ class BenchTarget {
     kNoAA = 0,
     kMSAA = 1,
     kContourAA = 2,
+    kCoverageAA = 3,
   };
 
   struct Options {
@@ -27,7 +28,7 @@ class BenchTarget {
     AAType aa = AAType::kNoAA;
   };
 
-  BenchTarget(skity::GPUContext *context,
+  BenchTarget(skity::GPUContext* context,
               std::unique_ptr<skity::GPUSurface> surface, Options options)
       : width_(options.width),
         height_(options.height),
@@ -36,7 +37,7 @@ class BenchTarget {
 
   virtual ~BenchTarget() = default;
 
-  Canvas *LockCanvas();
+  Canvas* LockCanvas();
 
   void Flush();
 
@@ -46,9 +47,9 @@ class BenchTarget {
  private:
   uint32_t width_;
   uint32_t height_;
-  skity::GPUContext *context_;
+  skity::GPUContext* context_;
   std::unique_ptr<skity::GPUSurface> surface_;
-  Canvas *canvas_;
+  Canvas* canvas_;
 };
 
 }  // namespace skity

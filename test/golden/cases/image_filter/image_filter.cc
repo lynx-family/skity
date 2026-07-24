@@ -11,12 +11,38 @@
 #include "common/golden_test_check.hpp"
 
 constexpr const char* kGoldenTestDir = CASE_DIR;
+constexpr const char* kGoldenTestCoverageAADir = CASE_DIR "coverage_aa_images/";
+
+namespace {
+
+struct PathListContext {
+  explicit PathListContext(const char* name)
+      : expected_path(kGoldenTestDir),
+        coverage_aa_path(kGoldenTestCoverageAADir) {
+    expected_path.append(name);
+    coverage_aa_path.append(name);
+  }
+
+  skity::testing::PathList ToPathList() const {
+    return {
+        .cpu_tess_path = expected_path.c_str(),
+        .gpu_tess_path = expected_path.c_str(),
+        .coverage_aa_path = coverage_aa_path.c_str(),
+    };
+  }
+
+  std::filesystem::path expected_path;
+  std::filesystem::path coverage_aa_path;
+};
+
+}  // namespace
 
 TEST(ImageFilterGolden, BlurFilter_10_5) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetColor(skity::Color_RED);
   paint.SetImageFilter(skity::ImageFilters::Blur(10, 5));
@@ -28,13 +54,10 @@ TEST(ImageFilterGolden, BlurFilter_10_5) {
   canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestDir);
-  expected_image_path.append("blur_filter_10_5.png");
+  PathListContext context("blur_filter_10_5.png");
   auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 200, 200,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
 }
 
 TEST(ImageFilterGolden, BlurFilter_10_5_Perspective) {
@@ -42,6 +65,7 @@ TEST(ImageFilterGolden, BlurFilter_10_5_Perspective) {
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetColor(skity::Color_RED);
   paint.SetImageFilter(skity::ImageFilters::Blur(10, 5));
@@ -51,21 +75,22 @@ TEST(ImageFilterGolden, BlurFilter_10_5_Perspective) {
   canvas->Save();
   canvas->Translate(50.f, 50.f);
   canvas->Concat(skity::Matrix{
-      2000, 0, 0, 0,     //
-      0, 2000, 0, 0,     //
-      800, 1200, 1, 1,   //
-      0, 0, 2000, 2000,  //
+      2000, 0, 0,
+      0,  //
+      0, 2000, 0,
+      0,  //
+      800, 1200, 1,
+      1,  //
+      0, 0, 2000,
+      2000,  //
   });
   canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestDir);
-  expected_image_path.append("blur_filter_10_5_perspective.png");
+  PathListContext context("blur_filter_10_5_perspective.png");
   auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 200, 200,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
 }
 
 TEST(ImageFilterGolden, BlurFilter_10_10) {
@@ -73,6 +98,7 @@ TEST(ImageFilterGolden, BlurFilter_10_10) {
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetColor(skity::Color_RED);
   paint.SetImageFilter(skity::ImageFilters::Blur(10, 10));
@@ -86,13 +112,10 @@ TEST(ImageFilterGolden, BlurFilter_10_10) {
   canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestDir);
-  expected_image_path.append("blur_filter_10_10.png");
+  PathListContext context("blur_filter_10_10.png");
   auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 200, 200,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
 }
 
 TEST(ImageFilterGolden, BlurFilter_10_0) {
@@ -100,6 +123,7 @@ TEST(ImageFilterGolden, BlurFilter_10_0) {
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetColor(skity::Color_RED);
   paint.SetImageFilter(skity::ImageFilters::Blur(10, 0));
@@ -110,19 +134,17 @@ TEST(ImageFilterGolden, BlurFilter_10_0) {
   canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestDir);
-  expected_image_path.append("blur_filter_10_0.png");
+  PathListContext context("blur_filter_10_0.png");
   auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 200, 200,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
 }
 
 TEST(ImageFilterGolden, DropShadow_0_0_10_10) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetColor(skity::Color_RED);
   paint.SetImageFilter(skity::ImageFilters::DropShadow(
@@ -133,13 +155,10 @@ TEST(ImageFilterGolden, DropShadow_0_0_10_10) {
   canvas->Translate(50.f, 50.f);
   canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
   canvas->Restore();
-  std::filesystem::path expected_image_path(kGoldenTestDir);
-  expected_image_path.append("drop_shadow_0_0_10_10.png");
+  PathListContext context("drop_shadow_0_0_10_10.png");
   auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 200, 200,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
 }
 
 TEST(ImageFilterGolden, DropShadow_10_n10_5_5) {
@@ -147,6 +166,7 @@ TEST(ImageFilterGolden, DropShadow_10_n10_5_5) {
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
 
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetColor(skity::Color_RED);
   paint.SetImageFilter(skity::ImageFilters::DropShadow(
@@ -158,19 +178,17 @@ TEST(ImageFilterGolden, DropShadow_10_n10_5_5) {
   canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
   canvas->Restore();
 
-  std::filesystem::path expected_image_path(kGoldenTestDir);
-  expected_image_path.append("drop_shadow_10_n10_5_5.png");
+  PathListContext context("drop_shadow_10_n10_5_5.png");
   auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 200, 200,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
 }
 
 TEST(ImageFilterGolden, Matrix_translate_50_50) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetColor(skity::Color_RED);
   paint.SetImageFilter(
@@ -182,6 +200,7 @@ TEST(ImageFilterGolden, Matrix_translate_50_50) {
 
   {
     skity::Paint bound_paint;
+    bound_paint.SetAntiAlias(true);
     bound_paint.SetStyle(skity::Paint::kStroke_Style);
     bound_paint.SetColor(skity::Color_CYAN);
     bound_paint.SetStrokeWidth(1);
@@ -189,19 +208,17 @@ TEST(ImageFilterGolden, Matrix_translate_50_50) {
     canvas->DrawRect(skity::Rect::MakeWH(100, 100), bound_paint);
   }
 
-  std::filesystem::path expected_image_path(kGoldenTestDir);
-  expected_image_path.append("matrix_translate_50_50.png");
+  PathListContext context("matrix_translate_50_50.png");
   auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 200, 200,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
 }
 
 TEST(ImageFilterGolden, RotateMatrix_10_deg_50_50) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetColor(skity::Color_RED);
   paint.SetImageFilter(skity::ImageFilters::MatrixTransform(
@@ -213,6 +230,7 @@ TEST(ImageFilterGolden, RotateMatrix_10_deg_50_50) {
 
   {
     skity::Paint bound_paint;
+    bound_paint.SetAntiAlias(true);
     bound_paint.SetStyle(skity::Paint::kStroke_Style);
     bound_paint.SetColor(skity::Color_CYAN);
     bound_paint.SetStrokeWidth(1);
@@ -220,19 +238,17 @@ TEST(ImageFilterGolden, RotateMatrix_10_deg_50_50) {
     canvas->DrawRect(skity::Rect::MakeXYWH(50, 50, 100, 100), bound_paint);
   }
 
-  std::filesystem::path expected_image_path(kGoldenTestDir);
-  expected_image_path.append("rotate_matrix_10_deg_50_50.png");
+  PathListContext context("rotate_matrix_10_deg_50_50.png");
   auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 200, 200,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
 }
 
 TEST(ImageFilterGolden, ComposeBlurMatrix) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetColor(skity::Color_RED);
 
@@ -249,6 +265,7 @@ TEST(ImageFilterGolden, ComposeBlurMatrix) {
 
   {
     skity::Paint bound_paint;
+    bound_paint.SetAntiAlias(true);
     bound_paint.SetStyle(skity::Paint::kStroke_Style);
     bound_paint.SetColor(skity::Color_CYAN);
     bound_paint.SetStrokeWidth(1);
@@ -256,12 +273,9 @@ TEST(ImageFilterGolden, ComposeBlurMatrix) {
     canvas->DrawRect(skity::Rect::MakeWH(100, 100), bound_paint);
   }
 
-  std::filesystem::path expected_image_path(kGoldenTestDir);
-  expected_image_path.append("compose_blur_matrix.png");
+  PathListContext context("compose_blur_matrix.png");
 
   auto dl = recorder.FinishRecording();
-  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
-      dl.get(), 200, 200,
-      skity::testing::PathList{.cpu_tess_path = expected_image_path.c_str(),
-                               .gpu_tess_path = expected_image_path.c_str()}));
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
 }

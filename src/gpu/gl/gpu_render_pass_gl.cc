@@ -116,33 +116,28 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
     // Set vertex
     auto const& buffer_layouts = *pipeline->GetDescriptor().buffers;
     for (auto& buffer_layout : buffer_layouts) {
-      if (buffer_layout.step_mode == GPUVertexStepMode::kVertex) {
-        BindBuffer(GL_ARRAY_BUFFER,
-                   static_cast<GPUBufferGL*>(command->vertex_buffer.buffer)
-                       ->GetBufferId());
+      bool is_instance =
+          buffer_layout.step_mode == GPUVertexStepMode::kInstance;
+      const auto& buffer =
+          is_instance ? command->instance_buffer : command->vertex_buffer;
+      BindBuffer(GL_ARRAY_BUFFER,
+                 static_cast<GPUBufferGL*>(buffer.buffer)->GetBufferId());
 
-        for (auto& attribute : buffer_layout.attributes) {
-          GL_CALL(EnableVertexAttribArray, attribute.shader_location);
+      for (auto& attribute : buffer_layout.attributes) {
+        GL_CALL(EnableVertexAttribArray, attribute.shader_location);
+        auto format = ToGLVertexFormatInfo(attribute.format);
+        auto offset = reinterpret_cast<void*>(buffer.offset + attribute.offset);
+        if (format.integer) {
+          GL_CALL(VertexAttribIPointer, attribute.shader_location,
+                  format.component_count, format.component_type,
+                  buffer_layout.array_stride, offset);
+        } else {
           GL_CALL(VertexAttribPointer, attribute.shader_location,
-                  static_cast<uint32_t>(attribute.format), GL_FLOAT, GL_FALSE,
-                  buffer_layout.array_stride,
-                  reinterpret_cast<void*>(command->vertex_buffer.offset +
-                                          attribute.offset));
-          GL_CALL(VertexAttribDivisor, attribute.shader_location, 0);
+                  format.component_count, format.component_type, GL_FALSE,
+                  buffer_layout.array_stride, offset);
         }
-      } else {
-        BindBuffer(GL_ARRAY_BUFFER,
-                   static_cast<GPUBufferGL*>(command->instance_buffer.buffer)
-                       ->GetBufferId());
-        for (auto& attribute : buffer_layout.attributes) {
-          GL_CALL(EnableVertexAttribArray, attribute.shader_location);
-          GL_CALL(VertexAttribPointer, attribute.shader_location,
-                  static_cast<uint32_t>(attribute.format), GL_FLOAT, GL_FALSE,
-                  buffer_layout.array_stride,
-                  reinterpret_cast<void*>(command->instance_buffer.offset +
-                                          attribute.offset));
-          GL_CALL(VertexAttribDivisor, attribute.shader_location, 1);
-        }
+        GL_CALL(VertexAttribDivisor, attribute.shader_location,
+                is_instance ? 1 : 0);
       }
     }
 

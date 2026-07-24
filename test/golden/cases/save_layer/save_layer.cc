@@ -13,6 +13,18 @@
 #include "skity/graphic/color.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
+static const char* kGoldenTestCoverageAAImageDir =
+    CASE_DIR "coverage_aa_images/";
+
+namespace {
+
+std::filesystem::path CoverageAAGoldenPath(const char* name) {
+  std::filesystem::path path(kGoldenTestCoverageAAImageDir);
+  path.append(name);
+  return path;
+}
+
+}  // namespace
 
 TEST(SaveLayerGolden, TwoCircle) {
   skity::PictureRecorder recorder;
@@ -21,6 +33,7 @@ TEST(SaveLayerGolden, TwoCircle) {
 
   canvas->Save();
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   canvas->Scale(10, 10);
   canvas->DrawCircle(20, 20, 10, paint);
@@ -33,11 +46,13 @@ TEST(SaveLayerGolden, TwoCircle) {
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("two_circle.png");
+  auto coverage_aa_path = CoverageAAGoldenPath("two_circle.png");
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 400.f, 400.f,
       skity::testing::PathList{.cpu_tess_path = golden_path.c_str(),
-                               .gpu_tess_path = golden_path.c_str()}));
+                               .gpu_tess_path = golden_path.c_str(),
+                               .coverage_aa_path = coverage_aa_path.c_str()}));
 }
 
 TEST(SaveLayerGolden, ThreeCircle) {
@@ -47,6 +62,7 @@ TEST(SaveLayerGolden, ThreeCircle) {
 
   canvas->Save();
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   canvas->Scale(10.1, 10.1);
   canvas->DrawCircle(20.3, 20.3, 10, paint);
@@ -66,11 +82,13 @@ TEST(SaveLayerGolden, ThreeCircle) {
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("three_circle.png");
+  auto coverage_aa_path = CoverageAAGoldenPath("three_circle.png");
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 400.f, 400.f,
       skity::testing::PathList{.cpu_tess_path = golden_path.c_str(),
-                               .gpu_tess_path = golden_path.c_str()}));
+                               .gpu_tess_path = golden_path.c_str(),
+                               .coverage_aa_path = coverage_aa_path.c_str()}));
 }
 
 TEST(SaveLayerGolden, TwoCircleWithTranslate) {
@@ -80,6 +98,7 @@ TEST(SaveLayerGolden, TwoCircleWithTranslate) {
 
   canvas->Save();
   skity::Paint paint;
+  paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   canvas->Scale(10, 10);
   canvas->DrawCircle(20, 20, 10, paint);
@@ -94,10 +113,12 @@ TEST(SaveLayerGolden, TwoCircleWithTranslate) {
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("two_circle_with_translate.png");
+  auto coverage_aa_path = CoverageAAGoldenPath("two_circle_with_translate.png");
 
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 400.f, 400.f,
       skity::testing::PathList{.cpu_tess_path = golden_path.c_str(),
-                               .gpu_tess_path = golden_path.c_str()}));
+                               .gpu_tess_path = golden_path.c_str(),
+                               .coverage_aa_path = coverage_aa_path.c_str()}));
 }

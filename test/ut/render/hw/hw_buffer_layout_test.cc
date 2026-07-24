@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "src/gpu/gpu_render_pipeline.hpp"
+#include "src/render/hw/draw/geometry/wgsl_coverage_aa_tile_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_filter_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_path_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
@@ -73,6 +74,11 @@ TEST(HWBufferLayoutMap, GetBufferLayout) {
         break;
       case skity::HWGeometryKeyType::kFilter:
         expected_buffer_layout = skity::WGSLFilterGeometry::GetBufferLayout();
+        EXPECT_EQ(expected_buffer_layout, actual_buffer_layout);
+        break;
+      case skity::HWGeometryKeyType::kCoverageAA:
+        expected_buffer_layout =
+            skity::WGSLCoverageAATileGeometry::GetBufferLayout();
         EXPECT_EQ(expected_buffer_layout, actual_buffer_layout);
         break;
     }

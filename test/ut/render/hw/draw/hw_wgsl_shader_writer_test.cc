@@ -19,6 +19,7 @@
 #include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_vertex_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
+#include "src/render/hw/draw/geometry/wgsl_coverage_aa_tile_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_path_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
@@ -1797,6 +1798,43 @@ TEST(ShaderWriter, PathWithSolidColor) {
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid));
   ASSERT_TRUE(CompareShader(vs, GetPathGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorFS()));
+}
+
+TEST(ShaderWriter, CoverageAAResolvesAlphaInFinalFragment) {
+  skity::WGSLCoverageAATileGeometry geometry(nullptr, 0, 0);
+  skity::WGSLSolidColor fragment{skity::Color4f{1.0f, 1.0f, 1.0f, 1.0f}};
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+  std::string vs = shader_writer.GenVSSourceWGSL();
+  std::string fs = shader_writer.GenFSSourceWGSL();
+
+  EXPECT_NE(vs.find("a_line_range: vec2<u32>"), std::string::npos);
+  EXPECT_NE(vs.find("a_backdrop_and_fill_rule: vec2<i32>"), std::string::npos);
+  EXPECT_NE(vs.find("@interpolate(flat) v_line_range: vec2<u32>"),
+            std::string::npos);
+  EXPECT_NE(fs.find("texture_2d<u32>"), std::string::npos);
+  EXPECT_NE(fs.find("textureLoad(uCoverageAALineTexture"), std::string::npos);
+  EXPECT_NE(fs.find("coverage_aa_edge_contribution(line.xy, line.zw"),
+            std::string::npos);
+  EXPECT_NE(fs.find("let tile_pixel: vec2<f32> = clamp(floor("),
+            std::string::npos);
+  EXPECT_EQ(fs.find("15.999"), std::string::npos);
+  EXPECT_NE(fs.find("coverage_aa_load_line(line_start + i, "
+                    "line_texture_width)"),
+            std::string::npos);
+  EXPECT_NE(fs.find("@interpolate(flat) v_line_range: vec2<u32>"),
+            std::string::npos);
+  EXPECT_NE(
+      fs.find("var winding: f32 = f32(input.v_backdrop_and_fill_rule.x);"),
+      std::string::npos);
+  EXPECT_EQ(fs.find("u32(round(input.v_line_range"), std::string::npos);
+  EXPECT_NE(fs.find("winding, input.v_backdrop_and_fill_rule.y"),
+            std::string::npos);
+  EXPECT_NE(fs.find("let parity: f32 = alpha - floor(alpha * 0.5) * 2.0;"),
+            std::string::npos);
+  EXPECT_EQ(fs.find("textureSample"), std::string::npos);
+  EXPECT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
+                                       skity::HWGeometryKeyType::kCoverageAA));
 }
 
 TEST(ShaderWriter, PathAAWithSolidColor) {

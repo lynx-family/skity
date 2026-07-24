@@ -5,6 +5,7 @@
 #include "src/render/hw/draw/hw_wgsl_shader_writer.hpp"
 
 #include <sstream>
+#include <string_view>
 
 #include "src/logging.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
@@ -105,6 +106,9 @@ void HWWGSLShaderWriter::WriteFSFunctionsAndStructs(
 void HWWGSLShaderWriter::WriteFSUniforms(std::stringstream& ss) const {
   DEBUG_CHECK(fragment_);
   fragment_->WriteFSUniforms(ss);
+  if (geometry_ && geometry_->AffectsFragment()) {
+    geometry_->WriteFSUniforms(ss);
+  }
 }
 
 void HWWGSLShaderWriter::WriteFSInput(std::stringstream& ss) const {
@@ -182,12 +186,23 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
 }
 
 void HWWGSLShaderWriter::WriteVaryings(std::stringstream& ss) const {
+#ifndef NDEBUG
+  constexpr std::string_view kFlatInterpolation = "@interpolate(flat) ";
+  auto varying_name = [kFlatInterpolation](const std::string& varying) {
+    std::string_view result = varying;
+    if (result.compare(0, kFlatInterpolation.size(), kFlatInterpolation) == 0) {
+      result.remove_prefix(kFlatInterpolation.size());
+    }
+    return result;
+  };
+#endif
+
   uint32_t i = 0;
   if (fragment_ && fragment_->GetVarings().has_value()) {
     const auto fs_varyings = fragment_->GetVarings().value();
     for (const auto& varying : fs_varyings) {
       // all varyings provided by fragment must start with the prefix 'f_'.
-      DEBUG_CHECK(varying.compare(0, 2, "f_") == 0);
+      DEBUG_CHECK(varying_name(varying).compare(0, 2, "f_") == 0);
       ss << "  @location(" << i << ") " << varying << ",\n";
       i++;
     }
@@ -196,7 +211,7 @@ void HWWGSLShaderWriter::WriteVaryings(std::stringstream& ss) const {
     const auto vs_varyings = geometry_->GetVarings().value();
     for (auto& varying : vs_varyings) {
       // all varyings provided by geometry must start with the prefix 'v_'.
-      DEBUG_CHECK(varying.compare(0, 2, "v_") == 0);
+      DEBUG_CHECK(varying_name(varying).compare(0, 2, "v_") == 0);
       ss << "  @location(" << i << ") " << varying << ",\n";
       i++;
     }

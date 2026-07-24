@@ -181,9 +181,29 @@ void AstPrinter::Visit(ast::Expression* expression) {
         call->args[2]->Accept(this);
         ss_ << ")";
         return;
+      } else if (call->ident->ident->name == "textureLoad") {
+        if (call->args.size() != 3) {
+          has_error_ = true;
+          return;
+        }
+        // textureLoad(texture, coord, level) -> texelFetch(texture, coord,
+        // level). Only texture_2d is currently supported.
+        ss_ << "texelFetch(";
+        call->args[0]->Accept(this);
+        ss_ << ", ";
+        call->args[1]->Accept(this);
+        ss_ << ", ";
+        call->args[2]->Accept(this);
+        ss_ << ")";
+        return;
       } else if (call->ident->ident->name == "textureDimensions") {
+        if (call->args.empty() || call->args.size() > 2) {
+          has_error_ = true;
+          return;
+        }
         // textureDimensions(texture, x) -> textureSize(texture, x)
-        ss_ << "textureSize(";
+        // Only texture_2d is currently supported.
+        ss_ << "uvec2(textureSize(";
         call->args[0]->Accept(this);
         ss_ << ", ";
         if (call->args.size() == 2) {
@@ -191,7 +211,7 @@ void AstPrinter::Visit(ast::Expression* expression) {
         } else {
           ss_ << "0";
         }
-        ss_ << ")";
+        ss_ << "))";
         return;
       } else if (call->ident->ident->name == "select") {
         ss_ << "(";
@@ -819,6 +839,30 @@ void AstPrinter::WriteType(const ast::Type& type) {
   } else if (name == "texture_3d") {
     ss_ << "sampler3D";
   } else if (name == "texture_2d") {
+    // The type argument is the shader-visible sampled type, not the texture
+    // storage width. For example, RGBA16Uint is texture_2d<u32> and lowers to
+    // usampler2D, whose texture loads return uvec4.
+    if (type.expr->ident->args.size() == 1 &&
+        type.expr->ident->args[0]->GetType() ==
+            ast::ExpressionType::kIdentifier) {
+      const auto& sampled_type =
+          static_cast<ast::IdentifierExp*>(type.expr->ident->args[0])
+              ->ident->name;
+      // In GLSL ES, sampler precision also determines the precision of texture
+      // lookup results. Use highp to preserve WGSL's 32-bit i32/u32 contract;
+      // desktop GLSL does not require a precision qualifier.
+      if (sampled_type == "u32") {
+        if (options_.standard == GlslOptions::Standard::kES) {
+          ss_ << "highp ";
+        }
+        ss_ << "u";
+      } else if (sampled_type == "i32") {
+        if (options_.standard == GlslOptions::Standard::kES) {
+          ss_ << "highp ";
+        }
+        ss_ << "i";
+      }
+    }
     ss_ << "sampler2D";
   } else if (name == "texture_1d") {
     ss_ << "sampler1D";

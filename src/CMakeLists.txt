@@ -292,6 +292,14 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/gpu/texture_impl.hpp
     ${CMAKE_CURRENT_LIST_DIR}/gpu/texture_manager.cc
     ${CMAKE_CURRENT_LIST_DIR}/gpu/texture_manager.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/coverage/coverage_aa_frame_data.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/coverage/coverage_aa_line_encoder.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/coverage/coverage_aa_line_encoder.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/coverage/coverage_aa_renderer.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/coverage/coverage_aa_renderer.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/coverage/coverage_aa_tiler.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/coverage/coverage_aa_tiler.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/coverage/coverage_aa_types.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/filters/hw_blur_filter.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/filters/hw_blur_filter.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/filters/hw_color_filter.cc
@@ -354,6 +362,7 @@ if(${SKITY_HW_RENDERER})
     PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/gpu/gpu_shader_module.cc
     ${CMAKE_CURRENT_LIST_DIR}/gpu/gpu_shader_module.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/coverage/wgsl_coverage_aa_common.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_blur_filter.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_blur_filter.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_gradient_fragment.cc
@@ -372,6 +381,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_texture_fragment.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_clip_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_clip_geometry.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_coverage_aa_tile_geometry.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_coverage_aa_tile_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_filter_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_filter_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_path_geometry.cc
@@ -386,6 +397,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_text_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_draw_step.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_draw_step.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_coverage_path_draw.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_coverage_path_draw.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_draw.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_draw.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_path_clip.cc

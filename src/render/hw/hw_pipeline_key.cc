@@ -30,6 +30,8 @@ std::string HWGeometryKeyTypeToName(HWGeometryKeyType::Value value) {
       return "Clip";
     case HWGeometryKeyType::kFilter:
       return "CommonFilterVertexWGSL";
+    case HWGeometryKeyType::kCoverageAA:
+      return "CoverageAA";
     default:
       return "UnknownGeometry";
   }
@@ -41,6 +43,8 @@ std::string HWGeometrySubKeyTypeToName(HWGeometryKeyType::Value value) {
       return "AA";
     case HWGeometryKeyType::kRRect:
       return "RRect";
+    case HWGeometryKeyType::kCoverageAA:
+      return "CoverageAA";
     default:
       return "UnknownGeometry";
   }

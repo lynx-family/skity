@@ -5,8 +5,6 @@
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 
 #include "src/effect/pixmap_shader.hpp"
-#include "src/gpu/gpu_context_impl.hpp"
-#include "src/graphic/blend_mode_priv.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
@@ -17,8 +15,6 @@
 #include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
 #include "src/render/hw/draw/step/color_step.hpp"
 #include "src/render/hw/draw/step/stencil_step.hpp"
-#include "src/render/hw/draw/wgx_filter.hpp"
-#include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 
 namespace skity {
@@ -38,26 +34,7 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
   auto geom = GenGeometry(context, false);
 
   auto frag = GenShadingFragment(context, paint_, is_stroke_);
-
-  if (paint_.GetColorFilter()) {
-    frag->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
-  }
-
-  if (IsAdvancedBlendMode(paint_.GetBlendMode())) {
-    if (GetDstReadStrategy() == DstReadStrategy::kNativeBlend) {
-      // Only GL needs a distinct shader variant (extension injection). On
-      // Vulkan the fragment stays plain and the native equation is applied
-      // through the pipeline blend-state variant.
-      if (context->gpuContext->GetGPUDevice()
-              ->GetCaps()
-              .native_blend_shader_variant) {
-        frag->SetUsesNativeAdvancedBlend(true);
-      }
-    } else {
-      frag->SetProgrammableBlending(WGXProgrammableBlending::Make(
-          paint_.GetBlendMode(), GetDstReadStrategy()));
-    }
-  }
+  ConfigureShadingFragment(context, paint_, GetDstReadStrategy(), frag);
 
   CoverageType coverage = CoverageType::kNone;
 
@@ -83,24 +60,7 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
     auto geometry = GenGeometry(context, true);
 
     auto fragment = GenShadingFragment(context, paint_, is_stroke_);
-
-    if (paint_.GetColorFilter()) {
-      fragment->SetFilter(
-          WGXFilterFragment::Make(paint_.GetColorFilter().get()));
-    }
-
-    if (IsAdvancedBlendMode(paint_.GetBlendMode())) {
-      if (GetDstReadStrategy() == DstReadStrategy::kNativeBlend) {
-        if (context->gpuContext->GetGPUDevice()
-                ->GetCaps()
-                .native_blend_shader_variant) {
-          fragment->SetUsesNativeAdvancedBlend(true);
-        }
-      } else {
-        fragment->SetProgrammableBlending(WGXProgrammableBlending::Make(
-            paint_.GetBlendMode(), GetDstReadStrategy()));
-      }
-    }
+    ConfigureShadingFragment(context, paint_, GetDstReadStrategy(), fragment);
 
     steps.emplace_back(context->arena_allocator->Make<ColorAAStep>(
         std::move(geometry), std::move(fragment), coverage));

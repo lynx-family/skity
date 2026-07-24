@@ -157,6 +157,19 @@ void AstPrinter::Visit(ast::Expression* expression) {
         ss_ << ",";
         call->args[2]->Accept(this);
         ss_ << ")";
+      } else if (call->ident->ident->name == "textureLoad") {
+        if (call->args.size() != 3) {
+          has_error_ = true;
+          return;
+        }
+        // textureLoad(texture, coord, level) -> texture.read(uint2(coord),
+        // uint(level)). Only texture_2d is currently supported.
+        call->args[0]->Accept(this);
+        ss_ << ".read(uint2(";
+        call->args[1]->Accept(this);
+        ss_ << "), uint(";
+        call->args[2]->Accept(this);
+        ss_ << "))";
       } else if (call->ident->ident->name == "textureDimensions") {
         // textureDimensions(texture) -> uint2(texture.get_width(),
         // texture.get_height())

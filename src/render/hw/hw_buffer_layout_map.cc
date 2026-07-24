@@ -4,6 +4,7 @@
 
 #include "src/render/hw/hw_buffer_layout_map.hpp"
 
+#include "src/render/hw/draw/geometry/wgsl_coverage_aa_tile_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_filter_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_path_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
@@ -38,6 +39,8 @@ void HWBufferLayoutMap::RegisterAllBufferLayouts() {
       std::move(WGSLPathGeometry::GetBufferLayout());
   buffer_layout_map_[HWGeometryKeyType::kFilter] =
       std::move(WGSLFilterGeometry::GetBufferLayout());
+  buffer_layout_map_[HWGeometryKeyType::kCoverageAA] =
+      std::move(WGSLCoverageAATileGeometry::GetBufferLayout());
 }
 
 HWBufferLayoutMap::HWBufferLayoutMap() { RegisterAllBufferLayouts(); }

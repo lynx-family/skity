@@ -8,12 +8,15 @@
 #include "src/effect/pixmap_shader.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
+#include "src/graphic/blend_mode_priv.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_vertex_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_stencil_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
+#include "src/render/hw/draw/wgx_filter.hpp"
+#include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
@@ -796,6 +799,31 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
         return arena_allocator->Make<WGSLSolidVertexColor>();
       }
     }
+  }
+}
+
+void ConfigureShadingFragment(HWDrawContext* context, const Paint& paint,
+                              DstReadStrategy dst_read_strategy,
+                              HWWGSLFragment* fragment) {
+  if (fragment == nullptr) {
+    return;
+  }
+
+  if (paint.GetColorFilter()) {
+    fragment->SetFilter(WGXFilterFragment::Make(paint.GetColorFilter().get()));
+  }
+
+  if (!IsAdvancedBlendMode(paint.GetBlendMode())) {
+    return;
+  }
+
+  if (dst_read_strategy != DstReadStrategy::kNativeBlend) {
+    fragment->SetProgrammableBlending(
+        WGXProgrammableBlending::Make(paint.GetBlendMode(), dst_read_strategy));
+  } else if (context->gpuContext->GetGPUDevice()
+                 ->GetCaps()
+                 .native_blend_shader_variant) {
+    fragment->SetUsesNativeAdvancedBlend(true);
   }
 }
 

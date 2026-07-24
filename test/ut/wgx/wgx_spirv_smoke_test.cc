@@ -1205,6 +1205,34 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
 }
 
+TEST(WgxSpirvSmokeTest,
+     EmitsUnsignedIntegerTextureLoadBuiltinForFragmentShader) {
+  auto program = wgx::Program::Parse(R"(
+@group(0) @binding(0) var tex: texture_2d<u32>;
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let encoded: vec4<u32> = textureLoad(tex, vec2<i32>(0, 0), 0);
+  return vec4<f32>(f32(encoded.x), f32(encoded.y),
+                   f32(encoded.z), f32(encoded.w));
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  DumpSpirvBinary("wgx_fs_main_unsigned_texture_load.spv", result.spirv);
+  auto words = result.spirv;
+
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeImage));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpImageFetch));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForScalarConstantStore) {
   auto program = wgx::Program::Parse(R"(
 @vertex
