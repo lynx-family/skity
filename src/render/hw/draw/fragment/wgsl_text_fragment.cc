@@ -315,6 +315,26 @@ std::string WGSLGradientTextFragment::GenSourceWGSL() const {
         }
       }
     )";
+  } else if (type_ == Shader::GradientType::kSweep) {
+    wgsl_code += R"(
+      @group(1) @binding(6) var<uniform> uSweepInfo     : vec4<f32>;
+
+      fn gradient_text_color(fs_in : GradientTextFSInput) -> vec4<f32> {
+        let k1Over2Pi : f32       = 0.1591549430918;
+        var center    : vec2<f32> = uSweepInfo.xy;
+        var bias      : f32       = uSweepInfo.z;
+        var scale     : f32       = uSweepInfo.w;
+        var coord     : vec2<f32> = fs_in.v_pos - center;
+        var angle     : f32       = atan(-coord.y, -coord.x);
+        var t         : f32       =
+            (angle * k1Over2Pi + 0.5 + bias) * scale;
+        var color     : vec4<f32> = calculate_gradient_color(t);
+        if gradient_info.flags == 0 {
+          color = vec4<f32>(color.xyz * color.w, color.w);
+        }
+        return color * gradient_info.global_alpha;
+      }
+    )";
   }
 
   if (filter_) {
