@@ -4,11 +4,14 @@
 
 #include <gtest/gtest.h>
 
+#include <iterator>
 #include <skity/io/data.hpp>
 #include <skity/text/font_arguments.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/typeface.hpp>
 #include <string>
+
+#include "src/text/ports/darwin/types_darwin.hpp"
 
 namespace skity {
 namespace {
@@ -25,9 +28,26 @@ void ExpectNotoSansCjkIndex1(std::shared_ptr<Typeface> const& typeface) {
   EXPECT_NE(desc.post_script_name.find("NotoSansCJKKR-Regular"),
             std::string::npos);
   EXPECT_FALSE(desc.family_name.empty());
+  EXPECT_FALSE(desc.full_name.empty());
   EXPECT_FALSE(desc.post_script_name.empty());
+  EXPECT_EQ(desc.family_name.find('\0'), std::string::npos);
+  EXPECT_EQ(desc.full_name.find('\0'), std::string::npos);
+  EXPECT_EQ(desc.post_script_name.find('\0'), std::string::npos);
   EXPECT_NE(typeface->UnicharToGlyph(0x4E00), 0);
   EXPECT_GT(typeface->CountTables(), 0);
+}
+
+TEST(CoreTextTypefaceTest, ConvertsCFStringToExactUtf8Length) {
+  constexpr UniChar kCharacters[] = {'P', 'i', 'n', 'g', 'F',    'a',   'n',
+                                     'g', 'S', 'C', '-', 0x4E2D, 0x6587};
+  UniqueCFRef<CFStringRef> cf_string(CFStringCreateWithCharacters(
+      kCFAllocatorDefault, kCharacters, std::size(kCharacters)));
+  ASSERT_NE(cf_string, nullptr);
+
+  std::string converted = cf_string_to_string(cf_string.get());
+
+  EXPECT_EQ(converted, "PingFangSC-\xE4\xB8\xAD\xE6\x96\x87");
+  EXPECT_EQ(converted.find('\0'), std::string::npos);
 }
 
 TEST(CoreTextTypefaceTest, MakeFromFileSupportsTtcIndex) {

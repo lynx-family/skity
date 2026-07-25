@@ -15,10 +15,28 @@
 #include <mutex>
 #include <skity/macros.hpp>
 #include <string>
+#include <vector>
 
 namespace skity {
 
 const CGFloat (&get_kit_font_weight_mapping())[11];  // NOLINT
+
+std::string cf_string_to_string(CFStringRef str) {
+  if (!str) {
+    return {};
+  }
+
+  CFIndex capacity = CFStringGetMaximumSizeForEncoding(CFStringGetLength(str),
+                                                       kCFStringEncodingUTF8) +
+                     1;
+  std::vector<char> buffer(capacity);
+  if (!CFStringGetCString(str, buffer.data(), capacity,
+                          kCFStringEncodingUTF8)) {
+    return {};
+  }
+
+  return std::string(buffer.data());
+}
 
 namespace {
 
@@ -135,7 +153,7 @@ bool find_desc_str(CTFontDescriptorRef desc, CFStringRef name,
     return false;
   }
 
-  *value = CFStringGetCStringPtr(ref.get(), kCFStringEncodingUTF8);
+  *value = cf_string_to_string(ref.get());
 
   return true;
 }
