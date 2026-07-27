@@ -166,6 +166,14 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
   const bool is_unsigned_vector =
       type_table->IsVectorType(operand_type) &&
       type_table->GetComponentType(operand_type) == type_table->GetU32Type();
+  // SPIR-V uses the same comparison opcode family for scalar and vector
+  // operands; only the result shape changes to match the operand.
+  const ir::TypeId comparison_result_type =
+      type_table->IsVectorType(operand_type)
+          ? type_table->GetVectorType(
+                type_table->GetBoolType(),
+                type_table->GetVectorComponentCount(operand_type))
+          : type_table->GetBoolType();
 
   switch (op_kind) {
     case ir::BinaryOpKind::kAdd:
@@ -291,103 +299,103 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
       }
       return false;
     case ir::BinaryOpKind::kEqual:
-      if (result_type != type_table->GetBoolType()) {
+      if (result_type != comparison_result_type) {
         return false;
       }
       if (is_bool) {
         *out_op = SpvOpLogicalEqual;
         return true;
       }
-      if (is_int) {
+      if (is_int || is_integer_vector) {
         *out_op = SpvOpIEqual;
         return true;
       }
-      if (is_float) {
+      if (is_float || is_float_vector) {
         *out_op = SpvOpFOrdEqual;
         return true;
       }
       return false;
     case ir::BinaryOpKind::kNotEqual:
-      if (result_type != type_table->GetBoolType()) {
+      if (result_type != comparison_result_type) {
         return false;
       }
       if (is_bool) {
         *out_op = SpvOpLogicalNotEqual;
         return true;
       }
-      if (is_int) {
+      if (is_int || is_integer_vector) {
         *out_op = SpvOpINotEqual;
         return true;
       }
-      if (is_float) {
+      if (is_float || is_float_vector) {
         *out_op = SpvOpFOrdNotEqual;
         return true;
       }
       return false;
     case ir::BinaryOpKind::kLessThan:
-      if (result_type != type_table->GetBoolType()) {
+      if (result_type != comparison_result_type) {
         return false;
       }
-      if (is_signed) {
+      if (is_signed || is_signed_vector) {
         *out_op = SpvOpSLessThan;
         return true;
       }
-      if (is_unsigned) {
+      if (is_unsigned || is_unsigned_vector) {
         *out_op = SpvOpULessThan;
         return true;
       }
-      if (is_float) {
+      if (is_float || is_float_vector) {
         *out_op = SpvOpFOrdLessThan;
         return true;
       }
       return false;
     case ir::BinaryOpKind::kGreaterThan:
-      if (result_type != type_table->GetBoolType()) {
+      if (result_type != comparison_result_type) {
         return false;
       }
-      if (is_signed) {
+      if (is_signed || is_signed_vector) {
         *out_op = SpvOpSGreaterThan;
         return true;
       }
-      if (is_unsigned) {
+      if (is_unsigned || is_unsigned_vector) {
         *out_op = SpvOpUGreaterThan;
         return true;
       }
-      if (is_float) {
+      if (is_float || is_float_vector) {
         *out_op = SpvOpFOrdGreaterThan;
         return true;
       }
       return false;
     case ir::BinaryOpKind::kLessThanEqual:
-      if (result_type != type_table->GetBoolType()) {
+      if (result_type != comparison_result_type) {
         return false;
       }
-      if (is_signed) {
+      if (is_signed || is_signed_vector) {
         *out_op = SpvOpSLessThanEqual;
         return true;
       }
-      if (is_unsigned) {
+      if (is_unsigned || is_unsigned_vector) {
         *out_op = SpvOpULessThanEqual;
         return true;
       }
-      if (is_float) {
+      if (is_float || is_float_vector) {
         *out_op = SpvOpFOrdLessThanEqual;
         return true;
       }
       return false;
     case ir::BinaryOpKind::kGreaterThanEqual:
-      if (result_type != type_table->GetBoolType()) {
+      if (result_type != comparison_result_type) {
         return false;
       }
-      if (is_signed) {
+      if (is_signed || is_signed_vector) {
         *out_op = SpvOpSGreaterThanEqual;
         return true;
       }
-      if (is_unsigned) {
+      if (is_unsigned || is_unsigned_vector) {
         *out_op = SpvOpUGreaterThanEqual;
         return true;
       }
-      if (is_float) {
+      if (is_float || is_float_vector) {
         *out_op = SpvOpFOrdGreaterThanEqual;
         return true;
       }

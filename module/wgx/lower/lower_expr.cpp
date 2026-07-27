@@ -27,17 +27,27 @@ bool IsComparisonOp(ast::BinaryOp op) {
   }
 }
 
+// WGX currently permits all six comparisons for numeric scalars and vectors.
+// Boolean comparison is intentionally limited to scalar == and !=.
 bool SupportsComparisonForType(ast::BinaryOp op, ir::TypeId type_id,
                                ir::TypeTable* type_table) {
-  if (type_table == nullptr || !type_table->IsScalarType(type_id)) {
+  if (type_table == nullptr) {
     return false;
   }
 
-  if (type_table->GetBoolType() == type_id) {
+  if (type_id == type_table->GetBoolType()) {
     return op == ast::BinaryOp::kEqual || op == ast::BinaryOp::kNotEqual;
   }
 
-  return type_table->IsIntegerType(type_id) || type_table->IsFloatType(type_id);
+  ir::TypeId component_type = type_id;
+  if (type_table->IsVectorType(type_id)) {
+    component_type = type_table->GetComponentType(type_id);
+  } else if (!type_table->IsScalarType(type_id)) {
+    return false;
+  }
+
+  return type_table->IsIntegerType(component_type) ||
+         type_table->IsFloatType(component_type);
 }
 
 bool SupportsShiftForType(ir::TypeId type_id, ir::TypeTable* type_table) {
@@ -1309,7 +1319,14 @@ ir::ExprResult Lowerer::LowerBinaryExpression(ast::BinaryExp* binary) {
     if (!SupportsComparisonForType(binary->op, lhs_value.type, type_table_)) {
       return ir::ExprResult();
     }
-    result_type = type_table_->GetBoolType();
+    // Component-wise vector comparisons keep the operand width and replace
+    // the component type with bool.
+    result_type =
+        type_table_->IsVectorType(lhs_value.type)
+            ? type_table_->GetVectorType(
+                  type_table_->GetBoolType(),
+                  type_table_->GetVectorComponentCount(lhs_value.type))
+            : type_table_->GetBoolType();
   } else if (binary->op == ast::BinaryOp::kLogicalAnd ||
              binary->op == ast::BinaryOp::kLogicalOr) {
     if (lhs_value.type != rhs_value.type ||

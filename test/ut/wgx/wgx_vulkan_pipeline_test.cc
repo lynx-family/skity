@@ -517,7 +517,7 @@ class WgxVulkanPipelineTest : public ::testing::Test {
 }  // namespace
 
 TEST_F(WgxVulkanPipelineTest,
-       CreatesGraphicsPipelineForStructInterfaceShaders) {
+       CreatesGraphicsPipelineForStructInterfaceAndVectorComparisonShaders) {
   const char* vertex_source = R"(
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
@@ -546,10 +546,14 @@ struct FragmentOutput {
 fn fs_main(input: FragmentInput) -> FragmentOutput {
   var output: FragmentOutput;
   var i: i32 = 0;
-  output.color = input.color;
+  let threshold: vec4<f32> = vec4<f32>(0.5);
+  let mask: vec4<bool> = input.color >= threshold;
+  let selected: vec4<f32> =
+      select(input.color, vec4<f32>(1.0), mask);
+  output.color = selected;
   while (i < 1) {
     i = i + 1;
-    output.color = input.color;
+    output.color = selected;
   }
   return output;
 }

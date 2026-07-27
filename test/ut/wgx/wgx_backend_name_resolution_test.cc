@@ -152,6 +152,179 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_NE(msl_result.content.find("texture2d<uint>"), std::string::npos);
 }
 
+TEST(WgxBackendNameResolutionTest, LowersVectorComparisonsAndSelectForGlsl) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let f2_a: vec2<f32> = vec2<f32>(0.0, 1.0);
+  let f2_b: vec2<f32> = vec2<f32>(1.0, 0.0);
+  let f2_less: vec2<bool> = f2_a < f2_b;
+  let f2_less_equal: vec2<bool> = f2_a <= f2_b;
+  let f2_selected: vec2<f32> = select(f2_a, f2_b, f2_a < f2_b);
+  let scalar_less: bool = f2_a.x < 17.0;
+  let scalar_selected: f32 = select(0.0, 1.0, scalar_less);
+
+  let i3_a: vec3<i32> = vec3<i32>(0, 1, 2);
+  let i3_b: vec3<i32> = vec3<i32>(2, 1, 0);
+  let i3_greater: vec3<bool> = i3_a > i3_b;
+  let i3_greater_equal: vec3<bool> = i3_a >= i3_b;
+
+  let u4_a: vec4<u32> =
+      vec4<u32>(u32(0), u32(1), u32(2), u32(3));
+  let u4_b: vec4<u32> =
+      vec4<u32>(u32(3), u32(2), u32(1), u32(0));
+  let u4_equal: vec4<bool> = u4_a == u4_b;
+  let u4_not_equal: vec4<bool> = u4_a != u4_b;
+  let selected: vec4<u32> = select(u4_a, u4_b, u4_equal);
+
+  return vec4<f32>(f32(selected.x), scalar_selected, f2_selected.x, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions desktop_options;
+  desktop_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  desktop_options.major_version = 3;
+  desktop_options.minor_version = 3;
+  auto desktop_result = program->WriteToGlsl("fs_main", desktop_options);
+  ASSERT_TRUE(desktop_result.success);
+  EXPECT_NE(desktop_result.content.find("lessThan("), std::string::npos);
+  EXPECT_NE(desktop_result.content.find("lessThanEqual("), std::string::npos);
+  EXPECT_NE(desktop_result.content.find("greaterThan("), std::string::npos);
+  EXPECT_NE(desktop_result.content.find("greaterThanEqual("),
+            std::string::npos);
+  EXPECT_NE(desktop_result.content.find("equal("), std::string::npos);
+  EXPECT_NE(desktop_result.content.find("notEqual("), std::string::npos);
+  EXPECT_NE(desktop_result.content.find(" < 17.000000"), std::string::npos);
+  EXPECT_NE(desktop_result.content.find(" ? 1.000000 : 0.000000"),
+            std::string::npos);
+  EXPECT_NE(desktop_result.content.find("uvec4 wgx_select("),
+            std::string::npos);
+  EXPECT_NE(desktop_result.content.find("vec2 wgx_select("), std::string::npos);
+  EXPECT_EQ(desktop_result.content.find("ivec3 wgx_select("),
+            std::string::npos);
+  EXPECT_EQ(desktop_result.content.find("bool wgx_select("), std::string::npos);
+
+  wgx::GlslOptions es_options;
+  es_options.standard = wgx::GlslOptions::Standard::kES;
+  es_options.major_version = 3;
+  es_options.minor_version = 0;
+  auto es_result = program->WriteToGlsl("fs_main", es_options);
+  ASSERT_TRUE(es_result.success);
+  EXPECT_NE(es_result.content.find("#version 300 es"), std::string::npos);
+  EXPECT_NE(es_result.content.find("uvec4 wgx_select("), std::string::npos);
+}
+
+TEST(WgxBackendNameResolutionTest, RejectsBooleanVectorComparison) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let lhs: vec2<bool> = vec2<bool>(true, false);
+  let rhs: vec2<bool> = vec2<bool>(false, true);
+  let compared: vec2<bool> = lhs == rhs;
+  return vec4<f32>(0.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  EXPECT_FALSE(program->WriteToGlsl("fs_main", glsl_options).success);
+
+  wgx::SpirvOptions spirv_options;
+  EXPECT_FALSE(program->WriteToSpirv("fs_main", spirv_options).success);
+}
+
+TEST(WgxBackendNameResolutionTest,
+     UsesKnownRhsVectorConstructorForIndirectLhs) {
+  auto program = wgx::Program::Parse(R"(
+struct Input {
+  value: vec4<f32>,
+}
+
+fn compare(input: Input) -> vec4<bool> {
+  return input.value < vec4<f32>(1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  var input: Input;
+  input.value = vec4<f32>(0.0);
+  let condition: vec4<bool> = compare(input);
+  return select(vec4<f32>(0.0), vec4<f32>(1.0), condition);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions options;
+  options.standard = wgx::GlslOptions::Standard::kDesktop;
+  options.major_version = 3;
+  options.minor_version = 3;
+  auto result = program->WriteToGlsl("fs_main", options);
+  ASSERT_TRUE(result.success);
+  EXPECT_NE(result.content.find("lessThan("), std::string::npos);
+  EXPECT_NE(result.content.find("vec4 wgx_select("), std::string::npos);
+}
+
+TEST(WgxBackendNameResolutionTest,
+     PreservesScalarComparisonForUnknownFunctionReturnType) {
+  auto program = wgx::Program::Parse(R"(
+fn value() -> f32 {
+  return 0.0;
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let compared: bool = value() < value();
+  return vec4<f32>(0.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions options;
+  options.standard = wgx::GlslOptions::Standard::kDesktop;
+  options.major_version = 3;
+  options.minor_version = 3;
+  auto result = program->WriteToGlsl("fs_main", options);
+  ASSERT_TRUE(result.success);
+  EXPECT_NE(result.content.find(" < "), std::string::npos);
+  EXPECT_EQ(result.content.find("lessThan("), std::string::npos);
+}
+
+TEST(WgxBackendNameResolutionTest,
+     PreservesScalarSelectForUnknownFunctionReturnType) {
+  auto program = wgx::Program::Parse(R"(
+fn mask() -> bool {
+  return true;
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let selected: f32 = select(0.0, 1.0, mask());
+  return vec4<f32>(selected);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions options;
+  options.standard = wgx::GlslOptions::Standard::kDesktop;
+  options.major_version = 3;
+  options.minor_version = 3;
+  auto result = program->WriteToGlsl("fs_main", options);
+  ASSERT_TRUE(result.success);
+  EXPECT_NE(result.content.find(" ? 1.000000 : 0.000000"), std::string::npos);
+  EXPECT_EQ(result.content.find("wgx_select("), std::string::npos);
+}
+
 TEST(WgxBackendNameResolutionTest,
      RewritesCustomTypeNamesInFunctionParameters) {
   auto program = wgx::Program::Parse(R"(
