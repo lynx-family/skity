@@ -7,6 +7,7 @@
 #include <skity/io/data.hpp>
 #include <skity/text/font_arguments.hpp>
 #include <skity/text/font_manager.hpp>
+#include <skity/text/ports/typeface_ct.hpp>
 #include <skity/text/typeface.hpp>
 #include <string>
 
@@ -67,6 +68,20 @@ TEST(CoreTextTypefaceTest, MakeVariationRejectsTtcIndexMismatch) {
   args.SetCollectionIndex(1);
 
   EXPECT_EQ(typeface->MakeVariation(args), nullptr);
+}
+
+TEST(CoreTextTypefaceTest, FromCTFontWithoutCacheCreatesIndependentTypefaces) {
+  CTFontRef ct_font =
+      CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 16.0, nullptr);
+  ASSERT_NE(ct_font, nullptr);
+
+  auto first = TypefaceCT::TypefaceFromCTFontWithoutCache(ct_font);
+  auto second = TypefaceCT::TypefaceFromCTFontWithoutCache(ct_font);
+  CFRelease(ct_font);
+
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(second, nullptr);
+  EXPECT_NE(first->TypefaceId(), second->TypefaceId());
 }
 
 }  // namespace

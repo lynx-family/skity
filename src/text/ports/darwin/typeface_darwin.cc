@@ -511,6 +511,18 @@ std::shared_ptr<Typeface> TypefaceCT::TypefaceFromCTFont(CTFontRef ct_font) {
   return TypefaceDarwin::Make(style, UniqueCTFontRef(ct_font));
 }
 
+std::shared_ptr<Typeface> TypefaceCT::TypefaceFromCTFontWithoutCache(
+    CTFontRef ct_font) {
+  CFRetain(ct_font);
+  UniqueCFRef<CTFontDescriptorRef> desc(CTFontCopyFontDescriptor(ct_font));
+
+  FontStyle style;
+
+  ct_desc_to_font_style(desc.get(), &style);
+
+  return TypefaceDarwin::MakeWithoutCache(style, UniqueCTFontRef(ct_font));
+}
+
 void TypefaceDarwin::SerializeData() {
   auto font_type = get_font_type_tag(ct_font_.get());
 
