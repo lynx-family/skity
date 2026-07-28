@@ -274,11 +274,11 @@ class FontNode : public Node {
   bool Attribute(const char* name, const char* value) override {
     if (!strcmp(name, "index")) {
       if (!parse_non_negative_integer(value, &index_)) {
-        LOGE("'%s' is an invalid index", value);
+        LOGE("'{}' is an invalid index", value);
       }
     } else if (!strcmp(name, "weight")) {
       if (!parse_non_negative_integer(value, &weight_)) {
-        LOGE("'%s' is an invalid wight", value);
+        LOGE("'{}' is an invalid weight", value);
       }
     } else if (!strcmp(name, "style")) {
       if (!strcmp("normal", value)) {
@@ -314,10 +314,11 @@ class AliasNode : public Node {
       lowercase(name_);
     } else if (!strcmp(name, "to")) {
       to_ = value;
+      lowercase(to_);
     } else if (!strcmp(name, "weight")) {
       if (!parse_non_negative_integer(value, &weight_)) {
         weight_ = 0;
-        LOGE("'%s' is an invalid weight", value);
+        LOGE("'{}' is an invalid weight", value);
       }
     }
     return true;
@@ -348,7 +349,7 @@ class AxisNode : public Node {
       if (parse_fixed<16>(value, &fixed)) {
         style_value_ = FixedDot16ToFloat(fixed);
       } else {
-        LOGE("'%s' is an invalid stylevalue", value);
+        LOGE("'{}' is an invalid stylevalue", value);
       }
     }
     return true;
@@ -529,7 +530,7 @@ static FontFamily* find_family(const std::vector<FontFamily>& font_families,
 void FontsXmlParser::HandleAliasNode(AliasNode* alias_node,
                                      std::vector<FontFamily>* font_families) {
   if (!find_family(*font_families, alias_node->to_)) {
-    LOGE("'%s' alias target not found", alias_node->to_);
+    LOGE("'{}' alias target not found", alias_node->to_);
     return;
   }
   if (alias_node->weight_) {
@@ -597,7 +598,7 @@ void FontsXmlParser::HandleAxisNode(AxisNode* axis_node,
   if (axis_tag_iter == file_info->axis_tags.end()) {
     file_info->axis_tags.emplace(axis_node->tag_, axis_node->style_value_);
   } else {
-    LOGE("'%s' axis specified more than once", axis_node->tag_);
+    LOGE("'{}' axis specified more than once", axis_node->tag_);
   }
 }
 
