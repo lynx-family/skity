@@ -798,6 +798,72 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpSelect));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsVectorComparisonInstructions) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let f_a: vec2<f32> = vec2<f32>(0.0, 1.0);
+  let f_b: vec2<f32> = vec2<f32>(1.0, 0.0);
+  let f_eq: vec2<bool> = f_a == f_b;
+  let f_ne: vec2<bool> = f_a != f_b;
+  let f_lt: vec2<bool> = f_a < f_b;
+  let f_le: vec2<bool> = f_a <= f_b;
+  let f_gt: vec2<bool> = f_a > f_b;
+  let f_ge: vec2<bool> = f_a >= f_b;
+
+  let i_a: vec3<i32> = vec3<i32>(0, 1, 2);
+  let i_b: vec3<i32> = vec3<i32>(2, 1, 0);
+  let i_eq: vec3<bool> = i_a == i_b;
+  let i_ne: vec3<bool> = i_a != i_b;
+  let i_lt: vec3<bool> = i_a < i_b;
+  let i_le: vec3<bool> = i_a <= i_b;
+  let i_gt: vec3<bool> = i_a > i_b;
+  let i_ge: vec3<bool> = i_a >= i_b;
+
+  let u_a: vec4<u32> =
+      vec4<u32>(u32(0), u32(1), u32(2), u32(3));
+  let u_b: vec4<u32> =
+      vec4<u32>(u32(3), u32(2), u32(1), u32(0));
+  let u_eq: vec4<bool> = u_a == u_b;
+  let u_ne: vec4<bool> = u_a != u_b;
+  let u_lt: vec4<bool> = u_a < u_b;
+  let u_le: vec4<bool> = u_a <= u_b;
+  let u_gt: vec4<bool> = u_a > u_b;
+  let u_ge: vec4<bool> = u_a >= u_b;
+
+  let selected: vec2<f32> = select(f_a, f_b, f_lt);
+  return vec4<f32>(selected, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+  ASSERT_GE(words.size(), 5u);
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFOrdEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFOrdNotEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFOrdLessThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFOrdLessThanEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFOrdGreaterThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpFOrdGreaterThanEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpINotEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSLessThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSLessThanEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSGreaterThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSGreaterThanEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpULessThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpULessThanEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpUGreaterThan));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpUGreaterThanEqual));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSelect));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsAtanBuiltinForFragmentShader) {
   auto program = wgx::Program::Parse(R"(
 @fragment

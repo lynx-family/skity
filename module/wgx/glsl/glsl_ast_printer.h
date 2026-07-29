@@ -7,8 +7,10 @@
 #include <wgsl_cross.h>
 
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include "semantic/symbol.h"
 #include "wgsl/ast/node.h"
@@ -68,6 +70,14 @@ class AstPrinter : public ast::AstVisitor {
   uint32_t GetTextureIndex() const { return texture_index_; }
 
  private:
+  struct LocallyKnownVectorType {
+    std::string glsl_name;
+    size_t width = 0;
+
+    bool IsValid() const { return !glsl_name.empty(); }
+    bool IsBoolean() const { return glsl_name.rfind("bvec", 0) == 0; }
+  };
+
   std::string GetOutputName(std::string_view name) const;
 
   std::string GetOutputName(const semantic::Symbol* symbol,
@@ -84,6 +94,20 @@ class AstPrinter : public ast::AstVisitor {
 
   const semantic::Symbol* FindDeclSymbol(
       const ast::Identifier* declaration) const;
+
+  // Deliberately recognizes only locally evident vector types: explicit
+  // declarations or constructors, plus a few type-preserving expressions. It
+  // does not infer member, index, or user-function return types. Unknown
+  // expressions preserve the legacy scalar GLSL syntax.
+  LocallyKnownVectorType TryGetLocallyKnownVectorType(
+      ast::Expression* expression) const;
+
+  LocallyKnownVectorType TryGetLocallyKnownVectorType(
+      const ast::Type& type) const;
+
+  void RequireSelectType(const LocallyKnownVectorType& type);
+
+  std::string BuildSelectHelpers() const;
 
   void WriteType(const ast::Type& type);
 
@@ -128,12 +152,14 @@ class AstPrinter : public ast::AstVisitor {
       declaration_symbols_;
   mutable std::unordered_map<const semantic::Symbol*, std::string>
       symbol_names_{};
+  std::stringstream preamble_ss_;
   std::stringstream ss_;
   bool has_error_ = false;
   uint32_t ubo_index_ = 0;
   uint32_t texture_index_ = 0;
   bool needs_fb_fetch_ = false;
   bool needs_advanced_blend_ = false;
+  std::vector<LocallyKnownVectorType> required_select_types_;
 };
 
 }  // namespace glsl

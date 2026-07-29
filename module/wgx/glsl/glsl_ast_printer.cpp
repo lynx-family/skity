@@ -4,8 +4,35 @@
 
 #include "glsl/glsl_ast_printer.h"
 
+#include <array>
+
 namespace wgx {
 namespace glsl {
+
+namespace {
+
+// WGSL vector comparisons are component-wise. GLSL expresses those operations
+// with built-ins such as lessThan(), which return a bvec of the same width.
+const char* GetVectorComparisonBuiltin(ast::BinaryOp op) {
+  switch (op) {
+    case ast::BinaryOp::kEqual:
+      return "equal";
+    case ast::BinaryOp::kNotEqual:
+      return "notEqual";
+    case ast::BinaryOp::kLessThan:
+      return "lessThan";
+    case ast::BinaryOp::kGreaterThan:
+      return "greaterThan";
+    case ast::BinaryOp::kLessThanEqual:
+      return "lessThanEqual";
+    case ast::BinaryOp::kGreaterThanEqual:
+      return "greaterThanEqual";
+    default:
+      return nullptr;
+  }
+}
+
+}  // namespace
 
 static std::string skip_glsl_keywords(const std::string_view& name) {
   if (name == "out" || name == "in" || name == "main" || name == "input" ||
@@ -115,6 +142,126 @@ const semantic::Symbol* AstPrinter::FindDeclSymbol(
   return it == declaration_symbols_.end() ? nullptr : it->second;
 }
 
+AstPrinter::LocallyKnownVectorType AstPrinter::TryGetLocallyKnownVectorType(
+    const ast::Type& type) const {
+  if (type.expr == nullptr || type.expr->ident == nullptr) {
+    return {};
+  }
+
+  const auto& name = type.expr->ident->name;
+  size_t width = 0;
+  if (name == "vec2") {
+    width = 2;
+  } else if (name == "vec3") {
+    width = 3;
+  } else if (name == "vec4") {
+    width = 4;
+  } else {
+    return {};
+  }
+
+  const auto& args = type.expr->ident->args;
+  if (args.size() != 1 ||
+      args[0]->GetType() != ast::ExpressionType::kIdentifier) {
+    return {};
+  }
+
+  const auto* component = static_cast<const ast::IdentifierExp*>(args[0]);
+  if (component->ident == nullptr) {
+    return {};
+  }
+
+  const auto& component_name = component->ident->name;
+  if (component_name == "f32") {
+    return {"vec" + std::to_string(width), width};
+  }
+  if (component_name == "i32") {
+    return {"ivec" + std::to_string(width), width};
+  }
+  if (component_name == "u32") {
+    return {"uvec" + std::to_string(width), width};
+  }
+  if (component_name == "bool") {
+    return {"bvec" + std::to_string(width), width};
+  }
+  return {};
+}
+
+AstPrinter::LocallyKnownVectorType AstPrinter::TryGetLocallyKnownVectorType(
+    ast::Expression* expression) const {
+  if (expression == nullptr) {
+    return {};
+  }
+
+  switch (expression->GetType()) {
+    case ast::ExpressionType::kIdentifier: {
+      auto* identifier = static_cast<ast::IdentifierExp*>(expression);
+      const auto* symbol = FindSymbol(identifier);
+      if (symbol == nullptr || symbol->declaration == nullptr) {
+        return {};
+      }
+      switch (symbol->kind) {
+        case semantic::SymbolKind::kVar:
+        case semantic::SymbolKind::kLet:
+        case semantic::SymbolKind::kConst:
+        case semantic::SymbolKind::kParameter:
+          return TryGetLocallyKnownVectorType(
+              static_cast<const ast::Variable*>(symbol->declaration)->type);
+        default:
+          return {};
+      }
+    }
+    case ast::ExpressionType::kFuncCall: {
+      auto* call = static_cast<ast::FunctionCallExp*>(expression);
+      return TryGetLocallyKnownVectorType(ast::Type{call->ident});
+    }
+    case ast::ExpressionType::kParenExp: {
+      auto* paren = static_cast<ast::ParenExp*>(expression);
+      return paren->exps.size() == 1
+                 ? TryGetLocallyKnownVectorType(paren->exps[0])
+                 : LocallyKnownVectorType{};
+    }
+    case ast::ExpressionType::kUnaryExp: {
+      auto* unary = static_cast<ast::UnaryExp*>(expression);
+      switch (unary->op) {
+        case ast::UnaryOp::kComplement:
+        case ast::UnaryOp::kNegation:
+        case ast::UnaryOp::kNot:
+          return TryGetLocallyKnownVectorType(unary->exp);
+        default:
+          return {};
+      }
+    }
+    case ast::ExpressionType::kBinaryExp: {
+      auto* binary = static_cast<ast::BinaryExp*>(expression);
+      if (GetVectorComparisonBuiltin(binary->op) == nullptr) {
+        return {};
+      }
+      LocallyKnownVectorType operand_type =
+          TryGetLocallyKnownVectorType(binary->lhs);
+      if (!operand_type.IsValid()) {
+        operand_type = TryGetLocallyKnownVectorType(binary->rhs);
+      }
+      return operand_type.IsValid()
+                 ? LocallyKnownVectorType{"bvec" + std::to_string(
+                                                       operand_type.width),
+                                          operand_type.width}
+                 : LocallyKnownVectorType{};
+    }
+    default:
+      return {};
+  }
+}
+
+void AstPrinter::RequireSelectType(const LocallyKnownVectorType& type) {
+  for (const auto& required_type : required_select_types_) {
+    if (required_type.glsl_name == type.glsl_name) {
+      return;
+    }
+  }
+  required_select_types_.push_back(type);
+}
+
 void AstPrinter::Visit(ast::Attribute* attribute) {
   switch (attribute->GetType()) {
     case ast::AttributeType::kLocation: {
@@ -214,6 +361,34 @@ void AstPrinter::Visit(ast::Expression* expression) {
         ss_ << "))";
         return;
       } else if (call->ident->ident->name == "select") {
+        if (call->args.size() != 3) {
+          has_error_ = true;
+          return;
+        }
+
+        // GLSL's ternary operator requires a scalar condition. When the local
+        // syntax exposes matching vector widths, use an on-demand helper for
+        // WGSL's component-wise select; otherwise preserve the scalar path.
+        LocallyKnownVectorType value_type =
+            TryGetLocallyKnownVectorType(call->args[0]);
+        if (!value_type.IsValid()) {
+          value_type = TryGetLocallyKnownVectorType(call->args[1]);
+        }
+        const LocallyKnownVectorType condition_type =
+            TryGetLocallyKnownVectorType(call->args[2]);
+        if (condition_type.IsValid() && value_type.IsValid() &&
+            condition_type.width == value_type.width) {
+          RequireSelectType(value_type);
+          ss_ << "wgx_select(";
+          call->args[0]->Accept(this);
+          ss_ << ", ";
+          call->args[1]->Accept(this);
+          ss_ << ", ";
+          call->args[2]->Accept(this);
+          ss_ << ")";
+          return;
+        }
+
         ss_ << "(";
         call->args[2]->Accept(this);
         ss_ << " ? ";
@@ -285,12 +460,30 @@ void AstPrinter::Visit(ast::Expression* expression) {
 
     case ast::ExpressionType::kBinaryExp: {
       auto* binary = static_cast<ast::BinaryExp*>(expression);
+      const char* vector_builtin = GetVectorComparisonBuiltin(binary->op);
+      if (vector_builtin != nullptr) {
+        LocallyKnownVectorType operand_type =
+            TryGetLocallyKnownVectorType(binary->lhs);
+        if (!operand_type.IsValid()) {
+          operand_type = TryGetLocallyKnownVectorType(binary->rhs);
+        }
+
+        if (operand_type.IsBoolean()) {
+          has_error_ = true;
+          return;
+        }
+        if (operand_type.IsValid()) {
+          ss_ << vector_builtin << "(";
+          binary->lhs->Accept(this);
+          ss_ << ", ";
+          binary->rhs->Accept(this);
+          ss_ << ")";
+          break;
+        }
+      }
+
       binary->lhs->Accept(this);
-
-      ss_ << " ";
-      ss_ << ast::op_to_string(binary->op);
-      ss_ << " ";
-
+      ss_ << " " << ast::op_to_string(binary->op) << " ";
       binary->rhs->Accept(this);
     } break;
 
@@ -656,16 +849,16 @@ void AstPrinter::Visit(ast::Variable* variable) {
 
 bool AstPrinter::Write() {
   // write version header first
-  ss_ << "#version " << options_.major_version << options_.minor_version
-      << "0 ";
+  preamble_ss_ << "#version " << options_.major_version
+               << options_.minor_version << "0 ";
 
   if (options_.standard == GlslOptions::Standard::kDesktop) {
-    ss_ << "core" << std::endl;
+    preamble_ss_ << "core" << std::endl;
   } else {
-    ss_ << "es" << std::endl;
+    preamble_ss_ << "es" << std::endl;
   }
 
-  ss_ << std::endl;
+  preamble_ss_ << std::endl;
 
   // Every extension is caller-requested through GlslOptions::extensions.
   // Extensions that need extra source-side handling are detected by name:
@@ -693,19 +886,19 @@ bool AstPrinter::Write() {
   // that only need a declaration can be added through GlslOptions::extensions
   // without touching this code.
   for (const auto& extension : extensions) {
-    ss_ << "#extension " << extension << " : require" << std::endl;
+    preamble_ss_ << "#extension " << extension << " : require" << std::endl;
   }
   if (!extensions.empty()) {
-    ss_ << std::endl;
+    preamble_ss_ << std::endl;
   }
 
   if (options_.standard == GlslOptions::Standard::kES &&
       func_->GetFunction()->GetPipelineStage() ==
           ast::PipelineStage::kFragment) {
     // GLES needs define the default precision
-    ss_ << "precision highp float;" << std::endl;
-    ss_ << "precision highp int;" << std::endl;
-    ss_ << std::endl;
+    preamble_ss_ << "precision highp float;" << std::endl;
+    preamble_ss_ << "precision highp int;" << std::endl;
+    preamble_ss_ << std::endl;
   }
 
   // write input of this entry point function
@@ -756,10 +949,49 @@ bool AstPrinter::Write() {
 
   WriteMainFunc();
 
+  // Helper requirements are complete after all expressions have been printed.
+  if (!required_select_types_.empty()) {
+    preamble_ss_ << BuildSelectHelpers();
+  }
+
   return true;
 }
 
-std::string AstPrinter::GetResult() const { return ss_.str(); }
+std::string AstPrinter::BuildSelectHelpers() const {
+  // For each required value type, emit one component-wise overload. For
+  // example, a vec2 overload is:
+  //
+  // vec2 wgx_select(vec2 false_value, vec2 true_value, bvec2 condition) {
+  //   return vec2(condition.x ? true_value.x : false_value.x,
+  //               condition.y ? true_value.y : false_value.y);
+  // }
+  std::stringstream helpers;
+  constexpr std::array<const char*, 4> kComponents = {"x", "y", "z", "w"};
+
+  for (const auto& type : required_select_types_) {
+    helpers << type.glsl_name << " wgx_select(" << type.glsl_name
+            << " false_value, " << type.glsl_name << " true_value, bvec"
+            << type.width << " condition) { return " << type.glsl_name << "(";
+    for (size_t component = 0; component < type.width; ++component) {
+      if (component != 0) {
+        helpers << ", ";
+      }
+      helpers << "condition." << kComponents[component] << " ? true_value."
+              << kComponents[component] << " : false_value."
+              << kComponents[component];
+    }
+    helpers << "); }\n";
+  }
+  if (!required_select_types_.empty()) {
+    helpers << "\n";
+  }
+
+  return helpers.str();
+}
+
+std::string AstPrinter::GetResult() const {
+  return preamble_ss_.str() + ss_.str();
+}
 
 void AstPrinter::WriteType(const ast::Type& type) {
   if (type.expr == nullptr) {
