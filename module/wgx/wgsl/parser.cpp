@@ -941,9 +941,14 @@ Parser::Result<ast::IfStatement*> Parser::IfStatement(AttrList& attrs) {
     last_stmt = else_body.GetValue();
   }
 
-  for (auto& itr : statements) {
+  // Build the nested if/else-if chain from the inside out: the outermost
+  // (first) if must be constructed last, with the already-built tail as its
+  // else branch. Iterating in reverse preserves source order; a forward loop
+  // reverses the entire branch chain (wgx bug: if/else-if bodies+conditions
+  // were swapped on every backend).
+  for (auto itr = statements.rbegin(); itr != statements.rend(); ++itr) {
     last_stmt = allocator_->Allocate<ast::IfStatement>(
-        itr.condition, itr.body, last_stmt, std::move(itr.attributes));
+        itr->condition, itr->body, last_stmt, std::move(itr->attributes));
   }
 
   return ReturnType{static_cast<ast::IfStatement*>(last_stmt)};
