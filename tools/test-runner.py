@@ -147,22 +147,27 @@ class TestRunner:
     def configure_cmake(self) -> Tuple[bool, str]:
         self.print_status(Colors.YELLOW, "🔧 Configuring with CMake...")
         os.makedirs(self.build_dir, exist_ok=True)
-        cmd = ["cmake", "-B", self.build_dir, "-DSKITY_TEST=ON", "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"]
+        cmd = [
+            "cmake",
+            "-B",
+            self.build_dir,
+            "-DSKITY_TEST=ON",
+            "-DSKITY_GOLDEN_GUI=OFF",
+            "-DSKITY_VK_BACKEND=ON",
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+        ]
         vk_test_loader = os.environ.get("SKITY_VK_TEST_USE_SYSTEM_LOADER", "")
         if vk_test_loader.upper() not in ("", "0", "OFF", "FALSE", "NO"):
             cmd.append("-DSKITY_VK_TEST_USE_SYSTEM_LOADER=ON")
         else:
             cmd.append("-DSKITY_VK_TEST_USE_SYSTEM_LOADER=OFF")
-        
+
         if self.suite.startswith("golden"):
             cmd.extend([
                 "-DSKITY_MTL_BACKEND=ON",
                 "-DSKITY_CODEC_MODULE=ON",
-                "-DSKITY_GOLDEN_GUI=OFF"
             ])
-            if self.backend == "vulkan":
-                cmd.append("-DSKITY_VK_BACKEND=ON")
-            
+
         exit_code, stdout, stderr = self.run_command(cmd)
         if exit_code != 0:
             self.print_status(Colors.RED, "❌ CMake configuration failed!")

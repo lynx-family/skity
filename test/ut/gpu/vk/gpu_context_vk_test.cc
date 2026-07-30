@@ -1493,6 +1493,9 @@ TEST_F(VulkanSharedContextTest, BeginAndEndRenderPassWithoutCommands) {
 }
 
 TEST_F(VulkanSharedContextTest, EnablesValidationLayerWhenAvailable) {
+#if !defined(SKITY_VK_DEBUG_RUNTIME)
+  GTEST_SKIP() << "Vulkan debug runtime is disabled in this build";
+#else
   ASSERT_NE(GetContext(), nullptr);
   const auto* state = GetState();
   ASSERT_NE(state, nullptr);
@@ -1505,6 +1508,7 @@ TEST_F(VulkanSharedContextTest, EnablesValidationLayerWhenAvailable) {
 
   EXPECT_TRUE(
       ContainsLayer(state->GetEnabledInstanceLayers(), kValidationLayer));
+#endif
 }
 
 TEST_F(VulkanSharedContextTest, EnablesPortabilitySubsetWhenAvailable) {
