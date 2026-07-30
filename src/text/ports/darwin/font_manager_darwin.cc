@@ -38,7 +38,7 @@ bool find_desc_str(CTFontDescriptorRef desc, CFStringRef name,
     return false;
   }
 
-  *value = CFStringGetCStringPtr(ref.get(), kCFStringEncodingUTF8);
+  *value = cf_string_to_string(ref.get());
   return true;
 }
 
@@ -384,18 +384,7 @@ std::string FontManagerDarwin::OnGetFamilyName(int index) const {
   CFStringRef cf_string =
       (CFStringRef)CFArrayGetValueAtIndex(cf_family_names_.get(), index);
 
-  CFIndex length = CFStringGetMaximumSizeForEncoding(
-                       CFStringGetLength(cf_string), kCFStringEncodingUTF8) +
-                   1;
-
-  std::vector<char> buffer(length);
-
-  Boolean ok = CFStringGetCString(cf_string, buffer.data(), length,
-                                  kCFStringEncodingUTF8);
-  if (!ok) {
-    return std::string{};
-  }
-  return std::string{buffer.data()};
+  return cf_string_to_string(cf_string);
 }
 
 std::shared_ptr<FontStyleSet> FontManagerDarwin::OnCreateStyleSet(

@@ -18,6 +18,7 @@
 #include <functional>
 #include <memory>
 #include <skity/text/font_style.hpp>
+#include <string>
 #include <type_traits>
 
 namespace skity {
@@ -38,6 +39,8 @@ using UniqueCFRef =
 
 using UniqueCTFontRef = UniqueCFRef<CTFontRef>;
 using UniqueCTArrayRef = UniqueCFRef<CFArrayRef>;
+
+std::string cf_string_to_string(CFStringRef str);
 
 void ct_desc_to_font_style(CTFontDescriptorRef desc, FontStyle* style,
                            bool from_data_provider = false);

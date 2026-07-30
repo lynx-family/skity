@@ -28,22 +28,6 @@ T skity_cf_retain(T t) {
   return (T)CFRetain(t);
 }
 
-std::string cf_string_to_string(UniqueCFRef<CFStringRef> str) {
-  if (!str) {
-    return {};
-  }
-
-  CFIndex length = CFStringGetMaximumSizeForEncoding(
-                       CFStringGetLength(str.get()), kCFStringEncodingUTF8) +
-                   1;
-
-  std::vector<char> buffer(length);
-
-  CFStringGetCString(str.get(), buffer.data(), length, kCFStringEncodingUTF8);
-
-  return std::string(buffer.data(), length - 1);
-}
-
 SKITY_SFNT_ULONG get_font_type_tag(CTFontRef ct_font) {
   UniqueCFRef<CFNumberRef> fon_format(static_cast<CFNumberRef>(
       CTFontCopyAttribute(ct_font, kCTFontFormatAttribute)));
@@ -480,14 +464,14 @@ std::shared_ptr<Typeface> TypefaceDarwin::OnMakeVariation(
 }
 
 void TypefaceDarwin::OnGetFontDescriptor(FontDescriptor& desc) const {
-  // get family name
+  UniqueCFRef<CFStringRef> family_name(CTFontCopyFamilyName(ct_font_.get()));
+  UniqueCFRef<CFStringRef> full_name(CTFontCopyFullName(ct_font_.get()));
+  UniqueCFRef<CFStringRef> post_script_name(
+      CTFontCopyPostScriptName(ct_font_.get()));
 
-  desc.family_name = cf_string_to_string(
-      UniqueCFRef<CFStringRef>(CTFontCopyFamilyName(ct_font_.get())));
-  desc.full_name = cf_string_to_string(
-      UniqueCFRef<CFStringRef>(CTFontCopyFullName(ct_font_.get())));
-  desc.post_script_name = cf_string_to_string(
-      UniqueCFRef<CFStringRef>(CTFontCopyPostScriptName(ct_font_.get())));
+  desc.family_name = cf_string_to_string(family_name.get());
+  desc.full_name = cf_string_to_string(full_name.get());
+  desc.post_script_name = cf_string_to_string(post_script_name.get());
 
   desc.factory_id = kFontFactoryID;
 
