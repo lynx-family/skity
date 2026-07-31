@@ -88,6 +88,29 @@ bool has_string(CTFontRef ct_font, CFStringRef string) {
                                       length);
 }
 
+bool is_cjk_language(CFStringRef language) {
+  if (language == nullptr) {
+    return false;
+  }
+
+  UniqueCFRef<CFLocaleRef> locale(
+      CFLocaleCreate(kCFAllocatorDefault, language));
+  if (!locale) {
+    return false;
+  }
+
+  CFTypeRef language_code =
+      CFLocaleGetValue(locale.get(), kCFLocaleLanguageCode);
+  if (language_code == nullptr ||
+      CFGetTypeID(language_code) != CFStringGetTypeID()) {
+    return false;
+  }
+
+  return CFEqual(language_code, CFSTR("zh")) ||
+         CFEqual(language_code, CFSTR("ja")) ||
+         CFEqual(language_code, CFSTR("ko"));
+}
+
 int32_t compute_metric(const FontStyle& a, const FontStyle& b) {
   int delta_weight = a.weight() - b.weight();
   int delta_width = a.width() - b.width();
@@ -451,16 +474,40 @@ std::shared_ptr<Typeface> FontManagerDarwin::OnMatchFamilyStyleCharacter(
 
   CFRange cf_range = CFRangeMake(0, CFStringGetLength(cf_string.get()));
 
-  const char* locale =
-      bcp47 != nullptr && bcp47Count > 0 && bcp47[0] != nullptr ? bcp47[0] : "";
-  UniqueCFRef<CFStringRef> cf_locale(
-      CFStringCreateWithCString(nullptr, locale, kCFStringEncodingUTF8));
-  if (!cf_locale) {
-    return nullptr;
+  UniqueCFRef<CFStringRef> cf_locale;
+  UniqueCFRef<CFArrayRef> system_preferred_languages;
+  CFStringRef effective_language = nullptr;
+
+  const bool has_explicit_language = bcp47 != nullptr && bcp47Count > 0 &&
+                                     bcp47[0] != nullptr && bcp47[0][0] != '\0';
+
+  if (has_explicit_language) {
+    cf_locale.reset(
+        CFStringCreateWithCString(nullptr, bcp47[0], kCFStringEncodingUTF8));
+    if (!cf_locale) {
+      return nullptr;
+    }
+    effective_language = cf_locale.get();
+  } else {
+    // Work around app-level font registration changing CoreText's default
+    // fallback order, which can otherwise select a Traditional Chinese face
+    // for Chinese characters when the caller does not provide a language.
+    system_preferred_languages.reset(CFLocaleCopyPreferredLanguages());
+    if (system_preferred_languages &&
+        CFArrayGetCount(system_preferred_languages.get()) > 0) {
+      CFTypeRef first_language =
+          CFArrayGetValueAtIndex(system_preferred_languages.get(), 0);
+      if (first_language != nullptr &&
+          CFGetTypeID(first_language) == CFStringGetTypeID() &&
+          CFStringGetLength(static_cast<CFStringRef>(first_language)) > 0 &&
+          is_cjk_language(static_cast<CFStringRef>(first_language))) {
+        effective_language = static_cast<CFStringRef>(first_language);
+      }
+    }
   }
 
   UniqueCFRef<CTFontRef> ct_font(CTFontCreateForStringWithLanguage(
-      family_font.get(), cf_string.get(), cf_range, cf_locale.get()));
+      family_font.get(), cf_string.get(), cf_range, effective_language));
   if (!ct_font || !has_string(ct_font.get(), cf_string.get())) {
     return nullptr;
   }
