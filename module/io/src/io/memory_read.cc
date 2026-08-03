@@ -362,11 +362,13 @@ SamplingOptions ReadBuffer::ReadSamplingOptions() {
   }
 
   if (ReadBool()) {
-    (void)ReadFloat();  // b
-    (void)ReadFloat();  // c
+    auto b = ReadFloat();
+    auto c = ReadFloat();
 
-    // we do not support cubic filter, just return the default one
-    return SamplingOptions{};
+    SamplingOptions options;
+    options.cubic.B = b;
+    options.cubic.C = c;
+    return options;
   } else {
     auto filter = static_cast<FilterMode>(ReadU32());
     auto mipmap = static_cast<MipmapMode>(ReadU32());

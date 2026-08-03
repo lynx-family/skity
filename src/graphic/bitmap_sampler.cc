@@ -91,6 +91,11 @@ Color BitmapSampler::GetColor(Vec2 uv) const {
   uv = Vec2{RemapFloatTile(uv.x, x_tile_mode_),
             RemapFloatTile(uv.y, y_tile_mode_)};
   Color color;
+  // The SW backend does not implement cubic resampling; fall back to bilinear.
+  if (sampling_options_.UseCubic()) {
+    color = Color4fToColor(SampleUnitLinear(uv));
+    return color;
+  }
   switch (sampling_options_.filter) {
     case FilterMode::kNearest:
       color = Color4fToColor(SampleUnitNearest(uv));

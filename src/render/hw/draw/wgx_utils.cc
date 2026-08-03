@@ -733,11 +733,17 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
       }
 
       if (texture != nullptr) {
+        const SamplingOptions* sampling = pixmap_shader->GetSamplingOptions();
         GPUSamplerDescriptor descriptor;
-        descriptor.mag_filter =
-            ToGPUFilterMode(pixmap_shader->GetSamplingOptions()->filter);
-        descriptor.min_filter =
-            ToGPUFilterMode(pixmap_shader->GetSamplingOptions()->filter);
+        if (sampling->UseCubic()) {
+          // Fast bicubic folds 4 cubic taps into 2x2 hardware bilinear
+          // samples, so the sampler must be linear regardless of filter.
+          descriptor.mag_filter = GPUFilterMode::kLinear;
+          descriptor.min_filter = GPUFilterMode::kLinear;
+        } else {
+          descriptor.mag_filter = ToGPUFilterMode(sampling->filter);
+          descriptor.min_filter = ToGPUFilterMode(sampling->filter);
+        }
 
         if (texture->GetDescriptor().mip_level_count == 1) {
           // If the texture does not contain mipmap data, but the sampler uses
@@ -745,8 +751,7 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
           // backends
           descriptor.mipmap_filter = GPUMipmapMode::kNone;
         } else {
-          descriptor.mipmap_filter =
-              ToGPUMipmapMode(pixmap_shader->GetSamplingOptions()->mipmap);
+          descriptor.mipmap_filter = ToGPUMipmapMode(sampling->mipmap);
         }
 
         auto sampler =

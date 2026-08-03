@@ -21,6 +21,7 @@ endif()
 
 add_subdirectory(case/animated_image)
 add_subdirectory(case/basic)
+add_subdirectory(case/bicubic)
 add_subdirectory(case/blend)
 add_subdirectory(case/clip)
 add_subdirectory(case/color_filter)

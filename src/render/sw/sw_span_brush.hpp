@@ -113,7 +113,7 @@ class PixmapBrush : public SWSpanBrush {
   PixmapBrush(std::vector<Span> const& spans, Bitmap* bitmap,
               ColorFilter* color_filter, BlendMode mode, float global_alpha,
               std::shared_ptr<Pixmap> pixmap, const Matrix& points_to_unit,
-              FilterMode filter_mode, TileMode x_tile_mode,
+              const SamplingOptions& sampling, TileMode x_tile_mode,
               TileMode y_tile_mode);
 
   ~PixmapBrush() override = default;

@@ -5,6 +5,8 @@
 #ifndef SRC_RENDER_HW_DRAW_FRAGMENT_WGSL_TEXTURE_FRAGMENT_HPP
 #define SRC_RENDER_HW_DRAW_FRAGMENT_WGSL_TEXTURE_FRAGMENT_HPP
 
+#include <skity/graphic/sampling_options.hpp>
+
 #include "src/effect/pixmap_shader.hpp"
 #include "src/render/hw/draw/hw_wgsl_fragment.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
@@ -62,6 +64,7 @@ class WGSLTextureFragment : public HWWGSLFragment {
   Matrix local_matrix_;
   float width_;
   float height_;
+  CubicResampler cubic_;
 };
 
 }  // namespace skity

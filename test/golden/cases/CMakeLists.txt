@@ -7,6 +7,7 @@
 add_subdirectory(shape)
 add_subdirectory(gradient)
 add_subdirectory(clip)
+add_subdirectory(image)
 add_subdirectory(image_filter)
 add_subdirectory(save_layer)
 add_subdirectory(simple_shape)
