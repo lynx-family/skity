@@ -129,10 +129,16 @@ void MemoryWriter32::WriteSampling(const SamplingOptions& sampling) {
   // dumy info to align with skia
   WriteUint32(0);  // maxAniso
 
-  WriteBool(false);  // use cubic
-
-  WriteUint32(static_cast<uint32_t>(sampling.filter));
-  WriteUint32(static_cast<uint32_t>(sampling.mipmap));
+  bool use_cubic = sampling.UseCubic();
+  WriteBool(use_cubic);
+  if (use_cubic) {
+    WriteFloat(sampling.cubic.B);
+    WriteFloat(sampling.cubic.C);
+    // In the skia format cubic is mutually exclusive with filter/mipmap.
+  } else {
+    WriteUint32(static_cast<uint32_t>(sampling.filter));
+    WriteUint32(static_cast<uint32_t>(sampling.mipmap));
+  }
 }
 
 uint32_t* MemoryWriter32::Reserve(size_t size) {

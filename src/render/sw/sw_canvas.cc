@@ -784,8 +784,8 @@ std::unique_ptr<SWSpanBrush> SWCanvas::GenerateBrush(
       return std::make_unique<PixmapBrush>(
           spans, bitmap_, paint.GetColorFilter().get(), paint.GetBlendMode(),
           paint.GetAlphaF(), std::move(pixmap), matrix,
-          pixmap_shader->GetSamplingOptions()->filter,
-          pixmap_shader->GetXTileMode(), pixmap_shader->GetYTileMode());
+          *pixmap_shader->GetSamplingOptions(), pixmap_shader->GetXTileMode(),
+          pixmap_shader->GetYTileMode());
     }
   }
 
