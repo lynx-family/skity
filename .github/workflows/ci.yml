@@ -236,6 +236,7 @@ jobs:
         timeout-minutes: 30
         env:
           ANGLE_DEFAULT_PLATFORM: "swiftshader"
+          AGENT_OUT_DIR: ${{ github.workspace }}/golden_failures
         steps:
           - name: Download Source
             uses: actions/checkout@v4.2.2
@@ -253,9 +254,16 @@ jobs:
               echo "DYLD_LIBRARY_PATH=$NEW_DYLD" >> $GITHUB_ENV
           - name: Build And Test
             run: |
+                mkdir -p "$AGENT_OUT_DIR"
                 export PATH=$PATH:$PWD/buildtools/cmake/CMake.app/Contents/bin
                 cmake -B out/cmake_golden_test -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DSKITY_MTL_BACKEND=ON -DSKITY_TEST=ON -DSKITY_GOLDEN_GUI=OFF -DSKITY_CT_FONT=ON
                 cmake --build out/cmake_golden_test --target skity_golden_test_text
                 export MTL_DEBUG_LAYER=1
                 export METAL_DEBUG_ERROR_MODE=1
                 ./out/cmake_golden_test/test/golden/skity_golden_test_text
+          - name: Upload CoreText Golden Diff
+            if: failure()
+            uses: actions/upload-artifact@v4.6.2
+            with:
+              name: coretext-golden-diff
+              path: ${{ env.AGENT_OUT_DIR }}
