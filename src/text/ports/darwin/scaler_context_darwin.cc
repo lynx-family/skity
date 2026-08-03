@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <skity/geometry/stroke.hpp>
@@ -482,6 +483,15 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
   // since bitmap extends one pixel, the origin point needs do the same move
   point.x += 1 / context_scale_;
   point.y += 1 / context_scale_;
+
+  // Core Graphics snaps the glyph baseline to the device pixel grid while
+  // rasterizing into the bitmap context. Keep the atlas origin in the same
+  // coordinate system; otherwise the fractional glyph bound is applied again
+  // when DirectGlyphRun places the bitmap, producing glyph-dependent vertical
+  // offsets.
+  if (transform_.b == 0 && transform_.c == 0) {
+    point.y = std::floor(point.y * context_scale_) / context_scale_;
+  }
 
   CGPoint src{point.x, point.y};
   CGPoint dst = CGPointApplyAffineTransform(src, invert_transform_);
