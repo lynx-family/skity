@@ -184,7 +184,7 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
         *out_op = SpvOpFAdd;
         return true;
       }
-      if (is_int) {
+      if (is_int || is_integer_vector) {
         *out_op = SpvOpIAdd;
         return true;
       }
@@ -197,7 +197,7 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
         *out_op = SpvOpFSub;
         return true;
       }
-      if (is_int) {
+      if (is_int || is_integer_vector) {
         *out_op = SpvOpISub;
         return true;
       }
@@ -210,7 +210,7 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
         *out_op = SpvOpFMul;
         return true;
       }
-      if (is_int) {
+      if (is_int || is_integer_vector) {
         *out_op = SpvOpIMul;
         return true;
       }
@@ -223,11 +223,11 @@ bool ResolveBinaryOpcode(ir::BinaryOpKind op_kind, ir::TypeId operand_type,
         *out_op = SpvOpFDiv;
         return true;
       }
-      if (is_signed) {
+      if (is_signed || is_signed_vector) {
         *out_op = SpvOpSDiv;
         return true;
       }
-      if (is_unsigned) {
+      if (is_unsigned || is_unsigned_vector) {
         *out_op = SpvOpUDiv;
         return true;
       }
