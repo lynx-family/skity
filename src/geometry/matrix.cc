@@ -141,6 +141,14 @@ bool Matrix::Invert(Matrix* inverse) const {
   return this->InvertNonIdentity(inverse);
 }
 
+bool Matrix::InvertZ0Plane(Matrix* inverse) const {
+  float values[9];
+  Get9(values);
+  Matrix z0_plane;
+  z0_plane.Set9(values);
+  return z0_plane.Invert(inverse);
+}
+
 float Matrix::Determinant() const {
   if (IsIdentity()) {
     return 1.f;
