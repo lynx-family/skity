@@ -16,6 +16,7 @@
 
 #include "src/text/ports/darwin/scaler_context_darwin.hpp"
 #include "src/text/ports/darwin/types_darwin.hpp"
+#include "src/text/scaler_context_cache.hpp"
 #include "src/text/sfnt_header.hpp"
 #include "src/utils/no_destructor.hpp"
 
@@ -145,7 +146,9 @@ TypefaceDarwin::TypefaceDarwin(const FontStyle& style, UniqueCTFontRef ct_font,
   variation_axes_.reset(CTFontCopyVariationAxes(ct_font_.get()));
 }
 
-TypefaceDarwin::~TypefaceDarwin() = default;
+TypefaceDarwin::~TypefaceDarwin() {
+  ScalerContextCache::GlobalScalerContextCache()->PurgeByTypeface(typeface_id_);
+}
 
 CTFontRef TypefaceDarwin::GetCTFont() const { return ct_font_.get(); }
 
