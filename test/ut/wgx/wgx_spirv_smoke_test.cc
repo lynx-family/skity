@@ -1585,6 +1585,41 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsIntegerVectorArithmetic) {
+  auto program = wgx::Program::Parse(R"(
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32)
+    -> @builtin(position) vec4<f32> {
+  var signed_value: vec2<i32> = vec2<i32>(i32(vertex_index), 12);
+  var unsigned_value: vec2<u32> = vec2<u32>(vertex_index, u32(12));
+  var sum: vec2<i32> = signed_value + vec2<i32>(3, 4);
+  var difference: vec2<u32> =
+      unsigned_value - vec2<u32>(u32(1), u32(2));
+  var product: vec2<i32> = signed_value * vec2<i32>(4, 5);
+  var signed_quotient: vec2<i32> = signed_value / vec2<i32>(2, 3);
+  var unsigned_quotient: vec2<u32> =
+      unsigned_value / vec2<u32>(u32(2), u32(3));
+  return vec4<f32>(f32(sum.x), f32(difference.x), f32(product.x),
+                   f32(signed_quotient.x) + f32(unsigned_quotient.x));
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("vs_main", options);
+
+  ASSERT_TRUE(result.success);
+  auto words = result.spirv;
+
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIAdd));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpISub));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpIMul));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpSDiv));
+  EXPECT_TRUE(ContainsInstruction(words, SpvOpUDiv));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForScalarDivideReturn) {
   auto program = wgx::Program::Parse(R"(
 @vertex
