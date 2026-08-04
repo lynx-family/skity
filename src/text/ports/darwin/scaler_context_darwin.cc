@@ -62,12 +62,11 @@ void ApplyOS2StrikeoutMetrics(skity::Typeface *typeface, CTFontRef ct_font,
   }
 }
 
-float compute_fake_bold_scale(float text_size, float text_scale) {
+float compute_fake_bold_scale(float text_size) {
   static const std::array<float, 2> keys = {9.0f, 36.0f};
-  std::array<float, 2> values = {1.0f / 24.0f, 1.0f / 32.0f};
-  for (size_t i = 0; i < values.size(); i++) {
-    values[i] /= text_scale;
-  }
+  // Local-space stroke-width ratios. text_scale_ is applied later when the
+  // stroke is converted to device space.
+  static const std::array<float, 2> values = {1.0f / 24.0f, 1.0f / 32.0f};
 
   if (text_size <= keys.front()) {
     return values.front();
@@ -91,21 +90,21 @@ float compute_fake_bold_scale(float text_size, float text_scale) {
 
 skity::StrokeDesc fake_bold_if_needed(const skity::StrokeDesc &stroke_desc,
                                       const skity::ScalerContextDesc &desc,
-                                      float text_scale, bool is_color) {
+                                      bool is_color) {
   if (desc.fake_bold && !is_color) {
     skity::StrokeDesc working_stroke_desc = stroke_desc;
     if (stroke_desc.is_stroke) {
       working_stroke_desc.is_stroke = true;
       working_stroke_desc.stroke_width =
           stroke_desc.stroke_width +
-          desc.text_size * compute_fake_bold_scale(desc.text_size, text_scale);
+          desc.text_size * compute_fake_bold_scale(desc.text_size);
       working_stroke_desc.cap = stroke_desc.cap;
       working_stroke_desc.join = stroke_desc.join;
       working_stroke_desc.miter_limit = stroke_desc.miter_limit;
     } else {
       working_stroke_desc.is_stroke = true;
       working_stroke_desc.stroke_width =
-          desc.text_size * compute_fake_bold_scale(desc.text_size, text_scale);
+          desc.text_size * compute_fake_bold_scale(desc.text_size);
       working_stroke_desc.cap = skity::Paint::Cap::kDefault_Cap;
       working_stroke_desc.join = skity::Paint::Join::kDefault_Join;
       working_stroke_desc.miter_limit = skity::Paint::kDefaultMiterLimit;
@@ -399,7 +398,7 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
 
   if (desc_.fake_bold && !is_color) {
     StrokeDesc working_stroke_desc =
-        fake_bold_if_needed(stroke_desc, desc_, text_scale_, is_color);
+        fake_bold_if_needed(stroke_desc, desc_, is_color);
 
     CGContextSetTextDrawingMode(cg_context.get(), kCGTextStroke);
     CGContextSetLineWidth(cg_context.get(),
@@ -440,7 +439,7 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
   bool is_color = GetTypeface()->ContainsColorTable();
 
   StrokeDesc working_stroke_desc =
-      fake_bold_if_needed(stroke_desc, desc_, text_scale_, is_color);
+      fake_bold_if_needed(stroke_desc, desc_, is_color);
 
   CGRect cg_bounds;
 
