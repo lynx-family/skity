@@ -497,8 +497,8 @@ HWCanvas::AnalyticalAAMode HWCanvas::SelectAnalyticalAA(
   }
 
   if (surface_->GetGPUContext()->IsEnableCoverageAA()) {
-    // TODO: Support other blend modes after Coverage AA participates in
-    // blending consistently with the other rendering paths.
+    // TODO(ColdPaleLight): Support other blend modes after Coverage AA
+    // participates in blending consistently with the other rendering paths.
     if (!transform.HasPersp() && paint.GetBlendMode() == BlendMode::kSrcOver) {
       return AnalyticalAAMode::kCoverage;
     }
@@ -769,10 +769,12 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
   if (paint.GetImageFilter() == nullptr && paint.GetMaskFilter() == nullptr) {
     Matrix layer_matrix_invert{};
     Rect new_layer_bounds;
-    layer_matrix.Invert(&layer_matrix_invert);
-    layer_matrix_invert.MapRect(&new_layer_bounds, transformed_bounds);
-    if (!layer_bounds.Intersect(new_layer_bounds)) {
-      layer_bounds.SetEmpty();
+    // MapRect projects points from z = 0, so invert that same plane.
+    if (layer_matrix.InvertZ0Plane(&layer_matrix_invert)) {
+      layer_matrix_invert.MapRect(&new_layer_bounds, transformed_bounds);
+      if (!layer_bounds.Intersect(new_layer_bounds)) {
+        layer_bounds.SetEmpty();
+      }
     }
   }
 

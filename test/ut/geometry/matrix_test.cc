@@ -608,6 +608,63 @@ TEST(Matrix, MapPointsWithPerspective) {
   EXPECT_EQ(dst_point[1], expected_dst[1]);
 }
 
+TEST(Matrix, InvertZ0PlaneRoundTrip) {
+  skity::Matrix perspective;
+  perspective.SetPersp1(0.002f);
+  auto transform =
+      perspective * skity::Matrix::RotateDeg(-45.f, {1.f, 0.f, 0.f});
+
+  skity::Matrix planar_inverse;
+  ASSERT_TRUE(transform.InvertZ0Plane(&planar_inverse));
+
+  skity::Vec2 source[] = {{20.f, 30.f}, {0.f, 0.f}, {-12.f, 45.f}};
+  skity::Vec2 transformed[3];
+  transform.MapPoints(transformed, source, 3);
+
+  skity::Vec2 restored[3];
+  planar_inverse.MapPoints(restored, transformed, 3);
+
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_NEAR(restored[i].x, source[i].x, 0.00001f);
+    EXPECT_NEAR(restored[i].y, source[i].y, 0.00001f);
+  }
+}
+
+TEST(Matrix, InvertZ0PlaneAllowsSingular4x4) {
+  auto transform = skity::Matrix::Translate(30.f, -20.f) *
+                   skity::Matrix::RotateDeg(27.f) *
+                   skity::Matrix::Scale(1.5f, 0.75f);
+  transform.Set(2, 2, 0.f);
+
+  EXPECT_FALSE(transform.Invert(nullptr));
+
+  skity::Matrix planar_inverse;
+  ASSERT_TRUE(transform.InvertZ0Plane(&planar_inverse));
+
+  skity::Vec2 source[] = {{-4.f, 3.f}, {0.f, 0.f}, {12.f, -7.f}};
+  skity::Vec2 transformed[3];
+  transform.MapPoints(transformed, source, 3);
+
+  skity::Vec2 restored[3];
+  planar_inverse.MapPoints(restored, transformed, 3);
+
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_NEAR(restored[i].x, source[i].x, 0.00001f);
+    EXPECT_NEAR(restored[i].y, source[i].y, 0.00001f);
+  }
+}
+
+TEST(Matrix, InvertZ0PlaneRejectsSingularProjection) {
+  skity::Matrix transform;
+  transform.Set(1, 1, 0.f);
+  transform.Set(1, 2, 1.f);
+  transform.Set(2, 1, 1.f);
+  transform.Set(2, 2, 0.f);
+
+  EXPECT_TRUE(transform.Invert(nullptr));
+  EXPECT_FALSE(transform.InvertZ0Plane(nullptr));
+}
+
 TEST(Matrix, PreConcatAndPostConcat) {
   skity::Matrix src = skity::Matrix{
       1,  2,  3,  4,   //

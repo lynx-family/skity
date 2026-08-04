@@ -144,6 +144,11 @@ struct SKITY_API Matrix {
 
   bool Invert(Matrix* inverse) const;
 
+  // Inverts the 2D projective transform induced by mapping the z = 0 plane
+  // through this matrix. Unlike a full 4x4 inverse, the returned matrix maps
+  // projected 2D points back to their coordinates on the z = 0 plane.
+  bool InvertZ0Plane(Matrix* inverse) const;
+
   float Determinant() const;
 
   void Transpose();
