@@ -488,8 +488,10 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
   // rasterizing into the bitmap context. Keep the atlas origin in the same
   // coordinate system; otherwise the fractional glyph bound is applied again
   // when DirectGlyphRun places the bitmap, producing glyph-dependent vertical
-  // offsets.
-  if (transform_.b == 0 && transform_.c == 0) {
+  // offsets. An X-axis skew (transform_.c), as used by synthetic italic text,
+  // does not affect the device-space Y coordinate and still needs the same
+  // alignment. Only transforms that mix X into Y (transform_.b) are excluded.
+  if (transform_.b == 0) {
     point.y = std::floor(point.y * context_scale_) / context_scale_;
   }
 
