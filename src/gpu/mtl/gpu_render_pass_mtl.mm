@@ -7,17 +7,32 @@
 #error ARC must be enabled!
 #endif
 
-#include "src/gpu/mtl/gpu_render_pass_mtl.h"
+#include <algorithm>
+
 #include "src/gpu/gpu_render_pass.hpp"
 #include "src/gpu/gpu_sampler.hpp"
 #include "src/gpu/gpu_shader_function.hpp"
 #include "src/gpu/mtl/formats_mtl.h"
 #include "src/gpu/mtl/gpu_buffer_mtl.h"
+#include "src/gpu/mtl/gpu_render_pass_mtl.h"
 #include "src/gpu/mtl/gpu_render_pipeline_mtl.h"
 #include "src/gpu/mtl/gpu_sampler_mtl.h"
 #include "src/gpu/mtl/gpu_texture_mtl.h"
 
 namespace skity {
+
+namespace {
+
+bool ClampScissorRect(GPUScissorRect& rect, uint32_t target_width, uint32_t target_height) {
+  rect.x = std::min(rect.x, target_width);
+  rect.y = std::min(rect.y, target_height);
+  rect.width = std::min(rect.width, target_width - rect.x);
+  rect.height = std::min(rect.height, target_height - rect.y);
+
+  return rect.width > 0 && rect.height > 0;
+}
+
+}  // namespace
 
 void GPURenderPassMTL::BindingsCache::SetRenderPipelineState(id<MTLRenderPipelineState> pipeline) {
   if (pipeline == pipeline_) {
@@ -145,22 +160,27 @@ void GPURenderPassMTL::EncodeCommands(std::optional<GPUViewport> viewport,
                             .znear = v.min_depth,
                             .zfar = v.max_depth,
                         }];
-  // Set scissor
-  [encoder_ setScissorRect:MTLScissorRect{
-                               .x = s.x,
-                               .y = s.y,
-                               .width = s.width,
-                               .height = s.height,
-                           }];
+  if (ClampScissorRect(s, target_width, target_height)) {
+    [encoder_ setScissorRect:MTLScissorRect{
+                                 .x = s.x,
+                                 .y = s.y,
+                                 .width = s.width,
+                                 .height = s.height,
+                             }];
+  }
 
   for (auto& command : GetCommands()) {
     if (!command->IsValid()) {
       continue;
     }
-    [encoder_ setScissorRect:MTLScissorRect{.x = command->scissor_rect.x,
-                                            .y = command->scissor_rect.y,
-                                            .width = command->scissor_rect.width,
-                                            .height = command->scissor_rect.height}];
+    auto command_scissor = command->scissor_rect;
+    if (!ClampScissorRect(command_scissor, target_width, target_height)) {
+      continue;
+    }
+    [encoder_ setScissorRect:MTLScissorRect{.x = command_scissor.x,
+                                            .y = command_scissor.y,
+                                            .width = command_scissor.width,
+                                            .height = command_scissor.height}];
     SetStencilReference(command->stencil_reference);
     SetPipeline(cache, command->pipeline);
     SetUniformBindings(cache, command->uniform_bindings);
