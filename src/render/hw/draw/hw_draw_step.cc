@@ -4,6 +4,9 @@
 
 #include "src/render/hw/draw/hw_draw_step.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 #include "src/logging.hpp"
 #include "src/render/hw/hw_buffer_layout_map.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
@@ -16,13 +19,18 @@ void HWDrawStep::GenerateCommand(const HWDrawStepContext& ctx, Command* cmd,
                                  Command* stencil_cmd) {
   SKITY_TRACE_EVENT(HWDrawStep_GenerateCommand);
 
-  GPUScissorRect rect{};
-  rect.x = static_cast<uint32_t>(std::floor(ctx.scissor.Left()));
-  rect.y = static_cast<uint32_t>(std::floor(ctx.scissor.Top()));
-  rect.width = static_cast<uint32_t>(std::ceil(ctx.scissor.Width()));
-  rect.height = static_cast<uint32_t>(std::ceil(ctx.scissor.Height()));
+  const float left = std::max(0.f, std::floor(ctx.scissor.Left()));
+  const float top = std::max(0.f, std::floor(ctx.scissor.Top()));
+  const float right = std::ceil(ctx.scissor.Right());
+  const float bottom = std::ceil(ctx.scissor.Bottom());
+  if (left >= right || top >= bottom) {
+    cmd->pipeline = nullptr;
+    return;
+  }
 
-  cmd->scissor_rect = rect;
+  cmd->scissor_rect = {static_cast<uint32_t>(left), static_cast<uint32_t>(top),
+                       static_cast<uint32_t>(right - left),
+                       static_cast<uint32_t>(bottom - top)};
 
   cmd->pipeline = GetPipeline(ctx.context, ctx.state, ctx.color_format,
                               ctx.sample_count, ctx.blend_mode);
