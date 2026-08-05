@@ -1,0 +1,226 @@
+# Copyright 2026 The Lynx Authors. All rights reserved.
+# Licensed under the Apache License Version 2.0 that can be found in the
+# LICENSE file in the root directory of this source tree.
+
+import("pugixml-static.gni")
+import("skity.gni")
+import("wgsl-cross.gni")
+
+_skity_root = get_path_info(".", "abspath")
+_skity_exclude_patterns = []
+_skity_defines = skity_compile_definitions
+
+if (!is_mac) {
+  _skity_exclude_patterns += [
+    "$_skity_root/src/gpu/mtl/*",
+    "$_skity_root/src/render/hw/mtl/*",
+    "$_skity_root/src/text/ports/darwin/*",
+  ]
+  _skity_defines -= [ "SKITY_METAL" ]
+}
+
+if (is_win) {
+  _skity_exclude_patterns += [ "$_skity_root/src/base/platform/posix/*" ]
+}
+
+_skity_sources = filter_exclude(skity_sources, _skity_exclude_patterns)
+
+if (is_win) {
+  _skity_sources += [
+    "$_skity_root/src/base/platform/win/file_win.cc",
+    "$_skity_root/src/base/platform/win/handle_result.cc",
+    "$_skity_root/src/base/platform/win/handle_result.hpp",
+    "$_skity_root/src/base/platform/win/lean_windows.hpp",
+    "$_skity_root/src/base/platform/win/mapping_win.cc",
+    "$_skity_root/src/base/platform/win/str_conversion.hpp",
+    "$_skity_root/src/text/ports/color_freetype.cc",
+    "$_skity_root/src/text/ports/color_freetype.hpp",
+    "$_skity_root/src/text/ports/freetype_face.cc",
+    "$_skity_root/src/text/ports/freetype_face.hpp",
+    "$_skity_root/src/text/ports/path_freetype.cc",
+    "$_skity_root/src/text/ports/path_freetype.hpp",
+    "$_skity_root/src/text/ports/scaler_context_freetype.cc",
+    "$_skity_root/src/text/ports/scaler_context_freetype.hpp",
+    "$_skity_root/src/text/ports/typeface_freetype.cc",
+    "$_skity_root/src/text/ports/typeface_freetype.hpp",
+    "$_skity_root/src/text/ports/win/dwrite_utils.hpp",
+    "$_skity_root/src/text/ports/win/dwrite_version.hpp",
+    "$_skity_root/src/text/ports/win/font_manager_win.cc",
+    "$_skity_root/src/text/ports/win/scoped_com_ptr.hpp",
+  ]
+}
+
+config("skity_public_config") {
+  include_dirs = [
+    ".",
+    "include",
+    "module/codec/include",
+    "module/wgx",
+    "module/wgx/include",
+    "third_party/glm",
+    "third_party/pugixml/src",
+  ]
+
+  defines = _skity_defines
+}
+
+config("skity_private_config") {
+  cflags = [
+    "-fvisibility=hidden",
+    "-fvisibility-inlines-hidden",
+  ]
+
+  cflags_cc = [
+    "-include",
+    "cstdlib",
+    "-include",
+    "type_traits",
+    "-fno-exceptions",
+    "-fno-rtti",
+  ]
+
+  cflags_objcc = [
+    "-include",
+    "cstdlib",
+    "-include",
+    "type_traits",
+    "-fobjc-arc",
+  ]
+}
+
+static_library("wgsl_cross_ast") {
+  sources = [ "$_skity_root/module/wgx/wgsl/ast/ast_function.cpp" ]
+
+  include_dirs = wgsl_cross_include_dirs
+  defines = wgsl_cross_compile_definitions
+
+  configs += [ ":skity_private_config" ]
+}
+
+static_library("wgsl_cross_glsl") {
+  sources = [ "$_skity_root/module/wgx/glsl/glsl_ast_printer.cpp" ]
+
+  include_dirs = wgsl_cross_include_dirs
+  defines = wgsl_cross_compile_definitions
+
+  configs += [ ":skity_private_config" ]
+}
+
+static_library("wgsl_cross_msl") {
+  sources = [
+    "$_skity_root/module/wgx/msl/msl_ast_printer.cpp",
+    "$_skity_root/module/wgx/msl/msl_attribute.cpp",
+    "$_skity_root/module/wgx/msl/uniform_capture.cpp",
+  ]
+
+  include_dirs = wgsl_cross_include_dirs
+  defines = wgsl_cross_compile_definitions
+
+  configs += [ ":skity_private_config" ]
+}
+
+static_library("wgsl_cross") {
+  sources = wgsl_cross_sources
+  sources -= [
+    "$_skity_root/module/wgx/glsl/glsl_ast_printer.cpp",
+    "$_skity_root/module/wgx/msl/msl_ast_printer.cpp",
+    "$_skity_root/module/wgx/msl/msl_attribute.cpp",
+    "$_skity_root/module/wgx/msl/uniform_capture.cpp",
+    "$_skity_root/module/wgx/wgsl/ast/ast_function.cpp",
+  ]
+
+  include_dirs = wgsl_cross_include_dirs
+  defines = wgsl_cross_compile_definitions
+
+  configs += [ ":skity_private_config" ]
+
+  deps = [
+    ":wgsl_cross_ast",
+    ":wgsl_cross_glsl",
+    ":wgsl_cross_msl",
+  ]
+}
+
+static_library("pugixml_static") {
+  sources = pugixml_static_sources
+
+  include_dirs = pugixml_static_include_dirs
+  defines = [ "PUGIXML_NO_EXCEPTIONS" ]
+
+  configs += [ ":skity_private_config" ]
+}
+
+static_library("skity") {
+  sources = _skity_sources
+
+  public_configs = [ ":skity_public_config" ]
+  configs += [ ":skity_private_config" ]
+
+  deps = [
+    ":pugixml_static",
+    ":wgsl_cross",
+  ]
+
+  if (is_win) {
+    deps += [ "//third_party/freetype2" ]
+  }
+
+  if (is_mac) {
+    frameworks = [
+      "AppKit.framework",
+      "CoreGraphics.framework",
+      "CoreText.framework",
+      "Foundation.framework",
+      "Metal.framework",
+      "QuartzCore.framework",
+    ]
+  }
+
+  if (is_win) {
+    libs = [ "Shlwapi.lib" ]
+  }
+}
+
+static_library("skity_codec") {
+  sources = [ "module/codec/include/skity/codec/codec.hpp" ]
+
+  public_configs = [ ":skity_public_config" ]
+  configs += [ ":skity_private_config" ]
+
+  deps = [ ":skity" ]
+
+  if (is_mac) {
+    sources += [ "module/codec/src/codec/apple/codec_apple.mm" ]
+    frameworks = [
+      "CoreGraphics.framework",
+      "CoreServices.framework",
+      "Foundation.framework",
+      "ImageIO.framework",
+    ]
+  } else {
+    sources += [
+      "module/codec/src/codec/codec.cc",
+      "module/codec/src/codec/codec_priv.cc",
+      "module/codec/src/codec/codec_priv.hpp",
+      "module/codec/src/codec/data_stream.cc",
+      "module/codec/src/codec/data_stream.hpp",
+      "module/codec/src/codec/jpeg_codec.cc",
+      "module/codec/src/codec/jpeg_codec.hpp",
+      "module/codec/src/codec/multi_frame_decoder.cc",
+      "module/codec/src/codec/png_codec.cc",
+      "module/codec/src/codec/png_codec.hpp",
+    ]
+    defines = [
+      "SKITY_ENABLE_CODEC_GIF=0",
+      "SKITY_ENABLE_CODEC_WEBP=0",
+    ]
+    deps += [
+      "//third_party/libjpeg-turbo:turbojpeg",
+      "//third_party/libpng",
+    ]
+  }
+}
+
+group("skity_codec_apple") {
+  deps = [ ":skity_codec" ]
+}
