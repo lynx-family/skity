@@ -30,14 +30,15 @@ class OffScreenContext final {
 
   void ResizeContext(uint32_t width, uint32_t height, bool need_color);
 
-  CGColorSpaceRef GetCGColorSpace() const;
+  CGColorSpaceRef GetCGColorSpace(bool need_color) const;
 
   CGColorRef GetCGColor() const;
 
   void *GetAddr() const;
 
  private:
-  UniqueCFRef<CGColorSpaceRef> cg_color_space_;
+  UniqueCFRef<CGColorSpaceRef> rgb_color_space_;
+  UniqueCFRef<CGColorSpaceRef> gray_color_space_;
   UniqueCFRef<CGColorRef> foreground_color_;
   std::shared_ptr<Data> pixel_data_;
 

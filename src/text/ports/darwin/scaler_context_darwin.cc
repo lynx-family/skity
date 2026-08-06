@@ -120,30 +120,29 @@ skity::StrokeDesc fake_bold_if_needed(const skity::StrokeDesc &stroke_desc,
 namespace skity {
 
 OffScreenContext::OffScreenContext(Color foreground_color) {
-  cg_color_space_.reset(CGColorSpaceCreateDeviceRGB());
+  rgb_color_space_.reset(CGColorSpaceCreateDeviceRGB());
+  gray_color_space_.reset(CGColorSpaceCreateDeviceGray());
   foreground_color_.reset(
-      ColorToCGColor(cg_color_space_.get(), foreground_color));
+      ColorToCGColor(rgb_color_space_.get(), foreground_color));
 }
 
 void OffScreenContext::ResizeContext(uint32_t width, uint32_t height,
                                      bool need_color) {
-  uint32_t row_bytes = width;
+  size_t row_bytes = width;
   if (need_color) {
     row_bytes *= 4;
   }
 
-  pixel_data_ =
-      Data::MakeFromMalloc(std::malloc(height * row_bytes), height * row_bytes);
-
-  if (need_color) {
-    cg_color_space_.reset(CGColorSpaceCreateDeviceRGB());
-  } else {
-    cg_color_space_.reset(CGColorSpaceCreateDeviceGray());
+  const size_t byte_size = static_cast<size_t>(height) * row_bytes;
+  // GlyphBitmapData borrows this storage. Keep the largest allocation owned by
+  // the scaler context and replace it only when the next glyph does not fit.
+  if (!pixel_data_ || pixel_data_->Size() < byte_size) {
+    pixel_data_ = Data::MakeFromMalloc(std::malloc(byte_size), byte_size);
   }
 }
 
-CGColorSpaceRef OffScreenContext::GetCGColorSpace() const {
-  return cg_color_space_.get();
+CGColorSpaceRef OffScreenContext::GetCGColorSpace(bool need_color) const {
+  return need_color ? rgb_color_space_.get() : gray_color_space_.get();
 }
 
 CGColorRef OffScreenContext::GetCGColor() const {
@@ -368,7 +367,7 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
 
   UniqueCFRef<CGContextRef> cg_context(CGBitmapContextCreate(
       os_context_.GetAddr(), width, height, bits_per_component, bytes_per_row,
-      os_context_.GetCGColorSpace(), bitmap_info));
+      os_context_.GetCGColorSpace(is_color), bitmap_info));
   // clear the bitmap before set transform
   CGContextClearRect(cg_context.get(), CGRectMake(0, 0, width, height));
 
