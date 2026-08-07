@@ -2036,6 +2036,37 @@ ir::ExprResult Lowerer::LowerBuiltinCallExpression(
         ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
   }
 
+  if (symbol->original_name == "any") {
+    if (call->args.size() != 1u) {
+      return ir::ExprResult();
+    }
+
+    ir::ExprResult arg_expr = LowerExpression(call->args[0]);
+    if (!arg_expr.IsValid()) {
+      return ir::ExprResult();
+    }
+
+    ir::Value arg_value = EnsureValue(arg_expr, block);
+    if (!arg_value.IsValue() || !type_table_->IsVectorType(arg_value.type) ||
+        type_table_->GetComponentType(arg_value.type) !=
+            type_table_->GetBoolType()) {
+      return ir::ExprResult();
+    }
+
+    ir::Instruction builtin_inst;
+    builtin_inst.kind = ir::InstKind::kBuiltinCall;
+    builtin_inst.builtin_call = ir::BuiltinCallKind::kAny;
+    builtin_inst.result_type = type_table_->GetBoolType();
+    builtin_inst.result_id = AllocateSSAId();
+    if (builtin_inst.result_id == 0) {
+      return ir::ExprResult();
+    }
+    builtin_inst.operands.push_back(arg_value);
+    block->instructions.emplace_back(builtin_inst);
+    return ir::ExprResult::ValueResult(
+        ir::Value::SSA(builtin_inst.result_type, builtin_inst.result_id));
+  }
+
   if (symbol->original_name == "select") {
     if (call->args.size() != 3u) {
       return ir::ExprResult();
