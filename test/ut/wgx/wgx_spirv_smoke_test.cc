@@ -318,6 +318,26 @@ fn fs_main() {
   EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsAny) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let flags: vec4<bool> = vec4<bool>(false, true, false, false);
+  let value: f32 = select(0.0, 1.0, any(flags));
+  return vec4<f32>(value);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  EXPECT_TRUE(ContainsInstruction(result.spirv, SpvOpAny));
+}
+
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForBuiltinPositionVec4Return) {
   auto program = wgx::Program::Parse(R"(
 @vertex
