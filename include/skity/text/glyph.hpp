@@ -5,6 +5,7 @@
 #ifndef INCLUDE_SKITY_TEXT_GLYPH_HPP
 #define INCLUDE_SKITY_TEXT_GLYPH_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <skity/graphic/path.hpp>
@@ -46,8 +47,34 @@ struct SKITY_API GlyphBitmapData {
   float width = {};
   float height = {};
   uint8_t* buffer = {};
+  // Byte distance between adjacent bitmap rows. Zero means tightly packed as
+  // width * bytes-per-pixel.
+  size_t row_bytes = 0;
   BitmapFormat format = BitmapFormat::kUnknown;
   bool need_free = false;
+
+  size_t RowBytes() const {
+    if (row_bytes != 0) {
+      return row_bytes;
+    }
+    if (!(width > 0.f)) {
+      return 0;
+    }
+
+    size_t bytes_per_pixel = 0;
+    switch (format) {
+      case BitmapFormat::kGray8:
+        bytes_per_pixel = 1;
+        break;
+      case BitmapFormat::kBGRA8:
+      case BitmapFormat::kRGBA8:
+        bytes_per_pixel = 4;
+        break;
+      case BitmapFormat::kUnknown:
+        break;
+    }
+    return static_cast<size_t>(width) * bytes_per_pixel;
+  }
 };
 
 class SKITY_API GlyphData {

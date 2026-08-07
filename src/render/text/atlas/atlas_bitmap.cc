@@ -37,12 +37,21 @@ glm::ivec4 AtlasBitmap::GetGlyphRegion(GlyphKey key) {
 
 glm::ivec4 AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
                                             const GlyphBitmapData& bitmap) {
-  if (static_cast<uint32_t>(bitmap.width) == 0 ||
-      static_cast<uint32_t>(bitmap.height) == 0) {
+  const uint32_t glyph_width = static_cast<uint32_t>(bitmap.width);
+  const uint32_t glyph_height = static_cast<uint32_t>(bitmap.height);
+  if (glyph_width == 0 || glyph_height == 0) {
     return {0, 0, 0, 0};
   }
-  uint32_t width = static_cast<uint32_t>(bitmap.width) + Atlas_Padding;
-  uint32_t height = static_cast<uint32_t>(bitmap.height) + Atlas_Padding;
+
+  const size_t data_row_size =
+      static_cast<size_t>(glyph_width) * bytes_per_pixel_;
+  const size_t source_row_size = bitmap.RowBytes();
+  if (!bitmap.buffer || source_row_size < data_row_size) {
+    return {0, 0, 0, 0};
+  }
+
+  uint32_t width = glyph_width + Atlas_Padding;
+  uint32_t height = glyph_height + Atlas_Padding;
   if (width > width_ - 2 || height > height_ - 2) {
     return {0, 0, 0, 0};
   }
@@ -63,12 +72,10 @@ glm::ivec4 AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
   glyph_regions_.insert(std::make_pair(key, region));
 
   // Copy bitmap to memory storage
-  uint32_t data_row_size =
-      static_cast<uint32_t>(bitmap.width) * bytes_per_pixel_;
-  uint32_t self_row_size = this->width_ * bytes_per_pixel_;
+  size_t self_row_size = static_cast<size_t>(this->width_) * bytes_per_pixel_;
 
-  for (uint32_t i = 0; i < static_cast<uint32_t>(bitmap.height); i++) {
-    uint8_t* src = bitmap.buffer + data_row_size * i;
+  for (uint32_t i = 0; i < glyph_height; i++) {
+    uint8_t* src = bitmap.buffer + source_row_size * i;
     uint8_t* dst = this->mem_data_ + self_row_size * (i + region.y) +
                    region.x * bytes_per_pixel_;
 

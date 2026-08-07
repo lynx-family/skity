@@ -181,21 +181,19 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
 
         auto bitmap_fill_buffer = glyph_data_fill->Image().buffer;
         auto bitmap_stroke_buffer = bitmap_info.buffer;
-        size_t initial_index_stroke = height_offset * width;
+        const size_t fill_row_bytes = glyph_data_fill->Image().RowBytes();
+        const size_t stroke_row_bytes = bitmap_info.RowBytes();
 
         for (size_t h = 0; h < height_fill; ++h) {
-          size_t index_stroke =
-              initial_index_stroke +
-              width_offset;  // Compute the initial stroke index
-          size_t index_fill = h * width_fill;  // Start of the fill row
-          for (size_t w = 0; w < width_fill;
-               ++w, ++index_fill, ++index_stroke) {
-            if (bitmap_fill_buffer[index_fill] == 0xff) {
-              bitmap_stroke_buffer[index_stroke] = 0;
+          const uint8_t* fill_row = bitmap_fill_buffer + h * fill_row_bytes;
+          uint8_t* stroke_row = bitmap_stroke_buffer +
+                                (h + height_offset) * stroke_row_bytes +
+                                width_offset;
+          for (size_t w = 0; w < width_fill; ++w) {
+            if (fill_row[w] == 0xff) {
+              stroke_row[w] = 0;
             }
           }
-          initial_index_stroke +=
-              width;  // Move the stroke index to the next row
         }
       }
     }
@@ -209,11 +207,12 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
     size_t width = static_cast<size_t>(bitmap_info.width);
     size_t height = static_cast<size_t>(bitmap_info.height);
     sdf::Image<uint8_t> unfiltered_image(width, height);
-    size_t unfiltered_image_size = width * height;
-    for (size_t index = 0; index < unfiltered_image_size; index++) {
-      size_t x = index % width;
-      size_t y = index / width;
-      unfiltered_image.Set(x, y, bitmap_info.buffer[index]);
+    const size_t source_row_bytes = bitmap_info.RowBytes();
+    for (size_t y = 0; y < height; ++y) {
+      const uint8_t* source_row = bitmap_info.buffer + y * source_row_bytes;
+      for (size_t x = 0; x < width; ++x) {
+        unfiltered_image.Set(x, y, source_row[x]);
+      }
     }
 
     sdf::Image<uint8_t> filtered_image =
@@ -221,6 +220,10 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
     const_cast<GlyphBitmapData&>(bitmap_info).width = filtered_image.GetWidth();
     const_cast<GlyphBitmapData&>(bitmap_info).height =
         filtered_image.GetHeight();
+    // The generated SDF owns a tightly packed image. Keep the fallback form of
+    // the row-bytes contract so a later backend regeneration cannot inherit a
+    // stale explicit stride from this temporary image.
+    const_cast<GlyphBitmapData&>(bitmap_info).row_bytes = 0;
     if (bitmap_info.need_free) {
       std::free(bitmap_info.buffer);
       const_cast<GlyphBitmapData&>(bitmap_info).need_free = false;

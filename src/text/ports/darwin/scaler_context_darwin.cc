@@ -9,7 +9,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <limits>
 #include <skity/geometry/stroke.hpp>
+#include <utility>
 
 #include "src/text/ports/darwin/typeface_darwin.hpp"
 
@@ -120,42 +123,183 @@ skity::StrokeDesc fake_bold_if_needed(const skity::StrokeDesc &stroke_desc,
 namespace skity {
 
 OffScreenContext::OffScreenContext(Color foreground_color) {
-  cg_color_space_.reset(CGColorSpaceCreateDeviceRGB());
+  rgb_color_space_.reset(CGColorSpaceCreateDeviceRGB());
+  gray_color_space_.reset(CGColorSpaceCreateDeviceGray());
   foreground_color_.reset(
-      ColorToCGColor(cg_color_space_.get(), foreground_color));
+      ColorToCGColor(rgb_color_space_.get(), foreground_color));
 }
 
-void OffScreenContext::ResizeContext(uint32_t width, uint32_t height,
-                                     bool need_color) {
-  uint32_t row_bytes = width;
-  if (need_color) {
-    row_bytes *= 4;
+OffScreenContext::~OffScreenContext() {
+  cg_context_.reset();
+  pixel_data_.reset();
+}
+
+uint32_t OffScreenContext::RoundSize(uint32_t dimension) {
+  uint32_t rounded = 1;
+  while (rounded < dimension &&
+         rounded <= std::numeric_limits<uint32_t>::max() / 2) {
+    rounded *= 2;
+  }
+  return rounded < dimension ? dimension : rounded;
+}
+
+void OffScreenContext::ClearActiveRect(const Target &target,
+                                       size_t bytes_per_pixel) {
+  const size_t active_row_bytes =
+      static_cast<size_t>(target.active_width) * bytes_per_pixel;
+
+  // Clear the backing storage directly. CGContextClearRect would be affected
+  // by the cached CTM and would also put clearing back on the Core Graphics
+  // path. A full-width active rect is contiguous even when it is bottom
+  // aligned, so clear it with a single memset.
+  if (active_row_bytes == target.row_bytes) {
+    std::memset(target.pixels, 0, active_row_bytes * target.active_height);
+    return;
   }
 
-  pixel_data_ =
-      Data::MakeFromMalloc(std::malloc(height * row_bytes), height * row_bytes);
-
-  if (need_color) {
-    cg_color_space_.reset(CGColorSpaceCreateDeviceRGB());
-  } else {
-    cg_color_space_.reset(CGColorSpaceCreateDeviceGray());
+  for (uint32_t y = 0; y < target.active_height; ++y) {
+    std::memset(target.pixels + static_cast<size_t>(y) * target.row_bytes, 0,
+                active_row_bytes);
   }
 }
 
-CGColorSpaceRef OffScreenContext::GetCGColorSpace() const {
-  return cg_color_space_.get();
+OffScreenContext::Target OffScreenContext::PrepareContext(uint32_t width,
+                                                          uint32_t height,
+                                                          bool need_color) {
+  if (width == 0 || height == 0) {
+    return {};
+  }
+
+  const bool context_fits = cg_context_ && need_color_ == need_color &&
+                            context_width_ >= width &&
+                            context_height_ >= height;
+  bool context_was_created = false;
+
+  if (!context_fits) {
+    const uint32_t context_width = std::max(context_width_, RoundSize(width));
+    const uint32_t context_height =
+        std::max(context_height_, RoundSize(height));
+    const size_t bytes_per_pixel = need_color ? 4 : 1;
+    if (context_width > std::numeric_limits<size_t>::max() / bytes_per_pixel) {
+      return {};
+    }
+
+    const size_t row_bytes =
+        static_cast<size_t>(context_width) * bytes_per_pixel;
+    if (context_height > std::numeric_limits<size_t>::max() / row_bytes) {
+      return {};
+    }
+
+    const size_t byte_size = static_cast<size_t>(context_height) * row_bytes;
+    std::shared_ptr<Data> pixel_data = pixel_data_;
+    if (!pixel_data || pixel_data->Size() < byte_size) {
+      void *pixels = std::malloc(byte_size);
+      if (!pixels) {
+        return {};
+      }
+      pixel_data = Data::MakeFromMalloc(pixels, byte_size);
+    }
+
+    const CGBitmapInfo bitmap_info =
+        need_color ? kCGImageByteOrder32Little | kCGImageAlphaPremultipliedFirst
+                   : kCGImageAlphaOnly;
+    UniqueCFRef<CGContextRef> cg_context(
+        CGBitmapContextCreate(const_cast<void *>(pixel_data->RawData()),
+                              context_width, context_height, 8, row_bytes,
+                              GetCGColorSpace(need_color), bitmap_info));
+    if (!cg_context) {
+      return {};
+    }
+
+    // Release the old CGContext before replacing the storage it borrows.
+    cg_context_ = std::move(cg_context);
+    pixel_data_ = std::move(pixel_data);
+    context_width_ = context_width;
+    context_height_ = context_height;
+    context_row_bytes_ = row_bytes;
+    need_color_ = need_color;
+    draw_state_ = {};
+    context_was_created = true;
+  }
+
+  auto *storage =
+      reinterpret_cast<uint8_t *>(const_cast<void *>(pixel_data_->RawData()));
+  auto *pixels = storage + static_cast<size_t>(context_height_ - height) *
+                               context_row_bytes_;
+
+  Target target = {cg_context_.get(),  storage,         pixels,
+                   context_row_bytes_, width,           height,
+                   context_width_,     context_height_, context_was_created};
+  ClearActiveRect(target, need_color ? 4 : 1);
+  return target;
+}
+
+bool OffScreenContext::SetTextDrawingMode(CGTextDrawingMode mode) {
+  if (!cg_context_ || (draw_state_.text_drawing_mode_valid &&
+                       draw_state_.text_drawing_mode == mode)) {
+    return false;
+  }
+
+  CGContextSetTextDrawingMode(cg_context_.get(), mode);
+  draw_state_.text_drawing_mode = mode;
+  draw_state_.text_drawing_mode_valid = true;
+  return true;
+}
+
+bool OffScreenContext::SetLineWidth(CGFloat width) {
+  if (!cg_context_ ||
+      (draw_state_.line_width_valid && draw_state_.line_width == width)) {
+    return false;
+  }
+
+  CGContextSetLineWidth(cg_context_.get(), width);
+  draw_state_.line_width = width;
+  draw_state_.line_width_valid = true;
+  return true;
+}
+
+bool OffScreenContext::SetLineCap(CGLineCap cap) {
+  if (!cg_context_ ||
+      (draw_state_.line_cap_valid && draw_state_.line_cap == cap)) {
+    return false;
+  }
+
+  CGContextSetLineCap(cg_context_.get(), cap);
+  draw_state_.line_cap = cap;
+  draw_state_.line_cap_valid = true;
+  return true;
+}
+
+bool OffScreenContext::SetLineJoin(CGLineJoin join) {
+  if (!cg_context_ ||
+      (draw_state_.line_join_valid && draw_state_.line_join == join)) {
+    return false;
+  }
+
+  CGContextSetLineJoin(cg_context_.get(), join);
+  draw_state_.line_join = join;
+  draw_state_.line_join_valid = true;
+  return true;
+}
+
+bool OffScreenContext::SetMiterLimit(CGFloat limit) {
+  if (!cg_context_ ||
+      (draw_state_.miter_limit_valid && draw_state_.miter_limit == limit)) {
+    return false;
+  }
+
+  CGContextSetMiterLimit(cg_context_.get(), limit);
+  draw_state_.miter_limit = limit;
+  draw_state_.miter_limit_valid = true;
+  return true;
+}
+
+CGColorSpaceRef OffScreenContext::GetCGColorSpace(bool need_color) const {
+  return need_color ? rgb_color_space_.get() : gray_color_space_.get();
 }
 
 CGColorRef OffScreenContext::GetCGColor() const {
   return foreground_color_.get();
-}
-
-void *OffScreenContext::GetAddr() const {
-  if (!pixel_data_) {
-    return nullptr;
-  }
-
-  return const_cast<void *>(pixel_data_->RawData());
 }
 
 class CGPathConvertor {
@@ -332,54 +476,10 @@ static CGLineJoin ToCGJoin(Paint::Join join) {
   }
 }
 
-void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
-                                        const StrokeDesc &stroke_desc) {
-  GenerateImageInfo(glyph, stroke_desc);
-  if (glyph->image_.width == 0 || glyph->image_.height == 0.0) {
-    return;
-  }
-  CGGlyph cg_glyph = glyph->Id();
-
-  auto width = glyph->image_.width;
-  auto height = glyph->image_.height;
-
-  bool is_color = glyph->image_.format == BitmapFormat::kBGRA8;
-
-  os_context_.ResizeContext(width, height, is_color);
-
-  // kCGImageByteOrder32Little + kCGImageAlphaPremultipliedFirst(argb) ===>
-  // bgra;
-  CGBitmapInfo bitmap_info =
-      is_color ? kCGImageByteOrder32Little | kCGImageAlphaPremultipliedFirst
-               : kCGImageAlphaOnly;
-
-  static size_t bits_per_component = 8;
-
-  // The number of bytes per pixel is equal to `(bitsPerComponent * number
-  // of components + 7)/8'
-  size_t bytes_per_pixel =
-      (bits_per_component * (is_color ? 4 : 1) + 7) / bits_per_component;
-
-  //  Each row of the bitmap consists of `bytesPerRow' bytes, which must be
-  //  at least
-  // `width * bytes per pixel' bytes; in addition, `bytesPerRow' must be an
-  //  integer multiple of the number of bytes per pixel.
-  size_t bytes_per_row = width * bytes_per_pixel;
-
-  UniqueCFRef<CGContextRef> cg_context(CGBitmapContextCreate(
-      os_context_.GetAddr(), width, height, bits_per_component, bytes_per_row,
-      os_context_.GetCGColorSpace(), bitmap_info));
-  // clear the bitmap before set transform
-  CGContextClearRect(cg_context.get(), CGRectMake(0, 0, width, height));
-
-  CGContextScaleCTM(cg_context.get(), context_scale_, context_scale_);
-  CGContextSetTextMatrix(cg_context.get(), transform_);
-
-  if (GlyphFormat::A8 == glyph->GetFormat()) {
-    CGContextSetGrayFillColor(cg_context.get(), 0.0f, 1.0f);
-  } else {
-    CGContextSetFillColorWithColor(cg_context.get(), os_context_.GetCGColor());
-  }
+void ScalerContextDarwin::InitializeCGContext(CGContextRef context,
+                                              bool is_color) {
+  CGContextScaleCTM(context, context_scale_, context_scale_);
+  CGContextSetTextMatrix(context, transform_);
 
   /**
    When Core Graphics draws non-emoji glyphs into a bitmap context, it will
@@ -390,8 +490,60 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
    setShouldSubpixelPositionFonts(true) and
    setShouldSubpixelQuantizeFonts(false)
    **/
-  // In my test, it's no need to call setShouldSubpixelPositionFonts(true)
-  CGContextSetAllowsFontSubpixelQuantization(cg_context.get(), false);
+  CGContextSetAllowsFontSubpixelQuantization(context, false);
+
+  if (is_color) {
+    CGContextSetFillColorWithColor(context, os_context_.GetCGColor());
+  } else {
+    CGContextSetGrayFillColor(context, 0.0f, 1.0f);
+  }
+}
+
+void ScalerContextDarwin::DrawGlyphWithState(CGContextRef context,
+                                             CGGlyph glyph, CGPoint point,
+                                             const StrokeDesc *stroke_desc) {
+  if (stroke_desc) {
+    os_context_.SetTextDrawingMode(kCGTextStroke);
+    os_context_.SetLineWidth(stroke_desc->stroke_width * text_scale_);
+    os_context_.SetLineCap(ToCGCap(stroke_desc->cap));
+    os_context_.SetLineJoin(ToCGJoin(stroke_desc->join));
+    os_context_.SetMiterLimit(stroke_desc->miter_limit);
+  } else {
+    os_context_.SetTextDrawingMode(kCGTextFill);
+  }
+
+  CTFontDrawGlyphs(ct_font_.get(), &glyph, &point, 1, context);
+}
+
+void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
+                                        const StrokeDesc &stroke_desc) {
+  // The returned pixels borrow OffScreenContext storage. Clear the previously
+  // published view before generating the next single-glyph bitmap.
+  glyph->image_.buffer = nullptr;
+  glyph->image_.row_bytes = 0;
+  glyph->image_.need_free = false;
+
+  GenerateImageInfo(glyph, stroke_desc);
+  if (glyph->image_.width == 0 || glyph->image_.height == 0.0) {
+    return;
+  }
+  CGGlyph cg_glyph = glyph->Id();
+
+  const uint32_t width = static_cast<uint32_t>(glyph->image_.width);
+  const uint32_t height = static_cast<uint32_t>(glyph->image_.height);
+
+  const bool is_color = glyph->image_.format == BitmapFormat::kBGRA8;
+
+  OffScreenContext::Target target =
+      os_context_.PrepareContext(width, height, is_color);
+  if (!target) {
+    return;
+  }
+
+  CGContextRef cg_context = target.context;
+  if (target.context_was_created) {
+    InitializeCGContext(cg_context, is_color);
+  }
 
   CGPoint point = CGPointMake(glyph->image_.origin_x_for_raster,
                               glyph->image_.origin_y_for_raster);
@@ -399,33 +551,15 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
   if (desc_.fake_bold && !is_color) {
     StrokeDesc working_stroke_desc =
         fake_bold_if_needed(stroke_desc, desc_, is_color);
-
-    CGContextSetTextDrawingMode(cg_context.get(), kCGTextStroke);
-    CGContextSetLineWidth(cg_context.get(),
-                          working_stroke_desc.stroke_width * text_scale_);
-    CGContextSetLineCap(cg_context.get(), ToCGCap(working_stroke_desc.cap));
-    CGContextSetLineJoin(cg_context.get(), ToCGJoin(working_stroke_desc.join));
-    CGContextSetMiterLimit(cg_context.get(), working_stroke_desc.miter_limit);
-    CTFontDrawGlyphs(ct_font_.get(), &cg_glyph, &point, 1, cg_context.get());
-
-    CGContextSetTextDrawingMode(cg_context.get(), kCGTextFill);
-    CTFontDrawGlyphs(ct_font_.get(), &cg_glyph, &point, 1, cg_context.get());
+    DrawGlyphWithState(cg_context, cg_glyph, point, &working_stroke_desc);
+    DrawGlyphWithState(cg_context, cg_glyph, point, nullptr);
   } else {
-    if (stroke_desc.is_stroke) {
-      CGContextSetTextDrawingMode(cg_context.get(), kCGTextStroke);
-      CGContextSetLineWidth(cg_context.get(),
-                            stroke_desc.stroke_width * text_scale_);
-      CGContextSetLineCap(cg_context.get(), ToCGCap(stroke_desc.cap));
-      CGContextSetLineJoin(cg_context.get(), ToCGJoin(stroke_desc.join));
-      CGContextSetMiterLimit(cg_context.get(), stroke_desc.miter_limit);
-      CTFontDrawGlyphs(ct_font_.get(), &cg_glyph, &point, 1, cg_context.get());
-    } else {
-      CGContextSetTextDrawingMode(cg_context.get(), kCGTextFill);
-      CTFontDrawGlyphs(ct_font_.get(), &cg_glyph, &point, 1, cg_context.get());
-    }
+    DrawGlyphWithState(cg_context, cg_glyph, point,
+                       stroke_desc.is_stroke ? &stroke_desc : nullptr);
   }
 
-  glyph->image_.buffer = reinterpret_cast<uint8_t *>(os_context_.GetAddr());
+  glyph->image_.buffer = target.pixels;
+  glyph->image_.row_bytes = target.row_bytes;
 }
 
 void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,

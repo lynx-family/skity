@@ -46,16 +46,23 @@ void ScalerContextContainer::PrepareImages(const GlyphID *glyph_ids,
                                            const Paint &paint)
     SKITY_EXCLUDES(mutex_) {
   std::lock_guard<std::mutex> lock(mutex_);
-  const GlyphData **cursor = results;
-  for (uint32_t idx = 0; idx < count; ++idx) {
-    auto glyph_id = glyph_ids[idx];
-    auto *glyph_data = this->Glyph(glyph_id);
-    StrokeDesc stroke_desc{paint.GetStyle() != Paint::kFill_Style,
-                           paint.GetStrokeWidth(), paint.GetStrokeCap(),
-                           paint.GetStrokeJoin(), paint.GetStrokeMiter()};
-    this->PrepareImage(glyph_data, stroke_desc);
-    *cursor++ = glyph_data;
+  if (count == 0) {
+    return;
   }
+
+  // Platform scaler contexts rasterize and expose one glyph at a time. The
+  // caller must consume or copy the returned bitmap before the next request.
+  DEBUG_CHECK(count == 1);
+  if (count != 1) {
+    return;
+  }
+
+  StrokeDesc stroke_desc{paint.GetStyle() != Paint::kFill_Style,
+                         paint.GetStrokeWidth(), paint.GetStrokeCap(),
+                         paint.GetStrokeJoin(), paint.GetStrokeMiter()};
+  auto *glyph_data = this->Glyph(glyph_ids[0]);
+  this->PrepareImage(glyph_data, stroke_desc);
+  results[0] = glyph_data;
 }
 
 void ScalerContextContainer::PrepareImageInfos(const GlyphID *glyph_ids,
@@ -98,13 +105,8 @@ GlyphData *ScalerContextContainer::AddGlyph(std::unique_ptr<GlyphData> glyph)
 void ScalerContextContainer::PrepareImage(GlyphData *glyph,
                                           const StrokeDesc &stroke_desc)
     SKITY_REQUIRES(mutex_) {
-  // Freetype is reuse bitmap memory, so can not just save memory pointer in
-  // this function. And there's no need to cache the memory in this function.
-  // Because:
-  // If this is in GPU backend, this is only called once, the outline
-  // bitmap is uploaded into GPU memory, so no need to save this memory. If this
-  // is in CPU backend, only Color Emoji need to load bitmap, and this is copied
-  // into CPU canvas context immediately.
+  // A backend may return caller-owned pixels or borrowed scratch storage. The
+  // single-glyph caller consumes the result before requesting another image.
   scaler_context_->GetImage(glyph, stroke_desc);
 }
 

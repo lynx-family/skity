@@ -6,9 +6,11 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstring>
 #include <new>
 
+#include "src/render/text/atlas/atlas_bitmap.hpp"
 #include "src/text/scaler_context_desc.hpp"
 
 namespace skity {
@@ -50,6 +52,52 @@ TEST(AtlasGlyphTest, GlyphKeyHashIgnoresPadding) {
 
   key1->~GlyphKey();
   key2->~GlyphKey();
+}
+
+TEST(GlyphBitmapDataTest, ResolvesTightAndExplicitRowBytes) {
+  GlyphBitmapData bitmap;
+  bitmap.width = 3;
+
+  bitmap.format = BitmapFormat::kGray8;
+  EXPECT_EQ(bitmap.RowBytes(), 3u);
+
+  bitmap.format = BitmapFormat::kBGRA8;
+  EXPECT_EQ(bitmap.RowBytes(), 12u);
+
+  bitmap.row_bytes = 16;
+  EXPECT_EQ(bitmap.RowBytes(), 16u);
+}
+
+TEST(AtlasBitmapTest, CopiesGlyphWithPaddedRows) {
+  constexpr uint32_t kAtlasWidth = 16;
+  constexpr uint32_t kGlyphWidth = 3;
+  constexpr uint32_t kGlyphHeight = 2;
+  constexpr size_t kSourceRowBytes = 5;
+  std::array<uint8_t, kSourceRowBytes * kGlyphHeight> source = {
+      1, 2, 3, 0xA1, 0xA2, 4, 5, 6, 0xB1, 0xB2,
+  };
+
+  GlyphBitmapData bitmap;
+  bitmap.width = kGlyphWidth;
+  bitmap.height = kGlyphHeight;
+  bitmap.buffer = source.data();
+  bitmap.row_bytes = kSourceRowBytes;
+  bitmap.format = BitmapFormat::kGray8;
+
+  AtlasBitmap atlas(kAtlasWidth, kAtlasWidth, 1);
+  ScalerContextDesc desc{};
+  GlyphKey key(7, desc);
+  const glm::ivec4 region = atlas.GenerateGlyphRegion(key, bitmap);
+  ASSERT_NE(region, INVALID_LOC);
+
+  for (uint32_t y = 0; y < kGlyphHeight; ++y) {
+    const uint8_t* atlas_row =
+        atlas.MemData() + static_cast<size_t>(region.y + y) * kAtlasWidth;
+    for (uint32_t x = 0; x < kGlyphWidth; ++x) {
+      EXPECT_EQ(atlas_row[region.x + x], source[y * kSourceRowBytes + x]);
+    }
+    EXPECT_EQ(atlas_row[region.x + kGlyphWidth], 0u);
+  }
 }
 
 }  // namespace skity
