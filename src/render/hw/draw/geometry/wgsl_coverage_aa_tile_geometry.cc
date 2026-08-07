@@ -82,6 +82,10 @@ HWFunctionBaseKey WGSLCoverageAATileGeometry::GetMainKey() const {
   return HWGeometryKeyType::kCoverageAA;
 }
 
+HWFunctionBaseKey WGSLCoverageAATileGeometry::GetFSSubKey() const {
+  return HWFragmentMaskKeyType::kCoverageAA;
+}
+
 void WGSLCoverageAATileGeometry::WriteVSFunctionsAndStructs(
     std::stringstream& ss) const {
   ss << CommonVertexWGSL();

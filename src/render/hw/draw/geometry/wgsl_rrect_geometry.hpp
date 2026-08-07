@@ -26,6 +26,10 @@ class WGSLRRectGeometry : public HWWGSLGeometry {
     return HWGeometryKeyType::kRRect;
   }
 
+  HWFunctionBaseKey GetFSSubKey() const override {
+    return HWFragmentMaskKeyType::kRRect;
+  }
+
   void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
 
   void WriteVSUniforms(std::stringstream& ss) const override;

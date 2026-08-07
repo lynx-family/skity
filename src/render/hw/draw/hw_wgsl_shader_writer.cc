@@ -260,6 +260,7 @@ HWFunctionBaseKey HWWGSLShaderWriter::GetFSKey() const {
   HWFunctionBaseKey filter_key = 0;
   if (geometry_ && geometry_->AffectsFragment()) {
     sub_key = geometry_->GetFSSubKey();
+    DEBUG_CHECK(sub_key != HWFragmentMaskKeyType::kNone);
   }
   if (fragment_->GetFilter()) {
     filter_key = fragment_->GetFilter()->GetType();

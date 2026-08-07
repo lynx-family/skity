@@ -157,7 +157,7 @@ TEST(HWPipelineKey, ConvexPath_SolidColor_AA) {
             MakeFunctionBaseKey(HWGeometryKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolid,
-                                HWGeometryKeyType::kPathAA));
+                                HWFragmentMaskKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetVertexName(), "VS_PathAA");
   EXPECT_EQ(steps[1]->GetFragmentName(), "FS_SolidColor_AA");
 
@@ -201,7 +201,7 @@ TEST(HWPipelineKey, ConcavePath_SolidColor_AA) {
             MakeFunctionBaseKey(HWGeometryKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolid,
-                                HWGeometryKeyType::kPathAA));
+                                HWFragmentMaskKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetVertexName(), "VS_PathAA");
   EXPECT_EQ(steps[1]->GetFragmentName(), "FS_SolidColor_AA");
 
@@ -243,7 +243,7 @@ TEST(HWPipelineKey, StrokePath_SolidColor_AA) {
             MakeFunctionBaseKey(HWGeometryKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolid,
-                                HWGeometryKeyType::kPathAA));
+                                HWFragmentMaskKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetVertexName(), "VS_PathAA");
   EXPECT_EQ(steps[1]->GetFragmentName(), "FS_SolidColor_AA");
 
@@ -486,7 +486,7 @@ TEST(HWPipelineKey, RRect_SolidVertexColor) {
                                 HWFragmentKeyType::kSolidVertex));
   EXPECT_EQ(steps[0]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex,
-                                HWGeometryKeyType::kRRect));
+                                HWFragmentMaskKeyType::kRRect));
   EXPECT_EQ(steps[0]->GetVertexName(), "VS_RRect_SolidVertexColor");
   EXPECT_EQ(steps[0]->GetFragmentName(), "FS_SolidVertexColor_RRect");
 }
@@ -511,7 +511,7 @@ TEST(HWPipelineKey, RRect_SolidVertex_LinearToSRGBGammaFilter) {
                                 HWFragmentKeyType::kSolidVertex));
   EXPECT_EQ(steps[0]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex,
-                                HWGeometryKeyType::kRRect,
+                                HWFragmentMaskKeyType::kRRect,
                                 HWColorFilterKeyType::kLinearToSRGBGamma));
 
   EXPECT_EQ(steps[0]->GetVertexName(), "VS_RRect_SolidVertexColor");
@@ -538,7 +538,7 @@ TEST(HWPipelineKey, RRect_SolidVertex_BlendSrcATop) {
                                 HWFragmentKeyType::kSolidVertex));
   EXPECT_EQ(steps[0]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex,
-                                HWGeometryKeyType::kRRect,
+                                HWFragmentMaskKeyType::kRRect,
                                 HWColorFilterKeyType::kSrcATop));
   EXPECT_EQ(steps[0]->GetVertexName(), "VS_RRect_SolidVertexColor");
   EXPECT_EQ(steps[0]->GetFragmentName(),
@@ -566,7 +566,7 @@ TEST(HWPipelineKey, RRect_SolidVertex_Compose) {
                                 HWFragmentKeyType::kSolidVertex));
   EXPECT_EQ(steps[0]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex,
-                                HWGeometryKeyType::kRRect,
+                                HWFragmentMaskKeyType::kRRect,
                                 HWColorFilterKeyType::kCompose));
   EXPECT_EQ(steps[0]->GetVertexName(), "VS_RRect_SolidVertexColor");
   EXPECT_EQ(steps[0]->GetFragmentName(),
@@ -583,7 +583,7 @@ TEST(HWPipelineKey, RRect_SolidVertex_Compose) {
       MakePipelineBaseKey(MakeFunctionBaseKey(HWGeometryKeyType::kRRect,
                                               HWFragmentKeyType::kSolidVertex),
                           MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex,
-                                              HWGeometryKeyType::kRRect,
+                                              HWFragmentMaskKeyType::kRRect,
                                               HWColorFilterKeyType::kCompose));
   expected_pipeline_key.compose_keys = {HWColorFilterKeyType::kSrcIn,
                                         HWColorFilterKeyType::kSrcATop};
@@ -796,7 +796,7 @@ TEST(HWPipelineKey, Texture) {
                                 HWFragmentKeyType::kTexture));
   EXPECT_EQ(step.GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kTexture,
-                                HWGeometryKeyType::kRRect));
+                                HWFragmentMaskKeyType::kRRect));
   EXPECT_EQ(step.GetVertexName(), "VS_RRect_Texture");
   EXPECT_EQ(step.GetFragmentName(), "FS_Texture_RRect");
 }
