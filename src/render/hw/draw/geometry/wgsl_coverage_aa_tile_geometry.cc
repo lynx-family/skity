@@ -44,12 +44,14 @@ static_assert(sizeof(CoverageAATileInstance) == 24,
 
 WGSLCoverageAATileGeometry::WGSLCoverageAATileGeometry(
     const CoverageAAFrameData* frame_data, size_t tiled_path_offset,
-    size_t tiled_path_count, Matrix physical_to_layer)
+    size_t tiled_path_count, Matrix physical_to_layer,
+    bool enable_conflation_correction)
     : HWWGSLGeometry(Flags::kSnippet | Flags::kAffectsFragment),
       frame_data_(frame_data),
       tiled_path_offset_(tiled_path_offset),
       tiled_path_count_(tiled_path_count),
-      physical_to_layer_(physical_to_layer) {}
+      physical_to_layer_(physical_to_layer),
+      enable_conflation_correction_(enable_conflation_correction) {}
 
 std::vector<GPUVertexBufferLayout>
 WGSLCoverageAATileGeometry::GetBufferLayout() {
@@ -83,7 +85,9 @@ HWFunctionBaseKey WGSLCoverageAATileGeometry::GetMainKey() const {
 }
 
 HWFunctionBaseKey WGSLCoverageAATileGeometry::GetFSSubKey() const {
-  return HWFragmentMaskKeyType::kCoverageAA;
+  return enable_conflation_correction_
+             ? HWFragmentMaskKeyType::kCoverageAAConflationCorrection
+             : HWFragmentMaskKeyType::kCoverageAA;
 }
 
 void WGSLCoverageAATileGeometry::WriteVSFunctionsAndStructs(
@@ -137,6 +141,11 @@ void WGSLCoverageAATileGeometry::WriteFSFunctionsAndStructs(
     std::stringstream& ss) const {
   ss << kCoverageAAFillRuleWGSL << kCoverageAAEdgeContributionWGSL
      << kCoverageAALineLoadWGSL;
+  if (enable_conflation_correction_) {
+    ss << kCoverageAAConflationCorrectionWGSL;
+  } else {
+    ss << kCoverageAAResolveWGSL;
+  }
 }
 
 void WGSLCoverageAATileGeometry::WriteFSUniforms(std::stringstream& ss) const {
@@ -152,18 +161,19 @@ void WGSLCoverageAATileGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
   let tile_pixel: vec2<f32> = clamp(floor(input.v_tile_pos),
                                     vec2<f32>(0.0, 0.0),
                                     vec2<f32>(15.0, 15.0));
-  var winding: f32 = f32(input.v_backdrop_and_fill_rule.x);
-  let line_start: u32 = input.v_line_range.x;
-  let line_count: u32 = input.v_line_range.y;
-  let line_texture_width: u32 = textureDimensions(uCoverageAALineTexture).x;
-  for (var i: u32 = u32(0); i < line_count; i = i + u32(1)) {
-    let line: vec4<f32> =
-        coverage_aa_load_line(line_start + i, line_texture_width);
-    winding = winding +
-        coverage_aa_edge_contribution(line.xy, line.zw, tile_pixel);
+)";
+
+  if (enable_conflation_correction_) {
+    ss << R"(
+  mask_alpha = coverage_aa_resolve_pixel_with_conflation_correction(
+      input.v_line_range, input.v_backdrop_and_fill_rule, tile_pixel);
+)";
+    return;
   }
-  mask_alpha = coverage_aa_resolve_alpha(
-      winding, input.v_backdrop_and_fill_rule.y);
+
+  ss << R"(
+  mask_alpha = coverage_aa_resolve_pixel(
+      input.v_line_range, input.v_backdrop_and_fill_rule, tile_pixel);
 )";
 }
 

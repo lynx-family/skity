@@ -50,6 +50,54 @@ bool CompareShapeGolden(skity::PictureRecorder& recorder, uint32_t width,
                                               context.ToPathList());
 }
 
+void TestCoverageAAConflationCorrectionTriangleRect(
+    skity::Path::PathFillType fill_type) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(256.f, 256.f));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Clear(skity::Color_BLACK);
+
+  skity::Paint paint;
+  paint.SetAntiAlias(true);
+  paint.SetColor(skity::Color_YELLOW);
+
+  constexpr float kLeft = 48.f;
+  constexpr float kTop = 48.f;
+  constexpr float kRight = 208.f;
+  constexpr float kBottom = 208.f;
+
+  skity::Path path;
+  path.MoveTo(kLeft, kTop);
+  path.LineTo(kRight, kTop);
+  path.LineTo(kRight, kBottom);
+  path.Close();
+
+  path.MoveTo(kLeft, kTop);
+  path.LineTo(kLeft, kBottom);
+  path.LineTo(kRight, kBottom);
+  path.Close();
+  path.SetFillType(fill_type);
+
+  canvas->DrawPath(path, paint);
+
+  auto dl = recorder.FinishRecording();
+  auto correction_off_path =
+      CoverageAAGoldenPath("triangle_rect_conflation_off.png");
+  auto correction_on_path =
+      CoverageAAGoldenPath("triangle_rect_conflation_on.png");
+
+  skity::testing::GoldenTestEnvConfig correction_off;
+  correction_off.enable_coverage_aa = true;
+  correction_off.sample_count = 1;
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 256, 256, correction_off_path.c_str(), correction_off));
+
+  skity::testing::GoldenTestEnvConfig correction_on = correction_off;
+  correction_on.enable_conflation_correction = true;
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 256, 256, correction_on_path.c_str(), correction_on));
+}
+
 }  // namespace
 
 namespace {
@@ -621,6 +669,16 @@ TEST(ShapeGolden, CanonicalEdgesExact) {
   config.require_exact_pixel_match = true;
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 192, 144, context.coverage_aa_path.c_str(), config));
+}
+
+TEST(ShapeGolden, CoverageAAConflationCorrectionTriangleRect) {
+  TestCoverageAAConflationCorrectionTriangleRect(
+      skity::Path::PathFillType::kWinding);
+}
+
+TEST(ShapeGolden, CoverageAAConflationCorrectionTriangleRectEvenOdd) {
+  TestCoverageAAConflationCorrectionTriangleRect(
+      skity::Path::PathFillType::kEvenOdd);
 }
 
 TEST(ShapeGolden, WindingContours) {

@@ -21,6 +21,7 @@ struct GPURenderTargetDescriptor {
   uint32_t width = 0;
   uint32_t height = 0;
   uint32_t sample_count = 1;
+  GPUSurfaceRenderOptions render_options;
 };
 
 /**

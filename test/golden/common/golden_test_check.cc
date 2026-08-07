@@ -248,6 +248,8 @@ struct AutoRestoreConfig {
     restore_config.enable_simple_shape_pipeline =
         gpu_context->IsEnableSimpleShapePipeline();
     restore_config.enable_coverage_aa = gpu_context->IsEnableCoverageAA();
+    restore_config.enable_conflation_correction =
+        gpu_context->IsConflationCorrectionEnabled();
     restore_enable_contour_aa = gpu_context->IsEnableContourAA();
     restore_config.supports_framebuffer_fetch = std::nullopt;
     restore_config.gl_surface_mode = env->GetGLSurfaceMode();
@@ -261,6 +263,7 @@ struct AutoRestoreConfig {
     gpu_context->SetEnableSimpleShapePipeline(
         config.enable_simple_shape_pipeline);
     gpu_context->SetEnableCoverageAA(config.enable_coverage_aa);
+    gpu_context->SetConflationCorrection(config.enable_conflation_correction);
 
     if (config.supports_framebuffer_fetch.has_value() ||
         config.supports_native_advanced_blend.has_value() ||
@@ -299,6 +302,8 @@ struct AutoRestoreConfig {
     gpu_context->SetEnableSimpleShapePipeline(
         restore_config.enable_simple_shape_pipeline);
     gpu_context->SetEnableCoverageAA(restore_config.enable_coverage_aa);
+    gpu_context->SetConflationCorrection(
+        restore_config.enable_conflation_correction);
     gpu_context->SetEnableContourAA(restore_enable_contour_aa);
 
     if (restore_config.supports_framebuffer_fetch.has_value() ||

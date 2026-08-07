@@ -31,6 +31,7 @@ struct GoldenTestEnvConfig {
   bool enable_gpu_tessellation = false;
   bool enable_simple_shape_pipeline = false;
   bool enable_coverage_aa = false;
+  bool enable_conflation_correction = false;
   bool require_exact_pixel_match = false;
   std::optional<bool> supports_framebuffer_fetch = std::nullopt;
   std::optional<bool> supports_native_advanced_blend = std::nullopt;

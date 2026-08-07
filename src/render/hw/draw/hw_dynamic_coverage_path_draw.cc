@@ -14,11 +14,12 @@
 
 namespace skity {
 
-HWDynamicCoveragePathDraw::HWDynamicCoveragePathDraw(Matrix local_to_physical,
-                                                     Matrix physical_to_layer,
-                                                     Path path, Paint paint)
+HWDynamicCoveragePathDraw::HWDynamicCoveragePathDraw(
+    Matrix local_to_physical, Matrix physical_to_layer, Path path, Paint paint,
+    bool enable_conflation_correction)
     : HWDynamicDraw(local_to_physical, paint.GetBlendMode()),
-      physical_to_layer_(physical_to_layer) {
+      physical_to_layer_(physical_to_layer),
+      enable_conflation_correction_(enable_conflation_correction) {
   path_groups_.emplace_back(BatchGroup<Path>{
       std::move(path),
       std::move(paint),
@@ -45,7 +46,8 @@ void HWDynamicCoveragePathDraw::OnGenerateDrawStep(
   }
 
   auto* geometry = context->arena_allocator->Make<WGSLCoverageAATileGeometry>(
-      frame_data_, tiled_path_offset_, tiled_path_count_, physical_to_layer_);
+      frame_data_, tiled_path_offset_, tiled_path_count_, physical_to_layer_,
+      enable_conflation_correction_);
   const auto& paint = path_groups_.front().paint;
   auto* fragment = GenShadingFragment(context, paint, false);
   ConfigureShadingFragment(context, paint, GetDstReadStrategy(), fragment);

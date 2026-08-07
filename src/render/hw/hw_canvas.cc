@@ -80,8 +80,7 @@ void HWCanvas::Init() {
 
   vertex_vector_cache_ = std::make_unique<VectorCache<float>>();
   index_vector_cache_ = std::make_unique<VectorCache<uint32_t>>();
-  auto* gpu_context = surface_->GetGPUContext();
-  if (gpu_context->IsEnableCoverageAA()) {
+  if (surface_->IsCoverageAAEnabled()) {
     coverage_aa_renderer_ = std::make_unique<CoverageAARenderer>();
   }
   layer_stack_.SetArenaAllocator(arena_allocator_);
@@ -426,7 +425,9 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
       Matrix physical_to_layer;
       layer_to_physical.Invert(&physical_to_layer);
       auto* coverage_draw = arena_allocator_->Make<HWDynamicCoveragePathDraw>(
-          layer_to_physical * transform, physical_to_layer, path, paint);
+          layer_to_physical * transform, physical_to_layer, path, paint,
+          surface_->GetCoverageAAMode() ==
+              CoverageAAMode::kConflationCorrection);
       // Coverage draws are not mergeable yet. If OnMergeIfPossible() is
       // implemented, register only the draw retained by HWLayer::AddDraw();
       // otherwise the renderer would also prepare a merged-away draw.
@@ -496,7 +497,7 @@ HWCanvas::AnalyticalAAMode HWCanvas::SelectAnalyticalAA(
     return AnalyticalAAMode::kNone;
   }
 
-  if (surface_->GetGPUContext()->IsEnableCoverageAA()) {
+  if (surface_->IsCoverageAAEnabled()) {
     // TODO(ColdPaleLight): Support other blend modes after Coverage AA
     // participates in blending consistently with the other rendering paths.
     if (!transform.HasPersp() && paint.GetBlendMode() == BlendMode::kSrcOver) {

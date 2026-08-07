@@ -16,7 +16,8 @@ class WGSLCoverageAATileGeometry : public HWWGSLGeometry {
  public:
   WGSLCoverageAATileGeometry(const CoverageAAFrameData* frame_data,
                              size_t tiled_path_offset, size_t tiled_path_count,
-                             Matrix physical_to_layer = Matrix{});
+                             Matrix physical_to_layer = Matrix{},
+                             bool enable_conflation_correction = false);
 
   ~WGSLCoverageAATileGeometry() override = default;
 
@@ -50,6 +51,7 @@ class WGSLCoverageAATileGeometry : public HWWGSLGeometry {
   size_t tiled_path_offset_ = 0;
   size_t tiled_path_count_ = 0;
   Matrix physical_to_layer_;
+  bool enable_conflation_correction_ = false;
 };
 
 }  // namespace skity

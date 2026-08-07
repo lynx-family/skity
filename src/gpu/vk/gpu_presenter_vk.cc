@@ -264,6 +264,7 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   surface_desc.height = target_height;
   surface_desc.sample_count = acquire_desc.sample_count;
   surface_desc.content_scale = acquire_desc.content_scale;
+  surface_desc.render_options = acquire_desc.render_options;
   surface_desc.surface_type = VKSurfaceType::kSwapchainImage;
   surface_desc.image = swapchain_images_[image_index];
   surface_desc.image_view = swapchain_image_views_[image_index];
