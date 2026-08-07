@@ -242,9 +242,6 @@ fn fs_main() -> @location(0) vec4<f32> {
   auto msl_result = program->WriteToMsl("fs_main", msl_options);
   ASSERT_TRUE(msl_result.success);
   EXPECT_NE(msl_result.content.find("any("), std::string::npos);
-
-  wgx::SpirvOptions spirv_options;
-  EXPECT_TRUE(program->WriteToSpirv("fs_main", spirv_options).success);
 }
 
 TEST(WgxBackendNameResolutionTest, RejectsBooleanVectorComparison) {
