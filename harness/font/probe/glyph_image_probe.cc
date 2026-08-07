@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <iomanip>
 #include <limits>
 #include <memory>
@@ -927,10 +928,23 @@ Json::Value GlyphImageToJson(const GlyphData& glyph, const std::string& path,
       image.width > 0.0f ? static_cast<size_t>(image.width) : 0;
   const size_t height =
       image.height > 0.0f ? static_cast<size_t>(image.height) : 0;
-  const size_t byte_size = width * height * BytesPerPixel(image.format);
+  const size_t tight_row_bytes = width * BytesPerPixel(image.format);
+  const size_t byte_size = tight_row_bytes * height;
   value["byte_size"] = static_cast<Json::UInt64>(byte_size);
   if (image.buffer != nullptr && byte_size > 0) {
-    value["digest"] = DigestBytes(image.buffer, byte_size);
+    const size_t source_row_bytes = image.RowBytes();
+    if (source_row_bytes < tight_row_bytes) {
+      errors->push_back(path + ".row_bytes is smaller than the image width");
+    } else if (source_row_bytes == tight_row_bytes) {
+      value["digest"] = DigestBytes(image.buffer, byte_size);
+    } else {
+      std::vector<uint8_t> tight_pixels(byte_size);
+      for (size_t y = 0; y < height; ++y) {
+        std::memcpy(tight_pixels.data() + y * tight_row_bytes,
+                    image.buffer + y * source_row_bytes, tight_row_bytes);
+      }
+      value["digest"] = DigestBytes(tight_pixels.data(), tight_pixels.size());
+    }
   }
   return value;
 }
@@ -969,21 +983,21 @@ Json::Value BuildFontGlyphImages(const Font& font,
       glyph_ids.data(), static_cast<uint32_t>(glyph_ids.size()),
       glyph_data.data(), paint, image_request.context_scale,
       image_request.transform);
-  font.LoadGlyphBitmap(glyph_ids.data(),
-                       static_cast<uint32_t>(glyph_ids.size()),
-                       glyph_data.data(), paint, image_request.context_scale,
-                       image_request.transform);
 
   for (size_t i = 0; i < glyphs.size(); ++i) {
+    const GlyphData* image_glyph = nullptr;
+    font.LoadGlyphBitmap(&glyph_ids[i], 1, &image_glyph, paint,
+                         image_request.context_scale, image_request.transform);
+
     const std::string item_path =
         "$.font_result.glyph_images[" + std::to_string(i) + "]";
     Json::Value item = GlyphRequestToJson(glyphs[i]);
-    if (glyph_data[i] == nullptr) {
+    if (image_glyph == nullptr) {
       errors->push_back(item_path + ".glyph_data is missing");
     } else {
       item["image"] =
-          GlyphImageToJson(*glyph_data[i], item_path + ".image", errors);
-      ReleaseGlyphImage(*glyph_data[i]);
+          GlyphImageToJson(*image_glyph, item_path + ".image", errors);
+      ReleaseGlyphImage(*image_glyph);
     }
     value.append(std::move(item));
   }

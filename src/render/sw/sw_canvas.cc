@@ -591,14 +591,12 @@ void SWCanvas::FillGlyphs(uint32_t count, const GlyphID* glyphs,
                            CurrentTransform());
       auto glyph_bitmap = glyphs_data[k]->Image();
 
-      size_t row_bytes = glyph_bitmap.width;
-      if (glyph_bitmap.format == BitmapFormat::kBGRA8) {
-        row_bytes *= 4;
-      }
+      const size_t row_bytes = glyph_bitmap.RowBytes();
 
       auto pixmap = std::make_shared<Pixmap>(
-          skity::Data::MakeWithCopy(glyph_bitmap.buffer,
-                                    row_bytes * glyph_bitmap.height),
+          skity::Data::MakeWithCopy(
+              glyph_bitmap.buffer,
+              row_bytes * static_cast<size_t>(glyph_bitmap.height)),
           row_bytes, glyph_bitmap.width, glyph_bitmap.height,
           AlphaType::kOpaque_AlphaType, ToColorType(glyph_bitmap.format));
       if (glyph_bitmap.need_free) {
