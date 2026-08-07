@@ -170,6 +170,7 @@ enum class BuiltinCallKind {
   kMix,
   kStep,
   kSmoothStep,
+  kAny,
   kSelect,
   kAtan,
   kAtan2,

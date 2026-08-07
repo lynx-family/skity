@@ -1607,6 +1607,23 @@ bool ModuleBuilder::EmitBuiltinCall(const ir::Instruction& inst) {
       value_map_[inst.result_id] = result_id;
       return true;
     }
+    case ir::BuiltinCallKind::kAny: {
+      if (inst.operands.size() != 1u) {
+        return false;
+      }
+
+      uint32_t operand_id = 0;
+      if (!MaterializeValue(inst.operands[0], &operand_id)) {
+        return false;
+      }
+
+      uint32_t result_id = ids_.Allocate();
+      AppendInstruction(
+          &sections_->functions, SpvOpAny,
+          {GetSpirvTypeId(inst.result_type), result_id, operand_id});
+      value_map_[inst.result_id] = result_id;
+      return true;
+    }
     case ir::BuiltinCallKind::kSelect: {
       if (inst.operands.size() != 3u) {
         return false;

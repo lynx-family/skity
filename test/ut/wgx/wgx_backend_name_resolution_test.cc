@@ -217,6 +217,36 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_NE(es_result.content.find("uvec4 wgx_select("), std::string::npos);
 }
 
+TEST(WgxBackendNameResolutionTest, LowersAny) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+  let flags: vec4<bool> = vec4<bool>(false, true, false, false);
+  let value: f32 = select(0.0, 1.0, any(flags));
+  return vec4<f32>(value);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  glsl_options.major_version = 3;
+  glsl_options.minor_version = 3;
+  auto glsl_result = program->WriteToGlsl("fs_main", glsl_options);
+  ASSERT_TRUE(glsl_result.success);
+  EXPECT_NE(glsl_result.content.find("any("), std::string::npos);
+
+  wgx::MslOptions msl_options;
+  auto msl_result = program->WriteToMsl("fs_main", msl_options);
+  ASSERT_TRUE(msl_result.success);
+  EXPECT_NE(msl_result.content.find("any("), std::string::npos);
+
+  wgx::SpirvOptions spirv_options;
+  EXPECT_TRUE(program->WriteToSpirv("fs_main", spirv_options).success);
+}
+
 TEST(WgxBackendNameResolutionTest, RejectsBooleanVectorComparison) {
   auto program = wgx::Program::Parse(R"(
 @fragment
