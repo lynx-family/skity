@@ -228,7 +228,7 @@ std::optional<std::vector<std::string>> WGSLPathAAGeometry::GetVarings() const {
 }
 
 HWFunctionBaseKey WGSLPathAAGeometry::GetFSSubKey() const {
-  return HWGeometryKeyType::kPathAA;
+  return HWFragmentMaskKeyType::kPathAA;
 }
 
 void WGSLPathAAGeometry::WriteFSAlphaMask(std::stringstream& ss) const {

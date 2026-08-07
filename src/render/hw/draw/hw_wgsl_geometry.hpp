@@ -46,7 +46,7 @@ class HWWGSLGeometry {
     };
   };
 
-  HWWGSLGeometry(uint32_t flags = Flags::kNone) : flags_(flags) {}
+  explicit HWWGSLGeometry(uint32_t flags = Flags::kNone) : flags_(flags) {}
 
   virtual ~HWWGSLGeometry() = default;
 
@@ -66,7 +66,9 @@ class HWWGSLGeometry {
    * Supplies fragment shader sub key. This method is called only when
    * 'Flags::kAffectsFragment' is specified.
    */
-  virtual HWFunctionBaseKey GetFSSubKey() const { return GetMainKey(); }
+  virtual HWFunctionBaseKey GetFSSubKey() const {
+    return HWFragmentMaskKeyType::kNone;
+  }
 
   /*
    * Generates the complete vertex shader. This method is called only when

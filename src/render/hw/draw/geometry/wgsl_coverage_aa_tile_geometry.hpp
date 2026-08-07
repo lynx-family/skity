@@ -24,6 +24,8 @@ class WGSLCoverageAATileGeometry : public HWWGSLGeometry {
 
   HWFunctionBaseKey GetMainKey() const override;
 
+  HWFunctionBaseKey GetFSSubKey() const override;
+
   void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
 
   void WriteVSUniforms(std::stringstream& ss) const override;

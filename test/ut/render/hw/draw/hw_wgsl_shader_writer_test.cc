@@ -1832,9 +1832,10 @@ TEST(ShaderWriter, CoverageAAResolvesAlphaInFinalFragment) {
   EXPECT_NE(fs.find("let parity: f32 = alpha - floor(alpha * 0.5) * 2.0;"),
             std::string::npos);
   EXPECT_EQ(fs.find("textureSample"), std::string::npos);
-  EXPECT_EQ(shader_writer.GetFSKey(),
-            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
-                                       skity::HWGeometryKeyType::kCoverageAA));
+  EXPECT_EQ(
+      shader_writer.GetFSKey(),
+      skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
+                                 skity::HWFragmentMaskKeyType::kCoverageAA));
 }
 
 TEST(ShaderWriter, PathAAWithSolidColor) {
@@ -1857,7 +1858,7 @@ TEST(ShaderWriter, PathAAWithSolidColor) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor_AA");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
-                                       skity::HWGeometryKeyType::kPathAA));
+                                       skity::HWFragmentMaskKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAFS()));
 }
@@ -1983,7 +1984,7 @@ TEST(ShaderWriter, PathAAWithLinearGradient) {
       shader_writer.GetFSKey(),
       skity::MakeFunctionBaseKey(
           skity::MakeMainKey(skity::HWFragmentKeyType::kGradient, 0b11001001),
-          skity::HWGeometryKeyType::kPathAA));
+          skity::HWFragmentMaskKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryGradientVS()));
   ASSERT_TRUE(CompareShader(fs, GetLinearGradientAAFS()));
 }
@@ -2045,7 +2046,7 @@ TEST(ShaderWriter, PathAAWithTexture) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_Texture_AA");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kTexture,
-                                       skity::HWGeometryKeyType::kPathAA));
+                                       skity::HWFragmentMaskKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAATextureVS()));
   ASSERT_TRUE(CompareShader(fs, GetTextureAAFS()));
 }
@@ -2076,7 +2077,7 @@ TEST(ShaderWriter, PathAAWithSolidColorAndColorFilter) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor_AA_MatrixFilter");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
-                                       skity::HWGeometryKeyType::kPathAA,
+                                       skity::HWFragmentMaskKeyType::kPathAA,
                                        skity::HWColorFilterKeyType::kMatrix));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAWithCFFS()));
@@ -2174,7 +2175,7 @@ TEST(ShaderWriter, RRectWithSolidColor) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidVertexColor_RRect");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolidVertex,
-                                       skity::HWGeometryKeyType::kRRect));
+                                       skity::HWFragmentMaskKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorRRectFS()));
 }
@@ -2217,7 +2218,7 @@ TEST(ShaderWriter, RRectWithLinearGradient) {
       shader_writer.GetFSKey(),
       skity::MakeFunctionBaseKey(
           skity::MakeMainKey(skity::HWFragmentKeyType::kGradient, 0b11001001),
-          skity::HWGeometryKeyType::kRRect));
+          skity::HWFragmentMaskKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectGeometryGradientVS()));
   ASSERT_TRUE(CompareShader(fs, GetLinearGradientRRectFS()));
 }
@@ -2252,7 +2253,7 @@ TEST(ShaderWriter, RRectWithTexture) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_Texture_RRect");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kTexture,
-                                       skity::HWGeometryKeyType::kRRect));
+                                       skity::HWFragmentMaskKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectTextureVS()));
   ASSERT_TRUE(CompareShader(fs, GetTextureRRectFS()));
 }
