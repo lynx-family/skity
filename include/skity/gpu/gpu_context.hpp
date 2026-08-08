@@ -268,17 +268,27 @@ class SKITY_API GPUContext {
   bool IsEnableContourAA() const { return enable_contour_aa_; }
 
   /**
-   * Used to specify whether to use coverage aa for anti-aliasing when msaa
-   * disabled.
-   *
-   * This setting must be configured before creating a Canvas from this
-   * GPUContext and must not be changed while any such Canvas is alive.
+   * Sets the default Coverage AA state for surfaces whose corresponding render
+   * option is kAuto.
    */
   void SetEnableCoverageAA(bool enable_coverage_aa) {
     enable_coverage_aa_ = enable_coverage_aa;
   }
 
   bool IsEnableCoverageAA() const { return enable_coverage_aa_; }
+
+  /**
+   * Sets the default sampling-based conflation correction heuristic for
+   * surfaces whose corresponding render option is kAuto. The setting is
+   * ignored when Coverage AA is disabled.
+   */
+  void SetConflationCorrection(bool enable) {
+    enable_conflation_correction_ = enable;
+  }
+
+  bool IsConflationCorrectionEnabled() const {
+    return enable_conflation_correction_;
+  }
 
   /**
    * Use a larger atlas cache for better performance, but with that comes a
@@ -352,6 +362,7 @@ class SKITY_API GPUContext {
   bool enable_merging_draw_call_ = true;
   bool enable_contour_aa_ = false;
   bool enable_coverage_aa_ = false;
+  bool enable_conflation_correction_ = false;
   std::uint8_t larger_atlas_mask_ = 0;
   bool enable_text_linear_filter_ = false;
   bool enable_gpu_tessellation_ = true;

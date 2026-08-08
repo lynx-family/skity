@@ -1062,6 +1062,7 @@ std::unique_ptr<GPURenderTarget> GPUContextVK::OnCreateRenderTarget(
   surface_desc.height = desc.height;
   surface_desc.content_scale = 1.0f;
   surface_desc.sample_count = desc.sample_count;
+  surface_desc.render_options = desc.render_options;
   surface_desc.surface_type = VKSurfaceType::kTexture;
 
   auto surface = std::make_unique<GPUSurfaceVK>(surface_desc, this, nullptr,

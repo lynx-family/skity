@@ -5,6 +5,7 @@
 #ifndef INCLUDE_SKITY_GPU_GPU_SURFACE_HPP
 #define INCLUDE_SKITY_GPU_GPU_SURFACE_HPP
 
+#include <cstdint>
 #include <skity/gpu/gpu_backend_type.hpp>
 #include <skity/gpu/gpu_semaphore.hpp>
 #include <skity/macros.hpp>
@@ -13,6 +14,36 @@
 namespace skity {
 
 class Pixmap;
+
+/**
+ * @enum CoverageAAMode controls Coverage AA selection for a GPU surface.
+ */
+enum class CoverageAAMode : uint8_t {
+  /**
+   * Inherit the GPUContext default when the surface is created.
+   */
+  kAuto,
+  /**
+   * Disable Coverage AA.
+   */
+  kDisabled,
+  /**
+   * Use analytical Coverage AA without conflation correction.
+   */
+  kAnalytical,
+  /**
+   * Use analytical Coverage AA with a sampling-based heuristic for selected
+   * conflation patterns.
+   *
+   * @note This mode costs additional fragment work and does not correct every
+   * conflation artifact.
+   */
+  kConflationCorrection,
+};
+
+struct GPUSurfaceRenderOptions {
+  CoverageAAMode coverage_aa = CoverageAAMode::kAuto;
+};
 
 /**
  * @struct GPUSurfaceDescriptor
@@ -25,6 +56,7 @@ struct GPUSurfaceDescriptor {
   uint32_t height = 0;
   uint32_t sample_count = 1;
   float content_scale = 1.f;
+  GPUSurfaceRenderOptions render_options;
 };
 
 /**

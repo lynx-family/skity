@@ -20,7 +20,8 @@ namespace skity {
 class HWDynamicCoveragePathDraw : public HWDynamicDraw {
  public:
   HWDynamicCoveragePathDraw(Matrix local_to_physical, Matrix physical_to_layer,
-                            Path path, Paint paint);
+                            Path path, Paint paint,
+                            bool enable_conflation_correction);
 
   ~HWDynamicCoveragePathDraw() override = default;
 
@@ -42,6 +43,7 @@ class HWDynamicCoveragePathDraw : public HWDynamicDraw {
   // coordinates are added to the GPU data.
   std::vector<BatchGroup<Path>> path_groups_;
   Matrix physical_to_layer_;
+  bool enable_conflation_correction_ = false;
   const CoverageAAFrameData* frame_data_ = nullptr;
   size_t tiled_path_offset_ = 0;
   size_t tiled_path_count_ = 0;

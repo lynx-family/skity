@@ -5,6 +5,7 @@
 #include "src/render/hw/draw/hw_wgsl_shader_writer.hpp"
 
 #include <gtest/gtest.h>
+#include <wgsl_cross.h>
 
 #include <algorithm>
 #include <iostream>
@@ -1815,6 +1816,10 @@ TEST(ShaderWriter, CoverageAAResolvesAlphaInFinalFragment) {
   EXPECT_NE(fs.find("textureLoad(uCoverageAALineTexture"), std::string::npos);
   EXPECT_NE(fs.find("coverage_aa_edge_contribution(line.xy, line.zw"),
             std::string::npos);
+  EXPECT_NE(fs.find("clamp(pixel_right - line_from.x, 0.0, 1.0)"),
+            std::string::npos);
+  EXPECT_EQ(fs.find("if line_from.x <= pixel_left"), std::string::npos);
+  EXPECT_EQ(fs.find("if line_from.x >= pixel_right"), std::string::npos);
   EXPECT_NE(fs.find("let tile_pixel: vec2<f32> = clamp(floor("),
             std::string::npos);
   EXPECT_EQ(fs.find("15.999"), std::string::npos);
@@ -1823,19 +1828,93 @@ TEST(ShaderWriter, CoverageAAResolvesAlphaInFinalFragment) {
             std::string::npos);
   EXPECT_NE(fs.find("@interpolate(flat) v_line_range: vec2<u32>"),
             std::string::npos);
-  EXPECT_NE(
-      fs.find("var winding: f32 = f32(input.v_backdrop_and_fill_rule.x);"),
-      std::string::npos);
-  EXPECT_EQ(fs.find("u32(round(input.v_line_range"), std::string::npos);
-  EXPECT_NE(fs.find("winding, input.v_backdrop_and_fill_rule.y"),
+  EXPECT_NE(fs.find("fn coverage_aa_resolve_pixel("), std::string::npos);
+  EXPECT_NE(fs.find("let backdrop: i32 = backdrop_and_fill_rule.x;"),
             std::string::npos);
-  EXPECT_NE(fs.find("let parity: f32 = alpha - floor(alpha * 0.5) * 2.0;"),
+  EXPECT_NE(fs.find("let fill_rule: i32 = backdrop_and_fill_rule.y;"),
+            std::string::npos);
+  EXPECT_NE(fs.find("let line_start: u32 = line_range.x;"), std::string::npos);
+  EXPECT_NE(fs.find("let line_count: u32 = line_range.y;"), std::string::npos);
+  EXPECT_NE(fs.find("let is_even_odd: bool = fill_rule != 0;"),
+            std::string::npos);
+  EXPECT_NE(fs.find("if line_count == u32(0)"), std::string::npos);
+  EXPECT_NE(fs.find("var winding: f32 = f32(backdrop);"), std::string::npos);
+  EXPECT_NE(fs.find("mask_alpha = coverage_aa_resolve_pixel("),
+            std::string::npos);
+  EXPECT_EQ(fs.find("u32(round(input.v_line_range"), std::string::npos);
+  EXPECT_NE(fs.find("winding, is_even_odd"), std::string::npos);
+  EXPECT_NE(fs.find("let even_winding: f32 = 2.0 * round(0.5 * winding);"),
             std::string::npos);
   EXPECT_EQ(fs.find("textureSample"), std::string::npos);
+  EXPECT_EQ(fs.find("coverage_aa_sample_winding_delta"), std::string::npos);
   EXPECT_EQ(
       shader_writer.GetFSKey(),
       skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
                                  skity::HWFragmentMaskKeyType::kCoverageAA));
+}
+
+TEST(ShaderWriter, CoverageAAConflationCorrectionUsesDistinctShader) {
+  skity::WGSLCoverageAATileGeometry geometry(nullptr, 0, 0, {}, true);
+  skity::WGSLSolidColor fragment{skity::Color4f{1.0f, 1.0f, 1.0f, 1.0f}};
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+  std::string fs = shader_writer.GenFSSourceWGSL();
+
+  EXPECT_NE(fs.find("coverage_aa_sample_winding_delta"), std::string::npos);
+  EXPECT_NE(fs.find("fn coverage_aa_resolve_pixel_with_conflation_correction("),
+            std::string::npos);
+  EXPECT_NE(
+      fs.find(
+          "mask_alpha = coverage_aa_resolve_pixel_with_conflation_correction("),
+      std::string::npos);
+  EXPECT_NE(fs.find("sample_y < vec4<f32>(y_max)"), std::string::npos);
+  EXPECT_NE(fs.find("var sample_winding: vec4<i32>"), std::string::npos);
+  EXPECT_NE(fs.find("var corner_winding: vec4<i32>"), std::string::npos);
+  EXPECT_NE(fs.find("var sample_is_inside: vec4<bool>"), std::string::npos);
+  EXPECT_NE(fs.find("if is_even_odd"), std::string::npos);
+  EXPECT_NE(fs.find("let sample_offset_x: vec4<f32>"), std::string::npos);
+  EXPECT_NE(fs.find("let sample_offset_y: vec4<f32>"), std::string::npos);
+  EXPECT_NE(fs.find("let corner_inset: f32 = 0.5 / 256.0;"), std::string::npos);
+  EXPECT_NE(fs.find("let corner_max: f32 = 1.0 - corner_inset;"),
+            std::string::npos);
+  EXPECT_EQ(fs.find("0.001953125"), std::string::npos);
+  EXPECT_EQ(fs.find("0.998046875"), std::string::npos);
+  EXPECT_NE(fs.find("let covered_samples: vec4<i32>"), std::string::npos);
+  EXPECT_EQ(fs.find("coverage_aa_resolve_alpha(f32(sample_winding"),
+            std::string::npos);
+  EXPECT_NE(fs.find("any(corner_winding < vec4<i32>(0))"), std::string::npos);
+  EXPECT_NE(fs.find("any(corner_winding > vec4<i32>(0))"), std::string::npos);
+  EXPECT_NE(fs.find("fn coverage_aa_has_two_distinct_odd_windings("),
+            std::string::npos);
+  EXPECT_NE(fs.find("winding != winding.yzwx"), std::string::npos);
+  EXPECT_NE(fs.find("winding != winding.zwxy"), std::string::npos);
+  EXPECT_NE(
+      fs.find("coverage_aa_has_two_distinct_odd_windings(corner_winding)"),
+      std::string::npos);
+  EXPECT_EQ(fs.find("corner_winding_is_odd.x"), std::string::npos);
+  EXPECT_EQ(fs.find("first_even_winding_after_min"), std::string::npos);
+  EXPECT_NE(fs.find("let may_conflate: bool = select("), std::string::npos);
+  EXPECT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(
+                skity::HWFragmentKeyType::kSolid,
+                skity::HWFragmentMaskKeyType::kCoverageAAConflationCorrection));
+
+  auto program = wgx::Program::Parse(fs);
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  glsl_options.major_version = 3;
+  glsl_options.minor_version = 3;
+  EXPECT_TRUE(program->WriteToGlsl("fs_main", glsl_options).success);
+
+  wgx::GlslOptions gles_options;
+  gles_options.standard = wgx::GlslOptions::Standard::kES;
+  gles_options.major_version = 3;
+  EXPECT_TRUE(program->WriteToGlsl("fs_main", gles_options).success);
+
+  wgx::MslOptions msl_options;
+  EXPECT_TRUE(program->WriteToMsl("fs_main", msl_options).success);
 }
 
 TEST(ShaderWriter, PathAAWithSolidColor) {

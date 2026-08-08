@@ -51,6 +51,8 @@ struct GPUSurfaceAcquireDescriptor {
    * Logical-to-physical scale factor for the acquired surface.
    */
   float content_scale = 1.f;
+
+  GPUSurfaceRenderOptions render_options;
 };
 
 /**

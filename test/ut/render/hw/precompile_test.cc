@@ -387,8 +387,17 @@ class FakeGPUContext : public GPUContextImpl {
   }
 
   std::unique_ptr<GPURenderTarget> OnCreateRenderTarget(
-      const GPURenderTargetDescriptor&, std::shared_ptr<Texture>) override {
-    return nullptr;
+      const GPURenderTargetDescriptor& desc,
+      std::shared_ptr<Texture> texture) override {
+    GPUSurfaceDescriptor surface_desc{};
+    surface_desc.width = desc.width;
+    surface_desc.height = desc.height;
+    surface_desc.sample_count = desc.sample_count;
+    surface_desc.render_options = desc.render_options;
+    auto surface = std::make_unique<FakeGPUSurface>(
+        surface_desc, this, GPUTextureFormat::kRGBA8Unorm);
+    return std::make_unique<GPURenderTarget>(std::move(surface),
+                                             std::move(texture));
   }
 
   std::shared_ptr<Data> OnReadPixels(
@@ -687,10 +696,12 @@ TEST(PrecompileDrawTest, AnalyticalAAModesAreMutuallyExclusiveInsideCanvas) {
   EXPECT_EQ(device->coverage_aa_line_texture_count(), 0u);
 }
 
-TEST(PrecompileDrawTest, CoverageAADrawUsesDirectLinesWithoutMaskPrepass) {
+TEST(PrecompileDrawTest,
+     SurfaceAnalyticalModeOverridesContextConflationCorrection) {
   FakeGPUContext context;
   ASSERT_TRUE(context.Init());
   context.SetEnableCoverageAA(true);
+  context.SetConflationCorrection(true);
   auto* device = context.device();
   ASSERT_NE(device, nullptr);
 
@@ -699,6 +710,7 @@ TEST(PrecompileDrawTest, CoverageAADrawUsesDirectLinesWithoutMaskPrepass) {
   surface_desc.height = 64;
   surface_desc.sample_count = 1;
   surface_desc.content_scale = 1.0f;
+  surface_desc.render_options.coverage_aa = CoverageAAMode::kAnalytical;
   auto surface = context.CreateSurface(&surface_desc);
   auto* canvas = surface->LockCanvas(true);
   ASSERT_NE(canvas, nullptr);
@@ -729,7 +741,118 @@ TEST(PrecompileDrawTest, CoverageAADrawUsesDirectLinesWithoutMaskPrepass) {
   EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("CoverageAAFill"));
   EXPECT_TRUE(device->HasVertexFunctionLabelContaining("CoverageAA"));
   EXPECT_TRUE(device->HasFragmentFunctionLabelContaining("CoverageAA"));
+  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining(
+      "CoverageAAConflationCorrection"));
   EXPECT_EQ(device->last_render_pass_count(), 1u);
+}
+
+TEST(PrecompileDrawTest, SurfaceCanDisableCoverageAADefault) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableCoverageAA(true);
+  auto* device = context.device();
+  ASSERT_NE(device, nullptr);
+
+  GPUSurfaceDescriptor surface_desc{};
+  surface_desc.width = 64;
+  surface_desc.height = 64;
+  surface_desc.sample_count = 1;
+  surface_desc.render_options.coverage_aa = CoverageAAMode::kDisabled;
+  auto surface = context.CreateSurface(&surface_desc);
+  auto* canvas = surface->LockCanvas(true);
+  ASSERT_NE(canvas, nullptr);
+
+  Path path;
+  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  Paint paint;
+  paint.SetAntiAlias(true);
+  canvas->DrawPath(path, paint);
+  canvas->Flush();
+
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("CoverageAA"));
+  EXPECT_EQ(device->coverage_aa_line_texture_count(), 0u);
+}
+
+TEST(PrecompileDrawTest, SurfaceCanEnableCoverageAAWithoutContextDefault) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto* device = context.device();
+  ASSERT_NE(device, nullptr);
+
+  GPUSurfaceDescriptor surface_desc{};
+  surface_desc.width = 64;
+  surface_desc.height = 64;
+  surface_desc.sample_count = 1;
+  surface_desc.render_options.coverage_aa = CoverageAAMode::kAnalytical;
+  auto surface = context.CreateSurface(&surface_desc);
+  auto* canvas = surface->LockCanvas(true);
+  ASSERT_NE(canvas, nullptr);
+
+  Path path;
+  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  Paint paint;
+  paint.SetAntiAlias(true);
+  canvas->DrawPath(path, paint);
+  canvas->Flush();
+
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("CoverageAA"));
+  EXPECT_TRUE(device->HasFragmentFunctionLabelContaining("CoverageAA"));
+  EXPECT_EQ(device->coverage_aa_line_texture_count(), 1u);
+}
+
+TEST(PrecompileDrawTest, SurfaceCanSelectConflationCorrection) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto* device = context.device();
+  ASSERT_NE(device, nullptr);
+
+  GPUSurfaceDescriptor surface_desc{};
+  surface_desc.width = 64;
+  surface_desc.height = 64;
+  surface_desc.sample_count = 1;
+  surface_desc.render_options.coverage_aa =
+      CoverageAAMode::kConflationCorrection;
+  auto surface = context.CreateSurface(&surface_desc);
+  auto* canvas = surface->LockCanvas(true);
+  ASSERT_NE(canvas, nullptr);
+
+  Path path;
+  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  Paint paint;
+  paint.SetAntiAlias(true);
+  canvas->DrawPath(path, paint);
+  canvas->Flush();
+
+  EXPECT_TRUE(device->HasFragmentFunctionLabelContaining(
+      "CoverageAAConflationCorrection"));
+  EXPECT_EQ(device->coverage_aa_line_texture_count(), 1u);
+}
+
+TEST(PrecompileDrawTest, RenderTargetUsesSurfaceCoverageAAOptions) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableCoverageAA(true);
+  context.SetConflationCorrection(true);
+  auto* device = context.device();
+  ASSERT_NE(device, nullptr);
+
+  GPURenderTargetDescriptor target_desc{};
+  target_desc.width = 64;
+  target_desc.height = 64;
+  target_desc.render_options.coverage_aa = CoverageAAMode::kAnalytical;
+  auto target = context.CreateRenderTarget(target_desc);
+  ASSERT_NE(target, nullptr);
+
+  Path path;
+  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  Paint paint;
+  paint.SetAntiAlias(true);
+  target->GetCanvas()->DrawPath(path, paint);
+
+  ASSERT_NE(context.MakeSnapshot(std::move(target)), nullptr);
+  EXPECT_TRUE(device->HasFragmentFunctionLabelContaining("CoverageAA"));
+  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining(
+      "CoverageAAConflationCorrection"));
 }
 
 TEST(PrecompileDrawTest, CoverageAADoesNotAddLayerMaskPasses) {

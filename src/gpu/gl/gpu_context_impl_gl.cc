@@ -134,6 +134,7 @@ std::unique_ptr<GPURenderTarget> GPUContextImplGL::OnCreateRenderTarget(
   surface_desc.height = desc.height;
   surface_desc.content_scale = 1.0;
   surface_desc.sample_count = desc.sample_count;
+  surface_desc.render_options = desc.render_options;
   surface_desc.surface_type = GLSurfaceType::kTexture;
   surface_desc.gl_id = gl_texture->GetGLTextureID();
 

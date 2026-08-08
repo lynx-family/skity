@@ -15,8 +15,10 @@
 
 #include "spirv/unified1/spirv.h"
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
+#include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_vertex_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
+#include "src/render/hw/draw/geometry/wgsl_coverage_aa_tile_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/hw_wgsl_shader_writer.hpp"
 
@@ -336,6 +338,19 @@ fn fs_main() -> @location(0) vec4<f32> {
 
   ASSERT_TRUE(result.success);
   EXPECT_TRUE(ContainsInstruction(result.spirv, SpvOpAny));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsCoverageAAConflationCorrectionShader) {
+  skity::WGSLCoverageAATileGeometry geometry(nullptr, 0, 0, {}, true);
+  skity::WGSLSolidColor fragment{skity::Color4f{1.0f, 1.0f, 1.0f, 1.0f}};
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+  auto program = wgx::Program::Parse(shader_writer.GenFSSourceWGSL());
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  EXPECT_TRUE(program->WriteToSpirv("fs_main", options).success);
 }
 
 TEST(WgxSpirvSmokeTest, EmitsVertexSpirvBinaryForBuiltinPositionVec4Return) {

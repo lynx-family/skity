@@ -45,6 +45,8 @@ std::string HWFragmentMaskKeyTypeToName(HWFragmentMaskKeyType::Value value) {
       return "RRect";
     case HWFragmentMaskKeyType::kCoverageAA:
       return "CoverageAA";
+    case HWFragmentMaskKeyType::kCoverageAAConflationCorrection:
+      return "CoverageAAConflationCorrection";
     default:
       return "UnknownFragmentMask";
   }

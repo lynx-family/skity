@@ -41,7 +41,8 @@ struct HWFragmentMaskKeyType {
     kPathAA = HWGeometryKeyType::kPathAA,
     kRRect = HWGeometryKeyType::kRRect,
     kCoverageAA = HWGeometryKeyType::kCoverageAA,
-    kLast = kCoverageAA,
+    kCoverageAAConflationCorrection = kFragmentOnlyStart,
+    kLast = kCoverageAAConflationCorrection,
   };
 };
 static_assert(HWGeometryKeyType::Value::kLast <

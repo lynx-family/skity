@@ -10,12 +10,33 @@
 
 namespace skity {
 
+namespace {
+
+CoverageAAMode ResolveCoverageAAMode(CoverageAAMode surface_mode,
+                                     const GPUContext& context) {
+  if (surface_mode != CoverageAAMode::kAuto) {
+    return surface_mode;
+  }
+
+  if (!context.IsEnableCoverageAA()) {
+    return CoverageAAMode::kDisabled;
+  }
+
+  return context.IsConflationCorrectionEnabled()
+             ? CoverageAAMode::kConflationCorrection
+             : CoverageAAMode::kAnalytical;
+}
+
+}  // namespace
+
 GPUSurfaceImpl::GPUSurfaceImpl(const GPUSurfaceDescriptor& desc,
                                GPUContextImpl* ctx)
     : width_(desc.width),
       height_(desc.height),
       sample_count_(desc.sample_count),
       content_scale_(desc.content_scale),
+      coverage_aa_mode_(
+          ResolveCoverageAAMode(desc.render_options.coverage_aa, *ctx)),
       ctx_(ctx),
       stage_buffer_(),
       canvas_() {}
@@ -27,6 +48,8 @@ GPUSurfaceImpl::GPUSurfaceImpl(const GPUSurfaceDescriptor& desc,
       height_(desc.height),
       sample_count_(desc.sample_count),
       content_scale_(desc.content_scale),
+      coverage_aa_mode_(
+          ResolveCoverageAAMode(desc.render_options.coverage_aa, *ctx)),
       ctx_(ctx),
       stage_buffer_(),
       static_buffer_(std::move(static_buffer)),

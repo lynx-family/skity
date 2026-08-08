@@ -38,6 +38,12 @@ class GPUSurfaceImpl : public GPUSurface {
 
   uint32_t GetSampleCount() const { return sample_count_; }
 
+  CoverageAAMode GetCoverageAAMode() const { return coverage_aa_mode_; }
+
+  bool IsCoverageAAEnabled() const {
+    return coverage_aa_mode_ != CoverageAAMode::kDisabled;
+  }
+
   Canvas* LockCanvas(bool clear) override;
 
   void Flush() override;
@@ -64,6 +70,7 @@ class GPUSurfaceImpl : public GPUSurface {
   uint32_t height_;
   uint32_t sample_count_;
   float content_scale_;
+  CoverageAAMode coverage_aa_mode_;
 
   GPUContextImpl* ctx_;
   std::unique_ptr<HWStageBuffer> stage_buffer_;
