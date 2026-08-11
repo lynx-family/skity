@@ -17,6 +17,7 @@
 #include "src/render/hw/hw_path_raster.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 #include "src/render/text/text_render_control.hpp"
+#include "src/render/text/transformed_mask_glyph_run.hpp"
 #include "src/tracing.hpp"
 #include "src/utils/arena_allocator.hpp"
 
@@ -26,109 +27,6 @@ struct GlyphRegionWithIndex {
   uint32_t index;
   GlyphRegion region;
 };
-
-namespace {
-
-constexpr float kCreationScaleBucketsPerOctave = 4.f;
-constexpr float kMinCreationScale = 1.f / 65536.f;
-constexpr float kAtlasDimensionSafetyMargin = 8.f;
-
-bool IsFinite(const Vec2& point) {
-  return std::isfinite(point.x) && std::isfinite(point.y);
-}
-
-float QuantizeCreationScaleDown(float scale) {
-  if (!std::isfinite(scale) || scale < kMinCreationScale) {
-    return 0.f;
-  }
-
-  float bucket = std::floor(std::log2(scale) * kCreationScaleBucketsPerOctave);
-  return std::exp2(bucket / kCreationScaleBucketsPerOctave);
-}
-
-float EstimatePerspectiveScale(const Matrix& position_matrix,
-                               const uint32_t count, const float* position_x,
-                               const float* position_y) {
-  Vec2 center{};
-  uint32_t finite_position_count = 0;
-  for (uint32_t index = 0; index < count; ++index) {
-    Vec2 position{position_x[index], position_y[index]};
-    if (IsFinite(position)) {
-      center += position;
-      finite_position_count++;
-    }
-  }
-  if (finite_position_count > 0) {
-    center /= static_cast<float>(finite_position_count);
-  }
-
-  Vec2 source[3] = {center, center + Vec2{1.f, 0.f}, center + Vec2{0.f, 1.f}};
-  Vec2 device[3];
-  position_matrix.MapPoints(device, source, 3);
-  if (!IsFinite(device[0]) || !IsFinite(device[1]) || !IsFinite(device[2])) {
-    return 1.f;
-  }
-
-  float scale_x = (device[1] - device[0]).Length();
-  float scale_y = (device[2] - device[0]).Length();
-  float scale = std::max(scale_x, scale_y);
-  return std::isfinite(scale) && scale > 0.f ? scale : 1.f;
-}
-
-float ComputeCreationScale(const uint32_t count, const GlyphID* glyphs,
-                           const float* position_x, const float* position_y,
-                           const Font& font, const Paint& paint,
-                           float context_scale, const Matrix& position_matrix,
-                           const AtlasConfig& atlas_config) {
-  if (count == 0 || !position_matrix.IsFinite() ||
-      !std::isfinite(context_scale) || context_scale <= 0.f) {
-    return 0.f;
-  }
-
-  float creation_scale = std::max(
-      1.f,
-      EstimatePerspectiveScale(position_matrix, count, position_x, position_y));
-
-  std::vector<const GlyphData*> glyph_info(count);
-  Paint metrics_paint = paint;
-  metrics_paint.SetStyle(Paint::kFill_Style);
-  font.LoadGlyphMetrics(glyphs, count, glyph_info.data(), metrics_paint);
-
-  float max_logical_dimension = std::max(font.GetSize(), 1.f);
-  for (const GlyphData* info : glyph_info) {
-    if (info != nullptr) {
-      max_logical_dimension = std::max(
-          {max_logical_dimension, info->GetWidth(), info->GetHeight()});
-    }
-  }
-
-  float max_bitmap_dimension =
-      static_cast<float>(atlas_config.max_bitmap_size) -
-      kAtlasDimensionSafetyMargin;
-  if (max_bitmap_dimension <= 0.f) {
-    return 0.f;
-  }
-
-  float fit_scale =
-      max_bitmap_dimension / (max_logical_dimension * context_scale);
-  creation_scale = std::min(creation_scale, fit_scale);
-  return QuantizeCreationScaleDown(creation_scale);
-}
-
-class HWUnmergeableTransformedTextDraw final : public HWDynamicTextDraw {
- public:
-  HWUnmergeableTransformedTextDraw(const Matrix& transform,
-                                   BlendMode blend_mode,
-                                   HWWGSLGeometry* geometry,
-                                   HWWGSLFragment* fragment)
-      : HWDynamicTextDraw(transform, blend_mode, geometry, fragment) {}
-
-  // Existing text batching assumes that merged geometry shares one draw
-  // transform. Keep this temporary perspective path isolated.
-  HWDrawType GetDrawType() const override { return HWDrawType::kUnknow; }
-};
-
-}  // namespace
 
 class DirectGlyphRun : public GlyphRun {
  public:
@@ -407,251 +305,6 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
           std::move(glyph_region_groups[group_index]), group_index, atlas,
           glyph_format));
     }
-  }
-
-  return run_list;
-}
-
-class TransformedColorGlyphRun : public GlyphRun {
- public:
-  TransformedColorGlyphRun(const uint32_t count, const GlyphID* glyphs,
-                           const Point& origin, const float* position_x,
-                           const float* position_y, const Font& font,
-                           float context_scale, const Matrix& creation_matrix,
-                           const Paint& paint,
-                           std::vector<GlyphRegionWithIndex> glyph_locs,
-                           uint32_t group_index, Atlas* atlas,
-                           GlyphFormat glyph_format)
-      : count_(count),
-        glyphs_(glyphs, glyphs + count),
-        origin_(origin),
-        position_x_(position_x, position_x + count),
-        position_y_(position_y, position_y + count),
-        font_(font),
-        context_scale_(context_scale),
-        creation_matrix_(creation_matrix),
-        paint_(paint),
-        glyph_locs_(std::move(glyph_locs)),
-        group_index_(group_index),
-        atlas_(atlas),
-        glyph_format_(glyph_format) {}
-
-  ~TransformedColorGlyphRun() override = default;
-
-  ArrayList<GlyphRect, 16> Raster(ArenaAllocator* arena_allocator);
-
-  HWDraw* Draw(Matrix transform, ArenaAllocator* arena_allocator,
-               float canvas_scale, bool use_linear_text_filter) override;
-
-  Rect GetBounds() override { return bounds_; }
-
-  bool IsStroke() override { return false; }
-
-  static GlyphRunList SubRunListByTexture(
-      const uint32_t count, const GlyphID* glyphs, const Point& origin,
-      const float* position_x, const float* position_y, const Font& font,
-      const Paint& paint, float context_scale, const Matrix& transform,
-      AtlasManager* atlas_manager, ArenaAllocator* arena_allocator);
-
- private:
-  uint32_t count_;
-  std::vector<GlyphID> glyphs_;
-  const Point origin_;
-  std::vector<float> position_x_;
-  std::vector<float> position_y_;
-  const Font font_;
-  float context_scale_;
-  Matrix creation_matrix_;
-  const Paint paint_;
-  std::vector<GlyphRegionWithIndex> glyph_locs_;
-  uint32_t group_index_;
-  Atlas* atlas_;
-  GlyphFormat glyph_format_;
-  Rect bounds_;
-};
-
-ArrayList<GlyphRect, 16> TransformedColorGlyphRun::Raster(
-    ArenaAllocator* arena_allocator) {
-  ArrayList<GlyphRect, 16> glyph_rects;
-  glyph_rects.SetArenaAllocator(arena_allocator);
-  bounds_ = Rect::MakeEmpty();
-  if (glyph_locs_.empty() || context_scale_ <= 0.f) {
-    return glyph_rects;
-  }
-
-  std::vector<const GlyphData*> glyph_info(count_);
-  font_.LoadGlyphBitmapInfo(glyphs_.data(), count_, glyph_info.data(), paint_,
-                            context_scale_, creation_matrix_);
-
-  for (const auto& glyph_loc : glyph_locs_) {
-    const GlyphData* info = glyph_info[glyph_loc.index];
-    if (info == nullptr) {
-      continue;
-    }
-
-    Vec2 uv_lt =
-        atlas_->CalculateUV(glyph_loc.region.index_in_group,
-                            glyph_loc.region.loc.x, glyph_loc.region.loc.y);
-    Vec2 uv_rb =
-        atlas_->CalculateUV(glyph_loc.region.index_in_group,
-                            glyph_loc.region.loc.x + glyph_loc.region.loc.z,
-                            glyph_loc.region.loc.y + glyph_loc.region.loc.w);
-
-    const Vec2 run_position{position_x_[glyph_loc.index],
-                            position_y_[glyph_loc.index]};
-    Vec2 creation_position{};
-    creation_matrix_.MapPoints(&creation_position, &run_position, 1);
-    if (!IsFinite(creation_position)) {
-      continue;
-    }
-
-    const auto& image = info->Image();
-    float left = creation_position.x + image.origin_x;
-    float top = creation_position.y - image.origin_y;
-    float width = static_cast<float>(glyph_loc.region.loc.z) / context_scale_;
-    float height = static_cast<float>(glyph_loc.region.loc.w) / context_scale_;
-    if (!std::isfinite(left) || !std::isfinite(top) || !std::isfinite(width) ||
-        !std::isfinite(height) || width <= 0.f || height <= 0.f) {
-      continue;
-    }
-
-    bounds_.Join(Rect::MakeXYWH(left, top, width, height));
-    glyph_rects.emplace_back(Vec4{left, top, left + width, top + height}, uv_lt,
-                             uv_rb);
-  }
-
-  return glyph_rects;
-}
-
-HWDraw* TransformedColorGlyphRun::Draw(Matrix transform,
-                                       ArenaAllocator* arena_allocator,
-                                       float canvas_scale,
-                                       bool use_linear_text_filter) {
-  SKITY_TRACE_EVENT(TransformedColorGlyphRun_Draw);
-  (void)canvas_scale;
-  (void)use_linear_text_filter;
-  if (!transform.IsFinite()) {
-    return nullptr;
-  }
-
-  ArrayList<GlyphRect, 16> glyph_rects = Raster(arena_allocator);
-  if (glyph_rects.empty()) {
-    return nullptr;
-  }
-
-  Matrix creation_inverse;
-  if (!creation_matrix_.Invert(&creation_inverse)) {
-    return nullptr;
-  }
-  Matrix position_matrix = transform * Matrix::Translate(origin_.x, origin_.y);
-  Matrix view_difference = position_matrix * creation_inverse;
-  if (!view_difference.IsFinite()) {
-    return nullptr;
-  }
-
-  atlas_->UploadAtlas(group_index_);
-  auto gpu_texture = atlas_->GetGPUTexture(group_index_);
-  auto gpu_sampler =
-      atlas_->GetGPUSampler(group_index_, GPUFilterMode::kLinear);
-
-  Paint paint_copy = paint_;
-  paint_copy.SetStyle(Paint::kFill_Style);
-  auto geometry = arena_allocator->Make<WGSLTextSolidColorGeometry>(
-      Matrix(), std::move(glyph_rects), paint_copy);
-  HWWGSLFragment* fragment = arena_allocator->Make<WGSLColorEmojiFragment>(
-      std::move(gpu_texture), std::move(gpu_sampler),
-      glyph_format_ == GlyphFormat::BGRA32, paint_.GetAlphaF());
-  if (paint_.GetColorFilter()) {
-    fragment->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
-  }
-
-  auto draw = arena_allocator->Make<HWUnmergeableTransformedTextDraw>(
-      view_difference, paint_.GetBlendMode(), geometry, fragment);
-  bounds_ = view_difference.MapRect(bounds_);
-  return draw;
-}
-
-GlyphRunList TransformedColorGlyphRun::SubRunListByTexture(
-    const uint32_t count, const GlyphID* glyphs, const Point& origin,
-    const float* position_x, const float* position_y, const Font& font,
-    const Paint& paint, float context_scale, const Matrix& transform,
-    AtlasManager* atlas_manager, ArenaAllocator* arena_allocator) {
-  GlyphRunList run_list;
-  run_list.SetArenaAllocator(arena_allocator);
-  if (count == 0 || atlas_manager == nullptr || !transform.IsFinite()) {
-    return run_list;
-  }
-
-  Atlas* atlas = atlas_manager->GetAtlas(AtlasFormat::RGBA32);
-  Matrix position_matrix = transform * Matrix::Translate(origin.x, origin.y);
-  float creation_scale =
-      ComputeCreationScale(count, glyphs, position_x, position_y, font, paint,
-                           context_scale, position_matrix, atlas->GetConfig());
-  if (creation_scale <= 0.f) {
-    return run_list;
-  }
-  Matrix creation_matrix = Matrix::Scale(creation_scale, creation_scale);
-
-  Paint working_paint = paint;
-  working_paint.SetStyle(Paint::kFill_Style);
-  std::vector<const GlyphData*> glyph_info(count);
-  font.LoadGlyphMetrics(glyphs, count, glyph_info.data(), working_paint);
-  GlyphFormat glyph_format = GlyphFormat::RGBA32;
-  for (const GlyphData* info : glyph_info) {
-    if (info != nullptr && info->GetFormat().has_value()) {
-      glyph_format = *info->GetFormat();
-      break;
-    }
-  }
-
-  std::vector<GlyphRegionWithIndex> glyph_regions;
-  uint32_t max_index = 0;
-  for (uint32_t index = 0; index < count; ++index) {
-    if (glyph_info[index] == nullptr) {
-      continue;
-    }
-    GlyphRegion glyph_region =
-        atlas->GetGlyphRegion(font, glyph_info[index]->Id(), working_paint,
-                              false, context_scale, creation_matrix);
-    if (glyph_region.loc.z <= 0 || glyph_region.loc.w <= 0) {
-      continue;
-    }
-    max_index = std::max(max_index, glyph_region.index_in_group);
-    glyph_regions.push_back({index, glyph_region});
-  }
-  if (glyph_regions.empty()) {
-    return run_list;
-  }
-
-  uint32_t max_per_atlas = atlas->GetConfig().max_num_bitmap_per_atlas;
-  uint32_t draw_count = max_index / max_per_atlas + 1;
-  if (draw_count == 1) {
-    run_list.push_back(arena_allocator->Make<TransformedColorGlyphRun>(
-        count, glyphs, origin, position_x, position_y, font, context_scale,
-        creation_matrix, working_paint, std::move(glyph_regions),
-        static_cast<uint32_t>(0), atlas, glyph_format));
-    return run_list;
-  }
-
-  std::vector<std::vector<GlyphRegionWithIndex>> glyph_region_groups(
-      draw_count);
-  for (const auto& glyph_region : glyph_regions) {
-    uint32_t group_index = glyph_region.region.index_in_group / max_per_atlas;
-    GlyphRegion grouped_region = glyph_region.region;
-    grouped_region.index_in_group %= max_per_atlas;
-    glyph_region_groups[group_index].push_back(
-        {glyph_region.index, grouped_region});
-  }
-
-  for (uint32_t group_index = 0; group_index < draw_count; ++group_index) {
-    if (glyph_region_groups[group_index].empty()) {
-      continue;
-    }
-    run_list.push_back(arena_allocator->Make<TransformedColorGlyphRun>(
-        count, glyphs, origin, position_x, position_y, font, context_scale,
-        creation_matrix, working_paint,
-        std::move(glyph_region_groups[group_index]), group_index, atlas,
-        glyph_format));
   }
 
   return run_list;
@@ -1033,12 +686,70 @@ GlyphRunList GlyphRun::MakeInternal(
         }
       }
     }
-  } else if (format == AtlasFormat::RGBA32 && transform.HasPersp()) {
-    Paint working_paint = paint;
-    working_paint.SetStyle(Paint::kFill_Style);
-    run_list = TransformedColorGlyphRun::SubRunListByTexture(
-        count, glyphs, origin, position_x, position_y, font, working_paint,
-        context_scale, transform, atlas_manager, arena_allocator);
+  } else if (transform.HasPersp()) {
+    if (format == AtlasFormat::RGBA32) {
+      Paint working_paint = paint;
+      working_paint.SetStyle(Paint::kFill_Style);
+      run_list = transformed_mask::MakeGlyphRunList(
+          count, glyphs, origin, position_x, position_y, font, working_paint,
+          format, context_scale, transform, false, atlas_manager,
+          arena_allocator);
+    } else {
+      std::vector<const GlyphData*> glyph_data(count);
+      font.LoadGlyphPath(glyphs, count, glyph_data.data());
+
+      std::vector<GlyphID> mask_glyphs;
+      std::vector<float> mask_position_x;
+      std::vector<float> mask_position_y;
+      mask_glyphs.reserve(count);
+      mask_position_x.reserve(count);
+      mask_position_y.reserve(count);
+
+      auto append_mask_runs = [&](const Paint& working_paint) {
+        GlyphRunList mask_runs = transformed_mask::MakeGlyphRunList(
+            static_cast<uint32_t>(mask_glyphs.size()), mask_glyphs.data(),
+            origin, mask_position_x.data(), mask_position_y.data(), font,
+            working_paint, format, context_scale, transform, false,
+            atlas_manager, arena_allocator);
+        for (auto* mask_run : mask_runs) {
+          run_list.push_back(mask_run);
+        }
+      };
+
+      auto flush_mask_runs = [&]() {
+        if (mask_glyphs.empty()) {
+          return;
+        }
+        // Bitmap-only glyphs have no outline to stroke. Match the bitmap text
+        // fallback by drawing a single fill mask for every paint style.
+        Paint working_paint = transformed_mask::MakeBitmapOnlyFillPaint(paint);
+        append_mask_runs(working_paint);
+        mask_glyphs.clear();
+        mask_position_x.clear();
+        mask_position_y.clear();
+      };
+
+      for (uint32_t index = 0; index < count; ++index) {
+        if (glyph_data[index] != nullptr &&
+            !glyph_data[index]->GetPath().IsEmpty()) {
+          // Preserve paint order when outline and bitmap-only glyphs overlap.
+          flush_mask_runs();
+          Path path = glyph_data[index]->GetPath().CopyWithMatrix(
+              Matrix::Translate(origin.x, origin.y));
+          run_list.push_back(arena_allocator->Make<PathGlyphRun>(
+              path, position_x[index], position_y[index], paint,
+              draw_path_func));
+        } else {
+          // Bitmap-only glyphs (for example bitmap emoji in an A8 font) have
+          // no outline to feed the path renderer. Keep them in local text
+          // coordinates and let the transformed-mask path rasterize them.
+          mask_glyphs.push_back(glyphs[index]);
+          mask_position_x.push_back(position_x[index]);
+          mask_position_y.push_back(position_y[index]);
+        }
+      }
+      flush_mask_runs();
+    }
   } else if (control.CanUseSDF(maximun_text_scale, paint,  // NOLINT
                                font.GetTypeface())) {
     // sdf

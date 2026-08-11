@@ -10,3 +10,5 @@ add_executable(fake_3d_example
 
 target_link_libraries(fake_3d_example PUBLIC skity::example_common)
 target_link_libraries(fake_3d_example PRIVATE glm::glm-header-only)
+target_compile_definitions(fake_3d_example PRIVATE
+    -DEXAMPLE_IMAGE_ROOT="${CMAKE_SOURCE_DIR}/example/images/")

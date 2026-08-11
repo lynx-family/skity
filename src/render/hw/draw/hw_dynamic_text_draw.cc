@@ -45,6 +45,10 @@ bool HWDynamicTextDraw::OnMergeIfPossible(HWDraw* draw) {
     return false;
   }
   auto other = static_cast<HWDynamicTextDraw*>(draw);
+  // One merged draw uploads one common-slot transform for all glyph instances.
+  if (GetTransform() != other->GetTransform()) {
+    return false;
+  }
   if (!geometry_->CanMerge(other->geometry_) ||
       !fragment_->CanMerge(other->fragment_)) {
     return false;
