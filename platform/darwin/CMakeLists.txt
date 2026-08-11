@@ -160,6 +160,34 @@ if(${SKITY_IO_MODULE})
   )
 endif()
 
+# C API wrapper sources are compiled into the framework when the capi module is
+# enabled, mirroring `add_subdirectory(module/capi)` in the root CMakeLists.txt
+# so the C ABI surface ships inside the static framework. The skity-capi target
+# is always defined before this directory is added (module/capi at root line
+# 182, platform/darwin at line 252), so its properties are available here.
+if(${SKITY_CAPI_MODULE})
+  get_target_property(capi_sources skity-capi SOURCES)
+  if (capi_sources STREQUAL "capi_sources-NOTFOUND")
+    message(FATAL_ERROR "capi_sources is not found")
+  endif()
+  target_sources(skity_framework PRIVATE ${capi_sources})
+
+  get_target_property(capi_include_dirs skity-capi INCLUDE_DIRECTORIES)
+  if (NOT capi_include_dirs STREQUAL "capi_include_dirs-NOTFOUND")
+    target_include_directories(skity_framework PRIVATE ${capi_include_dirs})
+  endif()
+
+  get_target_property(capi_compile_options skity-capi COMPILE_OPTIONS)
+  if (NOT capi_compile_options STREQUAL "capi_compile_options-NOTFOUND")
+    target_compile_options(skity_framework PRIVATE ${capi_compile_options})
+  endif()
+
+  get_target_property(capi_compile_definitions skity-capi COMPILE_DEFINITIONS)
+  if (NOT capi_compile_definitions STREQUAL "capi_compile_definitions-NOTFOUND")
+    target_compile_definitions(skity_framework PRIVATE ${capi_compile_definitions})
+  endif()
+endif()
+
 # set cxx standard
 set_target_properties(skity_framework PROPERTIES
   CXX_STANDARD 17
@@ -265,6 +293,15 @@ endif()
 if(${SKITY_IO_MODULE})
   install(
       DIRECTORY "${CMAKE_SOURCE_DIR}/module/io/include/skity/io"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
+      COMPONENT Runtime
+  )
+endif()
+
+# capi headers (pure-C ABI surface; consumers #include <skity_c/skity.h>)
+if(${SKITY_CAPI_MODULE})
+  install(
+      DIRECTORY "${CMAKE_SOURCE_DIR}/module/capi/include/skity_c"
       DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
       COMPONENT Runtime
   )

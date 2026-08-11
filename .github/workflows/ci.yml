@@ -140,7 +140,11 @@ jobs:
             run: |
                 export PATH=$PATH:$PWD/buildtools/cmake/CMake.app/Contents/bin
                 echo "PATH=$PATH" >> "$GITHUB_ENV"
-                cmake -B out/cmake_ios_release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DCMAKE_SYSTEM_NAME=iOS -DSKITY_MTL_BACKEND=ON -DSKITY_CT_FONT=ON -DSKITY_CODEC_MODULE=OFF
+                # capi ships inside the static skity_framework (see gen-xcframework
+                # below). The standalone libskity-capi dylib is not built on iOS:
+                # skity does not export symbols there (SKITY_DLL is off on iOS),
+                # so linking the dylib fails with undefined symbols.
+                cmake -B out/cmake_ios_release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DCMAKE_SYSTEM_NAME=iOS -DSKITY_MTL_BACKEND=ON -DSKITY_CT_FONT=ON -DSKITY_CODEC_MODULE=OFF -DSKITY_CAPI_MODULE=OFF
                 cmake --build out/cmake_ios_release
           - name: check build xcframework
             uses: ./.github/actions/gen-xcframework

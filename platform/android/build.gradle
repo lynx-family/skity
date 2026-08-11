@@ -31,6 +31,7 @@ android {
                             "-DSKITY_VK_BACKEND=ON",
                             "-DSKITY_CODEC_MODULE=ON",
                             "-DSKITY_IO_MODULE=ON",
+                            "-DSKITY_CAPI_MODULE=ON",
                             "-DWGX_GLSL_BACKEND=ON",
                             "-DWGX_MSL_BACKEND=OFF",
                             "-DSKITY_BUILD_INSTALL=OFF"
@@ -71,6 +72,11 @@ android {
         io {
             headers "../../module/io/include/"
             name "skity-io"
+        }
+
+        capi {
+            headers "../../module/capi/include/"
+            name "skity-capi"
         }
     }
 
