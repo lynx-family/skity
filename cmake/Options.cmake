@@ -26,6 +26,8 @@ cmake_dependent_option(
   OFF
 )
 
+option(SKITY_CAPI_MODULE "option for build C API wrapper module" ON)
+
 # option for building example
 # User can pass -DSKITY_EXAMPLE=ON to build example if needed
 option(SKITY_EXAMPLE "option for building example" OFF)

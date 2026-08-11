@@ -178,6 +178,10 @@ if(${SKITY_IO_MODULE})
   add_subdirectory(module/io)
 endif()
 
+if(${SKITY_CAPI_MODULE})
+  add_subdirectory(module/capi)
+endif()
+
 
 # header files
 add_subdirectory(include)
