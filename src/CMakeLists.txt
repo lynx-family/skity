@@ -98,6 +98,8 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_texture.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_run.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_run.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/transformed_mask_glyph_run.cc
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/transformed_mask_glyph_run.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/sdf_gen.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/text/sdf_gen.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/text_render_control.cc

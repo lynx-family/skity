@@ -12,6 +12,25 @@
 
 namespace skity::example::basic {
 
+namespace {
+
+std::shared_ptr<skity::TextBlob> BuildStarTextBlob(
+    const skity::Paint& text_paint) {
+  skity::TextBlobBuilder builder;
+  auto emoji_typeface =
+      skity::Typeface::MakeFromFile(EXAMPLE_IMAGE_ROOT "/NotoColorEmoji.ttf");
+
+  if (emoji_typeface) {
+    auto delegate =
+        skity::TypefaceDelegate::CreateSimpleFallbackDelegate({emoji_typeface});
+    return builder.BuildTextBlob("Skity 😀", text_paint, delegate.get());
+  }
+
+  return builder.BuildTextBlob("Skity 😀", text_paint);
+}
+
+}  // namespace
+
 void draw_even_odd_fill(skity::Canvas* canvas) {
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
   skity::Paint paint;
@@ -48,12 +67,32 @@ void draw_even_odd_fill(skity::Canvas* canvas) {
   glm::mat4 posM =
       glm::translate(glm::mat4(1.f), {anchor_point.x, anchor_point.y, 0.f});
 
+  skity::Paint text_paint;
+  text_paint.SetStyle(skity::Paint::kFill_Style);
+  text_paint.SetColor(skity::Color_BLACK);
+  text_paint.SetAntiAlias(true);
+  text_paint.SetTextSize(20.f);
+  text_paint.SetTypeface(skity::Typeface::GetDefaultTypeface());
+  static auto text_blob = BuildStarTextBlob(text_paint);
+  if (text_blob) {
+    auto text_bounds = text_blob->GetBoundsRect();
+    canvas->DrawTextBlob(text_blob.get(), 100 - text_bounds.CenterX(),
+                         10 - text_bounds.CenterY(), text_paint);
+  }
+
   canvas->Save();
 
   auto result = posM * invOrth * proj * view * midM_X * midM_Y * orth * preM;
   canvas->Concat(reinterpret_cast<skity::Matrix&>(result));
 
   canvas->DrawPath(path, paint);
+
+  if (text_blob) {
+    auto text_bounds = text_blob->GetBoundsRect();
+    canvas->DrawTextBlob(text_blob.get(),
+                         anchor_point.x - text_bounds.CenterX(),
+                         anchor_point.y - text_bounds.CenterY(), text_paint);
+  }
 
   canvas->Restore();
 

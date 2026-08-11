@@ -51,6 +51,7 @@ add_executable(skity_unit_test
     text/text_blob_test.cc
     text/text_run_test.cc
     text/text_test.cc
+    text/transformed_mask_glyph_run_test.cc
     utils/arena_allocator_test.cc
     utils/array_list_test.cc
 )
