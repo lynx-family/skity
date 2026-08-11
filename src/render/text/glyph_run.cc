@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <skity/geometry/matrix.hpp>
 #include <skity/graphic/paint.hpp>
+#include <skity/macros.hpp>
 
 #include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
 #include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
@@ -14,6 +15,7 @@
 #include "src/render/hw/draw/wgx_filter.hpp"
 #include "src/render/hw/hw_path_raster.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
+#include "src/render/text/glyph_raster_alignment.hpp"
 #include "src/render/text/text_render_control.hpp"
 #include "src/tracing.hpp"
 #include "src/utils/arena_allocator.hpp"
@@ -107,9 +109,6 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
   }
   font_.LoadGlyphMetrics(glyphs_.data(), count_, glyph_info.data(),
                          metrics_paint);
-  font_.LoadGlyphBitmapInfo(glyphs_.data(), count_, glyph_info.data(),
-                            metrics_paint, context_scale_, transform_);
-
   ArrayList<GlyphRect, 16> glyph_rects;
   glyph_rects.SetArenaAllocator(arena_allocator);
   bounds_ = Rect::MakeEmpty();
@@ -128,18 +127,21 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
         glyph_locs_[k].region.loc.x + glyph_locs_[k].region.loc.z,
         glyph_locs_[k].region.loc.y + glyph_locs_[k].region.loc.w);
 
-    auto origin_x = info.Image().origin_x;
-    auto origin_y = info.Image().origin_y;
+    auto origin_x = glyph_locs_[k].region.origin_x;
+    auto origin_y = glyph_locs_[k].region.origin_y;
 
     const Vec2 run_pos{position_x_[glyph_locs_[k].index],
                        position_y_[glyph_locs_[k].index]};
     Vec2 device_run_pos{0, 0};
     transform_.MapPoints(&device_run_pos, &run_pos, 1);
 
-    float rounded_x = std::floor(device_run_pos.x + 0.5f);
-    float rounded_y = std::floor(device_run_pos.y + 0.5f);
-    float rx = rounded_x + origin_x;
-    float ry = rounded_y - origin_y;
+#if defined(SKITY_MACOS) || defined(SKITY_IOS)
+    float rx = device_run_pos.x + origin_x;
+    float ry = device_run_pos.y - origin_y;
+#else
+    float rx = std::floor(device_run_pos.x + 0.5f) + origin_x;
+    float ry = std::floor(device_run_pos.y + 0.5f) - origin_y;
+#endif
     float rw = (uv_rb.x - uv_lt.x) / canvas_scale;
     float rh = (uv_rb.y - uv_lt.y) / canvas_scale;
 
@@ -254,8 +256,17 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
   uint32_t k = 0;
   while (k < count) {
     auto info = *(glyph_info[k]);
-    GlyphRegion glyph_region = atlas->GetGlyphRegion(
-        font, info.Id(), paint, false, context_scale, transform);
+    const Vec2 run_pos{position_x[k] + origin.x, position_y[k] + origin.y};
+    Vec2 device_run_pos{0, 0};
+    transform.MapPoints(&device_run_pos, &run_pos, 1);
+    uint8_t subpixel_x_phase = 0;
+#if defined(SKITY_MACOS) || defined(SKITY_IOS)
+    subpixel_x_phase =
+        QuantizeGlyphSubpixelPhase(device_run_pos.x, context_scale);
+#endif
+    GlyphRegion glyph_region =
+        atlas->GetGlyphRegion(font, info.Id(), paint, false, context_scale,
+                              transform, subpixel_x_phase, 0);
     if (glyph_region.loc.z == 0 || glyph_region.loc.w == 0) {
       k++;
       continue;
@@ -290,7 +301,8 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
           {glyph_regions[k].index,
            {glyph_regions[k].region.index_in_group %
                 atlas->GetConfig().max_num_bitmap_per_atlas,
-            glyph_regions[k].region.loc, 1.0f}});
+            glyph_regions[k].region.loc, 1.0f, glyph_regions[k].region.origin_x,
+            glyph_regions[k].region.origin_y}});
       k++;
     }
 

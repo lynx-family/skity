@@ -56,6 +56,8 @@ struct GlyphRegion {
   uint32_t index_in_group;
   glm::ivec4 loc;
   float scale;
+  float origin_x = 0.f;
+  float origin_y = 0.f;
 };
 
 struct GlyphKey {

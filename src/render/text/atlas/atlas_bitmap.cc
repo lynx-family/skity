@@ -27,37 +27,37 @@ AtlasBitmap::~AtlasBitmap() {
   }
 }
 
-glm::ivec4 AtlasBitmap::GetGlyphRegion(GlyphKey key) {
+GlyphRegion AtlasBitmap::GetGlyphRegion(GlyphKey key) {
   auto it = glyph_regions_.find(key);
   if (it != glyph_regions_.end()) {
     return it->second;
   }
-  return INVALID_LOC;
+  return GlyphRegion{0, INVALID_LOC, 1.f};
 }
 
-glm::ivec4 AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
-                                            const GlyphBitmapData& bitmap) {
+GlyphRegion AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
+                                             const GlyphBitmapData& bitmap) {
   const uint32_t glyph_width = static_cast<uint32_t>(bitmap.width);
   const uint32_t glyph_height = static_cast<uint32_t>(bitmap.height);
   if (glyph_width == 0 || glyph_height == 0) {
-    return {0, 0, 0, 0};
+    return GlyphRegion{0, {0, 0, 0, 0}, 1.f};
   }
 
   const size_t data_row_size =
       static_cast<size_t>(glyph_width) * bytes_per_pixel_;
   const size_t source_row_size = bitmap.RowBytes();
   if (!bitmap.buffer || source_row_size < data_row_size) {
-    return {0, 0, 0, 0};
+    return GlyphRegion{0, {0, 0, 0, 0}, 1.f};
   }
 
   uint32_t width = glyph_width + Atlas_Padding;
   uint32_t height = glyph_height + Atlas_Padding;
   if (width > width_ - 2 || height > height_ - 2) {
-    return {0, 0, 0, 0};
+    return GlyphRegion{0, {0, 0, 0, 0}, 1.f};
   }
   glm::ivec4 region = allocator_->AllocateRegion(width, height);
   if (region == INVALID_LOC) {
-    return region;
+    return GlyphRegion{0, region, 1.f};
   }
 
   // Do not assume textures are zero-initialized on macOS — newly created
@@ -69,7 +69,8 @@ glm::ivec4 AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
   region.y += Atlas_Padding / 2;
   region.z -= Atlas_Padding;
   region.w -= Atlas_Padding;
-  glyph_regions_.insert(std::make_pair(key, region));
+  GlyphRegion glyph_region{0, region, 1.f, bitmap.origin_x, bitmap.origin_y};
+  glyph_regions_.insert(std::make_pair(key, glyph_region));
 
   // Copy bitmap to memory storage
   size_t self_row_size = static_cast<size_t>(this->width_) * bytes_per_pixel_;
@@ -94,7 +95,7 @@ glm::ivec4 AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
     dirty_rect_->w = std::max(dirty_rect_->w, dirty_region.y + dirty_region.w);
   }
 
-  return region;
+  return glyph_region;
 }
 
 }  // namespace skity

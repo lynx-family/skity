@@ -38,6 +38,9 @@ struct ScalerContextDesc {
 
   uint8_t fake_bold;
   uint8_t hinting;
+  uint8_t subpixel_x_phase = 0;
+  uint8_t subpixel_y_phase = 0;
+  uint16_t reserved_padding = 0;
   // hash end
 
   friend inline bool operator==(const ScalerContextDesc& lhs,
@@ -50,7 +53,10 @@ struct ScalerContextDesc {
            lhs.context_scale == rhs.context_scale && lhs.cap == rhs.cap &&
            lhs.join == rhs.join && lhs.fake_bold == rhs.fake_bold &&
            lhs.foreground_color == rhs.foreground_color &&
-           lhs.hinting == rhs.hinting;
+           lhs.hinting == rhs.hinting &&
+           lhs.subpixel_x_phase == rhs.subpixel_x_phase &&
+           lhs.subpixel_y_phase == rhs.subpixel_y_phase &&
+           lhs.reserved_padding == rhs.reserved_padding;
   }
 
   friend inline bool operator!=(const ScalerContextDesc& lhs,
@@ -93,7 +99,10 @@ static_assert(sizeof(ScalerContextDesc) ==
                       sizeof(ScalerContextDesc::cap) +
                       sizeof(ScalerContextDesc::join) +
                       sizeof(ScalerContextDesc::fake_bold) +
-                      sizeof(ScalerContextDesc::hinting),
+                      sizeof(ScalerContextDesc::hinting) +
+                      sizeof(ScalerContextDesc::subpixel_x_phase) +
+                      sizeof(ScalerContextDesc::subpixel_y_phase) +
+                      sizeof(ScalerContextDesc::reserved_padding),
               "ScalerContextDesc must have no padding");
 
 }  // namespace skity

@@ -14,6 +14,7 @@
 #include <skity/geometry/stroke.hpp>
 #include <utility>
 
+#include "src/render/text/glyph_raster_alignment.hpp"
 #include "src/text/ports/darwin/typeface_darwin.hpp"
 
 namespace {
@@ -587,8 +588,10 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
 
   // extends one pixel for the bitmap bounds
   // it is used for the AA pixel and it is important
-  uint32_t width = std::ceil(cg_bounds.size.width * context_scale_) + 2;
-  uint32_t height = std::ceil(cg_bounds.size.height * context_scale_) + 2;
+  CGFloat raster_width = cg_bounds.size.width;
+  CGFloat raster_height = cg_bounds.size.height;
+  uint32_t width = std::ceil(raster_width * context_scale_) + 2;
+  uint32_t height = std::ceil(raster_height * context_scale_) + 2;
 
   if (working_stroke_desc.is_stroke) {
     if (glyph->GetPath().IsEmpty()) {
@@ -609,29 +612,35 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
     Rect stroke_bound = fill_path.GetBounds();
     point.x = -stroke_bound.Left();
     point.y = stroke_bound.Bottom();
-    width = std::ceil(stroke_bound.Width() * context_scale_) + 2;
-    height = std::ceil(stroke_bound.Height() * context_scale_) + 2;
+    raster_width = stroke_bound.Width();
+    raster_height = stroke_bound.Height();
+    width = std::ceil(raster_width * context_scale_) + 2;
+    height = std::ceil(raster_height * context_scale_) + 2;
   }
 
   // since bitmap extends one pixel, the origin point needs do the same move
   point.x += 1 / context_scale_;
   point.y += 1 / context_scale_;
 
-  // Core Graphics snaps the glyph baseline to the device pixel grid while
-  // rasterizing into the bitmap context. Keep the atlas origin in the same
-  // coordinate system; otherwise the fractional glyph bound is applied again
-  // when DirectGlyphRun places the bitmap, producing glyph-dependent vertical
-  // offsets. An X-axis skew (transform_.c), as used by synthetic italic text,
-  // does not affect the device-space Y coordinate and still needs the same
-  // alignment. Only transforms that mix X into Y (transform_.b) are excluded.
-  if (transform_.b == 0) {
-    point.y = std::floor(point.y * context_scale_) / context_scale_;
-  }
+  const CGFloat unaligned_point_x = point.x;
+  const CGFloat unaligned_point_y = point.y;
+  point.x = AlignRasterPointAtOrAbove(point.x, context_scale_,
+                                      desc_.subpixel_x_phase);
+  point.y = AlignRasterPointAtOrAbove(point.y, context_scale_,
+                                      desc_.subpixel_y_phase);
+
+  const CGFloat point_delta_x = point.x - unaligned_point_x;
+  const CGFloat point_delta_y = point.y - unaligned_point_y;
+  width = std::ceil((raster_width + point_delta_x) * context_scale_) + 2;
+  // CoreText antialiasing may cover the pixel immediately outside the
+  // typographic bounds. Preserve an extra vertical row after phase alignment.
+  height = std::ceil((raster_height + point_delta_y) * context_scale_) + 3;
 
   CGPoint src{point.x, point.y};
   CGPoint dst = CGPointApplyAffineTransform(src, invert_transform_);
   glyph->image_.origin_x = -point.x;
-  // the CoreGraphic coordinate needs to flip Y axis for our canvas rendering
+  // Core Graphics uses an upward Y axis while canvas placement uses a
+  // downward Y axis.
   glyph->image_.origin_y = -point.y + height / context_scale_;
   glyph->image_.origin_x_for_raster = dst.x;
   glyph->image_.origin_y_for_raster = dst.y;

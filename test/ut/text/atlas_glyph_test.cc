@@ -11,6 +11,7 @@
 #include <new>
 
 #include "src/render/text/atlas/atlas_bitmap.hpp"
+#include "src/render/text/glyph_raster_alignment.hpp"
 #include "src/text/scaler_context_desc.hpp"
 
 namespace skity {
@@ -68,6 +69,23 @@ TEST(GlyphBitmapDataTest, ResolvesTightAndExplicitRowBytes) {
   EXPECT_EQ(bitmap.RowBytes(), 16u);
 }
 
+TEST(GlyphRasterAlignmentTest, QuantizesAndAlignsPhysicalPixelPhase) {
+  constexpr float kScale = 2.f;
+  const uint8_t phase = QuantizeGlyphSubpixelPhase(10.25f, kScale);
+
+  EXPECT_EQ(phase, kGlyphSubpixelPhaseCount / 2);
+  EXPECT_FLOAT_EQ(AlignRasterPointAtOrAbove(1.1f, kScale, phase), 1.25f);
+}
+
+TEST(AtlasGlyphTest, SubpixelPhaseParticipatesInGlyphKeyEquality) {
+  ScalerContextDesc first_desc{};
+  ScalerContextDesc second_desc{};
+  second_desc.subpixel_x_phase = 1;
+
+  EXPECT_FALSE(
+      GlyphKey::Equal{}(GlyphKey(7, first_desc), GlyphKey(7, second_desc)));
+}
+
 TEST(AtlasBitmapTest, CopiesGlyphWithPaddedRows) {
   constexpr uint32_t kAtlasWidth = 16;
   constexpr uint32_t kGlyphWidth = 3;
@@ -83,20 +101,29 @@ TEST(AtlasBitmapTest, CopiesGlyphWithPaddedRows) {
   bitmap.buffer = source.data();
   bitmap.row_bytes = kSourceRowBytes;
   bitmap.format = BitmapFormat::kGray8;
+  bitmap.origin_x = -1.25f;
+  bitmap.origin_y = 3.5f;
 
   AtlasBitmap atlas(kAtlasWidth, kAtlasWidth, 1);
   ScalerContextDesc desc{};
   GlyphKey key(7, desc);
-  const glm::ivec4 region = atlas.GenerateGlyphRegion(key, bitmap);
-  ASSERT_NE(region, INVALID_LOC);
+  const GlyphRegion region = atlas.GenerateGlyphRegion(key, bitmap);
+  ASSERT_NE(region.loc, INVALID_LOC);
+  EXPECT_FLOAT_EQ(region.origin_x, bitmap.origin_x);
+  EXPECT_FLOAT_EQ(region.origin_y, bitmap.origin_y);
+
+  const GlyphRegion cached_region = atlas.GetGlyphRegion(key);
+  EXPECT_EQ(cached_region.loc, region.loc);
+  EXPECT_FLOAT_EQ(cached_region.origin_x, bitmap.origin_x);
+  EXPECT_FLOAT_EQ(cached_region.origin_y, bitmap.origin_y);
 
   for (uint32_t y = 0; y < kGlyphHeight; ++y) {
     const uint8_t* atlas_row =
-        atlas.MemData() + static_cast<size_t>(region.y + y) * kAtlasWidth;
+        atlas.MemData() + static_cast<size_t>(region.loc.y + y) * kAtlasWidth;
     for (uint32_t x = 0; x < kGlyphWidth; ++x) {
-      EXPECT_EQ(atlas_row[region.x + x], source[y * kSourceRowBytes + x]);
+      EXPECT_EQ(atlas_row[region.loc.x + x], source[y * kSourceRowBytes + x]);
     }
-    EXPECT_EQ(atlas_row[region.x + kGlyphWidth], 0u);
+    EXPECT_EQ(atlas_row[region.loc.x + kGlyphWidth], 0u);
   }
 }
 

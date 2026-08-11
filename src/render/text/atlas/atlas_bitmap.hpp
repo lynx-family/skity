@@ -23,11 +23,11 @@ class AtlasBitmap {
   ~AtlasBitmap();
 
   // query cache
-  glm::ivec4 GetGlyphRegion(GlyphKey key);
+  GlyphRegion GetGlyphRegion(GlyphKey key);
 
   // add one glyph to memory atlas
-  glm::ivec4 GenerateGlyphRegion(GlyphKey const& key,
-                                 const GlyphBitmapData& bitmap);
+  GlyphRegion GenerateGlyphRegion(GlyphKey const& key,
+                                  const GlyphBitmapData& bitmap);
 
   std::optional<glm::ivec4> DirtyRect() const { return dirty_rect_; }
 
@@ -42,9 +42,7 @@ class AtlasBitmap {
   [[maybe_unused]] uint32_t height_;
   uint32_t bytes_per_pixel_;
   std::unique_ptr<AtlasAllocator> allocator_;
-  // std::unordered_map<GlyphKey, glm::ivec4, GlyphKey::Hash, GlyphKey::Equal>
-  //     glyph_regions_ = {};
-  std::unordered_map<GlyphKey, glm::ivec4, GlyphKey::Hash, GlyphKey::Equal>
+  std::unordered_map<GlyphKey, GlyphRegion, GlyphKey::Hash, GlyphKey::Equal>
       glyph_regions_ = {};
   uint8_t* mem_data_ = nullptr;
   std::optional<glm::ivec4> dirty_rect_ = std::nullopt;
