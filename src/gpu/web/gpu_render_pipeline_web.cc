@@ -57,8 +57,8 @@ struct FragmentState {
     } else {
       target.blend = &blend;
 
-      blend.color.operation = WGPUBlendOperation_Add;
-      blend.alpha.operation = WGPUBlendOperation_Add;
+      blend.color.operation = ToWGPUBlendOperation(fragment.blend_op);
+      blend.alpha.operation = ToWGPUBlendOperation(fragment.blend_op);
 
       blend.color.srcFactor = blend.alpha.srcFactor =
           ToWGPUBlendFactor(fragment.src_blend_factor);

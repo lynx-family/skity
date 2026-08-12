@@ -99,6 +99,12 @@ class HWWGSLFragment {
    */
   virtual void WriteFSMain(std::stringstream& ss) const {}
 
+  /** Whether this fragment supplies a mask independent of its source color. */
+  virtual bool HasFragmentMask() const { return false; }
+
+  /** Multiplies or replaces the fragment shader's `coverage` variable. */
+  virtual void WriteFSCoverage(std::stringstream& ss) const {}
+
   /**
    * Supplies varings for vertex shader and fragment shader. This
    * method is called only when 'Flags::kSnippet' is specified.

@@ -60,11 +60,17 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceWEB::CreateShaderFunction(
 
 std::unique_ptr<GPURenderPipeline> GPUDeviceWEB::CreateRenderPipeline(
     const GPURenderPipelineDescriptor& desc) {
+  if (UsesDualSourceBlending(desc.target)) {
+    return {};
+  }
   return GPURenderPipelineWeb::Create(device_, desc);
 }
 
 std::unique_ptr<GPURenderPipeline> GPUDeviceWEB::ClonePipeline(
     GPURenderPipeline* base, const GPURenderPipelineDescriptor& desc) {
+  if (UsesDualSourceBlending(desc.target)) {
+    return {};
+  }
   // all depth stencil state and blend state are immutable in webgpu
   // just recreate a new pipeline
   return GPURenderPipelineWeb::Create(device_, desc);

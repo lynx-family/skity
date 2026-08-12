@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <filesystem>
 #include <skity/io/parse_path.hpp>
 #include <skity/recorder/picture_recorder.hpp>
@@ -396,6 +397,167 @@ TEST(SimpleShapeGolden, DrawStrokeRRectBlending) {
   PathListContext context("draw_stroke_rect_with_blending.png");
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400, 400,
                                                    context.ToPathList()));
+}
+
+TEST(SimpleShapeGolden, DrawAnalyticalBlendModes) {
+  constexpr uint32_t kWidth = 360;
+  constexpr uint32_t kHeight = 360;
+  constexpr std::array<skity::BlendMode, 9> kBlendModes = {
+      skity::BlendMode::kClear,   skity::BlendMode::kSrc,
+      skity::BlendMode::kSrcOver, skity::BlendMode::kSrcIn,
+      skity::BlendMode::kDstIn,   skity::BlendMode::kSrcOut,
+      skity::BlendMode::kDstATop, skity::BlendMode::kModulate,
+      skity::BlendMode::kOverlay,
+  };
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(kWidth, kHeight));
+  auto* canvas = recorder.GetRecordingCanvas();
+
+  canvas->SaveLayer(skity::Rect::MakeWH(kWidth, kHeight), skity::Paint{});
+  skity::Path clip_path;
+  clip_path.AddRRect(skity::RRect::MakeRectXY(
+      skity::Rect::MakeLTRB(4.f, 4.f, kWidth - 4.f, kHeight - 4.f), 16.f,
+      16.f));
+  canvas->ClipPath(clip_path, skity::Canvas::ClipOp::kIntersect);
+
+  for (size_t index = 0; index < kBlendModes.size(); ++index) {
+    float x = static_cast<float>(index % 3) * 120.f;
+    float y = static_cast<float>(index / 3) * 120.f;
+
+    skity::Paint destination;
+    destination.SetAntiAlias(true);
+    destination.SetColor(skity::ColorSetARGB(150, 220, 80, 60));
+    canvas->DrawRRect(
+        skity::RRect::MakeRectXY(
+            skity::Rect::MakeLTRB(x + 8.f, y + 10.f, x + 88.f, y + 105.f), 9.f,
+            7.f),
+        destination);
+
+    skity::Paint source;
+    source.SetAntiAlias(true);
+    source.SetBlendMode(kBlendModes[index]);
+    source.SetColor(skity::ColorSetARGB(180, 30, 150, 240));
+    if (index % 2 != 0) {
+      source.SetStyle(skity::Paint::kStroke_Style);
+      source.SetStrokeWidth(6.f);
+    }
+    canvas->Save();
+    canvas->Rotate(index % 2 == 0 ? 3.f : -3.f, x + 69.25f, y + 60.5f);
+    canvas->DrawRRect(
+        skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(x + 30.25f, y + 22.5f,
+                                                       x + 108.25f, y + 98.5f),
+                                 17.5f, 13.5f),
+        source);
+    canvas->Restore();
+  }
+  canvas->Restore();
+
+  auto display_list = recorder.FinishRecording();
+  PathListContext context("draw_analytical_blend_modes.png");
+  auto validate_strategy = [&](bool enable_coverage_aa, bool enable_contour_aa,
+                               bool supports_framebuffer_fetch,
+                               bool supports_dual_source_blending,
+                               const char* golden_path) {
+    SCOPED_TRACE(golden_path);
+    SCOPED_TRACE(supports_dual_source_blending ? "dual_source"
+                 : supports_framebuffer_fetch  ? "framebuffer_fetch"
+                                               : "texture_copy");
+    SCOPED_TRACE(enable_coverage_aa ? "coverage_aa" : "contour_aa");
+    skity::testing::GoldenTestEnvConfig config;
+    config.enable_coverage_aa = enable_coverage_aa;
+    config.enable_contour_aa = enable_contour_aa;
+    config.supports_framebuffer_fetch = supports_framebuffer_fetch;
+    config.supports_dual_source_blending = supports_dual_source_blending;
+    config.supports_native_advanced_blend = false;
+    config.supports_native_advanced_blend_coherent = false;
+    config.sample_count = 1;
+    EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+        display_list.get(), kWidth, kHeight, golden_path, config));
+  };
+
+  const auto contour_path =
+      std::filesystem::path(CASE_DIR "contour_aa_images/") /
+      "draw_analytical_blend_modes.png";
+  bool can_test_framebuffer_fetch = skity::testing::SupportsFramebufferFetch();
+  bool can_test_dual_source = skity::testing::SupportsDualSourceBlending();
+
+  // Generate and validate the variant baselines before the common path list.
+  // Missing variant images otherwise intentionally fall back to the common
+  // image, which prevents SKITY_UPDATE_MISSING_GOLDEN from creating them.
+  validate_strategy(true, false, false, false,
+                    context.expected_image_coverage_aa_path.c_str());
+  validate_strategy(false, true, false, false, contour_path.c_str());
+
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      display_list.get(), kWidth, kHeight, context.ToPathList()));
+
+  if (can_test_framebuffer_fetch) {
+    validate_strategy(true, false, true, false,
+                      context.expected_image_coverage_aa_path.c_str());
+    validate_strategy(false, true, true, false, contour_path.c_str());
+  }
+  if (can_test_dual_source) {
+    validate_strategy(true, false, false, true,
+                      context.expected_image_coverage_aa_path.c_str());
+    validate_strategy(false, true, false, true, contour_path.c_str());
+  }
+}
+
+TEST(SimpleShapeGolden, DrawSourceOpacityBlendModes) {
+  constexpr uint32_t kWidth = 360;
+  constexpr uint32_t kHeight = 480;
+  constexpr std::array<skity::BlendMode, 6> kBlendModes = {
+      skity::BlendMode::kSrc,    skity::BlendMode::kSrcIn,
+      skity::BlendMode::kSrcOut, skity::BlendMode::kDstATop,
+      skity::BlendMode::kDstIn,  skity::BlendMode::kDstOut,
+  };
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(kWidth, kHeight));
+  auto* canvas = recorder.GetRecordingCanvas();
+
+  for (size_t opacity_index = 0; opacity_index < 2; ++opacity_index) {
+    for (size_t mode_index = 0; mode_index < kBlendModes.size(); ++mode_index) {
+      float x = static_cast<float>(mode_index % 3) * 120.f;
+      float y = static_cast<float>(opacity_index * 2 + mode_index / 3) * 120.f;
+
+      skity::Paint destination;
+      destination.SetAntiAlias(true);
+      destination.SetColor(skity::ColorSetARGB(160, 220, 70, 60));
+      canvas->DrawCircle(x + 50.f, y + 60.f, 38.f, destination);
+
+      skity::Paint source;
+      source.SetAntiAlias(true);
+      source.SetBlendMode(kBlendModes[mode_index]);
+      source.SetColor(
+          skity::ColorSetARGB(opacity_index == 0 ? 255 : 150, 30, 145, 235));
+      canvas->Save();
+      canvas->Rotate(mode_index % 2 == 0 ? 7.f : -7.f, x + 72.f, y + 60.f);
+      canvas->DrawRRect(
+          skity::RRect::MakeRectXY(
+              skity::Rect::MakeLTRB(x + 38.f, y + 20.f, x + 108.f, y + 102.f),
+              15.f, 11.f),
+          source);
+      canvas->Restore();
+    }
+  }
+
+  auto display_list = recorder.FinishRecording();
+  std::filesystem::path golden_path = kGoldenTestImageSimpleDir;
+  golden_path.append("draw_source_opacity_blend_modes.png");
+
+  skity::testing::GoldenTestEnvConfig coverage_config;
+  coverage_config.enable_coverage_aa = true;
+  coverage_config.enable_contour_aa = false;
+  coverage_config.supports_framebuffer_fetch = false;
+  coverage_config.supports_dual_source_blending = false;
+  coverage_config.supports_native_advanced_blend = false;
+  coverage_config.supports_native_advanced_blend_coherent = false;
+  coverage_config.sample_count = 1;
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(display_list.get(), kWidth,
+                                                   kHeight, golden_path.c_str(),
+                                                   coverage_config));
 }
 
 // https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/yinyang.svg

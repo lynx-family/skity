@@ -174,8 +174,22 @@ constexpr WGPUBlendFactor ToWGPUBlendFactor(GPUBlendFactor factor) {
       return WGPUBlendFactor_OneMinusDstAlpha;
     case GPUBlendFactor::kSrcAlphaSaturated:
       return WGPUBlendFactor_SrcAlphaSaturated;
+    case GPUBlendFactor::kSrc1:
+    case GPUBlendFactor::kOneMinusSrc1:
+    case GPUBlendFactor::kSrc1Alpha:
+    case GPUBlendFactor::kOneMinusSrc1Alpha:
+      return WGPUBlendFactor_Undefined;
     default:
       return WGPUBlendFactor_Undefined;
+  }
+}
+
+constexpr WGPUBlendOperation ToWGPUBlendOperation(GPUBlendOperation operation) {
+  switch (operation) {
+    case GPUBlendOperation::kReverseSubtract:
+      return WGPUBlendOperation_ReverseSubtract;
+    default:
+      return WGPUBlendOperation_Add;
   }
 }
 

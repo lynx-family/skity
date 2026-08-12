@@ -13,6 +13,42 @@
 
 namespace {
 
+TEST(WgxBackendNameResolutionTest, LowersDualSourceFragmentOutputs) {
+  auto program = wgx::Program::Parse(R"(
+struct FSOutput {
+  @location(0) @blend_src(0) primary: vec4<f32>,
+  @location(0) @blend_src(1) secondary: vec4<f32>,
+}
+
+@fragment
+fn fs_main() -> FSOutput {
+  return FSOutput(vec4<f32>(1.0), vec4<f32>(0.5));
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  glsl_options.major_version = 3;
+  glsl_options.minor_version = 3;
+  auto glsl_result = program->WriteToGlsl("fs_main", glsl_options);
+  ASSERT_TRUE(glsl_result.success);
+  EXPECT_NE(glsl_result.content.find("layout(location = 0, index = 0)"),
+            std::string::npos);
+  EXPECT_NE(glsl_result.content.find("layout(location = 0, index = 1)"),
+            std::string::npos);
+
+  wgx::MslOptions msl_options;
+  auto msl_result = program->WriteToMsl("fs_main", msl_options);
+  ASSERT_TRUE(msl_result.success);
+  EXPECT_NE(msl_result.content.find("[[color(0),index(0)]]"),
+            std::string::npos);
+  EXPECT_NE(msl_result.content.find("[[color(0),index(1)]]"),
+            std::string::npos);
+}
+
 TEST(WgxBackendNameResolutionTest, RewritesGlslConflictingVariableNames) {
   auto program = wgx::Program::Parse(R"(
 @vertex
@@ -265,6 +301,32 @@ fn fs_main() -> @location(0) vec4<f32> {
   }
   EXPECT_TRUE(emits_any);
 #endif
+}
+
+TEST(WgxBackendNameResolutionTest, LowersDiscardForGlslAndMsl) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main(@builtin(position) position: vec4<f32>)
+    -> @location(0) vec4<f32> {
+  if position.x < 0.0 {
+    discard;
+  }
+  return vec4<f32>(1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  auto glsl_result = program->WriteToGlsl("fs_main", glsl_options);
+  ASSERT_TRUE(glsl_result.success);
+  EXPECT_NE(glsl_result.content.find("discard;"), std::string::npos);
+
+  wgx::MslOptions msl_options;
+  auto msl_result = program->WriteToMsl("fs_main", msl_options);
+  ASSERT_TRUE(msl_result.success);
+  EXPECT_NE(msl_result.content.find("discard_fragment();"), std::string::npos);
 }
 
 TEST(WgxBackendNameResolutionTest, RejectsBooleanVectorComparison) {

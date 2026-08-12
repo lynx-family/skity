@@ -505,9 +505,9 @@ std::vector<ir::OutputVariable> Lowerer::ResolveOutputVars(
       output.name = std::string{member->name->name};
       output.type = const_cast<Lowerer*>(this)->ResolveType(member->type);
       output.member_index = i;
-      ResolveInterfaceDecorations(member->attributes, &output.decoration_kind,
-                                  &output.decoration_value,
-                                  &output.interpolation);
+      ResolveInterfaceDecorations(
+          member->attributes, &output.decoration_kind, &output.decoration_value,
+          &output.interpolation, &output.blend_src_index);
       if (output.type == ir::kInvalidTypeId ||
           output.decoration_kind == ir::InterfaceDecorationKind::kNone) {
         continue;
@@ -521,7 +521,7 @@ std::vector<ir::OutputVariable> Lowerer::ResolveOutputVars(
   output.type = const_cast<Lowerer*>(this)->ResolveType(function->return_type);
   ResolveInterfaceDecorations(function->return_type_attrs,
                               &output.decoration_kind, &output.decoration_value,
-                              &output.interpolation);
+                              &output.interpolation, &output.blend_src_index);
   if (output.decoration_kind == ir::InterfaceDecorationKind::kBuiltin &&
       output.GetBuiltin() == ir::BuiltinType::kPosition) {
     output.name = "position_output";
@@ -774,7 +774,8 @@ const ast::StructDecl* Lowerer::ResolveStructDeclByName(
 void Lowerer::ResolveInterfaceDecorations(
     const std::vector<ast::Attribute*>& attributes,
     ir::InterfaceDecorationKind* decoration_kind, uint32_t* decoration_value,
-    ir::InterpolationType* interpolation) const {
+    ir::InterpolationType* interpolation,
+    std::optional<uint32_t>* blend_src_index) const {
   if (decoration_kind == nullptr || decoration_value == nullptr) {
     return;
   }
@@ -783,6 +784,9 @@ void Lowerer::ResolveInterfaceDecorations(
   *decoration_value = 0;
   if (interpolation != nullptr) {
     *interpolation = ir::InterpolationType::kNone;
+  }
+  if (blend_src_index != nullptr) {
+    *blend_src_index = std::nullopt;
   }
 
   for (auto* attr : attributes) {
@@ -822,6 +826,10 @@ void Lowerer::ResolveInterfaceDecorations(
           *interpolation = ir::InterpolationType::kPerspective;
         }
       }
+    } else if (attr->GetType() == ast::AttributeType::kBlendSrc &&
+               blend_src_index != nullptr) {
+      auto* blend_src = static_cast<const ast::BlendSrcAttribute*>(attr);
+      *blend_src_index = static_cast<uint32_t>(blend_src->index);
     }
   }
 }

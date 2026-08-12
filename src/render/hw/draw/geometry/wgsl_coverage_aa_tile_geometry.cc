@@ -154,7 +154,7 @@ void WGSLCoverageAATileGeometry::WriteFSUniforms(std::stringstream& ss) const {
 )";
 }
 
-void WGSLCoverageAATileGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
+void WGSLCoverageAATileGeometry::WriteFSCoverage(std::stringstream& ss) const {
   ss << R"(
   // The quad reaches 16 on its right and bottom edges, but the last pixel in a
   // 16x16 tile is pixel 15. Line endpoints may still decode exactly to 16.
@@ -165,14 +165,14 @@ void WGSLCoverageAATileGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
 
   if (enable_conflation_correction_) {
     ss << R"(
-  mask_alpha = coverage_aa_resolve_pixel_with_conflation_correction(
+  coverage = coverage_aa_resolve_pixel_with_conflation_correction(
       input.v_line_range, input.v_backdrop_and_fill_rule, tile_pixel);
 )";
     return;
   }
 
   ss << R"(
-  mask_alpha = coverage_aa_resolve_pixel(
+  coverage = coverage_aa_resolve_pixel(
       input.v_line_range, input.v_backdrop_and_fill_rule, tile_pixel);
 )";
 }

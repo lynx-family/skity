@@ -32,10 +32,12 @@ struct GoldenTestEnvConfig {
   bool enable_simple_shape_pipeline = false;
   bool enable_coverage_aa = false;
   bool enable_conflation_correction = false;
+  std::optional<bool> enable_contour_aa = std::nullopt;
   bool require_exact_pixel_match = false;
   std::optional<bool> supports_framebuffer_fetch = std::nullopt;
   std::optional<bool> supports_native_advanced_blend = std::nullopt;
   std::optional<bool> supports_native_advanced_blend_coherent = std::nullopt;
+  std::optional<bool> supports_dual_source_blending = std::nullopt;
   std::optional<GLSurfaceMode> gl_surface_mode = std::nullopt;
   std::optional<bool> gl_has_stencil_attachment = std::nullopt;
   uint32_t sample_count = 4;
@@ -47,6 +49,16 @@ struct GoldenTestEnvConfig {
 // cases skip on such devices, since the per-test cap override would otherwise
 // force the extension on and issue invalid GL/Vulkan calls.
 bool IsNativeAdvancedBlendUnsupported();
+
+// Returns whether the real device can read the current color attachment from
+// a fragment shader. Tests must not force this capability on unsupported
+// hardware because doing so can generate an invalid backend shader.
+bool SupportsFramebufferFetch();
+
+// Returns whether the real device supports dual-source fragment outputs and
+// Src1 blend factors. Tests must not force this capability on unsupported
+// hardware.
+bool SupportsDualSourceBlending();
 
 /**
  * @brief compare the display list with the golden texture. If the golden_test

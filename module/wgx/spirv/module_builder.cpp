@@ -504,6 +504,7 @@ bool ModuleBuilder::Build(SectionBuffers* sections,
     info.member_index = ir_output.member_index;
     info.decoration_kind = ir_output.decoration_kind;
     info.decoration_value = ir_output.decoration_value;
+    info.blend_src_index = ir_output.blend_src_index;
     info.interpolation = ir_output.interpolation;
     output_vars_.push_back(std::move(info));
   }
@@ -866,6 +867,12 @@ void ModuleBuilder::WriteAnnotationSection() {
           {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationLocation),
            output.decoration_value});
     }
+    if (output.blend_src_index.has_value()) {
+      AppendInstruction(
+          &sections_->annotations, SpvOpDecorate,
+          {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationIndex),
+           output.blend_src_index.value()});
+    }
     if (output.interpolation == ir::InterpolationType::kFlat) {
       AppendInstruction(
           &sections_->annotations, SpvOpDecorate,
@@ -1113,6 +1120,9 @@ bool ModuleBuilder::EmitInstruction(const ir::Instruction& inst) {
       return EmitReturn(inst);
     case ir::InstKind::kUnreachable:
       AppendInstruction(&sections_->functions, SpvOpUnreachable, {});
+      return true;
+    case ir::InstKind::kDiscard:
+      AppendInstruction(&sections_->functions, SpvOpKill, {});
       return true;
     default:
       return false;

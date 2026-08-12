@@ -9,21 +9,12 @@
 #include <skity/graphic/blend_mode.hpp>
 #include <string>
 
+#include "src/render/hw/dst_read_strategy.hpp"
+
 namespace skity {
 
 struct Command;
 struct HWDrawContext;
-
-enum class DstReadStrategy {
-  kNonRequired,
-  kFramebufferFetch,
-  kTextureCopy,
-  // Hardware-native advanced blend (GL_KHR_blend_equation_advanced /
-  // VK_EXT_blend_operation_advanced). Highest priority; never creates a
-  // programmable-blending object, so GetProgrammableBlendingKey is unused for
-  // it.
-  kNativeBlend,
-};
 
 /**
  * Common code generator for all advanced blending shader.

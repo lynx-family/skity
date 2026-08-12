@@ -19,7 +19,6 @@
 #include "src/effect/pixmap_shader.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_sampler.hpp"
-#include "src/graphic/blend_mode_priv.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
@@ -38,8 +37,8 @@
 #include "src/render/hw/draw/step/color_step.hpp"
 #include "src/render/hw/draw/step/stencil_step.hpp"
 #include "src/render/hw/draw/wgx_filter.hpp"
-#include "src/render/hw/draw/wgx_programmable_blending.hpp"
-#include "src/render/hw/dst_read_strategy.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/tracing.hpp"
 #include "src/utils/arena_allocator.hpp"
@@ -85,14 +84,27 @@ GPUTextureFormat ResolvePrecompileColorFormat(PrecompileColorType color_type) {
   return GPUTextureFormat::kInvalid;
 }
 
+HWBlendPlan ResolvePrecompileBlendPlan(HWDrawStepContext* ctx,
+                                       BlendMode blend_mode,
+                                       bool has_fragment_mask,
+                                       bool source_is_opaque) {
+  const auto& caps = ctx->context->gpuContext->GetGPUDevice()->GetCaps();
+  auto plan =
+      ResolveHWBlendPlan(blend_mode, has_fragment_mask, source_is_opaque, caps,
+                         /*supports_texture_copy_dst_read=*/true);
+  DEBUG_CHECK(plan.has_value());
+  return plan.value_or(HWBlendPlan{});
+}
+
 bool PrecompileStep(HWDrawStep* step, HWDrawStepContext* ctx,
-                    BlendMode blend_mode) {
+                    const HWBlendPlan& blend_plan) {
   DEBUG_CHECK(step != nullptr);
   DEBUG_CHECK(ctx != nullptr);
 
+  ctx->blend_plan = blend_plan;
   auto success =
       step->PrecompilePipeline(ctx->context, ctx->state, ctx->color_format,
-                               ctx->sample_count, blend_mode);
+                               ctx->sample_count, ctx->blend_plan);
   if (!success) {
     LOGE("Precompile shader failed: failed to create render pipeline");
   }
@@ -102,28 +114,14 @@ bool PrecompileStep(HWDrawStep* step, HWDrawStepContext* ctx,
 }
 
 HWWGSLFragment* ApplyPaintEffects(HWWGSLFragment* fragment, const Paint& paint,
-                                  GPUContextImpl* gpu_context) {
-  if (paint.GetColorFilter() != nullptr) {
-    fragment->SetFilter(WGXFilterFragment::Make(paint.GetColorFilter().get()));
-  }
-
-  if (IsAdvancedBlendMode(paint.GetBlendMode())) {
-    const auto& caps = gpu_context->GetGPUDevice()->GetCaps();
-    auto strategy = ResolveDstReadStrategy(paint.GetBlendMode(), caps);
-    if (strategy == DstReadStrategy::kNativeBlend) {
-      if (caps.native_blend_shader_variant) {
-        fragment->SetUsesNativeAdvancedBlend(true);
-      }
-    } else {
-      fragment->SetProgrammableBlending(
-          WGXProgrammableBlending::Make(paint.GetBlendMode(), strategy));
-    }
-  }
-
+                                  const HWBlendPlan& blend_plan,
+                                  HWDrawContext* context) {
+  ConfigureShadingFragment(context, paint, blend_plan, fragment);
   return fragment;
 }
 
 HWWGSLFragment* MakeColorFragment(HWDrawStepContext* ctx, const Paint& paint,
+                                  const HWBlendPlan& blend_plan,
                                   bool has_color = true) {
   auto* arena = ctx->context->arena_allocator;
   HWWGSLFragment* fragment = nullptr;
@@ -133,7 +131,7 @@ HWWGSLFragment* MakeColorFragment(HWDrawStepContext* ctx, const Paint& paint,
     if (type != Shader::GradientType::kNone) {
       fragment = arena->Make<WGSLGradientFragment>(
           info, type, paint.GetAlphaF(), paint.GetShader()->GetLocalMatrix());
-      return ApplyPaintEffects(fragment, paint, ctx->context->gpuContext);
+      return ApplyPaintEffects(fragment, paint, blend_plan, ctx->context);
     }
   }
 
@@ -143,15 +141,16 @@ HWWGSLFragment* MakeColorFragment(HWDrawStepContext* ctx, const Paint& paint,
     fragment = arena->Make<WGSLSolidColor>(paint.GetFillColor());
   }
 
-  return ApplyPaintEffects(fragment, paint, ctx->context->gpuContext);
+  return ApplyPaintEffects(fragment, paint, blend_plan, ctx->context);
 }
 
 HWWGSLFragment* MakeTextureFragment(HWDrawStepContext* ctx, const Paint& paint,
+                                    const HWBlendPlan& blend_plan,
                                     std::shared_ptr<PixmapShader> shader,
                                     const Matrix& matrix) {
   auto* fragment = ctx->context->arena_allocator->Make<WGSLTextureFragment>(
       std::move(shader), nullptr, nullptr, 1.f, matrix, 1.f, 1.f);
-  return ApplyPaintEffects(fragment, paint, ctx->context->gpuContext);
+  return ApplyPaintEffects(fragment, paint, blend_plan, ctx->context);
 }
 
 void PrecompilePathStep(HWDrawStepContext* ctx, const Paint& paint,
@@ -159,42 +158,48 @@ void PrecompilePathStep(HWDrawStepContext* ctx, const Paint& paint,
   auto* arena = ctx->context->arena_allocator;
   auto path = MakePrecompilePath();
   auto coverage = is_stroke ? CoverageType::kNoZero : CoverageType::kWinding;
+  auto blend_plan =
+      ResolvePrecompileBlendPlan(ctx, paint.GetBlendMode(), paint.IsAntiAlias(),
+                                 IsPaintSourceOpaque(paint));
 
   if (paint.IsAntiAlias()) {
     auto* geometry = arena->Make<WGSLPathAAGeometry>(path, paint);
-    auto* fragment = MakeColorFragment(ctx, paint);
+    auto* fragment = MakeColorFragment(ctx, paint, blend_plan);
     auto* aa_step = arena->Make<ColorAAStep>(geometry, fragment, coverage);
-    PrecompileStep(aa_step, ctx, paint.GetBlendMode());
+    PrecompileStep(aa_step, ctx, blend_plan);
   } else if (!is_stroke) {
     auto* geometry = arena->Make<WGSLPathGeometry>(path, paint, false);
-    auto* fragment = MakeColorFragment(ctx, paint);
+    auto* fragment = MakeColorFragment(ctx, paint, blend_plan);
     auto* color_step =
         arena->Make<ColorStep>(geometry, fragment, CoverageType::kNone);
     // Single pass fill geometry is precompiled as fill geometry.
-    PrecompileStep(color_step, ctx, paint.GetBlendMode());
+    PrecompileStep(color_step, ctx, blend_plan);
   }
 
   auto* stencil_step = arena->Make<StencilStep>(
       arena->Make<WGSLPathGeometry>(path, paint, is_stroke),
       arena->Make<WGSLStencilFragment>(), is_stroke);
-  PrecompileStep(stencil_step, ctx, BlendMode::kDefault);
+  PrecompileStep(stencil_step, ctx, blend_plan);
   auto* geometry = arena->Make<WGSLPathGeometry>(path, paint, is_stroke);
-  auto* fragment = MakeColorFragment(ctx, paint);
+  auto* fragment = MakeColorFragment(ctx, paint, blend_plan);
   auto* color_step = arena->Make<ColorStep>(geometry, fragment, coverage);
-  PrecompileStep(color_step, ctx, paint.GetBlendMode());
+  PrecompileStep(color_step, ctx, blend_plan);
 }
 
 void PrecompileTessPathStep(HWDrawStepContext* ctx, const Paint& paint,
                             bool is_stroke) {
   auto* arena = ctx->context->arena_allocator;
   auto path = MakePrecompilePath();
+  auto blend_plan = ResolvePrecompileBlendPlan(ctx, paint.GetBlendMode(),
+                                               /*has_fragment_mask=*/false,
+                                               IsPaintSourceOpaque(paint));
   HWWGSLGeometry* geometry = nullptr;
   if (is_stroke) {
     geometry = arena->Make<WGSLTessPathStrokeGeometry>(path, paint);
   } else {
     geometry = arena->Make<WGSLTessPathFillGeometry>(path, paint);
   }
-  auto* fragment = MakeColorFragment(ctx, paint);
+  auto* fragment = MakeColorFragment(ctx, paint, blend_plan);
   auto coverage = is_stroke ? CoverageType::kNoZero : CoverageType::kWinding;
   auto* stencil_step = arena->Make<StencilStep>(
       geometry, arena->Make<WGSLStencilFragment>(), is_stroke);
@@ -203,14 +208,17 @@ void PrecompileTessPathStep(HWDrawStepContext* ctx, const Paint& paint,
     auto* single_pass_step =
         arena->Make<ColorStep>(geometry, fragment, CoverageType::kNone);
     // Single pass fill geometry is precompiled as fill geometry.
-    PrecompileStep(single_pass_step, ctx, paint.GetBlendMode());
+    PrecompileStep(single_pass_step, ctx, blend_plan);
   }
-  PrecompileStep(stencil_step, ctx, BlendMode::kDefault);
-  PrecompileStep(color_step, ctx, paint.GetBlendMode());
+  PrecompileStep(stencil_step, ctx, blend_plan);
+  PrecompileStep(color_step, ctx, blend_plan);
 }
 
 void PrecompileRRectStep(HWDrawStepContext* ctx, const Paint& paint) {
   auto* arena = ctx->context->arena_allocator;
+  auto blend_plan = ResolvePrecompileBlendPlan(ctx, paint.GetBlendMode(),
+                                               /*has_fragment_mask=*/true,
+                                               IsPaintSourceOpaque(paint));
   std::vector<BatchGroup<RRect>> batch_group;
   batch_group.emplace_back(BatchGroup<RRect>{
       MakePrecompileRRect(),
@@ -219,9 +227,9 @@ void PrecompileRRectStep(HWDrawStepContext* ctx, const Paint& paint) {
   });
 
   auto* geometry = arena->Make<WGSLRRectGeometry>(batch_group);
-  auto* fragment = MakeColorFragment(ctx, paint, false);
+  auto* fragment = MakeColorFragment(ctx, paint, blend_plan, false);
   auto* step = arena->Make<ColorStep>(geometry, fragment, CoverageType::kNone);
-  PrecompileStep(step, ctx, paint.GetBlendMode());
+  PrecompileStep(step, ctx, blend_plan);
 }
 
 void PrecompileImageStep(HWDrawStepContext* ctx, const Paint& paint,
@@ -231,6 +239,9 @@ void PrecompileImageStep(HWDrawStepContext* ctx, const Paint& paint,
   auto matrix = Matrix{};
   auto work_paint = paint;
   work_paint.SetStyle(Paint::kFill_Style);
+  auto blend_plan = ResolvePrecompileBlendPlan(ctx, work_paint.GetBlendMode(),
+                                               /*has_fragment_mask=*/false,
+                                               /*source_is_opaque=*/false);
 
   auto pixmap = std::make_shared<Pixmap>(1, 1, AlphaType::kPremul_AlphaType,
                                          ColorType::kRGBA);
@@ -252,11 +263,11 @@ void PrecompileImageStep(HWDrawStepContext* ctx, const Paint& paint,
     geometry = arena->Make<WGSLPathGeometry>(path, work_paint, false);
   }
 
-  auto* fragment =
-      MakeTextureFragment(ctx, work_paint, std::move(shader), matrix);
+  auto* fragment = MakeTextureFragment(ctx, work_paint, blend_plan,
+                                       std::move(shader), matrix);
   auto* step = arena->Make<ColorStep>(geometry, fragment, CoverageType::kNone);
 
-  PrecompileStep(step, ctx, work_paint.GetBlendMode());
+  PrecompileStep(step, ctx, blend_plan);
 }
 
 ArrayList<GlyphRect, 16> MakePrecompileGlyphRects(ArenaAllocator* arena) {
@@ -268,6 +279,7 @@ ArrayList<GlyphRect, 16> MakePrecompileGlyphRects(ArenaAllocator* arena) {
 }
 
 HWWGSLFragment* MakeTextFragment(HWDrawStepContext* ctx, const Paint& paint,
+                                 const HWBlendPlan& blend_plan,
                                  WGSLTextFragment::BatchedTexture textures,
                                  std::shared_ptr<GPUSampler> sampler, bool sdf,
                                  bool emoji, bool swizzle_rb) {
@@ -292,18 +304,21 @@ HWWGSLFragment* MakeTextFragment(HWDrawStepContext* ctx, const Paint& paint,
                                                   std::move(sampler));
   }
 
-  return ApplyPaintEffects(fragment, paint, ctx->context->gpuContext);
+  return ApplyPaintEffects(fragment, paint, blend_plan, ctx->context);
 }
 
 void PrecompileTextStep(HWDrawStepContext* ctx, const Paint& paint, bool sdf,
                         bool emoji, bool swizzle_rb = false) {
   auto* arena = ctx->context->arena_allocator;
+  auto blend_plan = ResolvePrecompileBlendPlan(
+      ctx, paint.GetBlendMode(),
+      /*has_fragment_mask=*/!emoji, !emoji && IsPaintSourceOpaque(paint));
   auto glyph_rects = MakePrecompileGlyphRects(arena);
   WGSLTextFragment::BatchedTexture textures = {};
   std::shared_ptr<GPUSampler> sampler;
 
   HWWGSLGeometry* geometry = nullptr;
-  if (paint.GetShader() != nullptr && !sdf &&
+  if (paint.GetShader() != nullptr && !sdf && !emoji &&
       paint.GetShader()->AsGradient(nullptr) != Shader::GradientType::kNone) {
     geometry = arena->Make<WGSLTextGradientGeometry>(
         Matrix{}, std::move(glyph_rects), paint.GetShader()->GetLocalMatrix(),
@@ -313,10 +328,10 @@ void PrecompileTextStep(HWDrawStepContext* ctx, const Paint& paint, bool sdf,
         Matrix{}, std::move(glyph_rects), paint);
   }
 
-  auto* fragment = MakeTextFragment(ctx, paint, std::move(textures),
+  auto* fragment = MakeTextFragment(ctx, paint, blend_plan, std::move(textures),
                                     std::move(sampler), sdf, emoji, swizzle_rb);
   auto* step = arena->Make<ColorStep>(geometry, fragment, CoverageType::kNone);
-  PrecompileStep(step, ctx, paint.GetBlendMode());
+  PrecompileStep(step, ctx, blend_plan);
 }
 
 }  // namespace
@@ -444,12 +459,16 @@ void PrecompileContextImpl::PrecompileDraw(PrecompileDrawType draw_type,
 
   if (draw_type == PrecompileDrawType::kClipPath) {
     auto path = MakePrecompilePath();
+    auto blend_plan =
+        ResolvePrecompileBlendPlan(&step_context_, BlendMode::kDefault,
+                                   /*has_fragment_mask=*/false,
+                                   /*source_is_opaque=*/false);
     auto* step = arena_.Make<ClipStep>(
         arena_.Make<WGSLClipGeometry>(path, work_paint, false,
                                       Canvas::ClipOp::kIntersect),
         arena_.Make<WGSLStencilFragment>(), path.GetFillType(),
         Canvas::ClipOp::kIntersect);
-    PrecompileStep(step, &step_context_, BlendMode::kDefault);
+    PrecompileStep(step, &step_context_, blend_plan);
     return;
   }
 

@@ -15,6 +15,7 @@ struct GPUCaps {
   bool supports_native_advanced_blend = false;
   // true => advanced blend is coherent, no per-draw barrier required.
   bool supports_native_advanced_blend_coherent = false;
+  bool supports_dual_source_blending = false;
   // Native advanced blend needs a distinct shader variant only on GL (it must
   // inject #extension GL_KHR_blend_equation_advanced). Vulkan/Metal express it
   // purely through pipeline blend state, so their native-blend fragment shader
@@ -34,6 +35,10 @@ struct GPUShaderFeature {
   // Mirrors GPUCaps::supports_native_advanced_blend — the fragment shader
   // uses the device's native advanced blend equations.
   bool native_advanced_blend = false;
+  // Mirrors GPUCaps::supports_dual_source_blending. GL ES uses this request
+  // to emit GL_EXT_blend_func_extended; other backends express the feature in
+  // their native shader output and pipeline state.
+  bool dual_source_blending = false;
 };
 
 }  // namespace skity

@@ -322,9 +322,10 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/layer/hw_root_layer.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/layer/hw_sub_layer.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/layer/hw_sub_layer.hpp
-    ${CMAKE_CURRENT_LIST_DIR}/render/hw/dst_read_strategy.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/dst_read_strategy.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/native_blend.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_blend_plan.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_blend_plan.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_buffer_layout_map.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_buffer_layout_map.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_canvas.cc
@@ -421,6 +422,7 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/step/color_step.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/step/stencil_step.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/step/stencil_step.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/wgx_blend.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/wgx_filter.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/wgx_filter.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/wgx_programmable_blending.cc

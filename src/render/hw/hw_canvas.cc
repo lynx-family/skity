@@ -21,8 +21,9 @@
 #include "src/render/hw/draw/hw_dynamic_path_clip.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
-#include "src/render/hw/dst_read_strategy.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/filters/hw_filters.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/layer/hw_filter_layer.hpp"
 #include "src/render/paint_order.hpp"
 #include "src/render/shape.hpp"
@@ -384,17 +385,31 @@ void HWCanvas::DrawGlyphsInternal(uint32_t count, const GlyphID* glyphs,
         this->DrawPathInternal(path, paint, transform);
       });
   for (auto& glyph_run : glyph_runs) {
-    auto draw =
+    const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
+    auto blend_plan =
+        ResolveHWBlendPlan(paint.GetBlendMode(), glyph_run->HasFragmentMask(),
+                           glyph_run->IsSourceOpaque(), caps,
+                           CurrentLayer()->SupportsTextureCopyDstRead());
+    bool split_overlapping_glyphs =
+        blend_plan.has_value() &&
+        blend_plan->dst_read_strategy == DstReadStrategy::kTextureCopy;
+    auto glyph_draws =
         glyph_run->Draw(transform, arena_allocator_, ctx_scale_,
-                        surface_->GetGPUContext()->IsEnableTextLinearFilter());
-    if (draw) {
+                        surface_->GetGPUContext()->IsEnableTextLinearFilter(),
+                        split_overlapping_glyphs);
+
+    // Path glyph runs draw through DrawPathInternal and return no atlas draws.
+    if (!blend_plan.has_value()) {
+      continue;
+    }
+    for (auto& glyph_draw : glyph_draws) {
+      auto* draw = glyph_draw.draw;
+      DEBUG_CHECK(draw != nullptr);
+      DEBUG_CHECK(draw->HasFragmentMask() == glyph_run->HasFragmentMask());
       draw->SetSampleCount(GetCanvasSampleCount());
       SetupLayerSpaceBoundsForDraw(
-          draw, paint.ComputeFastBounds(glyph_run->GetBounds()), false);
-      // TODO(ColdPaleLight): create glyph draw fragments after the dst-read
-      // strategy is known, or let glyph draws rebuild programmable blending
-      // state here.
-      SetupDstReadStrategyForDraw(draw, paint.GetBlendMode());
+          draw, paint.ComputeFastBounds(glyph_draw.bounds), false);
+      draw->SetBlendPlan(blend_plan.value());
       CurrentLayer()->AddDraw(draw);
     }
   }
@@ -414,6 +429,7 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
   auto add_draw = [&](const Path& path, const Paint& paint, bool is_stroke) {
     bool use_gpu_tessellation = enable_gpu_tessellation && !paint.IsAntiAlias();
     HWDraw* draw = nullptr;
+    HWDynamicCoveragePathDraw* coverage_draw = nullptr;
     if (analytical_aa == AnalyticalAAMode::kCoverage) {
       DEBUG_CHECK(!is_stroke);
       // Coverage AA tiles and fixed-point line coordinates are defined in
@@ -424,14 +440,10 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
           CurrentLayer()->GetLayerPhysicalMatrix(Matrix{});
       Matrix physical_to_layer;
       layer_to_physical.Invert(&physical_to_layer);
-      auto* coverage_draw = arena_allocator_->Make<HWDynamicCoveragePathDraw>(
+      coverage_draw = arena_allocator_->Make<HWDynamicCoveragePathDraw>(
           layer_to_physical * transform, physical_to_layer, path, paint,
           surface_->GetCoverageAAMode() ==
               CoverageAAMode::kConflationCorrection);
-      // Coverage draws are not mergeable yet. If OnMergeIfPossible() is
-      // implemented, register only the draw retained by HWLayer::AddDraw();
-      // otherwise the renderer would also prepare a merged-away draw.
-      coverage_aa_renderer_->AddDraw(coverage_draw);
       draw = coverage_draw;
     } else {
       draw = arena_allocator_->Make<HWDynamicPathDraw>(
@@ -441,7 +453,16 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
     auto bounds = is_stroke ? paint.ComputeFastBounds(path.GetBounds())
                             : path.GetBounds();
     SetupLayerSpaceBoundsForDraw(draw, bounds);
-    SetupDstReadStrategyForDraw(draw, paint.GetBlendMode());
+    if (!SetupBlendPlanForDraw(draw, paint.GetBlendMode(),
+                               IsPaintSourceOpaque(paint))) {
+      return;
+    }
+    // Coverage draws are not mergeable yet. If OnMergeIfPossible() is
+    // implemented, register only the draw retained by HWLayer::AddDraw();
+    // otherwise the renderer would also prepare a merged-away draw.
+    if (coverage_draw != nullptr) {
+      coverage_aa_renderer_->AddDraw(coverage_draw);
+    }
     CurrentLayer()->AddDraw(draw);
   };
 
@@ -498,9 +519,7 @@ HWCanvas::AnalyticalAAMode HWCanvas::SelectAnalyticalAA(
   }
 
   if (surface_->IsCoverageAAEnabled()) {
-    // TODO(ColdPaleLight): Support other blend modes after Coverage AA
-    // participates in blending consistently with the other rendering paths.
-    if (!transform.HasPersp() && paint.GetBlendMode() == BlendMode::kSrcOver) {
+    if (!transform.HasPersp()) {
       return AnalyticalAAMode::kCoverage;
     }
   } else if (surface_->GetGPUContext()->IsEnableContourAA()) {
@@ -517,10 +536,6 @@ bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
   }
 
   if (paint.GetPathEffect() != nullptr) {
-    return true;
-  }
-
-  if (paint.GetBlendMode() != BlendMode::kSrcOver) {
     return true;
   }
 
@@ -577,7 +592,10 @@ void HWCanvas::DrawRRectInternal(const RRect& rrect, const Paint& paint,
     auto bounds = use_stroke ? paint.ComputeFastBounds(rrect.GetBounds())
                              : rrect.GetBounds();
     SetupLayerSpaceBoundsForDraw(draw, bounds);
-    SetupDstReadStrategyForDraw(draw, paint.GetBlendMode());
+    if (!SetupBlendPlanForDraw(draw, paint.GetBlendMode(),
+                               IsPaintSourceOpaque(paint))) {
+      return;
+    }
     CurrentLayer()->AddDraw(draw);
   };
 
@@ -865,7 +883,9 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
   layer->SetLayerSpaceBounds(transformed_bounds);
   layer->SetEnableMergingDrawCall(
       surface_->GetGPUContext()->IsEnableMergingDrawCall());
-  SetupDstReadStrategyForDraw(layer, paint.GetBlendMode());
+  if (!SetupBlendPlanForDraw(layer, paint.GetBlendMode(), false)) {
+    return nullptr;
+  }
   layer->SetRTOrigin(
       ResolveLayerRTOrigin(surface_->GetGPUContext()->GetBackendType()));
 
@@ -890,10 +910,17 @@ bool HWCanvas::NeesOffScreenLayer(const Paint& paint) const {
   return false;
 }
 
-void HWCanvas::SetupDstReadStrategyForDraw(HWDraw* draw, BlendMode blend_mode) {
+bool HWCanvas::SetupBlendPlanForDraw(HWDraw* draw, BlendMode blend_mode,
+                                     bool source_is_opaque) {
   const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
-  draw->SetDstReadStrategy(ResolveDstReadStrategy(
-      blend_mode, caps, CurrentLayer()->SupportsTextureCopyDstRead()));
+  auto plan =
+      ResolveHWBlendPlan(blend_mode, draw->HasFragmentMask(), source_is_opaque,
+                         caps, CurrentLayer()->SupportsTextureCopyDstRead());
+  if (!plan.has_value()) {
+    return false;
+  }
+  draw->SetBlendPlan(plan.value());
+  return true;
 }
 
 }  // namespace skity

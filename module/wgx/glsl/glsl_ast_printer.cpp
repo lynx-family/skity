@@ -1141,8 +1141,14 @@ void AstPrinter::WriteAttribute(ast::StructMember* member, bool input) {
   auto pipeline_stage = func_->GetFunction()->GetPipelineStage();
 
   auto attr = member->GetAttribute(ast::AttributeType::kLocation);
+  auto blend_src = member->GetAttribute(ast::AttributeType::kBlendSrc);
 
-  if (attr) {
+  if (attr && blend_src && !input &&
+      pipeline_stage == ast::PipelineStage::kFragment) {
+    ss_ << "layout(location = "
+        << static_cast<ast::LocationAttribute*>(attr)->index << ", index = "
+        << static_cast<ast::BlendSrcAttribute*>(blend_src)->index << ") ";
+  } else if (attr) {
     WriteLocation(attr, pipeline_stage, input);
   }
 

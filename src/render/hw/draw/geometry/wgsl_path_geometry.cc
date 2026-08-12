@@ -231,9 +231,9 @@ HWFunctionBaseKey WGSLPathAAGeometry::GetFSSubKey() const {
   return HWFragmentMaskKeyType::kPathAA;
 }
 
-void WGSLPathAAGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
+void WGSLPathAAGeometry::WriteFSCoverage(std::stringstream& ss) const {
   ss << R"(
-  mask_alpha = input.v_pos_aa;
+  coverage = input.v_pos_aa;
 )";
 }
 

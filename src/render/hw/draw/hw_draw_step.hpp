@@ -5,8 +5,6 @@
 #ifndef SRC_RENDER_HW_DRAW_HW_DRAW_STEP_HPP
 #define SRC_RENDER_HW_DRAW_HW_DRAW_STEP_HPP
 
-#include <skity/graphic/blend_mode.hpp>
-
 #include "src/logging.hpp"
 #include "src/render/hw/draw/hw_wgsl_fragment.hpp"
 #include "src/render/hw/draw/hw_wgsl_geometry.hpp"
@@ -25,7 +23,7 @@ struct HWDrawStepContext {
   Rect scissor = {};
   GPUTextureFormat color_format = GPUTextureFormat::kRGBA8Unorm;
   uint32_t sample_count = 1;
-  BlendMode blend_mode = BlendMode::kDefault;
+  HWBlendPlan blend_plan = {};
   Vec2 scale = {1.f, 1.f};
 };
 
@@ -50,7 +48,7 @@ class HWDrawStep : public HWShaderGenerator {
 
   bool PrecompilePipeline(HWDrawContext* context, HWDrawState state,
                           GPUTextureFormat target_format, uint32_t sample_count,
-                          BlendMode blend_mode);
+                          const HWBlendPlan& blend_plan);
 
   std::string GetVertexName() const override {
     if (geometry_->IsSnippet()) {
@@ -110,7 +108,8 @@ class HWDrawStep : public HWShaderGenerator {
  private:
   GPURenderPipeline* GetPipeline(HWDrawContext* context, HWDrawState state,
                                  GPUTextureFormat target_format,
-                                 uint32_t sample_count, BlendMode blend_mode);
+                                 uint32_t sample_count,
+                                 const HWBlendPlan& blend_plan);
 
  private:
   HWWGSLGeometry* geometry_;

@@ -87,6 +87,10 @@ class VulkanContextState {
 
   bool IsAdvancedBlendEnabled() const { return advanced_blend_enabled_; }
 
+  bool IsDualSourceBlendingEnabled() const {
+    return dual_source_blending_enabled_;
+  }
+
   // Whether advanced blend operations are coherent (no per-draw barrier
   // needed).
   bool IsAdvancedBlendCoherent() const { return advanced_blend_coherent_; }
@@ -177,6 +181,7 @@ class VulkanContextState {
   bool dynamic_rendering_enabled_ = false;
   bool advanced_blend_enabled_ = false;
   bool advanced_blend_coherent_ = false;
+  bool dual_source_blending_enabled_ = false;
   VulkanDebugRuntimeState debug_runtime_ = {};
 #if defined(SKITY_ANDROID)
   Fn_AHardwareBuffer_describe fn_ahb_describe_ = nullptr;

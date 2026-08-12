@@ -8,6 +8,7 @@
 
 #include "src/effect/color_filter_base.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
+#include "src/render/hw/draw/wgx_blend.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
@@ -101,88 +102,12 @@ class WGXBlendFilter : public WGXFilterFragment {
           "var uBlendSrcColor : vec4<f32> = uBlendSrcColor_" + suffix_ + ";\n";
     }
 
-    switch (mode_) {
-      case BlendMode::kClear:
-        wgsl_source += R"(
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
-        )";
-        break;
-      case BlendMode::kSrc:
-        wgsl_source += R"(
-            return uBlendSrcColor;
-        )";
-        break;
-      case BlendMode::kDst:
-        wgsl_source += R"(
-            return input_color;
-        )";
-        break;
-      case BlendMode::kSrcOver:
-        wgsl_source += R"(
-            return uBlendSrcColor + input_color * (1.0 - uBlendSrcColor.a);
-        )";
-        break;
-      case BlendMode::kDstOver:
-        wgsl_source += R"(
-            return input_color + uBlendSrcColor * (1.0 - input_color.a);
-        )";
-        break;
-      case BlendMode::kSrcIn:
-        wgsl_source += R"(
-            return uBlendSrcColor * input_color.a;
-        )";
-        break;
-      case BlendMode::kDstIn:
-        wgsl_source += R"(
-            return input_color * uBlendSrcColor.a;
-        )";
-        break;
-      case BlendMode::kSrcOut:
-        wgsl_source += R"(
-            return uBlendSrcColor * (1.0 - input_color.a);
-        )";
-        break;
-      case BlendMode::kDstOut:
-        wgsl_source += R"(
-            return input_color * (1.0 - uBlendSrcColor.a);
-        )";
-        break;
-      case BlendMode::kSrcATop:
-        wgsl_source += R"(
-            return uBlendSrcColor * input_color.a + input_color * (1.0 - uBlendSrcColor.a);
-        )";
-        break;
-      case BlendMode::kDstATop:
-        wgsl_source += R"(
-            return uBlendSrcColor.a * input_color + uBlendSrcColor * (1.0 - input_color.a);
-        )";
-        break;
-      case BlendMode::kXor:
-        wgsl_source += R"(
-            return uBlendSrcColor * (1.0 - input_color.a) + input_color * (1.0 - uBlendSrcColor.a);
-        )";
-        break;
-      case BlendMode::kPlus:
-        wgsl_source += R"(
-            return min(uBlendSrcColor + input_color, vec4<f32>(1.0));
-        )";
-        break;
-      case BlendMode::kModulate:
-        wgsl_source += R"(
-            return uBlendSrcColor * input_color;
-        )";
-        break;
-      case BlendMode::kScreen:
-        wgsl_source += R"(
-            return uBlendSrcColor + input_color - uBlendSrcColor * input_color;
-        )";
-        break;
-      default:
-        wgsl_source += R"(
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
-        )";
-        break;
+    auto expression = BuildPorterDuffBlendExpression(
+        mode_, "uBlendSrcColor", "input_color", /*clamp_plus=*/true);
+    if (expression.empty()) {
+      expression = "vec4<f32>(0.0)";
     }
+    wgsl_source += "return " + expression + ";\n";
     wgsl_source += "}\n";
 
     return wgsl_source;

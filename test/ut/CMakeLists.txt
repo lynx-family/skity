@@ -10,6 +10,7 @@ enable_testing()
 add_executable(skity_unit_test
     effect/color_filter_test.cc
     effect/image_filter_test.cc
+    effect/shader_test.cc
     geometry/geometry_test.cc
     geometry/math_test.cc
     geometry/matrix_test.cc
@@ -28,15 +29,16 @@ add_executable(skity_unit_test
     io/pixmap_test.cc
     render/canvas_state_test.cc
     render/sw_canvas_test.cc
-    render/hw/hw_buffer_layout_test.cc
     render/hw/coverage_aa_line_encoder_test.cc
     render/hw/coverage_aa_path_tiler_test.cc
-    render/hw/hw_pipeline_key_test.cc
-    render/hw/precompile_test.cc
-    render/hw/dst_read_strategy_test.cc
-    render/hw/hw_texture_copy_info_test.cc
+    render/hw/coverage_blend_reference_test.cc
     render/hw/draw/hw_wgsl_shader_writer_test.cc
     render/hw/draw/wgsl_text_fragment_test.cc
+    render/hw/hw_blend_plan_test.cc
+    render/hw/hw_buffer_layout_test.cc
+    render/hw/hw_pipeline_key_test.cc
+    render/hw/hw_texture_copy_info_test.cc
+    render/hw/precompile_test.cc
     wgx/wgx_backend_name_resolution_test.cc
     wgx/wgx_parser_test.cc
     wgx/wgx_resolver_test.cc

@@ -36,8 +36,10 @@ class HWSubLayer : public HWLayer {
     desc.height = texture_size_.y;
     desc.format = GetColorFormat();
     desc.storage_mode = GPUTextureStorageMode::kPrivate;
+    // Programmable blending may snapshot this render target before a draw.
     desc.usage =
         static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding) |
+        static_cast<GPUTextureUsageMask>(GPUTextureUsage::kCopySrc) |
         static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment);
 
     // color_texture always use sample count 1 since it used in rendering
@@ -71,7 +73,7 @@ class HWSubLayer : public HWLayer {
   bool SupportsTextureCopyDstRead() const override { return true; }
 
   std::shared_ptr<GPUTexture> GetResolveColorTexture() const override {
-    return layer_back_draw_texture_;
+    return color_texture_;
   }
 
   void OnPostDraw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) override;

@@ -36,7 +36,7 @@ void HWDynamicDraw::OnGenerateCommand(HWDrawContext* context,
   HWDrawStepContext ctx{
       context,          state,           GetTransform(),
       GetClipValue(),   GetScissorBox(), GetColorFormat(),
-      GetSampleCount(), blend_mode_,     context->scale,
+      GetSampleCount(), GetBlendPlan(),  context->scale,
   };
 
   for (auto& step : steps_) {
@@ -51,9 +51,7 @@ void HWDynamicDraw::OnGenerateCommand(HWDrawContext* context,
 }
 
 bool HWDynamicDraw::OnMergeIfPossible(HWDraw* draw) {
-  if (blend_mode_ != static_cast<HWDynamicDraw*>(draw)->blend_mode_) {
-    return false;
-  }
+  (void)draw;
   return true;
 }
 

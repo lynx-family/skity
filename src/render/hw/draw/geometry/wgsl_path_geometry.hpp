@@ -68,7 +68,7 @@ class WGSLPathAAGeometry : public HWWGSLGeometry {
 
   HWFunctionBaseKey GetFSSubKey() const override;
 
-  void WriteFSAlphaMask(std::stringstream& ss) const override;
+  void WriteFSCoverage(std::stringstream& ss) const override;
 
  private:
   const Path& path_;

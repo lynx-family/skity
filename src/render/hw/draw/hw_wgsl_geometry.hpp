@@ -127,10 +127,10 @@ class HWWGSLGeometry {
   virtual void WriteFSUniforms(std::stringstream& ss) const {}
 
   /**
-   * Supplies mask alpha calculation used by the fragment shader. This
+   * Supplies the fragment mask calculation. This
    * method is called only when 'Flags::kAffectsFragment' is specified.
    */
-  virtual void WriteFSAlphaMask(std::stringstream& ss) const {}
+  virtual void WriteFSCoverage(std::stringstream& ss) const {}
 
   virtual const char* GetEntryPoint() const { return "vs_main"; }
   /**
