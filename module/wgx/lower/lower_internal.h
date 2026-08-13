@@ -85,6 +85,7 @@ class Lowerer {
   bool LowerStatement(const ast::Statement* statement, ir::Block* block);
   ir::Value EnsureValue(const ir::ExprResult& expr, ir::Block* block);
   bool LowerReturnStatement(const ast::ReturnStatement* ret, ir::Block* block);
+  bool LowerDiscardStatement(ir::Block* block);
   ir::Block* CurrentBlock();
   ir::BlockId CreateBlock(const std::string& name);
   ir::BlockId CreateBlockWithId(const std::string& name, ir::BlockId id);

@@ -518,7 +518,7 @@ void AstPrinter::Visit(ast::Statement* statement) {
       break;
 
     case ast::StatementType::kDiscard:
-      ss_ << "discard;" << std::endl;
+      ss_ << "discard_fragment();" << std::endl;
       break;
 
     case ast::StatementType::kIf: {

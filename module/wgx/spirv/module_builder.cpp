@@ -1114,6 +1114,9 @@ bool ModuleBuilder::EmitInstruction(const ir::Instruction& inst) {
     case ir::InstKind::kUnreachable:
       AppendInstruction(&sections_->functions, SpvOpUnreachable, {});
       return true;
+    case ir::InstKind::kDiscard:
+      AppendInstruction(&sections_->functions, SpvOpKill, {});
+      return true;
     default:
       return false;
   }
