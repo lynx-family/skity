@@ -18,6 +18,13 @@ cmake_dependent_option(
 )
 
 option(SKITY_VK_BACKEND "option for vulkan backend" OFF)
+option(WGX_SPIRV_BACKEND "option for WGX SPIR-V generation"
+       ${SKITY_VK_BACKEND})
+
+if(SKITY_VK_BACKEND AND NOT WGX_SPIRV_BACKEND)
+  message(FATAL_ERROR "SKITY_VK_BACKEND requires WGX_SPIRV_BACKEND")
+endif()
+
 option(SKITY_CODEC_MODULE "option for build codec module" ON)
 cmake_dependent_option(
   SKITY_IO_MODULE "option for build io module"

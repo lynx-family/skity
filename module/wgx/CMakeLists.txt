@@ -5,12 +5,6 @@
 option(WGX_GLSL_BACKEND "Generate GLSL shader" ON)
 option(WGX_MSL_BACKEND "Generate MSL shader" ON)
 
-if (${SKITY_VK_BACKEND})
-    set(WGX_VULKAN_BACKEND ON)
-else()
-    set(WGX_VULKAN_BACKEND OFF)
-endif()
-
 add_library(wgsl-cross STATIC
     ${CMAKE_CURRENT_LIST_DIR}/include/wgsl_cross.h
     ${CMAKE_CURRENT_LIST_DIR}/wgsl/ast/ast_attribute.cpp
@@ -74,8 +68,8 @@ if (WGX_MSL_BACKEND)
     )
 endif()
 
-if (WGX_VULKAN_BACKEND)
-    target_compile_definitions(wgsl-cross PRIVATE -DWGX_VULKAN=1)
+if (WGX_SPIRV_BACKEND)
+    target_compile_definitions(wgsl-cross PRIVATE -DWGX_SPIRV=1)
     target_sources(wgsl-cross PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/ir/ir_module.h
         ${CMAKE_CURRENT_LIST_DIR}/ir/ir_type.h

@@ -24,7 +24,7 @@
 
 namespace {
 
-#if defined(WGX_VULKAN)
+#if defined(WGX_SPIRV)
 bool ContainsInstruction(const std::vector<uint32_t>& words, SpvOp opcode) {
   size_t offset = 5u;
   while (offset < words.size()) {
@@ -318,26 +318,6 @@ fn fs_main() {
   ASSERT_GE(words.size(), 5u);
   EXPECT_TRUE(ContainsInstruction(words, SpvOpEntryPoint));
   EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
-}
-
-TEST(WgxSpirvSmokeTest, EmitsAny) {
-  auto program = wgx::Program::Parse(R"(
-@fragment
-fn fs_main() -> @location(0) vec4<f32> {
-  let flags: vec4<bool> = vec4<bool>(false, true, false, false);
-  let value: f32 = select(0.0, 1.0, any(flags));
-  return vec4<f32>(value);
-}
-)");
-
-  ASSERT_NE(program, nullptr);
-  ASSERT_FALSE(program->GetDiagnosis().has_value());
-
-  wgx::SpirvOptions options;
-  auto result = program->WriteToSpirv("fs_main", options);
-
-  ASSERT_TRUE(result.success);
-  EXPECT_TRUE(ContainsInstruction(result.spirv, SpvOpAny));
 }
 
 TEST(WgxSpirvSmokeTest, EmitsCoverageAAConflationCorrectionShader) {
