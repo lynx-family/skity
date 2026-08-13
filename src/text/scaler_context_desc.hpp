@@ -6,9 +6,11 @@
 #define SRC_TEXT_SCALER_CONTEXT_DESC_HPP
 
 #include <cstdint>
+#include <cstring>
 #include <skity/graphic/paint.hpp>
 #include <skity/text/font.hpp>
 #include <skity/text/typeface.hpp>
+#include <type_traits>
 
 #include "src/render/text/text_transform.hpp"
 
@@ -17,40 +19,31 @@ namespace skity {
 // The underlying port accepts what kind of scale ratio.
 enum class PortScaleType { kFull, kVertical };
 
-// Make sure the objects has no padding.
 struct ScalerContextDesc {
-  // hash start
-  uint32_t typeface_id;
-  float text_size;
-  float scale_x;
-  float skew_x;
-  Matrix22 transform;
+  // The complete object representation is the cache identity. Keep every
+  // member initialized and preserve the dense-layout assertions below.
+  uint32_t typeface_id{};
+  float text_size{};
+  float scale_x{};
+  float skew_x{};
+  Matrix22 transform{};
 
   // scale ratio applied to surface
   float context_scale = 1.0f;
 
-  Color foreground_color;
+  Color foreground_color{};
 
-  float stroke_width;
-  float miter_limit;
-  Paint::Cap cap;
-  Paint::Join join;
+  float stroke_width{};
+  float miter_limit{};
+  Paint::Cap cap{};
+  Paint::Join join{};
 
-  uint8_t fake_bold;
-  uint8_t hinting;
-  // hash end
+  uint8_t fake_bold{};
+  uint8_t hinting{};
 
   friend inline bool operator==(const ScalerContextDesc& lhs,
                                 const ScalerContextDesc& rhs) {
-    return lhs.typeface_id == rhs.typeface_id &&
-           lhs.text_size == rhs.text_size && lhs.scale_x == rhs.scale_x &&
-           lhs.skew_x == rhs.skew_x && lhs.transform == rhs.transform &&
-           lhs.stroke_width == rhs.stroke_width &&
-           lhs.miter_limit == rhs.miter_limit &&
-           lhs.context_scale == rhs.context_scale && lhs.cap == rhs.cap &&
-           lhs.join == rhs.join && lhs.fake_bold == rhs.fake_bold &&
-           lhs.foreground_color == rhs.foreground_color &&
-           lhs.hinting == rhs.hinting;
+    return std::memcmp(&lhs, &rhs, sizeof(ScalerContextDesc)) == 0;
   }
 
   friend inline bool operator!=(const ScalerContextDesc& lhs,
@@ -80,6 +73,11 @@ struct ScalerContextDesc {
   }
 };
 
+static_assert(sizeof(Matrix22) == sizeof(float) * 4,
+              "Matrix22 must have no padding");
+static_assert(std::is_trivially_copyable_v<Matrix22>,
+              "Matrix22 must be trivially copyable");
+
 static_assert(sizeof(ScalerContextDesc) ==
                   sizeof(ScalerContextDesc::typeface_id) +
                       sizeof(ScalerContextDesc::text_size) +
@@ -95,6 +93,8 @@ static_assert(sizeof(ScalerContextDesc) ==
                       sizeof(ScalerContextDesc::fake_bold) +
                       sizeof(ScalerContextDesc::hinting),
               "ScalerContextDesc must have no padding");
+static_assert(std::is_trivially_copyable_v<ScalerContextDesc>,
+              "ScalerContextDesc must be trivially copyable");
 
 }  // namespace skity
 

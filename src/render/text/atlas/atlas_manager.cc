@@ -12,6 +12,8 @@
 #include "src/render/text/atlas/atlas_texture.hpp"
 #include "src/render/text/sdf_gen.hpp"
 #include "src/render/text/text_render_control.hpp"
+#include "src/text/scaler_context_cache.hpp"
+#include "src/text/scaler_context_container.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -20,6 +22,15 @@ namespace {
 
 bool valid_positive_float(float f) {
   return !(FloatIsNan(f) || !FloatIsFinite(f) || f < 0.f);
+}
+
+void LoadGlyphBitmap(const Font& font, GlyphID glyph_id,
+                     const GlyphData** glyph_data, const Paint& paint,
+                     const ScalerContextDesc& desc) {
+  auto scaler_context =
+      ScalerContextCache::GlobalScalerContextCache()->FindOrCreateScalerContext(
+          desc, font.GetTypeface());
+  scaler_context->PrepareImages(&glyph_id, 1, glyph_data, paint);
 }
 
 }  // namespace
@@ -67,7 +78,6 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font, GlyphID glyph_id,
                                   const Paint& paint, bool load_sdf,
                                   float context_scale,
                                   const Matrix& transform) {
-  auto typeface = font.GetTypeface();
   float font_size = font.GetSize();
   float sdf_scale = 1.0f;
   // TODO(jingle) consider transform for sdf text
@@ -85,41 +95,21 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font, GlyphID glyph_id,
     }
   }
 
-  ScalerContextDesc scaler_context_desc;
-  scaler_context_desc.typeface_id = typeface->TypefaceId();
-  scaler_context_desc.text_size = load_sdf ? text_size : font_size;
-  scaler_context_desc.scale_x = font.GetScaleX();
-  scaler_context_desc.skew_x = font.GetSkewX();
-  if (load_sdf) {
-    Matrix22 transform22{1.f, 0.f, 0.f, 1.f};
-    scaler_context_desc.transform = transform22;
-  } else {
-    Matrix22 transform22{transform.GetScaleX(), transform.GetSkewX(),
-                         transform.GetSkewY(), transform.GetScaleY()};
-    scaler_context_desc.transform = transform22;
-  }
-  scaler_context_desc.context_scale = load_sdf ? 1.f : context_scale;
+  Font raster_font(font);
+  raster_font.SetSize(load_sdf ? text_size : font_size);
 
-  Paint glyph_image_paint = paint;
+  Paint raster_paint = paint;
   if (load_sdf) {
-    glyph_image_paint.SetStyle(Paint::kFill_Style);
+    raster_paint.SetStyle(Paint::kFill_Style);
   }
-  scaler_context_desc.foreground_color =
-      ScalerContextDesc::GetGlyphImageForegroundColor(font, glyph_image_paint);
 
-  scaler_context_desc.stroke_width =
-      paint.GetStyle() == Paint::kStroke_Style ? paint.GetStrokeWidth() : 0.f;
-  scaler_context_desc.miter_limit = paint.GetStyle() == Paint::kStroke_Style
-                                        ? paint.GetStrokeMiter()
-                                        : Paint::kDefaultMiterLimit;
-  scaler_context_desc.cap = paint.GetStyle() == Paint::kStroke_Style
-                                ? paint.GetStrokeCap()
-                                : Paint::kDefault_Cap;
-  scaler_context_desc.join = paint.GetStyle() == Paint::kStroke_Style
-                                 ? paint.GetStrokeJoin()
-                                 : Paint::kDefault_Join;
-  scaler_context_desc.fake_bold = font.IsEmbolden() ? 1 : 0;
-  scaler_context_desc.hinting = static_cast<uint8_t>(font.GetHinting());
+  Matrix22 raster_transform =
+      load_sdf ? Matrix22{}
+               : Matrix22{transform.GetScaleX(), transform.GetSkewX(),
+                          transform.GetSkewY(), transform.GetScaleY()};
+  ScalerContextDesc scaler_context_desc = ScalerContextDesc::MakeTransformed(
+      raster_font, raster_paint, load_sdf ? 1.f : context_scale,
+      raster_transform);
   GlyphKey key(glyph_id, scaler_context_desc);
 
   for (uint32_t index = 0; index < atlas_bitmap_.size(); index++) {
@@ -150,19 +140,19 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
     fill_paint.SetStyle(Paint::kFill_Style);
   }
 
-  resized_font.LoadGlyphBitmap(&(key.glyph_id), 1, &glyph_data, fill_paint,
-                               key.scaler_context_desc.context_scale,
-                               key.scaler_context_desc.transform.ToMatrix());
+  LoadGlyphBitmap(resized_font, key.glyph_id, &glyph_data, fill_paint,
+                  key.scaler_context_desc);
   const auto& bitmap_info = glyph_data->Image();
 
   if (fill_paint.GetStyle() == Paint::kStroke_Style &&
       fill_paint.IsAdjustStroke()) {
     const GlyphData* glyph_data_fill;
     fill_paint.SetStyle(Paint::kFill_Style);
-    resized_font.LoadGlyphBitmap(&(key.glyph_id), 1, &glyph_data_fill,
-                                 fill_paint,
-                                 key.scaler_context_desc.context_scale,
-                                 key.scaler_context_desc.transform.ToMatrix());
+    ScalerContextDesc fill_desc = ScalerContextDesc::MakeTransformed(
+        resized_font, fill_paint, key.scaler_context_desc.context_scale,
+        key.scaler_context_desc.transform);
+    LoadGlyphBitmap(resized_font, key.glyph_id, &glyph_data_fill, fill_paint,
+                    fill_desc);
     fill_paint.SetStyle(Paint::kStroke_Style);
 
     if (valid_positive_float(bitmap_info.width) &&
