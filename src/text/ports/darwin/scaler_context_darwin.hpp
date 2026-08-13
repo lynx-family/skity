@@ -57,6 +57,7 @@ class OffScreenContext final {
   bool SetLineCap(CGLineCap cap);
   bool SetLineJoin(CGLineJoin join);
   bool SetMiterLimit(CGFloat limit);
+  bool SetShouldAntialias(bool should_antialias);
 
   CGColorRef GetCGColor() const;
 
@@ -74,6 +75,8 @@ class OffScreenContext final {
     CGLineJoin line_join = kCGLineJoinMiter;
     bool miter_limit_valid = false;
     CGFloat miter_limit = 0;
+    bool should_antialias_valid = false;
+    bool should_antialias = false;
   };
 
   static uint32_t RoundSize(uint32_t dimension);

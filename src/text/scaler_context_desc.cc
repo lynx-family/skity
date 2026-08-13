@@ -56,6 +56,11 @@ ScalerContextDesc ScalerContextDesc::MakeCanonicalized(const Font& font,
   desc.fake_bold = font.IsEmbolden() ? 1 : 0;
   desc.context_scale = 1.0f;
   desc.hinting = static_cast<uint8_t>(font.GetHinting());
+  desc.subpixel_positioning = font.IsSubpixel() ? 1 : 0;
+  desc.subpixel_x_phase = 0;
+  desc.subpixel_y_phase = 0;
+  desc.baseline_snap = font.IsBaselineSnap() ? 1 : 0;
+  desc.edging = static_cast<uint8_t>(font.GetEdging());
 
   return desc;
 }
@@ -83,6 +88,11 @@ ScalerContextDesc ScalerContextDesc::MakeTransformed(
   desc.fake_bold = font.IsEmbolden() ? 1 : 0;
   desc.context_scale = context_scale;
   desc.hinting = static_cast<uint8_t>(font.GetHinting());
+  desc.subpixel_positioning = font.IsSubpixel() ? 1 : 0;
+  desc.subpixel_x_phase = 0;
+  desc.subpixel_y_phase = 0;
+  desc.baseline_snap = font.IsBaselineSnap() ? 1 : 0;
+  desc.edging = static_cast<uint8_t>(font.GetEdging());
 
   return desc;
 }

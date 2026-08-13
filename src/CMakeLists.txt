@@ -96,6 +96,7 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_manager.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_texture.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_texture.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_position.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_run.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_run.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/transformed_mask_glyph_run.cc

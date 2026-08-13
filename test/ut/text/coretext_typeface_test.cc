@@ -326,6 +326,8 @@ TEST(CoreTextScalerContextTest, CachesAndInvalidatesDrawState) {
   EXPECT_FALSE(context.SetLineJoin(kCGLineJoinBevel));
   EXPECT_TRUE(context.SetMiterLimit(7.0));
   EXPECT_FALSE(context.SetMiterLimit(7.0));
+  EXPECT_TRUE(context.SetShouldAntialias(true));
+  EXPECT_FALSE(context.SetShouldAntialias(true));
 
   auto reused_target = context.PrepareContext(8, 8, false);
   ASSERT_TRUE(reused_target);
@@ -335,6 +337,7 @@ TEST(CoreTextScalerContextTest, CachesAndInvalidatesDrawState) {
   EXPECT_FALSE(context.SetLineCap(kCGLineCapRound));
   EXPECT_FALSE(context.SetLineJoin(kCGLineJoinBevel));
   EXPECT_FALSE(context.SetMiterLimit(7.0));
+  EXPECT_FALSE(context.SetShouldAntialias(true));
 
   auto grown_target = context.PrepareContext(32, 32, false);
   ASSERT_TRUE(grown_target);
@@ -344,6 +347,47 @@ TEST(CoreTextScalerContextTest, CachesAndInvalidatesDrawState) {
   EXPECT_TRUE(context.SetLineCap(kCGLineCapRound));
   EXPECT_TRUE(context.SetLineJoin(kCGLineJoinBevel));
   EXPECT_TRUE(context.SetMiterLimit(7.0));
+  EXPECT_TRUE(context.SetShouldAntialias(true));
+}
+
+TEST(CoreTextScalerContextTest, EdgingControlsAntialiasing) {
+  auto font_manager = FontManager::RefDefault();
+  auto base_typeface = font_manager->MakeFromFile(kNotoSansCjkTtc, 0);
+  ASSERT_NE(base_typeface, nullptr);
+  auto typeface = std::static_pointer_cast<TypefaceDarwin>(base_typeface);
+  const GlyphID glyph_id = typeface->UnicharToGlyph('A');
+  ASSERT_NE(glyph_id, 0);
+
+  Font alias_font(typeface, 48.f);
+  alias_font.SetEdging(Font::Edging::kAlias);
+  ScalerContextDesc alias_desc =
+      ScalerContextDesc::MakeTransformed(alias_font, Paint(), 1.f, Matrix22{});
+
+  Font antialias_font(typeface, 48.f);
+  antialias_font.SetEdging(Font::Edging::kAntiAlias);
+  ScalerContextDesc antialias_desc = ScalerContextDesc::MakeTransformed(
+      antialias_font, Paint(), 1.f, Matrix22{});
+
+  const StrokeDesc fill_desc{false, 0.f, Paint::kDefault_Cap,
+                             Paint::kDefault_Join, Paint::kDefaultMiterLimit};
+  ScalerContextDarwin alias_context(typeface, &alias_desc);
+  ScalerContextDarwin antialias_context(typeface, &antialias_desc);
+  const RasterizedGlyph alias =
+      RasterizeGlyph(&alias_context, glyph_id, fill_desc);
+  const RasterizedGlyph antialias =
+      RasterizeGlyph(&antialias_context, glyph_id, fill_desc);
+
+  ASSERT_EQ(alias.format, BitmapFormat::kGray8);
+  ASSERT_EQ(antialias.format, BitmapFormat::kGray8);
+  ASSERT_FALSE(alias.pixels.empty());
+  ASSERT_FALSE(antialias.pixels.empty());
+  EXPECT_NE(alias.pixels, antialias.pixels);
+  EXPECT_TRUE(
+      std::all_of(alias.pixels.begin(), alias.pixels.end(),
+                  [](uint8_t alpha) { return alpha == 0 || alpha == 255; }));
+  EXPECT_TRUE(
+      std::any_of(antialias.pixels.begin(), antialias.pixels.end(),
+                  [](uint8_t alpha) { return alpha != 0 && alpha != 255; }));
 }
 
 TEST(CoreTextScalerContextTest, ReusedContextDrawStateMatchesFreshRendering) {

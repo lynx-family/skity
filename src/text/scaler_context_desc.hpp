@@ -40,6 +40,15 @@ struct ScalerContextDesc {
 
   uint8_t fake_bold{};
   uint8_t hinting{};
+  uint8_t subpixel_positioning{};
+  uint8_t subpixel_x_phase{};
+  uint8_t subpixel_y_phase{};
+  uint8_t baseline_snap{};
+  uint8_t edging{};
+
+  // Keep the complete object representation initialized and free of implicit
+  // tail padding so it can be used directly as cache identity.
+  uint8_t reserved_padding[3]{};
 
   friend inline bool operator==(const ScalerContextDesc& lhs,
                                 const ScalerContextDesc& rhs) {
@@ -71,6 +80,8 @@ struct ScalerContextDesc {
   Font::FontHinting GetHinting() const {
     return static_cast<Font::FontHinting>(hinting);
   }
+
+  Font::Edging GetEdging() const { return static_cast<Font::Edging>(edging); }
 };
 
 static_assert(sizeof(Matrix22) == sizeof(float) * 4,
@@ -91,11 +102,16 @@ static_assert(sizeof(ScalerContextDesc) ==
                       sizeof(ScalerContextDesc::cap) +
                       sizeof(ScalerContextDesc::join) +
                       sizeof(ScalerContextDesc::fake_bold) +
-                      sizeof(ScalerContextDesc::hinting),
+                      sizeof(ScalerContextDesc::hinting) +
+                      sizeof(ScalerContextDesc::subpixel_positioning) +
+                      sizeof(ScalerContextDesc::subpixel_x_phase) +
+                      sizeof(ScalerContextDesc::subpixel_y_phase) +
+                      sizeof(ScalerContextDesc::baseline_snap) +
+                      sizeof(ScalerContextDesc::edging) +
+                      sizeof(ScalerContextDesc::reserved_padding),
               "ScalerContextDesc must have no padding");
 static_assert(std::is_trivially_copyable_v<ScalerContextDesc>,
               "ScalerContextDesc must be trivially copyable");
-
 }  // namespace skity
 
 #endif  // SRC_TEXT_SCALER_CONTEXT_DESC_HPP

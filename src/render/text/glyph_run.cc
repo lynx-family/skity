@@ -16,6 +16,7 @@
 #include "src/render/hw/draw/wgx_filter.hpp"
 #include "src/render/hw/hw_path_raster.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
+#include "src/render/text/glyph_position.hpp"
 #include "src/render/text/text_render_control.hpp"
 #include "src/render/text/transformed_mask_glyph_run.hpp"
 #include "src/tracing.hpp"
@@ -26,6 +27,7 @@ namespace skity {
 struct GlyphRegionWithIndex {
   uint32_t index;
   GlyphRegion region;
+  Vec2 position{};
 };
 
 class DirectGlyphRun : public GlyphRun {
@@ -110,8 +112,6 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
   }
   font_.LoadGlyphMetrics(glyphs_.data(), count_, glyph_info.data(),
                          metrics_paint);
-  font_.LoadGlyphBitmapInfo(glyphs_.data(), count_, glyph_info.data(),
-                            metrics_paint, context_scale_, transform_);
 
   ArrayList<GlyphRect, 16> glyph_rects;
   glyph_rects.SetArenaAllocator(arena_allocator);
@@ -131,9 +131,13 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
         glyph_locs_[k].region.loc.x + glyph_locs_[k].region.loc.z,
         glyph_locs_[k].region.loc.y + glyph_locs_[k].region.loc.w);
 
-    auto origin_x = info.Image().origin_x;
-    auto origin_y = info.Image().origin_y;
+    auto origin_x = glyph_locs_[k].region.origin_x;
+    auto origin_y = glyph_locs_[k].region.origin_y;
 
+#if defined(SKITY_MACOS) || defined(SKITY_IOS)
+    float rx = glyph_locs_[k].position.x + origin_x;
+    float ry = glyph_locs_[k].position.y - origin_y;
+#else
     const Vec2 run_pos{position_x_[glyph_locs_[k].index],
                        position_y_[glyph_locs_[k].index]};
     Vec2 device_run_pos{0, 0};
@@ -143,6 +147,7 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
     float rounded_y = std::floor(device_run_pos.y + 0.5f);
     float rx = rounded_x + origin_x;
     float ry = rounded_y - origin_y;
+#endif
     float rw = (uv_rb.x - uv_lt.x) / canvas_scale;
     float rh = (uv_rb.y - uv_lt.y) / canvas_scale;
 
@@ -253,12 +258,35 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
   font.LoadGlyphMetrics(glyphs, count, glyph_info.data(), metrics_paint);
   GlyphFormat glyph_format = *glyph_info[0]->GetFormat();
 
+  Vec2 device_origin{0.f, 0.f};
+  Vec2 device_zero{0.f, 0.f};
+  const Vec2 local_origin{origin.x, origin.y};
+  const Vec2 local_zero{0.f, 0.f};
+  transform.MapPoints(&device_origin, &local_origin, 1);
+  transform.MapPoints(&device_zero, &local_zero, 1);
+  const Vec2 origin_offset = device_origin - device_zero;
+
+  GlyphPositionRoundingSpec rounding_spec;
+#if defined(SKITY_MACOS) || defined(SKITY_IOS)
+  rounding_spec.is_subpixel = font.IsSubpixel();
+  rounding_spec.axis_alignment =
+      ComputeAxisAlignmentForHorizontalText(font.IsBaselineSnap(), transform);
+#endif
+
   Atlas* atlas = atlas_manager->GetAtlas(format);
   uint32_t k = 0;
   while (k < count) {
     auto info = *(glyph_info[k]);
+
+    const Vec2 run_pos{position_x[k] + origin.x, position_y[k] + origin.y};
+    Vec2 device_run_pos{0.f, 0.f};
+    transform.MapPoints(&device_run_pos, &run_pos, 1);
+    const QuantizedGlyphPosition glyph_position =
+        QuantizeGlyphPosition(device_run_pos, context_scale, rounding_spec);
+
     GlyphRegion glyph_region = atlas->GetGlyphRegion(
-        font, info.Id(), paint, false, context_scale, transform);
+        font, info.Id(), paint, false, context_scale, transform,
+        glyph_position.x_phase, glyph_position.y_phase);
     if (glyph_region.loc.z == 0 || glyph_region.loc.w == 0) {
       k++;
       continue;
@@ -268,7 +296,8 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
       max_index = glyph_region.index_in_group;
     }
 
-    glyph_regions.push_back({k, glyph_region});
+    glyph_regions.push_back(
+        {k, glyph_region, glyph_position.position - origin_offset});
     k++;
   }
 
@@ -289,11 +318,10 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
     while (k < glyph_regions.size()) {
       uint32_t group_index = glyph_regions[k].region.index_in_group /
                              atlas->GetConfig().max_num_bitmap_per_atlas;
+      GlyphRegion region = glyph_regions[k].region;
+      region.index_in_group %= atlas->GetConfig().max_num_bitmap_per_atlas;
       glyph_region_groups[group_index].push_back(
-          {glyph_regions[k].index,
-           {glyph_regions[k].region.index_in_group %
-                atlas->GetConfig().max_num_bitmap_per_atlas,
-            glyph_regions[k].region.loc, 1.0f}});
+          {glyph_regions[k].index, region, glyph_regions[k].position});
       k++;
     }
 

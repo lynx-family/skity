@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <skity/text/font.hpp>
 #include <skity/text/font_style.hpp>
 #include <skity/text/typeface.hpp>
 
@@ -84,6 +85,22 @@ std::shared_ptr<Typeface> ColorfulTypeface::OnMakeVariation(
 }
 
 }  // namespace skity
+
+TEST(Font, GlyphPositioningFlagsAreDisabled) {
+  skity::Font font;
+  EXPECT_FALSE(font.IsSubpixel());
+  EXPECT_FALSE(font.IsBaselineSnap());
+
+  font.SetSubpixel(true);
+  font.SetBaselineSnap(true);
+  EXPECT_FALSE(font.IsSubpixel());
+  EXPECT_FALSE(font.IsBaselineSnap());
+}
+
+TEST(Font, EdgingDefaultsToAntiAlias) {
+  skity::Font font;
+  EXPECT_EQ(font.GetEdging(), skity::Font::Edging::kAntiAlias);
+}
 
 TEST(TextRenderControl, disallow_sdf_test) {
   skity::TextRenderControl controller{true};
