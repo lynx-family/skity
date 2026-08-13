@@ -45,6 +45,11 @@ endif()
 
 if (${SKITY_VK_BACKEND})
   target_compile_definitions(skity-capi PRIVATE -DSKITY_VULKAN)
+  # skity keeps this include path private, so its C API target must add the
+  # vendored Vulkan headers for its own wrapper sources.
+  target_include_directories(skity-capi PRIVATE
+    ${SKITY_ROOT}/third_party/Vulkan-Headers/include
+  )
 endif()
 
 # Android 16 KiB page-size alignment (arm64 / x86_64), required for the .so to
