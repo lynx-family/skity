@@ -8,13 +8,38 @@
 
 #include <array>
 #include <cstring>
+#include <memory>
 #include <new>
+#include <vector>
 
 #include "src/render/text/atlas/atlas_bitmap.hpp"
 #include "src/render/text/glyph_position.hpp"
+#include "src/text/scaler_context_container.hpp"
 #include "src/text/scaler_context_desc.hpp"
 
 namespace skity {
+
+class PackedIdentityTestScalerContext final : public ScalerContext {
+ public:
+  explicit PackedIdentityTestScalerContext(const ScalerContextDesc* desc)
+      : ScalerContext({}, desc) {}
+
+  const std::vector<uint32_t>& Requests() const { return requests_; }
+
+ protected:
+  void GenerateMetrics(GlyphData*) override {}
+  void GenerateImage(PackedGlyphID id, GlyphData*, const StrokeDesc&) override {
+    requests_.push_back(id.Value());
+  }
+  void GenerateImageInfo(PackedGlyphID, GlyphData*,
+                         const StrokeDesc&) override {}
+  bool GeneratePath(GlyphData*) override { return true; }
+  void GenerateFontMetrics(FontMetrics* metrics) override { *metrics = {}; }
+  uint16_t OnGetFixedSize() override { return 0; }
+
+ private:
+  std::vector<uint32_t> requests_;
+};
 
 TEST(AtlasGlyphTest, GlyphKeyUsesDenseObjectRepresentation) {
   // Allocate two buffers with different "garbage" bytes, ensuring proper
@@ -25,7 +50,7 @@ TEST(AtlasGlyphTest, GlyphKeyUsesDenseObjectRepresentation) {
   std::memset(buffer1, 0xAA, sizeof(buffer1));
   std::memset(buffer2, 0xBB, sizeof(buffer2));
 
-  GlyphID id = 42;
+  const PackedGlyphID id(42, 1, 2);
   ScalerContextDesc desc{};
   desc.typeface_id = 1;
   desc.text_size = 14.0f;
@@ -53,6 +78,36 @@ TEST(AtlasGlyphTest, GlyphKeyUsesDenseObjectRepresentation) {
 
   key1->~GlyphKey();
   key2->~GlyphKey();
+}
+
+TEST(PackedGlyphIDTest, PacksGlyphAndTwoBitPhases) {
+  constexpr PackedGlyphID id(0xBEEF, 1, 3);
+  EXPECT_EQ(id.GetGlyphID(), 0xBEEF);
+  EXPECT_EQ(id.GetSubpixelXPhase(), 1);
+  EXPECT_EQ(id.GetSubpixelYPhase(), 3);
+  EXPECT_NE(id, PackedGlyphID(0xBEEF, 2, 3));
+}
+
+TEST(ScalerContextContainerTest, KeepsPhaseVariantsAsDistinctGlyphs) {
+  ScalerContextDesc desc{};
+  auto scaler = std::make_unique<PackedIdentityTestScalerContext>(&desc);
+  auto* scaler_ptr = scaler.get();
+  ScalerContextContainer container(std::move(scaler));
+  Paint paint;
+
+  const PackedGlyphID first_id(7, 1, 0);
+  const PackedGlyphID second_id(7, 2, 0);
+  const GlyphData* first = nullptr;
+  const GlyphData* second = nullptr;
+  container.PrepareImages(&first_id, 1, &first, paint);
+  container.PrepareImages(&second_id, 1, &second, paint);
+
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(second, nullptr);
+  EXPECT_NE(first, second);
+  EXPECT_EQ(first->Id(), second->Id());
+  EXPECT_EQ(scaler_ptr->Requests(),
+            (std::vector<uint32_t>{first_id.Value(), second_id.Value()}));
 }
 
 TEST(ScalerContextDescTest, SignedZeroHasDistinctBitwiseIdentity) {
@@ -100,6 +155,25 @@ TEST(AtlasBitmapTest, KeepsBitwiseDistinctGlyphKeysSeparate) {
   ASSERT_NE(inserted.loc, INVALID_LOC);
   EXPECT_EQ(atlas.GetGlyphRegion(GlyphKey(7, positive_zero)).loc, inserted.loc);
   EXPECT_EQ(atlas.GetGlyphRegion(GlyphKey(7, negative_zero)).loc, INVALID_LOC);
+}
+
+TEST(AtlasBitmapTest, DoesNotReuseDifferentPackedGlyphPhase) {
+  uint8_t source = 0xFF;
+  GlyphBitmapData bitmap;
+  bitmap.width = 1;
+  bitmap.height = 1;
+  bitmap.buffer = &source;
+  bitmap.format = BitmapFormat::kGray8;
+
+  ScalerContextDesc desc{};
+  AtlasBitmap atlas(16, 16, 1);
+  const GlyphKey first_phase(PackedGlyphID(7, 1, 0), desc);
+  const GlyphKey second_phase(PackedGlyphID(7, 2, 0), desc);
+  const GlyphRegion inserted = atlas.GenerateGlyphRegion(first_phase, bitmap);
+
+  ASSERT_NE(inserted.loc, INVALID_LOC);
+  EXPECT_EQ(atlas.GetGlyphRegion(first_phase).loc, inserted.loc);
+  EXPECT_EQ(atlas.GetGlyphRegion(second_phase).loc, INVALID_LOC);
 }
 
 TEST(GlyphPositionTest, MatchesSkiaQuarterPixelBoundaries) {
@@ -235,7 +309,7 @@ TEST(GlyphPositionTest, AlignsRasterPointToRequestedPhysicalPhase) {
   EXPECT_FLOAT_EQ(AlignRasterPointAtOrAbove(1.1f, 2.f, 2), 1.25f);
 }
 
-TEST(AtlasGlyphTest, SubpixelStateAndPhaseParticipateInGlyphKey) {
+TEST(AtlasGlyphTest, SubpixelStateAndPackedPhaseParticipateInGlyphKey) {
   ScalerContextDesc first_desc{};
   ScalerContextDesc second_desc{};
   second_desc.subpixel_positioning = 1;
@@ -244,9 +318,9 @@ TEST(AtlasGlyphTest, SubpixelStateAndPhaseParticipateInGlyphKey) {
       GlyphKey::Equal{}(GlyphKey(7, first_desc), GlyphKey(7, second_desc)));
 
   first_desc.subpixel_positioning = 1;
-  second_desc.subpixel_x_phase = 1;
   EXPECT_FALSE(
-      GlyphKey::Equal{}(GlyphKey(7, first_desc), GlyphKey(7, second_desc)));
+      GlyphKey::Equal{}(GlyphKey(PackedGlyphID(7, 0, 0), first_desc),
+                        GlyphKey(PackedGlyphID(7, 1, 0), second_desc)));
 }
 
 TEST(AtlasGlyphTest, EdgingParticipatesInGlyphKey) {

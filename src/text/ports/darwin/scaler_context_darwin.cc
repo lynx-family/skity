@@ -531,7 +531,7 @@ void ScalerContextDarwin::DrawGlyphWithState(CGContextRef context,
   CTFontDrawGlyphs(ct_font_.get(), &glyph, &point, 1, context);
 }
 
-void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
+void ScalerContextDarwin::GenerateImage(PackedGlyphID id, GlyphData *glyph,
                                         const StrokeDesc &stroke_desc) {
   // The returned pixels borrow OffScreenContext storage. Clear the previously
   // published view before generating the next single-glyph bitmap.
@@ -539,7 +539,7 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
   glyph->image_.row_bytes = 0;
   glyph->image_.need_free = false;
 
-  GenerateImageInfo(glyph, stroke_desc);
+  GenerateImageInfo(id, glyph, stroke_desc);
   if (glyph->image_.width == 0 || glyph->image_.height == 0.0) {
     return;
   }
@@ -583,7 +583,7 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
   glyph->image_.row_bytes = target.row_bytes;
 }
 
-void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
+void ScalerContextDarwin::GenerateImageInfo(PackedGlyphID id, GlyphData *glyph,
                                             const StrokeDesc &stroke_desc) {
   CGGlyph cg_glyph = glyph->Id();
 
@@ -647,7 +647,7 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
   // phase-specific atlas quad land on integer physical pixels.
   const CGFloat unaligned_point_x = point.x;
   point.x = AlignRasterPointAtOrAbove(point.x, context_scale_,
-                                      desc_.subpixel_x_phase);
+                                      id.GetSubpixelXPhase());
   const CGFloat point_delta_x = point.x - unaligned_point_x;
   width = std::ceil((raster_width + point_delta_x) * context_scale_) + 2;
 
@@ -656,7 +656,7 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
   // aligning the Core Graphics raster point.
   const CGFloat unaligned_point_y = point.y;
   point.y = AlignRasterPointAtOrAbove(
-      point.y, context_scale_, FlipGlyphSubpixelPhase(desc_.subpixel_y_phase));
+      point.y, context_scale_, FlipGlyphSubpixelPhase(id.GetSubpixelYPhase()));
   const CGFloat point_delta_y = point.y - unaligned_point_y;
   height = std::ceil((raster_height + point_delta_y) * context_scale_) + 2;
 

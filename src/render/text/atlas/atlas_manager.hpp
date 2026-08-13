@@ -30,11 +30,9 @@ class Atlas {
 
   const AtlasConfig& GetConfig() { return atlas_config_; }
 
-  GlyphRegion GetGlyphRegion(const Font& font, GlyphID glyph_id,
+  GlyphRegion GetGlyphRegion(const Font& font, PackedGlyphID packed_glyph_id,
                              const Paint& paint, bool load_sdf,
-                             float context_scale, const Matrix& transform,
-                             uint8_t subpixel_x_phase = 0,
-                             uint8_t subpixel_y_phase = 0);
+                             float context_scale, const Matrix& transform);
 
   // upload atlas from memory storage to gpu texture
   void UploadAtlas(uint32_t group_index);

@@ -24,13 +24,13 @@ bool valid_positive_float(float f) {
   return !(FloatIsNan(f) || !FloatIsFinite(f) || f < 0.f);
 }
 
-void LoadGlyphBitmap(const Font& font, GlyphID glyph_id,
+void LoadGlyphBitmap(const Font& font, PackedGlyphID packed_glyph_id,
                      const GlyphData** glyph_data, const Paint& paint,
                      const ScalerContextDesc& desc) {
   auto scaler_context =
       ScalerContextCache::GlobalScalerContextCache()->FindOrCreateScalerContext(
           desc, font.GetTypeface());
-  scaler_context->PrepareImages(&glyph_id, 1, glyph_data, paint);
+  scaler_context->PrepareImages(&packed_glyph_id, 1, glyph_data, paint);
 }
 
 }  // namespace
@@ -74,11 +74,11 @@ Atlas::Atlas(AtlasFormat format, GPUDevice* gpu_device,
   }
 }
 
-GlyphRegion Atlas::GetGlyphRegion(const Font& font, GlyphID glyph_id,
+GlyphRegion Atlas::GetGlyphRegion(const Font& font,
+                                  PackedGlyphID packed_glyph_id,
                                   const Paint& paint, bool load_sdf,
-                                  float context_scale, const Matrix& transform,
-                                  uint8_t subpixel_x_phase,
-                                  uint8_t subpixel_y_phase) {
+                                  float context_scale,
+                                  const Matrix& transform) {
   float font_size = font.GetSize();
   float sdf_scale = 1.0f;
   // TODO(jingle) consider transform for sdf text
@@ -111,9 +111,9 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font, GlyphID glyph_id,
   ScalerContextDesc scaler_context_desc = ScalerContextDesc::MakeTransformed(
       raster_font, raster_paint, load_sdf ? 1.f : context_scale,
       raster_transform);
-  scaler_context_desc.subpixel_x_phase = load_sdf ? 0 : subpixel_x_phase;
-  scaler_context_desc.subpixel_y_phase = load_sdf ? 0 : subpixel_y_phase;
-  GlyphKey key(glyph_id, scaler_context_desc);
+  GlyphKey key(
+      load_sdf ? PackedGlyphID(packed_glyph_id.GetGlyphID()) : packed_glyph_id,
+      scaler_context_desc);
 
   for (uint32_t index = 0; index < atlas_bitmap_.size(); index++) {
     if (atlas_bitmap_[index]) {
@@ -146,7 +146,7 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
     fill_paint.SetStyle(Paint::kFill_Style);
   }
 
-  LoadGlyphBitmap(resized_font, key.glyph_id, &glyph_data, fill_paint,
+  LoadGlyphBitmap(resized_font, key.packed_glyph_id, &glyph_data, fill_paint,
                   key.scaler_context_desc);
   const auto& bitmap_info = glyph_data->Image();
 
@@ -157,10 +157,8 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
     ScalerContextDesc fill_desc = ScalerContextDesc::MakeTransformed(
         resized_font, fill_paint, key.scaler_context_desc.context_scale,
         key.scaler_context_desc.transform);
-    fill_desc.subpixel_x_phase = key.scaler_context_desc.subpixel_x_phase;
-    fill_desc.subpixel_y_phase = key.scaler_context_desc.subpixel_y_phase;
-    LoadGlyphBitmap(resized_font, key.glyph_id, &glyph_data_fill, fill_paint,
-                    fill_desc);
+    LoadGlyphBitmap(resized_font, key.packed_glyph_id, &glyph_data_fill,
+                    fill_paint, fill_desc);
     fill_paint.SetStyle(Paint::kStroke_Style);
 
     if (valid_positive_float(bitmap_info.width) &&

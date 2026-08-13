@@ -8,6 +8,7 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "src/text/packed_glyph_id.hpp"
 #include "src/text/scaler_context.hpp"
 #include "src/utils/thread_annotations.hpp"
 
@@ -29,6 +30,9 @@ class ScalerContextContainer {
   void PrepareImages(const GlyphID* glyph_ids, uint32_t count,
                      const GlyphData* results[], const Paint& paint)
       SKITY_EXCLUDES(mutex_);
+  void PrepareImages(const PackedGlyphID* glyph_ids, uint32_t count,
+                     const GlyphData* results[], const Paint& paint)
+      SKITY_EXCLUDES(mutex_);
 
   void PrepareImageInfos(const GlyphID* glyph_ids, uint32_t count,
                          const GlyphData* results[], const Paint& paint)
@@ -37,12 +41,13 @@ class ScalerContextContainer {
   uint16_t GetFixedSize() { return scaler_context_->GetFixedSize(); }
 
  private:
-  GlyphData* Glyph(GlyphID id) SKITY_REQUIRES(mutex_);
-  GlyphData* AddGlyph(std::unique_ptr<GlyphData> glyph) SKITY_REQUIRES(mutex_);
-  void PrepareImage(GlyphData* glyph, const StrokeDesc& stroke_desc)
+  GlyphData* Glyph(PackedGlyphID id) SKITY_REQUIRES(mutex_);
+  GlyphData* AddGlyph(PackedGlyphID id, std::unique_ptr<GlyphData> glyph)
       SKITY_REQUIRES(mutex_);
-  void PrepareImageInfo(GlyphData* glyph, const StrokeDesc& stroke_desc)
-      SKITY_REQUIRES(mutex_);
+  void PrepareImage(PackedGlyphID id, GlyphData* glyph,
+                    const StrokeDesc& stroke_desc) SKITY_REQUIRES(mutex_);
+  void PrepareImageInfo(PackedGlyphID id, GlyphData* glyph,
+                        const StrokeDesc& stroke_desc) SKITY_REQUIRES(mutex_);
   void PreparePath(GlyphData* glyph) SKITY_REQUIRES(mutex_);
   enum PathDetail { kMetricsOnly, kMetricsAndPath };
   void InternalPrepare(const GlyphID* glyph_ids, uint32_t count,
@@ -53,8 +58,9 @@ class ScalerContextContainer {
   std::unique_ptr<ScalerContext> scaler_context_;
   const FontMetrics font_metrics_;
   mutable std::mutex mutex_;
-  std::unordered_map<GlyphID, std::unique_ptr<GlyphData>> glyph_data_map_
-      SKITY_GUARDED_BY(mutex_);
+  std::unordered_map<PackedGlyphID, std::unique_ptr<GlyphData>,
+                     PackedGlyphID::Hash>
+      glyph_data_map_ SKITY_GUARDED_BY(mutex_);
   //  std::vector<GlyphData*> glyph_data_for_index SKITY_GUARDED_BY(mutex_);
   // so we don't grow our arrays a lot
   static constexpr size_t kMinGlyphCount = 8;

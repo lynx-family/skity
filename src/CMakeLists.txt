@@ -110,6 +110,7 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/text/font.cc
   ${CMAKE_CURRENT_LIST_DIR}/text/font_style.cc
   ${CMAKE_CURRENT_LIST_DIR}/text/font_manager.cc
+  ${CMAKE_CURRENT_LIST_DIR}/text/packed_glyph_id.hpp
   ${CMAKE_CURRENT_LIST_DIR}/text/scaler_context_cache.cc
   ${CMAKE_CURRENT_LIST_DIR}/text/scaler_context_container.cc
   ${CMAKE_CURRENT_LIST_DIR}/text/scaler_context_desc.cc

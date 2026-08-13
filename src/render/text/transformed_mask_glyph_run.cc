@@ -537,8 +537,8 @@ GlyphRunList MakeGlyphRunList(uint32_t count, const GlyphID* glyphs,
       continue;
     }
     GlyphRegion glyph_region =
-        atlas->GetGlyphRegion(font, glyph_info[index]->Id(), paint, false,
-                              context_scale, creation_matrix);
+        atlas->GetGlyphRegion(font, PackedGlyphID(glyph_info[index]->Id()),
+                              paint, false, context_scale, creation_matrix);
     if (glyph_region.loc.z <= 0 || glyph_region.loc.w <= 0) {
       continue;
     }

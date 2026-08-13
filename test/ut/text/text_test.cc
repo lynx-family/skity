@@ -18,7 +18,7 @@ namespace skity {
 class ScalerContextEmpty : public ScalerContext {
  protected:
   void GenerateMetrics(GlyphData *) override {}
-  void GenerateImage(GlyphData *, const StrokeDesc &) override {}
+  void GenerateImage(PackedGlyphID, GlyphData *, const StrokeDesc &) override {}
   bool GeneratePath(GlyphData *) override { return true; }
   void GenerateFontMetrics(FontMetrics *) override {}
   uint16_t OnGetFixedSize() override { return 0; }

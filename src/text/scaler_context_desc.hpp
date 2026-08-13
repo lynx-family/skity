@@ -41,14 +41,12 @@ struct ScalerContextDesc {
   uint8_t fake_bold{};
   uint8_t hinting{};
   uint8_t subpixel_positioning{};
-  uint8_t subpixel_x_phase{};
-  uint8_t subpixel_y_phase{};
   uint8_t baseline_snap{};
   uint8_t edging{};
 
   // Keep the complete object representation initialized and free of implicit
   // tail padding so it can be used directly as cache identity.
-  uint8_t reserved_padding[3]{};
+  uint8_t reserved_padding{};
 
   friend inline bool operator==(const ScalerContextDesc& lhs,
                                 const ScalerContextDesc& rhs) {
@@ -104,8 +102,6 @@ static_assert(sizeof(ScalerContextDesc) ==
                       sizeof(ScalerContextDesc::fake_bold) +
                       sizeof(ScalerContextDesc::hinting) +
                       sizeof(ScalerContextDesc::subpixel_positioning) +
-                      sizeof(ScalerContextDesc::subpixel_x_phase) +
-                      sizeof(ScalerContextDesc::subpixel_y_phase) +
                       sizeof(ScalerContextDesc::baseline_snap) +
                       sizeof(ScalerContextDesc::edging) +
                       sizeof(ScalerContextDesc::reserved_padding),

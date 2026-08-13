@@ -118,9 +118,10 @@ class ScalerContextDarwin : public ScalerContext {
  protected:
   void GenerateMetrics(GlyphData *glyph) override;
 
-  void GenerateImage(GlyphData *glyph, const StrokeDesc &stroke_desc) override;
+  void GenerateImage(PackedGlyphID id, GlyphData *glyph,
+                     const StrokeDesc &stroke_desc) override;
 
-  void GenerateImageInfo(GlyphData *glyph,
+  void GenerateImageInfo(PackedGlyphID id, GlyphData *glyph,
                          const StrokeDesc &stroke_desc) override;
 
   bool GeneratePath(GlyphData *glyph) override;

@@ -45,6 +45,24 @@ void ScalerContextContainer::PrepareImages(const GlyphID *glyph_ids,
                                            const GlyphData *results[],
                                            const Paint &paint)
     SKITY_EXCLUDES(mutex_) {
+  if (count == 0) {
+    return;
+  }
+
+  DEBUG_CHECK(count == 1);
+  if (count != 1) {
+    return;
+  }
+
+  const PackedGlyphID packed_id(glyph_ids[0]);
+  this->PrepareImages(&packed_id, 1, results, paint);
+}
+
+void ScalerContextContainer::PrepareImages(const PackedGlyphID *glyph_ids,
+                                           uint32_t count,
+                                           const GlyphData *results[],
+                                           const Paint &paint)
+    SKITY_EXCLUDES(mutex_) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (count == 0) {
     return;
@@ -60,8 +78,9 @@ void ScalerContextContainer::PrepareImages(const GlyphID *glyph_ids,
   StrokeDesc stroke_desc{paint.GetStyle() != Paint::kFill_Style,
                          paint.GetStrokeWidth(), paint.GetStrokeCap(),
                          paint.GetStrokeJoin(), paint.GetStrokeMiter()};
-  auto *glyph_data = this->Glyph(glyph_ids[0]);
-  this->PrepareImage(glyph_data, stroke_desc);
+  const PackedGlyphID packed_id = glyph_ids[0];
+  auto *glyph_data = this->Glyph(packed_id);
+  this->PrepareImage(packed_id, glyph_data, stroke_desc);
   results[0] = glyph_data;
 }
 
@@ -73,47 +92,50 @@ void ScalerContextContainer::PrepareImageInfos(const GlyphID *glyph_ids,
   std::lock_guard<std::mutex> lock(mutex_);
   const GlyphData **cursor = results;
   for (uint32_t idx = 0; idx < count; ++idx) {
-    auto glyph_id = glyph_ids[idx];
-    auto *glyph_data = this->Glyph(glyph_id);
+    const PackedGlyphID packed_id(glyph_ids[idx]);
+    auto *glyph_data = this->Glyph(packed_id);
     if (glyph_data->image_.origin_x == 0 && glyph_data->image_.origin_y == 0) {
       StrokeDesc stroke_desc{paint.GetStyle() != Paint::kFill_Style,
                              paint.GetStrokeWidth(), paint.GetStrokeCap(),
                              paint.GetStrokeJoin(), paint.GetStrokeMiter()};
-      this->PrepareImageInfo(glyph_data, stroke_desc);
+      this->PrepareImageInfo(packed_id, glyph_data, stroke_desc);
     }
     *cursor++ = glyph_data;
   }
 }
 
-GlyphData *ScalerContextContainer::Glyph(GlyphID id) SKITY_REQUIRES(mutex_) {
+GlyphData *ScalerContextContainer::Glyph(PackedGlyphID id)
+    SKITY_REQUIRES(mutex_) {
   auto it = glyph_data_map_.find(id);
   if (it != glyph_data_map_.end()) {
     return it->second.get();
   }
-  auto glyph_data = std::make_unique<GlyphData>(id);
+  auto glyph_data = std::make_unique<GlyphData>(id.GetGlyphID());
   scaler_context_->MakeGlyph(glyph_data.get());
-  return this->AddGlyph(std::move(glyph_data));
+  return this->AddGlyph(id, std::move(glyph_data));
 }
 
-GlyphData *ScalerContextContainer::AddGlyph(std::unique_ptr<GlyphData> glyph)
+GlyphData *ScalerContextContainer::AddGlyph(PackedGlyphID id,
+                                            std::unique_ptr<GlyphData> glyph)
     SKITY_REQUIRES(mutex_) {
   GlyphData *raw_pointer = glyph.get();
-  glyph_data_map_[glyph->Id()] = std::move(glyph);
+  glyph_data_map_[id] = std::move(glyph);
   return raw_pointer;
 }
 
-void ScalerContextContainer::PrepareImage(GlyphData *glyph,
+void ScalerContextContainer::PrepareImage(PackedGlyphID id, GlyphData *glyph,
                                           const StrokeDesc &stroke_desc)
     SKITY_REQUIRES(mutex_) {
   // A backend may return caller-owned pixels or borrowed scratch storage. The
   // single-glyph caller consumes the result before requesting another image.
-  scaler_context_->GetImage(glyph, stroke_desc);
+  scaler_context_->GetImage(id, glyph, stroke_desc);
 }
 
-void ScalerContextContainer::PrepareImageInfo(GlyphData *glyph,
+void ScalerContextContainer::PrepareImageInfo(PackedGlyphID id,
+                                              GlyphData *glyph,
                                               const StrokeDesc &stroke_desc)
     SKITY_REQUIRES(mutex_) {
-  scaler_context_->GetImageInfo(glyph, stroke_desc);
+  scaler_context_->GetImageInfo(id, glyph, stroke_desc);
 }
 
 void ScalerContextContainer::PreparePath(GlyphData *glyph)
@@ -127,8 +149,8 @@ void ScalerContextContainer::InternalPrepare(
     ScalerContextContainer::PathDetail path_detail, const GlyphData *results[])
     SKITY_REQUIRES(mutex_) {
   for (uint32_t idx = 0; idx < count; ++idx) {
-    auto glyph_id = glyph_ids[idx];
-    auto *glyph_data = this->Glyph(glyph_id);
+    const PackedGlyphID packed_id(glyph_ids[idx]);
+    auto *glyph_data = this->Glyph(packed_id);
     if (path_detail == kMetricsAndPath) {
       this->PreparePath(glyph_data);
     }

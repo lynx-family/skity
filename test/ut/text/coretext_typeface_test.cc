@@ -69,7 +69,7 @@ size_t BytesPerPixel(BitmapFormat format) {
 RasterizedGlyph RasterizeGlyph(ScalerContextDarwin* context, GlyphID glyph_id,
                                const StrokeDesc& stroke_desc) {
   GlyphData glyph(glyph_id);
-  context->GetImage(&glyph, stroke_desc);
+  context->GetImage(PackedGlyphID(glyph_id), &glyph, stroke_desc);
 
   const GlyphBitmapData& image = glyph.Image();
   RasterizedGlyph result{image.origin_x, image.origin_y, image.width,

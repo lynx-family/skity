@@ -12,6 +12,7 @@
 #include <skity/text/typeface.hpp>
 
 #include "src/base/hash.hpp"
+#include "src/text/packed_glyph_id.hpp"
 #include "src/text/scaler_context_desc.hpp"
 
 namespace skity {
@@ -62,12 +63,14 @@ struct GlyphRegion {
 };
 
 struct GlyphKey {
-  const GlyphID glyph_id;
-  const uint16_t reserved_padding{0};
+  const PackedGlyphID packed_glyph_id;
   const ScalerContextDesc scaler_context_desc;
 
+  GlyphKey(PackedGlyphID id, const ScalerContextDesc& desc)
+      : packed_glyph_id(id), scaler_context_desc(desc) {}
+
   GlyphKey(GlyphID id, const ScalerContextDesc& desc)
-      : glyph_id(id), reserved_padding(0), scaler_context_desc(desc) {}
+      : GlyphKey(PackedGlyphID(id), desc) {}
 
   struct Hash {
     std::size_t operator()(const GlyphKey& key) const {
@@ -82,8 +85,7 @@ struct GlyphKey {
   };
 };
 
-static_assert(sizeof(GlyphKey) == sizeof(GlyphKey::glyph_id) +
-                                      sizeof(GlyphKey::reserved_padding) +
+static_assert(sizeof(GlyphKey) == sizeof(GlyphKey::packed_glyph_id) +
                                       sizeof(GlyphKey::scaler_context_desc),
               "GlyphKey must have no padding");
 

@@ -284,9 +284,11 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
     const QuantizedGlyphPosition glyph_position =
         QuantizeGlyphPosition(device_run_pos, context_scale, rounding_spec);
 
-    GlyphRegion glyph_region = atlas->GetGlyphRegion(
-        font, info.Id(), paint, false, context_scale, transform,
-        glyph_position.x_phase, glyph_position.y_phase);
+    GlyphRegion glyph_region =
+        atlas->GetGlyphRegion(font,
+                              PackedGlyphID(info.Id(), glyph_position.x_phase,
+                                            glyph_position.y_phase),
+                              paint, false, context_scale, transform);
     if (glyph_region.loc.z == 0 || glyph_region.loc.w == 0) {
       k++;
       continue;
@@ -489,7 +491,7 @@ GlyphRunList SDFGlyphRun::SubRunListByTexture(
   while (k < count) {
     auto info = *(glyph_info[k]);
     GlyphRegion glyph_region = atlas->GetGlyphRegion(
-        font, info.Id(), paint, true, context_scale, transform);
+        font, PackedGlyphID(info.Id()), paint, true, context_scale, transform);
     if (glyph_region.loc.z == 0 || glyph_region.loc.w == 0) {
       k++;
       continue;
