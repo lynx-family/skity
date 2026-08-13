@@ -1098,6 +1098,7 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
   dynamic_rendering_enabled_ = false;
   advanced_blend_enabled_ = false;
   advanced_blend_coherent_ = false;
+  dual_source_blending_enabled_ = false;
   pipeline_cache_ = VK_NULL_HANDLE;
 
   if (!LoadAvailableDeviceExtensions()) {
@@ -1105,6 +1106,7 @@ bool VulkanContextState::InitializeDevice(const GPUContextInfoVK& info) {
   }
 
   if (info.logical_device != VK_NULL_HANDLE) {
+    dual_source_blending_enabled_ = info.dual_source_blending_enabled;
     logical_device_ = info.logical_device;
     functions_.get_device_proc_addr =
         info.get_device_proc_addr != nullptr
@@ -1264,10 +1266,10 @@ bool VulkanContextState::InitializeOwnedDevice() {
     feature_query_next = &adv_blend_features.pNext;
   }
 
-  if (physical_device_features.pNext != nullptr) {
-    functions_.instance.vkGetPhysicalDeviceFeatures2(physical_device_,
-                                                     &physical_device_features);
-  }
+  functions_.instance.vkGetPhysicalDeviceFeatures2(physical_device_,
+                                                   &physical_device_features);
+  dual_source_blending_enabled_ =
+      physical_device_features.features.dualSrcBlend == VK_TRUE;
 
   if (has_dynamic_rendering_extension) {
     if (dynamic_rendering_features.dynamicRendering == VK_TRUE) {
@@ -1345,6 +1347,10 @@ bool VulkanContextState::InitializeOwnedDevice() {
   device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   device_info.queueCreateInfoCount = static_cast<uint32_t>(queue_infos.size());
   device_info.pQueueCreateInfos = queue_infos.data();
+  VkPhysicalDeviceFeatures enabled_core_features = {};
+  enabled_core_features.dualSrcBlend =
+      dual_source_blending_enabled_ ? VK_TRUE : VK_FALSE;
+  device_info.pEnabledFeatures = &enabled_core_features;
 
   void* enabled_feature_chain = nullptr;
   void** enabled_feature_next = &enabled_feature_chain;
@@ -1360,6 +1366,9 @@ bool VulkanContextState::InitializeOwnedDevice() {
     *enabled_feature_next = &adv_blend_features;
     enabled_feature_next = &adv_blend_features.pNext;
   }
+  // These structs were previously linked for feature queries. Terminate the
+  // rebuilt chain so skipped features cannot remain reachable.
+  *enabled_feature_next = nullptr;
   if (enabled_feature_chain != nullptr) {
     device_info.pNext = enabled_feature_chain;
   }
@@ -1569,6 +1578,7 @@ void VulkanContextState::Reset() {
   enabled_device_extensions_known_ = false;
   synchronization2_enabled_ = false;
   dynamic_rendering_enabled_ = false;
+  dual_source_blending_enabled_ = false;
   debug_runtime_ = {};
   functions_ = {};
   instance_ = VK_NULL_HANDLE;

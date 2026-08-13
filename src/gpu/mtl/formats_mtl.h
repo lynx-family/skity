@@ -119,6 +119,14 @@ constexpr MTLBlendFactor ToMTLBlendFactor(GPUBlendFactor type) {
       return MTLBlendFactorOneMinusDestinationAlpha;
     case GPUBlendFactor::kSrcAlphaSaturated:
       return MTLBlendFactorSourceAlphaSaturated;
+    case GPUBlendFactor::kSrc1:
+      return MTLBlendFactorSource1Color;
+    case GPUBlendFactor::kOneMinusSrc1:
+      return MTLBlendFactorOneMinusSource1Color;
+    case GPUBlendFactor::kSrc1Alpha:
+      return MTLBlendFactorSource1Alpha;
+    case GPUBlendFactor::kOneMinusSrc1Alpha:
+      return MTLBlendFactorOneMinusSource1Alpha;
   }
   return MTLBlendFactorZero;
 }

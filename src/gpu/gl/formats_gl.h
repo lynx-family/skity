@@ -132,6 +132,14 @@ constexpr GLenum ToBlendFactor(GPUBlendFactor factor) {
       return GL_ONE_MINUS_DST_ALPHA;
     case GPUBlendFactor::kSrcAlphaSaturated:
       return GL_SRC_ALPHA_SATURATE;
+    case GPUBlendFactor::kSrc1:
+      return GL_SRC1_COLOR;
+    case GPUBlendFactor::kOneMinusSrc1:
+      return GL_ONE_MINUS_SRC1_COLOR;
+    case GPUBlendFactor::kSrc1Alpha:
+      return GL_SRC1_ALPHA;
+    case GPUBlendFactor::kOneMinusSrc1Alpha:
+      return GL_ONE_MINUS_SRC1_ALPHA;
   }
 }
 

@@ -20,6 +20,7 @@ namespace skity {
 GPUDeviceGL::GPUDeviceGL() {
   auto gpu_caps = std::make_unique<GPUCaps>();
   auto* gl_interface = GLInterface::GlobalInterface();
+  InitGLVersion();
   gpu_caps->supports_framebuffer_fetch =
       gl_interface->ext_shader_framebuffer_fetch;
   gpu_caps->supports_native_advanced_blend =
@@ -28,6 +29,8 @@ GPUDeviceGL::GPUDeviceGL() {
       gl_interface->ext_khr_blend_equation_advanced_coherent;
   gpu_caps->native_blend_shader_variant =
       gl_interface->ext_khr_blend_equation_advanced;
+  gpu_caps->supports_dual_source_blending =
+      !is_gles_ || gl_interface->ext_blend_func_extended;
   InitCaps(std::move(gpu_caps));
 }
 
@@ -40,10 +43,6 @@ std::unique_ptr<GPUBuffer> GPUDeviceGL::CreateBuffer(
 
 std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunction(
     const GPUShaderFunctionDescriptor& desc) {
-  if (gl_version_major_ == 0 && gl_version_minor_ == 0) {
-    InitGLVersion();
-  }
-
   if (desc.source_type == GPUShaderSourceType::kWGX) {
     return CreateShaderFunctionFromModule(desc);
   }
@@ -191,6 +190,9 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunctionFromModule(
   }
   if (desc.features.framebuffer_fetch) {
     options.extensions.push_back("GL_EXT_shader_framebuffer_fetch");
+  }
+  if (is_gles_ && desc.features.dual_source_blending) {
+    options.extensions.push_back("GL_EXT_blend_func_extended");
   }
 
   auto wgx_result = source->module->GetProgram()->WriteToGlsl(

@@ -82,6 +82,14 @@ VkBlendFactor ToVkBlendFactor(GPUBlendFactor factor) {
       return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
     case GPUBlendFactor::kSrcAlphaSaturated:
       return VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
+    case GPUBlendFactor::kSrc1:
+      return VK_BLEND_FACTOR_SRC1_COLOR;
+    case GPUBlendFactor::kOneMinusSrc1:
+      return VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR;
+    case GPUBlendFactor::kSrc1Alpha:
+      return VK_BLEND_FACTOR_SRC1_ALPHA;
+    case GPUBlendFactor::kOneMinusSrc1Alpha:
+      return VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
   }
 
   return VK_BLEND_FACTOR_ONE;
@@ -523,6 +531,8 @@ GPUDeviceVK::GPUDeviceVK(std::shared_ptr<const VulkanContextState> state)
       state_ && state_->IsAdvancedBlendEnabled();
   gpu_caps->supports_native_advanced_blend_coherent =
       state_ && state_->IsAdvancedBlendCoherent();
+  gpu_caps->supports_dual_source_blending =
+      state_ && state_->IsDualSourceBlendingEnabled();
   InitCaps(std::move(gpu_caps));
 
   if (state_ == nullptr || state_->GetPhysicalDevice() == VK_NULL_HANDLE ||

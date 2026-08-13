@@ -120,6 +120,31 @@ bool ContainsDecoration(const std::vector<uint32_t>& words,
   return false;
 }
 
+bool ContainsDecorationValue(const std::vector<uint32_t>& words,
+                             SpvDecoration decoration, uint32_t value) {
+  size_t offset = 5u;
+  while (offset < words.size()) {
+    const uint32_t inst = words[offset];
+    const uint16_t word_count =
+        static_cast<uint16_t>(inst >> SpvWordCountShift);
+    const auto opcode = static_cast<SpvOp>(inst & SpvOpCodeMask);
+
+    if (word_count == 0u) {
+      return false;
+    }
+
+    if (opcode == SpvOpDecorate && word_count >= 4u &&
+        words[offset + 2u] == static_cast<uint32_t>(decoration) &&
+        words[offset + 3u] == value) {
+      return true;
+    }
+
+    offset += word_count;
+  }
+
+  return false;
+}
+
 bool ContainsMemberDecoration(const std::vector<uint32_t>& words,
                               SpvDecoration decoration) {
   size_t offset = 5u;
@@ -1151,6 +1176,64 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsDualSourceOutputIndexDecorations) {
+  auto program = wgx::Program::Parse(R"(
+struct FSOutput {
+  @location(0) @blend_src(0) primary: vec4<f32>,
+  @location(0) @blend_src(1) secondary: vec4<f32>,
+}
+
+@fragment
+fn fs_main() -> FSOutput {
+  var output: FSOutput;
+  output.primary = vec4<f32>(1.0);
+  output.secondary = vec4<f32>(0.5);
+  return output;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  EXPECT_TRUE(ContainsDecorationValue(result.spirv, SpvDecorationIndex, 0u));
+  EXPECT_TRUE(ContainsDecorationValue(result.spirv, SpvDecorationIndex, 1u));
+}
+
+TEST(WgxSpirvSmokeTest, IgnoresDualSourceIndexOnVertexOutputs) {
+  auto program = wgx::Program::Parse(R"(
+struct VSOutput {
+  @builtin(position) @blend_src(1) position: vec4<f32>,
+}
+
+@vertex
+fn struct_vs_main() -> VSOutput {
+  var output: VSOutput;
+  output.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  return output;
+}
+
+@vertex
+fn direct_vs_main() -> @builtin(position) @blend_src(1) vec4<f32> {
+  return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  for (const char* entry_point : {"struct_vs_main", "direct_vs_main"}) {
+    wgx::SpirvOptions options;
+    auto result = program->WriteToSpirv(entry_point, options);
+
+    ASSERT_TRUE(result.success);
+    EXPECT_FALSE(ContainsDecoration(result.spirv, SpvDecorationIndex));
+  }
 }
 
 TEST(WgxSpirvSmokeTest, EmitsDFdxBuiltinForFragmentShader) {

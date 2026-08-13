@@ -118,6 +118,16 @@ struct GPUContextInfoVK {
   bool enabled_device_extensions_known = false;
 
   /**
+   * Whether the user-provided logical device was created with the core
+   * `dualSrcBlend` feature enabled.
+   *
+   * Vulkan cannot query enabled core features from an existing logical
+   * device, so this must be declared explicitly. It is ignored when Skity
+   * creates the logical device.
+   */
+  bool dual_source_blending_enabled = false;
+
+  /**
    * User provided Vulkan graphics queue.
    *
    * If nullptr, the engine will use the first graphics queue if available.

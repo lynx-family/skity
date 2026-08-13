@@ -504,6 +504,7 @@ bool ModuleBuilder::Build(SectionBuffers* sections,
     info.member_index = ir_output.member_index;
     info.decoration_kind = ir_output.decoration_kind;
     info.decoration_value = ir_output.decoration_value;
+    info.blend_src_index = ir_output.blend_src_index;
     info.interpolation = ir_output.interpolation;
     output_vars_.push_back(std::move(info));
   }
@@ -865,6 +866,13 @@ void ModuleBuilder::WriteAnnotationSection() {
           &sections_->annotations, SpvOpDecorate,
           {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationLocation),
            output.decoration_value});
+    }
+    if (output.decoration_kind == ir::InterfaceDecorationKind::kLocation &&
+        output.blend_src_index.has_value()) {
+      AppendInstruction(
+          &sections_->annotations, SpvOpDecorate,
+          {output.spirv_var_id, static_cast<uint32_t>(SpvDecorationIndex),
+           output.blend_src_index.value()});
     }
     if (output.interpolation == ir::InterpolationType::kFlat) {
       AppendInstruction(

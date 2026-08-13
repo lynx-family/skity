@@ -71,6 +71,10 @@ struct OutputVariable {
   // - For kLocation: location index (0, 1, 2, ...)
   uint32_t decoration_value = 0;
 
+  // Dual-source fragment outputs share one color location and use this index
+  // to distinguish the primary (0) and secondary (1) blend sources.
+  std::optional<uint32_t> blend_src_index;
+
   // Helper to set builtin decoration
   void SetBuiltin(BuiltinType builtin) {
     decoration_kind = InterfaceDecorationKind::kBuiltin;

@@ -61,6 +61,14 @@ AttributeType BindingAttribute::GetType() const {
   return AttributeType::kBinding;
 }
 
+BlendSrcAttribute::BlendSrcAttribute(int64_t index) : index(index) {}
+
+std::string BlendSrcAttribute::GetName() const { return "blend_src"; }
+
+AttributeType BlendSrcAttribute::GetType() const {
+  return AttributeType::kBlendSrc;
+}
+
 BuiltinAttribute::BuiltinAttribute(std::string_view name) : name(name) {}
 
 std::string BuiltinAttribute::GetName() const { return "builtin"; }
