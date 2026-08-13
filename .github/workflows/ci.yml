@@ -188,7 +188,7 @@ jobs:
             run: |
                 $WindowsSdkVersion = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Directory | Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1 -ExpandProperty Name
                 Write-Host "Using Windows SDK version: $WindowsSdkVersion"
-                ./buildtools/cmake/bin/cmake -B out/cmake_host_build -DCMAKE_SYSTEM_VERSION=$WindowsSdkVersion -DSKITY_EXAMPLE=ON -DCMAKE_BUILD_TYPE=Debug -DSKITY_CODEC_MODULE=ON -DSKITY_TEST=ON  -DCMAKE_POLICY_VERSION_MINIMUM='3.5'
+                ./buildtools/cmake/bin/cmake -B out/cmake_host_build -DCMAKE_SYSTEM_VERSION=$WindowsSdkVersion -DSKITY_EXAMPLE=ON -DCMAKE_BUILD_TYPE=Debug -DSKITY_CODEC_MODULE=ON -DSKITY_TEST=ON -DWGX_SPIRV_BACKEND=ON -DCMAKE_POLICY_VERSION_MINIMUM='3.5'
                 Select-String -Path out/cmake_host_build/skity.vcxproj -Pattern "WindowsTargetPlatformVersion"
                 ./buildtools/cmake/bin/cmake --build out/cmake_host_build --target skity_unit_test
                 cd out/cmake_host_build/Debug

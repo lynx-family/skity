@@ -7,6 +7,10 @@
 
 #include <algorithm>
 
+#if defined(WGX_SPIRV)
+#include "spirv/unified1/spirv.h"
+#endif
+
 namespace {
 
 TEST(WgxBackendNameResolutionTest, RewritesGlslConflictingVariableNames) {
@@ -242,6 +246,25 @@ fn fs_main() -> @location(0) vec4<f32> {
   auto msl_result = program->WriteToMsl("fs_main", msl_options);
   ASSERT_TRUE(msl_result.success);
   EXPECT_NE(msl_result.content.find("any("), std::string::npos);
+
+#if defined(WGX_SPIRV)
+  wgx::SpirvOptions spirv_options;
+  auto spirv_result = program->WriteToSpirv("fs_main", spirv_options);
+  ASSERT_TRUE(spirv_result.success);
+
+  bool emits_any = false;
+  for (size_t offset = 5u; offset < spirv_result.spirv.size();) {
+    const uint32_t instruction = spirv_result.spirv[offset];
+    const uint32_t word_count = instruction >> SpvWordCountShift;
+    ASSERT_NE(word_count, 0u);
+    if (static_cast<SpvOp>(instruction & SpvOpCodeMask) == SpvOpAny) {
+      emits_any = true;
+      break;
+    }
+    offset += word_count;
+  }
+  EXPECT_TRUE(emits_any);
+#endif
 }
 
 TEST(WgxBackendNameResolutionTest, RejectsBooleanVectorComparison) {

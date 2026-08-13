@@ -148,6 +148,20 @@ endif()
 target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
 target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
 
+if (${WGX_SPIRV_BACKEND})
+    target_sources(skity_unit_test PRIVATE
+        wgx/wgx_spirv_smoke_test.cc
+        wgx/wgx_value_test.cc
+    )
+    target_compile_definitions(skity_unit_test PRIVATE
+        -DWGX_SPIRV=1
+        -DWGX_SPIRV_DUMP_DEFAULT_DIR="${CMAKE_BINARY_DIR}"
+    )
+    target_link_libraries(skity_unit_test PRIVATE
+        SPIRV-Headers::SPIRV-Headers
+    )
+endif()
+
 if(SKITY_ENABLE_FONT_HARNESS AND TARGET skity_font_harness)
     target_sources(skity_unit_test PRIVATE
         ${CMAKE_SOURCE_DIR}/harness/font/tests/unit/font_harness_self_test.cc
@@ -175,9 +189,7 @@ if (${SKITY_VK_BACKEND})
 
     add_executable(skity_vulkan_unit_test
         gpu/vk/gpu_context_vk_test.cc
-        wgx/wgx_spirv_smoke_test.cc
         wgx/wgx_vulkan_pipeline_test.cc
-        wgx/wgx_value_test.cc
     )
 
     target_include_directories(skity_vulkan_unit_test
@@ -185,11 +197,9 @@ if (${SKITY_VK_BACKEND})
         ${CMAKE_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/module/wgx
     )
-    target_compile_definitions(skity_vulkan_unit_test PRIVATE -DWGX_VULKAN=1)
     if (${SKITY_VK_TEST_USE_SYSTEM_LOADER})
         target_compile_definitions(skity_vulkan_unit_test PRIVATE -DSKITY_VK_TEST_USE_SYSTEM_LOADER=1)
     endif()
-    target_compile_definitions(skity_vulkan_unit_test PRIVATE -DWGX_SPIRV_DUMP_DEFAULT_DIR="${CMAKE_BINARY_DIR}")
     target_include_directories(skity_vulkan_unit_test PRIVATE
         ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include
         ${CMAKE_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include
@@ -199,7 +209,6 @@ if (${SKITY_VK_BACKEND})
         gmock_main
         glm::glm-header-only
         wgsl-cross
-        SPIRV-Headers::SPIRV-Headers
         ${SKITY_VK_TEST_LOADER_LIBRARIES}
     )
     if (NOT USE_THIRD_PARTY_ZLIB)

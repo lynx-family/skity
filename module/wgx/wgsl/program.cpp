@@ -13,7 +13,7 @@
 #include "wgsl/scanner.h"
 #include "wgsl/wgsl_function.h"
 
-#ifdef WGX_VULKAN
+#ifdef WGX_SPIRV
 #include "lower/lower_to_ir.h"
 #include "spirv/emitter.h"
 #endif
@@ -120,7 +120,7 @@ Result Program::WriteToSpirv(const char* entry_point,
                              std::optional<CompilerContext> ctx) const {
   (void)options;
   (void)ctx;
-#ifdef WGX_VULKAN
+#ifdef WGX_SPIRV
   auto func = module_->GetFunction(entry_point);
 
   if (func == nullptr || !func->IsEntryPoint()) {

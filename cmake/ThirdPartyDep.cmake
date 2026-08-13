@@ -35,7 +35,6 @@ if(${SKITY_VK_BACKEND})
   target_include_directories(skity PRIVATE third_party/Vulkan-Headers/include)
   # set vulkan headers
   target_include_directories(skity PRIVATE third_party/VulkanMemoryAllocator/include)
-  add_subdirectory(third_party/SPIRV-Headers)
 
   # Detect Linux display server headers for Vulkan platform extensions
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -56,6 +55,10 @@ if(${SKITY_VK_BACKEND})
 elseif(${SKITY_HW_RENDERER})
   # Only Vulkan headers are needed for stub compilation when VK backend is off
   target_include_directories(skity PRIVATE third_party/Vulkan-Headers/include)
+endif()
+
+if(${WGX_SPIRV_BACKEND})
+  add_subdirectory(third_party/SPIRV-Headers)
 endif()
 
 # json parser

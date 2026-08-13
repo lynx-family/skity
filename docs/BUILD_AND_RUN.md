@@ -76,6 +76,7 @@ There are several options you can use to configure the build:
     * `SKITY_GL_BACKEND` - Option for OpenGL backend. Default is ON. Pass `-DSKITY_GL_BACKEND=OFF` in command line to disable it. (OpenGL/GLES is almost supported by all platforms, so it is recommended not to turn this option off.)
     * `SKITY_MTL_BACKEND` - Option for Metal backend. Not available on Windows and Linux but open by default on Apple platform.
     * `SKITY_VK_BACKEND` - Option for Vulkan backend (experimental). Default is OFF. Pass `-DSKITY_VK_BACKEND=ON` in command line to enable it. Requires Vulkan at least version 1.1. Skity will attempt to create the highest available Vulkan version and leverage extensions such as dynamic rendering when supported.
+    * `WGX_SPIRV_BACKEND` - Option for WGX SPIR-V generation. Defaults to the value of `SKITY_VK_BACKEND`, but can be enabled independently without a Vulkan runtime by passing `-DWGX_SPIRV_BACKEND=ON`.
     * `SKITY_LOG` - Option for logging. Default is OFF since print log may slow down the performance. Pass `-DSKITY_LOG=ON` in command line to enable it.
 
 * Options for build optional modules:
