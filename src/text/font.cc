@@ -35,7 +35,7 @@ Font::Font(std::shared_ptr<Typeface> typeface, float size, float scaleX,
       size_(size),
       scale_x_(scaleX),
       skew_x_(skewX),
-      flags_(0),
+      flags_(kBaselineSnap_PrivFlag),
       edging_(static_cast<uint8_t>(Edging::kAntiAlias)) {}
 
 void Font::SetForceAutoHinting(bool predicate) {
@@ -47,8 +47,7 @@ void Font::SetEmbeddedBitmaps(bool predicate) {
 }
 
 void Font::SetSubpixel(bool predicate) {
-  // flags_ = SetClearMask(flags_, predicate, kSubpixel_PrivFlag);
-  (void)predicate;
+  flags_ = SetClearMask(flags_, predicate, kSubpixel_PrivFlag);
 }
 
 void Font::SetLinearMetrics(bool predicate) {
@@ -60,8 +59,7 @@ void Font::SetEmbolden(bool predicate) {
 }
 
 void Font::SetBaselineSnap(bool predicate) {
-  // flags_ = SetClearMask(flags_, predicate, kBaselineSnap_PrivFlag);
-  (void)predicate;
+  flags_ = SetClearMask(flags_, predicate, kBaselineSnap_PrivFlag);
 }
 
 void Font::SetSize(float textSize) { size_ = ValidSize(textSize); }

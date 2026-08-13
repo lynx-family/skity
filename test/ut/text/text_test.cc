@@ -86,14 +86,11 @@ std::shared_ptr<Typeface> ColorfulTypeface::OnMakeVariation(
 
 }  // namespace skity
 
-TEST(Font, GlyphPositioningFlagsAreDisabled) {
+TEST(Font, BaselineSnapIsEnabledByDefault) {
   skity::Font font;
-  EXPECT_FALSE(font.IsSubpixel());
-  EXPECT_FALSE(font.IsBaselineSnap());
+  EXPECT_TRUE(font.IsBaselineSnap());
 
-  font.SetSubpixel(true);
-  font.SetBaselineSnap(true);
-  EXPECT_FALSE(font.IsSubpixel());
+  font.SetBaselineSnap(false);
   EXPECT_FALSE(font.IsBaselineSnap());
 }
 
