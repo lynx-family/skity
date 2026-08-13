@@ -83,6 +83,7 @@ target_sources(
     ${CMAKE_CURRENT_LIST_DIR}/src/quaternion_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/data_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/stroke_c.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/bridge_c.cpp
 )
 
 if (${SKITY_BUILD_INSTALL})
@@ -91,6 +92,13 @@ if (${SKITY_BUILD_INSTALL})
     "${CMAKE_CURRENT_LIST_DIR}/include/skity_c"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.h"
+  )
+
+  install(
+    DIRECTORY
+    "${CMAKE_CURRENT_LIST_DIR}/include/skity_hpp"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.hpp"
   )
 
   install(
