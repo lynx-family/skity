@@ -15,7 +15,7 @@
 
 namespace skity {
 
-TEST(AtlasGlyphTest, GlyphKeyHashIgnoresPadding) {
+TEST(AtlasGlyphTest, GlyphKeyUsesDenseObjectRepresentation) {
   // Allocate two buffers with different "garbage" bytes, ensuring proper
   // alignment.
   alignas(GlyphKey) char buffer1[sizeof(GlyphKey)];
@@ -39,19 +39,31 @@ TEST(AtlasGlyphTest, GlyphKeyHashIgnoresPadding) {
   desc.fake_bold = 0;
   desc.hinting = 0;
 
-  // Use placement new to construct GlyphKey in the dirty buffers.
-  // The padding bytes will retain the garbage values (0xAA and 0xBB).
+  // Construct in prefilled storage to verify that initialization overwrites
+  // the complete dense key representation.
   GlyphKey* key1 = new (buffer1) GlyphKey(id, desc);
   GlyphKey* key2 = new (buffer2) GlyphKey(id, desc);
 
   GlyphKey::Hash hasher;
 
-  // If the hash function hashes the entire struct including padding,
-  // this EXPECT_EQ will fail.
+  EXPECT_EQ(std::memcmp(key1, key2, sizeof(GlyphKey)), 0);
+  EXPECT_TRUE(GlyphKey::Equal{}(*key1, *key2));
   EXPECT_EQ(hasher(*key1), hasher(*key2));
 
   key1->~GlyphKey();
   key2->~GlyphKey();
+}
+
+TEST(ScalerContextDescTest, SignedZeroHasDistinctBitwiseIdentity) {
+  ScalerContextDesc positive_zero{};
+  ScalerContextDesc negative_zero{};
+  positive_zero.skew_x = 0.f;
+  negative_zero.skew_x = -0.f;
+
+  EXPECT_NE(
+      std::memcmp(&positive_zero, &negative_zero, sizeof(ScalerContextDesc)),
+      0);
+  EXPECT_NE(positive_zero, negative_zero);
 }
 
 TEST(GlyphBitmapDataTest, ResolvesTightAndExplicitRowBytes) {
@@ -66,6 +78,27 @@ TEST(GlyphBitmapDataTest, ResolvesTightAndExplicitRowBytes) {
 
   bitmap.row_bytes = 16;
   EXPECT_EQ(bitmap.RowBytes(), 16u);
+}
+
+TEST(AtlasBitmapTest, KeepsBitwiseDistinctGlyphKeysSeparate) {
+  uint8_t source = 0xFF;
+  GlyphBitmapData bitmap;
+  bitmap.width = 1;
+  bitmap.height = 1;
+  bitmap.buffer = &source;
+  bitmap.format = BitmapFormat::kGray8;
+
+  ScalerContextDesc positive_zero{};
+  ScalerContextDesc negative_zero{};
+  positive_zero.skew_x = 0.f;
+  negative_zero.skew_x = -0.f;
+
+  AtlasBitmap atlas(16, 16, 1);
+  const glm::ivec4 inserted =
+      atlas.GenerateGlyphRegion(GlyphKey(7, positive_zero), bitmap);
+  ASSERT_NE(inserted, INVALID_LOC);
+  EXPECT_EQ(atlas.GetGlyphRegion(GlyphKey(7, positive_zero)), inserted);
+  EXPECT_EQ(atlas.GetGlyphRegion(GlyphKey(7, negative_zero)), INVALID_LOC);
 }
 
 TEST(AtlasBitmapTest, CopiesGlyphWithPaddedRows) {

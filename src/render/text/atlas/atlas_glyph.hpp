@@ -5,6 +5,7 @@
 #ifndef SRC_RENDER_TEXT_ATLAS_ATLAS_GLYPH_HPP
 #define SRC_RENDER_TEXT_ATLAS_ATLAS_GLYPH_HPP
 
+#include <cstring>
 #include <glm/glm.hpp>
 #include <memory>
 #include <skity/text/glyph.hpp>
@@ -74,8 +75,7 @@ struct GlyphKey {
 
   struct Equal {
     bool operator()(const GlyphKey& lhs, const GlyphKey& rhs) const {
-      return lhs.glyph_id == rhs.glyph_id &&
-             lhs.scaler_context_desc == rhs.scaler_context_desc;
+      return std::memcmp(&lhs, &rhs, sizeof(GlyphKey)) == 0;
     }
   };
 };

@@ -41,7 +41,7 @@ Color ScalerContextDesc::GetGlyphImageForegroundColor(const Font& font,
 
 ScalerContextDesc ScalerContextDesc::MakeCanonicalized(const Font& font,
                                                        const Paint& paint) {
-  ScalerContextDesc desc;
+  ScalerContextDesc desc{};
   desc.typeface_id = font.GetTypeface()->TypefaceId();
   desc.text_size = font.GetSize();
   desc.scale_x = font.GetScaleX();
@@ -63,7 +63,7 @@ ScalerContextDesc ScalerContextDesc::MakeCanonicalized(const Font& font,
 ScalerContextDesc ScalerContextDesc::MakeTransformed(
     const Font& font, const Paint& paint, float context_scale,
     const Matrix22& transform) {
-  ScalerContextDesc desc;
+  ScalerContextDesc desc{};
   desc.typeface_id = font.GetTypeface()->TypefaceId();
   desc.text_size = font.GetSize();
   desc.scale_x = font.GetScaleX();
