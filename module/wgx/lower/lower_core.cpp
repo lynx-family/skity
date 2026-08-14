@@ -260,8 +260,11 @@ bool Lowerer::LowerFunction(const ast::Function* function,
   ir_function_->entry_block_id = entry_block.id;
   ir_function_->blocks.push_back(std::move(entry_block));
   current_block_id_ = ir_function_->entry_block_id;
-  ir_function_->stage =
-      is_entry_point ? ir_module_->stage : ir::PipelineStage::kUnknown;
+  // Lowering currently builds an IR module for one entry point, so every
+  // reachable helper executes in the same shader stage. If an IR module ever
+  // contains multiple entry points, revisit this because a shared helper may
+  // be reachable from different stages.
+  ir_function_->stage = ir_module_->stage;
   ir_function_->return_type = ResolveType(function->return_type);
 
   bool ok = RegisterFunctionParameters();

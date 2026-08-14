@@ -267,6 +267,71 @@ fn fs_main() -> @location(0) vec4<f32> {
 #endif
 }
 
+void ExpectDiscardLowers(const char* source) {
+  auto program = wgx::Program::Parse(source);
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  auto glsl_result = program->WriteToGlsl("fs_main", glsl_options);
+  ASSERT_TRUE(glsl_result.success);
+  EXPECT_NE(glsl_result.content.find("discard;"), std::string::npos);
+
+  wgx::MslOptions msl_options;
+  auto msl_result = program->WriteToMsl("fs_main", msl_options);
+  ASSERT_TRUE(msl_result.success);
+  EXPECT_NE(msl_result.content.find("discard_fragment();"), std::string::npos);
+
+#if defined(WGX_SPIRV)
+  wgx::SpirvOptions spirv_options;
+  auto spirv_result = program->WriteToSpirv("fs_main", spirv_options);
+  ASSERT_TRUE(spirv_result.success);
+
+  bool emits_kill = false;
+  for (size_t offset = 5u; offset < spirv_result.spirv.size();) {
+    const uint32_t instruction = spirv_result.spirv[offset];
+    const uint32_t word_count = instruction >> SpvWordCountShift;
+    ASSERT_NE(word_count, 0u);
+    if (static_cast<SpvOp>(instruction & SpvOpCodeMask) == SpvOpKill) {
+      emits_kill = true;
+      break;
+    }
+    offset += word_count;
+  }
+  EXPECT_TRUE(emits_kill);
+#endif
+}
+
+TEST(WgxBackendNameResolutionTest, LowersDiscardInEntryPoint) {
+  ExpectDiscardLowers(R"(
+@fragment
+fn fs_main(@builtin(position) position: vec4<f32>)
+    -> @location(0) vec4<f32> {
+  if position.x < 0.0 {
+    discard;
+  }
+  return vec4<f32>(1.0);
+}
+)");
+}
+
+TEST(WgxBackendNameResolutionTest, LowersDiscardInHelper) {
+  ExpectDiscardLowers(R"(
+fn discard_if_negative(value: f32) {
+  if value < 0.0 {
+    discard;
+  }
+}
+
+@fragment
+fn fs_main(@builtin(position) position: vec4<f32>)
+    -> @location(0) vec4<f32> {
+  discard_if_negative(position.x);
+  return vec4<f32>(1.0);
+}
+)");
+}
+
 TEST(WgxBackendNameResolutionTest, RejectsBooleanVectorComparison) {
   auto program = wgx::Program::Parse(R"(
 @fragment

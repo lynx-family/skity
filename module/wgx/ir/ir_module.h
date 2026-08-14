@@ -146,6 +146,7 @@ struct InputVariable {
 enum class InstKind {
   kReturn,
   kUnreachable,
+  kDiscard,
   kVariable,
   kLoad,
   kStore,
@@ -275,7 +276,8 @@ struct Instruction {
 
   bool IsTerminator() const {
     return kind == InstKind::kReturn || kind == InstKind::kUnreachable ||
-           kind == InstKind::kBranch || kind == InstKind::kCondBranch;
+           kind == InstKind::kDiscard || kind == InstKind::kBranch ||
+           kind == InstKind::kCondBranch;
   }
 };
 

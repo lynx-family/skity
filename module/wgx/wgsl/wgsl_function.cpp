@@ -80,7 +80,8 @@ class FunctionCreator : public ast::AstVisitor {
       this->Visit(param);
     }
 
-    if (!function->return_type.IsBuiltin()) {
+    if (function->return_type.expr != nullptr &&
+        !function->return_type.IsBuiltin()) {
       this->Visit(function->return_type.expr);
     }
 
