@@ -20,6 +20,7 @@
 #include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
 #include "src/render/hw/draw/geometry/wgsl_coverage_aa_tile_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
+#include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/draw/hw_wgsl_shader_writer.hpp"
 
 namespace {
@@ -111,6 +112,31 @@ bool ContainsDecoration(const std::vector<uint32_t>& words,
 
     if (opcode == SpvOpDecorate && word_count >= 3u &&
         words[offset + 2u] == static_cast<uint32_t>(decoration)) {
+      return true;
+    }
+
+    offset += word_count;
+  }
+
+  return false;
+}
+
+bool ContainsDecorationValue(const std::vector<uint32_t>& words,
+                             SpvDecoration decoration, uint32_t value) {
+  size_t offset = 5u;
+  while (offset < words.size()) {
+    const uint32_t inst = words[offset];
+    const uint16_t word_count =
+        static_cast<uint16_t>(inst >> SpvWordCountShift);
+    const auto opcode = static_cast<SpvOp>(inst & SpvOpCodeMask);
+
+    if (word_count == 0u) {
+      return false;
+    }
+
+    if (opcode == SpvOpDecorate && word_count >= 4u &&
+        words[offset + 2u] == static_cast<uint32_t>(decoration) &&
+        words[offset + 3u] == value) {
       return true;
     }
 
@@ -318,6 +344,28 @@ fn fs_main() {
   ASSERT_GE(words.size(), 5u);
   EXPECT_TRUE(ContainsInstruction(words, SpvOpEntryPoint));
   EXPECT_TRUE(ContainsExecutionMode(words, SpvExecutionModeOriginUpperLeft));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsDiscard) {
+  auto program = wgx::Program::Parse(R"(
+@fragment
+fn fs_main(@builtin(position) position: vec4<f32>)
+    -> @location(0) vec4<f32> {
+  if position.x < 0.0 {
+    discard;
+  }
+  return vec4<f32>(1.0);
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  EXPECT_TRUE(ContainsInstruction(result.spirv, SpvOpKill));
 }
 
 TEST(WgxSpirvSmokeTest, EmitsCoverageAAConflationCorrectionShader) {
@@ -1151,6 +1199,33 @@ fn fs_main() -> @location(0) vec4<f32> {
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationLocation));
+}
+
+TEST(WgxSpirvSmokeTest, EmitsDualSourceOutputIndexDecorations) {
+  auto program = wgx::Program::Parse(R"(
+struct FSOutput {
+  @location(0) @blend_src(0) primary: vec4<f32>,
+  @location(0) @blend_src(1) secondary: vec4<f32>,
+}
+
+@fragment
+fn fs_main() -> FSOutput {
+  var output: FSOutput;
+  output.primary = vec4<f32>(1.0);
+  output.secondary = vec4<f32>(0.5);
+  return output;
+}
+)");
+
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::SpirvOptions options;
+  auto result = program->WriteToSpirv("fs_main", options);
+
+  ASSERT_TRUE(result.success);
+  EXPECT_TRUE(ContainsDecorationValue(result.spirv, SpvDecorationIndex, 0u));
+  EXPECT_TRUE(ContainsDecorationValue(result.spirv, SpvDecorationIndex, 1u));
 }
 
 TEST(WgxSpirvSmokeTest, EmitsDFdxBuiltinForFragmentShader) {
@@ -4185,8 +4260,10 @@ TEST(WgxSpirvSmokeTest, EmitsGradientLinear4OffsetFastTextWGSL) {
   skity::WGSLGradientTextFragment gradient_fragment(
       skity::WGSLGradientTextFragment::BatchedTexture{}, {}, gradient_info,
       skity::Shader::GradientType::kLinear, 1.0f);
+  skity::WGSLTextGradientGeometry text_geometry({}, {}, {}, {});
+  skity::HWWGSLShaderWriter shader_writer(&text_geometry, &gradient_fragment);
 
-  auto program = wgx::Program::Parse(gradient_fragment.GenSourceWGSL());
+  auto program = wgx::Program::Parse(shader_writer.GenFSSourceWGSL());
 
   ASSERT_NE(program, nullptr);
   ASSERT_FALSE(program->GetDiagnosis().has_value());

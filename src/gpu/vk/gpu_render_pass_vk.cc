@@ -706,7 +706,7 @@ bool RecordDrawCommands(const std::shared_ptr<const VulkanContextState>& state,
     // color-attachment writes (advanced or plain). BY_REGION keeps the
     // dependency tile-local on TBDR hardware (no main-memory round-trip).
     const auto& blend_target = pipeline->GetDescriptor().target;
-    if (blend_target.blend_op != GPUBlendOperation::kAdd &&
+    if (IsAdvancedBlendOperation(blend_target.blend_op) &&
         state->IsAdvancedBlendEnabled() && !state->IsAdvancedBlendCoherent()) {
       VkMemoryBarrier blend_barrier = {};
       blend_barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;

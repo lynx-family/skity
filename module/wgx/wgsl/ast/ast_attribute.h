@@ -124,6 +124,17 @@ struct BindingAttribute : public Attribute {
   int64_t index;
 };
 
+struct BlendSrcAttribute : public Attribute {
+  explicit BlendSrcAttribute(int64_t index);
+  ~BlendSrcAttribute() override = default;
+
+  std::string GetName() const override;
+
+  AttributeType GetType() const override;
+
+  int64_t index;
+};
+
 struct BuiltinAttribute : public Attribute {
   explicit BuiltinAttribute(std::string_view name);
   ~BuiltinAttribute() override = default;

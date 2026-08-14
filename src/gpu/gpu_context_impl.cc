@@ -80,6 +80,7 @@ std::unique_ptr<GPURenderTarget> GPUContextImpl::CreateRenderTarget(
   GPUTextureDescriptor texture_desc{};
   texture_desc.usage =
       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding) |
+      static_cast<GPUTextureUsageMask>(GPUTextureUsage::kCopySrc) |
       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment);
   texture_desc.format = GPUTextureFormat::kRGBA8Unorm;
   texture_desc.width = desc.width;

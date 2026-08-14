@@ -4,6 +4,7 @@
 
 #include "src/render/hw/draw/wgx_utils.hpp"
 
+#include "src/effect/color_filter_base.hpp"
 #include "src/effect/gradient_fallback.hpp"
 #include "src/effect/pixmap_shader.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
@@ -17,6 +18,7 @@
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 #include "src/render/hw/draw/wgx_filter.hpp"
 #include "src/render/hw/draw/wgx_programmable_blending.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
@@ -178,6 +180,21 @@ bool SetupImageBoundsInfo(const wgx::BindGroupEntry* image_bounds_entry,
   image_bounds_struct->GetMember("inv_matrix")
       ->type->SetData(&local_matrix, sizeof(Matrix));
   return true;
+}
+
+bool IsPaintSourceOpaque(const Paint& paint) {
+  if (paint.GetAlphaF() != 1.f) {
+    return false;
+  }
+
+  const auto& shader = paint.GetShader();
+  if (shader != nullptr && !shader->IsOpaque()) {
+    return false;
+  }
+
+  const auto& color_filter = paint.GetColorFilter();
+  return color_filter == nullptr ||
+         As_CFB(color_filter.get())->IsAlphaUnchanged();
 }
 
 WGXGradientFragment::WGXGradientFragment(const Shader::GradientInfo& info,
@@ -808,7 +825,7 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
 }
 
 void ConfigureShadingFragment(HWDrawContext* context, const Paint& paint,
-                              DstReadStrategy dst_read_strategy,
+                              const HWBlendPlan& blend_plan,
                               HWWGSLFragment* fragment) {
   if (fragment == nullptr) {
     return;
@@ -818,14 +835,21 @@ void ConfigureShadingFragment(HWDrawContext* context, const Paint& paint,
     fragment->SetFilter(WGXFilterFragment::Make(paint.GetColorFilter().get()));
   }
 
-  if (!IsAdvancedBlendMode(paint.GetBlendMode())) {
+  ConfigureFragmentBlending(context, blend_plan, fragment);
+}
+
+void ConfigureFragmentBlending(HWDrawContext* context,
+                               const HWBlendPlan& blend_plan,
+                               HWWGSLFragment* fragment) {
+  if (fragment == nullptr) {
     return;
   }
 
-  if (dst_read_strategy != DstReadStrategy::kNativeBlend) {
-    fragment->SetProgrammableBlending(
-        WGXProgrammableBlending::Make(paint.GetBlendMode(), dst_read_strategy));
-  } else if (context->gpuContext->GetGPUDevice()
+  if (blend_plan.strategy == HWBlendStrategy::kProgrammable) {
+    fragment->SetProgrammableBlending(WGXProgrammableBlending::Make(
+        blend_plan.blend_mode, blend_plan.dst_read_strategy));
+  } else if (IsAdvancedBlendOperation(blend_plan.formula.operation) &&
+             context->gpuContext->GetGPUDevice()
                  ->GetCaps()
                  .native_blend_shader_variant) {
     fragment->SetUsesNativeAdvancedBlend(true);

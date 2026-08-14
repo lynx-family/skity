@@ -249,14 +249,13 @@ struct Payload {
   value: f32,
 }
 
-fn helper(param: f32) -> f32 {
-  let local: f32 = param;
+fn helper(param : f32)->f32 {
+  let local : f32 = param;
   return local;
 }
 
-@vertex
-fn vs_main() -> @builtin(position) vec4<f32> {
-  var output: Payload;
+@vertex fn vs_main()->@builtin(position) vec4<f32> {
+  var output : Payload;
   output.value = helper(1.0);
   return vec4<f32>(output.value, 0.0, 0.0, 1.0);
 }
@@ -298,6 +297,94 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   ASSERT_NE(local_decl_stmt->variable->name, nullptr);
   EXPECT_NE(result.decl_symbols.find(local_decl_stmt->variable->name),
             result.decl_symbols.end());
+}
+
+TEST_F(ResolverTest, AcceptsDualSourceFragmentOutput) {
+  auto result = Resolve(R"(
+struct FSOutput {
+  @location(0) @blend_src(0) primary: vec4<f32>,
+  @location(0) @blend_src(1) secondary: vec4<f32>,
+}
+
+@fragment
+fn fs_main() -> FSOutput {
+  return FSOutput(vec4<f32>(1.0), vec4<f32>(1.0));
+}
+)");
+
+  EXPECT_TRUE(result.diagnostics.empty());
+}
+
+TEST_F(ResolverTest, RejectsBlendSourceOnVertexOutput) {
+  auto result = Resolve(R"(
+struct VSOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) @blend_src(0) primary: vec4<f32>,
+  @location(0) @blend_src(1) secondary: vec4<f32>,
+}
+
+@vertex
+fn vs_main() -> VSOutput {
+  return VSOutput(vec4<f32>(0.0), vec4<f32>(1.0), vec4<f32>(1.0));
+}
+)");
+
+  ASSERT_FALSE(result.diagnostics.empty());
+  EXPECT_NE(result.diagnostics.front().message.find("fragment outputs"),
+            std::string::npos);
+}
+
+TEST_F(ResolverTest, RejectsBlendSourceOnFragmentInput) {
+  auto result = Resolve(R"(
+struct FSInput {
+  @location(0) @blend_src(0) color: vec4<f32>,
+}
+
+@fragment
+fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
+  return input.color;
+}
+)");
+
+  ASSERT_FALSE(result.diagnostics.empty());
+  EXPECT_NE(result.diagnostics.front().message.find("fragment outputs"),
+            std::string::npos);
+}
+
+TEST_F(ResolverTest, RejectsBlendSourceAtNonzeroLocation) {
+  auto result = Resolve(R"(
+struct FSOutput {
+  @location(1) @blend_src(0) primary: vec4<f32>,
+  @location(1) @blend_src(1) secondary: vec4<f32>,
+}
+
+@fragment
+fn fs_main() -> FSOutput {
+  return FSOutput(vec4<f32>(1.0), vec4<f32>(1.0));
+}
+)");
+
+  ASSERT_FALSE(result.diagnostics.empty());
+  EXPECT_NE(result.diagnostics.front().message.find("location 0"),
+            std::string::npos);
+}
+
+TEST_F(ResolverTest, RejectsDuplicateBlendSourceIndex) {
+  auto result = Resolve(R"(
+struct FSOutput {
+  @location(0) @blend_src(0) primary: vec4<f32>,
+  @location(0) @blend_src(0) secondary: vec4<f32>,
+}
+
+@fragment
+fn fs_main() -> FSOutput {
+  return FSOutput(vec4<f32>(1.0), vec4<f32>(1.0));
+}
+)");
+
+  ASSERT_FALSE(result.diagnostics.empty());
+  EXPECT_NE(result.diagnostics.front().message.find("duplicate"),
+            std::string::npos);
 }
 
 TEST_F(ResolverTest, AcceptsBuiltinIdentifierReference) {

@@ -5,6 +5,7 @@
 #include "src/gpu/gl/gpu_device_gl.hpp"
 
 #include <cstring>
+#include <string_view>
 
 #include "src/gpu/gl/gl_interface.hpp"
 #include "src/gpu/gl/gpu_buffer_gl.hpp"
@@ -16,18 +17,106 @@
 #include "src/tracing.hpp"
 
 namespace skity {
+namespace {
+
+constexpr int ParseDecimal(std::string_view value, size_t offset) {
+  if (offset >= value.size() || value[offset] < '0' || value[offset] > '9') {
+    return -1;
+  }
+
+  int result = 0;
+  while (offset < value.size() && value[offset] >= '0' &&
+         value[offset] <= '9') {
+    result = result * 10 + value[offset++] - '0';
+  }
+  return result;
+}
+
+constexpr int GetAdrenoModel(std::string_view renderer) {
+  constexpr std::string_view kAdrenoPrefix = "Adreno (TM) ";
+  auto offset = renderer.find(kAdrenoPrefix);
+  if (offset != std::string_view::npos) {
+    return ParseDecimal(renderer, offset + kAdrenoPrefix.size());
+  }
+
+  if (renderer.size() >= 2 && renderer[0] == 'F' && renderer[1] == 'D') {
+    return ParseDecimal(renderer, 2);
+  }
+  return -1;
+}
+
+constexpr bool HasBrokenFramebufferFetch(std::string_view renderer) {
+  // Adreno 5xx advertises GL_EXT_shader_framebuffer_fetch, but fetching the
+  // destination is known to produce incorrect results (for example, Galaxy
+  // S7). The extension must not be exposed as a usable capability.
+  int adreno_model = GetAdrenoModel(renderer);
+  return adreno_model >= 500 && adreno_model < 600;
+}
+
+constexpr bool HasBrokenNativeAdvancedBlend(std::string_view vendor,
+                                            std::string_view renderer,
+                                            std::string_view version) {
+  // Skia disables KHR advanced blend equations on these driver families after
+  // observing major correctness issues. Prefer the programmable fallback even
+  // when the driver advertises the extension.
+  int adreno_model = GetAdrenoModel(renderer);
+  bool is_intel_driver = vendor.find("Intel") != std::string_view::npos &&
+                         version.find("Mesa") == std::string_view::npos;
+  bool is_angle_intel = renderer.find("ANGLE") != std::string_view::npos &&
+                        renderer.find("Intel") != std::string_view::npos;
+  return (adreno_model >= 400 && adreno_model < 600) ||
+         vendor.find("ARM") != std::string_view::npos || is_intel_driver ||
+         is_angle_intel;
+}
+
+std::string_view GetGLString(uint32_t name) {
+  auto* value = GL_CALL(GetString, name);
+  return value == nullptr
+             ? std::string_view{}
+             : std::string_view{reinterpret_cast<const char*>(value)};
+}
+
+static_assert(HasBrokenFramebufferFetch("Adreno (TM) 530"));
+static_assert(!HasBrokenFramebufferFetch("Adreno (TM) 640"));
+static_assert(HasBrokenNativeAdvancedBlend("Qualcomm", "Adreno (TM) 430", ""));
+static_assert(HasBrokenNativeAdvancedBlend("ARM", "Mali-G76", ""));
+static_assert(HasBrokenNativeAdvancedBlend(
+    "Google Inc.", "ANGLE (Intel, Intel UHD Graphics, OpenGL)", ""));
+static_assert(HasBrokenNativeAdvancedBlend("Intel Inc.",
+                                           "Intel Iris OpenGL Engine",
+                                           "4.1 INTEL-20.1.8"));
+static_assert(!HasBrokenNativeAdvancedBlend("Intel", "Mesa Intel(R) Graphics",
+                                            "4.6 Mesa 24.0"));
+static_assert(!HasBrokenNativeAdvancedBlend("Qualcomm", "Adreno (TM) 640", ""));
+
+}  // namespace
 
 GPUDeviceGL::GPUDeviceGL() {
+  InitGLVersion();
   auto gpu_caps = std::make_unique<GPUCaps>();
   auto* gl_interface = GLInterface::GlobalInterface();
+  auto vendor = GetGLString(GL_VENDOR);
+  auto renderer = GetGLString(GL_RENDERER);
+  auto version = GetGLString(GL_VERSION);
+
+  // An advertised extension is not sufficient on these drivers. Match Skia's
+  // policies so the resolver rejects known-broken framebuffer-fetch and native
+  // advanced-blend paths and chooses a safe programmable fallback.
   gpu_caps->supports_framebuffer_fetch =
-      gl_interface->ext_shader_framebuffer_fetch;
-  gpu_caps->supports_native_advanced_blend =
-      gl_interface->ext_khr_blend_equation_advanced;
+      gl_interface->ext_shader_framebuffer_fetch &&
+      !HasBrokenFramebufferFetch(renderer);
+  bool supports_native_advanced_blend =
+      gl_interface->ext_khr_blend_equation_advanced &&
+      !HasBrokenNativeAdvancedBlend(vendor, renderer, version);
+  gpu_caps->supports_native_advanced_blend = supports_native_advanced_blend;
   gpu_caps->supports_native_advanced_blend_coherent =
+      supports_native_advanced_blend &&
       gl_interface->ext_khr_blend_equation_advanced_coherent;
-  gpu_caps->native_blend_shader_variant =
-      gl_interface->ext_khr_blend_equation_advanced;
+  gpu_caps->native_blend_shader_variant = supports_native_advanced_blend;
+  gpu_caps->supports_dual_source_blending =
+      is_gles_ ? gl_interface->ext_blend_func_extended
+               : gl_version_major_ > 3 ||
+                     (gl_version_major_ == 3 && gl_version_minor_ >= 3);
   InitCaps(std::move(gpu_caps));
 }
 
@@ -40,8 +129,9 @@ std::unique_ptr<GPUBuffer> GPUDeviceGL::CreateBuffer(
 
 std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunction(
     const GPUShaderFunctionDescriptor& desc) {
-  if (gl_version_major_ == 0 && gl_version_minor_ == 0) {
-    InitGLVersion();
+  if (desc.features.dual_source_blending &&
+      !GetCaps().supports_dual_source_blending) {
+    return {};
   }
 
   if (desc.source_type == GPUShaderSourceType::kWGX) {
@@ -72,6 +162,10 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunction(
 
 std::unique_ptr<GPURenderPipeline> GPUDeviceGL::CreateRenderPipeline(
     const GPURenderPipelineDescriptor& desc) {
+  if (UsesDualSourceBlending(desc.target) &&
+      !GetCaps().supports_dual_source_blending) {
+    return {};
+  }
   auto pipeline = std::make_unique<GPURenderPipelineGL>(desc);
   if (!pipeline->IsValid()) {
     return nullptr;
@@ -81,6 +175,10 @@ std::unique_ptr<GPURenderPipeline> GPUDeviceGL::CreateRenderPipeline(
 
 std::unique_ptr<GPURenderPipeline> GPUDeviceGL::ClonePipeline(
     GPURenderPipeline* base, const GPURenderPipelineDescriptor& desc) {
+  if (UsesDualSourceBlending(desc.target) &&
+      !GetCaps().supports_dual_source_blending) {
+    return {};
+  }
   if (!base->IsValid()) {
     return std::unique_ptr<GPURenderPipeline>();
   }
@@ -191,6 +289,9 @@ std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunctionFromModule(
   }
   if (desc.features.framebuffer_fetch) {
     options.extensions.push_back("GL_EXT_shader_framebuffer_fetch");
+  }
+  if (is_gles_ && desc.features.dual_source_blending) {
+    options.extensions.push_back("GL_EXT_blend_func_extended");
   }
 
   auto wgx_result = source->module->GetProgram()->WriteToGlsl(

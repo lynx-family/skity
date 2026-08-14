@@ -8,6 +8,7 @@
 #include <wgsl_cross.h>
 
 #include <algorithm>
+#include <array>
 #include <iostream>
 #include <memory>
 #include <skity/skity.hpp>
@@ -25,6 +26,7 @@
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
+#include "src/render/hw/draw/wgx_blend.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace {
@@ -485,9 +487,9 @@ struct FSInput {
 fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
-  var mask_alpha: f32 = 1.0;
-  mask_alpha = input.v_pos_aa;
-  color = color * mask_alpha;
+  var coverage: f32 = 1.0;
+  coverage = input.v_pos_aa;
+  color = color * coverage;
   return color;
 }
 )";
@@ -523,9 +525,9 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
   color = filter_color(color);
-  var mask_alpha: f32 = 1.0;
-  mask_alpha = input.v_pos_aa;
-  color = color * mask_alpha;
+  var coverage: f32 = 1.0;
+  coverage = input.v_pos_aa;
+  color = color * coverage;
   return color;
 }
 )";
@@ -540,7 +542,7 @@ fn blend_overlay_component(s: vec2<f32>, d: vec2<f32>) -> f32 {
     return s.y * d.y - 2.0 * (d.y - d.x) * (s.y - s.x);
   }
 }
-fn blending(src: vec4<f32>, dst: vec4<f32>) -> vec4<f32> {
+fn blending(src: vec4<f32>, dst: vec4<f32>, coverage: f32) -> vec4<f32> {
 var result: vec4<f32>;
 
   result = vec4<f32>(blend_overlay_component(src.ra, dst.ra),
@@ -551,7 +553,7 @@ var result: vec4<f32>;
   var extra: vec4<f32> = dst * (1.0 - src.a) + src * (1.0 - dst.a);
   extra.a = 0.0;
   result += extra;
-      return result;
+      return mix(dst, result, coverage);
 }
 
 @group(1) @binding(0) var<uniform> uColor: vec4<f32>;
@@ -560,7 +562,7 @@ var result: vec4<f32>;
 fn fs_main(@color(0) dst_color: vec4<f32>) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
-  color = blending(color, dst_color);
+  color = blending(color, dst_color, 1.0);
   return color;
 }
 )";
@@ -575,7 +577,7 @@ fn blend_overlay_component(s: vec2<f32>, d: vec2<f32>) -> f32 {
     return s.y * d.y - 2.0 * (d.y - d.x) * (s.y - s.x);
   }
 }
-fn blending(src: vec4<f32>, dst: vec4<f32>) -> vec4<f32> {
+fn blending(src: vec4<f32>, dst: vec4<f32>, coverage: f32) -> vec4<f32> {
 var result: vec4<f32>;
 
   result = vec4<f32>(blend_overlay_component(src.ra, dst.ra),
@@ -586,7 +588,7 @@ var result: vec4<f32>;
   var extra: vec4<f32> = dst * (1.0 - src.a) + src * (1.0 - dst.a);
   extra.a = 0.0;
   result += extra;
-      return result;
+      return mix(dst, result, coverage);
 }
 
 @group(2) @binding(0) var<uniform> uDstUVMapping: vec4<f32>;
@@ -604,7 +606,7 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
   let dst_uv = input.frag_pos.xy * uDstUVMapping.xy + uDstUVMapping.zw;
   let dst_color = textureSample(uDstTexture, uDstSampler, dst_uv);
-  color = blending(color, dst_color);
+  color = blending(color, dst_color, 1.0);
   return color;
 }
 )";
@@ -742,9 +744,9 @@ struct FSInput {
 fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = generate_gradient_color(input.f_param_pos);
-  var mask_alpha: f32 = 1.0;
-  mask_alpha = input.v_pos_aa;
-  color = color * mask_alpha;
+  var coverage: f32 = 1.0;
+  coverage = input.v_pos_aa;
+  color = color * coverage;
   return color;
 }
 )";
@@ -857,9 +859,9 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
 
   color *= image_color_info.global_alpha;
 
-  var mask_alpha: f32 = 1.0;
-  mask_alpha = input.v_pos_aa;
-  color = color * mask_alpha;
+  var coverage: f32 = 1.0;
+  coverage = input.v_pos_aa;
+  color = color * coverage;
   return color;
 }
 )";
@@ -1107,9 +1109,9 @@ struct FSInput {
 fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = vec4<f32>(input.f_color.rgb * input.f_color.a, input.f_color.a);
-  var mask_alpha: f32 = 1.0;
-  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(round(input.v_fs_packed.z)), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
-  color = color * mask_alpha;
+  var coverage: f32 = 1.0;
+  coverage = calculate_mask_alpha(input.v_fs_packed.xy, i32(round(input.v_fs_packed.z)), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
+  color = color * coverage;
   return color;
 }
 )";
@@ -1413,9 +1415,9 @@ struct FSInput {
 fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = generate_gradient_color(input.f_param_pos);
-  var mask_alpha: f32 = 1.0;
-  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(round(input.v_fs_packed.z)), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
-  color = color * mask_alpha;
+  var coverage: f32 = 1.0;
+  coverage = calculate_mask_alpha(input.v_fs_packed.xy, i32(round(input.v_fs_packed.z)), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
+  color = color * coverage;
   return color;
 }
 )";
@@ -1720,9 +1722,9 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   }
 
   color *= image_color_info.global_alpha;
-  var mask_alpha: f32 = 1.0;
-  mask_alpha = calculate_mask_alpha(input.v_fs_packed.xy, i32(round(input.v_fs_packed.z)), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
-  color = color * mask_alpha;
+  var coverage: f32 = 1.0;
+  coverage = calculate_mask_alpha(input.v_fs_packed.xy, i32(round(input.v_fs_packed.z)), input.v_fs_packed.w, input.v_rect, input.v_radii, input.v_stroke, input.v_j, input.v_inv_grid);
+  color = color * coverage;
   return color;
 }
 )";
@@ -1773,6 +1775,32 @@ bool CompareShader(const std::string& actual, const std::string& expected) {
     }
   }
   return true;
+}
+
+void ExpectFragmentShaderCompilesAcrossBackends(const std::string& source,
+                                                bool test_spirv) {
+  auto program = wgx::Program::Parse(source);
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  glsl_options.major_version = 3;
+  glsl_options.minor_version = 3;
+  EXPECT_TRUE(program->WriteToGlsl("fs_main", glsl_options).success);
+
+  wgx::GlslOptions gles_options;
+  gles_options.standard = wgx::GlslOptions::Standard::kES;
+  gles_options.major_version = 3;
+  EXPECT_TRUE(program->WriteToGlsl("fs_main", gles_options).success);
+
+  wgx::MslOptions msl_options;
+  EXPECT_TRUE(program->WriteToMsl("fs_main", msl_options).success);
+
+  if (test_spirv) {
+    wgx::SpirvOptions spirv_options;
+    EXPECT_TRUE(program->WriteToSpirv("fs_main", spirv_options).success);
+  }
 }
 
 }  // namespace
@@ -1839,7 +1867,7 @@ TEST(ShaderWriter, CoverageAAResolvesAlphaInFinalFragment) {
             std::string::npos);
   EXPECT_NE(fs.find("if line_count == u32(0)"), std::string::npos);
   EXPECT_NE(fs.find("var winding: f32 = f32(backdrop);"), std::string::npos);
-  EXPECT_NE(fs.find("mask_alpha = coverage_aa_resolve_pixel("),
+  EXPECT_NE(fs.find("coverage = coverage_aa_resolve_pixel("),
             std::string::npos);
   EXPECT_EQ(fs.find("u32(round(input.v_line_range"), std::string::npos);
   EXPECT_NE(fs.find("winding, is_even_odd"), std::string::npos);
@@ -1864,7 +1892,7 @@ TEST(ShaderWriter, CoverageAAConflationCorrectionUsesDistinctShader) {
             std::string::npos);
   EXPECT_NE(
       fs.find(
-          "mask_alpha = coverage_aa_resolve_pixel_with_conflation_correction("),
+          "coverage = coverage_aa_resolve_pixel_with_conflation_correction("),
       std::string::npos);
   EXPECT_NE(fs.find("sample_y < vec4<f32>(y_max)"), std::string::npos);
   EXPECT_NE(fs.find("var sample_winding: vec4<i32>"), std::string::npos);
@@ -1915,6 +1943,195 @@ TEST(ShaderWriter, CoverageAAConflationCorrectionUsesDistinctShader) {
 
   wgx::MslOptions msl_options;
   EXPECT_TRUE(program->WriteToMsl("fs_main", msl_options).success);
+}
+
+TEST(ShaderWriter, BlendOutputsCompileAcrossBackends) {
+  auto path = MakePath();
+  skity::Paint paint;
+  skity::WGSLPathAAGeometry geometry{path, paint};
+  skity::WGSLSolidColor fragment{paint.GetColor4f()};
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+
+  struct TestCase {
+    skity::HWBlendOutput output;
+    const char* expected;
+  };
+  constexpr std::array<TestCase, 5> kCases = {{
+      {skity::HWBlendOutput::kNone, "color = vec4<f32>(0.0);"},
+      {skity::HWBlendOutput::kCoverage, "color = vec4<f32>(coverage);"},
+      {skity::HWBlendOutput::kSourceTimesCoverage, "color = color * coverage;"},
+      {skity::HWBlendOutput::kOneMinusSourceAlphaTimesCoverage,
+       "color = vec4<f32>((1.0 - color.a) * coverage);"},
+      {skity::HWBlendOutput::kOneMinusSourceTimesCoverage,
+       "color = (vec4<f32>(1.0) - color) * coverage;"},
+  }};
+
+  std::optional<skity::HWFunctionKey> first_fragment_key;
+  skity::HWFunctionKey first_vertex_key;
+  for (const auto& test_case : kCases) {
+    shader_writer.SetBlendOutputs(test_case.output,
+                                  skity::HWBlendOutput::kNone);
+    auto key = shader_writer.GetPipelineKey();
+    auto vertex_key = key.GetFunctionKey(skity::GPUShaderStage::kVertex);
+    auto fragment_key = key.GetFunctionKey(skity::GPUShaderStage::kFragment);
+    if (!first_fragment_key.has_value()) {
+      first_vertex_key = vertex_key;
+      first_fragment_key = fragment_key;
+    } else {
+      EXPECT_EQ(vertex_key, first_vertex_key);
+      EXPECT_NE(fragment_key, first_fragment_key.value());
+    }
+
+    auto program = wgx::Program::Parse(shader_writer.GenFSSourceWGSL());
+    ASSERT_NE(program, nullptr);
+    ASSERT_FALSE(program->GetDiagnosis().has_value());
+    EXPECT_NE(shader_writer.GenFSSourceWGSL().find(test_case.expected),
+              std::string::npos);
+
+    wgx::GlslOptions glsl_options;
+    glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+    glsl_options.major_version = 3;
+    glsl_options.minor_version = 3;
+    EXPECT_TRUE(program->WriteToGlsl("fs_main", glsl_options).success);
+
+    wgx::GlslOptions gles_options;
+    gles_options.standard = wgx::GlslOptions::Standard::kES;
+    gles_options.major_version = 3;
+    EXPECT_TRUE(program->WriteToGlsl("fs_main", gles_options).success);
+
+    wgx::MslOptions msl_options;
+    EXPECT_TRUE(program->WriteToMsl("fs_main", msl_options).success);
+
+    wgx::SpirvOptions spirv_options;
+    EXPECT_TRUE(program->WriteToSpirv("fs_main", spirv_options).success);
+  }
+}
+
+TEST(ShaderWriter, DualSourceOutputsCompileAcrossBackends) {
+  auto path = MakePath();
+  skity::Paint paint;
+  skity::WGSLPathAAGeometry geometry{path, paint};
+  skity::WGSLSolidColor fragment{paint.GetColor4f()};
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+
+  auto single_output_key = shader_writer.GetPipelineKey();
+  shader_writer.SetBlendOutputs(skity::HWBlendOutput::kSourceTimesCoverage,
+                                skity::HWBlendOutput::kCoverage);
+  auto dual_source_key = shader_writer.GetPipelineKey();
+  EXPECT_EQ(single_output_key.GetFunctionKey(skity::GPUShaderStage::kVertex),
+            dual_source_key.GetFunctionKey(skity::GPUShaderStage::kVertex));
+  EXPECT_NE(single_output_key.GetFunctionKey(skity::GPUShaderStage::kFragment),
+            dual_source_key.GetFunctionKey(skity::GPUShaderStage::kFragment));
+
+  auto source = shader_writer.GenFSSourceWGSL();
+  EXPECT_NE(source.find("@location(0) @blend_src(0) primary"),
+            std::string::npos);
+  EXPECT_NE(source.find("@location(0) @blend_src(1) secondary"),
+            std::string::npos);
+  EXPECT_NE(source.find("output.primary = color * coverage;"),
+            std::string::npos);
+  EXPECT_NE(source.find("output.secondary = vec4<f32>(coverage);"),
+            std::string::npos);
+  EXPECT_NE(source.find("return output;"), std::string::npos);
+
+  auto program = wgx::Program::Parse(source);
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+
+  wgx::GlslOptions glsl_options;
+  glsl_options.standard = wgx::GlslOptions::Standard::kDesktop;
+  glsl_options.major_version = 3;
+  glsl_options.minor_version = 3;
+  auto glsl_result = program->WriteToGlsl("fs_main", glsl_options);
+  ASSERT_TRUE(glsl_result.success);
+  EXPECT_NE(glsl_result.content.find("layout(location = 0, index = 0)"),
+            std::string::npos);
+  EXPECT_NE(glsl_result.content.find("layout(location = 0, index = 1)"),
+            std::string::npos);
+
+  wgx::GlslOptions gles_options;
+  gles_options.standard = wgx::GlslOptions::Standard::kES;
+  gles_options.major_version = 3;
+  gles_options.extensions.push_back("GL_EXT_blend_func_extended");
+  auto gles_result = program->WriteToGlsl("fs_main", gles_options);
+  ASSERT_TRUE(gles_result.success);
+  EXPECT_NE(gles_result.content.find(
+                "#extension GL_EXT_blend_func_extended : require"),
+            std::string::npos);
+
+  wgx::MslOptions msl_options;
+  auto msl_result = program->WriteToMsl("fs_main", msl_options);
+  ASSERT_TRUE(msl_result.success);
+  EXPECT_NE(msl_result.content.find("[[color(0),index(0)]]"),
+            std::string::npos);
+  EXPECT_NE(msl_result.content.find("[[color(0),index(1)]]"),
+            std::string::npos);
+
+  wgx::SpirvOptions spirv_options;
+  EXPECT_TRUE(program->WriteToSpirv("fs_main", spirv_options).success);
+}
+
+TEST(ShaderWriter, PorterDuffBlendExpressionsCoverAllCoefficientModes) {
+  for (int32_t value = static_cast<int32_t>(skity::BlendMode::kClear);
+       value <= static_cast<int32_t>(skity::BlendMode::kLastCoeffMode);
+       ++value) {
+    auto mode = static_cast<skity::BlendMode>(value);
+    SCOPED_TRACE(skity::BlendMode_Name(mode));
+    EXPECT_FALSE(skity::BuildPorterDuffBlendExpression(mode, "src", "dst",
+                                                       /*clamp_plus=*/false)
+                     .empty());
+  }
+
+  EXPECT_EQ(skity::BuildPorterDuffBlendExpression(
+                skity::BlendMode::kPlus, "src", "dst", /*clamp_plus=*/false),
+            "src + dst");
+  EXPECT_EQ(skity::BuildPorterDuffBlendExpression(
+                skity::BlendMode::kPlus, "src", "dst", /*clamp_plus=*/true),
+            "min(src + dst, vec4<f32>(1.0))");
+}
+
+TEST(ShaderWriter, CoverageAwareProgrammableBlendingCompilesAcrossBackends) {
+  constexpr std::array<skity::BlendMode, 4> kBlendModes = {
+      skity::BlendMode::kSrc, skity::BlendMode::kSrcIn,
+      skity::BlendMode::kSrcOut, skity::BlendMode::kDstATop};
+  constexpr std::array<skity::DstReadStrategy, 2> kDstReadStrategies = {
+      skity::DstReadStrategy::kFramebufferFetch,
+      skity::DstReadStrategy::kTextureCopy};
+
+  for (auto blend_mode : kBlendModes) {
+    for (auto dst_read_strategy : kDstReadStrategies) {
+      SCOPED_TRACE(skity::BlendMode_Name(blend_mode));
+      SCOPED_TRACE(static_cast<int32_t>(dst_read_strategy));
+
+      auto path = MakePath();
+      skity::Paint paint;
+      skity::WGSLPathAAGeometry geometry{path, paint};
+      skity::WGSLSolidColor fragment{paint.GetColor4f()};
+      fragment.SetProgrammableBlending(
+          skity::WGXProgrammableBlending::Make(blend_mode, dst_read_strategy));
+      skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+
+      auto fs = shader_writer.GenFSSourceWGSL();
+      auto blend_expression = skity::BuildPorterDuffBlendExpression(
+          blend_mode, "src", "dst", /*clamp_plus=*/false);
+      EXPECT_NE(fs.find("result = " + blend_expression + ";"),
+                std::string::npos);
+      EXPECT_NE(fs.find("return mix(dst, result, coverage);"),
+                std::string::npos);
+      EXPECT_NE(fs.find("color = blending(color, dst_color, coverage);"),
+                std::string::npos);
+      EXPECT_EQ(fs.find("color = color * coverage;"), std::string::npos);
+      if (dst_read_strategy == skity::DstReadStrategy::kTextureCopy) {
+        EXPECT_NE(fs.find("if coverage <= 0.0 {\n    discard;\n  }"),
+                  std::string::npos);
+      } else {
+        EXPECT_EQ(fs.find("discard;"), std::string::npos);
+      }
+
+      ExpectFragmentShaderCompilesAcrossBackends(
+          fs, dst_read_strategy == skity::DstReadStrategy::kTextureCopy);
+    }
+  }
 }
 
 TEST(ShaderWriter, PathAAWithSolidColor) {
@@ -2228,7 +2445,8 @@ TEST(ShaderWriter, PathWithSolidColorAndTextureCopyProgrammableBlending) {
           "var dst_color: vec4<f32> = textureSample(uDstTexture, uDstSampler, "
           "dst_uv);"),
       std::string::npos);
-  ASSERT_NE(fs.find("color = blending(color, dst_color);"), std::string::npos);
+  ASSERT_NE(fs.find("color = blending(color, dst_color, 1.0);"),
+            std::string::npos);
 }
 
 TEST(ShaderWriter, RRectWithSolidColor) {

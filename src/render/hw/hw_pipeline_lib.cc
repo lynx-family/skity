@@ -4,59 +4,16 @@
 
 #include "src/render/hw/hw_pipeline_lib.hpp"
 
-#include "src/gpu/gpu_caps.hpp"
 #include "src/gpu/gpu_device.hpp"
 #include "src/gpu/gpu_shader_function.hpp"
 #include "src/gpu/gpu_shader_module.hpp"
-#include "src/graphic/blend_mode_priv.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 #include "src/render/hw/hw_shader_generator.hpp"
-#include "src/render/hw/native_blend.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
-
-static std::pair<GPUBlendFactor, GPUBlendFactor> get_gpu_blending(
-    BlendMode blend_mode) {
-  if (blend_mode == BlendMode::kClear) {
-    return {GPUBlendFactor::kZero, GPUBlendFactor::kZero};
-  } else if (blend_mode == BlendMode::kSrc) {
-    return {GPUBlendFactor::kOne, GPUBlendFactor::kZero};
-  } else if (blend_mode == BlendMode::kSrcOver) {
-    return {GPUBlendFactor::kOne, GPUBlendFactor::kOneMinusSrcAlpha};
-  } else if (blend_mode == BlendMode::kDst) {
-    return {GPUBlendFactor::kZero, GPUBlendFactor::kOne};
-  } else if (blend_mode == BlendMode::kDstOver) {
-    return {GPUBlendFactor::kOneMinusDstAlpha, GPUBlendFactor::kOne};
-  } else if (blend_mode == BlendMode::kSrcIn) {
-    return {GPUBlendFactor::kDstAlpha, GPUBlendFactor::kZero};
-  } else if (blend_mode == BlendMode::kDstIn) {
-    return {GPUBlendFactor::kZero, GPUBlendFactor::kSrcAlpha};
-  } else if (blend_mode == BlendMode::kSrcOut) {
-    return {GPUBlendFactor::kOneMinusDstAlpha, GPUBlendFactor::kZero};
-  } else if (blend_mode == BlendMode::kDstOut) {
-    return {GPUBlendFactor::kZero, GPUBlendFactor::kOneMinusSrcAlpha};
-  } else if (blend_mode == BlendMode::kSrcATop) {
-    return {GPUBlendFactor::kDstAlpha, GPUBlendFactor::kOneMinusSrcAlpha};
-  } else if (blend_mode == BlendMode::kDstATop) {
-    return {GPUBlendFactor::kOneMinusDstAlpha, GPUBlendFactor::kSrcAlpha};
-  } else if (blend_mode == BlendMode::kXor) {
-    return {GPUBlendFactor::kOneMinusDstAlpha,
-            GPUBlendFactor::kOneMinusSrcAlpha};
-  } else if (blend_mode == BlendMode::kPlus) {
-    return {GPUBlendFactor::kOne, GPUBlendFactor::kOne};
-  } else {
-    return {GPUBlendFactor::kOne, GPUBlendFactor::kZero};
-  }
-}
-
-struct BlendState {
-  GPUBlendFactor src_factor;
-  GPUBlendFactor dst_factor;
-  GPUBlendOperation op;
-};
 
 // programmable_blending packs (blend_mode | dst_read_strategy<<8) when the draw
 // reads dst inside the shader (framebuffer-fetch / texture-copy). It is 0 for
@@ -76,51 +33,18 @@ static bool UsesFramebufferFetch(uint32_t programmable_blending) {
              static_cast<uint32_t>(DstReadStrategy::kFramebufferFetch);
 }
 
-// Unified blend-state resolution shared by pipeline creation and cache matching
-// so they cannot drift apart. Native advanced blend returns
-// {kOne, kOneMinusSrcAlpha, native_op}: the GL/Vulkan advanced equations ignore
-// the RGB blend factors, while the alpha channel (kept on ADD with those
-// factors) computes exactly source-over, matching every advanced shader branch.
-//
-// shader_side_blending is true for the framebuffer-fetch / texture-copy
-// pipeline (programmable_blending holds a packed key): those draws blend inside
-// the shader, so the fixed-function equation must stay on ADD regardless of
-// mode. For every other pipeline the native equation is selected purely from
-// blend_mode + caps — which is what lets the Vulkan native path share one
-// pipeline with ordinary blends and differ only by a blend-state variant.
-static BlendState resolve_blend_state(BlendMode blend_mode, const GPUCaps& caps,
-                                      bool shader_side_blending) {
-  if (!shader_side_blending && caps.supports_native_advanced_blend &&
-      IsAdvancedBlendMode(blend_mode)) {
-    if (auto op = ToNativeBlendOp(blend_mode)) {
-      return {GPUBlendFactor::kOne, GPUBlendFactor::kOneMinusSrcAlpha, *op};
-    }
-  }
-  auto factors = get_gpu_blending(blend_mode);
-  return {factors.first, factors.second, GPUBlendOperation::kAdd};
-}
-
 static void setup_blending_state(GPURenderPipelineDescriptor& gpu_desc,
-                                 const HWPipelineDescriptor& hw_desc,
-                                 const GPUCaps& caps,
-                                 bool shader_side_blending) {
+                                 const HWPipelineDescriptor& hw_desc) {
   gpu_desc.target.format = hw_desc.color_format;
   gpu_desc.target.write_mask = hw_desc.color_mask;
-
-  auto blend_state =
-      resolve_blend_state(hw_desc.blend_mode, caps, shader_side_blending);
-  gpu_desc.target.src_blend_factor = blend_state.src_factor;
-  gpu_desc.target.dst_blend_factor = blend_state.dst_factor;
-  gpu_desc.target.blend_op = blend_state.op;
+  gpu_desc.target.src_blend_factor = hw_desc.blend_formula.src_factor;
+  gpu_desc.target.dst_blend_factor = hw_desc.blend_formula.dst_factor;
+  gpu_desc.target.blend_op = hw_desc.blend_formula.operation;
 }
 
 HWPipeline::HWPipeline(GPUDevice* device, GPUBackendType backend,
-                       std::unique_ptr<GPURenderPipeline> base_pipeline,
-                       bool shader_side_blending)
-    : gpu_device_(device),
-      backend_(backend),
-      gpu_pipelines_(),
-      shader_side_blending_(shader_side_blending) {
+                       std::unique_ptr<GPURenderPipeline> base_pipeline)
+    : gpu_device_(device), backend_(backend), gpu_pipelines_() {
   gpu_pipelines_.emplace_back(std::move(base_pipeline));
 }
 
@@ -135,8 +59,7 @@ GPURenderPipeline* HWPipeline::GetPipeline(const HWPipelineDescriptor& desc) {
 
   auto gpu_desc = base_pipeline->GetDescriptor();
 
-  setup_blending_state(gpu_desc, desc, gpu_device_->GetCaps(),
-                       shader_side_blending_);
+  setup_blending_state(gpu_desc, desc);
   gpu_desc.depth_stencil = desc.depth_stencil;
   gpu_desc.sample_count = desc.sample_count;
 
@@ -159,13 +82,10 @@ bool HWPipeline::PipelineMatch(GPURenderPipeline* pipeline,
 
   const auto& gpu_desc = pipeline->GetDescriptor();
 
-  auto blend_state = resolve_blend_state(
-      desc.blend_mode, gpu_device_->GetCaps(), shader_side_blending_);
-
   return gpu_desc.target.write_mask == desc.color_mask &&
-         gpu_desc.target.src_blend_factor == blend_state.src_factor &&
-         gpu_desc.target.dst_blend_factor == blend_state.dst_factor &&
-         gpu_desc.target.blend_op == blend_state.op &&
+         gpu_desc.target.src_blend_factor == desc.blend_formula.src_factor &&
+         gpu_desc.target.dst_blend_factor == desc.blend_formula.dst_factor &&
+         gpu_desc.target.blend_op == desc.blend_formula.operation &&
          gpu_desc.sample_count == static_cast<int32_t>(desc.sample_count) &&
          gpu_desc.target.format == desc.color_format;
 }
@@ -260,10 +180,7 @@ std::unique_ptr<HWPipeline> HWPipelineLib::CreatePipeline(
     return std::unique_ptr<HWPipeline>();
   }
 
-  bool shader_side_blending = IsShaderSideBlending(key.programmable_blending);
-
-  setup_blending_state(gpu_pso_desc, desc, gpu_device_->GetCaps(),
-                       shader_side_blending);
+  setup_blending_state(gpu_pso_desc, desc);
   gpu_pso_desc.depth_stencil = desc.depth_stencil;
 
   auto gpu_pipeline = gpu_device_->CreateRenderPipeline(gpu_pso_desc);
@@ -272,8 +189,8 @@ std::unique_ptr<HWPipeline> HWPipelineLib::CreatePipeline(
     return std::unique_ptr<HWPipeline>();
   }
 
-  return std::make_unique<HWPipeline>(
-      gpu_device_, backend_, std::move(gpu_pipeline), shader_side_blending);
+  return std::make_unique<HWPipeline>(gpu_device_, backend_,
+                                      std::move(gpu_pipeline));
 }
 
 void HWPipelineLib::SetupShaderFunction(GPURenderPipelineDescriptor& desc,
@@ -359,6 +276,9 @@ std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
     }
     if (UsesFramebufferFetch(pipeline_key.programmable_blending)) {
       desc.features.framebuffer_fetch = true;
+    }
+    if (pipeline_key.secondary_blend_output != HWBlendOutput::kNone) {
+      desc.features.dual_source_blending = true;
     }
   }
 

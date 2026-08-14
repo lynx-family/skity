@@ -6,6 +6,7 @@
 
 #include "src/logging.hpp"
 #include "src/render/hw/draw/step/color_step.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
 
 namespace skity {
 
@@ -15,6 +16,7 @@ void HWDynamicTextDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
     return;
   }
 
+  ConfigureFragmentBlending(context, GetBlendPlan(), fragment_);
   steps.emplace_back(context->arena_allocator->Make<ColorStep>(
       geometry_, fragment_, CoverageType::kNone));
 }
@@ -64,6 +66,7 @@ void HWDynamicSdfTextDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
     return;
   }
 
+  ConfigureFragmentBlending(context, GetBlendPlan(), fragment_);
   steps.emplace_back(context->arena_allocator->Make<ColorStep>(
       geometry_, fragment_, CoverageType::kNone));
 }

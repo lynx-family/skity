@@ -11,6 +11,65 @@
 
 namespace skity {
 
+namespace {
+
+Rect GetGlyphRectBounds(const GlyphRect& glyph_rect, const Matrix& transform) {
+  return transform.MapRect(
+      Rect::MakeLTRB(glyph_rect.vertex_coord.x, glyph_rect.vertex_coord.y,
+                     glyph_rect.vertex_coord.z, glyph_rect.vertex_coord.w));
+}
+
+}  // namespace
+
+std::vector<GlyphRectBatch> BuildGlyphRectBatches(
+    ArrayList<GlyphRect, 16> glyph_rects, const Matrix& transform,
+    ArenaAllocator* arena_allocator, bool split_overlapping_glyphs) {
+  std::vector<GlyphRectBatch> batches;
+  if (glyph_rects.empty()) {
+    return batches;
+  }
+
+  if (!split_overlapping_glyphs) {
+    GlyphRectBatch batch;
+    for (const auto& glyph_rect : glyph_rects) {
+      batch.bounds.Join(GetGlyphRectBounds(glyph_rect, transform));
+    }
+    batch.glyph_rects = std::move(glyph_rects);
+    batches.push_back(std::move(batch));
+    return batches;
+  }
+
+  std::vector<Rect> occupied_bounds;
+  auto begin_batch = [&]() -> GlyphRectBatch& {
+    batches.emplace_back();
+    batches.back().glyph_rects.SetArenaAllocator(arena_allocator);
+    occupied_bounds.clear();
+    return batches.back();
+  };
+
+  auto* batch = &begin_batch();
+  for (const auto& glyph_rect : glyph_rects) {
+    Rect glyph_bounds = GetGlyphRectBounds(glyph_rect, transform);
+    bool overlaps = false;
+    if (Rect::Intersect(batch->bounds, glyph_bounds)) {
+      for (const auto& occupied : occupied_bounds) {
+        if (Rect::Intersect(occupied, glyph_bounds)) {
+          overlaps = true;
+          break;
+        }
+      }
+    }
+
+    if (overlaps) {
+      batch = &begin_batch();
+    }
+    batch->glyph_rects.push_back(glyph_rect);
+    batch->bounds.Join(glyph_bounds);
+    occupied_bounds.push_back(glyph_bounds);
+  }
+  return batches;
+}
+
 std::vector<GPUVertexBufferLayout> WGSLTextGeometry::GetBufferLayout() {
   return std::vector<GPUVertexBufferLayout>{
       GPUVertexBufferLayout{
@@ -117,7 +176,7 @@ std::string WGSLTextSolidColorGeometry::GenSourceWGSL() const {
   wgsl_code += R"(
     struct TextSolidColorVSOutput {
         @builtin(position)              pos         : vec4<f32>,
-        @location(0) @interpolate(flat) txt_index   : i32,
+        @location(0) @interpolate(flat) v_txt_index : i32,
         @location(1)                    v_uv        : vec2<f32>,
         @location(2)                    v_color     : vec4<f32>
     };
@@ -131,7 +190,7 @@ std::string WGSLTextSolidColorGeometry::GenSourceWGSL() const {
                                        text_in.a_offset.y * text_in.a_uv.y + text_in.a_offset.w * text_in.a_uv.w);
 
         output.pos          = get_vertex_position(pos, common_slot);
-        output.txt_index    = get_texture_index(uv.x);
+        output.v_txt_index  = get_texture_index(uv.x);
         output.v_uv         = get_texture_uv(uv);
         output.v_color      = text_in.a_color;
         return output;
@@ -139,6 +198,12 @@ std::string WGSLTextSolidColorGeometry::GenSourceWGSL() const {
   )";
 
   return wgsl_code;
+}
+
+std::optional<std::vector<std::string>> WGSLTextSolidColorGeometry::GetVarings()
+    const {
+  return std::vector<std::string>{"@interpolate(flat) v_txt_index: i32",
+                                  "v_uv: vec2<f32>", "v_color: vec4<f32>"};
 }
 
 std::string WGSLTextGradientGeometry::GenSourceWGSL() const {
@@ -149,7 +214,7 @@ std::string WGSLTextGradientGeometry::GenSourceWGSL() const {
   wgsl_code += R"(
     struct TextGradientVSOutput {
         @builtin(position)              pos         : vec4<f32>,
-        @location(0) @interpolate(flat) txt_index   : i32,
+        @location(0) @interpolate(flat) v_txt_index : i32,
         @location(1)                    v_uv        : vec2<f32>,
         @location(2)                    v_pos       : vec2<f32>,
     };
@@ -166,7 +231,7 @@ std::string WGSLTextGradientGeometry::GenSourceWGSL() const {
                                        text_in.a_offset.y * text_in.a_uv.y + text_in.a_offset.w * text_in.a_uv.w);
 
         output.pos          = get_vertex_position(pos, common_slot);
-        output.txt_index    = get_texture_index(uv.x);
+        output.v_txt_index  = get_texture_index(uv.x);
         output.v_uv         = get_texture_uv(uv);
         output.v_pos        = (inv_matrix * common_slot.userTransform * vec4<f32>(pos, 0.0, 1.0)).xy;
 
@@ -175,6 +240,12 @@ std::string WGSLTextGradientGeometry::GenSourceWGSL() const {
   )";
 
   return wgsl_code;
+}
+
+std::optional<std::vector<std::string>> WGSLTextGradientGeometry::GetVarings()
+    const {
+  return std::vector<std::string>{"@interpolate(flat) v_txt_index: i32",
+                                  "v_uv: vec2<f32>", "v_pos: vec2<f32>"};
 }
 
 void WGSLTextGradientGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,

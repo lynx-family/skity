@@ -62,6 +62,13 @@ static bool SupportsFramebufferFetch(id<MTLDevice> device) {
 #endif
 }
 
+static bool SupportsDualSourceBlending() {
+  if (@available(macOS 10.12, iOS 11.0, tvOS 11.0, *)) {
+    return true;
+  }
+  return false;
+}
+
 GPUDeviceMTL::GPUDeviceMTL(id<MTLDevice> device, id<MTLCommandQueue> queue)
     : GPUDevice(),
       mtl_device_(device),
@@ -71,6 +78,7 @@ GPUDeviceMTL::GPUDeviceMTL(id<MTLDevice> device, id<MTLCommandQueue> queue)
   auto gpu_caps = std::make_unique<GPUCaps>();
   gpu_caps->supports_framebuffer_fetch = SupportsFramebufferFetch(device);
   gpu_caps->supports_host_visible_buffer = true;
+  gpu_caps->supports_dual_source_blending = SupportsDualSourceBlending();
   InitCaps(std::move(gpu_caps));
 }
 
@@ -115,6 +123,9 @@ id<MTLDepthStencilState> GPUDeviceMTL::FindOrCreateDepthStencilState(
 std::unique_ptr<GPURenderPipeline> GPUDeviceMTL::CreateRenderPipeline(
     const GPURenderPipelineDescriptor& desc) {
   if (desc.vertex_function == nullptr || desc.fragment_function == nullptr) {
+    return {};
+  }
+  if (UsesDualSourceBlending(desc.target) && !GetCaps().supports_dual_source_blending) {
     return {};
   }
 

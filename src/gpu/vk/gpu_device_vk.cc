@@ -82,6 +82,14 @@ VkBlendFactor ToVkBlendFactor(GPUBlendFactor factor) {
       return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
     case GPUBlendFactor::kSrcAlphaSaturated:
       return VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
+    case GPUBlendFactor::kSrc1:
+      return VK_BLEND_FACTOR_SRC1_COLOR;
+    case GPUBlendFactor::kOneMinusSrc1:
+      return VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR;
+    case GPUBlendFactor::kSrc1Alpha:
+      return VK_BLEND_FACTOR_SRC1_ALPHA;
+    case GPUBlendFactor::kOneMinusSrc1Alpha:
+      return VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
   }
 
   return VK_BLEND_FACTOR_ONE;
@@ -91,6 +99,8 @@ VkBlendOp ToVkBlendOp(GPUBlendOperation op) {
   switch (op) {
     case GPUBlendOperation::kAdd:
       return VK_BLEND_OP_ADD;
+    case GPUBlendOperation::kReverseSubtract:
+      return VK_BLEND_OP_REVERSE_SUBTRACT;
     case GPUBlendOperation::kMultiply:
       return VK_BLEND_OP_MULTIPLY_EXT;
     case GPUBlendOperation::kScreen:
@@ -523,6 +533,8 @@ GPUDeviceVK::GPUDeviceVK(std::shared_ptr<const VulkanContextState> state)
       state_ && state_->IsAdvancedBlendEnabled();
   gpu_caps->supports_native_advanced_blend_coherent =
       state_ && state_->IsAdvancedBlendCoherent();
+  gpu_caps->supports_dual_source_blending =
+      state_ && state_->IsDualSourceBlendingEnabled();
   InitCaps(std::move(gpu_caps));
 
   if (state_ == nullptr || state_->GetPhysicalDevice() == VK_NULL_HANDLE ||
@@ -717,6 +729,10 @@ std::unique_ptr<GPURenderPipelineVK> GPUDeviceVK::CreateRenderPipelineInternal(
       desc.vertex_function == nullptr || desc.fragment_function == nullptr) {
     return {};
   }
+  if (UsesDualSourceBlending(desc.target) &&
+      !GetCaps().supports_dual_source_blending) {
+    return {};
+  }
 
   auto* vertex_function = GPUShaderFunctionVK::Cast(desc.vertex_function.get());
   auto* fragment_function =
@@ -900,7 +916,7 @@ std::unique_ptr<GPURenderPipelineVK> GPUDeviceVK::CreateRenderPipelineInternal(
 
   VkPipelineColorBlendAttachmentState color_blend_attachment = {};
   VkPipelineColorBlendAdvancedStateCreateInfoEXT advanced_blend_state = {};
-  if (desc.target.blend_op != GPUBlendOperation::kAdd) {
+  if (IsAdvancedBlendOperation(desc.target.blend_op)) {
     // Native advanced blend: the advanced equation ignores the RGB blend
     // factors, and the spec blends alpha "as if VK_BLEND_OP_ADD" (source-over)
     // regardless of alphaBlendOp. VUID-...-advancedBlendAlphaBlendOp-01409
@@ -933,12 +949,12 @@ std::unique_ptr<GPURenderPipelineVK> GPUDeviceVK::CreateRenderPipelineInternal(
         ToVkBlendFactor(desc.target.src_blend_factor);
     color_blend_attachment.dstColorBlendFactor =
         ToVkBlendFactor(desc.target.dst_blend_factor);
-    color_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+    color_blend_attachment.colorBlendOp = ToVkBlendOp(desc.target.blend_op);
     color_blend_attachment.srcAlphaBlendFactor =
         ToVkBlendFactor(desc.target.src_blend_factor);
     color_blend_attachment.dstAlphaBlendFactor =
         ToVkBlendFactor(desc.target.dst_blend_factor);
-    color_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    color_blend_attachment.alphaBlendOp = ToVkBlendOp(desc.target.blend_op);
     color_blend_attachment.colorWriteMask =
         ToVkColorWriteMask(desc.target.write_mask);
   }
@@ -950,7 +966,7 @@ std::unique_ptr<GPURenderPipelineVK> GPUDeviceVK::CreateRenderPipelineInternal(
   color_blend_state.pAttachments = &color_blend_attachment;
   // The advanced-state struct must hang off the state create-info pNext, not
   // the attachment pNext.
-  if (desc.target.blend_op != GPUBlendOperation::kAdd) {
+  if (IsAdvancedBlendOperation(desc.target.blend_op)) {
     color_blend_state.pNext = &advanced_blend_state;
   }
 

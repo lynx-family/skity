@@ -172,6 +172,7 @@ class ModuleBuilder {
     ir::InterfaceDecorationKind decoration_kind =
         ir::InterfaceDecorationKind::kNone;
     uint32_t decoration_value = 0;
+    std::optional<uint32_t> blend_src_index;
     uint32_t spirv_var_id = 0;
     ir::InterpolationType interpolation = ir::InterpolationType::kNone;
 

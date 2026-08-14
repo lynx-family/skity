@@ -41,7 +41,7 @@ class WGSLCoverageAATileGeometry : public HWWGSLGeometry {
 
   void WriteFSUniforms(std::stringstream& ss) const override;
 
-  void WriteFSAlphaMask(std::stringstream& ss) const override;
+  void WriteFSCoverage(std::stringstream& ss) const override;
 
   void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
                   float clip_depth, Command* stencil_cmd) override;

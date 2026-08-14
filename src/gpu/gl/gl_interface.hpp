@@ -175,6 +175,7 @@ struct GLInterface {
   bool ext_multisampled_render_to_texture = false;
   bool oes_egl_image_external = false;
   bool ext_shader_framebuffer_fetch = false;
+  bool ext_blend_func_extended = false;
   bool ext_khr_blend_equation_advanced = false;
   bool ext_khr_blend_equation_advanced_coherent = false;
 

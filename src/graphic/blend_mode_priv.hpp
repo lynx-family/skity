@@ -27,7 +27,7 @@ void ProterDuffBlendNeon(uint32_t src, uint32_t* dst, uint32_t len,
 #endif
 
 constexpr bool IsAdvancedBlendMode(BlendMode mode) {
-  return mode > BlendMode::kPlus;
+  return mode > BlendMode::kLastCoeffMode;
 }
 
 }  // namespace skity

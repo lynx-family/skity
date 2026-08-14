@@ -85,6 +85,7 @@ class Lowerer {
   bool LowerStatement(const ast::Statement* statement, ir::Block* block);
   ir::Value EnsureValue(const ir::ExprResult& expr, ir::Block* block);
   bool LowerReturnStatement(const ast::ReturnStatement* ret, ir::Block* block);
+  bool LowerDiscardStatement(ir::Block* block);
   ir::Block* CurrentBlock();
   ir::BlockId CreateBlock(const std::string& name);
   ir::BlockId CreateBlockWithId(const std::string& name, ir::BlockId id);
@@ -156,7 +157,8 @@ class Lowerer {
   void ResolveInterfaceDecorations(
       const std::vector<ast::Attribute*>& attributes,
       ir::InterfaceDecorationKind* decoration_kind, uint32_t* decoration_value,
-      ir::InterpolationType* interpolation) const;
+      ir::InterpolationType* interpolation,
+      std::optional<uint32_t>* blend_src_index = nullptr) const;
   const ir::StructMember* FindStructMember(ir::TypeId struct_type,
                                            std::string_view member_name,
                                            uint32_t* member_index) const;

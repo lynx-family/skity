@@ -404,6 +404,124 @@ void Resolver::Visit(ast::Function* function) {
     return;
   }
 
+  auto find_attribute = [](const std::vector<ast::Attribute*>& attributes,
+                           ast::AttributeType type) -> ast::Attribute* {
+    for (auto* attribute : attributes) {
+      if (attribute != nullptr && attribute->GetType() == type) {
+        return attribute;
+      }
+    }
+    return nullptr;
+  };
+
+  auto resolve_struct = [this](ast::Type type) -> ast::StructDecl* {
+    while (type.expr != nullptr && type.expr->ident != nullptr) {
+      auto* declaration = module_->GetGlobalTypeDecl(type.expr->ident->name);
+      if (declaration == nullptr) {
+        return nullptr;
+      }
+      if (declaration->GetType() == ast::TypeDeclType::kStruct) {
+        return static_cast<ast::StructDecl*>(declaration);
+      }
+      type = static_cast<ast::Alias*>(declaration)->type;
+    }
+    return nullptr;
+  };
+
+  auto is_vec4_f32 = [this](ast::Type type) {
+    while (type.expr != nullptr && type.expr->ident != nullptr) {
+      auto* declaration = module_->GetGlobalTypeDecl(type.expr->ident->name);
+      if (declaration == nullptr ||
+          declaration->GetType() != ast::TypeDeclType::kAlias) {
+        break;
+      }
+      type = static_cast<ast::Alias*>(declaration)->type;
+    }
+    if (type.expr == nullptr || type.expr->ident == nullptr ||
+        type.expr->ident->name != "vec4" ||
+        type.expr->ident->args.size() != 1) {
+      return false;
+    }
+    auto* element = type.expr->ident->args[0];
+    if (element == nullptr ||
+        element->GetType() != ast::ExpressionType::kIdentifier) {
+      return false;
+    }
+    auto* element_type = static_cast<ast::IdentifierExp*>(element);
+    return element_type->ident != nullptr && element_type->ident->name == "f32";
+  };
+
+  for (auto* param : function->params) {
+    if (param == nullptr) {
+      continue;
+    }
+    if (find_attribute(param->attributes, ast::AttributeType::kBlendSrc)) {
+      Report("blend_src is only valid on fragment outputs");
+    }
+    if (auto* declaration = resolve_struct(param->type)) {
+      for (auto* member : declaration->members) {
+        if (member != nullptr &&
+            find_attribute(member->attributes, ast::AttributeType::kBlendSrc)) {
+          Report("blend_src is only valid on fragment outputs");
+        }
+      }
+    }
+  }
+
+  struct Output {
+    const std::vector<ast::Attribute*>& attributes;
+    ast::Type type;
+  };
+  std::vector<Output> outputs;
+  if (auto* declaration = resolve_struct(function->return_type)) {
+    for (auto* member : declaration->members) {
+      if (member != nullptr) {
+        outputs.push_back({member->attributes, member->type});
+      }
+    }
+  } else {
+    outputs.push_back({function->return_type_attrs, function->return_type});
+  }
+
+  uint32_t blend_src_mask = 0;
+  bool has_blend_src = false;
+  for (const auto& output : outputs) {
+    auto* blend_src_attribute =
+        find_attribute(output.attributes, ast::AttributeType::kBlendSrc);
+    if (blend_src_attribute == nullptr) {
+      continue;
+    }
+
+    has_blend_src = true;
+    if (function->GetPipelineStage() != ast::PipelineStage::kFragment) {
+      Report("blend_src is only valid on fragment outputs");
+      continue;
+    }
+
+    auto* location_attribute =
+        find_attribute(output.attributes, ast::AttributeType::kLocation);
+    if (location_attribute == nullptr ||
+        static_cast<ast::LocationAttribute*>(location_attribute)->index != 0) {
+      Report("blend_src requires location 0");
+    }
+    if (!is_vec4_f32(output.type)) {
+      Report("blend_src output must have type vec4<f32>");
+    }
+
+    auto index =
+        static_cast<ast::BlendSrcAttribute*>(blend_src_attribute)->index;
+    uint32_t bit = 1u << static_cast<uint32_t>(index);
+    if ((blend_src_mask & bit) != 0) {
+      Report("duplicate blend_src index");
+    }
+    blend_src_mask |= bit;
+  }
+  if (has_blend_src &&
+      function->GetPipelineStage() == ast::PipelineStage::kFragment &&
+      blend_src_mask != 0x3u) {
+    Report("fragment dual-source output requires blend_src 0 and 1");
+  }
+
   PushScope();
 
   for (auto* param : function->params) {

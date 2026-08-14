@@ -60,6 +60,9 @@ std::unique_ptr<GPURenderPipelineMTL> GPURenderPipelineMTL::Make(
   render_pipeline_desc.colorAttachments[0].sourceRGBBlendFactor = src;
   render_pipeline_desc.colorAttachments[0].destinationAlphaBlendFactor = dst;
   render_pipeline_desc.colorAttachments[0].destinationRGBBlendFactor = dst;
+  MTLBlendOperation operation = ToMTLBlendOperation(target.blend_op);
+  render_pipeline_desc.colorAttachments[0].alphaBlendOperation = operation;
+  render_pipeline_desc.colorAttachments[0].rgbBlendOperation = operation;
 
   render_pipeline_desc.colorAttachments[0].writeMask =
       static_cast<MTLColorWriteMask>(MTLColorWriteMaskAll & target.write_mask);

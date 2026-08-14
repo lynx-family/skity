@@ -39,6 +39,21 @@ fn fs_main() -> @location(0) vec4<f32> {
 }
 )";
 
+constexpr char kDualSourceFragmentWGSL[] = R"(
+struct FSOutput {
+  @location(0) @blend_src(0) primary: vec4<f32>,
+  @location(0) @blend_src(1) secondary: vec4<f32>,
+}
+
+@fragment
+fn fs_main() -> FSOutput {
+  var output: FSOutput;
+  output.primary = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+  output.secondary = vec4<f32>(1.0);
+  return output;
+}
+)";
+
 constexpr char kUniformFragmentWGSL[] = R"(
 struct FSUniforms {
   color : vec4<f32>,
@@ -810,6 +825,38 @@ TEST_F(VulkanSharedContextTest, CreateRenderPipelineFromWGXFunctions) {
   }
 }
 
+TEST_F(VulkanSharedContextTest, CreatesDualSourcePipelineWhenEnabled) {
+  ASSERT_NE(GetContext(), nullptr);
+  auto* device = GetDevice();
+  ASSERT_NE(device, nullptr);
+  ASSERT_EQ(device->GetCaps().supports_dual_source_blending,
+            GetState()->IsDualSourceBlendingEnabled());
+  if (!device->GetCaps().supports_dual_source_blending) {
+    GTEST_SKIP() << "Vulkan device does not support dualSrcBlend";
+  }
+
+  auto vertex_function =
+      CreateWGXShaderFunction(device, kSimpleVertexWGSL, "vk_dual_source_vs",
+                              "vs_main", skity::GPUShaderStage::kVertex);
+  auto fragment_function = CreateWGXShaderFunction(
+      device, kDualSourceFragmentWGSL, "vk_dual_source_fs", "fs_main",
+      skity::GPUShaderStage::kFragment);
+  ASSERT_NE(vertex_function, nullptr);
+  ASSERT_NE(fragment_function, nullptr);
+
+  skity::GPURenderPipelineDescriptor desc = {};
+  desc.vertex_function = vertex_function;
+  desc.fragment_function = fragment_function;
+  desc.target.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  desc.target.src_blend_factor = skity::GPUBlendFactor::kOne;
+  desc.target.dst_blend_factor = skity::GPUBlendFactor::kOneMinusSrc1Alpha;
+  desc.label = skity::GPULabel("vk_dual_source_pipeline");
+
+  auto pipeline = device->CreateRenderPipeline(desc);
+  ASSERT_NE(pipeline, nullptr);
+  EXPECT_TRUE(pipeline->IsValid());
+}
+
 TEST_F(VulkanSharedContextTest,
        CreateRenderPipelineWithDepthStencilFormatFallback) {
   ASSERT_NE(GetContext(), nullptr);
@@ -1011,6 +1058,39 @@ TEST_F(VulkanSharedContextTest, EncodeDrawCommandWithUniformBinding) {
 
   EXPECT_TRUE(command_buffer->Submit());
   GetState()->CollectPendingSubmissions(true);
+}
+
+TEST(VulkanProcLoaderTest, ExternalDeviceDefaultsDualSourceDisabled) {
+  auto bundle = CreateLegacyGPUContextForTest();
+  ASSERT_NE(bundle.context, nullptr);
+
+  auto* vk_context = static_cast<skity::GPUContextVK*>(bundle.context.get());
+  ASSERT_NE(vk_context, nullptr);
+  EXPECT_FALSE(vk_context->GetState()->IsDualSourceBlendingEnabled());
+
+  auto* context_impl = static_cast<skity::GPUContextImpl*>(vk_context);
+  auto* device = context_impl->GetGPUDevice();
+  ASSERT_NE(device, nullptr);
+  EXPECT_FALSE(device->GetCaps().supports_dual_source_blending);
+
+  auto vertex_function = CreateWGXShaderFunction(
+      device, kSimpleVertexWGSL, "legacy_dual_source_vs", "vs_main",
+      skity::GPUShaderStage::kVertex);
+  auto fragment_function = CreateWGXShaderFunction(
+      device, kSimpleFragmentWGSL, "legacy_dual_source_fs", "fs_main",
+      skity::GPUShaderStage::kFragment);
+  ASSERT_NE(vertex_function, nullptr);
+  ASSERT_NE(fragment_function, nullptr);
+
+  skity::GPURenderPipelineDescriptor desc = {};
+  desc.vertex_function = vertex_function;
+  desc.fragment_function = fragment_function;
+  desc.target.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  desc.target.src_blend_factor = skity::GPUBlendFactor::kOne;
+  desc.target.dst_blend_factor = skity::GPUBlendFactor::kOneMinusSrc1Alpha;
+  desc.label = skity::GPULabel("legacy_dual_source_pipeline");
+
+  EXPECT_EQ(device->CreateRenderPipeline(desc), nullptr);
 }
 
 TEST(VulkanProcLoaderTest, EncodeLegacyDrawCommandWithUniformBinding) {

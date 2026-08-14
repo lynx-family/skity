@@ -620,6 +620,23 @@ TEST(HWPipelineKey, ProgrammableBlendingHash) {
   EXPECT_NE(hasher(key1), hasher(key3));
 }
 
+TEST(HWPipelineKey, SecondaryBlendOutputOnlyAffectsFragmentKey) {
+  HWPipelineKey single_output;
+  single_output.base_key = 1;
+
+  HWPipelineKey dual_source = single_output;
+  dual_source.secondary_blend_output = HWBlendOutput::kCoverage;
+
+  EXPECT_NE(single_output, dual_source);
+  EXPECT_EQ(single_output.GetFunctionKey(GPUShaderStage::kVertex),
+            dual_source.GetFunctionKey(GPUShaderStage::kVertex));
+  EXPECT_NE(single_output.GetFunctionKey(GPUShaderStage::kFragment),
+            dual_source.GetFunctionKey(GPUShaderStage::kFragment));
+
+  HWPipelineKeyHash hasher;
+  EXPECT_NE(hasher(single_output), hasher(dual_source));
+}
+
 TEST(HWPipelineKey, ProgrammableBlendingKeyIncludesDstReadStrategy) {
   auto framebuffer_fetch = skity::WGXProgrammableBlending::Make(
       skity::BlendMode::kOverlay, skity::DstReadStrategy::kFramebufferFetch);

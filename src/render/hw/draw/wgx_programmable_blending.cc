@@ -10,6 +10,7 @@
 
 #include "src/gpu/gpu_render_pass.hpp"
 #include "src/logging.hpp"
+#include "src/render/hw/draw/wgx_blend.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_draw_pass.hpp"
@@ -173,19 +174,17 @@ std::string WGXProgrammableBlending::GenSourceWGSL() const {
   std::stringstream ss;
   AppendHelperFunction(blend_mode_, ss);
 
-  ss << "fn blending(src: vec4<f32>, dst: vec4<f32>) -> vec4<f32> {\n";
+  ss << "fn blending(src: vec4<f32>, dst: vec4<f32>, coverage: f32) "
+        "-> vec4<f32> {\n";
   ss << "var result: vec4<f32>;\n";
-  switch (blend_mode_) {
-    case BlendMode::kModulate: {
-      ss << "result = src * dst;\n";
-      break;
-    }
-    case BlendMode::kScreen: {
-      ss << "result = src + (vec4<f32>(1.0) - src) * dst;\n";
-      break;
-    }
-    case BlendMode::kOverlay: {
-      ss << R"(
+  auto expression = BuildPorterDuffBlendExpression(blend_mode_, "src", "dst",
+                                                   /*clamp_plus=*/false);
+  if (!expression.empty()) {
+    ss << "result = " << expression << ";\n";
+  } else {
+    switch (blend_mode_) {
+      case BlendMode::kOverlay: {
+        ss << R"(
   result = vec4<f32>(blend_overlay_component(src.ra, dst.ra),
                      blend_overlay_component(src.ga, dst.ga),
                      blend_overlay_component(src.ba, dst.ba),
@@ -195,45 +194,45 @@ std::string WGXProgrammableBlending::GenSourceWGSL() const {
   extra.a = 0.0;
   result += extra;
       )";
-      break;
-    }
-    case BlendMode::kDarken: {
-      ss << R"(
+        break;
+      }
+      case BlendMode::kDarken: {
+        ss << R"(
   result = src + (1.0 - src.a) * dst;
   var rgb: vec3<f32> = min(result.rgb, (1.0 - dst.a) * src.rgb + dst.rgb);
   result = vec4<f32>(rgb, result.a);
       )";
-      break;
-    }
-    case BlendMode::kLighten: {
-      ss << R"(
+        break;
+      }
+      case BlendMode::kLighten: {
+        ss << R"(
   result = src + (1.0 - src.a) * dst;
   var rgb: vec3<f32> = max(result.rgb, (1.0 - dst.a) * src.rgb + dst.rgb);
   result = vec4<f32>(rgb, result.a);
       )";
-      break;
-    }
+        break;
+      }
 
-    case BlendMode::kColorDodge: {
-      ss << R"(
+      case BlendMode::kColorDodge: {
+        ss << R"(
   result = vec4<f32>(blend_color_dodge_component(src.ra, dst.ra),
                      blend_color_dodge_component(src.ga, dst.ga),
                      blend_color_dodge_component(src.ba, dst.ba),
                      src.a + (1.0 - src.a) * dst.a);
       )";
-      break;
-    }
-    case BlendMode::kColorBurn: {
-      ss << R"(
+        break;
+      }
+      case BlendMode::kColorBurn: {
+        ss << R"(
   result = vec4<f32>(blend_color_burn_component(src.ra, dst.ra),
                      blend_color_burn_component(src.ga, dst.ga),
                      blend_color_burn_component(src.ba, dst.ba),
                      src.a + (1.0 - src.a) * dst.a);
       )";
-      break;
-    }
-    case BlendMode::kHardLight: {
-      ss << R"(
+        break;
+      }
+      case BlendMode::kHardLight: {
+        ss << R"(
   result = vec4<f32>(blend_overlay_component(dst.ra, src.ra),
                      blend_overlay_component(dst.ga, src.ga),
                      blend_overlay_component(dst.ba, src.ba),
@@ -243,10 +242,10 @@ std::string WGXProgrammableBlending::GenSourceWGSL() const {
   extra.a = 0.0;
   result += extra;
       )";
-      break;
-    }
-    case BlendMode::kSoftLight: {
-      ss << R"(
+        break;
+      }
+      case BlendMode::kSoftLight: {
+        ss << R"(
   if dst.a == 0.0 {
     result = src;
   } else {
@@ -256,50 +255,51 @@ std::string WGXProgrammableBlending::GenSourceWGSL() const {
                        src.a + (1.0 - src.a) * dst.a);
   }
 )";
-      break;
-    }
-    case BlendMode::kDifference: {
-      ss << R"(
+        break;
+      }
+      case BlendMode::kDifference: {
+        ss << R"(
   result = vec4<f32>(src.rgb + dst.rgb - 2.0 * min(src.rgb * dst.a, dst.rgb * src.a),
                      src.a + (1.0 - src.a) * dst.a);
 )";
-      break;
-    }
-    case BlendMode::kExclusion: {
-      ss << R"(
+        break;
+      }
+      case BlendMode::kExclusion: {
+        ss << R"(
   result = vec4<f32>(dst.rgb + src.rgb - 2.0 * dst.rgb * src.rgb,
                      src.a + (1.0 - src.a) * dst.a);
 )";
-      break;
-    }
-    case BlendMode::kMultiply: {
-      ss << R"(
+        break;
+      }
+      case BlendMode::kMultiply: {
+        ss << R"(
   result = vec4<f32>(
       (1.0 - src.a) * dst.rgb + (1.0 - dst.a) * src.rgb + src.rgb * dst.rgb,
       src.a + (1.0 - src.a) * dst.a);
 )";
-      break;
+        break;
+      }
+      case BlendMode::kHue: {
+        ss << "result = blend_hslc(vec2<f32>(0.0, 1.0), src, dst);\n";
+        break;
+      }
+      case BlendMode::kSaturation: {
+        ss << "result = blend_hslc(vec2<f32>(1.0, 1.0), src, dst);\n";
+        break;
+      }
+      case BlendMode::kColor: {
+        ss << "result = blend_hslc(vec2<f32>(0.0, 0.0), src, dst);\n";
+        break;
+      }
+      case BlendMode::kLuminosity: {
+        ss << "result = blend_hslc(vec2<f32>(1.0, 0.0), src, dst);\n";
+        break;
+      }
+      default:
+        ss << "result = src;\n";
     }
-    case BlendMode::kHue: {
-      ss << "result = blend_hslc(vec2<f32>(0.0, 1.0), src, dst);\n";
-      break;
-    }
-    case BlendMode::kSaturation: {
-      ss << "result = blend_hslc(vec2<f32>(1.0, 1.0), src, dst);\n";
-      break;
-    }
-    case BlendMode::kColor: {
-      ss << "result = blend_hslc(vec2<f32>(0.0, 0.0), src, dst);\n";
-      break;
-    }
-    case BlendMode::kLuminosity: {
-      ss << "result = blend_hslc(vec2<f32>(1.0, 0.0), src, dst);\n";
-      break;
-    }
-    default:
-      ss << "result = src;\n";
   }
-  ss << "return result;\n";
+  ss << "return mix(dst, result, coverage);\n";
   ss << "}\n";
 
   if (dst_read_strategy_ == DstReadStrategy::kTextureCopy) {

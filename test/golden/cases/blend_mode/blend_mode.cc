@@ -173,6 +173,7 @@ static skity::testing::GoldenTestEnvConfig TextureCopyConfig(
     uint32_t sample_count) {
   skity::testing::GoldenTestEnvConfig config;
   config.supports_framebuffer_fetch = false;
+  config.supports_dual_source_blending = false;
   config.supports_native_advanced_blend = false;
   config.supports_native_advanced_blend_coherent = false;
   config.sample_count = sample_count;
@@ -240,6 +241,7 @@ static skity::testing::GoldenTestEnvConfig FramebufferFetchConfig(
     uint32_t sample_count) {
   skity::testing::GoldenTestEnvConfig config;
   config.supports_framebuffer_fetch = true;
+  config.supports_dual_source_blending = false;
   config.supports_native_advanced_blend = false;
   config.supports_native_advanced_blend_coherent = false;
   config.sample_count = sample_count;
@@ -534,6 +536,83 @@ BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Hue)
 BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Saturation)
 BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Color)
 BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Luminosity)
+
+static void DrawBlendStateTransitions(skity::Canvas* canvas) {
+  constexpr float kCellSize = 120.f;
+  constexpr std::array<skity::Color, 6> kDestinationColors = {
+      skity::ColorSetARGB(190, 230, 70, 90),
+      skity::ColorSetARGB(190, 50, 170, 110),
+      skity::ColorSetARGB(190, 70, 100, 230),
+      skity::ColorSetARGB(190, 225, 155, 45),
+      skity::ColorSetARGB(190, 145, 75, 210),
+      skity::ColorSetARGB(190, 45, 175, 205),
+  };
+  constexpr std::array<skity::BlendMode, 6> kBlendModes = {
+      skity::BlendMode::kSrc,      skity::BlendMode::kSrc,
+      skity::BlendMode::kModulate, skity::BlendMode::kScreen,
+      skity::BlendMode::kOverlay,  skity::BlendMode::kDstATop,
+  };
+  constexpr std::array<bool, 6> kAntiAlias = {true, false, true,
+                                              true, true,  true};
+
+  skity::Paint background;
+  background.SetColor(skity::ColorSetARGB(255, 24, 30, 42));
+  canvas->DrawRect(skity::Rect::MakeWH(360.f, 240.f), background);
+
+  skity::Paint destination;
+  destination.SetBlendMode(skity::BlendMode::kSrc);
+  for (size_t index = 0; index < kDestinationColors.size(); ++index) {
+    float x = static_cast<float>(index % 3) * kCellSize;
+    float y = static_cast<float>(index / 3) * kCellSize;
+    destination.SetColor(kDestinationColors[index]);
+    canvas->DrawRect(
+        skity::Rect::MakeLTRB(x + 8.f, y + 8.f, x + 112.f, y + 112.f),
+        destination);
+  }
+
+  // Keep these source draws consecutive. Their order exercises dual-source,
+  // disabled, ordinary fixed-function, advanced, then dual-source blending.
+  for (size_t index = 0; index < kBlendModes.size(); ++index) {
+    float x = static_cast<float>(index % 3) * kCellSize;
+    float y = static_cast<float>(index / 3) * kCellSize;
+    skity::Paint source;
+    source.SetAntiAlias(kAntiAlias[index]);
+    source.SetBlendMode(kBlendModes[index]);
+    source.SetColor(skity::ColorSetARGB(180, 30, 150, 240));
+
+    canvas->Save();
+    canvas->Rotate(index % 2 == 0 ? 4.f : -4.f, x + 70.f, y + 61.f);
+    canvas->DrawRRect(
+        skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(x + 30.25f, y + 23.5f,
+                                                       x + 109.25f, y + 99.5f),
+                                 18.f, 14.f),
+        source);
+    canvas->Restore();
+  }
+}
+
+TEST(BlendModeGolden, ContinuousBlendStateSwitches) {
+  constexpr uint32_t kWidth = 360;
+  constexpr uint32_t kHeight = 240;
+  if (!skity::testing::SupportsDualSourceBlending()) {
+    GTEST_SKIP() << "Device does not expose dual-source blending";
+  }
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(kWidth, kHeight));
+  DrawBlendStateTransitions(recorder.GetRecordingCanvas());
+
+  skity::testing::GoldenTestEnvConfig config;
+  config.enable_coverage_aa = true;
+  config.supports_dual_source_blending = true;
+  config.sample_count = 1;
+
+  auto golden_path =
+      MakeBlendModeGoldenPath("blend_mode_continuous_state_switches.png");
+  auto display_list = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      display_list.get(), kWidth, kHeight, golden_path.c_str(), config));
+}
 
 static void DrawBlendModeComposite(skity::Canvas* canvas) {
   skity::Paint paint;

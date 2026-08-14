@@ -23,13 +23,7 @@ namespace skity {
  */
 class WGSLTextFragment : public HWWGSLFragment {
  public:
-  static constexpr const char* kCommonTextFragment = R"(
-    @group(1) @binding(0) var uSampler      : sampler;
-    @group(1) @binding(1) var uFontTexture0 : texture_2d<f32>;
-    @group(1) @binding(2) var uFontTexture1 : texture_2d<f32>;
-    @group(1) @binding(3) var uFontTexture2 : texture_2d<f32>;
-    @group(1) @binding(4) var uFontTexture3 : texture_2d<f32>;
-
+  static constexpr const char* kCommonTextFunctions = R"(
     fn get_texture_color(font_index: i32, uv: vec2<f32>) -> vec4<f32> {
        var texture_dimension : vec2<u32> = vec2<u32>(textureDimensions(uFontTexture0));
        var texture_uv        : vec2<f32> = vec2<f32>(uv.x / f32(texture_dimension.x),
@@ -61,6 +55,14 @@ class WGSLTextFragment : public HWWGSLFragment {
 
   ~WGSLTextFragment() override = default;
 
+  void WriteFSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteFSUniforms(std::stringstream& ss) const override;
+
+  bool HasFragmentMask() const override { return true; }
+
+  void WriteFSCoverage(std::stringstream& ss) const override;
+
   bool CanMerge(const HWWGSLFragment* other) const override;
 
   void PrepareCMD(Command* cmd, HWDrawContext* context) override;
@@ -82,7 +84,7 @@ class WGSLColorTextFragment : public WGSLTextFragment {
 
   uint32_t NextBindingIndex() const override;
 
-  std::string GenSourceWGSL() const override;
+  void WriteFSMain(std::stringstream& ss) const override;
 
   bool CanMerge(const HWWGSLFragment* other) const override;
 
@@ -104,11 +106,15 @@ class WGSLColorEmojiFragment : public WGSLTextFragment {
 
   uint32_t NextBindingIndex() const override;
 
+  void WriteFSUniforms(std::stringstream& ss) const override;
+
+  void WriteFSMain(std::stringstream& ss) const override;
+
+  bool HasFragmentMask() const override { return false; }
+
   bool CanMerge(const HWWGSLFragment* other) const override;
 
   void PrepareCMD(Command* cmd, HWDrawContext* context) override;
-
-  std::string GenSourceWGSL() const override;
 
  private:
   bool swizzle_rb_ = false;
@@ -133,7 +139,11 @@ class WGSLGradientTextFragment : public WGSLTextFragment {
 
   HWFunctionBaseKey GetMainKey() const override;
 
-  std::string GenSourceWGSL() const override;
+  void WriteFSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteFSUniforms(std::stringstream& ss) const override;
+
+  void WriteFSMain(std::stringstream& ss) const override;
 
   bool CanMerge(const HWWGSLFragment* other) const override;
 
@@ -159,7 +169,11 @@ class WGSLSdfColorTextFragment : public WGSLTextFragment {
 
   uint32_t NextBindingIndex() const override;
 
-  std::string GenSourceWGSL() const override;
+  void WriteFSUniforms(std::stringstream& ss) const override;
+
+  void WriteFSMain(std::stringstream& ss) const override;
+
+  void WriteFSCoverage(std::stringstream& ss) const override;
 
   bool CanMerge(const HWWGSLFragment* other) const override;
 

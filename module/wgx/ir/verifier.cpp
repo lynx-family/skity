@@ -94,6 +94,14 @@ VerificationResult Verifier::VerifyInstruction(const Instruction& inst,
       return VerifyReturn(inst, index);
     case InstKind::kUnreachable:
       return VerificationResult::Success();
+    case InstKind::kDiscard:
+      if (function.stage != PipelineStage::kFragment ||
+          !inst.operands.empty() || inst.result_id != 0) {
+        return VerificationResult::Failure(
+            "Discard must be a result-less fragment terminator", index,
+            inst.kind, block_index);
+      }
+      return VerificationResult::Success();
     case InstKind::kVariable:
       return VerifyVariable(inst, index);
     case InstKind::kLoad:

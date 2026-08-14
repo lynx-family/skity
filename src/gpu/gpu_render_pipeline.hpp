@@ -138,7 +138,18 @@ enum class GPUBlendFactor {
   kDstAlpha,
   kOneMinusDstAlpha,
   kSrcAlphaSaturated,
+  kSrc1,
+  kOneMinusSrc1,
+  kSrc1Alpha,
+  kOneMinusSrc1Alpha,
 };
+
+constexpr bool IsDualSourceBlendFactor(GPUBlendFactor factor) {
+  return factor == GPUBlendFactor::kSrc1 ||
+         factor == GPUBlendFactor::kOneMinusSrc1 ||
+         factor == GPUBlendFactor::kSrc1Alpha ||
+         factor == GPUBlendFactor::kOneMinusSrc1Alpha;
+}
 
 // Fixed-function blend equation. kAdd is the default and covers every
 // Porter-Duff mode; the advanced ops map to GL_KHR_blend_equation_advanced /
@@ -146,6 +157,7 @@ enum class GPUBlendFactor {
 // intentionally absent (handled via the shader fallback path).
 enum class GPUBlendOperation {
   kAdd,
+  kReverseSubtract,
   kMultiply,
   kScreen,
   kOverlay,
@@ -163,6 +175,11 @@ enum class GPUBlendOperation {
   kHslLuminosity,
 };
 
+constexpr bool IsAdvancedBlendOperation(GPUBlendOperation operation) {
+  return operation != GPUBlendOperation::kAdd &&
+         operation != GPUBlendOperation::kReverseSubtract;
+}
+
 struct GPUColorTargetState {
   GPUTextureFormat format = GPUTextureFormat::kBGRA8Unorm;
   GPUBlendFactor src_blend_factor = GPUBlendFactor::kOne;
@@ -177,6 +194,11 @@ struct GPUColorTargetState {
            blend_op == other.blend_op && write_mask == other.write_mask;
   }
 };
+
+constexpr bool UsesDualSourceBlending(const GPUColorTargetState& target) {
+  return IsDualSourceBlendFactor(target.src_blend_factor) ||
+         IsDualSourceBlendFactor(target.dst_blend_factor);
+}
 
 struct GPURenderPipelineDescriptor {
   std::shared_ptr<GPUShaderFunction> vertex_function;

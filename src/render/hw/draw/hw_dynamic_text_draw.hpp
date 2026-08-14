@@ -13,12 +13,11 @@ namespace skity {
 
 class HWDynamicTextDraw : public HWDynamicDraw {
  public:
-  HWDynamicTextDraw(const Matrix& transform, BlendMode blend_mode,
-                    HWWGSLGeometry* geometry, HWWGSLFragment* fragment)
-      : HWDynamicDraw(transform,
-                      blend_mode),
-        geometry_(geometry),
-        fragment_(fragment) {}
+  HWDynamicTextDraw(const Matrix& transform, HWWGSLGeometry* geometry,
+                    HWWGSLFragment* fragment)
+      : HWDynamicDraw(transform), geometry_(geometry), fragment_(fragment) {
+    SetHasFragmentMask(fragment != nullptr && fragment->HasFragmentMask());
+  }
 
   ~HWDynamicTextDraw() override = default;
 
@@ -27,12 +26,11 @@ class HWDynamicTextDraw : public HWDynamicDraw {
   bool OnMergeIfPossible(HWDraw* draw) override;
 
   static Matrix CalcTransform(const Matrix& canvas_transform,
-                       const Matrix& text_transform);
+                              const Matrix& text_transform);
 
  protected:
   void OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                           HWDrawContext* context) override;
-
 
   HWWGSLGeometry* geometry_;
   HWWGSLFragment* fragment_;
@@ -40,12 +38,11 @@ class HWDynamicTextDraw : public HWDynamicDraw {
 
 class HWDynamicSdfTextDraw : public HWDynamicDraw {
  public:
-  HWDynamicSdfTextDraw(const Matrix& transform,
-                       BlendMode blend_mode, HWWGSLGeometry* geometry,
+  HWDynamicSdfTextDraw(const Matrix& transform, HWWGSLGeometry* geometry,
                        HWWGSLFragment* fragment)
-      : HWDynamicDraw(transform, blend_mode),
-        geometry_(geometry),
-        fragment_(fragment) {}
+      : HWDynamicDraw(transform), geometry_(geometry), fragment_(fragment) {
+    SetHasFragmentMask(fragment != nullptr && fragment->HasFragmentMask());
+  }
 
   ~HWDynamicSdfTextDraw() override = default;
 

@@ -20,7 +20,7 @@ struct Command;
 struct HWDrawContext;
 class HWWGSLFragment;
 class Paint;
-enum class DstReadStrategy;
+struct HWBlendPlan;
 
 void UploadBindGroup(uint32_t group, const wgx::BindGroupEntry* entry,
                      Command* cmd, HWDrawContext* ctx);
@@ -63,12 +63,20 @@ bool SetupImageBoundsInfo(const wgx::BindGroupEntry* image_bounds_entry,
                           const Matrix& local_matrix, float width,
                           float height);
 
+// Returns whether shading produces alpha 1 before the fragment mask is
+// applied. Unknown shader and color-filter behavior is treated as translucent.
+bool IsPaintSourceOpaque(const Paint& paint);
+
 HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
                                    bool is_stroke, bool has_color = true);
 
 void ConfigureShadingFragment(HWDrawContext* context, const Paint& paint,
-                              DstReadStrategy dst_read_strategy,
+                              const HWBlendPlan& blend_plan,
                               HWWGSLFragment* fragment);
+
+void ConfigureFragmentBlending(HWDrawContext* context,
+                               const HWBlendPlan& blend_plan,
+                               HWWGSLFragment* fragment);
 /**
  * Common code generator for Gradient Shader.
  * It contains the struct for common gradient info:

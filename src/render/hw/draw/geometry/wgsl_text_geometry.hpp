@@ -22,6 +22,15 @@ struct GlyphRect {
   Vec2 texture_coord_br;
 };
 
+struct GlyphRectBatch {
+  ArrayList<GlyphRect, 16> glyph_rects;
+  Rect bounds = Rect::MakeEmpty();
+};
+
+std::vector<GlyphRectBatch> BuildGlyphRectBatches(
+    ArrayList<GlyphRect, 16> glyph_rects, const Matrix& transform,
+    ArenaAllocator* arena_allocator, bool split_overlapping_glyphs);
+
 class WGSLTextGeometry : public HWWGSLGeometry {
  public:
   static constexpr const char* kTextCommonVertex = R"(
@@ -84,6 +93,8 @@ class WGSLTextSolidColorGeometry : public WGSLTextGeometry {
 
   std::string GenSourceWGSL() const override;
 
+  std::optional<std::vector<std::string>> GetVarings() const override;
+
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kColorText;
   }
@@ -106,6 +117,8 @@ class WGSLTextGradientGeometry : public WGSLTextGeometry {
   ~WGSLTextGradientGeometry() override = default;
 
   std::string GenSourceWGSL() const override;
+
+  std::optional<std::vector<std::string>> GetVarings() const override;
 
   HWFunctionBaseKey GetMainKey() const override {
     return HWGeometryKeyType::kGradientText;

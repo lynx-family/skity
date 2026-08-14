@@ -101,6 +101,14 @@ void HWWGSLShaderWriter::WriteFSFunctionsAndStructs(
   if (fragment_->GetProgrammableBlending()) {
     ss << fragment_->GetProgrammableBlending()->GenSourceWGSL();
   }
+  if (HasSecondaryBlendOutput()) {
+    ss << R"(
+struct FSOutput {
+  @location(0) @blend_src(0) primary: vec4<f32>,
+  @location(0) @blend_src(1) secondary: vec4<f32>,
+};
+)";
+  }
 }
 
 void HWWGSLShaderWriter::WriteFSUniforms(std::stringstream& ss) const {
@@ -147,7 +155,11 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
       ss << ", " << fs_params[i];
     }
   }
-  ss << ") -> @location(0) vec4<f32> {\n";
+  if (HasSecondaryBlendOutput()) {
+    ss << ") -> FSOutput {\n";
+  } else {
+    ss << ") -> @location(0) vec4<f32> {\n";
+  }
   ss << "  var color : vec4<f32>;\n";
 
   fragment_->WriteFSMain(ss);
@@ -157,32 +169,81 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
 )";
   }
 
-  if (geometry_ && geometry_->AffectsFragment()) {
+  if (HasFragmentMask()) {
     ss << R"(
-  var mask_alpha: f32 = 1.0;
+  var coverage: f32 = 1.0;
 )";
-    geometry_->WriteFSAlphaMask(ss);
-    ss << R"(
-  color = color * mask_alpha;
-)";
+    if (geometry_ && geometry_->AffectsFragment()) {
+      geometry_->WriteFSCoverage(ss);
+    }
+    if (fragment_->HasFragmentMask()) {
+      fragment_->WriteFSCoverage(ss);
+    }
   }
 
+  if (!NeedsProgrammableBlending()) {
+    if (HasSecondaryBlendOutput()) {
+      ss << "\n  var output: FSOutput;\n";
+      WriteBlendOutput(ss, blend_output_, "output.primary");
+      WriteBlendOutput(ss, secondary_blend_output_, "output.secondary");
+    } else {
+      WriteBlendOutput(ss, blend_output_, "color");
+    }
+  }
+
+  const char* coverage = HasFragmentMask() ? "coverage" : "1.0";
+
   if (NeedsFramebufferFetch()) {
-    ss << R"(
-  color = blending(color, dst_color);
-)";
+    ss << "\n  color = blending(color, dst_color, " << coverage << ");\n";
   } else if (NeedsTextureCopy()) {
+    if (HasFragmentMask()) {
+      ss << R"(
+  // The destination copy covers the draw bounds, while analytical geometry
+  // may rasterize a larger quad or tile. Zero-coverage fragments must leave
+  // the destination untouched and must not sample outside the copied region.
+  if coverage <= 0.0 {
+    discard;
+  }
+)";
+    }
     ss << R"(
   var dst_uv : vec2<f32> = input.frag_pos.xy * uDstUVMapping.xy + uDstUVMapping.zw;
   var dst_color: vec4<f32> = textureSample(uDstTexture, uDstSampler, dst_uv);
-  color = blending(color, dst_color);
 )";
+    ss << "  color = blending(color, dst_color, " << coverage << ");\n";
   }
 
-  ss << R"(
-  return color;
+  ss << "\n  return " << (HasSecondaryBlendOutput() ? "output" : "color")
+     << ";\n}\n";
 }
-)";
+
+void HWWGSLShaderWriter::WriteBlendOutput(std::stringstream& ss,
+                                          HWBlendOutput output,
+                                          std::string_view target) const {
+  const char* coverage = HasFragmentMask() ? "coverage" : "1.0";
+  switch (output) {
+    case HWBlendOutput::kNone:
+      ss << "\n  " << target << " = vec4<f32>(0.0);\n";
+      break;
+    case HWBlendOutput::kCoverage:
+      ss << "\n  " << target << " = vec4<f32>(" << coverage << ");\n";
+      break;
+    case HWBlendOutput::kSourceTimesCoverage:
+      if (HasFragmentMask()) {
+        ss << "\n  " << target << " = color * coverage;\n";
+      } else if (target != "color") {
+        ss << "\n  " << target << " = color;\n";
+      }
+      break;
+    case HWBlendOutput::kOneMinusSourceAlphaTimesCoverage:
+      ss << "\n  " << target << " = vec4<f32>((1.0 - color.a) * " << coverage
+         << ");\n";
+      break;
+    case HWBlendOutput::kOneMinusSourceTimesCoverage:
+      ss << "\n  " << target << " = (vec4<f32>(1.0) - color) * " << coverage
+         << ";\n";
+      break;
+  }
 }
 
 void HWWGSLShaderWriter::WriteVaryings(std::stringstream& ss) const {

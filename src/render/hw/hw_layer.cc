@@ -105,6 +105,7 @@ void HWLayer::Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {
 HWLayerState* HWLayer::GetState() { return &state_; }
 
 void HWLayer::AddDraw(HWDraw* draw) {
+  DEBUG_CHECK(draw != nullptr && draw->HasBlendPlan());
   FlushPendingClip();
 
   draw->SetColorFormat(GetColorFormat());
@@ -407,6 +408,13 @@ EmulatedLoadInfo HWLayer::CreateEmulatedLoadInfo() {
 
   draw->SetSampleCount(GetSampleCount());
   draw->SetColorFormat(GetColorFormat());
+  draw->SetBlendPlan({
+      BlendMode::kSrc,
+      HWBlendStrategy::kFixedFunction,
+      {HWBlendOutput::kSourceTimesCoverage, GPUBlendFactor::kOne,
+       GPUBlendFactor::kZero, GPUBlendOperation::kAdd},
+      DstReadStrategy::kNonRequired,
+  });
 
   EmulatedLoadInfo load_info;
   load_info.draw = draw;

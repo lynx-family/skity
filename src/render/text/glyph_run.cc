@@ -14,6 +14,7 @@
 #include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/draw/hw_dynamic_text_draw.hpp"
 #include "src/render/hw/draw/wgx_filter.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_path_raster.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
 #include "src/render/text/text_render_control.hpp"
@@ -23,10 +24,14 @@
 
 namespace skity {
 
+namespace {
+
 struct GlyphRegionWithIndex {
   uint32_t index;
   GlyphRegion region;
 };
+
+}  // namespace
 
 class DirectGlyphRun : public GlyphRun {
  public:
@@ -57,10 +62,17 @@ class DirectGlyphRun : public GlyphRun {
   ArrayList<GlyphRect, 16> Raster(float canvas_scale,
                                   ArenaAllocator* arena_allocator);
 
-  HWDraw* Draw(Matrix transform, ArenaAllocator* arena_allocator,
-               float canvas_scale, bool use_linear_text_filter) override;
+  GlyphDrawList Draw(Matrix transform, ArenaAllocator* arena_allocator,
+                     float canvas_scale, bool use_linear_text_filter,
+                     bool split_overlapping_glyphs) override;
 
-  Rect GetBounds() override { return bounds_; }
+  bool HasFragmentMask() const override {
+    return glyph_format_ == GlyphFormat::A8;
+  }
+
+  bool IsSourceOpaque() const override {
+    return glyph_format_ == GlyphFormat::A8 && IsPaintSourceOpaque(paint_);
+  }
 
   bool IsStroke() override { return is_stroke_; }
 
@@ -86,8 +98,6 @@ class DirectGlyphRun : public GlyphRun {
   uint32_t group_index_;
   Atlas* atlas_;
   GlyphFormat glyph_format_;
-
-  Rect bounds_;
 };
 
 ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
@@ -115,7 +125,6 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
 
   ArrayList<GlyphRect, 16> glyph_rects;
   glyph_rects.SetArenaAllocator(arena_allocator);
-  bounds_ = Rect::MakeEmpty();
   if (glyph_locs_.empty()) {
     return glyph_rects;
   }
@@ -159,73 +168,83 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
     }
 
     Vec4 bounds = {rx, ry, rx + rw, ry + rh};
-    bounds_.Join(Rect::MakeXYWH(rx, ry, rw, rh));
-
     glyph_rects.emplace_back(bounds, uv_lt, uv_rb);
   }
 
   return glyph_rects;
 }
 
-HWDraw* DirectGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
-                             float canvas_scale, bool use_linear_text_filter) {
+GlyphDrawList DirectGlyphRun::Draw(Matrix transform,
+                                   ArenaAllocator* arena_allocator,
+                                   float canvas_scale,
+                                   bool use_linear_text_filter,
+                                   bool split_overlapping_glyphs) {
   SKITY_TRACE_EVENT(DirectGlyphRun_Draw);
   ArrayList<GlyphRect, 16> glyph_rects = Raster(canvas_scale, arena_allocator);
 
-  Vector color = is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
-
   atlas_->UploadAtlas(group_index_);
   auto gpu_texture = atlas_->GetGPUTexture(group_index_);
+  auto gpu_sampler = atlas_->GetGPUSampler(
+      group_index_, use_linear_text_filter ? GPUFilterMode::kLinear
+                                           : GPUFilterMode::kNearest);
 
   Matrix text_transform = transform * Matrix::Translate(origin_.x, origin_.y);
   Matrix final_transform =
       HWDynamicTextDraw::CalcTransform(transform, text_transform);
-  HWWGSLGeometry* geometry;
-  if (paint_.GetShader()) {
-    geometry = arena_allocator->Make<WGSLTextGradientGeometry>(
-        final_transform, std::move(glyph_rects),
-        paint_.GetShader()->GetLocalMatrix(), transform);
-  } else {
-    Paint paint_copy = paint_;
-    paint_copy.SetFillColor(color);
-    paint_copy.SetStrokeColor(color);
-    geometry = arena_allocator->Make<WGSLTextSolidColorGeometry>(
-        final_transform, std::move(glyph_rects), paint_copy);
+  auto batches =
+      BuildGlyphRectBatches(std::move(glyph_rects), final_transform,
+                            arena_allocator, split_overlapping_glyphs);
+
+  Shader::GradientInfo gradient_info{};
+  Shader::GradientType gradient_type = Shader::GradientType::kNone;
+  if (paint_.GetShader() != nullptr) {
+    gradient_type = paint_.GetShader()->AsGradient(&gradient_info);
   }
+  bool uses_gradient = glyph_format_ == GlyphFormat::A8 &&
+                       gradient_type != Shader::GradientType::kNone;
 
-  HWWGSLFragment* fragment;
+  Vector color = is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
+  Paint paint_copy = paint_;
+  paint_copy.SetFillColor(color);
+  paint_copy.SetStrokeColor(color);
 
-  auto gpu_sampler = atlas_->GetGPUSampler(
-      group_index_, use_linear_text_filter ? GPUFilterMode::kLinear
-                                           : GPUFilterMode::kNearest);
-  if (atlas_->GetFormat() == AtlasFormat::A8) {
-    if (paint_.GetShader() && paint_.GetShader()->AsGradient(nullptr) !=
-                                  Shader::GradientType::kNone) {
-      // Text does not have image shader for now
-      Shader::GradientInfo info{};
-      auto type = paint_.GetShader()->AsGradient(&info);
-
-      fragment = arena_allocator->Make<WGSLGradientTextFragment>(
-          std::move(gpu_texture), std::move(gpu_sampler), info, type,
-          paint_.GetAlphaF());
+  GlyphDrawList draws;
+  draws.SetArenaAllocator(arena_allocator);
+  for (auto& batch : batches) {
+    HWWGSLGeometry* geometry = nullptr;
+    if (uses_gradient) {
+      geometry = arena_allocator->Make<WGSLTextGradientGeometry>(
+          final_transform, std::move(batch.glyph_rects),
+          paint_.GetShader()->GetLocalMatrix(), transform);
     } else {
-      fragment = arena_allocator->Make<WGSLColorTextFragment>(
-          std::move(gpu_texture), std::move(gpu_sampler));
+      geometry = arena_allocator->Make<WGSLTextSolidColorGeometry>(
+          final_transform, std::move(batch.glyph_rects), paint_copy);
     }
-  } else {
-    fragment = arena_allocator->Make<WGSLColorEmojiFragment>(
-        std::move(gpu_texture), std::move(gpu_sampler),
-        glyph_format_ == GlyphFormat::BGRA32, paint_.GetAlphaF());
-  }
 
-  if (paint_.GetColorFilter()) {
-    fragment->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
-  }
+    HWWGSLFragment* fragment = nullptr;
+    if (uses_gradient) {
+      fragment = arena_allocator->Make<WGSLGradientTextFragment>(
+          gpu_texture, gpu_sampler, gradient_info, gradient_type,
+          paint_.GetAlphaF());
+    } else if (glyph_format_ == GlyphFormat::A8) {
+      fragment = arena_allocator->Make<WGSLColorTextFragment>(gpu_texture,
+                                                              gpu_sampler);
+    } else {
+      fragment = arena_allocator->Make<WGSLColorEmojiFragment>(
+          gpu_texture, gpu_sampler, glyph_format_ == GlyphFormat::BGRA32,
+          paint_.GetAlphaF());
+    }
 
-  HWDynamicTextDraw* text_draw = arena_allocator->Make<HWDynamicTextDraw>(
-      Matrix(), paint_.GetBlendMode(), geometry, fragment);
-  bounds_ = text_draw->GetTransform().MapRect(bounds_);
-  return text_draw;
+    if (paint_.GetColorFilter()) {
+      fragment->SetFilter(
+          WGXFilterFragment::Make(paint_.GetColorFilter().get()));
+    }
+
+    auto* draw =
+        arena_allocator->Make<HWDynamicTextDraw>(Matrix(), geometry, fragment);
+    draws.emplace_back(GlyphDraw{draw, batch.bounds});
+  }
+  return draws;
 }
 
 GlyphRunList DirectGlyphRun::SubRunListByTexture(
@@ -237,7 +256,6 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
   GlyphRunList run_list;
   run_list.SetArenaAllocator(arena_allocator);
   std::vector<GlyphRegionWithIndex> glyph_regions;
-  uint32_t max_index = 0;
 
   std::vector<const GlyphData*> glyph_info(count);
   Paint metrics_paint;
@@ -254,6 +272,20 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
   GlyphFormat glyph_format = *glyph_info[0]->GetFormat();
 
   Atlas* atlas = atlas_manager->GetAtlas(format);
+  const uint32_t glyphs_per_group = atlas->GetConfig().max_num_bitmap_per_atlas;
+  uint32_t current_group_index = 0;
+  bool has_current_group = false;
+  auto flush_group = [&]() {
+    if (glyph_regions.empty()) {
+      return;
+    }
+    run_list.push_back(arena_allocator->Make<DirectGlyphRun>(
+        count, glyphs, origin, position_x, position_y, font, context_scale,
+        transform, paint, is_stroke, std::move(glyph_regions),
+        current_group_index, atlas, glyph_format));
+    glyph_regions.clear();
+  };
+
   uint32_t k = 0;
   while (k < count) {
     auto info = *(glyph_info[k]);
@@ -264,48 +296,18 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
       continue;
     }
 
-    if (max_index < glyph_region.index_in_group) {
-      max_index = glyph_region.index_in_group;
+    uint32_t group_index = glyph_region.index_in_group / glyphs_per_group;
+    if (has_current_group && group_index != current_group_index) {
+      flush_group();
     }
+    current_group_index = group_index;
+    has_current_group = true;
 
+    glyph_region.index_in_group %= glyphs_per_group;
     glyph_regions.push_back({k, glyph_region});
     k++;
   }
-
-  uint32_t draw_count =
-      max_index / atlas->GetConfig().max_num_bitmap_per_atlas + 1;
-  if (draw_count == 1) {
-    if (!glyph_regions.empty()) {
-      run_list.push_back(arena_allocator->Make<DirectGlyphRun>(
-          count, glyphs, origin, position_x, position_y, font, context_scale,
-          transform, paint, is_stroke, std::move(glyph_regions),
-          static_cast<uint32_t>(0), atlas, glyph_format));
-    }
-  } else {
-    std::vector<std::vector<GlyphRegionWithIndex>> glyph_region_groups(
-        draw_count);
-
-    k = 0;
-    while (k < glyph_regions.size()) {
-      uint32_t group_index = glyph_regions[k].region.index_in_group /
-                             atlas->GetConfig().max_num_bitmap_per_atlas;
-      glyph_region_groups[group_index].push_back(
-          {glyph_regions[k].index,
-           {glyph_regions[k].region.index_in_group %
-                atlas->GetConfig().max_num_bitmap_per_atlas,
-            glyph_regions[k].region.loc, 1.0f}});
-      k++;
-    }
-
-    for (uint32_t group_index = 0; group_index < glyph_region_groups.size();
-         group_index++) {
-      run_list.push_back(arena_allocator->Make<DirectGlyphRun>(
-          count, glyphs, origin, position_x, position_y, font, context_scale,
-          transform, paint, is_stroke,
-          std::move(glyph_region_groups[group_index]), group_index, atlas,
-          glyph_format));
-    }
-  }
+  flush_group();
 
   return run_list;
 }
@@ -339,10 +341,13 @@ class SDFGlyphRun : public GlyphRun {
   ArrayList<GlyphRect, 16> Raster(float canvas_scale,
                                   ArenaAllocator* arena_allocator);
 
-  HWDraw* Draw(Matrix transform, ArenaAllocator* arena_allocator,
-               float canvas_scale, bool) override;
+  GlyphDrawList Draw(Matrix transform, ArenaAllocator* arena_allocator,
+                     float canvas_scale, bool enable_text_linear_filter,
+                     bool split_overlapping_glyphs) override;
 
-  Rect GetBounds() override { return bounds_; }
+  bool HasFragmentMask() const override { return true; }
+
+  bool IsSourceOpaque() const override { return IsPaintSourceOpaque(paint_); }
 
   bool IsStroke() override { return false; }
 
@@ -357,8 +362,6 @@ class SDFGlyphRun : public GlyphRun {
   std::vector<GlyphRegionWithIndex> glyph_locs_;
   uint32_t group_index_;
   Atlas* atlas_;
-
-  Rect bounds_;
 };
 
 ArrayList<GlyphRect, 16> SDFGlyphRun::Raster(float canvas_scale,
@@ -371,7 +374,6 @@ ArrayList<GlyphRect, 16> SDFGlyphRun::Raster(float canvas_scale,
 
   ArrayList<GlyphRect, 16> glyph_rects;
   glyph_rects.SetArenaAllocator(arena_allocator);
-  bounds_ = Rect::MakeEmpty();
   for (uint32_t k = 0; k < glyph_locs_.size(); k++) {
     auto info = *(glyph_info[glyph_locs_[k].index]);
 
@@ -403,45 +405,50 @@ ArrayList<GlyphRect, 16> SDFGlyphRun::Raster(float canvas_scale,
     }
 
     Vec4 bounds = {rx, ry, rx + rw, ry + rh};
-    bounds_.Join(Rect::MakeXYWH(rx, ry, rw, rh));
-
     glyph_rects.emplace_back(bounds, uv_lt, uv_rb);
   }
 
   return glyph_rects;
 }
 
-HWDraw* SDFGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
-                          float canvas_scale, bool) {
+GlyphDrawList SDFGlyphRun::Draw(Matrix transform,
+                                ArenaAllocator* arena_allocator,
+                                float canvas_scale, bool,
+                                bool split_overlapping_glyphs) {
   SKITY_TRACE_EVENT(SDFGlyphRun_Draw);
 
   ArrayList<GlyphRect, 16> glyph_rects = Raster(canvas_scale, arena_allocator);
   atlas_->UploadAtlas(group_index_);
   auto gpu_texture = atlas_->GetGPUTexture(group_index_);
+  auto gpu_sampler =
+      atlas_->GetGPUSampler(group_index_, GPUFilterMode::kLinear);
   Vector color = paint_.GetFillColor();
 
   Matrix text_transform = transform * Matrix::Translate(origin_.x, origin_.y);
   Matrix final_transform =
       HWDynamicSdfTextDraw::CalcTransform(text_transform, 1.0f);
+  auto batches =
+      BuildGlyphRectBatches(std::move(glyph_rects), final_transform,
+                            arena_allocator, split_overlapping_glyphs);
 
-  WGSLTextSolidColorGeometry* geometry =
-      arena_allocator->Make<WGSLTextSolidColorGeometry>(
-          final_transform, std::move(glyph_rects), paint_);
+  GlyphDrawList draws;
+  draws.SetArenaAllocator(arena_allocator);
+  for (auto& batch : batches) {
+    auto* geometry = arena_allocator->Make<WGSLTextSolidColorGeometry>(
+        final_transform, std::move(batch.glyph_rects), paint_);
+    HWWGSLFragment* fragment = arena_allocator->Make<WGSLSdfColorTextFragment>(
+        gpu_texture, gpu_sampler, color);
+    if (paint_.GetColorFilter()) {
+      fragment->SetFilter(
+          WGXFilterFragment::Make(paint_.GetColorFilter().get()));
+    }
 
-  auto gpu_sampler =
-      atlas_->GetGPUSampler(group_index_, GPUFilterMode::kLinear);
-  HWWGSLFragment* fragment = arena_allocator->Make<WGSLSdfColorTextFragment>(
-      std::move(gpu_texture), std::move(gpu_sampler), color);
-
-  if (paint_.GetColorFilter()) {
-    fragment->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
+    // SDF scale is applied to the glyph geometry rather than the draw itself.
+    auto* draw = arena_allocator->Make<HWDynamicSdfTextDraw>(Matrix(), geometry,
+                                                             fragment);
+    draws.emplace_back(GlyphDraw{draw, batch.bounds});
   }
-
-  // need to apply sdf scale to draw other than glyph
-  HWDynamicSdfTextDraw* text_draw = arena_allocator->Make<HWDynamicSdfTextDraw>(
-      Matrix(), paint_.GetBlendMode(), geometry, fragment);
-  bounds_ = text_draw->GetTransform().MapRect(bounds_);
-  return text_draw;
+  return draws;
 }
 
 GlyphRunList SDFGlyphRun::SubRunListByTexture(
@@ -450,13 +457,26 @@ GlyphRunList SDFGlyphRun::SubRunListByTexture(
     const Paint& paint, float context_scale, const Matrix& transform,
     AtlasManager* atlas_manager, ArenaAllocator* arena_allocator) {
   GlyphRunList run_list;
+  run_list.SetArenaAllocator(arena_allocator);
   std::vector<GlyphRegionWithIndex> glyph_regions;
-  uint32_t max_index = 0;
 
   std::vector<const GlyphData*> glyph_info(count);
   font.LoadGlyphMetrics(glyphs, count, glyph_info.data(), paint);
   AtlasFormat format = AtlasFormat::A8;
   Atlas* atlas = atlas_manager->GetAtlas(format);
+  const uint32_t glyphs_per_group = atlas->GetConfig().max_num_bitmap_per_atlas;
+  uint32_t current_group_index = 0;
+  bool has_current_group = false;
+  auto flush_group = [&]() {
+    if (glyph_regions.empty()) {
+      return;
+    }
+    run_list.push_back(arena_allocator->Make<SDFGlyphRun>(
+        count, glyphs, origin, position_x, position_y, font, paint,
+        std::move(glyph_regions), current_group_index, atlas));
+    glyph_regions.clear();
+  };
+
   uint32_t k = 0;
   while (k < count) {
     auto info = *(glyph_info[k]);
@@ -467,45 +487,18 @@ GlyphRunList SDFGlyphRun::SubRunListByTexture(
       continue;
     }
 
-    if (max_index < glyph_region.index_in_group) {
-      max_index = glyph_region.index_in_group;
+    uint32_t group_index = glyph_region.index_in_group / glyphs_per_group;
+    if (has_current_group && group_index != current_group_index) {
+      flush_group();
     }
+    current_group_index = group_index;
+    has_current_group = true;
 
+    glyph_region.index_in_group %= glyphs_per_group;
     glyph_regions.push_back({k, glyph_region});
     k++;
   }
-
-  uint32_t draw_count =
-      max_index / atlas->GetConfig().max_num_bitmap_per_atlas + 1;
-  if (draw_count == 1) {
-    if (!glyph_regions.empty()) {
-      run_list.push_back(arena_allocator->Make<SDFGlyphRun>(
-          count, glyphs, origin, position_x, position_y, font, paint,
-          std::move(glyph_regions), 0U, atlas));
-    }
-  } else {
-    std::vector<std::vector<GlyphRegionWithIndex>> glyph_region_groups(
-        draw_count);
-
-    k = 0;
-    while (k < glyph_regions.size()) {
-      uint32_t group_index = glyph_regions[k].region.index_in_group /
-                             atlas->GetConfig().max_num_bitmap_per_atlas;
-      glyph_region_groups[group_index].push_back(
-          {glyph_regions[k].index,
-           {glyph_regions[k].region.index_in_group %
-                atlas->GetConfig().max_num_bitmap_per_atlas,
-            glyph_regions[k].region.loc, glyph_regions[k].region.scale}});
-      k++;
-    }
-
-    for (uint32_t group_index = 0; group_index < glyph_region_groups.size();
-         group_index++) {
-      run_list.push_back(arena_allocator->Make<SDFGlyphRun>(
-          count, glyphs, origin, position_x, position_y, font, paint,
-          std::move(glyph_region_groups[group_index]), group_index, atlas));
-    }
-  }
+  flush_group();
 
   return run_list;
 }
@@ -522,10 +515,13 @@ class PathGlyphRun : public GlyphRun {
 
   ~PathGlyphRun() override = default;
 
-  HWDraw* Draw(Matrix transform, ArenaAllocator* arena_allocator,
-               float canvas_scale, bool) override;
+  GlyphDrawList Draw(Matrix transform, ArenaAllocator* arena_allocator,
+                     float canvas_scale, bool enable_text_linear_filter,
+                     bool split_overlapping_glyphs) override;
 
-  Rect GetBounds() override { return path_.GetBounds(); }
+  bool HasFragmentMask() const override { return false; }
+
+  bool IsSourceOpaque() const override { return false; }
 
   bool IsStroke() override { return false; }
 
@@ -537,15 +533,17 @@ class PathGlyphRun : public GlyphRun {
   DrawPathFunc draw_path_func_;
 };
 
-HWDraw* PathGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
-                           float canvas_scale, bool) {
+GlyphDrawList PathGlyphRun::Draw(Matrix, ArenaAllocator* arena_allocator, float,
+                                 bool, bool) {
   SKITY_TRACE_EVENT(PathGlyphRun_Draw);
   Matrix glyph_transform = Matrix::Translate(position_x_, position_y_);
   Path path = path_.CopyWithMatrix(glyph_transform);
 
   // Consider to extract isolated path renderer.
   draw_path_func_(path, paint_);
-  return nullptr;
+  GlyphDrawList draws;
+  draws.SetArenaAllocator(arena_allocator);
+  return draws;
 }
 
 GlyphRun::~GlyphRun() = default;
@@ -563,66 +561,30 @@ GlyphRunList GlyphRun::Make(const uint32_t count, const GlyphID* glyphs,
   metrics_paint.SetStyle(Paint::kFill_Style);
   font.LoadGlyphMetrics(glyphs, count, glyph_info.data(), metrics_paint);
 
-  uint32_t a8_count = 0;
-  for (uint32_t index = 0; index < count; index++) {
-    if (glyph_info[index]->GetFormat() == GlyphFormat::A8) {
-      a8_count++;
-    }
-  }
-
-  if (a8_count == count) {
-    return MakeInternal(count, glyphs, origin, position_x, position_y, font,
-                        paint, AtlasFormat::A8, context_scale, transform,
-                        atlas_manager, arena_allocator, draw_path_func);
-  }
-
-  if (a8_count == 0) {
-    return MakeInternal(count, glyphs, origin, position_x, position_y, font,
-                        paint, AtlasFormat::RGBA32, context_scale, transform,
-                        atlas_manager, arena_allocator, draw_path_func);
-  }
-
-  const uint32_t rgba_count = count - a8_count;
-  std::vector<GlyphID> A8_glyph(a8_count);
-  std::vector<float> A8_position_x(a8_count);
-  std::vector<float> A8_position_y(a8_count);
-  std::vector<GlyphID> RGBA_glyph(rgba_count);
-  std::vector<float> RGBA_position_x(rgba_count);
-  std::vector<float> RGBA_position_y(rgba_count);
-
-  uint32_t a8_index = 0;
-  uint32_t rgba_index = 0;
-  for (uint32_t index = 0; index < count; index++) {
-    if (glyph_info[index]->GetFormat() == GlyphFormat::A8) {
-      A8_glyph[a8_index] = glyphs[index];
-      A8_position_x[a8_index] = position_x[index];
-      A8_position_y[a8_index] = position_y[index];
-      a8_index++;
-    } else {
-      RGBA_glyph[rgba_index] = glyphs[index];
-      RGBA_position_x[rgba_index] = position_x[index];
-      RGBA_position_y[rgba_index] = position_y[index];
-      rgba_index++;
-    }
-  }
-
   GlyphRunList result;
   result.SetArenaAllocator(arena_allocator);
 
-  GlyphRunList A8_list = MakeInternal(
-      a8_count, A8_glyph.data(), origin, A8_position_x.data(),
-      A8_position_y.data(), font, paint, AtlasFormat::A8, context_scale,
-      transform, atlas_manager, arena_allocator, draw_path_func);
-  for (auto& item : A8_list) {
-    result.push_back(item);
-  }
+  // Keep format runs in input order. Besides preserving overlapping-glyph
+  // blending, RGBA and BGRA glyphs require different shader swizzles even
+  // though they share the same atlas format.
+  uint32_t run_start = 0;
+  while (run_start < count) {
+    GlyphFormat glyph_format = *glyph_info[run_start]->GetFormat();
+    uint32_t run_end = run_start + 1;
+    while (run_end < count &&
+           glyph_info[run_end]->GetFormat() == glyph_format) {
+      run_end++;
+    }
 
-  GlyphRunList RGBA_list = MakeInternal(
-      rgba_count, RGBA_glyph.data(), origin, RGBA_position_x.data(),
-      RGBA_position_y.data(), font, paint, AtlasFormat::RGBA32, context_scale,
-      transform, atlas_manager, arena_allocator, draw_path_func);
-  for (auto& item : RGBA_list) {
-    result.push_back(item);
+    GlyphRunList sub_runs =
+        MakeInternal(run_end - run_start, glyphs + run_start, origin,
+                     position_x + run_start, position_y + run_start, font,
+                     paint, FromGlyphFormat(glyph_format), context_scale,
+                     transform, atlas_manager, arena_allocator, draw_path_func);
+    for (auto& sub_run : sub_runs) {
+      result.push_back(sub_run);
+    }
+    run_start = run_end;
   }
 
   return result;

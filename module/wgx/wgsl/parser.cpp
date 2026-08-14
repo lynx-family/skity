@@ -1998,6 +1998,45 @@ Parser::Result<ast::Attribute*> Parser::Attribute() {
     return ReturnType{allocator_->Allocate<ast::BindingAttribute>(index)};
   }
 
+  if (Consume(TokenType::kIdentifier, "blend_src")) {
+    if (!Consume(TokenType::kParenLeft)) {
+      diagnosis_.message = "Expected '(' after blend_src attribute";
+      diagnosis_.line = Peek().line;
+      diagnosis_.column = Peek().column;
+      return ReturnType{State::kError};
+    }
+
+    auto exp = ConstLiteral();
+    if (exp.state != State::kSuccess) {
+      return ReturnType{State::kError};
+    }
+
+    if (!Consume(TokenType::kParenRight)) {
+      diagnosis_.message = "Expected ')' after blend_src attribute";
+      diagnosis_.line = Peek().line;
+      diagnosis_.column = Peek().column;
+      return ReturnType{State::kError};
+    }
+
+    auto const_exp = exp.GetValue();
+    if (const_exp->GetType() != ast::ExpressionType::kIntLiteral) {
+      diagnosis_.message = "Expected integer literal after blend_src attribute";
+      diagnosis_.line = Peek().line;
+      diagnosis_.column = Peek().column;
+      return ReturnType{State::kError};
+    }
+
+    auto index = static_cast<ast::IntLiteralExp*>(const_exp)->value;
+    if (index < 0 || index > 1) {
+      diagnosis_.message = "blend_src index must be 0 or 1";
+      diagnosis_.line = Peek().line;
+      diagnosis_.column = Peek().column;
+      return ReturnType{State::kError};
+    }
+
+    return ReturnType{allocator_->Allocate<ast::BlendSrcAttribute>(index)};
+  }
+
   if (Consume(TokenType::kIdentifier, "builtin")) {
     if (!Consume(TokenType::kParenLeft)) {
       diagnosis_.message = "Expected '(' after builtin attribute";

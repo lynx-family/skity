@@ -27,6 +27,11 @@ class HWWGSLShaderWriter {
   std::string GetVSShaderName() const;
   std::string GetFSShaderName() const;
 
+  void SetBlendOutputs(HWBlendOutput primary, HWBlendOutput secondary) {
+    blend_output_ = primary;
+    secondary_blend_output_ = secondary;
+  }
+
   HWFunctionBaseKey GetVSKey() const;
   HWFunctionBaseKey GetFSKey() const;
 
@@ -34,6 +39,8 @@ class HWWGSLShaderWriter {
     HWPipelineKey key;
     key.base_key = MakePipelineBaseKey(GetVSKey(), GetFSKey());
     key.compose_keys = GetComposeKeys(key.base_key);
+    key.blend_output = blend_output_;
+    key.secondary_blend_output = secondary_blend_output_;
     key.programmable_blending =
         fragment_->GetProgrammableBlending()
             ? fragment_->GetProgrammableBlending()->GetProgrammableBlendingKey()
@@ -62,6 +69,8 @@ class HWWGSLShaderWriter {
   void WriteFSUniforms(std::stringstream& ss) const;
   void WriteFSInput(std::stringstream& ss) const;
   void WriteFSMain(std::stringstream& ss) const;
+  void WriteBlendOutput(std::stringstream& ss, HWBlendOutput output,
+                        std::string_view target) const;
 
   void WriteVaryings(std::stringstream& ss) const;
   bool HasVarings() const;
@@ -84,9 +93,20 @@ class HWWGSLShaderWriter {
                DstReadStrategy::kTextureCopy;
   }
 
+  bool HasFragmentMask() const {
+    return (geometry_ != nullptr && geometry_->AffectsFragment()) ||
+           (fragment_ != nullptr && fragment_->HasFragmentMask());
+  }
+
+  bool HasSecondaryBlendOutput() const {
+    return secondary_blend_output_ != HWBlendOutput::kNone;
+  }
+
  private:
   const HWWGSLGeometry* geometry_ = nullptr;
   const HWWGSLFragment* fragment_ = nullptr;
+  HWBlendOutput blend_output_ = HWBlendOutput::kSourceTimesCoverage;
+  HWBlendOutput secondary_blend_output_ = HWBlendOutput::kNone;
 };
 
 }  // namespace skity

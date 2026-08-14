@@ -18,6 +18,8 @@ class PixmapShader : public Shader {
                         TileMode y_tile_mode, const Matrix& local_matrix);
   ~PixmapShader() override = default;
 
+  bool IsOpaque() const override;
+
   const std::shared_ptr<Image>* AsImage() const override;
 
   const SamplingOptions* GetSamplingOptions() const override;

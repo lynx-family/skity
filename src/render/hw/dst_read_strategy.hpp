@@ -5,19 +5,13 @@
 #ifndef SRC_RENDER_HW_DST_READ_STRATEGY_HPP
 #define SRC_RENDER_HW_DST_READ_STRATEGY_HPP
 
-#include <skity/graphic/blend_mode.hpp>
-
-#include "src/gpu/gpu_caps.hpp"
-#include "src/render/hw/draw/wgx_programmable_blending.hpp"
-
 namespace skity {
 
-DstReadStrategy ResolveDstReadStrategy(BlendMode blend_mode,
-                                       const GPUCaps& caps);
-
-DstReadStrategy ResolveDstReadStrategy(BlendMode blend_mode,
-                                       const GPUCaps& caps,
-                                       bool supports_texture_copy_dst_read);
+enum class DstReadStrategy {
+  kNonRequired,
+  kFramebufferFetch,
+  kTextureCopy,
+};
 
 }  // namespace skity
 

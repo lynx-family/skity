@@ -36,7 +36,7 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
   layer_back_draw_->SetColorFormat(GetColorFormat());
   layer_back_draw_->SetScissorBox(GetScissorBox());
 
-  layer_back_draw_->SetDstReadStrategy(GetDstReadStrategy());
+  layer_back_draw_->SetBlendPlan(GetBlendPlan());
 
   auto state = layer_back_draw_->Prepare(context);
 
@@ -66,8 +66,8 @@ std::shared_ptr<GPURenderPass> HWSubLayer::OnBeginRenderPass(
 bool HWSubLayer::OnCopyToDstTexture(GPUCommandBuffer* cmd,
                                     std::shared_ptr<GPUTexture> dst_texture,
                                     GPURegion copy_region) const {
-  return CopyRegionToDstTexture(cmd, layer_back_draw_texture_,
-                                std::move(dst_texture), copy_region);
+  return CopyRegionToDstTexture(cmd, color_texture_, std::move(dst_texture),
+                                copy_region);
 }
 
 void HWSubLayer::OnPostDraw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {

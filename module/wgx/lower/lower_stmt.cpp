@@ -45,6 +45,8 @@ bool Lowerer::LowerStatement(const ast::Statement* statement,
     case ast::StatementType::kReturn:
       return LowerReturnStatement(
           static_cast<const ast::ReturnStatement*>(statement), block);
+    case ast::StatementType::kDiscard:
+      return LowerDiscardStatement(block);
     case ast::StatementType::kBlock:
       return LowerBlockStatement(
           static_cast<const ast::BlockStatement*>(statement), block);
@@ -108,6 +110,13 @@ bool Lowerer::LowerReturnStatement(const ast::ReturnStatement* ret,
   }
   inst.operands.push_back(return_value);
 
+  block->instructions.emplace_back(inst);
+  return true;
+}
+
+bool Lowerer::LowerDiscardStatement(ir::Block* block) {
+  ir::Instruction inst;
+  inst.kind = ir::InstKind::kDiscard;
   block->instructions.emplace_back(inst);
   return true;
 }

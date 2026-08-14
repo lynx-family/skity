@@ -518,7 +518,7 @@ void AstPrinter::Visit(ast::Statement* statement) {
       break;
 
     case ast::StatementType::kDiscard:
-      ss_ << "discard;" << std::endl;
+      ss_ << "discard_fragment();" << std::endl;
       break;
 
     case ast::StatementType::kIf: {
@@ -998,6 +998,13 @@ std::vector<Attribute> AstPrinter::GetAttributes(
         auto color_attr = static_cast<ast::ColorAttribute*>(attr);
         attrs.emplace_back(
             Attribute{"color", static_cast<uint32_t>(color_attr->index)});
+      }
+    } else if (attr->GetType() == ast::AttributeType::kBlendSrc) {
+      if (entry_point_output && func_->GetFunction()->GetPipelineStage() ==
+                                    ast::PipelineStage::kFragment) {
+        auto blend_src_attr = static_cast<ast::BlendSrcAttribute*>(attr);
+        attrs.emplace_back(
+            Attribute{"index", static_cast<uint32_t>(blend_src_attr->index)});
       }
     } else if (attr->GetType() == ast::AttributeType::kVertex ||
                attr->GetType() == ast::AttributeType::kFragment) {
