@@ -52,6 +52,18 @@ if (${SKITY_VK_BACKEND})
   )
 endif()
 
+# Match the core library's LTO setting (see the skity target in the root
+# CMakeLists.txt). On Android release builds skity objects are compiled with
+# -flto, so this wrapper must also link with -flto or strict linkers reject
+# the LTO bitcode pulled in from libskity.so. The other size flags from the
+# core target (--exclude-libs / --gc-sections / --icf) are not needed here:
+# they are size optimizations and capi is a thin forwarding layer.
+if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+  if (ANDROID)
+    target_link_options(skity-capi PRIVATE "-flto")
+  endif()
+endif()
+
 # Android 16 KiB page-size alignment (arm64 / x86_64), required for the .so to
 # load on Android 15+ devices with 16 KiB pages. Mirrors the option applied to
 # the core skity target in cmake/Platform.cmake.
