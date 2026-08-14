@@ -630,7 +630,8 @@ class ScalerContextDWrite : public ScalerContext {
     GlyphDataWinAccess::SetFormat(glyph, GlyphFormat::A8);
   }
 
-  void GenerateImage(GlyphData* glyph, const StrokeDesc& stroke_desc) override {
+  void GenerateImage(PackedGlyphID, GlyphData* glyph,
+                     const StrokeDesc& stroke_desc) override {
     if (CanGenerateDWriteColorImage(glyph, stroke_desc) &&
         GenerateDWriteColorImage(glyph)) {
       return;
@@ -644,7 +645,7 @@ class ScalerContextDWrite : public ScalerContext {
     (void)GenerateDWritePathImageInfo(glyph, stroke_desc, true);
   }
 
-  void GenerateImageInfo(GlyphData* glyph,
+  void GenerateImageInfo(PackedGlyphID, GlyphData* glyph,
                          const StrokeDesc& stroke_desc) override {
     if (CanGenerateDWriteColorImage(glyph, stroke_desc) &&
         GenerateDWriteColorImageInfo(glyph)) {

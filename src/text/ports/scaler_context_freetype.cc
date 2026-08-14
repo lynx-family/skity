@@ -450,7 +450,7 @@ static FT_Stroker_LineJoin ToFreetypeJoin(Paint::Join join) {
   }
 }
 
-void ScalerContextFreetype::GenerateImage(GlyphData* glyph,
+void ScalerContextFreetype::GenerateImage(PackedGlyphID, GlyphData* glyph,
                                           const StrokeDesc& stroke_desc) {
   SKITY_TRACE_EVENT(ScalerContextFreetype_GenerateImage);
   std::lock_guard<std::mutex> locker(FreetypeFace::f_t_mutex());
@@ -612,7 +612,7 @@ void ScalerContextFreetype::GenerateImage(GlyphData* glyph,
   }
 }
 
-void ScalerContextFreetype::GenerateImageInfo(GlyphData* glyph,
+void ScalerContextFreetype::GenerateImageInfo(PackedGlyphID, GlyphData* glyph,
                                               const StrokeDesc& desc) {}
 
 bool ScalerContextFreetype::GeneratePath(GlyphData* glyph_data) {

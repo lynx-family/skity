@@ -14,6 +14,7 @@
 #include <skity/geometry/stroke.hpp>
 #include <utility>
 
+#include "src/render/text/glyph_position.hpp"
 #include "src/text/ports/darwin/typeface_darwin.hpp"
 
 namespace {
@@ -294,6 +295,18 @@ bool OffScreenContext::SetMiterLimit(CGFloat limit) {
   return true;
 }
 
+bool OffScreenContext::SetShouldAntialias(bool should_antialias) {
+  if (!cg_context_ || (draw_state_.should_antialias_valid &&
+                       draw_state_.should_antialias == should_antialias)) {
+    return false;
+  }
+
+  CGContextSetShouldAntialias(cg_context_.get(), should_antialias);
+  draw_state_.should_antialias = should_antialias;
+  draw_state_.should_antialias_valid = true;
+  return true;
+}
+
 CGColorSpaceRef OffScreenContext::GetCGColorSpace(bool need_color) const {
   return need_color ? rgb_color_space_.get() : gray_color_space_.get();
 }
@@ -489,8 +502,11 @@ void ScalerContextDarwin::InitializeCGContext(CGContextRef context,
    subpixel positioning by explicitly setting both
    setShouldSubpixelPositionFonts(true) and
    setShouldSubpixelQuantizeFonts(false)
-   **/
+  **/
   CGContextSetAllowsFontSubpixelQuantization(context, false);
+  CGContextSetShouldSubpixelQuantizeFonts(context, false);
+  CGContextSetAllowsFontSubpixelPositioning(context, true);
+  CGContextSetShouldSubpixelPositionFonts(context, true);
 
   if (is_color) {
     CGContextSetFillColorWithColor(context, os_context_.GetCGColor());
@@ -515,7 +531,7 @@ void ScalerContextDarwin::DrawGlyphWithState(CGContextRef context,
   CTFontDrawGlyphs(ct_font_.get(), &glyph, &point, 1, context);
 }
 
-void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
+void ScalerContextDarwin::GenerateImage(PackedGlyphID id, GlyphData *glyph,
                                         const StrokeDesc &stroke_desc) {
   // The returned pixels borrow OffScreenContext storage. Clear the previously
   // published view before generating the next single-glyph bitmap.
@@ -523,7 +539,7 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
   glyph->image_.row_bytes = 0;
   glyph->image_.need_free = false;
 
-  GenerateImageInfo(glyph, stroke_desc);
+  GenerateImageInfo(id, glyph, stroke_desc);
   if (glyph->image_.width == 0 || glyph->image_.height == 0.0) {
     return;
   }
@@ -545,6 +561,11 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
     InitializeCGContext(cg_context, is_color);
   }
 
+  // Skia chooses Core Graphics antialiasing from the glyph mask format:
+  // BW (Font::Edging::kAlias) disables it, while A8/LCD/color masks enable it.
+  os_context_.SetShouldAntialias(is_color ||
+                                 desc_.GetEdging() != Font::Edging::kAlias);
+
   CGPoint point = CGPointMake(glyph->image_.origin_x_for_raster,
                               glyph->image_.origin_y_for_raster);
 
@@ -562,7 +583,7 @@ void ScalerContextDarwin::GenerateImage(GlyphData *glyph,
   glyph->image_.row_bytes = target.row_bytes;
 }
 
-void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
+void ScalerContextDarwin::GenerateImageInfo(PackedGlyphID id, GlyphData *glyph,
                                             const StrokeDesc &stroke_desc) {
   CGGlyph cg_glyph = glyph->Id();
 
@@ -587,8 +608,10 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
 
   // extends one pixel for the bitmap bounds
   // it is used for the AA pixel and it is important
-  uint32_t width = std::ceil(cg_bounds.size.width * context_scale_) + 2;
-  uint32_t height = std::ceil(cg_bounds.size.height * context_scale_) + 2;
+  CGFloat raster_width = cg_bounds.size.width;
+  CGFloat raster_height = cg_bounds.size.height;
+  uint32_t width = std::ceil(raster_width * context_scale_) + 2;
+  uint32_t height = std::ceil(raster_height * context_scale_) + 2;
 
   if (working_stroke_desc.is_stroke) {
     if (glyph->GetPath().IsEmpty()) {
@@ -609,24 +632,33 @@ void ScalerContextDarwin::GenerateImageInfo(GlyphData *glyph,
     Rect stroke_bound = fill_path.GetBounds();
     point.x = -stroke_bound.Left();
     point.y = stroke_bound.Bottom();
-    width = std::ceil(stroke_bound.Width() * context_scale_) + 2;
-    height = std::ceil(stroke_bound.Height() * context_scale_) + 2;
+    raster_width = stroke_bound.Width();
+    raster_height = stroke_bound.Height();
+    width = std::ceil(raster_width * context_scale_) + 2;
+    height = std::ceil(raster_height * context_scale_) + 2;
   }
 
   // since bitmap extends one pixel, the origin point needs do the same move
   point.x += 1 / context_scale_;
   point.y += 1 / context_scale_;
 
-  // Core Graphics snaps the glyph baseline to the device pixel grid while
-  // rasterizing into the bitmap context. Keep the atlas origin in the same
-  // coordinate system; otherwise the fractional glyph bound is applied again
-  // when DirectGlyphRun places the bitmap, producing glyph-dependent vertical
-  // offsets. An X-axis skew (transform_.c), as used by synthetic italic text,
-  // does not affect the device-space Y coordinate and still needs the same
-  // alignment. Only transforms that mix X into Y (transform_.b) are excluded.
-  if (transform_.b == 0) {
-    point.y = std::floor(point.y * context_scale_) / context_scale_;
-  }
+  // Skia puts the two-bit phase in the glyph identity and draws the mask at
+  // the same quarter-pixel phase. Aligning the raster point here makes the
+  // phase-specific atlas quad land on integer physical pixels.
+  const CGFloat unaligned_point_x = point.x;
+  point.x = AlignRasterPointAtOrAbove(point.x, context_scale_,
+                                      id.GetSubpixelXPhase());
+  const CGFloat point_delta_x = point.x - unaligned_point_x;
+  width = std::ceil((raster_width + point_delta_x) * context_scale_) + 2;
+
+  // Core Graphics uses an upward Y axis. Skia draws at
+  // glyph.top + glyph.height - subY, so convert the device-space phase before
+  // aligning the Core Graphics raster point.
+  const CGFloat unaligned_point_y = point.y;
+  point.y = AlignRasterPointAtOrAbove(
+      point.y, context_scale_, FlipGlyphSubpixelPhase(id.GetSubpixelYPhase()));
+  const CGFloat point_delta_y = point.y - unaligned_point_y;
+  height = std::ceil((raster_height + point_delta_y) * context_scale_) + 2;
 
   CGPoint src{point.x, point.y};
   CGPoint dst = CGPointApplyAffineTransform(src, invert_transform_);

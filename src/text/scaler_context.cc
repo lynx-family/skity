@@ -13,13 +13,14 @@ ScalerContext::ScalerContext(std::weak_ptr<Typeface> typeface,
 void ScalerContext::MakeGlyph(GlyphData* glyph_data) {
   this->GenerateMetrics(glyph_data);
 }
-void ScalerContext::GetImage(GlyphData* glyph, const StrokeDesc& stroke_desc) {
-  this->GenerateImage(glyph, stroke_desc);
+void ScalerContext::GetImage(PackedGlyphID id, GlyphData* glyph,
+                             const StrokeDesc& stroke_desc) {
+  this->GenerateImage(id, glyph, stroke_desc);
 }
 
-void ScalerContext::GetImageInfo(GlyphData* glyph,
+void ScalerContext::GetImageInfo(PackedGlyphID id, GlyphData* glyph,
                                  const StrokeDesc& stroke_desc) {
-  this->GenerateImageInfo(glyph, stroke_desc);
+  this->GenerateImageInfo(id, glyph, stroke_desc);
 }
 
 void ScalerContext::GetPath(GlyphData* glyph) { this->GeneratePath(glyph); }

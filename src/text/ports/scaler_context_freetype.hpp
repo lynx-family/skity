@@ -26,8 +26,9 @@ class ScalerContextFreetype : public ScalerContext {
 
  protected:
   void GenerateMetrics(GlyphData *glyph) override;
-  void GenerateImage(GlyphData *glyph, const StrokeDesc &stroke_desc) override;
-  void GenerateImageInfo(GlyphData *glyph,
+  void GenerateImage(PackedGlyphID, GlyphData *glyph,
+                     const StrokeDesc &stroke_desc) override;
+  void GenerateImageInfo(PackedGlyphID, GlyphData *glyph,
                          const StrokeDesc &stroke_desc) override;
   bool GeneratePath(GlyphData *glyph) override;
   void GenerateFontMetrics(FontMetrics *metrics) override;

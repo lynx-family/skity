@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <memory>
 #include <skity/graphic/color.hpp>
 #include <skity/graphic/tile_mode.hpp>
 #include <skity/recorder/picture_recorder.hpp>
@@ -18,10 +19,38 @@
 #include <skity/text/text_run.hpp>
 #include <skity/text/typeface.hpp>
 #include <skity/text/utf.hpp>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "common/golden_test_check.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
+
+static std::shared_ptr<skity::TextBlob> MakeSubpixelTextBlob(
+    const char* text, const std::shared_ptr<skity::Typeface>& typeface,
+    float text_size) {
+  if (!text || !typeface) {
+    return nullptr;
+  }
+
+  std::string utf8{text};
+  std::vector<skity::Unichar> code_points;
+  if (!skity::UTF::UTF8ToCodePoint(utf8.data(), utf8.size(), code_points) ||
+      code_points.empty()) {
+    return nullptr;
+  }
+
+  std::vector<skity::GlyphID> glyphs(code_points.size());
+  typeface->UnicharsToGlyphs(code_points.data(), code_points.size(),
+                             glyphs.data());
+
+  skity::Font font{typeface, text_size};
+  font.SetSubpixel(true);
+  std::vector<skity::TextRun> runs;
+  runs.emplace_back(font, std::move(glyphs));
+  return std::make_shared<skity::TextBlob>(std::move(runs));
+}
 
 TEST(TextGolden, Basic) {
   skity::PictureRecorder recorder;
@@ -39,13 +68,17 @@ TEST(TextGolden, Basic) {
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetTypeface(typeface);
 
-  canvas->DrawSimpleText("SKITY skity", 20.f, 50.f, paint);
+  auto latin_text = MakeSubpixelTextBlob("SKITY skity", typeface, 64.f);
+  ASSERT_NE(latin_text, nullptr);
+  canvas->DrawTextBlob(latin_text.get(), 20.f, 50.f, paint);
 
   auto typeface_cjk =
       skity::FontManager::RefDefault()->MatchFamilyStyleCharacter(
           nullptr, skity::FontStyle(), nullptr, 0, 0x95E8);
   paint.SetTypeface(typeface_cjk);
-  canvas->DrawSimpleText("你好", 20.f, 150.f, paint);
+  auto cjk_text = MakeSubpixelTextBlob("你好", typeface_cjk, 64.f);
+  ASSERT_NE(cjk_text, nullptr);
+  canvas->DrawTextBlob(cjk_text.get(), 20.f, 150.f, paint);
 
   std::filesystem::path golden_path = kGoldenTestImageDir;
   golden_path.append("text_basic.png");
@@ -69,6 +102,10 @@ TEST(TextGolden, TextLinearGradientFlags) {
 
   paint.SetStyle(skity::Paint::kFill_Style);
   paint.SetTypeface(typeface);
+  auto typeface_cjk =
+      skity::FontManager::RefDefault()->MatchFamilyStyleCharacter(
+          nullptr, skity::FontStyle(), nullptr, 0, 0x95E8);
+
   canvas->Save();
   for (uint32_t i = 0; i < 2; i++) {
     canvas->Translate(0, 200 * i);
@@ -86,13 +123,15 @@ TEST(TextGolden, TextLinearGradientFlags) {
                                          skity::TileMode::kMirror, flags);
 
     paint.SetShader(lgs);
-    canvas->DrawSimpleText("SKITY skity", 20.f, 50.f, paint);
+    auto latin_text =
+        MakeSubpixelTextBlob("SKITY skity", paint.GetTypeface(), 64.f);
+    ASSERT_NE(latin_text, nullptr);
+    canvas->DrawTextBlob(latin_text.get(), 20.f, 50.f, paint);
 
-    auto typeface_cjk =
-        skity::FontManager::RefDefault()->MatchFamilyStyleCharacter(
-            nullptr, skity::FontStyle(), nullptr, 0, 0x95E8);
     paint.SetTypeface(typeface_cjk);
-    canvas->DrawSimpleText("你好", 20.f, 150.f, paint);
+    auto cjk_text = MakeSubpixelTextBlob("你好", typeface_cjk, 64.f);
+    ASSERT_NE(cjk_text, nullptr);
+    canvas->DrawTextBlob(cjk_text.get(), 20.f, 150.f, paint);
   }
 
   std::filesystem::path golden_path = kGoldenTestImageDir;

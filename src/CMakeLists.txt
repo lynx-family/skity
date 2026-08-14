@@ -96,6 +96,7 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_manager.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_texture.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_texture.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_position.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_run.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_run.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/transformed_mask_glyph_run.cc
@@ -109,6 +110,7 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/text/font.cc
   ${CMAKE_CURRENT_LIST_DIR}/text/font_style.cc
   ${CMAKE_CURRENT_LIST_DIR}/text/font_manager.cc
+  ${CMAKE_CURRENT_LIST_DIR}/text/packed_glyph_id.hpp
   ${CMAKE_CURRENT_LIST_DIR}/text/scaler_context_cache.cc
   ${CMAKE_CURRENT_LIST_DIR}/text/scaler_context_container.cc
   ${CMAKE_CURRENT_LIST_DIR}/text/scaler_context_desc.cc

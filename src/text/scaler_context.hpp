@@ -11,6 +11,7 @@
 #include <skity/text/typeface.hpp>
 
 #include "src/logging.hpp"
+#include "src/text/packed_glyph_id.hpp"
 #include "src/text/scaler_context_desc.hpp"
 
 namespace skity {
@@ -85,8 +86,10 @@ class ScalerContext {
     return typeface;
   }
   void MakeGlyph(GlyphData* glyph_data);
-  void GetImage(GlyphData* glyph, const StrokeDesc& stroke_desc);
-  void GetImageInfo(GlyphData* glyph, const StrokeDesc& stroke_desc);
+  void GetImage(PackedGlyphID id, GlyphData* glyph,
+                const StrokeDesc& stroke_desc);
+  void GetImageInfo(PackedGlyphID id, GlyphData* glyph,
+                    const StrokeDesc& stroke_desc);
   void GetPath(GlyphData* glyph);
   void GetFontMetrics(FontMetrics* metrics);
   bool IsVertical() { return false; }
@@ -96,9 +99,9 @@ class ScalerContext {
  protected:
   //  virtual bool GenerateAdvance(GlyphData* glyph) = 0;
   virtual void GenerateMetrics(GlyphData* glyph) = 0;
-  virtual void GenerateImage(GlyphData* glyph,
+  virtual void GenerateImage(PackedGlyphID id, GlyphData* glyph,
                              const StrokeDesc& stroke_desc) = 0;
-  virtual void GenerateImageInfo(GlyphData* glyph,
+  virtual void GenerateImageInfo(PackedGlyphID id, GlyphData* glyph,
                                  const StrokeDesc& stroke_desc) = 0;
   virtual bool GeneratePath(GlyphData* glyph) = 0;
   virtual void GenerateFontMetrics(FontMetrics*) = 0;

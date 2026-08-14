@@ -34,7 +34,9 @@ Font::Font(std::shared_ptr<Typeface> typeface, float size, float scaleX,
     : typeface_(std::move(typeface)),
       size_(size),
       scale_x_(scaleX),
-      skew_x_(skewX) {}
+      skew_x_(skewX),
+      flags_(kBaselineSnap_PrivFlag),
+      edging_(static_cast<uint8_t>(Edging::kAntiAlias)) {}
 
 void Font::SetForceAutoHinting(bool predicate) {
   flags_ = SetClearMask(flags_, predicate, kForceAutoHinting_PrivFlag);

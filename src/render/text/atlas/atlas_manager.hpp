@@ -30,7 +30,7 @@ class Atlas {
 
   const AtlasConfig& GetConfig() { return atlas_config_; }
 
-  GlyphRegion GetGlyphRegion(const Font& font, GlyphID glyph_id,
+  GlyphRegion GetGlyphRegion(const Font& font, PackedGlyphID packed_glyph_id,
                              const Paint& paint, bool load_sdf,
                              float context_scale, const Matrix& transform);
 

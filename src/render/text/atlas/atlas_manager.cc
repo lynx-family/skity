@@ -24,13 +24,13 @@ bool valid_positive_float(float f) {
   return !(FloatIsNan(f) || !FloatIsFinite(f) || f < 0.f);
 }
 
-void LoadGlyphBitmap(const Font& font, GlyphID glyph_id,
+void LoadGlyphBitmap(const Font& font, PackedGlyphID packed_glyph_id,
                      const GlyphData** glyph_data, const Paint& paint,
                      const ScalerContextDesc& desc) {
   auto scaler_context =
       ScalerContextCache::GlobalScalerContextCache()->FindOrCreateScalerContext(
           desc, font.GetTypeface());
-  scaler_context->PrepareImages(&glyph_id, 1, glyph_data, paint);
+  scaler_context->PrepareImages(&packed_glyph_id, 1, glyph_data, paint);
 }
 
 }  // namespace
@@ -74,7 +74,8 @@ Atlas::Atlas(AtlasFormat format, GPUDevice* gpu_device,
   }
 }
 
-GlyphRegion Atlas::GetGlyphRegion(const Font& font, GlyphID glyph_id,
+GlyphRegion Atlas::GetGlyphRegion(const Font& font,
+                                  PackedGlyphID packed_glyph_id,
                                   const Paint& paint, bool load_sdf,
                                   float context_scale,
                                   const Matrix& transform) {
@@ -110,20 +111,25 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font, GlyphID glyph_id,
   ScalerContextDesc scaler_context_desc = ScalerContextDesc::MakeTransformed(
       raster_font, raster_paint, load_sdf ? 1.f : context_scale,
       raster_transform);
-  GlyphKey key(glyph_id, scaler_context_desc);
+  GlyphKey key(
+      load_sdf ? PackedGlyphID(packed_glyph_id.GetGlyphID()) : packed_glyph_id,
+      scaler_context_desc);
 
   for (uint32_t index = 0; index < atlas_bitmap_.size(); index++) {
     if (atlas_bitmap_[index]) {
       AtlasBitmap* memory_atlas = atlas_bitmap_[index].get();
       auto region = memory_atlas->GetGlyphRegion(key);
-      if (region != INVALID_LOC) {
-        return GlyphRegion{index, region, sdf_scale};
+      if (region.loc != INVALID_LOC) {
+        region.index_in_group = index;
+        region.scale = sdf_scale;
+        return region;
       }
     }
   }
 
   GlyphRegion gen_region = GenerateGlyphRegion(font, key, paint, load_sdf);
-  return GlyphRegion{gen_region.index_in_group, gen_region.loc, sdf_scale};
+  gen_region.scale = sdf_scale;
+  return gen_region;
 }
 
 GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
@@ -140,7 +146,7 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
     fill_paint.SetStyle(Paint::kFill_Style);
   }
 
-  LoadGlyphBitmap(resized_font, key.glyph_id, &glyph_data, fill_paint,
+  LoadGlyphBitmap(resized_font, key.packed_glyph_id, &glyph_data, fill_paint,
                   key.scaler_context_desc);
   const auto& bitmap_info = glyph_data->Image();
 
@@ -151,8 +157,8 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
     ScalerContextDesc fill_desc = ScalerContextDesc::MakeTransformed(
         resized_font, fill_paint, key.scaler_context_desc.context_scale,
         key.scaler_context_desc.transform);
-    LoadGlyphBitmap(resized_font, key.glyph_id, &glyph_data_fill, fill_paint,
-                    fill_desc);
+    LoadGlyphBitmap(resized_font, key.packed_glyph_id, &glyph_data_fill,
+                    fill_paint, fill_desc);
     fill_paint.SetStyle(Paint::kStroke_Style);
 
     if (valid_positive_float(bitmap_info.width) &&
@@ -240,12 +246,13 @@ GlyphRegion Atlas::GenerateGlyphRegionInternal(
   }
   AtlasBitmap* atlas_bitmap = atlas_bitmap_[current_bitmap_index_].get();
   auto region = atlas_bitmap->GenerateGlyphRegion(key, glyph_bitmap);
-  if (region != INVALID_LOC) {
+  if (region.loc != INVALID_LOC) {
     if (glyph_bitmap.need_free) {
       std::free(glyph_bitmap.buffer);
       const_cast<GlyphBitmapData&>(glyph_bitmap).need_free = false;
     }
-    return GlyphRegion{current_bitmap_index_, region, 1.f};
+    region.index_in_group = current_bitmap_index_;
+    return region;
   } else {
     current_bitmap_index_ = atlas_bitmap_.size();
     return GenerateGlyphRegionInternal(key, glyph_bitmap);

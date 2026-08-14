@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <skity/text/font.hpp>
 #include <skity/text/font_style.hpp>
 #include <skity/text/typeface.hpp>
 
@@ -17,7 +18,7 @@ namespace skity {
 class ScalerContextEmpty : public ScalerContext {
  protected:
   void GenerateMetrics(GlyphData *) override {}
-  void GenerateImage(GlyphData *, const StrokeDesc &) override {}
+  void GenerateImage(PackedGlyphID, GlyphData *, const StrokeDesc &) override {}
   bool GeneratePath(GlyphData *) override { return true; }
   void GenerateFontMetrics(FontMetrics *) override {}
   uint16_t OnGetFixedSize() override { return 0; }
@@ -84,6 +85,19 @@ std::shared_ptr<Typeface> ColorfulTypeface::OnMakeVariation(
 }
 
 }  // namespace skity
+
+TEST(Font, BaselineSnapIsEnabledByDefault) {
+  skity::Font font;
+  EXPECT_TRUE(font.IsBaselineSnap());
+
+  font.SetBaselineSnap(false);
+  EXPECT_FALSE(font.IsBaselineSnap());
+}
+
+TEST(Font, EdgingDefaultsToAntiAlias) {
+  skity::Font font;
+  EXPECT_EQ(font.GetEdging(), skity::Font::Edging::kAntiAlias);
+}
 
 TEST(TextRenderControl, disallow_sdf_test) {
   skity::TextRenderControl controller{true};
