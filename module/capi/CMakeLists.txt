@@ -66,12 +66,14 @@ endif()
 
 # Android 16 KiB page-size alignment (arm64 / x86_64), required for the .so to
 # load on Android 15+ devices with 16 KiB pages. Mirrors the option applied to
-# the core skity target in cmake/Platform.cmake.
+# the core skity target in cmake/Platform.cmake. Note that only max-page-size
+# is used (see the comment there): LLD 9 pads PT_GNU_RELRO.memsz up to
+# common-page-size but does not extend the covering RW PT_LOAD, which made
+# dlopen on 4 KiB-page devices fail for this thin RELRO-heavy shim.
 if (ANDROID)
   if (CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a" OR CMAKE_ANDROID_ARCH_ABI STREQUAL "x86_64")
     target_link_options(skity-capi PRIVATE
       "-Wl,-z,max-page-size=16384"
-      "-Wl,-z,common-page-size=16384"
     )
   endif()
 endif()

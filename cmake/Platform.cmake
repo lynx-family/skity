@@ -75,7 +75,14 @@ elseif(ANDROID)
 
   # arm64
   if (CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a" OR CMAKE_ANDROID_ARCH_ABI STREQUAL "x86_64")
-    target_link_options(skity PUBLIC "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
+    # 16 KiB device compatibility only requires max-page-size (p_align).
+    # Do NOT add common-page-size=16384 here: LLD 9 (NDK r21) pads
+    # PT_GNU_RELRO.memsz up to common-page-size but does not extend the
+    # covering RW PT_LOAD, so on targets whose RW segment is mostly RELRO
+    # data (e.g. the skity-capi shim) the RELRO range can stick past the RW
+    # PT_LOAD mapping and dlopen on 4 KiB-page devices fails with a
+    # misleading "can't enable GNU RELRO protection ... Out of memory".
+    target_link_options(skity PUBLIC "-Wl,-z,max-page-size=16384")
   endif()
 elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
   message("build for macos")
