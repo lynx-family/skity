@@ -4,10 +4,16 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <skity/text/font.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/typeface.hpp>
+#include <vector>
 
 #include "concurrent_runner.h"
+#include "src/text/ports/scaler_context_freetype.hpp"
 #include "src/text/scaler_context.hpp"
 #include "src/text/scaler_context_desc.hpp"
 
@@ -15,6 +21,62 @@ using namespace skity;
 
 constexpr int kThreadCount = 8;
 constexpr int kIterations = 500;
+constexpr const char* kRobotoRegular =
+    SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf";
+
+struct RasterizedGlyph {
+  float origin_x = 0.f;
+  float origin_y = 0.f;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  std::vector<uint8_t> pixels;
+};
+
+RasterizedGlyph RasterizeGlyph(std::shared_ptr<Typeface> typeface,
+                               GlyphID glyph_id, uint8_t x_phase,
+                               uint8_t y_phase, float context_scale = 1.f) {
+  Font font(typeface, 48.f);
+  font.SetSubpixel(true);
+  Paint paint;
+  ScalerContextDesc desc = ScalerContextDesc::MakeTransformed(
+      font, paint, context_scale, Matrix22{});
+  auto context = typeface->CreateScalerContext(&desc);
+  EXPECT_NE(context, nullptr);
+  if (!context) {
+    return {};
+  }
+
+  GlyphData glyph(glyph_id);
+  context->MakeGlyph(&glyph);
+  const StrokeDesc stroke_desc{false, paint.GetStrokeWidth(),
+                               paint.GetStrokeCap(), paint.GetStrokeJoin(),
+                               paint.GetStrokeMiter()};
+  context->GetImage(PackedGlyphID(glyph_id, x_phase, y_phase), &glyph,
+                    stroke_desc);
+
+  const GlyphBitmapData& image = glyph.Image();
+  RasterizedGlyph result{image.origin_x,
+                         image.origin_y,
+                         static_cast<uint32_t>(image.width),
+                         static_cast<uint32_t>(image.height),
+                         {}};
+  EXPECT_EQ(image.format, BitmapFormat::kGray8);
+  EXPECT_NE(image.buffer, nullptr);
+
+  const size_t tight_row_bytes = result.width;
+  EXPECT_GE(image.RowBytes(), tight_row_bytes);
+  if (image.buffer && image.RowBytes() >= tight_row_bytes) {
+    result.pixels.resize(tight_row_bytes * result.height);
+    for (size_t y = 0; y < result.height; ++y) {
+      std::memcpy(result.pixels.data() + y * tight_row_bytes,
+                  image.buffer + y * image.RowBytes(), tight_row_bytes);
+    }
+  }
+  if (image.need_free) {
+    std::free(image.buffer);
+  }
+  return result;
+}
 
 class TypefaceTest : public ::testing::Test {
  protected:
@@ -258,6 +320,93 @@ TEST_F(TypefaceTest, CreateScalerContextThreadSafe) {
     auto ctx = default_typeface->CreateScalerContext(&desc);
     EXPECT_NE(ctx, nullptr);
   });
+}
+
+TEST(FreeTypeScalerContextTest, RasterizesPackedSubpixelPhases) {
+  auto typeface = Typeface::MakeFromFile(kRobotoRegular);
+  ASSERT_NE(typeface, nullptr);
+  const GlyphID glyph_id = typeface->UnicharToGlyph('H');
+  ASSERT_NE(glyph_id, 0);
+
+  const RasterizedGlyph phase_0 = RasterizeGlyph(typeface, glyph_id, 0, 0);
+  const RasterizedGlyph x_phase_1 = RasterizeGlyph(typeface, glyph_id, 1, 0);
+  const RasterizedGlyph y_phase_1 = RasterizeGlyph(typeface, glyph_id, 0, 1);
+
+  ASSERT_FALSE(phase_0.pixels.empty());
+  ASSERT_FALSE(x_phase_1.pixels.empty());
+  ASSERT_FALSE(y_phase_1.pixels.empty());
+  EXPECT_TRUE(phase_0.width != x_phase_1.width ||
+              phase_0.height != x_phase_1.height ||
+              phase_0.pixels != x_phase_1.pixels);
+  EXPECT_TRUE(phase_0.width != y_phase_1.width ||
+              phase_0.height != y_phase_1.height ||
+              phase_0.pixels != y_phase_1.pixels);
+
+  EXPECT_NEAR(phase_0.origin_x, std::round(phase_0.origin_x), 1e-6f);
+  EXPECT_NEAR(x_phase_1.origin_x + 0.25f,
+              std::round(x_phase_1.origin_x + 0.25f), 1e-6f);
+  EXPECT_NEAR(y_phase_1.origin_y - 0.25f,
+              std::round(y_phase_1.origin_y - 0.25f), 1e-6f);
+}
+
+TEST(FreeTypeScalerContextTest, AppliesPackedPhaseInPhysicalPixelSpace) {
+  auto typeface = Typeface::MakeFromFile(kRobotoRegular);
+  ASSERT_NE(typeface, nullptr);
+  const GlyphID glyph_id = typeface->UnicharToGlyph('H');
+  ASSERT_NE(glyph_id, 0);
+
+  constexpr float kContentScale = 2.f;
+  const RasterizedGlyph phase =
+      RasterizeGlyph(typeface, glyph_id, 1, 0, kContentScale);
+
+  ASSERT_FALSE(phase.pixels.empty());
+  const float physical_origin = phase.origin_x * kContentScale + 0.25f;
+  EXPECT_NEAR(physical_origin, std::round(physical_origin), 1e-6f);
+}
+
+TEST(FreeTypeScalerContextTest, ExpandsMonochromeBitmapToGray8) {
+  uint8_t source_pixels[] = {0xA8u, 0x50u};
+  FT_Bitmap source{};
+  source.rows = 2;
+  source.width = 5;
+  source.pitch = 1;
+  source.buffer = source_pixels;
+  source.num_grays = 2;
+  source.pixel_mode = FT_PIXEL_MODE_MONO;
+
+  GlyphBitmapData target;
+  ASSERT_TRUE(internal::CopyFreetypeBitmap(source, &target));
+  ASSERT_NE(target.buffer, nullptr);
+  EXPECT_EQ(target.format, BitmapFormat::kGray8);
+  EXPECT_EQ(target.width, 5.f);
+  EXPECT_EQ(target.height, 2.f);
+  EXPECT_EQ(target.RowBytes(), 5u);
+  EXPECT_TRUE(target.need_free);
+
+  constexpr uint8_t kExpected[] = {0xFFu, 0u,    0xFFu, 0u,    0xFFu,
+                                   0u,    0xFFu, 0u,    0xFFu, 0u};
+  EXPECT_EQ(std::memcmp(target.buffer, kExpected, sizeof(kExpected)), 0);
+  std::free(target.buffer);
+}
+
+TEST(FreeTypeScalerContextTest, CopiesNegativePitchFromLogicalTopRow) {
+  uint8_t source_pixels[] = {0x50u, 0xA8u};
+  FT_Bitmap source{};
+  source.rows = 2;
+  source.width = 5;
+  source.pitch = -1;
+  source.buffer = source_pixels + 1;
+  source.num_grays = 2;
+  source.pixel_mode = FT_PIXEL_MODE_MONO;
+
+  GlyphBitmapData target;
+  ASSERT_TRUE(internal::CopyFreetypeBitmap(source, &target));
+  ASSERT_NE(target.buffer, nullptr);
+
+  constexpr uint8_t kExpected[] = {0xFFu, 0u,    0xFFu, 0u,    0xFFu,
+                                   0u,    0xFFu, 0u,    0xFFu, 0u};
+  EXPECT_EQ(std::memcmp(target.buffer, kExpected, sizeof(kExpected)), 0);
+  std::free(target.buffer);
 }
 
 TEST_F(TypefaceTest, GetFontDescriptorBasic) {

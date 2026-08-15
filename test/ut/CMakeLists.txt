@@ -68,7 +68,11 @@ endif()
 
 # Place the cases that depend on specific fonts here.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT SKITY_CT_FONT))
-  target_compile_definitions(skity_unit_test PRIVATE -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/")
+  target_compile_definitions(skity_unit_test PRIVATE
+      -DFREETYPE_STATIC_LIB=1
+      -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/")
+  target_include_directories(skity_unit_test PRIVATE
+      ${CMAKE_SOURCE_DIR}/third_party/freetype2/include)
 
   target_sources(skity_unit_test PRIVATE text/typeface_test.cc)
 endif()

@@ -20,24 +20,148 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <skity/geometry/stroke.hpp>
 
 #include "src/base/fixed_types.hpp"
 #include "src/render/sw/sw_a8_drawable.hpp"
+#include "src/render/text/glyph_position.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
-static BitmapFormat ft_pixel_mode_to_fmt(FT_Pixel_Mode mode) {
-  switch (mode) {
-    case FT_PIXEL_MODE_GRAY:
-      return BitmapFormat::kGray8;
-    case FT_PIXEL_MODE_BGRA:
-      return BitmapFormat::kBGRA8;
-    default:
-      DEBUG_CHECK(false);
-      return BitmapFormat::kUnknown;
+namespace {
+
+struct GlyphSubpixelOffset {
+  float x = 0.f;
+  float y = 0.f;
+  FT_Pos ft_x = 0;
+  FT_Pos ft_y = 0;
+};
+
+GlyphSubpixelOffset GetGlyphSubpixelOffset(const ScalerContextDesc& desc,
+                                           PackedGlyphID id) {
+  if (!desc.subpixel_positioning) {
+    return {};
+  }
+
+  const uint8_t x_phase = id.GetSubpixelXPhase();
+  const uint8_t y_phase = id.GetSubpixelYPhase();
+  return {GlyphSubpixelPhase(x_phase), GlyphSubpixelPhase(y_phase),
+          static_cast<FT_Pos>(x_phase) << 4,
+          -(static_cast<FT_Pos>(y_phase) << 4)};
+}
+
+void ApplyGlyphSubpixelOffset(FT_GlyphSlot slot,
+                              const GlyphSubpixelOffset& offset) {
+  if (slot->format == FT_GLYPH_FORMAT_OUTLINE &&
+      (offset.ft_x != 0 || offset.ft_y != 0)) {
+    // Skia applies the packed device-space phase after FT_Load_Glyph. FreeType
+    // uses an upward Y axis, hence the negated Y offset above.
+    FT_Outline_Translate(&slot->outline, offset.ft_x, offset.ft_y);
   }
 }
+
+void SetGlyphBitmapOrigin(GlyphBitmapData* image, FT_Pos bitmap_left,
+                          FT_Pos bitmap_top, const GlyphSubpixelOffset& offset,
+                          float context_scale) {
+  // The run position already contains the packed phase. Cancel it from the
+  // bitmap origin so that a phase-specific mask is placed on the integer
+  // physical-pixel grid instead of applying the phase twice.
+  image->origin_x = (bitmap_left - offset.x) / context_scale;
+  image->origin_y = (bitmap_top + offset.y) / context_scale;
+}
+
+}  // namespace
+
+namespace internal {
+
+bool CopyFreetypeBitmap(const FT_Bitmap& source, GlyphBitmapData* target) {
+  if (target == nullptr) {
+    return false;
+  }
+
+  BitmapFormat format = BitmapFormat::kGray8;
+  size_t bytes_per_pixel = 1u;
+  size_t packed_source_row_bytes = 0u;
+  switch (source.pixel_mode) {
+    case FT_PIXEL_MODE_MONO:
+      packed_source_row_bytes = (source.width + 7u) / 8u;
+      break;
+    case FT_PIXEL_MODE_GRAY:
+      packed_source_row_bytes = source.width;
+      break;
+    case FT_PIXEL_MODE_BGRA:
+      format = BitmapFormat::kBGRA8;
+      bytes_per_pixel = 4u;
+      packed_source_row_bytes = static_cast<size_t>(source.width) * 4u;
+      break;
+    default:
+      return false;
+  }
+
+  const size_t source_pitch = source.pitch < 0
+                                  ? static_cast<size_t>(-int64_t{source.pitch})
+                                  : static_cast<size_t>(source.pitch);
+  const size_t target_row_bytes =
+      static_cast<size_t>(source.width) * bytes_per_pixel;
+  if ((source.width > 0u && source.rows > 0u && source.buffer == nullptr) ||
+      source_pitch < packed_source_row_bytes ||
+      (source.rows > 0u &&
+       target_row_bytes > std::numeric_limits<size_t>::max() / source.rows)) {
+    return false;
+  }
+
+  const size_t byte_count = target_row_bytes * source.rows;
+  uint8_t* pixels = byte_count == 0u
+                        ? nullptr
+                        : static_cast<uint8_t*>(std::malloc(byte_count));
+  if (byte_count != 0u && pixels == nullptr) {
+    return false;
+  }
+
+  if (byte_count == 0u) {
+    target->width = source.width;
+    target->height = source.rows;
+    target->buffer = nullptr;
+    target->row_bytes = target_row_bytes;
+    target->format = format;
+    target->need_free = false;
+    return true;
+  }
+
+  // FreeType defines `buffer` as the first logical row and `pitch` as the
+  // signed offset to the following row. This also covers upward-flow bitmaps.
+  const uint8_t* source_row = source.buffer;
+  for (size_t y = 0; y < source.rows; ++y) {
+    uint8_t* target_row = pixels + y * target_row_bytes;
+    switch (source.pixel_mode) {
+      case FT_PIXEL_MODE_MONO:
+        for (size_t x = 0; x < source.width; ++x) {
+          target_row[x] =
+              (source_row[x >> 3u] & (0x80u >> (x & 7u))) ? 0xFFu : 0u;
+        }
+        break;
+      case FT_PIXEL_MODE_GRAY:
+      case FT_PIXEL_MODE_BGRA:
+        std::memcpy(target_row, source_row, target_row_bytes);
+        break;
+      default:
+        std::free(pixels);
+        return false;
+    }
+    source_row += source.pitch;
+  }
+
+  target->width = source.width;
+  target->height = source.rows;
+  target->buffer = pixels;
+  target->row_bytes = target_row_bytes;
+  target->format = format;
+  target->need_free = pixels != nullptr;
+  return true;
+}
+
+}  // namespace internal
 /** Returns the bitmap strike equal to or just larger than the requested size.
  */
 static FT_Int ChooseBitmapStrike(FT_Face face, FT_F26Dot6 scaleY) {
@@ -450,7 +574,7 @@ static FT_Stroker_LineJoin ToFreetypeJoin(Paint::Join join) {
   }
 }
 
-void ScalerContextFreetype::GenerateImage(PackedGlyphID, GlyphData* glyph,
+void ScalerContextFreetype::GenerateImage(PackedGlyphID id, GlyphData* glyph,
                                           const StrokeDesc& stroke_desc) {
   SKITY_TRACE_EVENT(ScalerContextFreetype_GenerateImage);
   std::lock_guard<std::mutex> locker(FreetypeFace::f_t_mutex());
@@ -490,6 +614,8 @@ void ScalerContextFreetype::GenerateImage(PackedGlyphID, GlyphData* glyph,
     return;
   }
   EmboldenIfNeeded(glyph->Id());
+  const GlyphSubpixelOffset subpixel_offset = GetGlyphSubpixelOffset(desc_, id);
+  ApplyGlyphSubpixelOffset(face_->glyph, subpixel_offset);
 
   FT_Bitmap bitmap;
   GlyphBitmapData& info = glyph->image_;
@@ -514,52 +640,36 @@ void ScalerContextFreetype::GenerateImage(PackedGlyphID, GlyphData* glyph,
       glyph->hori_bearing_x_ = bitmapGlyph->left;
       glyph->hori_bearing_y_ = bitmapGlyph->top;
       bitmap = bitmapGlyph->bitmap;
-      // won't stroke bitmap glyph
-      uint8_t* copy_data =
-          reinterpret_cast<uint8_t*>(std::malloc(bitmap.rows * bitmap.pitch));
-      std::memcpy(copy_data, bitmap.buffer, bitmap.rows * bitmap.pitch);
-      info.buffer = copy_data;
-      info.need_free = true;
-      info.width = bitmap.width;
-      info.height = bitmap.rows;
-      info.origin_x = bitmapGlyph->left / desc_.context_scale;
-      info.origin_y = bitmapGlyph->top / desc_.context_scale;
-      info.format =
-          ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
+      // Won't stroke bitmap glyph. Copy before releasing ft_glyph.
+      if (!internal::CopyFreetypeBitmap(bitmap, &info)) {
+        FT_Done_Glyph(ft_glyph);
+        return;
+      }
+      SetGlyphBitmapOrigin(&info, bitmapGlyph->left, bitmapGlyph->top,
+                           subpixel_offset, desc_.context_scale);
       FT_Done_Glyph(ft_glyph);
     } else {
       if (FT_Render_Glyph(face_->glyph, FT_RENDER_MODE_NORMAL)) {
         return;
       }
       bitmap = face_->glyph->bitmap;
-      uint8_t* copy_data =
-          reinterpret_cast<uint8_t*>(std::malloc(bitmap.rows * bitmap.pitch));
-      std::memcpy(copy_data, bitmap.buffer, bitmap.rows * bitmap.pitch);
-      info.buffer = copy_data;
-      info.need_free = true;
-      info.width = bitmap.width;
-      info.height = bitmap.rows;
-      info.origin_x = face_->glyph->bitmap_left / desc_.context_scale;
-      info.origin_y = face_->glyph->bitmap_top / desc_.context_scale;
-      info.format =
-          ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
+      if (!internal::CopyFreetypeBitmap(bitmap, &info)) {
+        return;
+      }
+      SetGlyphBitmapOrigin(&info, face_->glyph->bitmap_left,
+                           face_->glyph->bitmap_top, subpixel_offset,
+                           desc_.context_scale);
     }
   } else {
     if (transform_matrix_.IsIdentity()) {
       bitmap = face_->glyph->bitmap;
       // Not use slot memory directly as slot in ft is temporary before next
       // loading.
-      uint32_t bytes_count = bitmap.rows * bitmap.pitch;
-      uint8_t* copy_data = reinterpret_cast<uint8_t*>(std::malloc(bytes_count));
-      std::memcpy(copy_data, bitmap.buffer, bytes_count);
-      info.buffer = copy_data;
-      info.need_free = true;
-      info.width = bitmap.width;
-      info.height = bitmap.rows;
+      if (!internal::CopyFreetypeBitmap(bitmap, &info)) {
+        return;
+      }
       info.origin_x = glyph->GetHoriBearingX() / desc_.context_scale;
       info.origin_y = glyph->GetHoriBearingY() / desc_.context_scale;
-      info.format =
-          ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
     } else {
       // transform bitmap
       bitmap = face_->glyph->bitmap;
@@ -597,8 +707,8 @@ void ScalerContextFreetype::GenerateImage(PackedGlyphID, GlyphData* glyph,
         info.height = dst_height;
         info.origin_x = glyph->GetHoriBearingX() / desc_.context_scale;
         info.origin_y = glyph->GetHoriBearingY() / desc_.context_scale;
-        info.format =
-            ft_pixel_mode_to_fmt(static_cast<FT_Pixel_Mode>(bitmap.pixel_mode));
+        info.row_bytes = static_cast<size_t>(dst_width) * sizeof(uint32_t);
+        info.format = BitmapFormat::kRGBA8;
       } else {
         // transformed bitmap is invisible
         info.buffer = nullptr;

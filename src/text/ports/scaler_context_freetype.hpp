@@ -18,6 +18,13 @@
 #include "src/text/ports/typeface_freetype.hpp"
 #include "src/text/scaler_context.hpp"
 namespace skity {
+
+namespace internal {
+
+bool CopyFreetypeBitmap(const FT_Bitmap &source, GlyphBitmapData *target);
+
+}  // namespace internal
+
 class ScalerContextFreetype : public ScalerContext {
  public:
   ScalerContextFreetype(std::shared_ptr<TypefaceFreeType> typeface,
