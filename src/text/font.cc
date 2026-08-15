@@ -35,7 +35,7 @@ Font::Font(std::shared_ptr<Typeface> typeface, float size, float scaleX,
       size_(size),
       scale_x_(scaleX),
       skew_x_(skewX),
-      flags_(kBaselineSnap_PrivFlag),
+      flags_(kSubpixel_PrivFlag | kBaselineSnap_PrivFlag),
       edging_(static_cast<uint8_t>(Edging::kAntiAlias)) {}
 
 void Font::SetForceAutoHinting(bool predicate) {
