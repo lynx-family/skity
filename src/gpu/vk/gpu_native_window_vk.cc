@@ -314,6 +314,14 @@ class GPUNativeWindowVKImpl final : public GPUNativeWindowVK {
   }
 
  private:
+  // Replaces the presenter and retires the old swapchain.
+  //
+  // The caller must serialize this with the render loop: there must be no
+  // in-flight AcquireNextSurface/Present call and no outstanding (acquired
+  // but unpresented) surface when the old presenter is destroyed. An
+  // abandoned acquired image never returns to the window's BufferQueue, and
+  // on Android that drains the producer until dequeueBuffer fails and the
+  // driver faults inside QueuePresentKHR.
   bool RecreatePresenter(uint32_t width, uint32_t height) {
     if (context_ == nullptr || surface_ == VK_NULL_HANDLE) {
       return false;

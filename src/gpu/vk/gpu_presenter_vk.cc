@@ -186,8 +186,39 @@ int32_t GPUPresenterVK::GetPresentMode() const {
 GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
     const GPUSurfaceAcquireDescriptor& acquire_desc) {
   GPUSurfaceAcquireResult result = {};
+
+  // Everything that can be validated from immutable presenter state must run
+  // before the frame fence is reset and an image is acquired: once
+  // vkAcquireNextImageKHR succeeds, the image (and its underlying
+  // BufferQueue slot on Android) is only returned by a successful present.
+  // Abandoning it drains the producer's free slots until presentation dies.
+  const uint32_t target_width = static_cast<uint32_t>(
+      std::floor(static_cast<float>(desc_.width) / acquire_desc.content_scale));
+  const uint32_t target_height = static_cast<uint32_t>(std::floor(
+      static_cast<float>(desc_.height) / acquire_desc.content_scale));
+  const GPUTextureFormat surface_format = ToGPUTextureFormat(swapchain_format_);
+
+  std::lock_guard<std::mutex> lock(mutex_);
   if (state_ == nullptr || swapchain_ == VK_NULL_HANDLE ||
       frame_slots_.empty() || has_outstanding_surface_) {
+    return result;
+  }
+  if (broken_) {
+    // The swapchain state is unrecoverable and a buffer may still be held
+    // from the BufferQueue's perspective. Only recreating the presenter
+    // retires the old swapchain (which returns its buffers to the window),
+    // so ask for that explicitly instead of a generic error the caller
+    // might just log before retrying in a spin.
+    result.status = GPUPresenterStatus::kNeedRecreate;
+    return result;
+  }
+
+  if (target_width == 0 || target_height == 0) {
+    LOGE("Failed to acquire Vulkan surface: invalid target size");
+    return result;
+  }
+  if (surface_format == GPUTextureFormat::kInvalid) {
+    LOGE("Failed to acquire Vulkan surface: unsupported swapchain format");
     return result;
   }
 
@@ -207,18 +238,27 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
     return result;
   }
 
+  // From this point on the frame fence is unsignaled and only a completed
+  // surface hand-off (the caller submits rendering against its sync info and
+  // presents) can signal it again. Any failure below invalidates the slot
+  // and the presenter is marked broken so it fails fast instead of dead
+  // waiting on the unsignaled fence (or leaking the acquired image).
   uint32_t image_index = 0;
   const VkResult acquire_result = fns_.vkAcquireNextImageKHR(
       state_->GetLogicalDevice(), swapchain_, UINT64_MAX,
       frame_slot.acquire_semaphore, VK_NULL_HANDLE, &image_index);
   if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR ||
       acquire_result == VK_SUBOPTIMAL_KHR) {
+    // The acquire semaphore is left in an undefined state by the spec; the
+    // caller must recreate the presenter (which builds fresh semaphores).
+    broken_ = true;
     result.status = GPUPresenterStatus::kNeedRecreate;
     return result;
   }
   if (acquire_result != VK_SUCCESS) {
     LOGE("Failed to acquire swapchain image: {}",
          static_cast<int32_t>(acquire_result));
+    broken_ = true;
     return result;
   }
 
@@ -226,10 +266,7 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
       image_index >= swapchain_image_views_.size()) {
     LOGE("Failed to acquire swapchain image: invalid image index {}",
          image_index);
-    state_->DeviceFns().vkWaitForFences(state_->GetLogicalDevice(), 1,
-                                        &frame_slot.in_flight, VK_TRUE,
-                                        UINT64_MAX);
-    fns_.vkResetFences(state_->GetLogicalDevice(), 1, &frame_slot.in_flight);
+    broken_ = true;
     return result;
   }
 
@@ -238,6 +275,7 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
     if (device_fns.vkWaitForFences(state_->GetLogicalDevice(), 1, &image_fence,
                                    VK_TRUE, UINT64_MAX) != VK_SUCCESS) {
       LOGE("Failed to wait for Vulkan image fence");
+      broken_ = true;
       return result;
     }
   }
@@ -248,15 +286,6 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   sync_info.wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   sync_info.signal_semaphore = image_present_semaphores_[image_index];
   sync_info.signal_fence = frame_slot.in_flight;
-
-  const uint32_t target_width = static_cast<uint32_t>(
-      std::floor(static_cast<float>(desc_.width) / acquire_desc.content_scale));
-  const uint32_t target_height = static_cast<uint32_t>(std::floor(
-      static_cast<float>(desc_.height) / acquire_desc.content_scale));
-  if (target_width == 0 || target_height == 0) {
-    LOGE("Failed to acquire Vulkan surface: invalid target size");
-    return result;
-  }
 
   GPUSurfaceDescriptorVK surface_desc = {};
   surface_desc.backend = GPUBackendType::kVulkan;
@@ -282,7 +311,7 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   texture_desc.height = desc_.height;
   texture_desc.mip_level_count = 1;
   texture_desc.sample_count = 1;
-  texture_desc.format = ToGPUTextureFormat(swapchain_format_);
+  texture_desc.format = surface_format;
   texture_desc.usage =
       static_cast<GPUTextureUsageMask>(GPUTextureUsage::kRenderAttachment);
   if ((swapchain_image_usage_ & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0) {
@@ -294,16 +323,13 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
         static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
   }
   texture_desc.storage_mode = GPUTextureStorageMode::kPrivate;
-  if (texture_desc.format == GPUTextureFormat::kInvalid) {
-    LOGE("Failed to acquire Vulkan surface: unsupported swapchain format");
-    return result;
-  }
 
   auto texture = GPUTextureVK::Wrap(
       state_, texture_desc, surface_desc.image, surface_desc.image_view,
       surface_desc.initial_layout, surface_desc.final_layout,
       surface_desc.format, false, false);
   if (texture == nullptr) {
+    broken_ = true;
     return result;
   }
 
@@ -322,6 +348,7 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
 
 GPUPresenterStatus GPUPresenterVK::Present(
     std::unique_ptr<GPUSurface> surface) {
+  std::lock_guard<std::mutex> lock(mutex_);
   if (!has_outstanding_surface_ || surface == nullptr ||
       surface->GetBackendType() != GPUBackendType::kVulkan) {
     return GPUPresenterStatus::kError;
@@ -330,6 +357,16 @@ GPUPresenterStatus GPUPresenterVK::Present(
   auto* surface_vk = static_cast<GPUSurfaceVK*>(surface.get());
   const auto* present_info = surface_vk->GetPresentInfo();
   if (present_info == nullptr || present_info->owner != this) {
+    return GPUPresenterStatus::kError;
+  }
+
+  // The surface may outlive the presenter state it was acquired from (e.g.
+  // the caller held it across a Reset); never feed retired handles into the
+  // driver, it faults deep inside QueuePresentKHR on Android.
+  if (swapchain_ == VK_NULL_HANDLE || frame_slots_.empty() ||
+      present_info->image_index >= image_present_semaphores_.size() ||
+      present_info->image_index >= swapchain_images_.size()) {
+    LOGE("Failed to present Vulkan surface: presenter state is invalid");
     return GPUPresenterStatus::kError;
   }
 
@@ -353,8 +390,13 @@ GPUPresenterStatus GPUPresenterVK::Present(
     return GPUPresenterStatus::kSuccess;
   }
   if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    broken_ = true;
     return GPUPresenterStatus::kNeedRecreate;
   }
+  // The presentation engine owns the image now but its state is unknown;
+  // require the caller to recreate the presenter instead of reusing the
+  // swapchain.
+  broken_ = true;
   return GPUPresenterStatus::kError;
 }
 
@@ -694,6 +736,12 @@ void GPUPresenterVK::DestroySwapchain() {
 }
 
 void GPUPresenterVK::Reset() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (has_outstanding_surface_) {
+    LOGE(
+        "Resetting Vulkan presenter with an outstanding surface: its "
+        "swapchain image will leak from the presentation queue");
+  }
   if (state_ != nullptr && state_->GetLogicalDevice() != VK_NULL_HANDLE &&
       state_->DeviceFns().vkDeviceWaitIdle != nullptr) {
     state_->DeviceFns().vkDeviceWaitIdle(state_->GetLogicalDevice());
@@ -706,6 +754,7 @@ void GPUPresenterVK::Reset() {
   DestroySwapchain();
   current_frame_ = 0;
   has_outstanding_surface_ = false;
+  broken_ = false;
 }
 
 }  // namespace skity
