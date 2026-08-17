@@ -5,9 +5,11 @@
 #include <gtest/gtest.h>
 
 #include <skity/effect/color_filter.hpp>
+#include <skity/graphic/paint.hpp>
 
 #include "src/effect/color_filter_base.hpp"
 #include "src/graphic/color_priv.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
 
 TEST(BlendFilterTest, Creation) {
   auto filter =
@@ -185,4 +187,45 @@ TEST(ComposeFilterTest, Creation) {
 
   EXPECT_EQ(filters[0], filter2.get());
   EXPECT_EQ(filters[1], filter1.get());
+}
+
+TEST(ColorFilterOpacityTest, IncludesPaintAlphaAndColorFilter) {
+  skity::Paint paint;
+  EXPECT_TRUE(skity::IsPaintSourceOpaque(paint));
+
+  paint.SetAlphaF(0.5f);
+  EXPECT_FALSE(skity::IsPaintSourceOpaque(paint));
+  paint.SetAlphaF(1.f);
+
+  paint.SetColorFilter(
+      skity::ColorFilters::Blend(skity::Color_RED, skity::BlendMode::kSrcATop));
+  EXPECT_TRUE(skity::IsPaintSourceOpaque(paint));
+
+  constexpr float alpha_preserving_matrix[20] = {
+      0.f, 1.f, 0.f, 0.f, 0.f,  //
+      1.f, 0.f, 0.f, 0.f, 0.f,  //
+      0.f, 0.f, 1.f, 0.f, 0.f,  //
+      0.f, 0.f, 0.f, 1.f, 0.f,  //
+  };
+  paint.SetColorFilter(skity::ColorFilters::Matrix(alpha_preserving_matrix));
+  EXPECT_TRUE(skity::IsPaintSourceOpaque(paint));
+
+  constexpr float alpha_reducing_matrix[20] = {
+      1.f, 0.f, 0.f, 0.f,  0.f,  //
+      0.f, 1.f, 0.f, 0.f,  0.f,  //
+      0.f, 0.f, 1.f, 0.f,  0.f,  //
+      0.f, 0.f, 0.f, 0.5f, 0.f,  //
+  };
+  paint.SetColorFilter(skity::ColorFilters::Matrix(alpha_reducing_matrix));
+  EXPECT_FALSE(skity::IsPaintSourceOpaque(paint));
+
+  paint.SetColorFilter(skity::ColorFilters::Compose(
+      skity::ColorFilters::SRGBToLinearGamma(),
+      skity::ColorFilters::Matrix(alpha_preserving_matrix)));
+  EXPECT_TRUE(skity::IsPaintSourceOpaque(paint));
+
+  paint.SetColorFilter(skity::ColorFilters::Compose(
+      skity::ColorFilters::SRGBToLinearGamma(),
+      skity::ColorFilters::Matrix(alpha_reducing_matrix)));
+  EXPECT_FALSE(skity::IsPaintSourceOpaque(paint));
 }

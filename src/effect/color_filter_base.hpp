@@ -36,6 +36,8 @@ class ColorFilterBase : public ColorFilter {
 
   virtual ColorFilterType GetType() const = 0;
 
+  virtual bool IsAlphaUnchanged() const { return false; }
+
  protected:
   ColorFilterBase() = default;
 };
@@ -61,6 +63,10 @@ class BlendColorFilter : public ColorFilterBase {
   BlendMode GetBlendMode() const { return mode_; }
 
   ColorFilterType GetType() const override { return ColorFilterType::kBlend; }
+
+  bool IsAlphaUnchanged() const override {
+    return mode_ == BlendMode::kDst || mode_ == BlendMode::kSrcATop;
+  }
 
   std::string_view ProcName() const override;
 
@@ -105,6 +111,11 @@ class MatrixColorFilter : public ColorFilterBase {
 
   ColorFilterType GetType() const override { return ColorFilterType::kMatrix; }
 
+  bool IsAlphaUnchanged() const override {
+    return matrix_[15] == 0.f && matrix_[16] == 0.f && matrix_[17] == 0.f &&
+           matrix_[18] == 1.f && matrix_[19] == 0.f;
+  }
+
   std::string_view ProcName() const override;
 
   void FlattenToBuffer(WriteBuffer& buffer) const override;
@@ -123,6 +134,8 @@ class SRGBGammaColorFilter : public ColorFilterBase {
   PMColor OnFilterColor(PMColor c) const override;
 #endif
   ColorFilterType GetType() const override { return type_; }
+
+  bool IsAlphaUnchanged() const override { return true; }
 
   std::string_view ProcName() const override;
 
@@ -145,6 +158,15 @@ class ComposeColorFilter : public ColorFilterBase {
   }
 
   ColorFilterType GetType() const override { return ColorFilterType::kCompose; }
+
+  bool IsAlphaUnchanged() const override {
+    for (const auto* filter : filters_) {
+      if (!As_CFB(filter)->IsAlphaUnchanged()) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   const std::vector<ColorFilter*>& GetFilters() const { return filters_; }
 

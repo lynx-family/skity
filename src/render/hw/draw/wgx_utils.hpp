@@ -63,6 +63,11 @@ bool SetupImageBoundsInfo(const wgx::BindGroupEntry* image_bounds_entry,
                           const Matrix& local_matrix, float width,
                           float height);
 
+// Returns whether the paint source produces alpha 1 before the fragment mask
+// is applied. Mask/image filters and unknown shader or color-filter behavior
+// are conservatively treated as translucent.
+bool IsPaintSourceOpaque(const Paint& paint);
+
 HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
                                    bool is_stroke, bool has_color = true);
 
