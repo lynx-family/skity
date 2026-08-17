@@ -138,6 +138,10 @@ enum class GPUBlendFactor {
   kDstAlpha,
   kOneMinusDstAlpha,
   kSrcAlphaSaturated,
+  kSrc1,
+  kOneMinusSrc1,
+  kSrc1Alpha,
+  kOneMinusSrc1Alpha,
 };
 
 // Fixed-function blend equation. kAdd is the default and covers every

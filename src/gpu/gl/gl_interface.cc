@@ -236,6 +236,9 @@ bool GLInterface::LoadExtensions(GLADloadfunc loader) {
   ext_shader_framebuffer_fetch =
       extensions.Contains("GL_EXT_shader_framebuffer_fetch");
 
+  // GL_EXT_blend_func_extended
+  ext_blend_func_extended = extensions.Contains("GL_EXT_blend_func_extended");
+
   // GL_KHR_blend_equation_advanced
   ext_khr_blend_equation_advanced =
       extensions.Contains("GL_KHR_blend_equation_advanced");

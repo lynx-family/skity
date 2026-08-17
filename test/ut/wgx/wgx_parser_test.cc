@@ -9,11 +9,13 @@
 #include <string_view>
 #include <vector>
 
+#include "module/wgx/wgsl/ast/ast_attribute.h"
 #include "module/wgx/wgsl/ast/ast_function.h"
 #include "module/wgx/wgsl/ast/ast_module.h"
 #include "module/wgx/wgsl/ast/expression.h"
 #include "module/wgx/wgsl/ast/identifier.h"
 #include "module/wgx/wgsl/ast/statement.h"
+#include "module/wgx/wgsl/ast/type_decl.h"
 #include "module/wgx/wgsl/parser.h"
 #include "module/wgx/wgsl/scanner.h"
 
@@ -220,6 +222,47 @@ fn two(a: bool) -> i32 {
   auto* ret = static_cast<ReturnStatement*>(else_block->statements[0]);
   ASSERT_EQ(ret->value->GetType(), ExpressionType::kIntLiteral);
   EXPECT_EQ(static_cast<IntLiteralExp*>(ret->value)->value, 2);
+}
+
+TEST_F(WgxParserTest, ParsesBlendSourceAttribute) {
+  Parse(R"(
+struct FSOutput {
+  @location(0) @blend_src(0) primary: vec4<f32>,
+  @location(0) @blend_src(1) secondary: vec4<f32>,
+}
+
+@fragment
+fn fs_main() -> FSOutput {
+  return FSOutput(vec4<f32>(1.0), vec4<f32>(1.0));
+}
+)");
+  ASSERT_NE(module_, nullptr) << parser_->GetDiagnosis().message;
+
+  auto* type_decl = module_->GetGlobalTypeDecl("FSOutput");
+  ASSERT_NE(type_decl, nullptr);
+  ASSERT_EQ(type_decl->GetType(), wgx::ast::TypeDeclType::kStruct);
+  auto* output = static_cast<wgx::ast::StructDecl*>(type_decl);
+  ASSERT_EQ(output->members.size(), 2u);
+
+  auto* primary =
+      output->members[0]->GetAttribute(wgx::ast::AttributeType::kBlendSrc);
+  auto* secondary =
+      output->members[1]->GetAttribute(wgx::ast::AttributeType::kBlendSrc);
+  ASSERT_NE(primary, nullptr);
+  ASSERT_NE(secondary, nullptr);
+  EXPECT_EQ(static_cast<wgx::ast::BlendSrcAttribute*>(primary)->index, 0);
+  EXPECT_EQ(static_cast<wgx::ast::BlendSrcAttribute*>(secondary)->index, 1);
+}
+
+TEST_F(WgxParserTest, RejectsInvalidBlendSourceIndex) {
+  Parse(R"(
+struct FSOutput {
+  @location(0) @blend_src(2) color: vec4<f32>,
+}
+)");
+  EXPECT_EQ(module_, nullptr);
+  EXPECT_NE(parser_->GetDiagnosis().message.find("must be 0 or 1"),
+            std::string::npos);
 }
 
 }  // namespace

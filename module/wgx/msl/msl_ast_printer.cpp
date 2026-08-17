@@ -999,6 +999,26 @@ std::vector<Attribute> AstPrinter::GetAttributes(
         attrs.emplace_back(
             Attribute{"color", static_cast<uint32_t>(color_attr->index)});
       }
+    } else if (attr->GetType() == ast::AttributeType::kBlendSrc) {
+      if (entry_point_output && func_->GetFunction()->GetPipelineStage() ==
+                                    ast::PipelineStage::kFragment) {
+        bool has_location = false;
+        for (auto* output_attr : attributes) {
+          if (output_attr->GetType() == ast::AttributeType::kLocation) {
+            has_location = true;
+            break;
+          }
+        }
+        if (!has_location) {
+          continue;
+        }
+
+        // @location(0) @blend_src(n) becomes
+        // [[color(0), index(n)]] on an MSL fragment output.
+        auto blend_src_attr = static_cast<ast::BlendSrcAttribute*>(attr);
+        attrs.emplace_back(
+            Attribute{"index", static_cast<uint32_t>(blend_src_attr->index)});
+      }
     } else if (attr->GetType() == ast::AttributeType::kVertex ||
                attr->GetType() == ast::AttributeType::kFragment) {
       if (target == AttrTarget::kFunction) {
