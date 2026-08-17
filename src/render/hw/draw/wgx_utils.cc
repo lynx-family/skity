@@ -4,6 +4,7 @@
 
 #include "src/render/hw/draw/wgx_utils.hpp"
 
+#include "src/effect/color_filter_base.hpp"
 #include "src/effect/gradient_fallback.hpp"
 #include "src/effect/pixmap_shader.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
@@ -177,6 +178,31 @@ bool SetupImageBoundsInfo(const wgx::BindGroupEntry* image_bounds_entry,
 
   image_bounds_struct->GetMember("inv_matrix")
       ->type->SetData(&local_matrix, sizeof(Matrix));
+  return true;
+}
+
+bool IsPaintSourceOpaque(const Paint& paint) {
+  // Mask/image filters can change coverage or introduce transparent pixels.
+  // Keep this optimization conservative until their alpha behavior is modeled.
+  if (paint.GetMaskFilter() != nullptr || paint.GetImageFilter() != nullptr) {
+    return false;
+  }
+
+  if (paint.GetAlphaF() != 1.f) {
+    return false;
+  }
+
+  const auto& shader = paint.GetShader();
+  if (shader != nullptr && !shader->IsOpaque()) {
+    return false;
+  }
+
+  const auto& color_filter = paint.GetColorFilter();
+  if (color_filter != nullptr &&
+      !As_CFB(color_filter.get())->IsAlphaUnchanged()) {
+    return false;
+  }
+
   return true;
 }
 

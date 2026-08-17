@@ -10,6 +10,8 @@ enable_testing()
 add_executable(skity_unit_test
     effect/color_filter_test.cc
     effect/image_filter_test.cc
+    effect/mask_filter_test.cc
+    effect/shader_test.cc
     geometry/geometry_test.cc
     geometry/math_test.cc
     geometry/matrix_test.cc

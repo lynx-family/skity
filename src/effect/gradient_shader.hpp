@@ -40,6 +40,8 @@ class GradientShader : public Shader {
   explicit GradientShader(GradientType type) : Shader(), info_(), type_(type) {}
   ~GradientShader() override = default;
 
+  bool IsOpaque() const override;
+
   GradientType AsGradient(GradientInfo* info) const override;
 
   void FlattenToBuffer(WriteBuffer& buffer) const override;

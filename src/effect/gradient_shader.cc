@@ -4,6 +4,7 @@
 
 #include "src/effect/gradient_shader.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -19,6 +20,15 @@ void EnsureColorOffsetsNonDescending(std::vector<float> &color_offsets,
   }
 }
 }  // namespace
+
+bool GradientShader::IsOpaque() const {
+  // A conical gradient may return transparent pixels outside its valid cone,
+  // even when all color stops are opaque.
+  return type_ != GradientType::kConical &&
+         info_.tile_mode != TileMode::kDecal && !info_.colors.empty() &&
+         std::all_of(info_.colors.begin(), info_.colors.end(),
+                     [](const Vec4 &color) { return color.a == 1.f; });
+}
 
 GradientShader::GradientType GradientShader::AsGradient(
     GradientInfo *info) const {

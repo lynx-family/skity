@@ -6,6 +6,9 @@
 
 #include <skity/effect/color_filter.hpp>
 #include <skity/effect/image_filter.hpp>
+#include <skity/graphic/paint.hpp>
+
+#include "src/render/hw/draw/wgx_utils.hpp"
 
 using namespace skity;
 
@@ -44,4 +47,10 @@ TEST(ImageFilter, ComputeFastBounds) {
       ImageFilters::MatrixTransform(Matrix::Scale(2, 2)));
   dst = image_filter->ComputeFastBounds(src);
   ASSERT_EQ(dst, Rect::MakeLTRB(100, 0, 300, 100));
+}
+
+TEST(ImageFilterOpacityTest, IsConservativelyTranslucent) {
+  Paint paint;
+  paint.SetImageFilter(ImageFilters::Blur(2.f, 2.f));
+  EXPECT_FALSE(IsPaintSourceOpaque(paint));
 }

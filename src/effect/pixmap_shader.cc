@@ -20,6 +20,16 @@ PixmapShader::PixmapShader(std::shared_ptr<Image> image,
   SetLocalMatrix(local_matrix);
 }
 
+bool PixmapShader::IsOpaque() const {
+  if (image_ == nullptr || image_->GetAlphaType() != kOpaque_AlphaType ||
+      x_tile_mode_ == TileMode::kDecal || y_tile_mode_ == TileMode::kDecal) {
+    return false;
+  }
+
+  auto image_type = image_->GetImageType();
+  return image_type == ImageType::kPixmap || image_type == ImageType::kTexture;
+}
+
 const std::shared_ptr<Image>* PixmapShader::AsImage() const { return &image_; }
 
 const SamplingOptions* PixmapShader::GetSamplingOptions() const {
