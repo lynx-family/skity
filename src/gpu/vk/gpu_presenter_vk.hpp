@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.h>
 
 #include <memory>
+#include <mutex>
 #include <skity/gpu/gpu_context_vk.hpp>
 #include <skity/gpu/gpu_presenter.hpp>
 #include <vector>
@@ -99,6 +100,17 @@ class GPUPresenterVK : public GPUPresenter {
   std::vector<VkFence> image_in_flight_fences_ = {};
   uint32_t current_frame_ = 0;
   bool has_outstanding_surface_ = false;
+  // Set when an acquired image can no longer be tracked (acquire/present
+  // failure after the frame fence was reset). A leaked swapchain image never
+  // returns to the BufferQueue, which on Android drains the producer's free
+  // slots (dequeueBuffer INVALID_OPERATION) until the driver faults inside
+  // QueuePresentKHR. Once broken, Acquire fails until the presenter is
+  // recreated by the caller.
+  bool broken_ = false;
+  // Serializes AcquireNextSurface/Present against Reset. Present touches
+  // swapchain handles and semaphores inside the driver, so Reset must not
+  // destroy them concurrently (vkDeviceWaitIdle does not cover presents).
+  std::mutex mutex_ = {};
 };
 
 }  // namespace skity
