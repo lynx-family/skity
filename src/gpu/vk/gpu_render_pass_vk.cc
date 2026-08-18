@@ -707,6 +707,7 @@ bool RecordDrawCommands(const std::shared_ptr<const VulkanContextState>& state,
     // dependency tile-local on TBDR hardware (no main-memory round-trip).
     const auto& blend_target = pipeline->GetDescriptor().target;
     if (blend_target.blend_op != GPUBlendOperation::kAdd &&
+        blend_target.blend_op != GPUBlendOperation::kReverseSubtract &&
         state->IsAdvancedBlendEnabled() && !state->IsAdvancedBlendCoherent()) {
       VkMemoryBarrier blend_barrier = {};
       blend_barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;

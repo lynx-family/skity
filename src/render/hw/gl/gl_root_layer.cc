@@ -15,25 +15,26 @@
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/hw_render_pass_builder.hpp"
 
 namespace skity {
 
-GLRootLayer::GLRootLayer(uint32_t width, uint32_t height, const Rect &bounds,
+GLRootLayer::GLRootLayer(uint32_t width, uint32_t height, const Rect& bounds,
                          GLuint vao)
     : HWRootLayer(width, height, bounds, GPUTextureFormat::kRGBA8Unorm),
       vao_(vao) {
   SetRTOrigin(LayerRTOrigin::kBottomLeft);
 }
 
-void GLRootLayer::Draw(GPURenderPass *render_pass, GPUCommandBuffer *cmd) {
+void GLRootLayer::Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {
   BindVAO();
 
   HWRootLayer::Draw(render_pass, cmd);
 }
 
-void GLRootLayer::OnPostDraw(GPURenderPass *render_pass,
-                             GPUCommandBuffer *cmd) {
+void GLRootLayer::OnPostDraw(GPURenderPass* render_pass,
+                             GPUCommandBuffer* cmd) {
   UnBindVAO();
 }
 
@@ -60,11 +61,11 @@ void GLRootLayer::UnBindVAO() {
 }
 
 GLDirectRootLayer::GLDirectRootLayer(uint32_t width, uint32_t height,
-                                     const Rect &bounds, GLuint vao, GLuint fbo)
+                                     const Rect& bounds, GLuint vao, GLuint fbo)
     : GLRootLayer(width, height, bounds, vao), fbo_id_(fbo) {}
 
 std::shared_ptr<GPURenderPass> GLDirectRootLayer::OnBeginRenderPass(
-    GPUCommandBuffer *cmd, bool force_load) {
+    GPUCommandBuffer* cmd, bool force_load) {
   GPUTextureDescriptor texture_desc{};
 
   texture_desc.width = GetWidth();
@@ -94,7 +95,7 @@ std::shared_ptr<GPURenderPass> GLDirectRootLayer::OnBeginRenderPass(
 }
 
 bool GLDirectRootLayer::OnCopyToDstTexture(
-    GPUCommandBuffer *cmd, std::shared_ptr<GPUTexture> dst_texture,
+    GPUCommandBuffer* cmd, std::shared_ptr<GPUTexture> dst_texture,
     GPURegion copy_region) const {
   GPUTextureDescriptor texture_desc{};
   texture_desc.width = GetWidth();
@@ -109,14 +110,14 @@ bool GLDirectRootLayer::OnCopyToDstTexture(
 }
 
 GLExternTextureLayer::GLExternTextureLayer(std::shared_ptr<GPUTexture> texture,
-                                           const Rect &bounds, GLuint vao,
+                                           const Rect& bounds, GLuint vao,
                                            int32_t src_fbo)
     : GLRootLayer(texture->GetDescriptor().width,
                   texture->GetDescriptor().height, bounds, vao),
       ext_texture_(std::move(texture)),
       src_fbo_(src_fbo) {}
 
-HWDrawState GLExternTextureLayer::OnPrepare(HWDrawContext *context) {
+HWDrawState GLExternTextureLayer::OnPrepare(HWDrawContext* context) {
   auto ret = GLRootLayer::OnPrepare(context);
 
   HWRenderPassBuilder builder(context, ext_texture_);
@@ -129,7 +130,7 @@ HWDrawState GLExternTextureLayer::OnPrepare(HWDrawContext *context) {
 }
 
 std::shared_ptr<GPURenderPass> GLExternTextureLayer::OnBeginRenderPass(
-    GPUCommandBuffer *cmd, bool force_load) {
+    GPUCommandBuffer* cmd, bool force_load) {
   if (force_load) {
     render_pass_desc_.color_attachment.load_op = GPULoadOp::kLoad;
   }
@@ -137,7 +138,7 @@ std::shared_ptr<GPURenderPass> GLExternTextureLayer::OnBeginRenderPass(
 
   if (src_fbo_ > 0 && !force_load) {
     auto gpu_render_pass_gl =
-        static_cast<GPURenderPassGL *>(gpu_render_pass.get());
+        static_cast<GPURenderPassGL*>(gpu_render_pass.get());
     gpu_render_pass_gl->SetAfterCleanupAction([this, gpu_render_pass_gl]() {
       auto read_fbo = src_fbo_;
       auto draw_fbo = gpu_render_pass_gl->GetTargetFBO();
@@ -153,14 +154,14 @@ std::shared_ptr<GPURenderPass> GLExternTextureLayer::OnBeginRenderPass(
 }
 
 bool GLExternTextureLayer::OnCopyToDstTexture(
-    GPUCommandBuffer *cmd, std::shared_ptr<GPUTexture> dst_texture,
+    GPUCommandBuffer* cmd, std::shared_ptr<GPUTexture> dst_texture,
     GPURegion copy_region) const {
   return CopyRegionToDstTexture(cmd, ext_texture_, std::move(dst_texture),
                                 copy_region);
 }
 
 GLDrawTextureLayer::GLDrawTextureLayer(std::shared_ptr<GPUTexture> texture,
-                                       GLuint resolve_fbo, const Rect &bounds,
+                                       GLuint resolve_fbo, const Rect& bounds,
                                        GLuint vao,
                                        bool can_blit_from_target_fbo)
     : GLRootLayer(texture->GetDescriptor().width,
@@ -172,7 +173,7 @@ GLDrawTextureLayer::GLDrawTextureLayer(std::shared_ptr<GPUTexture> texture,
                              color_texture_->GetDescriptor().height));
 }
 
-HWDrawState GLDrawTextureLayer::OnPrepare(HWDrawContext *context) {
+HWDrawState GLDrawTextureLayer::OnPrepare(HWDrawContext* context) {
   auto ret = GLRootLayer::OnPrepare(context);
 
   HWRenderPassBuilder builder(context, color_texture_);
@@ -183,7 +184,7 @@ HWDrawState GLDrawTextureLayer::OnPrepare(HWDrawContext *context) {
 
   // prepare layer back draw
   {
-    const auto &bounds = GetBounds();
+    const auto& bounds = GetBounds();
     Path path;
     path.AddRect(bounds);
 
@@ -198,6 +199,11 @@ HWDrawState GLDrawTextureLayer::OnPrepare(HWDrawContext *context) {
     paint.SetBlendMode(blend_mode);
     layer_back_draw_ = context->arena_allocator->Make<HWDynamicPathDraw>(
         GetTransform(), std::move(path), std::move(paint), false, false);
+    layer_back_draw_->SetBlendPlan(
+        ResolveFixedFunctionBlendPlan(blend_mode,
+                                      /*has_fragment_mask=*/false,
+                                      /*source_is_opaque=*/false)
+            .value());
   }
 
   // If layer_back_draw_ is null means user want open WGSL pipeline
@@ -215,7 +221,7 @@ HWDrawState GLDrawTextureLayer::OnPrepare(HWDrawContext *context) {
   return ret;
 }
 
-void GLDrawTextureLayer::OnGenerateCommand(HWDrawContext *context,
+void GLDrawTextureLayer::OnGenerateCommand(HWDrawContext* context,
                                            HWDrawState state) {
   GLRootLayer::OnGenerateCommand(context, state);
 
@@ -225,14 +231,14 @@ void GLDrawTextureLayer::OnGenerateCommand(HWDrawContext *context,
 }
 
 std::shared_ptr<GPURenderPass> GLDrawTextureLayer::OnBeginRenderPass(
-    GPUCommandBuffer *cmd, bool force_load) {
+    GPUCommandBuffer* cmd, bool force_load) {
   if (force_load) {
     render_pass_desc_.color_attachment.load_op = GPULoadOp::kLoad;
   }
   auto gpu_render_pass = cmd->BeginRenderPass(render_pass_desc_);
   if (can_blit_from_target_fbo_ && resolve_fbo_ > 0) {
     auto gpu_render_pass_gl =
-        static_cast<GPURenderPassGL *>(gpu_render_pass.get());
+        static_cast<GPURenderPassGL*>(gpu_render_pass.get());
     gpu_render_pass_gl->SetAfterCleanupAction([this, gpu_render_pass_gl]() {
       auto read_fbo = resolve_fbo_;
       auto draw_fbo = gpu_render_pass_gl->GetTargetFBO();
@@ -247,13 +253,13 @@ std::shared_ptr<GPURenderPass> GLDrawTextureLayer::OnBeginRenderPass(
 }
 
 bool GLDrawTextureLayer::OnCopyToDstTexture(
-    GPUCommandBuffer *cmd, std::shared_ptr<GPUTexture> dst_texture,
+    GPUCommandBuffer* cmd, std::shared_ptr<GPUTexture> dst_texture,
     GPURegion copy_region) const {
   return CopyRegionToDstTexture(cmd, color_texture_, std::move(dst_texture),
                                 copy_region);
 }
 
-void GLDrawTextureLayer::OnPostDraw(GPURenderPass *, GPUCommandBuffer *cmd) {
+void GLDrawTextureLayer::OnPostDraw(GPURenderPass*, GPUCommandBuffer* cmd) {
   if (!layer_back_draw_) {
     return;
   }
@@ -295,11 +301,11 @@ void GLDrawTextureLayer::OnPostDraw(GPURenderPass *, GPUCommandBuffer *cmd) {
 
 GLPartialDrawTextureLayer::GLPartialDrawTextureLayer(
     std::shared_ptr<GPUTexture> texture, GLuint resolve_fbo,
-    const skity::Rect &bounds, GLuint vao)
+    const skity::Rect& bounds, GLuint vao)
     : GLDrawTextureLayer(std::move(texture), resolve_fbo, bounds, vao, false) {}
 
 HWDrawState GLPartialDrawTextureLayer::OnPrepare(
-    skity::HWDrawContext *context) {
+    skity::HWDrawContext* context) {
   auto ret = GLRootLayer::OnPrepare(context);
 
   HWRenderPassBuilder builder(context, color_texture_);
@@ -328,6 +334,11 @@ HWDrawState GLPartialDrawTextureLayer::OnPrepare(
     paint.SetBlendMode(blend_mode);
     layer_back_draw_ = context->arena_allocator->Make<HWDynamicPathDraw>(
         GetTransform(), std::move(path), std::move(paint), false, false);
+    layer_back_draw_->SetBlendPlan(
+        ResolveFixedFunctionBlendPlan(blend_mode,
+                                      /*has_fragment_mask=*/false,
+                                      /*source_is_opaque=*/false)
+            .value());
   }
 
   // If layer_back_draw_ is null means user want open WGSL pipeline
@@ -348,8 +359,8 @@ HWDrawState GLPartialDrawTextureLayer::OnPrepare(
   return ret;
 }
 
-void GLPartialDrawTextureLayer::OnPostDraw(GPURenderPass *render_pass,
-                                           GPUCommandBuffer *cmd) {
+void GLPartialDrawTextureLayer::OnPostDraw(GPURenderPass* render_pass,
+                                           GPUCommandBuffer* cmd) {
   if (!layer_back_draw_) {
     return;
   }

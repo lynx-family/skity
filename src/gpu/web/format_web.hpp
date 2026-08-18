@@ -150,6 +150,15 @@ constexpr WGPUStencilOperation ToWGPUStencilOperation(GPUStencilOperation op) {
   }
 }
 
+constexpr WGPUBlendOperation ToWGPUBlendOperation(GPUBlendOperation operation) {
+  switch (operation) {
+    case GPUBlendOperation::kReverseSubtract:
+      return WGPUBlendOperation_ReverseSubtract;
+    default:
+      return WGPUBlendOperation_Add;
+  }
+}
+
 constexpr WGPUBlendFactor ToWGPUBlendFactor(GPUBlendFactor factor) {
   switch (factor) {
     case GPUBlendFactor::kZero:

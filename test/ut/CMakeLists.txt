@@ -33,6 +33,7 @@ add_executable(skity_unit_test
     render/hw/hw_buffer_layout_test.cc
     render/hw/coverage_aa_line_encoder_test.cc
     render/hw/coverage_aa_path_tiler_test.cc
+    render/hw/hw_blend_plan_test.cc
     render/hw/hw_pipeline_key_test.cc
     render/hw/precompile_test.cc
     render/hw/dst_read_strategy_test.cc

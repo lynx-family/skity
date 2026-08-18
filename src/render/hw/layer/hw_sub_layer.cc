@@ -21,7 +21,7 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
     path.AddRect(bounds);
 
     Paint paint;
-    paint.SetBlendMode(blend_mode_);
+    paint.SetBlendMode(GetBlendPlan().blend_mode);
     paint.SetAlphaF(alpha_);
     paint.SetStyle(Paint::kFill_Style);
     paint.SetShader(CreateDrawLayerShader(context->gpuContext,
@@ -36,7 +36,7 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
   layer_back_draw_->SetColorFormat(GetColorFormat());
   layer_back_draw_->SetScissorBox(GetScissorBox());
 
-  layer_back_draw_->SetDstReadStrategy(GetDstReadStrategy());
+  layer_back_draw_->SetBlendPlan(GetBlendPlan());
 
   auto state = layer_back_draw_->Prepare(context);
 

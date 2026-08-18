@@ -13,6 +13,7 @@
 
 #include "skity/graphic/image.hpp"
 #include "src/render/hw/draw/wgx_programmable_blending.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/hw_draw_pass.hpp"
 #include "src/render/hw/hw_render_target_cache.hpp"
 #include "src/render/hw/hw_static_buffer.hpp"
@@ -130,6 +131,11 @@ class HWDraw {
       return false;
     }
 
+    if (!has_blend_plan_ || !draw->has_blend_plan_ ||
+        blend_plan_ != draw->blend_plan_) {
+      return false;
+    }
+
     bool merged = OnMergeIfPossible(draw);
     if (merged) {
       layer_space_bounds_.Join(draw->layer_space_bounds_);
@@ -141,10 +147,19 @@ class HWDraw {
 
   void SetClipDepth(uint32_t clip_depth) { clip_depth_ = clip_depth; }
 
-  DstReadStrategy GetDstReadStrategy() const { return dst_read_strategy_; }
+  bool HasFragmentMask() const { return has_fragment_mask_; }
 
-  void SetDstReadStrategy(DstReadStrategy strategy) {
-    dst_read_strategy_ = strategy;
+  DstReadStrategy GetDstReadStrategy() const {
+    return blend_plan_.dst_read_strategy;
+  }
+
+  bool HasBlendPlan() const { return has_blend_plan_; }
+
+  const HWBlendPlan& GetBlendPlan() const { return blend_plan_; }
+
+  void SetBlendPlan(const HWBlendPlan& blend_plan) {
+    blend_plan_ = blend_plan;
+    has_blend_plan_ = true;
   }
 
  protected:
@@ -153,6 +168,10 @@ class HWDraw {
   virtual void OnGenerateCommand(HWDrawContext* context, HWDrawState state) = 0;
 
   virtual bool OnMergeIfPossible(HWDraw* draw) { return false; }
+
+  void SetHasFragmentMask(bool has_fragment_mask) {
+    has_fragment_mask_ = has_fragment_mask;
+  }
 
   void SetTransform(const Matrix& matrix) { transform_ = matrix; }
 
@@ -163,13 +182,15 @@ class HWDraw {
   float clip_value_ = 0.f;
   GPUTextureFormat target_format_ = GPUTextureFormat::kRGBA8Unorm;
   bool anti_alias_ = false;
+  bool has_fragment_mask_ = false;
+  bool has_blend_plan_ = false;
   bool prepared_ = false;
   bool generated_ = false;
   HWDrawState draw_state_ = HWDrawState::kDrawStateNone;
   Rect scissor_rect_ = {};
   Rect layer_space_bounds_ = Rect::MakeLTRB(-1E9F, -1E9F, 1E9F, 1E9F);
   HWDraw* clip_draw_ = nullptr;
-  DstReadStrategy dst_read_strategy_ = DstReadStrategy::kNonRequired;
+  HWBlendPlan blend_plan_ = {};
 };
 
 }  // namespace skity

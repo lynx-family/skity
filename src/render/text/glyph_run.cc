@@ -227,8 +227,8 @@ HWDraw* DirectGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
     fragment->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
   }
 
-  HWDynamicTextDraw* text_draw = arena_allocator->Make<HWDynamicTextDraw>(
-      Matrix(), paint_.GetBlendMode(), geometry, fragment);
+  HWDynamicTextDraw* text_draw =
+      arena_allocator->Make<HWDynamicTextDraw>(Matrix(), geometry, fragment);
   bounds_ = text_draw->GetTransform().MapRect(bounds_);
   return text_draw;
 }
@@ -468,8 +468,8 @@ HWDraw* SDFGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
   }
 
   // need to apply sdf scale to draw other than glyph
-  HWDynamicSdfTextDraw* text_draw = arena_allocator->Make<HWDynamicSdfTextDraw>(
-      Matrix(), paint_.GetBlendMode(), geometry, fragment);
+  HWDynamicSdfTextDraw* text_draw =
+      arena_allocator->Make<HWDynamicSdfTextDraw>(Matrix(), geometry, fragment);
   bounds_ = text_draw->GetTransform().MapRect(bounds_);
   return text_draw;
 }

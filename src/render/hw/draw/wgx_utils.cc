@@ -834,7 +834,7 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
 }
 
 void ConfigureShadingFragment(HWDrawContext* context, const Paint& paint,
-                              DstReadStrategy dst_read_strategy,
+                              const HWBlendPlan& blend_plan,
                               HWWGSLFragment* fragment) {
   if (fragment == nullptr) {
     return;
@@ -844,14 +844,11 @@ void ConfigureShadingFragment(HWDrawContext* context, const Paint& paint,
     fragment->SetFilter(WGXFilterFragment::Make(paint.GetColorFilter().get()));
   }
 
-  if (!IsAdvancedBlendMode(paint.GetBlendMode())) {
-    return;
-  }
-
-  if (dst_read_strategy != DstReadStrategy::kNativeBlend) {
-    fragment->SetProgrammableBlending(
-        WGXProgrammableBlending::Make(paint.GetBlendMode(), dst_read_strategy));
-  } else if (context->gpuContext->GetGPUDevice()
+  if (blend_plan.strategy == HWBlendStrategy::kProgrammable) {
+    fragment->SetProgrammableBlending(WGXProgrammableBlending::Make(
+        blend_plan.blend_mode, blend_plan.dst_read_strategy));
+  } else if (blend_plan.dst_read_strategy == DstReadStrategy::kNativeBlend &&
+             context->gpuContext->GetGPUDevice()
                  ->GetCaps()
                  .native_blend_shader_variant) {
     fragment->SetUsesNativeAdvancedBlend(true);

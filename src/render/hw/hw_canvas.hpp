@@ -125,7 +125,9 @@ class HWCanvas : public Canvas {
         CurrentLayer()->CalculateLayerSpaceBounds(bounds, transform));
   }
 
-  void SetupDstReadStrategyForDraw(HWDraw* draw, BlendMode blend_mode);
+  void SetupBlendForDraw(HWDraw* draw, BlendMode blend_mode,
+                         bool source_is_opaque,
+                         bool use_coverage_aware_blending);
 
   bool NeesOffScreenLayer(const Paint& paint) const;
 

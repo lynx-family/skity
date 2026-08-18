@@ -20,6 +20,7 @@
 #include "src/gpu/texture_impl.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_draw_pass.hpp"
 #include "src/render/hw/hw_texture_copy_utils.hpp"
@@ -105,6 +106,7 @@ void HWLayer::Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {
 HWLayerState* HWLayer::GetState() { return &state_; }
 
 void HWLayer::AddDraw(HWDraw* draw) {
+  DEBUG_CHECK(draw != nullptr && draw->HasBlendPlan());
   FlushPendingClip();
 
   draw->SetColorFormat(GetColorFormat());
@@ -404,6 +406,10 @@ EmulatedLoadInfo HWLayer::CreateEmulatedLoadInfo() {
   paint.SetBlendMode(BlendMode::kSrc);
   auto draw = arena_allocator_->Make<HWDynamicPathDraw>(
       GetTransform(), std::move(path), std::move(paint), false, false);
+  draw->SetBlendPlan(ResolveFixedFunctionBlendPlan(BlendMode::kSrc,
+                                                   /*has_fragment_mask=*/false,
+                                                   /*source_is_opaque=*/false)
+                         .value());
 
   draw->SetSampleCount(GetSampleCount());
   draw->SetColorFormat(GetColorFormat());

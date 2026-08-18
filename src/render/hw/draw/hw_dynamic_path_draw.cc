@@ -21,11 +21,13 @@ namespace skity {
 
 HWDynamicPathDraw::HWDynamicPathDraw(Matrix transform, Path path, Paint paint,
                                      bool is_stroke, bool use_gpu_tessellation)
-    : HWDynamicDraw(transform, paint.GetBlendMode()),
+    : HWDynamicDraw(transform),
       path_(std::move(path)),
       paint_(std::move(paint)),
       is_stroke_(is_stroke),
-      use_gpu_tessellation_(use_gpu_tessellation) {}
+      use_gpu_tessellation_(use_gpu_tessellation) {
+  SetHasFragmentMask(paint_.IsAntiAlias());
+}
 
 void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                                            HWDrawContext* context) {
@@ -34,7 +36,7 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
   auto geom = GenGeometry(context, false);
 
   auto frag = GenShadingFragment(context, paint_, is_stroke_);
-  ConfigureShadingFragment(context, paint_, GetDstReadStrategy(), frag);
+  ConfigureShadingFragment(context, paint_, GetBlendPlan(), frag);
 
   CoverageType coverage = CoverageType::kNone;
 
@@ -60,7 +62,7 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
     auto geometry = GenGeometry(context, true);
 
     auto fragment = GenShadingFragment(context, paint_, is_stroke_);
-    ConfigureShadingFragment(context, paint_, GetDstReadStrategy(), fragment);
+    ConfigureShadingFragment(context, paint_, GetBlendPlan(), fragment);
 
     steps.emplace_back(context->arena_allocator->Make<ColorAAStep>(
         std::move(geometry), std::move(fragment), coverage));
