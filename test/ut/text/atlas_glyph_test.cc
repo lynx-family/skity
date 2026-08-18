@@ -333,6 +333,28 @@ TEST(AtlasGlyphTest, EdgingParticipatesInGlyphKey) {
       GlyphKey::Equal{}(GlyphKey(7, alias_desc), GlyphKey(7, antialias_desc)));
 }
 
+TEST(AtlasGlyphTest, ScalerPolicyFlagsParticipateInGlyphKey) {
+  Font base_font(Typeface::GetDefaultTypeface(), 16.f);
+  Font configured_font = base_font;
+  configured_font.SetForceAutoHinting(true);
+  configured_font.SetEmbeddedBitmaps(true);
+  configured_font.SetLinearMetrics(true);
+
+  const ScalerContextDesc base_desc =
+      ScalerContextDesc::MakeTransformed(base_font, Paint(), 1.f, Matrix22{});
+  const ScalerContextDesc configured_desc = ScalerContextDesc::MakeTransformed(
+      configured_font, Paint(), 1.f, Matrix22{});
+
+  EXPECT_FALSE(
+      GlyphKey::Equal{}(GlyphKey(7, base_desc), GlyphKey(7, configured_desc)));
+  EXPECT_FALSE(base_desc.IsForceAutoHinting());
+  EXPECT_FALSE(base_desc.IsEmbeddedBitmaps());
+  EXPECT_FALSE(base_desc.IsLinearMetrics());
+  EXPECT_TRUE(configured_desc.IsForceAutoHinting());
+  EXPECT_TRUE(configured_desc.IsEmbeddedBitmaps());
+  EXPECT_TRUE(configured_desc.IsLinearMetrics());
+}
+
 TEST(AtlasBitmapTest, CopiesGlyphWithPaddedRows) {
   constexpr uint32_t kAtlasWidth = 16;
   constexpr uint32_t kGlyphWidth = 3;

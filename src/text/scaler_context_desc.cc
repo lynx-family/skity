@@ -21,6 +21,20 @@ Color GetPaintTextColor(const Paint& paint) {
                             : paint.GetFillColor());
 }
 
+uint8_t GetScalerFlags(const Font& font) {
+  uint8_t flags = 0;
+  if (font.IsForceAutoHinting()) {
+    flags |= ScalerContextDesc::kForceAutoHintingFlag;
+  }
+  if (font.IsEmbeddedBitmaps()) {
+    flags |= ScalerContextDesc::kEmbeddedBitmapsFlag;
+  }
+  if (font.IsLinearMetrics()) {
+    flags |= ScalerContextDesc::kLinearMetricsFlag;
+  }
+  return flags;
+}
+
 }  // namespace
 
 size_t ScalerContextDesc::hash() const {
@@ -59,6 +73,7 @@ ScalerContextDesc ScalerContextDesc::MakeCanonicalized(const Font& font,
   desc.subpixel_positioning = font.IsSubpixel() ? 1 : 0;
   desc.baseline_snap = font.IsBaselineSnap() ? 1 : 0;
   desc.edging = static_cast<uint8_t>(font.GetEdging());
+  desc.scaler_flags = GetScalerFlags(font);
 
   return desc;
 }
@@ -89,6 +104,7 @@ ScalerContextDesc ScalerContextDesc::MakeTransformed(
   desc.subpixel_positioning = font.IsSubpixel() ? 1 : 0;
   desc.baseline_snap = font.IsBaselineSnap() ? 1 : 0;
   desc.edging = static_cast<uint8_t>(font.GetEdging());
+  desc.scaler_flags = GetScalerFlags(font);
 
   return desc;
 }
