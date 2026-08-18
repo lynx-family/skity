@@ -122,4 +122,55 @@ std::shared_ptr<Pixmap> WebpDecoder::DecodeFrame(
   return pixmap;
 }
 
+std::shared_ptr<Pixmap> WebpDecoder::DecodeFirstFrameScaled(
+    int32_t target_width, int32_t target_height) {
+  if (frame_count_ != 1 || target_width <= 0 || target_height <= 0) {
+    return nullptr;
+  }
+
+  WebPIterator iter;
+  WebPDIteratorPTR auto_iter(&iter);
+
+  if (!WebPDemuxGetFrame(demuxer_.get(), 1, &iter) || !iter.complete) {
+    return nullptr;
+  }
+
+  // libwebp's rescaler decodes straight to the requested size — any ratio,
+  // no second pass. MODE_RGBA output is unpremultiplied, matching the
+  // module's canonical pixmap.
+  WebPDecoderConfig config;
+  if (!WebPInitDecoderConfig(&config)) {
+    return nullptr;
+  }
+
+  config.output.colorspace = MODE_RGBA;
+  config.options.use_scaling = 1;
+  config.options.scaled_width = target_width;
+  config.options.scaled_height = target_height;
+
+  if (WebPDecode(iter.fragment.bytes, iter.fragment.size, &config) !=
+      VP8_STATUS_OK) {
+    WebPFreeDecBuffer(&config.output);
+    return nullptr;
+  }
+
+  auto pixmap = std::make_shared<Pixmap>(
+      config.output.width, config.output.height, AlphaType::kUnpremul_AlphaType,
+      ColorType::kRGBA);
+
+  // Stride is width * 4 for an internal RGBA buffer, but copy row by row to
+  // stay independent of that assumption.
+  const uint8_t* rgba = config.output.u.RGBA.rgba;
+  int stride = config.output.u.RGBA.stride;
+  for (int i = 0; i < config.output.height; i++) {
+    std::memcpy(pixmap->WritableAddr8(0, i),
+                rgba + static_cast<size_t>(i) * stride,
+                static_cast<size_t>(config.output.width) * 4);
+  }
+
+  WebPFreeDecBuffer(&config.output);
+
+  return pixmap;
+}
+
 }  // namespace skity

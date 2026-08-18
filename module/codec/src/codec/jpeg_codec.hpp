@@ -14,7 +14,7 @@ class JPEGCodec : public Codec {
   JPEGCodec() = default;
   ~JPEGCodec() override = default;
 
-  std::shared_ptr<Pixmap> Decode() override;
+  std::shared_ptr<Pixmap> Decode(const DecodeOptions& options) override;
 
   std::shared_ptr<MultiFrameDecoder> DecodeMultiFrame() override;
 

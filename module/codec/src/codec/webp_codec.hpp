@@ -23,7 +23,7 @@ class WEBPCodec : public Codec {
 
   bool RecognizeFileType(const char *header, size_t size) override;
 
-  std::shared_ptr<Pixmap> Decode() override;
+  std::shared_ptr<Pixmap> Decode(const DecodeOptions &options) override;
 
   std::shared_ptr<MultiFrameDecoder> DecodeMultiFrame() override;
 

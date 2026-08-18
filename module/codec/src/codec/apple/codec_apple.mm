@@ -11,6 +11,10 @@
 #import <Foundation/Foundation.h>
 #import <ImageIO/ImageIO.h>
 
+#import <algorithm>
+
+#import "src/codec/codec_priv.hpp"
+
 namespace skity {
 
 namespace {
@@ -18,6 +22,67 @@ namespace {
 bool DataIsGIF(const uint8_t* data, size_t size) {
   if (size < 6) return false;
   return (memcmp(data, "GIF89a", 6) == 0 || memcmp(data, "GIF87a", 6) == 0);
+}
+
+/**
+ * Reads the intrinsic pixel size from the image source and resolves the
+ * aspect-fit target. Returns true when a reduced-size thumbnail decode
+ * should be used instead of a full decode.
+ */
+bool ResolveThumbnailSize(CGImageSourceRef source, const DecodeOptions& options, int32_t* out_width,
+                          int32_t* out_height) {
+  CFDictionaryRef properties = CGImageSourceCopyProperties(source, NULL);
+  if (properties == NULL) {
+    return false;
+  }
+
+  bool need_thumbnail = false;
+  CFNumberRef width_num = (CFNumberRef)CFDictionaryGetValue(properties, kCGImagePropertyPixelWidth);
+  CFNumberRef height_num =
+      (CFNumberRef)CFDictionaryGetValue(properties, kCGImagePropertyPixelHeight);
+
+  if (width_num != NULL && height_num != NULL) {
+    int32_t width = 0;
+    int32_t height = 0;
+    CFNumberGetValue(width_num, kCFNumberIntType, &width);
+    CFNumberGetValue(height_num, kCFNumberIntType, &height);
+    need_thumbnail = codec_priv::ResolveTargetSize(width, height, options, out_width, out_height);
+  }
+
+  CFRelease(properties);
+  return need_thumbnail;
+}
+
+/**
+ * Decodes frame 0 at a reduced size via ImageIO's own aspect-fit scaling:
+ * kCGImageSourceThumbnailMaxPixelSize bounds the longest side of the output
+ * and never upscales, matching DecodeOptions semantics. EXIF orientation is
+ * applied via the transform option.
+ */
+CGImageRef CreateScaledImageAtIndex(CGImageSourceRef source, int32_t target_width,
+                                    int32_t target_height) {
+  int32_t max_pixel_size = std::max(target_width, target_height);
+
+  CFNumberRef size_number = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &max_pixel_size);
+
+  const void* keys[] = {
+      kCGImageSourceThumbnailMaxPixelSize,
+      kCGImageSourceCreateThumbnailFromImageAlways,
+      kCGImageSourceCreateThumbnailWithTransform,
+      kCGImageSourceShouldCacheImmediately,
+  };
+  const void* values[] = {size_number, kCFBooleanTrue, kCFBooleanTrue, kCFBooleanTrue};
+
+  CFDictionaryRef options_dict =
+      CFDictionaryCreate(kCFAllocatorDefault, keys, values, sizeof(keys) / sizeof(keys[0]),
+                         &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+  CGImageRef image = CGImageSourceCreateThumbnailAtIndex(source, 0, options_dict);
+
+  CFRelease(options_dict);
+  CFRelease(size_number);
+
+  return image;
 }
 
 std::shared_ptr<Pixmap> CGImageToPixmap(CGImageRef cg_image) {
@@ -187,7 +252,7 @@ class CodecApple : public Codec {
 
   ~CodecApple() override = default;
 
-  std::shared_ptr<Pixmap> Decode() override;
+  std::shared_ptr<Pixmap> Decode(const DecodeOptions& options) override;
 
   std::shared_ptr<MultiFrameDecoder> DecodeMultiFrame() override;
 
@@ -206,7 +271,7 @@ class CodecApple : public Codec {
   NSData* ns_data_ = nil;
 };
 
-std::shared_ptr<Pixmap> CodecApple::Decode() {
+std::shared_ptr<Pixmap> CodecApple::Decode(const DecodeOptions& options) {
   if (data_ == nullptr) {
     return {};
   }
@@ -223,7 +288,15 @@ std::shared_ptr<Pixmap> CodecApple::Decode() {
     return {};
   }
 
-  CGImageRef cg_image = CGImageSourceCreateImageAtIndex(source, 0, NULL);
+  CGImageRef cg_image = nil;
+  int32_t target_width = 0;
+  int32_t target_height = 0;
+  if (ResolveThumbnailSize(source, options, &target_width, &target_height)) {
+    cg_image = CreateScaledImageAtIndex(source, target_width, target_height);
+  } else {
+    cg_image = CGImageSourceCreateImageAtIndex(source, 0, NULL);
+  }
+
   CFRelease(source);
 
   if (cg_image == nil) {

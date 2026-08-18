@@ -10,6 +10,8 @@
 #include <skity/io/pixmap.hpp>
 #include <vector>
 
+#include "src/codec/codec_priv.hpp"
+
 namespace skity {
 
 namespace {
@@ -84,7 +86,16 @@ bool BMPCodec::RecognizeFileType(const char* header, size_t size) {
 
 std::shared_ptr<MultiFrameDecoder> BMPCodec::DecodeMultiFrame() { return {}; }
 
-std::shared_ptr<Pixmap> BMPCodec::Decode() {
+std::shared_ptr<Pixmap> BMPCodec::Decode(const DecodeOptions& options) {
+  // BMP is uncompressed and has no scaled decoding; resample after decode.
+  return codec_priv::ResamplePixmapToTarget(DecodeIntrinsic(), options);
+}
+
+std::shared_ptr<Pixmap> BMPCodec::DecodeIntrinsic() {
+  if (!data_) {
+    return nullptr;
+  }
+
   const auto* raw = static_cast<const uint8_t*>(data_->RawData());
   size_t size = data_->Size();
 

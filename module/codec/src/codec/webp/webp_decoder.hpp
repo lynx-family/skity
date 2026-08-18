@@ -66,6 +66,17 @@ class WebpDecoder : public MultiFrameDecoder {
   std::shared_ptr<Pixmap> DecodeFrame(
       const CodecFrame* frame, std::shared_ptr<Pixmap> prev_pixmap) override;
 
+  /**
+   * Decode the (only) frame at an exact scaled size, using libwebp's built-in
+   * rescaler (WebPDecoderConfig use_scaling). Only valid for single-frame
+   * images; animated images must go through DecodeFrame().
+   *
+   * Returns nullptr on failure; the caller is expected to fall back to
+   * DecodeFrame() + resample.
+   */
+  std::shared_ptr<Pixmap> DecodeFirstFrameScaled(int32_t target_width,
+                                                 int32_t target_height);
+
   const std::shared_ptr<Data>& GetData() const { return data_; }
 
  private:

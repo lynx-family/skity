@@ -38,7 +38,16 @@ PNGCodec::PNGCodec() = default;
 
 PNGCodec::~PNGCodec() {}
 
-std::shared_ptr<Pixmap> skity::PNGCodec::Decode() {
+std::shared_ptr<Pixmap> skity::PNGCodec::Decode(const DecodeOptions& options) {
+  // libpng has no scaled decoding; decode at intrinsic size and resample.
+  return codec_priv::ResamplePixmapToTarget(DecodeIntrinsic(), options);
+}
+
+std::shared_ptr<Pixmap> skity::PNGCodec::DecodeIntrinsic() {
+  if (!data_) {
+    return nullptr;
+  }
+
   PNGImage png_image{};
   if (!png_image_begin_read_from_memory(&png_image.image, data_->RawData(),
                                         data_->Size())) {

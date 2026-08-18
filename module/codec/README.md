@@ -7,6 +7,9 @@ Currently it only support PNG and JPEG format. And it is not stable.
 >
 > This module is not stable. Do not use this module in commercial project, otherwise you need to take your own risk.
 
+Design doc for decode-time downscaling (decoding directly at a target size):
+[DOWNSCALE_DECODE_DESIGN.md](DOWNSCALE_DECODE_DESIGN.md).
+
 This module depends on [libpng](https://github.com/pnggroup/libpng) and [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo).
 To fetch these should sync with `dev` target:
 

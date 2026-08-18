@@ -12,7 +12,9 @@ extern "C" {
 
 #include <turbojpeg.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <csetjmp>
 #include <cstring>
 #include <skity/io/data.hpp>
@@ -23,6 +25,11 @@ extern "C" {
 namespace skity {
 
 namespace {
+
+// How far the native n/8 scaled output may miss the requested target before
+// the shared resampler is run to close the remainder (see
+// DOWNSCALE_DECODE_DESIGN.md §4.1 / §9 Q2).
+constexpr double kRemainderTolerance = 0.02;
 
 struct TJHandlerWrapper {
   explicit TJHandlerWrapper(tjhandle h) : handle(h) {}
@@ -186,7 +193,7 @@ bool JPEGCodec::RecognizeFileType(const char* header, size_t size) {
   }
 }
 
-std::shared_ptr<Pixmap> JPEGCodec::Decode() {
+std::shared_ptr<Pixmap> JPEGCodec::Decode(const DecodeOptions& options) {
   if (!data_ || data_->Size() == 0) {
     return nullptr;
   }
@@ -203,6 +210,11 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode() {
   uint8_t* volatile pixels = nullptr;
   uint32_t volatile width = 0;
   uint32_t volatile height = 0;
+  // Post-decode resample target, set when the native n/8 scaled output misses
+  // the requested size by more than kRemainderTolerance. Read on the longjmp
+  // path, hence volatile as well.
+  int32_t volatile resample_width = 0;
+  int32_t volatile resample_height = 0;
 
   if (setjmp(jerr.setjmp_buffer)) {
     // A fatal libjpeg error occurred (e.g. corrupt/truncated scan data). Tear
@@ -217,9 +229,11 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode() {
           static_cast<size_t>(width) * height * tjPixelSize[TJPF_RGBA];
       auto image_data = skity::Data::MakeWithCopy(buf, size);
       tjFree(buf);
-      return std::make_shared<Pixmap>(
+      auto pixmap = std::make_shared<Pixmap>(
           image_data, static_cast<size_t>(width) * tjPixelSize[TJPF_RGBA],
           width, height);
+      return codec_priv::ResamplePixmapToSize(pixmap, resample_width,
+                                              resample_height);
     }
     if (buf) {
       tjFree(buf);
@@ -241,6 +255,46 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode() {
   }
 
   cinfo.out_color_space = JCS_EXT_RGBA;
+
+  // Decode-time downscaling via libjpeg's IDCT scaling: pick the largest
+  // supported n/8 ratio that does not overshoot the aspect-fit target. The
+  // scaled dimensions come out of jpeg_calc_output_dimensions(), never hand
+  // computed.
+  {
+    int32_t target_width = 0;
+    int32_t target_height = 0;
+    if (codec_priv::ResolveTargetSize(static_cast<int32_t>(cinfo.image_width),
+                                      static_cast<int32_t>(cinfo.image_height),
+                                      options, &target_width, &target_height)) {
+      double scale =
+          std::min(static_cast<double>(target_width) / cinfo.image_width,
+                   static_cast<double>(target_height) / cinfo.image_height);
+
+      // Largest num with num/8 <= scale; the epsilon keeps exact ratios (e.g.
+      // 0.5) from being rounded down by floating point.
+      int32_t scale_num =
+          std::clamp(static_cast<int32_t>(scale * 8.0 + 1e-9), 1, 8);
+
+      if (scale_num < 8) {
+        cinfo.scale_num = scale_num;
+        cinfo.scale_denom = 8;
+        jpeg_calc_output_dimensions(&cinfo);
+
+        // The n/8 granularity leaves up to ~12.5% gap to the target. When the
+        // native output misses the request by more than the tolerance, close
+        // the remainder with the shared resampler so outputs are predictable.
+        double out_width = static_cast<double>(cinfo.output_width);
+        double out_height = static_cast<double>(cinfo.output_height);
+        if (std::abs(out_width - target_width) >
+                target_width * kRemainderTolerance ||
+            std::abs(out_height - target_height) >
+                target_height * kRemainderTolerance) {
+          resample_width = target_width;
+          resample_height = target_height;
+        }
+      }
+    }
+  }
 
   if (!jpeg_start_decompress(&cinfo)) {
     jpeg_destroy_decompress(&cinfo);
@@ -287,7 +341,10 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode() {
 
   auto image_data = skity::Data::MakeWithCopy(buf, pixel_size);
   tjFree(buf);
-  return std::make_shared<Pixmap>(image_data, row_bytes, width, height);
+  auto pixmap = std::make_shared<Pixmap>(image_data, row_bytes, width, height);
+
+  return codec_priv::ResamplePixmapToSize(pixmap, resample_width,
+                                          resample_height);
 }
 
 std::shared_ptr<MultiFrameDecoder> JPEGCodec::DecodeMultiFrame() { return {}; }

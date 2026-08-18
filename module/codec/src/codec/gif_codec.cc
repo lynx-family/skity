@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 
+#include "src/codec/codec_priv.hpp"
 #include "src/codec/data_stream.hpp"
 #include "src/codec/wuffs/wuffs_codec.hpp"
 
@@ -62,9 +63,18 @@ class GIFDecoder : public WuffsDecoder {
 
 GIFCodec::~GIFCodec() = default;
 
-std::shared_ptr<Pixmap> GIFCodec::Decode() {
+std::shared_ptr<Pixmap> GIFCodec::Decode(const DecodeOptions& options) {
+  // wuffs has no scaled decoding; resample the first frame after decode.
+  return codec_priv::ResamplePixmapToTarget(DecodeIntrinsic(), options);
+}
+
+std::shared_ptr<Pixmap> GIFCodec::DecodeIntrinsic() {
   // create a wuffs gif decoder and decode the first frame
   CreateWuffsDecoderIfNeed();
+
+  if (!wuffs_decoder_) {
+    return {};
+  }
 
   if (wuffs_decoder_->GetFrameCount() == 0) {
     return {};
