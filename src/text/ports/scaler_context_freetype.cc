@@ -22,6 +22,7 @@
 #include <cstring>
 #include <limits>
 #include <skity/geometry/stroke.hpp>
+#include <vector>
 
 #include "src/base/fixed_types.hpp"
 #include "src/render/sw/sw_a8_drawable.hpp"
@@ -69,6 +70,220 @@ void SetGlyphBitmapOrigin(GlyphBitmapData* image, FT_Pos bitmap_left,
   // physical-pixel grid instead of applying the phase twice.
   image->origin_x = (bitmap_left - offset.x) / context_scale;
   image->origin_y = (bitmap_top + offset.y) / context_scale;
+}
+
+bool RasterizeOutline(FT_GlyphSlot slot, const GlyphSubpixelOffset& offset,
+                      float context_scale, GlyphBitmapData* image) {
+  if (slot == nullptr || image == nullptr || context_scale <= 0.f ||
+      slot->format != FT_GLYPH_FORMAT_OUTLINE) {
+    return false;
+  }
+
+  FT_BBox bbox;
+  FT_Outline_Get_CBox(&slot->outline, &bbox);
+  const FT_Pos x_min = bbox.xMin + offset.ft_x;
+  const FT_Pos x_max = bbox.xMax + offset.ft_x;
+  const FT_Pos y_min = bbox.yMin + offset.ft_y;
+  const FT_Pos y_max = bbox.yMax + offset.ft_y;
+  const FT_Pos left = FDot6Floor(x_min);
+  const FT_Pos right = FDot6Ceil(x_max);
+  const FT_Pos bottom = FDot6Floor(y_min);
+  const FT_Pos top = FDot6Ceil(y_max);
+  if (right <= left || top <= bottom ||
+      static_cast<uint64_t>(right - left) >
+          std::numeric_limits<unsigned int>::max() ||
+      static_cast<uint64_t>(top - bottom) >
+          std::numeric_limits<unsigned int>::max()) {
+    return false;
+  }
+
+  // Skia's A8 FreeType path applies the packed phase and aligns the
+  // phase-shifted outline bounds to the destination bitmap in one translate.
+  // This keeps negative coordinates on floor semantics and prevents
+  // FT_Render_Glyph from choosing a different implicit mask extent.
+  const FT_Pos x_shift = offset.ft_x - left * 64;
+  const FT_Pos y_shift = offset.ft_y - bottom * 64;
+  FT_Outline_Translate(&slot->outline, x_shift, y_shift);
+
+  FT_Bitmap target{};
+  target.width = static_cast<unsigned int>(right - left);
+  target.rows = static_cast<unsigned int>(top - bottom);
+  target.pitch = static_cast<int>(target.width);
+  target.pixel_mode = FT_PIXEL_MODE_GRAY;
+  target.num_grays = 256;
+
+  const size_t row_bytes = static_cast<size_t>(target.pitch);
+  if (target.rows > 0u &&
+      row_bytes > std::numeric_limits<size_t>::max() / target.rows) {
+    return false;
+  }
+  std::vector<uint8_t> pixels(row_bytes * target.rows, 0u);
+  target.buffer = pixels.data();
+  if (FT_Outline_Get_Bitmap(slot->library, &slot->outline, &target) != 0 ||
+      !internal::CopyFreetypeBitmap(target, image)) {
+    return false;
+  }
+
+  SetGlyphBitmapOrigin(image, left, top, offset, context_scale);
+  return true;
+}
+
+Rect GetColorRasterBounds(const GlyphData& glyph,
+                          const GlyphSubpixelOffset& offset) {
+  const float left = glyph.GetHoriBearingX() + offset.x;
+  const float top = -glyph.GetHoriBearingY() + offset.y;
+  return Rect::MakeLTRB(std::floor(left), std::floor(top),
+                        std::ceil(left + glyph.GetWidth()),
+                        std::ceil(top + glyph.GetHeight()));
+}
+
+bool ShouldSubpixelBitmap(FT_Face face, const ScalerContextDesc& desc,
+                          FT_GlyphSlot slot, const Matrix22& transform,
+                          const GlyphSubpixelOffset& offset) {
+  const bool mechanism =
+      slot != nullptr && slot->format == FT_GLYPH_FORMAT_BITMAP &&
+      desc.subpixel_positioning && (offset.ft_x != 0 || offset.ft_y != 0);
+  // Match Skia's policy: bitmap-only faces always resample for phase, while a
+  // scalable face's embedded strike is only phase-resampled when another
+  // transform already requires filtering.
+  const bool policy =
+      face != nullptr && (!FT_IS_SCALABLE(face) || !transform.IsIdentity());
+  return mechanism && policy;
+}
+
+bool IsAxisAlignedForHinting(const ScalerContextDesc& desc) {
+  const Matrix22 transform = desc.GetTransformMatrix();
+  const bool keeps_device_axes =
+      transform.GetSkewX() == 0.f && transform.GetSkewY() == 0.f;
+  const bool swaps_device_axes =
+      transform.GetScaleX() == 0.f && transform.GetScaleY() == 0.f;
+  // This is Skia's FreeType isAxisAligned(rec) predicate. Font skew is part of
+  // the pre-transform and therefore also makes grid-aligned hinting unsafe.
+  return desc.skew_x == 0.f && (keeps_device_axes || swaps_device_axes);
+}
+
+bool RasterizeBitmap(FT_GlyphSlot slot, Matrix bitmap_transform,
+                     const GlyphSubpixelOffset& offset,
+                     bool apply_subpixel_offset, float context_scale,
+                     GlyphBitmapData* image) {
+  if (slot == nullptr || image == nullptr || context_scale <= 0.f ||
+      slot->format != FT_GLYPH_FORMAT_BITMAP) {
+    return false;
+  }
+
+  if (apply_subpixel_offset) {
+    bitmap_transform.PostTranslate(offset.x, offset.y);
+  }
+
+  if (bitmap_transform.IsIdentity()) {
+    if (!internal::CopyFreetypeBitmap(slot->bitmap, image)) {
+      return false;
+    }
+    // Skia leaves a scalable strike un-resampled when its adjusted bitmap
+    // transform is identity, so the packed phase does not enter the mask
+    // bounds. Skity's run position already contains that phase; cancel it in
+    // the bitmap origin just as the phase-aware branches do, otherwise phase
+    // 3 crosses the nearest-sampled pixel boundary and shifts the whole glyph.
+    SetGlyphBitmapOrigin(image, slot->bitmap_left, slot->bitmap_top, offset,
+                         context_scale);
+    return true;
+  }
+
+  GlyphBitmapData source;
+  if (!internal::CopyFreetypeBitmap(slot->bitmap, &source)) {
+    return false;
+  }
+
+  // The atlas contract keeps native color glyph bytes in FreeType BGRA order
+  // and applies the R/B swizzle in the emoji fragment. Use an RGBA software
+  // surface here as a byte-preserving four-channel resampler; declaring the
+  // intermediate BGRA would make the software canvas convert channels before
+  // the atlas shader performs its existing swizzle.
+  const ColorType color_type =
+      source.format == BitmapFormat::kGray8 ? ColorType::kA8 : ColorType::kRGBA;
+  auto source_pixmap = std::make_shared<Pixmap>(
+      static_cast<uint32_t>(source.width), static_cast<uint32_t>(source.height),
+      AlphaType::kPremul_AlphaType, color_type);
+  if (source_pixmap->WritableAddr() == nullptr ||
+      source_pixmap->RowBytes() < source.RowBytes()) {
+    if (source.need_free) {
+      std::free(source.buffer);
+    }
+    return false;
+  }
+  for (uint32_t row = 0; row < static_cast<uint32_t>(source.height); ++row) {
+    std::memcpy(source_pixmap->WritableAddr8(0, row),
+                source.buffer + row * source.RowBytes(), source.RowBytes());
+  }
+  if (source.need_free) {
+    std::free(source.buffer);
+  }
+
+  const Rect source_bounds =
+      Rect::MakeXYWH(static_cast<float>(slot->bitmap_left),
+                     -static_cast<float>(slot->bitmap_top),
+                     static_cast<float>(slot->bitmap.width),
+                     static_cast<float>(slot->bitmap.rows));
+  const Rect mapped_bounds = bitmap_transform.MapRect(source_bounds);
+  if (!mapped_bounds.IsFinite() || mapped_bounds.IsEmpty()) {
+    return false;
+  }
+
+  const float left = std::floor(mapped_bounds.Left());
+  const float top = std::floor(mapped_bounds.Top());
+  const float right = std::ceil(mapped_bounds.Right());
+  const float bottom = std::ceil(mapped_bounds.Bottom());
+  const double width = static_cast<double>(right) - left;
+  const double height = static_cast<double>(bottom) - top;
+  if (!(width > 0.0 && height > 0.0) ||
+      width > std::numeric_limits<uint32_t>::max() ||
+      height > std::numeric_limits<uint32_t>::max()) {
+    return false;
+  }
+
+  Bitmap destination(static_cast<uint32_t>(width),
+                     static_cast<uint32_t>(height),
+                     AlphaType::kPremul_AlphaType, color_type);
+  auto canvas = Canvas::MakeSoftwareCanvas(&destination);
+  auto source_image = Image::MakeImage(source_pixmap, nullptr);
+  if (!canvas || !source_image) {
+    return false;
+  }
+
+  // This is Skia's native-bitmap path: round out the transformed mask bounds,
+  // translate them to the destination origin, then linearly resample the
+  // strike. A packed phase is a post-translation on the bitmap transform.
+  canvas->Translate(-left, -top);
+  canvas->Concat(bitmap_transform);
+  canvas->Translate(slot->bitmap_left, -slot->bitmap_top);
+  SamplingOptions options;
+  options.filter = FilterMode::kLinear;
+  options.mipmap = MipmapMode::kNearest;
+  canvas->DrawImage(source_image, 0, 0, options);
+
+  const size_t row_bytes = destination.RowBytes();
+  if (destination.Height() > 0u &&
+      row_bytes > std::numeric_limits<size_t>::max() / destination.Height()) {
+    return false;
+  }
+  const size_t byte_count = row_bytes * destination.Height();
+  auto* pixels = static_cast<uint8_t*>(std::malloc(byte_count));
+  if (pixels == nullptr) {
+    return false;
+  }
+  std::memcpy(pixels, destination.GetPixelAddr(), byte_count);
+
+  image->buffer = pixels;
+  image->need_free = true;
+  image->width = destination.Width();
+  image->height = destination.Height();
+  image->row_bytes = row_bytes;
+  image->format = source.format;
+  const float phase_x = apply_subpixel_offset ? offset.x : 0.f;
+  const float phase_y = apply_subpixel_offset ? offset.y : 0.f;
+  image->origin_x = (left - phase_x) / context_scale;
+  image->origin_y = (-top + phase_y) / context_scale;
+  return true;
 }
 
 }  // namespace
@@ -224,15 +439,25 @@ ScalerContextFreetype::ScalerContextFreetype(
     return;
   }
   FT_Int32 load_flags = FT_LOAD_DEFAULT;
+  bool linear_metrics = desc->IsLinearMetrics();
+  Font::FontHinting hinting = desc->GetHinting();
+  if (!IsAxisAlignedForHinting(*desc)) {
+    // Skia's FreeType typeface filters non-axis-aligned strikes to unhinted
+    // outlines before constructing the scaler. Hinting against the original
+    // pixel grid would otherwise distort rotated or skewed glyphs.
+    hinting = Font::FontHinting::kNone;
+  }
 
-  switch (desc->GetHinting()) {
+  // Keep the A8 load-flag mapping synchronized with Skia's
+  // SkScalerContext_FreeType constructor.
+  switch (hinting) {
     case Font::FontHinting::kNone:
       load_flags = FT_LOAD_NO_HINTING;
-      linear_metrics_ = true;
+      linear_metrics = true;
       break;
     case Font::FontHinting::kSlight:
       load_flags = FT_LOAD_TARGET_LIGHT;
-      linear_metrics_ = true;
+      linear_metrics = true;
       break;
     case Font::FontHinting::kNormal:
     case Font::FontHinting::kFull:
@@ -243,8 +468,14 @@ ScalerContextFreetype::ScalerContextFreetype(
       break;
   }
 
+  if (desc->IsForceAutoHinting()) {
+    load_flags |= FT_LOAD_FORCE_AUTOHINT;
+  }
+  if (!desc->IsEmbeddedBitmaps()) {
+    load_flags |= FT_LOAD_NO_BITMAP;
+  }
+
   load_flags |= FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH;
-  load_flags |= FT_LOAD_COLOR;
 
   load_glyph_flags_ = load_flags;
   using DoneFTSize = FunctionWrapper<decltype(FT_Done_Size), FT_Done_Size>;
@@ -305,8 +536,9 @@ ScalerContextFreetype::ScalerContextFreetype(
         Matrix22(text_scale_.x / ft_face_->Face()->size->metrics.x_ppem, 0, 0,
                  text_scale_.y / ft_face_->Face()->size->metrics.y_ppem);
     load_glyph_flags_ &= ~FT_LOAD_NO_BITMAP;
+    load_glyph_flags_ |= FT_LOAD_COLOR;
     // FreeType does not provide linear metrics for bitmap fonts.
-    linear_metrics_ = false;
+    linear_metrics = false;
   } else {
     return;
   }
@@ -323,6 +555,7 @@ ScalerContextFreetype::ScalerContextFreetype(
 
   ft_size_ = ftSize.release();
   face_ = ft_face_->Face();
+  linear_metrics_ = linear_metrics;
 }
 
 ScalerContextFreetype::~ScalerContextFreetype() {
@@ -582,46 +815,56 @@ void ScalerContextFreetype::GenerateImage(PackedGlyphID id, GlyphData* glyph,
     return;
   }
 
-  if (FT_IS_SCALABLE(face_) && glyph->color_type_ == GlyphColorType::kColorV1) {
-    FT_OpaquePaint opaqueLayerPaint{nullptr, 1};
-    if (FT_Get_Color_Glyph_Paint(face_, glyph->Id(),
-                                 FT_COLOR_INCLUDE_ROOT_TRANSFORM,
-                                 &opaqueLayerPaint)) {
-      if (!color_utils_->DrawColorV1Glyph(face_, *glyph)) {
-        glyph->image_ = {};
-        return;
-      }
+  const GlyphSubpixelOffset subpixel_offset = GetGlyphSubpixelOffset(desc_, id);
 
-      GlyphBitmapData& info = glyph->image_;
-      Bitmap* bitmap = color_utils_->GetBitmap();
-      if (bitmap == nullptr || bitmap->Width() == 0 || bitmap->Height() == 0) {
-        info = {};
-        return;
-      }
-
-      info.buffer = bitmap->GetPixelAddr();
-      info.width = bitmap->Width();
-      info.height = bitmap->Height();
-      info.origin_x = glyph->GetHoriBearingX() / desc_.context_scale;
-      info.origin_y = glyph->GetHoriBearingY() / desc_.context_scale;
-      info.format = BitmapFormat::kRGBA8;
-
+  if (FT_IS_SCALABLE(face_) &&
+      (glyph->color_type_ == GlyphColorType::kColorV0 ||
+       glyph->color_type_ == GlyphColorType::kColorV1)) {
+    const Rect raster_bounds = GetColorRasterBounds(*glyph, subpixel_offset);
+    color_utils_->SetForegroundColor(desc_.foreground_color);
+    const bool drew_glyph =
+        glyph->color_type_ == GlyphColorType::kColorV0
+            ? color_utils_->DrawColorV0Glyph(
+                  face_, *glyph, load_glyph_flags_, raster_bounds,
+                  {subpixel_offset.x, subpixel_offset.y})
+            : color_utils_->DrawColorV1Glyph(
+                  face_, *glyph, raster_bounds,
+                  {subpixel_offset.x, subpixel_offset.y});
+    if (!drew_glyph) {
+      glyph->image_ = {};
       return;
     }
+
+    GlyphBitmapData& info = glyph->image_;
+    Bitmap* bitmap = color_utils_->GetBitmap();
+    if (bitmap == nullptr || bitmap->Width() == 0 || bitmap->Height() == 0) {
+      info = {};
+      return;
+    }
+
+    info.buffer = bitmap->GetPixelAddr();
+    info.width = bitmap->Width();
+    info.height = bitmap->Height();
+    info.origin_x =
+        (raster_bounds.Left() - subpixel_offset.x) / desc_.context_scale;
+    info.origin_y =
+        (-raster_bounds.Top() + subpixel_offset.y) / desc_.context_scale;
+    info.format = BitmapFormat::kRGBA8;
+
+    return;
   }
 
   if (FT_Load_Glyph(face_, glyph->Id(), load_glyph_flags_)) {
     return;
   }
   EmboldenIfNeeded(glyph->Id());
-  const GlyphSubpixelOffset subpixel_offset = GetGlyphSubpixelOffset(desc_, id);
-  ApplyGlyphSubpixelOffset(face_->glyph, subpixel_offset);
 
   FT_Bitmap bitmap;
   GlyphBitmapData& info = glyph->image_;
 
   if (face_->glyph->format != FT_GLYPH_FORMAT_BITMAP) {
     if (stroke_desc.is_stroke) {
+      ApplyGlyphSubpixelOffset(face_->glyph, subpixel_offset);
       FT_Stroker stroker;
 
       int radius = static_cast<FT_Fixed>(
@@ -649,75 +892,18 @@ void ScalerContextFreetype::GenerateImage(PackedGlyphID id, GlyphData* glyph,
                            subpixel_offset, desc_.context_scale);
       FT_Done_Glyph(ft_glyph);
     } else {
-      if (FT_Render_Glyph(face_->glyph, FT_RENDER_MODE_NORMAL)) {
+      if (!RasterizeOutline(face_->glyph, subpixel_offset, desc_.context_scale,
+                            &info)) {
         return;
       }
-      bitmap = face_->glyph->bitmap;
-      if (!internal::CopyFreetypeBitmap(bitmap, &info)) {
-        return;
-      }
-      SetGlyphBitmapOrigin(&info, face_->glyph->bitmap_left,
-                           face_->glyph->bitmap_top, subpixel_offset,
-                           desc_.context_scale);
     }
   } else {
-    if (transform_matrix_.IsIdentity()) {
-      bitmap = face_->glyph->bitmap;
-      // Not use slot memory directly as slot in ft is temporary before next
-      // loading.
-      if (!internal::CopyFreetypeBitmap(bitmap, &info)) {
-        return;
-      }
-      info.origin_x = glyph->GetHoriBearingX() / desc_.context_scale;
-      info.origin_y = glyph->GetHoriBearingY() / desc_.context_scale;
-    } else {
-      // transform bitmap
-      bitmap = face_->glyph->bitmap;
-      auto pixmap = std::make_shared<Pixmap>(bitmap.width, bitmap.rows,
-                                             AlphaType::kPremul_AlphaType,
-                                             ColorType::kRGBA);
-      std::memcpy(pixmap->WritableAddr(), bitmap.buffer,
-                  bitmap.rows * bitmap.pitch);
-      auto origin_image = Image::MakeImage(pixmap, nullptr);
-
-      uint32_t dst_width = std::floor(glyph->GetWidth());
-      uint32_t dst_height = std::floor(glyph->GetHeight());
-      Bitmap dst_bitmap(dst_width, dst_height, AlphaType::kPremul_AlphaType);
-      auto canvas = skity::Canvas::MakeSoftwareCanvas(&dst_bitmap);
-
-      if (canvas) {
-        canvas->Translate(-glyph->hori_bearing_x_, glyph->hori_bearing_y_);
-        canvas->Concat(transform_matrix_.ToMatrix());
-        canvas->Translate(face_->glyph->bitmap_left, -face_->glyph->bitmap_top);
-
-        SamplingOptions options;
-        options.filter = FilterMode::kLinear;
-        options.mipmap = MipmapMode::kNearest;
-        canvas->DrawImage(origin_image, 0, 0, options);
-
-        // copy dst
-        uint32_t bytes_count = dst_width * dst_height * sizeof(uint32_t);
-        uint8_t* copy_data =
-            reinterpret_cast<uint8_t*>(std::malloc(bytes_count));
-        std::memcpy(copy_data, dst_bitmap.GetPixelAddr(), bytes_count);
-        info.buffer = copy_data;
-        info.need_free = true;
-
-        info.width = dst_width;
-        info.height = dst_height;
-        info.origin_x = glyph->GetHoriBearingX() / desc_.context_scale;
-        info.origin_y = glyph->GetHoriBearingY() / desc_.context_scale;
-        info.row_bytes = static_cast<size_t>(dst_width) * sizeof(uint32_t);
-        info.format = BitmapFormat::kRGBA8;
-      } else {
-        // transformed bitmap is invisible
-        info.buffer = nullptr;
-        info.width = 0;
-        info.height = 0;
-        info.origin_x = 0;
-        info.origin_y = 0;
-        info.format = BitmapFormat::kGray8;
-      }
+    const bool subpixel_bitmap = ShouldSubpixelBitmap(
+        face_, desc_, face_->glyph, transform_matrix_, subpixel_offset);
+    if (!RasterizeBitmap(face_->glyph, transform_matrix_.ToMatrix(),
+                         subpixel_offset, subpixel_bitmap, desc_.context_scale,
+                         &info)) {
+      info = {};
     }
   }
 }

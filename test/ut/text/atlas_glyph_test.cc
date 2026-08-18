@@ -334,16 +334,11 @@ TEST(AtlasGlyphTest, EdgingParticipatesInGlyphKey) {
 }
 
 TEST(AtlasGlyphTest, ScalerPolicyFlagsParticipateInGlyphKey) {
-  Font base_font(Typeface::GetDefaultTypeface(), 16.f);
-  Font configured_font = base_font;
-  configured_font.SetForceAutoHinting(true);
-  configured_font.SetEmbeddedBitmaps(true);
-  configured_font.SetLinearMetrics(true);
-
-  const ScalerContextDesc base_desc =
-      ScalerContextDesc::MakeTransformed(base_font, Paint(), 1.f, Matrix22{});
-  const ScalerContextDesc configured_desc = ScalerContextDesc::MakeTransformed(
-      configured_font, Paint(), 1.f, Matrix22{});
+  ScalerContextDesc base_desc{};
+  ScalerContextDesc configured_desc{};
+  configured_desc.scaler_flags = ScalerContextDesc::kForceAutoHintingFlag |
+                                 ScalerContextDesc::kEmbeddedBitmapsFlag |
+                                 ScalerContextDesc::kLinearMetricsFlag;
 
   EXPECT_FALSE(
       GlyphKey::Equal{}(GlyphKey(7, base_desc), GlyphKey(7, configured_desc)));

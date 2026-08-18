@@ -23,15 +23,22 @@ class ColorFreeType {
   explicit ColorFreeType(PathFreeType* path_unitls)
       : path_unitls_(path_unitls) {}
 
-  bool DrawColorV1Glyph(FT_Face face, const GlyphData& glyph);
+  bool DrawColorV0Glyph(FT_Face face, const GlyphData& glyph,
+                        uint32_t load_glyph_flags, const Rect& raster_bounds,
+                        const Vec2& subpixel_offset);
+
+  bool DrawColorV1Glyph(FT_Face face, const GlyphData& glyph,
+                        const Rect& raster_bounds, const Vec2& subpixel_offset);
 
   bool ComputeColorV1Glyph(FT_Face face, const GlyphData& glyph, Rect* bounds);
 
   Bitmap* GetBitmap() { return bitmap_.get(); }
 
+  void SetForegroundColor(Color color) { foreground_color_ = color; }
+
  private:
   void PreparePalette(FT_Face face);
-  bool PrepareCanvas(const GlyphData& glyph);
+  bool PrepareCanvas(const Rect& raster_bounds);
 
   [[maybe_unused]] PathFreeType* path_unitls_ = nullptr;
 

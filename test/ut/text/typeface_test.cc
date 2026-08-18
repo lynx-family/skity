@@ -32,14 +32,17 @@ struct RasterizedGlyph {
   std::vector<uint8_t> pixels;
 };
 
-RasterizedGlyph RasterizeGlyph(std::shared_ptr<Typeface> typeface,
-                               GlyphID glyph_id, uint8_t x_phase,
-                               uint8_t y_phase, float context_scale = 1.f) {
+RasterizedGlyph RasterizeGlyph(
+    std::shared_ptr<Typeface> typeface, GlyphID glyph_id, uint8_t x_phase,
+    uint8_t y_phase, float context_scale = 1.f,
+    const Matrix22& transform = Matrix22{},
+    Font::FontHinting hinting = Font::FontHinting::kNormal) {
   Font font(typeface, 48.f);
   font.SetSubpixel(true);
+  font.SetHinting(hinting);
   Paint paint;
-  ScalerContextDesc desc = ScalerContextDesc::MakeTransformed(
-      font, paint, context_scale, Matrix22{});
+  ScalerContextDesc desc =
+      ScalerContextDesc::MakeTransformed(font, paint, context_scale, transform);
   auto context = typeface->CreateScalerContext(&desc);
   EXPECT_NE(context, nullptr);
   if (!context) {
@@ -362,6 +365,25 @@ TEST(FreeTypeScalerContextTest, AppliesPackedPhaseInPhysicalPixelSpace) {
   ASSERT_FALSE(phase.pixels.empty());
   const float physical_origin = phase.origin_x * kContentScale + 0.25f;
   EXPECT_NEAR(physical_origin, std::round(physical_origin), 1e-6f);
+}
+
+TEST(FreeTypeScalerContextTest, DisablesHintingForNonAxisAlignedTransform) {
+  auto typeface = Typeface::MakeFromFile(kRobotoRegular);
+  ASSERT_NE(typeface, nullptr);
+  const GlyphID glyph_id = typeface->UnicharToGlyph('H');
+  ASSERT_NE(glyph_id, 0);
+
+  const Matrix22 y_skew{1.f, 0.f, 0.25f, 1.f};
+  const RasterizedGlyph requested_hinted = RasterizeGlyph(
+      typeface, glyph_id, 1, 1, 1.f, y_skew, Font::FontHinting::kNormal);
+  const RasterizedGlyph explicitly_unhinted = RasterizeGlyph(
+      typeface, glyph_id, 1, 1, 1.f, y_skew, Font::FontHinting::kNone);
+
+  EXPECT_FLOAT_EQ(requested_hinted.origin_x, explicitly_unhinted.origin_x);
+  EXPECT_FLOAT_EQ(requested_hinted.origin_y, explicitly_unhinted.origin_y);
+  EXPECT_EQ(requested_hinted.width, explicitly_unhinted.width);
+  EXPECT_EQ(requested_hinted.height, explicitly_unhinted.height);
+  EXPECT_EQ(requested_hinted.pixels, explicitly_unhinted.pixels);
 }
 
 TEST(FreeTypeScalerContextTest, ExpandsMonochromeBitmapToGray8) {

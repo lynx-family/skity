@@ -775,16 +775,72 @@ Path clip_box_path(ColorContext context, GlyphID glyph_id, bool untransformed) {
 
 }  // namespace
 
-bool ColorFreeType::DrawColorV1Glyph(FT_Face face, const GlyphData& glyph) {
+bool ColorFreeType::DrawColorV0Glyph(FT_Face face, const GlyphData& glyph,
+                                     uint32_t load_glyph_flags,
+                                     const Rect& raster_bounds,
+                                     const Vec2& subpixel_offset) {
   PreparePalette(face);
-  if (!PrepareCanvas(glyph)) {
+  if (!PrepareCanvas(raster_bounds)) {
+    return false;
+  }
+
+  // Skia rasterizes COLRv0 as its component outlines rather than asking
+  // FreeType to pre-compose a BGRA bitmap. This makes the packed glyph phase
+  // part of the color mask itself and keeps the result in Skity's RGBA atlas
+  // convention.
+  canvas_->Translate(-raster_bounds.Left() + subpixel_offset.x,
+                     -raster_bounds.Top() + subpixel_offset.y);
+  FT_LayerIterator iterator{0, 0, nullptr};
+  FT_UInt layer_glyph = 0;
+  FT_UInt layer_color = 0;
+  bool have_layers = false;
+  uint32_t flags = load_glyph_flags;
+  flags |= FT_LOAD_BITMAP_METRICS_ONLY;
+  flags |= FT_LOAD_NO_BITMAP;
+  flags &= ~FT_LOAD_RENDER;
+  flags &= ~FT_LOAD_COLOR;
+
+  while (FT_Get_Color_Glyph_Layer(face, glyph.Id(), &layer_glyph, &layer_color,
+                                  &iterator)) {
+    have_layers = true;
+    if (FT_Load_Glyph(face, layer_glyph, flags) != 0 ||
+        face->glyph->format != FT_GLYPH_FORMAT_OUTLINE) {
+      return false;
+    }
+
+    Path path;
+    if (!path_unitls_->GenerateGlyphPath(face, &path)) {
+      return false;
+    }
+
+    Paint paint;
+    paint.SetAntiAlias(true);
+    if (layer_color == kForegroundColorPaletteIndex) {
+      paint.SetColor(foreground_color_);
+    } else if (layer_color < palette_.size()) {
+      paint.SetColor(palette_[layer_color]);
+    } else {
+      return false;
+    }
+    canvas_->DrawPath(path, paint);
+  }
+
+  return have_layers;
+}
+
+bool ColorFreeType::DrawColorV1Glyph(FT_Face face, const GlyphData& glyph,
+                                     const Rect& raster_bounds,
+                                     const Vec2& subpixel_offset) {
+  PreparePalette(face);
+  if (!PrepareCanvas(raster_bounds)) {
     return false;
   }
 
   VisitedSet visited_set;
   ColorContext context{this,      path_unitls_,      canvas_.get(), face,
                        &palette_, foreground_color_, &visited_set};
-  context.canvas->Translate(-glyph.GetHoriBearingX(), glyph.GetHoriBearingY());
+  context.canvas->Translate(-raster_bounds.Left() + subpixel_offset.x,
+                            -raster_bounds.Top() + subpixel_offset.y);
   return start_glyph(context, glyph.Id(), FT_COLOR_INCLUDE_ROOT_TRANSFORM);
 }
 
@@ -818,12 +874,12 @@ void ColorFreeType::PreparePalette(FT_Face face) {
   }
 }
 
-bool ColorFreeType::PrepareCanvas(const GlyphData& glyph) {
+bool ColorFreeType::PrepareCanvas(const Rect& raster_bounds) {
   canvas_.reset();
   bitmap_.reset();
 
-  float width = glyph.GetWidth();
-  float height = glyph.GetHeight();
+  float width = raster_bounds.Width();
+  float height = raster_bounds.Height();
   constexpr float kMaxBitmapSize =
       static_cast<float>(std::numeric_limits<uint32_t>::max());
 
