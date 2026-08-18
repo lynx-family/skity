@@ -333,6 +333,23 @@ TEST(AtlasGlyphTest, EdgingParticipatesInGlyphKey) {
       GlyphKey::Equal{}(GlyphKey(7, alias_desc), GlyphKey(7, antialias_desc)));
 }
 
+TEST(AtlasGlyphTest, ScalerPolicyFlagsParticipateInGlyphKey) {
+  ScalerContextDesc base_desc{};
+  ScalerContextDesc configured_desc{};
+  configured_desc.scaler_flags = ScalerContextDesc::kForceAutoHintingFlag |
+                                 ScalerContextDesc::kEmbeddedBitmapsFlag |
+                                 ScalerContextDesc::kLinearMetricsFlag;
+
+  EXPECT_FALSE(
+      GlyphKey::Equal{}(GlyphKey(7, base_desc), GlyphKey(7, configured_desc)));
+  EXPECT_FALSE(base_desc.IsForceAutoHinting());
+  EXPECT_FALSE(base_desc.IsEmbeddedBitmaps());
+  EXPECT_FALSE(base_desc.IsLinearMetrics());
+  EXPECT_TRUE(configured_desc.IsForceAutoHinting());
+  EXPECT_TRUE(configured_desc.IsEmbeddedBitmaps());
+  EXPECT_TRUE(configured_desc.IsLinearMetrics());
+}
+
 TEST(AtlasBitmapTest, CopiesGlyphWithPaddedRows) {
   constexpr uint32_t kAtlasWidth = 16;
   constexpr uint32_t kGlyphWidth = 3;

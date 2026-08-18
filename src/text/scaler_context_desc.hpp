@@ -43,10 +43,14 @@ struct ScalerContextDesc {
   uint8_t subpixel_positioning{};
   uint8_t baseline_snap{};
   uint8_t edging{};
+  // Font options that affect scaler output but fit in one byte. Keeping these
+  // bits in the descriptor makes both scaler lookup and atlas lookup observe
+  // the same raster-policy identity without introducing structure padding.
+  uint8_t scaler_flags{};
 
-  // Keep the complete object representation initialized and free of implicit
-  // tail padding so it can be used directly as cache identity.
-  uint8_t reserved_padding{};
+  static constexpr uint8_t kForceAutoHintingFlag = 1u << 0;
+  static constexpr uint8_t kEmbeddedBitmapsFlag = 1u << 1;
+  static constexpr uint8_t kLinearMetricsFlag = 1u << 2;
 
   friend inline bool operator==(const ScalerContextDesc& lhs,
                                 const ScalerContextDesc& rhs) {
@@ -80,6 +84,18 @@ struct ScalerContextDesc {
   }
 
   Font::Edging GetEdging() const { return static_cast<Font::Edging>(edging); }
+
+  bool IsForceAutoHinting() const {
+    return (scaler_flags & kForceAutoHintingFlag) != 0;
+  }
+
+  bool IsEmbeddedBitmaps() const {
+    return (scaler_flags & kEmbeddedBitmapsFlag) != 0;
+  }
+
+  bool IsLinearMetrics() const {
+    return (scaler_flags & kLinearMetricsFlag) != 0;
+  }
 };
 
 static_assert(sizeof(Matrix22) == sizeof(float) * 4,
@@ -104,7 +120,7 @@ static_assert(sizeof(ScalerContextDesc) ==
                       sizeof(ScalerContextDesc::subpixel_positioning) +
                       sizeof(ScalerContextDesc::baseline_snap) +
                       sizeof(ScalerContextDesc::edging) +
-                      sizeof(ScalerContextDesc::reserved_padding),
+                      sizeof(ScalerContextDesc::scaler_flags),
               "ScalerContextDesc must have no padding");
 static_assert(std::is_trivially_copyable_v<ScalerContextDesc>,
               "ScalerContextDesc must be trivially copyable");
