@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <limits>
 #include <vector>
 
 namespace skity {
@@ -80,6 +81,18 @@ inline uint8_t UnpremulChannel(uint8_t c, uint8_t a) {
 
 inline uint8_t DivRound(int64_t value, int64_t weight) {
   return static_cast<uint8_t>((value + weight / 2) / weight);
+}
+
+// Computes a * b into *out in size_t; returns false on overflow. Buffer sizes
+// derived from image dimensions must go through this — decoding a pixmap with
+// pathological dimensions (width > 2^29) would otherwise overflow the int
+// expressions and under-allocate.
+inline bool CheckedMul(size_t a, size_t b, size_t* out) {
+  if (b != 0 && a > std::numeric_limits<size_t>::max() / b) {
+    return false;
+  }
+  *out = a * b;
+  return true;
 }
 
 }  // namespace
@@ -199,21 +212,32 @@ std::shared_ptr<Pixmap> ResamplePixmap(const std::shared_ptr<Pixmap>& src,
   BuildContributions(src_height, dst_height, &y_contrib, &y_offsets);
 
   // Pass 1: horizontal box filter into a premul intermediate of
-  // src_height x dst_width.
-  std::vector<uint8_t> premul_row(src_width * 4);
-  std::vector<uint8_t> mid(static_cast<size_t>(src_height) * dst_width * 4);
+  // src_height x dst_width. All byte sizes and pixel offsets are computed in
+  // size_t — at int32 dimensions the plain int expressions overflow first.
+  size_t src_row_bytes = 0;
+  size_t mid_row_bytes = 0;
+  size_t mid_bytes = 0;
+  if (!CheckedMul(static_cast<size_t>(src_width), 4, &src_row_bytes) ||
+      !CheckedMul(static_cast<size_t>(dst_width), 4, &mid_row_bytes) ||
+      !CheckedMul(static_cast<size_t>(src_height), mid_row_bytes, &mid_bytes)) {
+    return nullptr;
+  }
+
+  std::vector<uint8_t> premul_row(src_row_bytes);
+  std::vector<uint8_t> mid(mid_bytes);
 
   for (int32_t y = 0; y < src_height; y++) {
     const uint8_t* row = src->Addr8(0, y);
     for (int32_t x = 0; x < src_width; x++) {
-      uint8_t a = row[x * 4 + 3];
-      premul_row[x * 4 + 0] = PremulChannel(row[x * 4 + 0], a);
-      premul_row[x * 4 + 1] = PremulChannel(row[x * 4 + 1], a);
-      premul_row[x * 4 + 2] = PremulChannel(row[x * 4 + 2], a);
-      premul_row[x * 4 + 3] = a;
+      size_t idx = static_cast<size_t>(x) * 4;
+      uint8_t a = row[idx + 3];
+      premul_row[idx + 0] = PremulChannel(row[idx + 0], a);
+      premul_row[idx + 1] = PremulChannel(row[idx + 1], a);
+      premul_row[idx + 2] = PremulChannel(row[idx + 2], a);
+      premul_row[idx + 3] = a;
     }
 
-    uint8_t* mid_row = mid.data() + static_cast<size_t>(y) * dst_width * 4;
+    uint8_t* mid_row = mid.data() + static_cast<size_t>(y) * mid_row_bytes;
     for (int32_t x = 0; x < dst_width; x++) {
       int64_t r = 0, g = 0, b = 0, a = 0, weight = 0;
       for (int32_t c = x_offsets[x]; c < x_offsets[x + 1]; c++) {
@@ -240,28 +264,29 @@ std::shared_ptr<Pixmap> ResamplePixmap(const std::shared_ptr<Pixmap>& src,
       static_cast<uint32_t>(dst_width), static_cast<uint32_t>(dst_height),
       AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
 
-  std::vector<int64_t> acc(static_cast<size_t>(dst_width) * 4);
+  std::vector<int64_t> acc(mid_row_bytes);
   for (int32_t y = 0; y < dst_height; y++) {
     std::fill(acc.begin(), acc.end(), 0);
 
     int64_t weight = 0;
     for (int32_t c = y_offsets[y]; c < y_offsets[y + 1]; c++) {
       const uint8_t* mid_row =
-          mid.data() + static_cast<size_t>(y_contrib[c].index) * dst_width * 4;
+          mid.data() + static_cast<size_t>(y_contrib[c].index) * mid_row_bytes;
       int32_t row_weight = y_contrib[c].weight;
       weight += row_weight;
-      for (int32_t x = 0; x < dst_width * 4; x++) {
+      for (size_t x = 0; x < mid_row_bytes; x++) {
         acc[x] += static_cast<int64_t>(mid_row[x]) * row_weight;
       }
     }
 
     uint8_t* out_row = dst->WritableAddr8(0, y);
     for (int32_t x = 0; x < dst_width; x++) {
-      uint8_t a = DivRound(acc[x * 4 + 3], weight);
-      out_row[x * 4 + 0] = UnpremulChannel(DivRound(acc[x * 4 + 0], weight), a);
-      out_row[x * 4 + 1] = UnpremulChannel(DivRound(acc[x * 4 + 1], weight), a);
-      out_row[x * 4 + 2] = UnpremulChannel(DivRound(acc[x * 4 + 2], weight), a);
-      out_row[x * 4 + 3] = a;
+      size_t idx = static_cast<size_t>(x) * 4;
+      uint8_t a = DivRound(acc[idx + 3], weight);
+      out_row[idx + 0] = UnpremulChannel(DivRound(acc[idx + 0], weight), a);
+      out_row[idx + 1] = UnpremulChannel(DivRound(acc[idx + 1], weight), a);
+      out_row[idx + 2] = UnpremulChannel(DivRound(acc[idx + 2], weight), a);
+      out_row[idx + 3] = a;
     }
   }
 
