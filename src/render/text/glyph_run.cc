@@ -33,20 +33,15 @@ struct GlyphRegionWithIndex {
 class DirectGlyphRun : public GlyphRun {
  public:
   DirectGlyphRun(const uint32_t count, const GlyphID* glyphs,
-                 const Point& origin, const float* position_x,
-                 const float* position_y, const Font& font, float context_scale,
-                 const Matrix& transform, const Paint& paint,
-                 const bool is_stroke,
+                 const Point& origin, const Font& font, float context_scale,
+                 const Paint& paint, const bool is_stroke,
                  std::vector<GlyphRegionWithIndex> glyph_locs,
                  uint32_t group_index, Atlas* atlas, GlyphFormat glyph_format)
       : count_(count),
         glyphs_(glyphs, glyphs + count),
         origin_(origin),
-        position_x_(position_x, position_x + count),
-        position_y_(position_y, position_y + count),
         font_(font),
         context_scale_(context_scale),
-        transform_(transform),
         paint_(paint),
         is_stroke_(is_stroke),
         glyph_locs_(std::move(glyph_locs)),
@@ -77,11 +72,8 @@ class DirectGlyphRun : public GlyphRun {
   uint32_t count_;
   std::vector<GlyphID> glyphs_;
   const Point origin_;
-  std::vector<float> position_x_;
-  std::vector<float> position_y_;
   const Font font_;
   float context_scale_;
-  Matrix transform_;
   const Paint paint_;
   const bool is_stroke_;
   std::vector<GlyphRegionWithIndex> glyph_locs_;
@@ -134,20 +126,8 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
     auto origin_x = glyph_locs_[k].region.origin_x;
     auto origin_y = glyph_locs_[k].region.origin_y;
 
-#if defined(SKITY_MACOS) || defined(SKITY_IOS)
     float rx = glyph_locs_[k].position.x + origin_x;
     float ry = glyph_locs_[k].position.y - origin_y;
-#else
-    const Vec2 run_pos{position_x_[glyph_locs_[k].index],
-                       position_y_[glyph_locs_[k].index]};
-    Vec2 device_run_pos{0, 0};
-    transform_.MapPoints(&device_run_pos, &run_pos, 1);
-
-    float rounded_x = std::floor(device_run_pos.x + 0.5f);
-    float rounded_y = std::floor(device_run_pos.y + 0.5f);
-    float rx = rounded_x + origin_x;
-    float ry = rounded_y - origin_y;
-#endif
     float rw = (uv_rb.x - uv_lt.x) / canvas_scale;
     float rh = (uv_rb.y - uv_lt.y) / canvas_scale;
 
@@ -267,11 +247,9 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
   const Vec2 origin_offset = device_origin - device_zero;
 
   GlyphPositionRoundingSpec rounding_spec;
-#if defined(SKITY_MACOS) || defined(SKITY_IOS)
   rounding_spec.is_subpixel = font.IsSubpixel();
   rounding_spec.axis_alignment =
       ComputeAxisAlignmentForHorizontalText(font.IsBaselineSnap(), transform);
-#endif
 
   Atlas* atlas = atlas_manager->GetAtlas(format);
   uint32_t k = 0;
@@ -308,9 +286,9 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
   if (draw_count == 1) {
     if (!glyph_regions.empty()) {
       run_list.push_back(arena_allocator->Make<DirectGlyphRun>(
-          count, glyphs, origin, position_x, position_y, font, context_scale,
-          transform, paint, is_stroke, std::move(glyph_regions),
-          static_cast<uint32_t>(0), atlas, glyph_format));
+          count, glyphs, origin, font, context_scale, paint, is_stroke,
+          std::move(glyph_regions), static_cast<uint32_t>(0), atlas,
+          glyph_format));
     }
   } else {
     std::vector<std::vector<GlyphRegionWithIndex>> glyph_region_groups(
@@ -330,8 +308,7 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
     for (uint32_t group_index = 0; group_index < glyph_region_groups.size();
          group_index++) {
       run_list.push_back(arena_allocator->Make<DirectGlyphRun>(
-          count, glyphs, origin, position_x, position_y, font, context_scale,
-          transform, paint, is_stroke,
+          count, glyphs, origin, font, context_scale, paint, is_stroke,
           std::move(glyph_region_groups[group_index]), group_index, atlas,
           glyph_format));
     }
