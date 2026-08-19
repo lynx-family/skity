@@ -51,6 +51,11 @@ WebpDecoder::WebpDecoder(WebPDemuxerPTR demuxer, std::shared_ptr<Data> data)
   frame_height_ = WebPDemuxGetI(demuxer_.get(), WEBP_FF_CANVAS_HEIGHT);
   frame_count_ = WebPDemuxGetI(demuxer_.get(), WEBP_FF_FRAME_COUNT);
 
+  // A legal animation may hold a single ANMF frame; frame_count alone cannot
+  // distinguish it from a static WebP. The VP8X animation flag can.
+  is_animation_ = (WebPDemuxGetI(demuxer_.get(), WEBP_FF_FORMAT_FLAGS) &
+                   ANIMATION_FLAG) != 0;
+
   // query all frame info
 
   for (int32_t i = 0; i < frame_count_; i++) {
@@ -124,7 +129,12 @@ std::shared_ptr<Pixmap> WebpDecoder::DecodeFrame(
 
 std::shared_ptr<Pixmap> WebpDecoder::DecodeFirstFrameScaled(
     int32_t target_width, int32_t target_height) {
-  if (frame_count_ != 1 || target_width <= 0 || target_height <= 0) {
+  // Animated files — including single-frame ones — must not take this path:
+  // the fragment covers the frame rect only, so decoding it scaled to the
+  // canvas-derived target would drop the offset, background and blend
+  // semantics. Fall back to the anim-decoder canvas path.
+  if (frame_count_ != 1 || is_animation_ || target_width <= 0 ||
+      target_height <= 0) {
     return nullptr;
   }
 
