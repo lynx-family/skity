@@ -28,10 +28,15 @@ bool DataIsGIF(const uint8_t* data, size_t size) {
  * Reads the intrinsic pixel size from the image source and resolves the
  * aspect-fit target. Returns true when a reduced-size thumbnail decode
  * should be used instead of a full decode.
+ *
+ * PixelWidth/PixelHeight are per-image (index) properties; the container
+ * dictionary returned by CGImageSourceCopyProperties() does not carry them,
+ * so the frame-0 dictionary from CGImageSourceCopyPropertiesAtIndex() is
+ * required here.
  */
 bool ResolveThumbnailSize(CGImageSourceRef source, const DecodeOptions& options, int32_t* out_width,
                           int32_t* out_height) {
-  CFDictionaryRef properties = CGImageSourceCopyProperties(source, NULL);
+  CFDictionaryRef properties = CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
   if (properties == NULL) {
     return false;
   }
@@ -102,8 +107,10 @@ std::shared_ptr<Pixmap> CGImageToPixmap(CGImageRef cg_image) {
 
   CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
 
-  // RGBA8888, little-endian unpremultiplied alpha
-  CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Big | kCGImageAlphaLast;
+  // Premultiplied RGBA8888: unpremultiplied (kCGImageAlphaLast) bitmap
+  // contexts fail to create on current SDKs, so draw premultiplied and
+  // convert back to the module's canonical unpremul below.
+  CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedLast;
 
   CGContextRef ctx = CGBitmapContextCreate(const_cast<void*>(data->RawData()),  // dst buffer
                                            width, height,
@@ -122,6 +129,25 @@ std::shared_ptr<Pixmap> CGImageToPixmap(CGImageRef cg_image) {
   CGContextDrawImage(ctx, CGRectMake(0, 0, width, height), cg_image);
 
   CGContextRelease(ctx);
+
+  // Un-premultiply in place. Opaque pixels (a == 255) are untouched; fully
+  // transparent ones collapse to zero, matching CodecTransformLineUnpremul.
+  uint8_t* pixels = static_cast<uint8_t*>(const_cast<void*>(data->RawData()));
+  size_t pixel_count = width * height;
+  for (size_t i = 0; i < pixel_count; i++) {
+    uint8_t* px = pixels + i * 4;
+    uint8_t a = px[3];
+    if (a == 255) {
+      continue;
+    }
+    if (a == 0) {
+      px[0] = px[1] = px[2] = 0;
+      continue;
+    }
+    for (int c = 0; c < 3; c++) {
+      px[c] = static_cast<uint8_t>(std::min(255, (px[c] * 255 + a / 2) / a));
+    }
+  }
 
   // default is unpremultiplied RGBA format
   auto pixmap = std::make_shared<Pixmap>(std::move(data), width, height);
