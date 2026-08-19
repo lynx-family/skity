@@ -182,27 +182,29 @@ In `JPEGCodec::Decode(options)`:
 
 1. Compute the aspect-fit target `(tw, th)` from `options` and the header
    dims.
-2. Choose the largest supported ratio `r <= min(tw/w, th/h)` from the fixed
-   set {1/8, 1/4, 3/8, 1/2, 5/8, 3/4, 7/8, 1/1} (downscale only) — the same
-   level table `SkJpegCodec` negotiates over (§2.1); `scale_num/scale_denom`
-   follow from the chosen level. Exact output dims come from
-   `jpeg_calc_output_dimensions()` rather than hand-computed `ceil()`.
+2. Choose the smallest supported ratio `r >= min(tw/w, th/h)` from the fixed
+   set {1/8, 1/4, 3/8, 1/2, 5/8, 3/4, 7/8, 1/1} that still **covers** the
+   target in both axes — the same level table `SkJpegCodec` negotiates over
+   (§2.1); `scale_num/scale_denom` follow from the chosen level. Exact
+   output dims come from `jpeg_calc_output_dimensions()` rather than
+   hand-computed `ceil()`.
 3. Set it after `jpeg_read_header()`, before `jpeg_start_decompress()`; the
    existing scanline loop, partial-decode `setjmp/longjmp` recovery, and
    pre-fill already key off `cinfo.output_width / output_scanline`, so they
    adapt without restructuring.
-4. If the scaled dims are still more than ~2% larger than the target in
-   either axis, run the shared resampler (§5) for the remainder. With the
-   n/8 granularity the remainder is at most 12.5%, so this final pass is
-   cheap.
+4. If the native dims are not exactly the target, run the shared resampler
+   (§5) for the remainder. With the covering rule the native output is
+   always >= the target, so this final pass only ever downsamples (up to
+   ~1/7 of a step) — cheap and blur-free.
 
-   Implementation note: with the "largest n/8 ≤ scale" rule the native output
-   is always ≤ target; the gap is on the *small* side (up to ~12.5%). The
-   implemented remainder pass therefore triggers when the native output
-   misses the target by more than 2% in **either direction**, resampling to
-   the exact target (§9 Q2 resolved this way for output-size
-   predictability). Requests that land exactly on the n/8 grid stay on the
-   pure native path.
+   Implementation note: the original "largest n/8 ≤ scale" (floor) rule was
+   changed to the covering (ceil) rule after review — floor can undershoot
+   the target by up to ~12.5%, which forced the remainder pass to
+   **upscale**, discarding detail at IDCT time and blurring the grow step
+   (e.g. 133×100 → target 66×50 picked 3/8 → 50×38 → grown back to 66×50).
+   With ceil the native output covers the target, the remainder resample is
+   always a downscale, and requests that land exactly on the n/8 grid still
+   take the pure native path with no second pass (§9 Q2).
 
 IDCT-scaled decoding is not an approximation hack: libjpeg computes a scaled
 inverse DCT, which for downscale ratios is quality-comparable to (and much
@@ -314,6 +316,15 @@ Testing notes:
   math, no-upscale clamp, one-dimension-unspecified), and content checks
   against a reference (full decode + independent scaler) with a PSNR /
   max-delta tolerance rather than exact pixels.
+- JPEG quality regression guard (`JPEGDecodeScaledHighFrequencyQuality`):
+  noise content scaled just below an n/8 grid point; asserts the output
+  keeps ≥ 0.62 of the reference's row-difference energy. The floor rule
+  measured ~0.53 (decode-undersized + interpolated growth), the covering
+  rule ~0.71.
+- WebP: a legal single-frame animation (`single_frame_anim.webp`, canvas
+  200×200, frame 128×128 at an offset) must composite onto the canvas —
+  `frame_count == 1` alone does not identify a static WebP
+  (`ANIMATION_FLAG` does).
 - JPEG: truncated-file partial decode at scaled size must still return a
   partial pixmap (existing behavior, new dims).
 - Golden tests are unaffected by construction — they call the no-argument
@@ -334,9 +345,10 @@ Testing notes:
 1. Aspect-fit box vs exact-stretch semantics — aspect-fit proposed (§3.1);
    confirm with the primary consumer (Lynx image pipeline).
 2. ~~Whether the JPEG remainder pass threshold (~2%) should instead always
-   resample to exact target~~ — resolved: the remainder pass resamples to
-   the exact target whenever the native n/8 output misses it by more than
-   2% in either direction (§4.1).
+   resample to exact target~~ — resolved (and tightened after review): the
+   level rule is "smallest n/8 that covers the target" and the remainder
+   pass resamples to the exact target whenever the native output misses it,
+   so the pass only ever downsamples (§4.1).
 3. Whether `prefer_quality` survives into the stable API or remains
    internal. Note: libwebp's decoder has no sharp-YUV option (see §10), so
    the flag currently has no effect on any backend.
@@ -358,7 +370,10 @@ Testing notes:
   framework build compiles only `codec_apple.mm` without `codec_priv.cc`,
   and the ImageIO path needs the same aspect-fit negotiation without
   linking the resampler.
-- **JPEG remainder pass triggers on misses in either direction** (§4.1
-  note) — the "largest n/8 ≤ scale" rule can only undershoot the target, so
-  "more than ~2% larger" from the proposal was generalized to "misses by
-  more than ~2%".
+- **JPEG level rule is "smallest n/8 that covers the target"** (§4.1,
+  revised after review) — the original proposal's "largest n/8 ≤ scale"
+  (floor) rule could undershoot the target by up to ~12.5% and forced an
+  upscaling remainder pass (decode → shrink → blur-grow). The covering rule
+  keeps every remainder resample a pure downscale; the ~2% threshold was
+  dropped in favor of "resample whenever the native output is not exactly
+  the target" for fully predictable output sizes.

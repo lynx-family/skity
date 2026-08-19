@@ -26,11 +26,6 @@ namespace skity {
 
 namespace {
 
-// How far the native n/8 scaled output may miss the requested target before
-// the shared resampler is run to close the remainder (see
-// DOWNSCALE_DECODE_DESIGN.md §4.1 / §9 Q2).
-constexpr double kRemainderTolerance = 0.02;
-
 struct TJHandlerWrapper {
   explicit TJHandlerWrapper(tjhandle h) : handle(h) {}
 
@@ -211,8 +206,7 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode(const DecodeOptions& options) {
   uint32_t volatile width = 0;
   uint32_t volatile height = 0;
   // Post-decode resample target, set when the native n/8 scaled output misses
-  // the requested size by more than kRemainderTolerance. Read on the longjmp
-  // path, hence volatile as well.
+  // the requested size. Read on the longjmp path, hence volatile as well.
   int32_t volatile resample_width = 0;
   int32_t volatile resample_height = 0;
 
@@ -256,10 +250,10 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode(const DecodeOptions& options) {
 
   cinfo.out_color_space = JCS_EXT_RGBA;
 
-  // Decode-time downscaling via libjpeg's IDCT scaling: pick the largest
-  // supported n/8 ratio that does not overshoot the aspect-fit target. The
-  // scaled dimensions come out of jpeg_calc_output_dimensions(), never hand
-  // computed.
+  // Decode-time downscaling via libjpeg's IDCT scaling: pick the smallest
+  // supported n/8 ratio that still covers the aspect-fit target in both
+  // axes. The scaled dimensions come out of jpeg_calc_output_dimensions(),
+  // never hand computed.
   {
     int32_t target_width = 0;
     int32_t target_height = 0;
@@ -270,25 +264,25 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode(const DecodeOptions& options) {
           std::min(static_cast<double>(target_width) / cinfo.image_width,
                    static_cast<double>(target_height) / cinfo.image_height);
 
-      // Largest num with num/8 <= scale; the epsilon keeps exact ratios (e.g.
-      // 0.5) from being rounded down by floating point.
+      // Smallest num with num/8 >= scale, so the native output is >= the
+      // target in both axes and any remainder pass only ever downsamples.
+      // (The floor rule would under-shoot by up to ~12.5% and force an
+      // upscaling resample — decode, shrink, then blur-grow.) The epsilon
+      // keeps exact ratios (e.g. 0.5) from rounding up.
       int32_t scale_num =
-          std::clamp(static_cast<int32_t>(scale * 8.0 + 1e-9), 1, 8);
+          std::clamp(static_cast<int32_t>(std::ceil(scale * 8.0 - 1e-9)), 1, 8);
 
       if (scale_num < 8) {
         cinfo.scale_num = scale_num;
         cinfo.scale_denom = 8;
         jpeg_calc_output_dimensions(&cinfo);
 
-        // The n/8 granularity leaves up to ~12.5% gap to the target. When the
-        // native output misses the request by more than the tolerance, close
-        // the remainder with the shared resampler so outputs are predictable.
-        double out_width = static_cast<double>(cinfo.output_width);
-        double out_height = static_cast<double>(cinfo.output_height);
-        if (std::abs(out_width - target_width) >
-                target_width * kRemainderTolerance ||
-            std::abs(out_height - target_height) >
-                target_height * kRemainderTolerance) {
+        // With the covering rule the native n/8 output may exceed the target
+        // by up to ~1/7. Resample to the exact target whenever it misses, so
+        // output sizes stay predictable; requests that land on the n/8 grid
+        // still take the pure native path with no second pass.
+        if (cinfo.output_width != static_cast<JDIMENSION>(target_width) ||
+            cinfo.output_height != static_cast<JDIMENSION>(target_height)) {
           resample_width = target_width;
           resample_height = target_height;
         }
