@@ -4,7 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <skity/codec/codec.hpp>
 #include <skity/graphic/color.hpp>
@@ -249,6 +251,107 @@ TEST(CodecScaleTest, JPEGDecodeScaled) {
   ASSERT_TRUE(pixmap != nullptr);
   EXPECT_EQ(pixmap->Width(), 133u);
   EXPECT_EQ(pixmap->Height(), 100u);
+}
+
+// Fixed-seed LCG noise: every pixel uncorrelated, so the output's
+// row-difference energy directly measures how much detail survived the
+// decode-time scaling (see the JPEG quality test below).
+std::shared_ptr<skity::Pixmap> MakeNoisePixmap(uint32_t width,
+                                               uint32_t height) {
+  auto pixmap = std::make_shared<skity::Pixmap>(
+      width, height, skity::AlphaType::kUnpremul_AlphaType,
+      skity::ColorType::kRGBA);
+  uint32_t state = 0x12345678u;
+  for (uint32_t y = 0; y < height; y++) {
+    uint8_t* row = pixmap->WritableAddr8(0, y);
+    for (uint32_t x = 0; x < width; x++) {
+      state = state * 1664525u + 1013904223u;
+      uint8_t v = static_cast<uint8_t>((state >> 16) & 0xFF);
+      row[x * 4 + 0] = v;
+      row[x * 4 + 1] = v;
+      row[x * 4 + 2] = v;
+      row[x * 4 + 3] = 255;
+    }
+  }
+  return pixmap;
+}
+
+TEST(CodecScaleTest, JPEGDecodeScaledHighFrequencyQuality) {
+  // Noise content scaled just below an n/8 grid point (0.4922, i.e. under
+  // 4/8): the scaled decode must stay close to the "full decode + shared
+  // resampler" reference and must keep the detail level of a downscaled
+  // decode. The pre-fix floor rule picked 3/8 (96x96 native) and grew it
+  // 31% to the target; interpolated growth carries systematically less
+  // detail per output row than the covering rule's 4/8 (128x128) decode
+  // with a 1.5% downscale remainder.
+  auto noisy = MakeNoisePixmap(256, 256);
+
+  auto encoder = skity::Codec::MakeJPEGCodec();
+  auto jpeg_data = encoder->Encode(noisy.get());
+  ASSERT_TRUE(jpeg_data != nullptr);
+
+  auto codec = skity::Codec::MakeFromData(jpeg_data);
+  ASSERT_TRUE(codec != nullptr);
+  codec->SetData(jpeg_data);
+
+  // Reference: full decode, then the shared resampler.
+  auto full = codec->Decode();
+  ASSERT_TRUE(full != nullptr);
+  auto reference = ResamplePixmap(full, 126, 126);
+  ASSERT_TRUE(reference != nullptr);
+
+  // Scaled decode: scale 0.4922 sits just below the 4/8 grid point, the
+  // worst case for the floor rule.
+  DecodeOptions box{};
+  box.target_width = 126;
+  box.target_height = 126;
+  auto scaled = codec->Decode(box);
+  ASSERT_TRUE(scaled != nullptr);
+  ASSERT_EQ(scaled->Width(), 126u);
+  ASSERT_EQ(scaled->Height(), 126u);
+
+  int64_t total_err = 0;
+  for (uint32_t y = 0; y < 126; y++) {
+    for (uint32_t x = 0; x < 126; x++) {
+      const uint8_t* ref_px = reference->Addr8(x, y);
+      const uint8_t* got_px = scaled->Addr8(x, y);
+      for (int c = 0; c < 3; c++) {
+        total_err += std::abs(static_cast<int32_t>(ref_px[c]) -
+                              static_cast<int32_t>(got_px[c]));
+      }
+    }
+  }
+  double mean_err = static_cast<double>(total_err) / (126.0 * 126.0 * 3.0);
+
+  // Loose quality guard: the covering rule measures mean ~13.7 here (the
+  // 1/2 IDCT resample against the full-decode reference); a regression that
+  // discards much more detail lands well above this bound.
+  EXPECT_LT(mean_err, 20.0);
+
+  // The precise upscale detector: the output must keep a fixed fraction of
+  // the reference's vertical detail (row-difference energy). The covering
+  // rule measures ratio ~0.71; the pre-fix floor rule (decode 96x96, grow
+  // 31% to the target) measures ~0.53 — interpolation-inflated output has
+  // systematically less detail per row than a downscaled decode. Being a
+  // ratio against the same-pipeline reference, the bound is robust to
+  // libjpeg IDCT flavor differences across platforms.
+  auto row_energy = [](const skity::Pixmap& pm) {
+    int64_t e = 0;
+    for (uint32_t y = 1; y < pm.Height(); y++) {
+      for (uint32_t x = 0; x < pm.Width(); x++) {
+        const uint8_t* a = pm.Addr8(x, y);
+        const uint8_t* b = pm.Addr8(x, y - 1);
+        for (int c = 0; c < 3; c++) {
+          e +=
+              std::abs(static_cast<int32_t>(a[c]) - static_cast<int32_t>(b[c]));
+        }
+      }
+    }
+    return e;
+  };
+  double detail_ratio = static_cast<double>(row_energy(*scaled)) /
+                        static_cast<double>(row_energy(*reference));
+  EXPECT_GT(detail_ratio, 0.62);
 }
 
 TEST(CodecScaleTest, JPEGDecodeScaledNativeRatio) {
@@ -511,4 +614,40 @@ TEST(CodecScaleTest, WebPDecodeScaledAnimated) {
   EXPECT_EQ(pixmap->Width(), 100u);
   EXPECT_EQ(pixmap->Height(), 100u);
   EXPECT_EQ(pixmap->GetColorType(), skity::ColorType::kRGBA);
+}
+
+TEST(CodecScaleTest, WebPDecodeScaledSingleFrameAnimation) {
+  // single_frame_anim.webp is a legal animation with exactly one ANMF frame:
+  // canvas 200x200, frame 128x128 at offset (40,60). frame_count alone cannot
+  // distinguish it from a static WebP — it must composite the fragment onto
+  // the canvas, not decode the fragment scaled to the canvas-derived target.
+  auto webp_data =
+      skity::Data::MakeFromFileName(SKITY_TEST_SINGLE_ANIM_WEBP_FILE);
+  ASSERT_TRUE(webp_data != nullptr);
+
+  auto codec = skity::Codec::MakeFromData(webp_data);
+  ASSERT_TRUE(codec != nullptr);
+  codec->SetData(webp_data);
+
+  DecodeOptions half{};
+  half.target_width = 100;
+  half.target_height = 100;
+  auto pixmap = codec->Decode(half);
+
+  ASSERT_TRUE(pixmap != nullptr);
+  // Canvas semantics: the 200x200 canvas composited with the frame at its
+  // offset, scaled to 100x100.
+  EXPECT_EQ(pixmap->Width(), 100u);
+  EXPECT_EQ(pixmap->Height(), 100u);
+
+  // The top-left corner is outside the frame rect (offset 40,60 scales to
+  // 20,30): it must show the animation background (transparent), not frame
+  // pixels — the pre-fix fast path stretched the fragment over the full
+  // canvas and put opaque frame content here.
+  const uint8_t* corner = pixmap->Addr8(0, 0);
+  EXPECT_EQ(corner[3], 0);
+
+  // Frame center (canvas 104,124 scales to 52,62) is opaque frame content.
+  const uint8_t* center = pixmap->Addr8(52, 62);
+  EXPECT_NE(center[3], 0);
 }

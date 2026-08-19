@@ -111,6 +111,7 @@ if (${SKITY_CODEC_MODULE})
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_SF_GIF_FILE="${CMAKE_SOURCE_DIR}/example/images/color_wheel.gif")
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_WEBP_FILE="${CMAKE_SOURCE_DIR}/example/images/blendBG.webp")
     target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_SF_WEBP_FILE="${CMAKE_SOURCE_DIR}/example/images/color_wheel.webp")
+    target_compile_definitions(skity_unit_test PRIVATE -DSKITY_TEST_SINGLE_ANIM_WEBP_FILE="${CMAKE_SOURCE_DIR}/example/images/single_frame_anim.webp")
 
     target_link_libraries(skity_unit_test PUBLIC skity::codec)
 endif()
