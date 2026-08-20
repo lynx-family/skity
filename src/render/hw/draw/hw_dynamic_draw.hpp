@@ -13,7 +13,7 @@ namespace skity {
 class HWDynamicDraw : public HWDraw {
  public:
   HWDynamicDraw(Matrix transform, BlendMode blend_mode)
-      : HWDraw(transform), blend_mode_(blend_mode), steps_(), commands_() {}
+      : HWDraw(transform, blend_mode), steps_(), commands_() {}
 
   ~HWDynamicDraw() override = default;
 
@@ -36,7 +36,6 @@ class HWDynamicDraw : public HWDraw {
                                   HWDrawContext* context) = 0;
 
  private:
-  BlendMode blend_mode_;
   ArrayList<HWDrawStep*, 2> steps_;
   ArrayList<Command*, 32> commands_;
 };

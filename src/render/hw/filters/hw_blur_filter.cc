@@ -75,7 +75,7 @@ void HWBlurFilter::PrepareWGXCMD(
       },
       output_texture->GetDescriptor().format,
       1,
-      BlendMode::kDefault,
+      {},
       context->scale,
   };
 

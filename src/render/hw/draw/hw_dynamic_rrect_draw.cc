@@ -56,7 +56,7 @@ void HWDynamicRRectDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
   auto geom = arena_allocator->Make<WGSLRRectGeometry>(batch_group_);
   auto frag = GenShadingFragment(
       context, paint, paint.GetStyle() == Paint::kStroke_Style, false);
-  ConfigureShadingFragment(context, paint, GetDstReadStrategy(), frag);
+  ConfigureShadingFragment(context, paint, GetBlendPlan(), frag);
 
   steps.emplace_back(context->arena_allocator->Make<ColorStep>(
       std::move(geom), std::move(frag), CoverageType::kNone));

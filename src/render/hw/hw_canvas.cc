@@ -21,8 +21,8 @@
 #include "src/render/hw/draw/hw_dynamic_path_clip.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
-#include "src/render/hw/dst_read_strategy.hpp"
 #include "src/render/hw/filters/hw_filters.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/layer/hw_filter_layer.hpp"
 #include "src/render/paint_order.hpp"
 #include "src/render/shape.hpp"
@@ -394,7 +394,7 @@ void HWCanvas::DrawGlyphsInternal(uint32_t count, const GlyphID* glyphs,
       // TODO(ColdPaleLight): create glyph draw fragments after the dst-read
       // strategy is known, or let glyph draws rebuild programmable blending
       // state here.
-      SetupDstReadStrategyForDraw(draw, paint.GetBlendMode());
+      SetupBlendPlanForDraw(draw, paint.GetBlendMode());
       CurrentLayer()->AddDraw(draw);
     }
   }
@@ -441,7 +441,7 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
     auto bounds = is_stroke ? paint.ComputeFastBounds(path.GetBounds())
                             : path.GetBounds();
     SetupLayerSpaceBoundsForDraw(draw, bounds);
-    SetupDstReadStrategyForDraw(draw, paint.GetBlendMode());
+    SetupBlendPlanForDraw(draw, paint.GetBlendMode());
     CurrentLayer()->AddDraw(draw);
   };
 
@@ -577,7 +577,7 @@ void HWCanvas::DrawRRectInternal(const RRect& rrect, const Paint& paint,
     auto bounds = use_stroke ? paint.ComputeFastBounds(rrect.GetBounds())
                              : rrect.GetBounds();
     SetupLayerSpaceBoundsForDraw(draw, bounds);
-    SetupDstReadStrategyForDraw(draw, paint.GetBlendMode());
+    SetupBlendPlanForDraw(draw, paint.GetBlendMode());
     CurrentLayer()->AddDraw(draw);
   };
 
@@ -855,7 +855,6 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
   layer->SetArenaAllocator(arena_allocator_);
   layer->SetColorFormat(surface_->GetGPUFormat());
   layer->SetAlpha(paint.GetAlphaF());
-  layer->SetBlendMode(paint.GetBlendMode());
 
   if (surface_->GetGPUContext()->GetGPUDevice()->CanUseMSAA()) {
     layer->SetSampleCount(GetCanvasSampleCount());
@@ -865,7 +864,7 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
   layer->SetLayerSpaceBounds(transformed_bounds);
   layer->SetEnableMergingDrawCall(
       surface_->GetGPUContext()->IsEnableMergingDrawCall());
-  SetupDstReadStrategyForDraw(layer, paint.GetBlendMode());
+  SetupBlendPlanForDraw(layer, paint.GetBlendMode());
   layer->SetRTOrigin(
       ResolveLayerRTOrigin(surface_->GetGPUContext()->GetBackendType()));
 
@@ -890,9 +889,9 @@ bool HWCanvas::NeesOffScreenLayer(const Paint& paint) const {
   return false;
 }
 
-void HWCanvas::SetupDstReadStrategyForDraw(HWDraw* draw, BlendMode blend_mode) {
+void HWCanvas::SetupBlendPlanForDraw(HWDraw* draw, BlendMode blend_mode) {
   const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
-  draw->SetDstReadStrategy(ResolveDstReadStrategy(
+  draw->SetBlendPlan(ResolveHWBlendPlan(
       blend_mode, caps, CurrentLayer()->SupportsTextureCopyDstRead()));
 }
 
