@@ -42,6 +42,7 @@ typedef enum {
   SKITY_OBJECT_TYPE_PATH_MEASURE,
   SKITY_OBJECT_TYPE_CAMERA,
   SKITY_OBJECT_TYPE_DATA,
+  SKITY_OBJECT_TYPE_TYPEFACE_DELEGATE,
 } skity_object_type;
 
 /* When set, the wrapper owns the underlying object and releases it on destroy.
@@ -164,6 +165,10 @@ struct skity_camera_s {
   std::shared_ptr<void> impl;
 };
 struct skity_data_s {
+  skity_object_header header;
+  std::shared_ptr<void> impl;
+};
+struct skity_typeface_delegate_s {
   skity_object_header header;
   std::shared_ptr<void> impl;
 };
