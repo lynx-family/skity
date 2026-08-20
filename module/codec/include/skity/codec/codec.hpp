@@ -325,6 +325,31 @@ class SKITY_EXPERIMENTAL_API MultiFrameDecoder {
 };
 
 /**
+ * Options for Codec::Decode(DecodeOptions).
+ */
+struct DecodeOptions {
+  /**
+   * Requested output size, in pixels. Semantics:
+   *
+   *  - Both 0 (default): decode at intrinsic size.
+   *  - One of them 0: derived from the other, preserving aspect ratio.
+   *  - Both non-zero: aspect-fit box — the output is scaled to fit within
+   *    (target_width x target_height) preserving aspect ratio.
+   *
+   * The codec never upscales: if the intrinsic size already fits within the
+   * requested box, the image is decoded at intrinsic size.
+   */
+  int32_t target_width = 0;
+  int32_t target_height = 0;
+
+  /**
+   * Quality hint for decode-time scaling. Off by default; reserved for
+   * tuning, may be removed before the API stabilizes.
+   */
+  bool prefer_quality = false;
+};
+
+/**
  * Codec interface for encoding and decoding image data.
  *
  * @note This is experimental the API is unstable.
@@ -362,16 +387,34 @@ class SKITY_EXPERIMENTAL_API Codec {
   void SetData(std::shared_ptr<Data> data) { data_ = std::move(data); }
 
   /**
-   * Decode the data to pixmap.
+   * Decode the data to pixmap at intrinsic size.
    * If decode a multi-frame image, this method will return the first frame.
    * To get other frames, use DecodeMultiFrame().
+   *
+   * Equivalent to Decode(DecodeOptions{}).
    *
    * @note Currently the codec only output pixmap with RGBA color type and
    *       unpremul alpha type.
    *
    * @return The decoded pixmap. nullptr if decode failed.
    */
-  virtual std::shared_ptr<Pixmap> Decode() = 0;
+  std::shared_ptr<Pixmap> Decode() { return Decode(DecodeOptions{}); }
+
+  /**
+   * Decode the data to pixmap, scaled down to the size requested in
+   * options (best-effort, see DecodeOptions).
+   *
+   * Where the underlying decoder supports it, the scaling happens during
+   * decode (e.g. JPEG DCT scaling, WebP rescaler, ImageIO thumbnails);
+   * otherwise the image is decoded at intrinsic size and resampled.
+   *
+   * The returned pixmap's Width()/Height() are authoritative — callers must
+   * read the actual output size instead of assuming the request was honored
+   * exactly.
+   *
+   * @return The decoded pixmap. nullptr if decode failed.
+   */
+  virtual std::shared_ptr<Pixmap> Decode(const DecodeOptions& options) = 0;
 
   /**
    * Decode the data to pixmap. If decode a multi-frame image, this method will

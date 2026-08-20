@@ -66,6 +66,19 @@ class WebpDecoder : public MultiFrameDecoder {
   std::shared_ptr<Pixmap> DecodeFrame(
       const CodecFrame* frame, std::shared_ptr<Pixmap> prev_pixmap) override;
 
+  /**
+   * Decode the (only) frame at an exact scaled size, using libwebp's built-in
+   * rescaler (WebPDecoderConfig use_scaling). Only valid for single-frame
+   * *static* images; animated images must go through DecodeFrame() for canvas
+   * compositing (an animation may legally have a single ANMF frame whose
+   * fragment covers only part of the canvas).
+   *
+   * Returns nullptr on failure; the caller is expected to fall back to
+   * DecodeFrame() + resample.
+   */
+  std::shared_ptr<Pixmap> DecodeFirstFrameScaled(int32_t target_width,
+                                                 int32_t target_height);
+
   const std::shared_ptr<Data>& GetData() const { return data_; }
 
  private:
@@ -75,6 +88,10 @@ class WebpDecoder : public MultiFrameDecoder {
   int32_t frame_width_;
   int32_t frame_height_;
   int32_t frame_count_;
+
+  // VP8X ANIMATION_FLAG: the file is an animated WebP even when it holds a
+  // single ANMF frame.
+  bool is_animation_ = false;
 
   std::vector<WebpFrame> frames_ = {};
 };

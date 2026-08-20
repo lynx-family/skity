@@ -2,8 +2,8 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef SKITY_MODULE_CODEC_GIF_CODEC_HPP
-#define SKITY_MODULE_CODEC_GIF_CODEC_HPP
+#ifndef MODULE_CODEC_SRC_CODEC_GIF_CODEC_HPP
+#define MODULE_CODEC_SRC_CODEC_GIF_CODEC_HPP
 
 #include <skity/codec/codec.hpp>
 
@@ -16,7 +16,7 @@ class GIFCodec : public Codec {
   GIFCodec() = default;
   ~GIFCodec() override;
 
-  std::shared_ptr<Pixmap> Decode() override;
+  std::shared_ptr<Pixmap> Decode(const DecodeOptions& options) override;
 
   std::shared_ptr<MultiFrameDecoder> DecodeMultiFrame() override;
 
@@ -32,10 +32,12 @@ class GIFCodec : public Codec {
  private:
   void CreateWuffsDecoderIfNeed();
 
+  std::shared_ptr<Pixmap> DecodeIntrinsic();
+
  private:
   std::shared_ptr<WuffsDecoder> wuffs_decoder_;
 };
 
 }  // namespace skity
 
-#endif  // SKITY_MODULE_CODEC_GIF_CODEC_HPP
+#endif  // MODULE_CODEC_SRC_CODEC_GIF_CODEC_HPP

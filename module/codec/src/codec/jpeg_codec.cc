@@ -12,7 +12,9 @@ extern "C" {
 
 #include <turbojpeg.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <csetjmp>
 #include <cstring>
 #include <skity/io/data.hpp>
@@ -186,7 +188,7 @@ bool JPEGCodec::RecognizeFileType(const char* header, size_t size) {
   }
 }
 
-std::shared_ptr<Pixmap> JPEGCodec::Decode() {
+std::shared_ptr<Pixmap> JPEGCodec::Decode(const DecodeOptions& options) {
   if (!data_ || data_->Size() == 0) {
     return nullptr;
   }
@@ -203,6 +205,10 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode() {
   uint8_t* volatile pixels = nullptr;
   uint32_t volatile width = 0;
   uint32_t volatile height = 0;
+  // Post-decode resample target, set when the native n/8 scaled output misses
+  // the requested size. Read on the longjmp path, hence volatile as well.
+  int32_t volatile resample_width = 0;
+  int32_t volatile resample_height = 0;
 
   if (setjmp(jerr.setjmp_buffer)) {
     // A fatal libjpeg error occurred (e.g. corrupt/truncated scan data). Tear
@@ -217,9 +223,11 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode() {
           static_cast<size_t>(width) * height * tjPixelSize[TJPF_RGBA];
       auto image_data = skity::Data::MakeWithCopy(buf, size);
       tjFree(buf);
-      return std::make_shared<Pixmap>(
+      auto pixmap = std::make_shared<Pixmap>(
           image_data, static_cast<size_t>(width) * tjPixelSize[TJPF_RGBA],
           width, height);
+      return codec_priv::ResamplePixmapToSize(pixmap, resample_width,
+                                              resample_height);
     }
     if (buf) {
       tjFree(buf);
@@ -241,6 +249,50 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode() {
   }
 
   cinfo.out_color_space = JCS_EXT_RGBA;
+
+  // Decode-time downscaling via libjpeg's IDCT scaling: pick the smallest
+  // supported n/8 ratio that still covers the aspect-fit target in both
+  // axes. The scaled dimensions come out of jpeg_calc_output_dimensions(),
+  // never hand computed.
+  {
+    int32_t target_width = 0;
+    int32_t target_height = 0;
+    if (codec_priv::ResolveTargetSize(static_cast<int32_t>(cinfo.image_width),
+                                      static_cast<int32_t>(cinfo.image_height),
+                                      options, &target_width, &target_height)) {
+      double scale =
+          std::min(static_cast<double>(target_width) / cinfo.image_width,
+                   static_cast<double>(target_height) / cinfo.image_height);
+
+      // Smallest num with num/8 >= scale, so the native output is >= the
+      // target in both axes and any remainder pass only ever downsamples.
+      // (The floor rule would under-shoot by up to ~12.5% and force an
+      // upscaling resample — decode, shrink, then blur-grow.) The epsilon
+      // keeps exact ratios (e.g. 0.5) from rounding up.
+      int32_t scale_num =
+          std::clamp(static_cast<int32_t>(std::ceil(scale * 8.0 - 1e-9)), 1, 8);
+
+      if (scale_num < 8) {
+        cinfo.scale_num = scale_num;
+        cinfo.scale_denom = 8;
+      }
+
+      // Always let libjpeg compute the output dims — with the default 8/8
+      // (targets within 1/8 of the intrinsic size) that is the intrinsic
+      // size, which then flows into the same remainder pass below.
+      jpeg_calc_output_dimensions(&cinfo);
+
+      // With the covering rule the native n/8 output may exceed the target
+      // by up to ~1/7. Resample to the exact target whenever it misses, so
+      // output sizes stay predictable; requests that land on the n/8 grid
+      // still take the pure native path with no second pass.
+      if (cinfo.output_width != static_cast<JDIMENSION>(target_width) ||
+          cinfo.output_height != static_cast<JDIMENSION>(target_height)) {
+        resample_width = target_width;
+        resample_height = target_height;
+      }
+    }
+  }
 
   if (!jpeg_start_decompress(&cinfo)) {
     jpeg_destroy_decompress(&cinfo);
@@ -287,7 +339,10 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode() {
 
   auto image_data = skity::Data::MakeWithCopy(buf, pixel_size);
   tjFree(buf);
-  return std::make_shared<Pixmap>(image_data, row_bytes, width, height);
+  auto pixmap = std::make_shared<Pixmap>(image_data, row_bytes, width, height);
+
+  return codec_priv::ResamplePixmapToSize(pixmap, resample_width,
+                                          resample_height);
 }
 
 std::shared_ptr<MultiFrameDecoder> JPEGCodec::DecodeMultiFrame() { return {}; }

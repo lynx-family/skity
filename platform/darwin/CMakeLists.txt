@@ -109,6 +109,9 @@ if(${SKITY_CODEC_MODULE})
   # set codec source file
   target_sources(skity_framework PRIVATE ${CMAKE_SOURCE_DIR}/module/codec/src/codec/apple/codec_apple.mm)
   target_include_directories(skity_framework PRIVATE ${CMAKE_SOURCE_DIR}/module/codec/include)
+  # codec_apple.mm includes "src/codec/codec_priv.hpp" for the shared
+  # aspect-fit target-size negotiation (header-only, no codec_priv.cc here).
+  target_include_directories(skity_framework PRIVATE ${CMAKE_SOURCE_DIR}/module/codec)
   target_link_libraries(skity_framework PRIVATE "-framework ImageIO" "-framework CoreGraphics" "-framework CoreServices" "-framework MobileCoreServices")
 endif()
 

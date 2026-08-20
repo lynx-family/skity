@@ -6,6 +6,7 @@
 
 #include <cstring>
 
+#include "src/codec/codec_priv.hpp"
 #include "src/codec/webp/webp_decoder.hpp"
 
 namespace skity {
@@ -35,7 +36,7 @@ WEBPCodec::WEBPCodec() = default;
 
 WEBPCodec::~WEBPCodec() = default;
 
-std::shared_ptr<Pixmap> WEBPCodec::Decode() {
+std::shared_ptr<Pixmap> WEBPCodec::Decode(const DecodeOptions& options) {
   CreateDecoderIfNeed();
 
   if (!decoder_) {
@@ -48,7 +49,25 @@ std::shared_ptr<Pixmap> WEBPCodec::Decode() {
     return {};
   }
 
-  return decoder_->DecodeFrame(frame, nullptr);
+  int32_t target_width = 0;
+  int32_t target_height = 0;
+  if (decoder_->GetFrameCount() == 1 &&
+      codec_priv::ResolveTargetSize(decoder_->GetWidth(), decoder_->GetHeight(),
+                                    options, &target_width, &target_height)) {
+    // Single-frame WebP: let libwebp's rescaler hit the exact target size.
+    // On failure fall through to the anim-decoder path below, which also
+    // handles single-frame files.
+    auto scaled = decoder_->DecodeFirstFrameScaled(target_width, target_height);
+    if (scaled) {
+      return scaled;
+    }
+  }
+
+  // Animated WebP keeps the canvas path at intrinsic size in v1 (the anim
+  // decoder has no scaling); resample afterwards like the other fallback
+  // formats.
+  return codec_priv::ResamplePixmapToTarget(
+      decoder_->DecodeFrame(frame, nullptr), options);
 }
 
 std::shared_ptr<MultiFrameDecoder> WEBPCodec::DecodeMultiFrame() {

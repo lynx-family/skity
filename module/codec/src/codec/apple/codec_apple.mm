@@ -11,6 +11,10 @@
 #import <Foundation/Foundation.h>
 #import <ImageIO/ImageIO.h>
 
+#import <algorithm>
+
+#import "src/codec/codec_priv.hpp"
+
 namespace skity {
 
 namespace {
@@ -18,6 +22,72 @@ namespace {
 bool DataIsGIF(const uint8_t* data, size_t size) {
   if (size < 6) return false;
   return (memcmp(data, "GIF89a", 6) == 0 || memcmp(data, "GIF87a", 6) == 0);
+}
+
+/**
+ * Reads the intrinsic pixel size from the image source and resolves the
+ * aspect-fit target. Returns true when a reduced-size thumbnail decode
+ * should be used instead of a full decode.
+ *
+ * PixelWidth/PixelHeight are per-image (index) properties; the container
+ * dictionary returned by CGImageSourceCopyProperties() does not carry them,
+ * so the frame-0 dictionary from CGImageSourceCopyPropertiesAtIndex() is
+ * required here.
+ */
+bool ResolveThumbnailSize(CGImageSourceRef source, const DecodeOptions& options, int32_t* out_width,
+                          int32_t* out_height) {
+  CFDictionaryRef properties = CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
+  if (properties == NULL) {
+    return false;
+  }
+
+  bool need_thumbnail = false;
+  CFNumberRef width_num = (CFNumberRef)CFDictionaryGetValue(properties, kCGImagePropertyPixelWidth);
+  CFNumberRef height_num =
+      (CFNumberRef)CFDictionaryGetValue(properties, kCGImagePropertyPixelHeight);
+
+  if (width_num != NULL && height_num != NULL) {
+    int32_t width = 0;
+    int32_t height = 0;
+    CFNumberGetValue(width_num, kCFNumberIntType, &width);
+    CFNumberGetValue(height_num, kCFNumberIntType, &height);
+    need_thumbnail = codec_priv::ResolveTargetSize(width, height, options, out_width, out_height);
+  }
+
+  CFRelease(properties);
+  return need_thumbnail;
+}
+
+/**
+ * Decodes frame 0 at a reduced size via ImageIO's own aspect-fit scaling:
+ * kCGImageSourceThumbnailMaxPixelSize bounds the longest side of the output
+ * and never upscales, matching DecodeOptions semantics. EXIF orientation is
+ * applied via the transform option.
+ */
+CGImageRef CreateScaledImageAtIndex(CGImageSourceRef source, int32_t target_width,
+                                    int32_t target_height) {
+  int32_t max_pixel_size = std::max(target_width, target_height);
+
+  CFNumberRef size_number = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &max_pixel_size);
+
+  const void* keys[] = {
+      kCGImageSourceThumbnailMaxPixelSize,
+      kCGImageSourceCreateThumbnailFromImageAlways,
+      kCGImageSourceCreateThumbnailWithTransform,
+      kCGImageSourceShouldCacheImmediately,
+  };
+  const void* values[] = {size_number, kCFBooleanTrue, kCFBooleanTrue, kCFBooleanTrue};
+
+  CFDictionaryRef options_dict =
+      CFDictionaryCreate(kCFAllocatorDefault, keys, values, sizeof(keys) / sizeof(keys[0]),
+                         &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+  CGImageRef image = CGImageSourceCreateThumbnailAtIndex(source, 0, options_dict);
+
+  CFRelease(options_dict);
+  CFRelease(size_number);
+
+  return image;
 }
 
 std::shared_ptr<Pixmap> CGImageToPixmap(CGImageRef cg_image) {
@@ -37,8 +107,10 @@ std::shared_ptr<Pixmap> CGImageToPixmap(CGImageRef cg_image) {
 
   CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
 
-  // RGBA8888, little-endian unpremultiplied alpha
-  CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Big | kCGImageAlphaLast;
+  // Premultiplied RGBA8888: unpremultiplied (kCGImageAlphaLast) bitmap
+  // contexts fail to create on current SDKs, so draw premultiplied and
+  // convert back to the module's canonical unpremul below.
+  CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedLast;
 
   CGContextRef ctx = CGBitmapContextCreate(const_cast<void*>(data->RawData()),  // dst buffer
                                            width, height,
@@ -57,6 +129,25 @@ std::shared_ptr<Pixmap> CGImageToPixmap(CGImageRef cg_image) {
   CGContextDrawImage(ctx, CGRectMake(0, 0, width, height), cg_image);
 
   CGContextRelease(ctx);
+
+  // Un-premultiply in place. Opaque pixels (a == 255) are untouched; fully
+  // transparent ones collapse to zero, matching CodecTransformLineUnpremul.
+  uint8_t* pixels = static_cast<uint8_t*>(const_cast<void*>(data->RawData()));
+  size_t pixel_count = width * height;
+  for (size_t i = 0; i < pixel_count; i++) {
+    uint8_t* px = pixels + i * 4;
+    uint8_t a = px[3];
+    if (a == 255) {
+      continue;
+    }
+    if (a == 0) {
+      px[0] = px[1] = px[2] = 0;
+      continue;
+    }
+    for (int c = 0; c < 3; c++) {
+      px[c] = static_cast<uint8_t>(std::min(255, (px[c] * 255 + a / 2) / a));
+    }
+  }
 
   // default is unpremultiplied RGBA format
   auto pixmap = std::make_shared<Pixmap>(std::move(data), width, height);
@@ -187,7 +278,7 @@ class CodecApple : public Codec {
 
   ~CodecApple() override = default;
 
-  std::shared_ptr<Pixmap> Decode() override;
+  std::shared_ptr<Pixmap> Decode(const DecodeOptions& options) override;
 
   std::shared_ptr<MultiFrameDecoder> DecodeMultiFrame() override;
 
@@ -206,7 +297,7 @@ class CodecApple : public Codec {
   NSData* ns_data_ = nil;
 };
 
-std::shared_ptr<Pixmap> CodecApple::Decode() {
+std::shared_ptr<Pixmap> CodecApple::Decode(const DecodeOptions& options) {
   if (data_ == nullptr) {
     return {};
   }
@@ -223,7 +314,15 @@ std::shared_ptr<Pixmap> CodecApple::Decode() {
     return {};
   }
 
-  CGImageRef cg_image = CGImageSourceCreateImageAtIndex(source, 0, NULL);
+  CGImageRef cg_image = nil;
+  int32_t target_width = 0;
+  int32_t target_height = 0;
+  if (ResolveThumbnailSize(source, options, &target_width, &target_height)) {
+    cg_image = CreateScaledImageAtIndex(source, target_width, target_height);
+  } else {
+    cg_image = CGImageSourceCreateImageAtIndex(source, 0, NULL);
+  }
+
   CFRelease(source);
 
   if (cg_image == nil) {
