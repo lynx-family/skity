@@ -9,7 +9,7 @@
 namespace skity {
 
 bool DataStream::Seek(size_t offset) {
-  if (offset > data_->Size()) {
+  if (!data_ || offset > data_->Size()) {
     return false;
   }
   offset_ = offset;
@@ -22,6 +22,10 @@ bool DataStream::Rewind() {
 }
 
 size_t DataStream::Read(void* dst, size_t size) {
+  if (!data_) {
+    return 0;
+  }
+
   if (offset_ + size > data_->Size()) {
     size = data_->Size() - offset_;
   }

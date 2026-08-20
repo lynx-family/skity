@@ -13,25 +13,6 @@
 
 namespace skity {
 
-namespace {
-
-WuffsImageDecoder create_gif_decoder() {
-  auto decoder = wuffs_gif__decoder::alloc_as__wuffs_base__image_decoder();
-
-  auto status = reinterpret_cast<wuffs_gif__decoder*>(decoder.get())
-                    ->initialize(sizeof__wuffs_gif__decoder(), WUFFS_VERSION,
-                                 WUFFS_INITIALIZE__DEFAULT_OPTIONS);
-
-  if (status.repr != nullptr) {
-    std::cerr << "Failed to initialize gif decoder: " << status.message()
-              << std::endl;
-  }
-
-  return decoder;
-}
-
-}  // namespace
-
 class GIFDecoder : public WuffsDecoder {
  public:
   GIFDecoder(WuffsImageDecoder decoder, WuffsBuffer buffer,
@@ -105,9 +86,17 @@ bool GIFCodec::RecognizeFileType(const char* header, size_t size) {
 }
 
 void GIFCodec::CreateWuffsDecoderIfNeed() {
+  if (!data_) {
+    // Nothing bound (e.g. a codec straight from MakeGIFCodec()): building a
+    // wuffs decoder around an empty DataStream would crash inside
+    // DataStream::Read(). Drop any stale decoder so both DecodeIntrinsic()
+    // and DecodeMultiFrame() fail cleanly; SetData() revives the codec.
+    wuffs_decoder_.reset();
+    return;
+  }
+
   if (wuffs_decoder_ == nullptr ||
-      (wuffs_decoder_ != nullptr &&
-       wuffs_decoder_->GetDataStream()->GetData() != data_)) {
+      wuffs_decoder_->GetDataStream()->GetData() != data_) {
     wuffs_decoder_ = std::make_unique<GIFDecoder>(
         wuffs_gif__decoder::alloc_as__wuffs_base__image_decoder(),
         WuffsBuffer{}, std::make_shared<DataStream>(data_));

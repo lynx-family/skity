@@ -25,6 +25,26 @@ TEST(GIFCodecTest, Create) {
   EXPECT_TRUE(auto_gen != nullptr);
 }
 
+TEST(GIFCodecTest, DecodeWithoutData) {
+  // A codec straight from MakeGIFCodec() has no data bound. Both decode
+  // entry points must fail cleanly instead of crashing inside wuffs on an
+  // empty DataStream (the pre-fix crash was a null deref in
+  // DataStream::Read, reached from the WuffsDecoder constructor).
+  auto codec = skity::Codec::MakeGIFCodec();
+  ASSERT_TRUE(codec != nullptr);
+
+  EXPECT_TRUE(codec->Decode() == nullptr);
+  EXPECT_TRUE(codec->DecodeMultiFrame() == nullptr);
+
+  // Binding valid data afterwards revives the codec.
+  auto data = skity::Data::MakeFromFileName(SKITY_TEST_SF_GIF_FILE);
+  codec->SetData(data);
+
+  auto pixmap = codec->Decode();
+  EXPECT_TRUE(pixmap != nullptr);
+  EXPECT_TRUE(codec->DecodeMultiFrame() != nullptr);
+}
+
 TEST(GIFCodecTest, DecodeMultipleFrame) {
   auto data = skity::Data::MakeFromFileName(SKITY_TEST_MF_GIF_FILE);
 
