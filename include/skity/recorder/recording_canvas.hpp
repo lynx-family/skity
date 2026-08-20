@@ -67,7 +67,7 @@ class SKITY_API RecordingCanvas : public Canvas {
   void AccumulateOpBounds(const Rect& raw_bounds, const Paint* paint);
   void UpdateProperties(const Paint& paint);
 
-  DisplayListBuilder* dp_builder_;
+  DisplayListBuilder* dp_builder_ = nullptr;
 };
 
 }  // namespace skity
