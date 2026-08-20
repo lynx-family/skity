@@ -96,6 +96,85 @@ SKITY_C_DEFINE_HANDLE(skity_font);
  *         container of pre-laid-out text runs built from a UTF-8 string. */
 SKITY_C_DEFINE_HANDLE(skity_text_blob);
 
+/** @brief Opaque typeface delegate, the C handle for skity::TypefaceDelegate.
+ *         Decides which typeface renders a code point the paint's typeface
+ *         does not cover, enabling multi-font fallback (CJK / emoji mixing). */
+SKITY_C_DEFINE_HANDLE(skity_typeface_delegate);
+
+/**
+ * @brief Create a fallback delegate over an ordered typeface list.
+ *
+ * For a code point not covered by the paint's typeface, the first typeface in
+ * @p typefaces that contains a glyph for it is used; a code point covered by
+ * none of them is dropped. Mirrors
+ * skity::TypefaceDelegate::CreateSimpleFallbackDelegate.
+ *
+ * The delegate holds shared references to the typefaces, so the passed handles
+ * may be released immediately afterwards.
+ *
+ * @param typefaces  array of fallback typefaces, probed in order
+ * @param count      number of entries in @p typefaces
+ * @return           delegate handle, or NULL when @p typefaces is NULL or
+ *                   @p count is 0 (no fallback)
+ */
+SKITY_C_API skity_typeface_delegate skity_typeface_delegate_create_simple(
+    const skity_typeface* typefaces, uint32_t count);
+
+/**
+ * @brief Fallback probe invoked when the paint's typeface has no glyph for a
+ *        code point.
+ *
+ * The returned handle must stay valid across the delegate's lifetime (the
+ * wrapper only takes a shared reference and never releases the handle);
+ * returning NULL drops the code point from the layout.
+ *
+ * @param userdata   caller-supplied pointer passed back unchanged
+ * @param code_point Unicode code point needing a fallback typeface
+ * @return           a typeface handle, or NULL if no fallback applies
+ */
+typedef skity_typeface (*skity_typeface_fallback_fn)(void* userdata,
+                                                     uint32_t code_point);
+
+/**
+ * @brief Create a fallback delegate driven by a C callback.
+ *
+ * Text-run splitting follows the built-in policy (same as
+ * skity_typeface_delegate_create_simple); only the typeface choice is
+ * delegated to @p fallback.
+ *
+ * @param fallback  callback deciding the fallback typeface; must not be NULL
+ * @param userdata  caller-supplied pointer passed back to the callbacks
+ * @param release   callback invoked with @p userdata when the delegate is
+ *                  destroyed; may be NULL
+ * @return          delegate handle, or NULL on invalid arguments
+ */
+SKITY_C_API skity_typeface_delegate skity_typeface_delegate_create_fallback(
+    skity_typeface_fallback_fn fallback, void* userdata,
+    void (*release)(void* userdata));
+
+/** @brief Release the delegate handle and its underlying object. Safe on NULL.
+ *         Invokes the @p release callback given to
+ *         skity_typeface_delegate_create_fallback, if any. */
+SKITY_C_API void skity_typeface_delegate_destroy(
+    skity_typeface_delegate delegate);
+
+/**
+ * @brief Build an immutable text blob from a UTF-8 string using @p delegate
+ *        for per-code-point font fallback.
+ *
+ * The text size and base typeface are taken from @p paint; code points the
+ * paint's typeface does not cover are routed through the delegate. Passing a
+ * NULL @p delegate is equivalent to skity_text_blob_create (no fallback).
+ *
+ * @param text      NUL-terminated UTF-8 string to lay out
+ * @param paint     paint supplying the text size and base typeface
+ * @param delegate  fallback policy, or NULL for none
+ * @return          the new text blob, or NULL on invalid arguments (including
+ *                  a paint with no typeface set)
+ */
+SKITY_C_API skity_text_blob skity_text_blob_create_with_delegate(
+    const char* text, skity_paint paint, skity_typeface_delegate delegate);
+
 /**
  * @brief Build an immutable text blob from a UTF-8 string.
  *
