@@ -354,6 +354,40 @@ TEST(CodecScaleTest, JPEGDecodeScaledHighFrequencyQuality) {
   EXPECT_GT(detail_ratio, 0.62);
 }
 
+TEST(CodecScaleTest, JPEGDecodeScaledNearIntrinsic) {
+  // Targets within 1/8 of the intrinsic size (scale in (7/8, 1)) round up
+  // to the 8/8 IDCT level: no scaled decode happens, but the remainder pass
+  // must still bring the output below the requested box. The pre-fix code
+  // skipped the resample at 8/8 and returned the intrinsic 133x100, which
+  // exceeds both boxes below.
+  auto jpeg_data = skity::Data::MakeFromFileName(SKITY_TEST_JPEG_FILE);
+  ASSERT_TRUE(jpeg_data != nullptr);
+
+  auto codec = skity::Codec::MakeFromData(jpeg_data);
+  ASSERT_TRUE(codec != nullptr);
+  codec->SetData(jpeg_data);
+
+  // Reviewer's repro: scale 0.99, just under intrinsic.
+  DecodeOptions near_intrinsic{};
+  near_intrinsic.target_width = 132;
+  near_intrinsic.target_height = 99;
+  auto pixmap = codec->Decode(near_intrinsic);
+
+  ASSERT_TRUE(pixmap != nullptr);
+  EXPECT_EQ(pixmap->Width(), 132u);
+  EXPECT_EQ(pixmap->Height(), 99u);
+
+  // Mid-interval: scale 0.96.
+  DecodeOptions mid{};
+  mid.target_width = 128;
+  mid.target_height = 96;
+  pixmap = codec->Decode(mid);
+
+  ASSERT_TRUE(pixmap != nullptr);
+  EXPECT_EQ(pixmap->Width(), 128u);
+  EXPECT_EQ(pixmap->Height(), 96u);
+}
+
 TEST(CodecScaleTest, JPEGDecodeScaledNativeRatio) {
   // Scale exactly 0.5: native DCT scaling hits 67x50 on its own (133 * 3/8
   // would be 50x38), no remainder pass needed, dimensions still exact.

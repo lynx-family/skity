@@ -206,6 +206,13 @@ In `JPEGCodec::Decode(options)`:
    always a downscale, and requests that land exactly on the n/8 grid still
    take the pure native path with no second pass (§9 Q2).
 
+   The covering level set includes 1/1: a target within 1/8 of the
+   intrinsic size (scale in (7/8, 1)) selects 8/8 — no IDCT scaling — but
+   still goes through step 4's remainder pass, so the output never exceeds
+   the requested box (e.g. 133×100 → target 132×99 decodes 133×100 and
+   resamples down; returning the intrinsic size there would violate the
+   aspect-fit contract).
+
 IDCT-scaled decoding is not an approximation hack: libjpeg computes a scaled
 inverse DCT, which for downscale ratios is quality-comparable to (and much
 faster than) full decode + post-resample, and it decodes strictly fewer

@@ -275,17 +275,21 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode(const DecodeOptions& options) {
       if (scale_num < 8) {
         cinfo.scale_num = scale_num;
         cinfo.scale_denom = 8;
-        jpeg_calc_output_dimensions(&cinfo);
+      }
 
-        // With the covering rule the native n/8 output may exceed the target
-        // by up to ~1/7. Resample to the exact target whenever it misses, so
-        // output sizes stay predictable; requests that land on the n/8 grid
-        // still take the pure native path with no second pass.
-        if (cinfo.output_width != static_cast<JDIMENSION>(target_width) ||
-            cinfo.output_height != static_cast<JDIMENSION>(target_height)) {
-          resample_width = target_width;
-          resample_height = target_height;
-        }
+      // Always let libjpeg compute the output dims — with the default 8/8
+      // (targets within 1/8 of the intrinsic size) that is the intrinsic
+      // size, which then flows into the same remainder pass below.
+      jpeg_calc_output_dimensions(&cinfo);
+
+      // With the covering rule the native n/8 output may exceed the target
+      // by up to ~1/7. Resample to the exact target whenever it misses, so
+      // output sizes stay predictable; requests that land on the n/8 grid
+      // still take the pure native path with no second pass.
+      if (cinfo.output_width != static_cast<JDIMENSION>(target_width) ||
+          cinfo.output_height != static_cast<JDIMENSION>(target_height)) {
+        resample_width = target_width;
+        resample_height = target_height;
       }
     }
   }
