@@ -398,6 +398,64 @@ TEST(SimpleShapeGolden, DrawStrokeRRectBlending) {
                                                    context.ToPathList()));
 }
 
+TEST(SimpleShapeGolden, FixedBlendModulateAndScreen) {
+  constexpr uint32_t kWidth = 360;
+  constexpr uint32_t kHeight = 180;
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(kWidth, kHeight));
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Clear(skity::ColorSetARGB(255, 38, 56, 76));
+
+  skity::Paint destination;
+  destination.SetAntiAlias(false);
+  destination.SetColor(skity::ColorSetARGB(255, 210, 70, 100));
+  canvas->DrawRect(skity::Rect::MakeLTRB(20.f, 20.f, 160.f, 160.f),
+                   destination);
+  destination.SetColor(skity::ColorSetARGB(255, 40, 145, 210));
+  canvas->DrawRect(skity::Rect::MakeLTRB(200.f, 20.f, 340.f, 160.f),
+                   destination);
+
+  skity::Paint source;
+  source.SetAntiAlias(true);
+  source.SetColor(skity::ColorSetARGB(180, 245, 200, 45));
+  source.SetBlendMode(skity::BlendMode::kModulate);
+  canvas->DrawRRect(
+      skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(35.f, 35.f, 145.f, 145.f),
+                               24.f, 24.f),
+      source);
+
+  source.SetBlendMode(skity::BlendMode::kScreen);
+  canvas->DrawRRect(
+      skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(215.f, 35.f, 325.f, 145.f),
+                               24.f, 24.f),
+      source);
+
+  auto dl = recorder.FinishRecording();
+  PathListContext context("fixed_blend_modulate_and_screen.png");
+
+  auto compare = [&](const std::filesystem::path& path,
+                     bool enable_simple_shape, bool enable_coverage_aa,
+                     bool supports_framebuffer_fetch) {
+    skity::testing::GoldenTestEnvConfig config;
+    config.enable_simple_shape_pipeline = enable_simple_shape;
+    config.enable_coverage_aa = enable_coverage_aa;
+    config.sample_count = 1;
+    config.supports_framebuffer_fetch = supports_framebuffer_fetch;
+    config.supports_native_advanced_blend = false;
+    config.supports_native_advanced_blend_coherent = false;
+    return skity::testing::CompareGoldenTexture(dl.get(), kWidth, kHeight,
+                                                path.c_str(), config);
+  };
+
+  EXPECT_TRUE(
+      compare(context.expected_image_coverage_aa_path, false, true, true));
+  EXPECT_TRUE(
+      compare(context.expected_image_coverage_aa_path, false, true, false));
+  EXPECT_TRUE(compare(context.expected_image_simple_path, true, false, true));
+  EXPECT_TRUE(compare(context.expected_image_simple_path, true, false, false));
+}
+
 // https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/yinyang.svg
 TEST(SimpleShapeGolden, DrawYinAndYang) {
   skity::PictureRecorder recorder;

@@ -10,7 +10,7 @@
 
 namespace skity {
 
-HWFilterOutput HWBlurFilter::Prepare(const HWFilterContext &context) {
+HWFilterOutput HWBlurFilter::Prepare(const HWFilterContext& context) {
   auto child_output = GetChildOutput(0, context);
 
   Vec2 input_texture_size = Vec2{child_output.texture->GetDescriptor().width,
@@ -53,9 +53,9 @@ HWFilterOutput HWBlurFilter::Prepare(const HWFilterContext &context) {
 }
 
 void HWBlurFilter::PrepareWGXCMD(
-    Command *cmd, HWDrawContext *context,
-    const std::shared_ptr<GPUTexture> &texture,
-    const std::shared_ptr<GPUTexture> &output_texture, const Vec2 &dir,
+    Command* cmd, HWDrawContext* context,
+    const std::shared_ptr<GPUTexture>& texture,
+    const std::shared_ptr<GPUTexture>& output_texture, const Vec2& dir,
     float radius, Vec2 uv_scale, Vec2 uv_offset) {
   ColorStep step{context->arena_allocator->Make<WGSLFilterGeometry>(1.0f, 1.0f),
                  context->arena_allocator->Make<WGSLBlurFilter>(
@@ -75,7 +75,7 @@ void HWBlurFilter::PrepareWGXCMD(
       },
       output_texture->GetDescriptor().format,
       1,
-      BlendMode::kDefault,
+      HWBlendPlan{},
       context->scale,
   };
 

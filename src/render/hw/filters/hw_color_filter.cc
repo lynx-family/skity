@@ -11,7 +11,7 @@
 
 namespace skity {
 
-HWFilterOutput HWColorFilter::Prepare(const HWFilterContext &context) {
+HWFilterOutput HWColorFilter::Prepare(const HWFilterContext& context) {
   auto draw_context = context.draw_context;
 
   auto child_output = GetChildOutput(0, context);
@@ -39,14 +39,14 @@ HWFilterOutput HWColorFilter::Prepare(const HWFilterContext &context) {
 }
 
 void HWColorFilter::PrepareCMD(
-    HWDrawContext *draw_context, Command *cmd,
-    const std::shared_ptr<GPUTexture> &input_texture) {
+    HWDrawContext* draw_context, Command* cmd,
+    const std::shared_ptr<GPUTexture>& input_texture) {
   InternalPrepareCMDWGX(draw_context, cmd, input_texture);
 }
 
 void HWColorFilter::InternalPrepareCMDWGX(
-    HWDrawContext *context, Command *cmd,
-    const std::shared_ptr<GPUTexture> &input_texture) {
+    HWDrawContext* context, Command* cmd,
+    const std::shared_ptr<GPUTexture>& input_texture) {
   auto fragment =
       context->arena_allocator->Make<WGSLImageFilter>(input_texture);
 
@@ -71,7 +71,7 @@ void HWColorFilter::InternalPrepareCMDWGX(
       },
       input_texture->GetDescriptor().format,
       1,
-      BlendMode::kDefault,
+      HWBlendPlan{},
       context->scale,
   };
 

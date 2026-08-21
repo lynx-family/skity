@@ -150,6 +150,7 @@ enum class GPUBlendFactor {
 // intentionally absent (handled via the shader fallback path).
 enum class GPUBlendOperation {
   kAdd,
+  kReverseSubtract,
   kMultiply,
   kScreen,
   kOverlay,

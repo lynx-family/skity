@@ -12,6 +12,7 @@
 
 #include "src/gpu/gpu_shader_function.hpp"
 #include "src/logging.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 
 namespace skity {
 
@@ -142,13 +143,15 @@ using HWFunctionKey = HWPipelineKey;
 constexpr uint32_t kNativeAdvancedBlendKey = 0x80000000u;
 
 struct HWPipelineKey {
-  uint64_t base_key;
+  uint64_t base_key = 0;
   std::optional<std::vector<uint32_t>> compose_keys;
   uint32_t programmable_blending = 0;
+  std::optional<HWBlendOutput> blend_output;
 
   bool operator==(const HWPipelineKey& other) const {
     return base_key == other.base_key && compose_keys == other.compose_keys &&
-           programmable_blending == other.programmable_blending;
+           programmable_blending == other.programmable_blending &&
+           blend_output == other.blend_output;
   }
 
   bool operator!=(const HWPipelineKey& other) const {
@@ -173,6 +176,7 @@ struct HWPipelineKey {
         key.base_key = GetFragmentBaseKey();
         key.compose_keys = compose_keys;
         key.programmable_blending = programmable_blending;
+        key.blend_output = blend_output;
         break;
     }
     // Add stage to base key to make sure vertex and fragment key are
@@ -192,6 +196,13 @@ struct HWPipelineKeyHash {
       }
     }
     res += std::hash<uint32_t>()(key.programmable_blending);
+    // Reserve zero for an absent output. This keeps nullopt distinct from
+    // kNone, whose enum value is zero, in the common integer hash.
+    const uint32_t blend_output_hash =
+        key.blend_output.has_value()
+            ? static_cast<uint32_t>(key.blend_output.value()) + 1u
+            : 0u;
+    res += std::hash<uint32_t>()(blend_output_hash);
     return res;
   }
 };

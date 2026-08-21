@@ -18,9 +18,9 @@ namespace skity {
 
 struct Command;
 struct HWDrawContext;
+struct HWBlendPlan;
 class HWWGSLFragment;
 class Paint;
-enum class DstReadStrategy;
 
 void UploadBindGroup(uint32_t group, const wgx::BindGroupEntry* entry,
                      Command* cmd, HWDrawContext* ctx);
@@ -72,7 +72,7 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
                                    bool is_stroke, bool has_color = true);
 
 void ConfigureShadingFragment(HWDrawContext* context, const Paint& paint,
-                              DstReadStrategy dst_read_strategy,
+                              const HWBlendPlan& blend_plan,
                               HWWGSLFragment* fragment);
 /**
  * Common code generator for Gradient Shader.

@@ -15,6 +15,18 @@
 
 namespace skity {
 namespace transformed_mask {
+namespace {
+
+void SetDefaultBlendPlan(HWDraw* first, HWDraw* second) {
+  auto plan = ResolveFixedFunctionBlendPlan(BlendMode::kSrcOver,
+                                            /*has_fragment_mask=*/false,
+                                            /*source_is_opaque=*/false)
+                  .value();
+  first->SetBlendPlan(plan);
+  second->SetBlendPlan(plan);
+}
+
+}  // namespace
 
 TEST(TransformedMaskGlyphRunTest, BitmapOnlyStrokeFallsBackToStrokeColorFill) {
   Paint paint;
@@ -142,10 +154,9 @@ TEST(TransformedMaskGlyphRunTest, MergesTextDrawsWithSamePerspectiveTransform) {
   WGSLTextSolidColorGeometry second_geometry(Matrix{}, {}, Paint{});
   WGSLColorEmojiFragment first_fragment({}, nullptr, false, 1.f);
   WGSLColorEmojiFragment second_fragment({}, nullptr, false, 1.f);
-  HWDynamicTextDraw first_draw(transform, BlendMode::kSrcOver, &first_geometry,
-                               &first_fragment);
-  HWDynamicTextDraw second_draw(transform, BlendMode::kSrcOver,
-                                &second_geometry, &second_fragment);
+  HWDynamicTextDraw first_draw(transform, &first_geometry, &first_fragment);
+  HWDynamicTextDraw second_draw(transform, &second_geometry, &second_fragment);
+  SetDefaultBlendPlan(&first_draw, &second_draw);
   first_draw.SetLayerSpaceBounds(Rect::MakeLTRB(0.f, 0.f, 10.f, 10.f));
   second_draw.SetLayerSpaceBounds(Rect::MakeLTRB(20.f, 20.f, 30.f, 30.f));
 
@@ -163,10 +174,11 @@ TEST(TransformedMaskGlyphRunTest, RejectsTextDrawsWithDifferentTransforms) {
   WGSLTextSolidColorGeometry second_geometry(Matrix{}, {}, Paint{});
   WGSLColorEmojiFragment first_fragment({}, nullptr, false, 1.f);
   WGSLColorEmojiFragment second_fragment({}, nullptr, false, 1.f);
-  HWDynamicTextDraw first_draw(first_transform, BlendMode::kSrcOver,
-                               &first_geometry, &first_fragment);
-  HWDynamicTextDraw second_draw(second_transform, BlendMode::kSrcOver,
-                                &second_geometry, &second_fragment);
+  HWDynamicTextDraw first_draw(first_transform, &first_geometry,
+                               &first_fragment);
+  HWDynamicTextDraw second_draw(second_transform, &second_geometry,
+                                &second_fragment);
+  SetDefaultBlendPlan(&first_draw, &second_draw);
 
   EXPECT_FALSE(first_draw.MergeIfPossible(&second_draw));
 }
@@ -176,10 +188,9 @@ TEST(TransformedMaskGlyphRunTest, KeepsIdentityTextDrawMerging) {
   WGSLTextSolidColorGeometry second_geometry(Matrix{}, {}, Paint{});
   WGSLColorTextFragment first_fragment({}, nullptr);
   WGSLColorTextFragment second_fragment({}, nullptr);
-  HWDynamicTextDraw first_draw(Matrix{}, BlendMode::kSrcOver, &first_geometry,
-                               &first_fragment);
-  HWDynamicTextDraw second_draw(Matrix{}, BlendMode::kSrcOver, &second_geometry,
-                                &second_fragment);
+  HWDynamicTextDraw first_draw(Matrix{}, &first_geometry, &first_fragment);
+  HWDynamicTextDraw second_draw(Matrix{}, &second_geometry, &second_fragment);
+  SetDefaultBlendPlan(&first_draw, &second_draw);
 
   EXPECT_TRUE(first_draw.MergeIfPossible(&second_draw));
 }

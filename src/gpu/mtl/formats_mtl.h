@@ -131,6 +131,15 @@ constexpr MTLBlendFactor ToMTLBlendFactor(GPUBlendFactor type) {
   return MTLBlendFactorZero;
 }
 
+constexpr MTLBlendOperation ToMTLBlendOperation(GPUBlendOperation operation) {
+  switch (operation) {
+    case GPUBlendOperation::kReverseSubtract:
+      return MTLBlendOperationReverseSubtract;
+    default:
+      return MTLBlendOperationAdd;
+  }
+}
+
 constexpr MTLVertexStepFunction ToMTLVertexStepFunction(GPUVertexStepMode step_mode) {
   switch (step_mode) {
     case GPUVertexStepMode::kVertex:

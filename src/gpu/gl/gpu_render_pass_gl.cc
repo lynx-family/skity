@@ -199,6 +199,7 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
     auto const& target = pipeline->GetDescriptor().target;
     auto* gl = GLInterface::GlobalInterface();
     if (target.blend_op != GPUBlendOperation::kAdd &&
+        target.blend_op != GPUBlendOperation::kReverseSubtract &&
         gl->ext_khr_blend_equation_advanced &&
         !gl->ext_khr_blend_equation_advanced_coherent && gl->fBlendBarrierKHR) {
       gl->fBlendBarrierKHR();

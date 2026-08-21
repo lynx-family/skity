@@ -125,6 +125,12 @@ class FakeGPUDevice : public GPUDevice {
     return std::make_unique<GPUBuffer>(desc);
   }
 
+  std::shared_ptr<GPUShaderModule> CreateShaderModule(
+      const GPUShaderModuleDescriptor& desc) override {
+    shader_module_sources_.push_back(desc.source);
+    return GPUDevice::CreateShaderModule(desc);
+  }
+
   std::shared_ptr<GPUShaderFunction> CreateShaderFunction(
       const GPUShaderFunctionDescriptor& desc) override {
     shader_function_count_++;
@@ -260,6 +266,15 @@ class FakeGPUDevice : public GPUDevice {
     return false;
   }
 
+  bool HasShaderModuleSourceContaining(const std::string& text) const {
+    for (const auto& source : shader_module_sources_) {
+      if (source.find(text) != std::string::npos) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void set_fail_render_pipeline_creation(bool fail) {
     fail_render_pipeline_creation_ = fail;
   }
@@ -285,6 +300,7 @@ class FakeGPUDevice : public GPUDevice {
   uint32_t sampler_count_ = 0;
   std::vector<std::string> fragment_function_labels_;
   std::vector<std::string> vertex_function_labels_;
+  std::vector<std::string> shader_module_sources_;
   std::shared_ptr<FakeCommandBuffer> last_command_buffer_;
   bool disallow_shader_pipeline_creation_ = false;
   bool fail_render_pipeline_creation_ = false;
@@ -1038,6 +1054,24 @@ TEST(PrecompileDrawTest, PrecompileDrawIncludesAdvancedBlendingPipeline) {
 
   EXPECT_EQ(device->shader_function_count(), shader_function_count);
   EXPECT_EQ(device->render_pipeline_count(), render_pipeline_count);
+}
+
+TEST(PrecompileDrawTest, PrecompileRRectFixedBlendSkipsProgrammableBlending) {
+  constexpr BlendMode kModes[] = {BlendMode::kModulate, BlendMode::kScreen};
+  for (auto mode : kModes) {
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    context.SetEnableSimpleShapePipeline(true);
+    auto* device = context.device();
+    ASSERT_NE(device, nullptr);
+
+    Paint paint;
+    paint.SetBlendMode(mode);
+    PrecompileDraw(context, false, PrecompileDrawType::kDrawRRect, paint);
+
+    EXPECT_TRUE(device->HasShaderModuleSourceContaining("var source_color"));
+    EXPECT_FALSE(device->HasShaderModuleSourceContaining("fn blending("));
+  }
 }
 
 TEST(PrecompileDrawTest,

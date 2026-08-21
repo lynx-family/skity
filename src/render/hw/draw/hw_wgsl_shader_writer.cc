@@ -157,7 +157,16 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
 )";
   }
 
-  if (geometry_ && geometry_->AffectsFragment()) {
+  if (HasFixedBlendOutput()) {
+    ss << R"(
+  var source_color: vec4<f32> = color;
+  var mask_alpha: f32 = 1.0;
+)";
+    if (geometry_ && geometry_->AffectsFragment()) {
+      geometry_->WriteFSAlphaMask(ss);
+    }
+    WriteFixedBlendOutput(ss);
+  } else if (geometry_ && geometry_->AffectsFragment()) {
     ss << R"(
   var mask_alpha: f32 = 1.0;
 )";
@@ -183,6 +192,42 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
   return color;
 }
 )";
+}
+
+void HWWGSLShaderWriter::WriteFixedBlendOutput(std::stringstream& ss) const {
+  DEBUG_CHECK(blend_output_.has_value());
+  switch (blend_output_.value()) {
+    case HWBlendOutput::kNone:
+      ss << R"(
+  color = vec4<f32>(0.0);
+)";
+      break;
+    case HWBlendOutput::kSource:
+      ss << R"(
+  color = source_color;
+)";
+      break;
+    case HWBlendOutput::kCoverage:
+      ss << R"(
+  color = vec4<f32>(mask_alpha);
+)";
+      break;
+    case HWBlendOutput::kSourceTimesCoverage:
+      ss << R"(
+  color = source_color * mask_alpha;
+)";
+      break;
+    case HWBlendOutput::kOneMinusSourceAlphaTimesCoverage:
+      ss << R"(
+  color = vec4<f32>((1.0 - source_color.a) * mask_alpha);
+)";
+      break;
+    case HWBlendOutput::kOneMinusSourceTimesCoverage:
+      ss << R"(
+  color = (vec4<f32>(1.0) - source_color) * mask_alpha;
+)";
+      break;
+  }
 }
 
 void HWWGSLShaderWriter::WriteVaryings(std::stringstream& ss) const {

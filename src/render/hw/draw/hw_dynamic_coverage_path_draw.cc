@@ -17,9 +17,10 @@ namespace skity {
 HWDynamicCoveragePathDraw::HWDynamicCoveragePathDraw(
     Matrix local_to_physical, Matrix physical_to_layer, Path path, Paint paint,
     bool enable_conflation_correction)
-    : HWDynamicDraw(local_to_physical, paint.GetBlendMode()),
+    : HWDynamicDraw(local_to_physical),
       physical_to_layer_(physical_to_layer),
       enable_conflation_correction_(enable_conflation_correction) {
+  SetHasFragmentMask(true);
   path_groups_.emplace_back(BatchGroup<Path>{
       std::move(path),
       std::move(paint),
@@ -50,7 +51,7 @@ void HWDynamicCoveragePathDraw::OnGenerateDrawStep(
       enable_conflation_correction_);
   const auto& paint = path_groups_.front().paint;
   auto* fragment = GenShadingFragment(context, paint, false);
-  ConfigureShadingFragment(context, paint, GetDstReadStrategy(), fragment);
+  ConfigureShadingFragment(context, paint, GetBlendPlan(), fragment);
 
   steps.emplace_back(context->arena_allocator->Make<ColorStep>(
       geometry, fragment, CoverageType::kNone));

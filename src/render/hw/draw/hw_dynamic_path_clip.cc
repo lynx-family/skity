@@ -14,9 +14,9 @@
 namespace skity {
 
 HWDynamicPathClip::HWDynamicPathClip(Matrix transform, Path path,
-                                     Canvas::ClipOp op, const Rect &bounds,
+                                     Canvas::ClipOp op, const Rect& bounds,
                                      bool use_gpu_tessellation)
-    : HWDynamicDraw(transform, BlendMode::kSrcOver),
+    : HWDynamicDraw(transform),
       path_(std::move(path)),
       op_(op),
       bounds_(),
@@ -24,11 +24,11 @@ HWDynamicPathClip::HWDynamicPathClip(Matrix transform, Path path,
   bounds_.AddRect(bounds);
 }
 
-void HWDynamicPathClip::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
-                                           HWDrawContext *context) {
+void HWDynamicPathClip::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
+                                           HWDrawContext* context) {
   auto arena_allocator = context->arena_allocator;
 
-  HWWGSLGeometry *geometry;
+  HWWGSLGeometry* geometry;
   if (use_gpu_tessellation_) {
     geometry = arena_allocator->Make<WGSLTessPathFillGeometry>(path_, paint_);
   } else {

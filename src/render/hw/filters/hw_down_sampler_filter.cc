@@ -16,7 +16,7 @@ HWDownSamplerFilter::HWDownSamplerFilter(std::shared_ptr<HWFilter> input,
                                          float scale)
     : HWFilter({input}, "HWDownSamplerFilter"), scale_(scale) {}
 
-HWFilterOutput HWDownSamplerFilter::Prepare(const HWFilterContext &context) {
+HWFilterOutput HWDownSamplerFilter::Prepare(const HWFilterContext& context) {
   auto draw_context = context.draw_context;
 
   auto child_output = GetChildOutput(0, context);
@@ -53,8 +53,8 @@ HWFilterOutput HWDownSamplerFilter::Prepare(const HWFilterContext &context) {
 }
 
 void HWDownSamplerFilter::PrepareCMDWGX(
-    HWDrawContext *context, Command *cmd,
-    const std::shared_ptr<GPUTexture> &input_texture, const Vec2 &output_size) {
+    HWDrawContext* context, Command* cmd,
+    const std::shared_ptr<GPUTexture>& input_texture, const Vec2& output_size) {
   auto geometry =
       context->arena_allocator->Make<WGSLFilterGeometry>(1.0f, 1.0f);
   auto fragment =
@@ -79,7 +79,7 @@ void HWDownSamplerFilter::PrepareCMDWGX(
       },
       input_texture->GetDescriptor().format,
       1,
-      BlendMode::kDefault,
+      HWBlendPlan{},
       context->scale,
   };
 

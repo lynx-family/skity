@@ -374,8 +374,8 @@ HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
     fragment->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
   }
 
-  auto* draw = arena_allocator->Make<HWDynamicTextDraw>(
-      view_difference, paint_.GetBlendMode(), geometry, fragment);
+  auto* draw = arena_allocator->Make<HWDynamicTextDraw>(view_difference,
+                                                        geometry, fragment);
   bounds_ = MapBounds(view_difference, bounds_);
   return draw;
 }

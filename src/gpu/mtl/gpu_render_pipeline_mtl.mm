@@ -60,6 +60,15 @@ std::unique_ptr<GPURenderPipelineMTL> GPURenderPipelineMTL::Make(
   render_pipeline_desc.colorAttachments[0].sourceRGBBlendFactor = src;
   render_pipeline_desc.colorAttachments[0].destinationAlphaBlendFactor = dst;
   render_pipeline_desc.colorAttachments[0].destinationRGBBlendFactor = dst;
+  // Metal defaults both equations to add. Only write the non-default equation
+  // here; leaving the ordinary path untouched avoids backend-specific blend
+  // validation for descriptors that do not need reverse subtraction.
+  if (target.blend_op == GPUBlendOperation::kReverseSubtract) {
+    render_pipeline_desc.colorAttachments[0].rgbBlendOperation =
+        ToMTLBlendOperation(target.blend_op);
+    render_pipeline_desc.colorAttachments[0].alphaBlendOperation =
+        ToMTLBlendOperation(target.blend_op);
+  }
 
   render_pipeline_desc.colorAttachments[0].writeMask =
       static_cast<MTLColorWriteMask>(MTLColorWriteMaskAll & target.write_mask);

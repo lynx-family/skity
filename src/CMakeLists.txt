@@ -329,6 +329,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/native_blend.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_buffer_layout_map.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_buffer_layout_map.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_blend_plan.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_blend_plan.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_canvas.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_canvas.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_draw.cc
