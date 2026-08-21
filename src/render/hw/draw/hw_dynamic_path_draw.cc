@@ -34,7 +34,7 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
   auto geom = GenGeometry(context, false);
 
   auto frag = GenShadingFragment(context, paint_, is_stroke_);
-  ConfigureShadingFragment(context, paint_, GetDstReadStrategy(), frag);
+  ConfigureShadingFragment(context, paint_, GetBlendPlan(), frag);
 
   CoverageType coverage = CoverageType::kNone;
 
@@ -60,7 +60,7 @@ void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
     auto geometry = GenGeometry(context, true);
 
     auto fragment = GenShadingFragment(context, paint_, is_stroke_);
-    ConfigureShadingFragment(context, paint_, GetDstReadStrategy(), fragment);
+    ConfigureShadingFragment(context, paint_, GetBlendPlan(), fragment);
 
     steps.emplace_back(context->arena_allocator->Make<ColorAAStep>(
         std::move(geometry), std::move(fragment), coverage));

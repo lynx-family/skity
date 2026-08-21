@@ -326,7 +326,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/layer/hw_sub_layer.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/dst_read_strategy.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/dst_read_strategy.hpp
-    ${CMAKE_CURRENT_LIST_DIR}/render/hw/native_blend.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_blend_plan.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_blend_plan.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_buffer_layout_map.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_buffer_layout_map.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_canvas.cc
@@ -358,6 +359,7 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_stage_buffer.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_static_buffer.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/hw_static_buffer.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/native_blend.hpp
   )
 
   # Dynamic shader

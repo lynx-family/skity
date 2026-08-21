@@ -13,6 +13,7 @@
 
 #include "skity/graphic/image.hpp"
 #include "src/render/hw/draw/wgx_programmable_blending.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/hw_draw_pass.hpp"
 #include "src/render/hw/hw_render_target_cache.hpp"
 #include "src/render/hw/hw_static_buffer.hpp"
@@ -77,7 +78,8 @@ inline HWDrawState operator|=(HWDrawState& lhs, HWDrawState rhs) {
 
 class HWDraw {
  public:
-  explicit HWDraw(Matrix transform) : transform_(transform) {}
+  explicit HWDraw(Matrix transform, BlendMode blend_mode = BlendMode::kSrcOver)
+      : transform_(transform), blend_plan_{blend_mode} {}
 
   virtual ~HWDraw() = default;
 
@@ -130,6 +132,10 @@ class HWDraw {
       return false;
     }
 
+    if (blend_plan_ != draw->blend_plan_) {
+      return false;
+    }
+
     bool merged = OnMergeIfPossible(draw);
     if (merged) {
       layer_space_bounds_.Join(draw->layer_space_bounds_);
@@ -141,11 +147,13 @@ class HWDraw {
 
   void SetClipDepth(uint32_t clip_depth) { clip_depth_ = clip_depth; }
 
-  DstReadStrategy GetDstReadStrategy() const { return dst_read_strategy_; }
-
-  void SetDstReadStrategy(DstReadStrategy strategy) {
-    dst_read_strategy_ = strategy;
+  DstReadStrategy GetDstReadStrategy() const {
+    return blend_plan_.dst_read_strategy;
   }
+
+  const HWBlendPlan& GetBlendPlan() const { return blend_plan_; }
+
+  void SetBlendPlan(const HWBlendPlan& blend_plan) { blend_plan_ = blend_plan; }
 
  protected:
   virtual HWDrawState OnPrepare(HWDrawContext* context) = 0;
@@ -169,7 +177,7 @@ class HWDraw {
   Rect scissor_rect_ = {};
   Rect layer_space_bounds_ = Rect::MakeLTRB(-1E9F, -1E9F, 1E9F, 1E9F);
   HWDraw* clip_draw_ = nullptr;
-  DstReadStrategy dst_read_strategy_ = DstReadStrategy::kNonRequired;
+  HWBlendPlan blend_plan_ = {};
 };
 
 }  // namespace skity

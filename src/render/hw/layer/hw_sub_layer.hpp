@@ -24,8 +24,6 @@ class HWSubLayer : public HWLayer {
 
   void SetAlpha(float alpha) { alpha_ = alpha; }
 
-  void SetBlendMode(BlendMode blend_mode) { blend_mode_ = blend_mode; }
-
   void ExpandTextureSizeToNextPow2() {
     texture_size_ = MakeApprox(texture_size_);
   }
@@ -86,7 +84,6 @@ class HWSubLayer : public HWLayer {
 
  private:
   float alpha_ = 1.0f;
-  BlendMode blend_mode_ = BlendMode::kSrcOver;
   HWDraw* layer_back_draw_ = {};
   std::shared_ptr<GPUTexture> color_texture_ = {};
   std::shared_ptr<GPUTexture> layer_back_draw_texture_ = {};

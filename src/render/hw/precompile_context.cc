@@ -19,7 +19,6 @@
 #include "src/effect/pixmap_shader.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_sampler.hpp"
-#include "src/graphic/blend_mode_priv.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
@@ -37,9 +36,8 @@
 #include "src/render/hw/draw/step/clip_step.hpp"
 #include "src/render/hw/draw/step/color_step.hpp"
 #include "src/render/hw/draw/step/stencil_step.hpp"
-#include "src/render/hw/draw/wgx_filter.hpp"
-#include "src/render/hw/draw/wgx_programmable_blending.hpp"
-#include "src/render/hw/dst_read_strategy.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/tracing.hpp"
 #include "src/utils/arena_allocator.hpp"
@@ -85,14 +83,22 @@ GPUTextureFormat ResolvePrecompileColorFormat(PrecompileColorType color_type) {
   return GPUTextureFormat::kInvalid;
 }
 
+HWBlendPlan ResolvePrecompileBlendPlan(HWDrawContext* context,
+                                       BlendMode blend_mode) {
+  const auto& caps = context->gpuContext->GetGPUDevice()->GetCaps();
+  return ResolveHWBlendPlan(blend_mode, caps,
+                            /*supports_texture_copy_dst_read=*/true);
+}
+
 bool PrecompileStep(HWDrawStep* step, HWDrawStepContext* ctx,
                     BlendMode blend_mode) {
   DEBUG_CHECK(step != nullptr);
   DEBUG_CHECK(ctx != nullptr);
 
+  auto blend_plan = ResolvePrecompileBlendPlan(ctx->context, blend_mode);
   auto success =
       step->PrecompilePipeline(ctx->context, ctx->state, ctx->color_format,
-                               ctx->sample_count, blend_mode);
+                               ctx->sample_count, blend_plan);
   if (!success) {
     LOGE("Precompile shader failed: failed to create render pipeline");
   }
@@ -102,24 +108,9 @@ bool PrecompileStep(HWDrawStep* step, HWDrawStepContext* ctx,
 }
 
 HWWGSLFragment* ApplyPaintEffects(HWWGSLFragment* fragment, const Paint& paint,
-                                  GPUContextImpl* gpu_context) {
-  if (paint.GetColorFilter() != nullptr) {
-    fragment->SetFilter(WGXFilterFragment::Make(paint.GetColorFilter().get()));
-  }
-
-  if (IsAdvancedBlendMode(paint.GetBlendMode())) {
-    const auto& caps = gpu_context->GetGPUDevice()->GetCaps();
-    auto strategy = ResolveDstReadStrategy(paint.GetBlendMode(), caps);
-    if (strategy == DstReadStrategy::kNativeBlend) {
-      if (caps.native_blend_shader_variant) {
-        fragment->SetUsesNativeAdvancedBlend(true);
-      }
-    } else {
-      fragment->SetProgrammableBlending(
-          WGXProgrammableBlending::Make(paint.GetBlendMode(), strategy));
-    }
-  }
-
+                                  HWDrawContext* context) {
+  auto blend_plan = ResolvePrecompileBlendPlan(context, paint.GetBlendMode());
+  ConfigureShadingFragment(context, paint, blend_plan, fragment);
   return fragment;
 }
 
@@ -133,7 +124,7 @@ HWWGSLFragment* MakeColorFragment(HWDrawStepContext* ctx, const Paint& paint,
     if (type != Shader::GradientType::kNone) {
       fragment = arena->Make<WGSLGradientFragment>(
           info, type, paint.GetAlphaF(), paint.GetShader()->GetLocalMatrix());
-      return ApplyPaintEffects(fragment, paint, ctx->context->gpuContext);
+      return ApplyPaintEffects(fragment, paint, ctx->context);
     }
   }
 
@@ -143,7 +134,7 @@ HWWGSLFragment* MakeColorFragment(HWDrawStepContext* ctx, const Paint& paint,
     fragment = arena->Make<WGSLSolidColor>(paint.GetFillColor());
   }
 
-  return ApplyPaintEffects(fragment, paint, ctx->context->gpuContext);
+  return ApplyPaintEffects(fragment, paint, ctx->context);
 }
 
 HWWGSLFragment* MakeTextureFragment(HWDrawStepContext* ctx, const Paint& paint,
@@ -151,7 +142,7 @@ HWWGSLFragment* MakeTextureFragment(HWDrawStepContext* ctx, const Paint& paint,
                                     const Matrix& matrix) {
   auto* fragment = ctx->context->arena_allocator->Make<WGSLTextureFragment>(
       std::move(shader), nullptr, nullptr, 1.f, matrix, 1.f, 1.f);
-  return ApplyPaintEffects(fragment, paint, ctx->context->gpuContext);
+  return ApplyPaintEffects(fragment, paint, ctx->context);
 }
 
 void PrecompilePathStep(HWDrawStepContext* ctx, const Paint& paint,
@@ -292,7 +283,7 @@ HWWGSLFragment* MakeTextFragment(HWDrawStepContext* ctx, const Paint& paint,
                                                   std::move(sampler));
   }
 
-  return ApplyPaintEffects(fragment, paint, ctx->context->gpuContext);
+  return ApplyPaintEffects(fragment, paint, ctx->context);
 }
 
 void PrecompileTextStep(HWDrawStepContext* ctx, const Paint& paint, bool sdf,

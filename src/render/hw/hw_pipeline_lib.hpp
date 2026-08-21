@@ -9,13 +9,13 @@
 
 #include <memory>
 #include <skity/gpu/gpu_context.hpp>
-#include <skity/graphic/blend_mode.hpp>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "src/gpu/gpu_render_pipeline.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace skity {
@@ -35,7 +35,7 @@ struct HWPipelineDescriptor {
   int32_t color_mask = 0xF;
   uint32_t sample_count = 1;
   const std::vector<GPUVertexBufferLayout>* buffers = nullptr;
-  BlendMode blend_mode = BlendMode::kDefault;
+  HWBlendPlan blend_plan = {};
   GPUTextureFormat color_format = GPUTextureFormat::kRGBA8Unorm;
   GPUDepthStencilState depth_stencil = {};
   HWShaderGenerator* shader_generator = nullptr;

@@ -50,7 +50,7 @@ void HWDynamicCoveragePathDraw::OnGenerateDrawStep(
       enable_conflation_correction_);
   const auto& paint = path_groups_.front().paint;
   auto* fragment = GenShadingFragment(context, paint, false);
-  ConfigureShadingFragment(context, paint, GetDstReadStrategy(), fragment);
+  ConfigureShadingFragment(context, paint, GetBlendPlan(), fragment);
 
   steps.emplace_back(context->arena_allocator->Make<ColorStep>(
       geometry, fragment, CoverageType::kNone));

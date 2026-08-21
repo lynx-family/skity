@@ -128,7 +128,7 @@ void HWFilter::InternalDrawChildrenOutpusWGX(
         },
         color_format,
         1,
-        BlendMode::kDefault,
+        {},
         context.scale,
     };
 

@@ -33,7 +33,7 @@ void HWDrawStep::GenerateCommand(const HWDrawStepContext& ctx, Command* cmd,
                        static_cast<uint32_t>(bottom - top)};
 
   cmd->pipeline = GetPipeline(ctx.context, ctx.state, ctx.color_format,
-                              ctx.sample_count, ctx.blend_mode);
+                              ctx.sample_count, ctx.blend_plan);
   if (RequireStencil()) {
     const auto stencil_state = GetStencilState();
     cmd->front_stencil_compare_mask = stencil_state.front.stencil_read_mask;
@@ -58,8 +58,8 @@ void HWDrawStep::GenerateCommand(const HWDrawStepContext& ctx, Command* cmd,
 bool HWDrawStep::PrecompilePipeline(HWDrawContext* context, HWDrawState state,
                                     GPUTextureFormat target_format,
                                     uint32_t sample_count,
-                                    BlendMode blend_mode) {
-  return GetPipeline(context, state, target_format, sample_count, blend_mode) !=
+                                    const HWBlendPlan& blend_plan) {
+  return GetPipeline(context, state, target_format, sample_count, blend_plan) !=
          nullptr;
 }
 
@@ -67,17 +67,16 @@ GPURenderPipeline* HWDrawStep::GetPipeline(HWDrawContext* context,
                                            HWDrawState state,
                                            GPUTextureFormat target_format,
                                            uint32_t sample_count,
-                                           BlendMode blend_mode) {
+                                           const HWBlendPlan& blend_plan) {
   SKITY_TRACE_EVENT(HWDrawStep_GetPipeline);
 
   HWPipelineDescriptor pipeline{};
 
   if (RequireColorWrite()) {
     pipeline.color_mask = 0xF;
-    pipeline.blend_mode = blend_mode;
+    pipeline.blend_plan = blend_plan;
   } else {
     pipeline.color_mask = 0x0;
-    pipeline.blend_mode = BlendMode::kDefault;
   }
 
   pipeline.color_format = target_format;
