@@ -96,6 +96,10 @@ std::unique_ptr<GPURenderTarget> GPUContextImpl::CreateRenderTarget(
 
 std::shared_ptr<Image> GPUContextImpl::MakeSnapshot(
     std::unique_ptr<GPURenderTarget> render_target) {
+  if (render_target == nullptr) {
+    return nullptr;
+  }
+
   auto dl = render_target->recorder_.FinishRecording();
 
   if (dl == nullptr) {
