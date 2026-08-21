@@ -60,9 +60,18 @@ void TextureImpl::DeferredUploadImage(std::shared_ptr<Pixmap> pixmap) {
 }
 
 void TextureImpl::CommitDeferredImageUpload() {
-  CHECK(pending_pixmap_);
-  UploadImage(pending_pixmap_);
-  pending_pixmap_.reset();
+  if (!pending_pixmap_) {
+    return;
+  }
+  auto delegate = delegate_.lock();
+  if (!delegate) {
+    return;
+  }
+  if (delegate->UploadTextureImage(*this, pending_pixmap_)) {
+    // Keep the pending pixmap when the upload fails (e.g. GPU memory
+    // exhaustion) so the upload can be retried on a later frame.
+    pending_pixmap_.reset();
+  }
 }
 
 void TextureImpl::UploadImage(std::shared_ptr<Pixmap> pixmap) {

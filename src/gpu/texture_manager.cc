@@ -94,7 +94,7 @@ TextureState TextureManager::QueryState(const UniqueID& handler) {
   return TextureState::Uploaded;
 }
 
-void TextureManager::SaveGPUTexture(const UniqueID& handler,
+bool TextureManager::SaveGPUTexture(const UniqueID& handler,
                                     CreateGPUTextureCallback callback) {
   UniqueLock lock(shared_mutex_);
   if (handler_to_texture_.find(handler) == handler_to_texture_.end() ||
@@ -102,6 +102,7 @@ void TextureManager::SaveGPUTexture(const UniqueID& handler,
     auto hw_texture = callback();
     handler_to_texture_.insert_or_assign(handler, std::move(hw_texture));
   }
+  return handler_to_texture_[handler] != nullptr;
 }
 
 std::shared_ptr<GPUTexture> TextureManager::QueryGPUTexture(
@@ -113,7 +114,7 @@ std::shared_ptr<GPUTexture> TextureManager::QueryGPUTexture(
   return handler_to_texture_[handler] ? handler_to_texture_[handler] : nullptr;
 }
 
-void TextureManager::UploadTextureImage(const TextureImpl& texture,
+bool TextureManager::UploadTextureImage(const TextureImpl& texture,
                                         std::shared_ptr<Pixmap> pixmap) {
   auto device = gpu_device_;
 
@@ -127,7 +128,7 @@ void TextureManager::UploadTextureImage(const TextureImpl& texture,
                              : std::min(requested_level_count, max_level_count);
   }
 
-  SaveGPUTexture(
+  return SaveGPUTexture(
       texture.GetHandler(),
       [device, pixmap = std::move(pixmap), format = texture.GetFormat(),
        mipmap_level_count]() -> std::shared_ptr<GPUTexture> {
@@ -170,7 +171,16 @@ std::shared_ptr<GPUTexture> TextureManager::GetGPUTexture(
   if (QueryState(texture->GetHandler()) == TextureState::Created) {
     texture->CommitDeferredImageUpload();
   }
-  CHECK(QueryState(texture->GetHandler()) == TextureState::Uploaded);
+  if (QueryState(texture->GetHandler()) != TextureState::Uploaded) {
+    // GPU texture creation may fail (e.g. out of GPU memory). Callers already
+    // handle a null texture by falling back to a solid color, so return null
+    // instead of killing the process. A pending pixmap, if any, is kept for a
+    // retry on a later frame.
+    LOGE("Failed to upload texture {} , texture state = {}",
+         texture->GetHandler().id,
+         static_cast<uint32_t>(QueryState(texture->GetHandler())));
+    return nullptr;
+  }
   return QueryGPUTexture(texture->GetHandler());
 }
 

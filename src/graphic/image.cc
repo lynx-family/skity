@@ -16,6 +16,7 @@
 #include "src/gpu/texture_manager.hpp"
 #include "src/graphic/bitmap_sampler.hpp"
 #include "src/graphic/color_priv.hpp"
+#include "src/logging.hpp"
 
 namespace skity {
 namespace {
@@ -68,6 +69,9 @@ bool ScalePixelsForTexture(std::shared_ptr<Pixmap> dst, GPUContext* context,
   desc.height = dst->Height();
   desc.sample_count = 1;
   auto render_target = context->CreateRenderTarget(desc);
+  if (!render_target) {
+    return false;
+  }
   auto canvas = render_target->GetCanvas();
   canvas->DrawImageRect(Image::MakeHWImage(texture),
                         Rect::MakeWH(texture->Width(), texture->Height()),
@@ -75,6 +79,9 @@ bool ScalePixelsForTexture(std::shared_ptr<Pixmap> dst, GPUContext* context,
                         sampling_options);
   std::shared_ptr<Image> snapshot =
       context->MakeSnapshot(std::move(render_target));
+  if (!snapshot) {
+    return false;
+  }
   auto snapshot_pixels = snapshot->ReadPixels(context);
   if (!snapshot_pixels) {
     return false;
@@ -115,8 +122,14 @@ class TextureImage : public Image {
     }
     const auto& texture_image = *GetTexture();
     auto gpu_texture = texture_image->GetGPUTexture();
+    if (gpu_texture == nullptr) {
+      return nullptr;
+    }
     auto* gpu_context_impl = static_cast<GPUContextImpl*>(context);
     auto data = gpu_context_impl->ReadPixels(gpu_texture);
+    if (data == nullptr) {
+      return nullptr;
+    }
 
     return std::make_shared<Pixmap>(
         data, Width(), Height(), AlphaType::kPremul_AlphaType,
@@ -222,6 +235,13 @@ std::shared_ptr<Texture> PromiseTextureImage::GetTextureByContext(
     }
 
     auto gpu_texture = texture_->GetGPUTexture();
+    if (!gpu_texture) {
+      // The promised texture has no GPU texture (e.g. creation failed).
+      // Drop the cache so the promise can be resolved again later.
+      LOGE("PromiseTextureImage: promise texture is not ready");
+      texture_.reset();
+      return nullptr;
+    }
 
     gpu_texture->SetRelease(release_callback_, promise_texture_context_);
   }
@@ -240,6 +260,13 @@ const std::shared_ptr<Texture>* PromiseTextureImage::GetTexture() const {
       return nullptr;
     }
     auto gpu_texture = texture_->GetGPUTexture();
+    if (!gpu_texture) {
+      // The promised texture has no GPU texture (e.g. creation failed).
+      // Drop the cache so the promise can be resolved again later.
+      LOGE("PromiseTextureImage: promise texture is not ready");
+      texture_.reset();
+      return nullptr;
+    }
     gpu_texture->SetRelease(release_callback_, promise_texture_context_);
   }
   return &texture_;

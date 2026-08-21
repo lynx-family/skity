@@ -98,7 +98,7 @@ class TextureManager : public TextureImplDelegate,
                                                std::shared_ptr<Pixmap> pixmap);
 
   // TextureImplDelegate
-  void UploadTextureImage(const TextureImpl& texture,
+  bool UploadTextureImage(const TextureImpl& texture,
                           std::shared_ptr<Pixmap> pixmap) override;
   std::shared_ptr<GPUTexture> GetGPUTexture(TextureImpl* texture) override;
   void DropTexture(const UniqueID& handler) override;
@@ -112,7 +112,9 @@ class TextureManager : public TextureImplDelegate,
 
   TextureState QueryState(const UniqueID& handler);
 
-  void SaveGPUTexture(const UniqueID& handler,
+  // Returns whether the handler is associated with a valid GPU texture after
+  // this call.
+  bool SaveGPUTexture(const UniqueID& handler,
                       CreateGPUTextureCallback callback);
 
   std::shared_ptr<GPUTexture> QueryGPUTexture(const UniqueID& handler);

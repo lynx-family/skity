@@ -94,7 +94,12 @@ std::unique_ptr<GPURenderTarget> GPUContextImplMTL::OnCreateRenderTarget(
     return {};
   }
 
-  auto mtl_texture = static_cast<GPUTextureMTL *>(texture->GetGPUTexture().get());
+  auto gpu_texture = texture->GetGPUTexture();
+  if (gpu_texture == nullptr) {
+    return {};
+  }
+
+  auto mtl_texture = static_cast<GPUTextureMTL *>(gpu_texture.get());
 
   GPUSurfaceDescriptorMTL surface_desc{};
   surface_desc.backend = GetBackendType();
