@@ -441,7 +441,12 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
     auto bounds = is_stroke ? paint.ComputeFastBounds(path.GetBounds())
                             : path.GetBounds();
     SetupLayerSpaceBoundsForDraw(draw, bounds);
-    SetupBlendPlanForDraw(draw, paint.GetBlendMode());
+    if (analytical_aa == AnalyticalAAMode::kContour) {
+      draw->SetLayerSpaceBounds(
+          draw->GetLayerSpaceBounds().MakeOutset(1.f, 1.f));
+    }
+    SetupBlendPlanForDraw(draw, paint.GetBlendMode(),
+                          analytical_aa != AnalyticalAAMode::kNone);
     CurrentLayer()->AddDraw(draw);
   };
 
@@ -498,12 +503,11 @@ HWCanvas::AnalyticalAAMode HWCanvas::SelectAnalyticalAA(
   }
 
   if (surface_->IsCoverageAAEnabled()) {
-    // TODO(ColdPaleLight): Support other blend modes after Coverage AA
-    // participates in blending consistently with the other rendering paths.
-    if (!transform.HasPersp() && paint.GetBlendMode() == BlendMode::kSrcOver) {
+    if (!transform.HasPersp() && CanUseFragmentMask(paint.GetBlendMode())) {
       return AnalyticalAAMode::kCoverage;
     }
-  } else if (surface_->GetGPUContext()->IsEnableContourAA()) {
+  } else if (surface_->GetGPUContext()->IsEnableContourAA() &&
+             CanUseFragmentMask(paint.GetBlendMode())) {
     return AnalyticalAAMode::kContour;
   }
 
@@ -520,7 +524,7 @@ bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
     return true;
   }
 
-  if (paint.GetBlendMode() != BlendMode::kSrcOver) {
+  if (!CanUseFragmentMask(paint.GetBlendMode())) {
     return true;
   }
 
@@ -577,7 +581,8 @@ void HWCanvas::DrawRRectInternal(const RRect& rrect, const Paint& paint,
     auto bounds = use_stroke ? paint.ComputeFastBounds(rrect.GetBounds())
                              : rrect.GetBounds();
     SetupLayerSpaceBoundsForDraw(draw, bounds);
-    SetupBlendPlanForDraw(draw, paint.GetBlendMode());
+    SetupBlendPlanForDraw(draw, paint.GetBlendMode(),
+                          /*has_fragment_mask=*/true);
     CurrentLayer()->AddDraw(draw);
   };
 
@@ -889,10 +894,21 @@ bool HWCanvas::NeesOffScreenLayer(const Paint& paint) const {
   return false;
 }
 
-void HWCanvas::SetupBlendPlanForDraw(HWDraw* draw, BlendMode blend_mode) {
+void HWCanvas::SetupBlendPlanForDraw(HWDraw* draw, BlendMode blend_mode,
+                                     bool has_fragment_mask) {
   const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
-  draw->SetBlendPlan(ResolveHWBlendPlan(
-      blend_mode, caps, CurrentLayer()->SupportsTextureCopyDstRead()));
+  draw->SetBlendPlan(
+      ResolveHWBlendPlan(blend_mode, has_fragment_mask, caps,
+                         CurrentLayer()->SupportsTextureCopyDstRead()));
+}
+
+bool HWCanvas::CanUseFragmentMask(BlendMode blend_mode) const {
+  DEBUG_CHECK(!layer_stack_.empty());
+
+  const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
+  return ResolveHWBlendPlan(blend_mode, /*has_fragment_mask=*/true, caps,
+                            layer_stack_.back()->SupportsTextureCopyDstRead())
+      .SupportsFragmentMask();
 }
 
 }  // namespace skity

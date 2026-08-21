@@ -157,25 +157,32 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
 )";
   }
 
-  if (geometry_ && geometry_->AffectsFragment()) {
-    ss << R"(
+  ss << R"(
   var mask_alpha: f32 = 1.0;
 )";
+  if (geometry_ && geometry_->AffectsFragment()) {
     geometry_->WriteFSAlphaMask(ss);
+  }
+
+  if (NeedsTextureCopy()) {
+    // A mask may use a larger raster quad than the destination copy. Avoid
+    // sampling a clamped edge texel for fragments outside the actual shape.
     ss << R"(
-  color = color * mask_alpha;
+  if mask_alpha <= 0.0 {
+    discard;
+  }
+  var dst_uv : vec2<f32> = input.frag_pos.xy * uDstUVMapping.xy + uDstUVMapping.zw;
+  var dst_color: vec4<f32> = textureSample(uDstTexture, uDstSampler, dst_uv);
 )";
   }
 
-  if (NeedsFramebufferFetch()) {
+  if (fragment_->GetProgrammableBlending()) {
     ss << R"(
-  color = blending(color, dst_color);
+  color = mix(dst_color, blending(color, dst_color), mask_alpha);
 )";
-  } else if (NeedsTextureCopy()) {
+  } else {
     ss << R"(
-  var dst_uv : vec2<f32> = input.frag_pos.xy * uDstUVMapping.xy + uDstUVMapping.zw;
-  var dst_color: vec4<f32> = textureSample(uDstTexture, uDstSampler, dst_uv);
-  color = blending(color, dst_color);
+  color = color * mask_alpha;
 )";
   }
 

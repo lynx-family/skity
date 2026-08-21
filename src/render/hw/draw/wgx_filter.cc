@@ -8,6 +8,7 @@
 
 #include "src/effect/color_filter_base.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
+#include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
@@ -80,111 +81,36 @@ class WGXBlendFilter : public WGXFilterFragment {
   }
 
   std::string GenSourceWGSL() const override {
-    std::string wgsl_source = "";
+    std::string wgsl_source;
+    std::string uniform_name = "uBlendSrcColor";
+    std::string blend_function_name = "blend_color_filter";
 
     if (mode_ != BlendMode::kClear && mode_ != BlendMode::kDst) {
-      wgsl_source += "@group(1) @binding(" + std::to_string(binding_) +
-                     ") var<uniform> uBlendSrcColor";
-
       if (!suffix_.empty()) {
-        wgsl_source += "_" + suffix_;
+        uniform_name += "_" + suffix_;
       }
-
-      wgsl_source += " : vec4<f32>;\n";
+      wgsl_source += "@group(1) @binding(" + std::to_string(binding_) +
+                     ") var<uniform> " + uniform_name + " : vec4<f32>;\n";
     }
-
-    wgsl_source += GenFunctionSignature();
-    wgsl_source += "{\n";
 
     if (!suffix_.empty()) {
-      wgsl_source +=
-          "var uBlendSrcColor : vec4<f32> = uBlendSrcColor_" + suffix_ + ";\n";
+      blend_function_name += "_" + suffix_;
     }
 
-    switch (mode_) {
-      case BlendMode::kClear:
-        wgsl_source += R"(
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
-        )";
-        break;
-      case BlendMode::kSrc:
-        wgsl_source += R"(
-            return uBlendSrcColor;
-        )";
-        break;
-      case BlendMode::kDst:
-        wgsl_source += R"(
-            return input_color;
-        )";
-        break;
-      case BlendMode::kSrcOver:
-        wgsl_source += R"(
-            return uBlendSrcColor + input_color * (1.0 - uBlendSrcColor.a);
-        )";
-        break;
-      case BlendMode::kDstOver:
-        wgsl_source += R"(
-            return input_color + uBlendSrcColor * (1.0 - input_color.a);
-        )";
-        break;
-      case BlendMode::kSrcIn:
-        wgsl_source += R"(
-            return uBlendSrcColor * input_color.a;
-        )";
-        break;
-      case BlendMode::kDstIn:
-        wgsl_source += R"(
-            return input_color * uBlendSrcColor.a;
-        )";
-        break;
-      case BlendMode::kSrcOut:
-        wgsl_source += R"(
-            return uBlendSrcColor * (1.0 - input_color.a);
-        )";
-        break;
-      case BlendMode::kDstOut:
-        wgsl_source += R"(
-            return input_color * (1.0 - uBlendSrcColor.a);
-        )";
-        break;
-      case BlendMode::kSrcATop:
-        wgsl_source += R"(
-            return uBlendSrcColor * input_color.a + input_color * (1.0 - uBlendSrcColor.a);
-        )";
-        break;
-      case BlendMode::kDstATop:
-        wgsl_source += R"(
-            return uBlendSrcColor.a * input_color + uBlendSrcColor * (1.0 - input_color.a);
-        )";
-        break;
-      case BlendMode::kXor:
-        wgsl_source += R"(
-            return uBlendSrcColor * (1.0 - input_color.a) + input_color * (1.0 - uBlendSrcColor.a);
-        )";
-        break;
-      case BlendMode::kPlus:
-        wgsl_source += R"(
-            return min(uBlendSrcColor + input_color, vec4<f32>(1.0));
-        )";
-        break;
-      case BlendMode::kModulate:
-        wgsl_source += R"(
-            return uBlendSrcColor * input_color;
-        )";
-        break;
-      case BlendMode::kScreen:
-        wgsl_source += R"(
-            return uBlendSrcColor + input_color - uBlendSrcColor * input_color;
-        )";
-        break;
-      default:
-        wgsl_source += R"(
-            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
-        )";
-        break;
+    if (GetType() == HWColorFilterKeyType::kUnknown) {
+      return wgsl_source + GenFunctionSignature() + R"({
+  return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+}
+)";
     }
-    wgsl_source += "}\n";
 
+    wgsl_source += GenBlendFunctionWGSL(mode_, blend_function_name);
+    wgsl_source +=
+        GenFunctionSignature() + "{\n  return " + blend_function_name + "(";
+    wgsl_source += mode_ == BlendMode::kClear || mode_ == BlendMode::kDst
+                       ? "vec4<f32>(0.0)"
+                       : uniform_name;
+    wgsl_source += ", input_color);\n}\n";
     return wgsl_source;
   }
 
