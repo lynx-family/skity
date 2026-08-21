@@ -151,7 +151,7 @@ void WGSLTextureFragment::WriteFSMain(std::stringstream& ss) const {
 
       if (image_color_info.infos.y == 3 && (frag_coord.x < 0.0 || frag_coord.x >= 1.0)) || (image_color_info.infos.z == 3 && (frag_coord.y < 0.0 || frag_coord.y >= 1.0))
       {
-        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
       }
 
       if image_color_info.infos.x == 3 {
@@ -171,7 +171,7 @@ void WGSLTextureFragment::WriteFSMain(std::stringstream& ss) const {
 
     if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) || (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0))
     {
-      return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+      color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 
     uv.x = remap_float_tile(uv.x, image_color_info.infos.y);

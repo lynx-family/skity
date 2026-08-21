@@ -66,11 +66,6 @@ class HWWGSLShaderWriter {
   void WriteVaryings(std::stringstream& ss) const;
   bool HasVarings() const;
 
-  bool NeedsProgrammableBlending() const {
-    return fragment_ != nullptr &&
-           fragment_->GetProgrammableBlending() != nullptr;
-  }
-
   bool NeedsFramebufferFetch() const {
     return fragment_ != nullptr &&
            fragment_->GetProgrammableBlending() != nullptr &&

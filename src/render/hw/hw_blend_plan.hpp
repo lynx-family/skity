@@ -29,12 +29,16 @@ struct HWBlendPlan {
   }
 
   bool operator!=(const HWBlendPlan& other) const { return !(*this == other); }
+
+  bool SupportsFragmentMask() const;
 };
 
-// Records the blend mode and resolves the same destination-read route used by
-// the existing rendering pipeline. This function only centralizes that
-// decision; it does not add coverage-aware blending behavior.
-HWBlendPlan ResolveHWBlendPlan(BlendMode blend_mode, const GPUCaps& caps,
+// Fragment masks use shader-side blending when the existing fixed-function
+// formula cannot represent partial coverage. Prefer framebuffer fetch, then a
+// destination texture copy; without either route, preserve the legacy blend
+// behavior.
+HWBlendPlan ResolveHWBlendPlan(BlendMode blend_mode, bool has_fragment_mask,
+                               const GPUCaps& caps,
                                bool supports_texture_copy_dst_read);
 
 // Resolves the fixed-function state for the shader variant that will actually

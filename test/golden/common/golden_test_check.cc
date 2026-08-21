@@ -263,6 +263,7 @@ struct AutoRestoreConfig {
     gpu_context->SetEnableSimpleShapePipeline(
         config.enable_simple_shape_pipeline);
     gpu_context->SetEnableCoverageAA(config.enable_coverage_aa);
+    gpu_context->SetEnableContourAA(config.enable_contour_aa);
     gpu_context->SetConflationCorrection(config.enable_conflation_correction);
 
     if (config.supports_framebuffer_fetch.has_value() ||

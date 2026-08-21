@@ -169,13 +169,54 @@ fn blend_hslc(flipSat: vec2<f32>, src: vec4<f32>, dst: vec4<f32>) -> vec4<f32> {
 }
 }  // namespace
 
-std::string WGXProgrammableBlending::GenSourceWGSL() const {
+std::string GenBlendFunctionWGSL(BlendMode blend_mode,
+                                 std::string_view function_name) {
   std::stringstream ss;
-  AppendHelperFunction(blend_mode_, ss);
+  AppendHelperFunction(blend_mode, ss);
 
-  ss << "fn blending(src: vec4<f32>, dst: vec4<f32>) -> vec4<f32> {\n";
+  ss << "fn " << function_name
+     << "(src: vec4<f32>, dst: vec4<f32>) -> vec4<f32> {\n";
   ss << "var result: vec4<f32>;\n";
-  switch (blend_mode_) {
+  switch (blend_mode) {
+    case BlendMode::kClear:
+      ss << "result = vec4<f32>(0.0, 0.0, 0.0, 0.0);\n";
+      break;
+    case BlendMode::kSrc:
+      ss << "result = src;\n";
+      break;
+    case BlendMode::kDst:
+      ss << "result = dst;\n";
+      break;
+    case BlendMode::kSrcOver:
+      ss << "result = src + dst * (1.0 - src.a);\n";
+      break;
+    case BlendMode::kDstOver:
+      ss << "result = dst + src * (1.0 - dst.a);\n";
+      break;
+    case BlendMode::kSrcIn:
+      ss << "result = src * dst.a;\n";
+      break;
+    case BlendMode::kDstIn:
+      ss << "result = dst * src.a;\n";
+      break;
+    case BlendMode::kSrcOut:
+      ss << "result = src * (1.0 - dst.a);\n";
+      break;
+    case BlendMode::kDstOut:
+      ss << "result = dst * (1.0 - src.a);\n";
+      break;
+    case BlendMode::kSrcATop:
+      ss << "result = src * dst.a + dst * (1.0 - src.a);\n";
+      break;
+    case BlendMode::kDstATop:
+      ss << "result = dst * src.a + src * (1.0 - dst.a);\n";
+      break;
+    case BlendMode::kXor:
+      ss << "result = src * (1.0 - dst.a) + dst * (1.0 - src.a);\n";
+      break;
+    case BlendMode::kPlus:
+      ss << "result = min(src + dst, vec4<f32>(1.0));\n";
+      break;
     case BlendMode::kModulate: {
       ss << "result = src * dst;\n";
       break;
@@ -301,6 +342,13 @@ std::string WGXProgrammableBlending::GenSourceWGSL() const {
   }
   ss << "return result;\n";
   ss << "}\n";
+
+  return ss.str();
+}
+
+std::string WGXProgrammableBlending::GenSourceWGSL() const {
+  std::stringstream ss;
+  ss << GenBlendFunctionWGSL(blend_mode_, "blending");
 
   if (dst_read_strategy_ == DstReadStrategy::kTextureCopy) {
     AppendDstReadTextureCopyLayout(ss);

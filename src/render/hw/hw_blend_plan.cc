@@ -46,18 +46,54 @@ HWBlendFormula ResolveLegacyFormula(BlendMode blend_mode) {
   }
 }
 
+bool LegacyFormulaHandlesFragmentMask(BlendMode blend_mode) {
+  // These equations remain coverage-correct after the shader multiplies the
+  // source by the fragment mask, so keep their existing fixed-function path.
+  switch (blend_mode) {
+    case BlendMode::kDst:
+    case BlendMode::kSrcOver:
+    case BlendMode::kDstOver:
+    case BlendMode::kDstOut:
+    case BlendMode::kSrcATop:
+    case BlendMode::kXor:
+      return true;
+    default:
+      return false;
+  }
+}
+
 }  // namespace
 
-HWBlendPlan ResolveHWBlendPlan(BlendMode blend_mode, const GPUCaps& caps,
+bool HWBlendPlan::SupportsFragmentMask() const {
+  return dst_read_strategy == DstReadStrategy::kFramebufferFetch ||
+         dst_read_strategy == DstReadStrategy::kTextureCopy ||
+         LegacyFormulaHandlesFragmentMask(blend_mode);
+}
+
+HWBlendPlan ResolveHWBlendPlan(BlendMode blend_mode, bool has_fragment_mask,
+                               const GPUCaps& caps,
                                bool supports_texture_copy_dst_read) {
-  return {blend_mode, ResolveDstReadStrategy(blend_mode, caps,
-                                             supports_texture_copy_dst_read)};
+  auto strategy =
+      ResolveDstReadStrategy(blend_mode, caps, supports_texture_copy_dst_read);
+  if (has_fragment_mask && !LegacyFormulaHandlesFragmentMask(blend_mode)) {
+    if (caps.supports_framebuffer_fetch) {
+      strategy = DstReadStrategy::kFramebufferFetch;
+    } else if (supports_texture_copy_dst_read) {
+      strategy = DstReadStrategy::kTextureCopy;
+    }
+  }
+
+  return {blend_mode, strategy};
 }
 
 HWBlendFormula ResolveHWBlendFormula(const HWBlendPlan& blend_plan,
                                      const GPUCaps& caps,
                                      bool shader_side_blending) {
-  if (!shader_side_blending && caps.supports_native_advanced_blend &&
+  if (shader_side_blending) {
+    return {GPUBlendFactor::kOne, GPUBlendFactor::kZero};
+  }
+
+  if (caps.supports_native_advanced_blend &&
       IsAdvancedBlendMode(blend_plan.blend_mode)) {
     if (auto operation = ToNativeBlendOp(blend_plan.blend_mode)) {
       return {GPUBlendFactor::kOne, GPUBlendFactor::kOneMinusSrcAlpha,
