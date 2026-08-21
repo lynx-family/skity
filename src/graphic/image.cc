@@ -16,6 +16,7 @@
 #include "src/gpu/texture_manager.hpp"
 #include "src/graphic/bitmap_sampler.hpp"
 #include "src/graphic/color_priv.hpp"
+#include "src/logging.hpp"
 
 namespace skity {
 namespace {
@@ -222,6 +223,13 @@ std::shared_ptr<Texture> PromiseTextureImage::GetTextureByContext(
     }
 
     auto gpu_texture = texture_->GetGPUTexture();
+    if (!gpu_texture) {
+      // The promised texture has no GPU texture (e.g. creation failed).
+      // Drop the cache so the promise can be resolved again later.
+      LOGE("PromiseTextureImage: promise texture is not ready");
+      texture_.reset();
+      return nullptr;
+    }
 
     gpu_texture->SetRelease(release_callback_, promise_texture_context_);
   }
@@ -240,6 +248,13 @@ const std::shared_ptr<Texture>* PromiseTextureImage::GetTexture() const {
       return nullptr;
     }
     auto gpu_texture = texture_->GetGPUTexture();
+    if (!gpu_texture) {
+      // The promised texture has no GPU texture (e.g. creation failed).
+      // Drop the cache so the promise can be resolved again later.
+      LOGE("PromiseTextureImage: promise texture is not ready");
+      texture_.reset();
+      return nullptr;
+    }
     gpu_texture->SetRelease(release_callback_, promise_texture_context_);
   }
   return &texture_;

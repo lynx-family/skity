@@ -65,7 +65,9 @@ class TextureImplDelegate {
  public:
   virtual ~TextureImplDelegate() = default;
 
-  virtual void UploadTextureImage(const TextureImpl& texture,
+  // Returns whether the GPU texture was created (and the image uploaded)
+  // successfully. A false return means the upload can be retried later.
+  virtual bool UploadTextureImage(const TextureImpl& texture,
                                   std::shared_ptr<Pixmap> pixmap) = 0;
   virtual std::shared_ptr<GPUTexture> GetGPUTexture(TextureImpl* texture) = 0;
   virtual void DropTexture(const UniqueID& handler) = 0;

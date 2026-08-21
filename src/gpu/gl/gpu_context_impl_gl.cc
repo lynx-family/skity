@@ -126,7 +126,16 @@ std::unique_ptr<GPUSurface> GPUContextImplGL::CreateSurface(
 
 std::unique_ptr<GPURenderTarget> GPUContextImplGL::OnCreateRenderTarget(
     const GPURenderTargetDescriptor& desc, std::shared_ptr<Texture> texture) {
-  auto gl_texture = static_cast<GPUTextureGL*>(texture->GetGPUTexture().get());
+  if (texture == nullptr) {
+    return nullptr;
+  }
+
+  auto gpu_texture = texture->GetGPUTexture();
+  if (gpu_texture == nullptr) {
+    return nullptr;
+  }
+
+  auto gl_texture = static_cast<GPUTextureGL*>(gpu_texture.get());
 
   GPUSurfaceDescriptorGL surface_desc{};
   surface_desc.backend = GetBackendType();
