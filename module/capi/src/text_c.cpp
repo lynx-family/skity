@@ -12,6 +12,8 @@
 #include <skity/text/font_style.hpp>
 #include <skity/text/text_blob.hpp>
 #include <skity/text/typeface.hpp>
+#include <utility>
+#include <vector>
 
 #include "handle.hpp"
 
@@ -45,6 +47,49 @@ skity::Font* font_of(skity_font handle) {
   auto* w = skity::capi::resolve<skity_font_s>(handle, SKITY_OBJECT_TYPE_FONT);
   return w ? static_cast<skity::Font*>(w->impl.get()) : nullptr;
 }
+
+skity::TypefaceDelegate* typeface_delegate_of(skity_typeface_delegate handle) {
+  auto* w = skity::capi::resolve<skity_typeface_delegate_s>(
+      handle, SKITY_OBJECT_TYPE_TYPEFACE_DELEGATE);
+  return w ? static_cast<skity::TypefaceDelegate*>(w->impl.get()) : nullptr;
+}
+
+/*
+ * TypefaceDelegate adapter over a C fallback callback. BreakTextRun keeps the
+ * built-in empty policy (single run, per-code-point fallback), matching
+ * CreateSimpleFallbackDelegate.
+ */
+class CallbackDelegate : public skity::TypefaceDelegate {
+ public:
+  CallbackDelegate(skity_typeface_fallback_fn fallback, void* userdata,
+                   void (*release)(void*))
+      : fallback_(fallback), userdata_(userdata), release_(release) {}
+
+  ~CallbackDelegate() override {
+    if (release_ != nullptr) {
+      release_(userdata_);
+    }
+  }
+
+  std::shared_ptr<skity::Typeface> Fallback(
+      uint32_t code_point, skity::Paint const&) override {
+    if (fallback_ == nullptr) {
+      return nullptr;
+    }
+    // The handle stays owned by the C side; only a shared reference is taken.
+    return skity::capi::get_impl<skity_typeface_s, skity::Typeface>(
+        fallback_(userdata_, code_point), SKITY_OBJECT_TYPE_TYPEFACE);
+  }
+
+  std::vector<std::vector<uint32_t>> BreakTextRun(const char*) override {
+    return {};
+  }
+
+ private:
+  skity_typeface_fallback_fn fallback_;
+  void* userdata_;
+  void (*release_)(void*);
+};
 
 skity::FontStyle to_font_style(skity_font_style s) {
   return skity::FontStyle(s.weight, s.width,
@@ -111,6 +156,66 @@ uint16_t skity_typeface_unichar_to_glyph(skity_typeface typeface,
                                          uint32_t unichar) {
   auto* tf = typeface_of(typeface);
   return tf ? tf->UnicharToGlyph(unichar) : 0;
+}
+
+skity_typeface_delegate skity_typeface_delegate_create_simple(
+    const skity_typeface* typefaces, uint32_t count) {
+  if (typefaces == nullptr || count == 0) {
+    return nullptr;
+  }
+  std::vector<std::shared_ptr<skity::Typeface>> faces;
+  faces.reserve(count);
+  for (uint32_t i = 0; i < count; i++) {
+    auto tf = skity::capi::get_impl<skity_typeface_s, skity::Typeface>(
+        typefaces[i], SKITY_OBJECT_TYPE_TYPEFACE);
+    if (tf == nullptr) {
+      return nullptr;
+    }
+    faces.push_back(std::move(tf));
+  }
+  auto delegate = skity::TypefaceDelegate::CreateSimpleFallbackDelegate(faces);
+  if (delegate == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_typeface_delegate_s>(
+      SKITY_OBJECT_TYPE_TYPEFACE_DELEGATE, SKITY_HANDLE_OWNING,
+      std::move(delegate));
+}
+
+skity_typeface_delegate skity_typeface_delegate_create_fallback(
+    skity_typeface_fallback_fn fallback, void* userdata,
+    void (*release)(void* userdata)) {
+  if (fallback == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_typeface_delegate_s>(
+      SKITY_OBJECT_TYPE_TYPEFACE_DELEGATE, SKITY_HANDLE_OWNING,
+      std::make_shared<CallbackDelegate>(fallback, userdata, release));
+}
+
+void skity_typeface_delegate_destroy(skity_typeface_delegate delegate) {
+  skity::capi::destroy_handle<skity_typeface_delegate_s>(
+      delegate, SKITY_OBJECT_TYPE_TYPEFACE_DELEGATE);
+}
+
+skity_text_blob skity_text_blob_create_with_delegate(
+    const char* text, skity_paint paint, skity_typeface_delegate delegate) {
+  if (text == nullptr) {
+    return nullptr;
+  }
+  auto* pw =
+      skity::capi::resolve<skity_paint_s>(paint, SKITY_OBJECT_TYPE_PAINT);
+  if (pw == nullptr) {
+    return nullptr;
+  }
+  auto* p = static_cast<skity::Paint*>(pw->impl.get());
+  skity::TextBlobBuilder builder;
+  auto blob = builder.BuildTextBlob(text, *p, typeface_delegate_of(delegate));
+  if (blob == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_text_blob_s>(
+      SKITY_OBJECT_TYPE_TEXT_BLOB, SKITY_HANDLE_OWNING, std::move(blob));
 }
 
 skity_text_blob skity_text_blob_create(const char* text, skity_paint paint) {

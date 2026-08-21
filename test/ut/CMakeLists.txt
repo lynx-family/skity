@@ -121,6 +121,20 @@ if (${SKITY_CODEC_MODULE})
     target_link_libraries(skity_unit_test PUBLIC skity::codec)
 endif()
 
+# C API wrapper tests (CPU-only; replay targets are recording canvases).
+if (${SKITY_CAPI_MODULE})
+    target_sources(skity_unit_test PRIVATE
+        capi/recorder_c_test.cc
+        capi/text_delegate_c_test.cc
+    )
+
+    target_include_directories(skity_unit_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/module/capi/include
+    )
+
+    target_link_libraries(skity_unit_test PUBLIC skity::capi)
+endif()
+
 # no-rtti
 if (MSVC)
     target_compile_options(skity_unit_test PUBLIC /EHsc /GR-)
