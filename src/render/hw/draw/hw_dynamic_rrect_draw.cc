@@ -13,7 +13,7 @@ namespace skity {
 
 HWDynamicRRectDraw::HWDynamicRRectDraw(Matrix transform, RRect rrect,
                                        Paint paint)
-    : HWDynamicDraw(transform, paint.GetBlendMode()) {
+    : HWDynamicDraw(transform) {
   batch_group_.emplace_back(BatchGroup<RRect>{
       std::move(rrect),
       std::move(paint),

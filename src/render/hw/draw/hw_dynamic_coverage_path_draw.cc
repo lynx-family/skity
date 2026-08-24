@@ -17,7 +17,7 @@ namespace skity {
 HWDynamicCoveragePathDraw::HWDynamicCoveragePathDraw(
     Matrix local_to_physical, Matrix physical_to_layer, Path path, Paint paint,
     bool enable_conflation_correction)
-    : HWDynamicDraw(local_to_physical, paint.GetBlendMode()),
+    : HWDynamicDraw(local_to_physical),
       physical_to_layer_(physical_to_layer),
       enable_conflation_correction_(enable_conflation_correction) {
   path_groups_.emplace_back(BatchGroup<Path>{

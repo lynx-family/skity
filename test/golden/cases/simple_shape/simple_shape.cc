@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <filesystem>
 #include <skity/io/parse_path.hpp>
 #include <skity/recorder/picture_recorder.hpp>
@@ -418,6 +419,91 @@ TEST(SimpleShapeGolden, DrawStrokeRRectBlending) {
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), 400, 400, context.expected_image_coverage_aa_path.c_str(),
       config));
+}
+
+TEST(SimpleShapeGolden, CoverageAwareBlendModes) {
+  constexpr size_t kColumns = 5;
+  constexpr std::array<skity::BlendMode, 16> kBlendModes = {
+      skity::BlendMode::kClear,   skity::BlendMode::kSrc,
+      skity::BlendMode::kDst,     skity::BlendMode::kSrcOver,
+      skity::BlendMode::kDstOver, skity::BlendMode::kSrcIn,
+      skity::BlendMode::kDstIn,   skity::BlendMode::kSrcOut,
+      skity::BlendMode::kDstOut,  skity::BlendMode::kSrcATop,
+      skity::BlendMode::kDstATop, skity::BlendMode::kXor,
+      skity::BlendMode::kPlus,    skity::BlendMode::kModulate,
+      skity::BlendMode::kScreen,  skity::BlendMode::kOverlay,
+  };
+  constexpr size_t kRows = (kBlendModes.size() + kColumns - 1) / kColumns;
+  constexpr uint32_t kWidth = kColumns * 100;
+  constexpr uint32_t kHeight = kRows * 2 * 100;
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(kWidth, kHeight));
+  auto* canvas = recorder.GetRecordingCanvas();
+
+  for (size_t opacity = 0; opacity < 2; ++opacity) {
+    for (size_t index = 0; index < kBlendModes.size(); ++index) {
+      float x = static_cast<float>(index % kColumns) * 100.f;
+      float y = static_cast<float>(opacity * kRows + index / kColumns) * 100.f;
+
+      skity::Paint destination;
+      destination.SetAntiAlias(true);
+      destination.SetColor(skity::ColorSetARGB(170, 220, 75, 55));
+      canvas->DrawCircle(x + 43.f, y + 50.f, 34.f, destination);
+
+      skity::Paint source;
+      source.SetAntiAlias(true);
+      source.SetBlendMode(kBlendModes[index]);
+      source.SetColor(
+          skity::ColorSetARGB(opacity == 0 ? 255 : 155, 35, 145, 235));
+      if (index % 2 != 0) {
+        source.SetStyle(skity::Paint::kStroke_Style);
+        source.SetStrokeWidth(6.f);
+      }
+      canvas->Save();
+      canvas->Rotate(index % 2 == 0 ? 6.f : -6.f, x + 60.f, y + 50.f);
+      canvas->DrawRRect(
+          skity::RRect::MakeRectXY(
+              skity::Rect::MakeLTRB(x + 28.f, y + 17.f, x + 91.f, y + 83.f),
+              13.f, 10.f),
+          source);
+      canvas->Restore();
+    }
+  }
+
+  auto display_list = recorder.FinishRecording();
+  PathListContext context("coverage_aware_blend_modes.png");
+  auto contour_path = std::filesystem::path(CASE_DIR "contour_aa_images/") /
+                      "coverage_aware_blend_modes.png";
+
+  auto validate = [&](bool coverage_aa, bool contour_aa, bool simple_shape,
+                      bool dual_source, const char* path) {
+    skity::testing::GoldenTestEnvConfig config;
+    config.enable_coverage_aa = coverage_aa;
+    config.enable_contour_aa = contour_aa;
+    config.enable_simple_shape_pipeline = simple_shape;
+    config.supports_framebuffer_fetch = false;
+    config.supports_native_advanced_blend = false;
+    config.supports_native_advanced_blend_coherent = false;
+    config.supports_dual_source_blending = dual_source;
+    config.sample_count = 1;
+    EXPECT_TRUE(skity::testing::CompareGoldenTexture(display_list.get(), kWidth,
+                                                     kHeight, path, config));
+  };
+
+  validate(true, false, false, false,
+           context.expected_image_coverage_aa_path.c_str());
+  validate(false, true, false, false, contour_path.c_str());
+  validate(false, false, true, false,
+           context.expected_image_simple_path.c_str());
+
+  if (skity::testing::SupportsDualSourceBlending()) {
+    validate(true, false, false, true,
+             context.expected_image_coverage_aa_path.c_str());
+    validate(false, true, false, true, contour_path.c_str());
+    validate(false, false, true, true,
+             context.expected_image_simple_path.c_str());
+  }
 }
 
 TEST(SimpleShapeGolden, PlusWithPartialCoverage) {

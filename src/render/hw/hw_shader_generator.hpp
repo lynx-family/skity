@@ -20,7 +20,7 @@ class HWShaderGenerator {
   virtual const char* GetVertexEntryPoint() const = 0;
 
   virtual std::string GetFragmentName() const = 0;
-  virtual std::string GenFragmentWGSL() const = 0;
+  virtual std::string GenFragmentWGSL(const HWFunctionKey& key) const = 0;
   virtual const char* GetFragmentEntryPoint() const = 0;
 };
 

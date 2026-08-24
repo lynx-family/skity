@@ -16,7 +16,7 @@ namespace skity {
 HWDynamicPathClip::HWDynamicPathClip(Matrix transform, Path path,
                                      Canvas::ClipOp op, const Rect &bounds,
                                      bool use_gpu_tessellation)
-    : HWDynamicDraw(transform, BlendMode::kSrcOver),
+    : HWDynamicDraw(transform),
       path_(std::move(path)),
       op_(op),
       bounds_(),

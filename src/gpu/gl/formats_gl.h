@@ -147,6 +147,8 @@ constexpr GLenum ToGLBlendEquation(GPUBlendOperation op) {
   switch (op) {
     case GPUBlendOperation::kAdd:
       return GL_FUNC_ADD;
+    case GPUBlendOperation::kReverseSubtract:
+      return GL_FUNC_REVERSE_SUBTRACT;
     case GPUBlendOperation::kMultiply:
       return GL_MULTIPLY_KHR;
     case GPUBlendOperation::kScreen:

@@ -125,10 +125,10 @@ class HWCanvas : public Canvas {
         CurrentLayer()->CalculateLayerSpaceBounds(bounds, transform));
   }
 
-  void SetupBlendPlanForDraw(HWDraw* draw, BlendMode blend_mode,
+  void SetupBlendPlanForDraw(HWDraw* draw, const Paint& paint,
                              bool has_fragment_mask = false);
 
-  bool CanUseFragmentMask(BlendMode blend_mode) const;
+  bool CanUseFragmentMask(const Paint& paint) const;
 
   bool NeesOffScreenLayer(const Paint& paint) const;
 

@@ -252,6 +252,7 @@ struct AutoRestoreConfig {
         gpu_context->IsConflationCorrectionEnabled();
     restore_enable_contour_aa = gpu_context->IsEnableContourAA();
     restore_config.supports_framebuffer_fetch = std::nullopt;
+    restore_config.supports_dual_source_blending = std::nullopt;
     restore_config.gl_surface_mode = env->GetGLSurfaceMode();
     restore_config.gl_has_stencil_attachment = env->GetGLHasStencilAttachment();
     restore_config.sample_count = env->GetSampleCount();
@@ -268,7 +269,8 @@ struct AutoRestoreConfig {
 
     if (config.supports_framebuffer_fetch.has_value() ||
         config.supports_native_advanced_blend.has_value() ||
-        config.supports_native_advanced_blend_coherent.has_value()) {
+        config.supports_native_advanced_blend_coherent.has_value() ||
+        config.supports_dual_source_blending.has_value()) {
       auto* gpu_context_impl = static_cast<GPUContextImpl*>(gpu_context);
       auto* gpu_device = gpu_context_impl->GetGPUDevice();
       auto& caps = const_cast<GPUCaps&>(gpu_device->GetCaps());
@@ -291,6 +293,12 @@ struct AutoRestoreConfig {
         caps.supports_native_advanced_blend_coherent =
             config.supports_native_advanced_blend_coherent.value();
       }
+      if (config.supports_dual_source_blending.has_value()) {
+        restore_config.supports_dual_source_blending =
+            caps.supports_dual_source_blending;
+        caps.supports_dual_source_blending =
+            config.supports_dual_source_blending.value();
+      }
     }
   }
 
@@ -309,7 +317,8 @@ struct AutoRestoreConfig {
 
     if (restore_config.supports_framebuffer_fetch.has_value() ||
         restore_config.supports_native_advanced_blend.has_value() ||
-        restore_config.supports_native_advanced_blend_coherent.has_value()) {
+        restore_config.supports_native_advanced_blend_coherent.has_value() ||
+        restore_config.supports_dual_source_blending.has_value()) {
       auto* gpu_context_impl = static_cast<GPUContextImpl*>(gpu_context);
       auto* gpu_device = gpu_context_impl->GetGPUDevice();
       auto& caps = const_cast<GPUCaps&>(gpu_device->GetCaps());
@@ -325,6 +334,10 @@ struct AutoRestoreConfig {
       if (restore_config.supports_native_advanced_blend_coherent.has_value()) {
         caps.supports_native_advanced_blend_coherent =
             restore_config.supports_native_advanced_blend_coherent.value();
+      }
+      if (restore_config.supports_dual_source_blending.has_value()) {
+        caps.supports_dual_source_blending =
+            restore_config.supports_dual_source_blending.value();
       }
     }
   }
@@ -362,6 +375,17 @@ bool IsNativeAdvancedBlendUnsupported() {
   auto* gpu_device = gpu_context_impl->GetGPUDevice();
   return gpu_device == nullptr ||
          !gpu_device->GetCaps().supports_native_advanced_blend;
+}
+
+bool SupportsDualSourceBlending() {
+  auto* env = GoldenTestEnv::GetInstance();
+  if (env == nullptr || env->GetGPUContext() == nullptr) {
+    return false;
+  }
+  auto* gpu_context = static_cast<GPUContextImpl*>(env->GetGPUContext());
+  auto* gpu_device = gpu_context->GetGPUDevice();
+  return gpu_device != nullptr &&
+         gpu_device->GetCaps().supports_dual_source_blending;
 }
 
 std::shared_ptr<Pixmap> ReadImage(const char* path) {

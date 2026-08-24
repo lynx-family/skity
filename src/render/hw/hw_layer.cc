@@ -20,6 +20,7 @@
 #include "src/gpu/texture_impl.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_draw_pass.hpp"
 #include "src/render/hw/hw_texture_copy_utils.hpp"
@@ -419,6 +420,10 @@ EmulatedLoadInfo HWLayer::CreateEmulatedLoadInfo() {
   paint.SetBlendMode(BlendMode::kSrc);
   auto draw = arena_allocator_->Make<HWDynamicPathDraw>(
       GetTransform(), std::move(path), std::move(paint), false, false);
+
+  // Emulated load copies the resolved texture back into the MSAA attachment
+  // with device-independent Src blending.
+  draw->SetBlendPlan(ResolveCoefficientBlendPlan(BlendMode::kSrc));
 
   draw->SetSampleCount(GetSampleCount());
   draw->SetColorFormat(GetColorFormat());

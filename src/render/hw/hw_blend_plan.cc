@@ -4,104 +4,283 @@
 
 #include "src/render/hw/hw_blend_plan.hpp"
 
-#include "src/graphic/blend_mode_priv.hpp"
+#include "src/logging.hpp"
 #include "src/render/hw/native_blend.hpp"
 
 namespace skity {
 namespace {
 
-HWBlendFormula ResolveLegacyFormula(BlendMode blend_mode) {
+HWBlendPlan MakePlan(BlendMode blend_mode, HWBlendOutput primary_output,
+                     HWBlendOutput secondary_output, GPUBlendFactor src_factor,
+                     GPUBlendFactor dst_factor, GPUBlendOperation operation,
+                     DstReadStrategy dst_read_strategy) {
+  return {blend_mode,
+          {primary_output, secondary_output, src_factor, dst_factor, operation},
+          dst_read_strategy};
+}
+
+std::optional<HWBlendPlan> MakeProgrammablePlan(
+    BlendMode blend_mode, const GPUCaps& caps,
+    bool supports_texture_copy_dst_read) {
+  if (caps.supports_framebuffer_fetch) {
+    return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                    GPUBlendFactor::kOne, GPUBlendFactor::kZero,
+                    GPUBlendOperation::kAdd,
+                    DstReadStrategy::kFramebufferFetch);
+  }
+  if (supports_texture_copy_dst_read) {
+    return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                    GPUBlendFactor::kOne, GPUBlendFactor::kZero,
+                    GPUBlendOperation::kAdd, DstReadStrategy::kTextureCopy);
+  }
+  return std::nullopt;
+}
+
+HWBlendPlan MakeDualSourcePlan(BlendMode blend_mode, GPUBlendFactor src_factor,
+                               HWBlendOutput secondary_output) {
+  return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                  secondary_output, src_factor,
+                  GPUBlendFactor::kOneMinusSrc1Alpha, GPUBlendOperation::kAdd,
+                  DstReadStrategy::kNonRequired);
+}
+
+std::optional<HWBlendPlan> ResolveOpaqueCoveragePlan(BlendMode blend_mode) {
   switch (blend_mode) {
-    case BlendMode::kClear:
-      return {GPUBlendFactor::kZero, GPUBlendFactor::kZero};
     case BlendMode::kSrc:
-      return {GPUBlendFactor::kOne, GPUBlendFactor::kZero};
-    case BlendMode::kDst:
-      return {GPUBlendFactor::kZero, GPUBlendFactor::kOne};
-    case BlendMode::kSrcOver:
-      return {GPUBlendFactor::kOne, GPUBlendFactor::kOneMinusSrcAlpha};
-    case BlendMode::kDstOver:
-      return {GPUBlendFactor::kOneMinusDstAlpha, GPUBlendFactor::kOne};
+      return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kOne,
+                      GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
     case BlendMode::kSrcIn:
-      return {GPUBlendFactor::kDstAlpha, GPUBlendFactor::kZero};
-    case BlendMode::kDstIn:
-      return {GPUBlendFactor::kZero, GPUBlendFactor::kSrcAlpha};
+      return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kDstAlpha,
+                      GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
     case BlendMode::kSrcOut:
-      return {GPUBlendFactor::kOneMinusDstAlpha, GPUBlendFactor::kZero};
-    case BlendMode::kDstOut:
-      return {GPUBlendFactor::kZero, GPUBlendFactor::kOneMinusSrcAlpha};
-    case BlendMode::kSrcATop:
-      return {GPUBlendFactor::kDstAlpha, GPUBlendFactor::kOneMinusSrcAlpha};
+      return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kOneMinusDstAlpha,
+                      GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
     case BlendMode::kDstATop:
-      return {GPUBlendFactor::kOneMinusDstAlpha, GPUBlendFactor::kSrcAlpha};
-    case BlendMode::kXor:
-      return {GPUBlendFactor::kOneMinusDstAlpha,
-              GPUBlendFactor::kOneMinusSrcAlpha};
-    case BlendMode::kPlus:
-      return {GPUBlendFactor::kOne, GPUBlendFactor::kOne};
+      return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kOneMinusDstAlpha,
+                      GPUBlendFactor::kOne, GPUBlendOperation::kAdd,
+                      DstReadStrategy::kNonRequired);
+    case BlendMode::kDstIn:
+      return MakePlan(blend_mode, HWBlendOutput::kNone, HWBlendOutput::kNone,
+                      GPUBlendFactor::kZero, GPUBlendFactor::kOne,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kDstOut:
+      return MakePlan(blend_mode, HWBlendOutput::kCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kDst,
+                      GPUBlendFactor::kOne, GPUBlendOperation::kReverseSubtract,
+                      DstReadStrategy::kNonRequired);
     default:
-      // Preserve the previous fallback for Modulate, Screen, and advanced
-      // modes. Correct coverage-aware routes are added in later commits.
-      return {GPUBlendFactor::kOne, GPUBlendFactor::kZero};
+      return std::nullopt;
   }
 }
 
-bool LegacyFormulaHandlesFragmentMask(BlendMode blend_mode) {
-  // These equations remain coverage-correct after the shader multiplies the
-  // source by the fragment mask, so keep their existing fixed-function path.
-  switch (blend_mode) {
-    case BlendMode::kDst:
-    case BlendMode::kSrcOver:
-    case BlendMode::kDstOver:
-    case BlendMode::kDstOut:
-    case BlendMode::kSrcATop:
-    case BlendMode::kXor:
-      return true;
-    default:
-      return false;
+std::optional<HWBlendPlan> ResolveCoveragePlan(
+    BlendMode blend_mode, bool source_is_opaque, const GPUCaps& caps,
+    bool supports_texture_copy_dst_read) {
+  if (source_is_opaque) {
+    if (auto plan = ResolveOpaqueCoveragePlan(blend_mode)) {
+      return plan;
+    }
   }
+
+  switch (blend_mode) {
+    case BlendMode::kClear:
+      return MakePlan(blend_mode, HWBlendOutput::kCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kDst,
+                      GPUBlendFactor::kOne, GPUBlendOperation::kReverseSubtract,
+                      DstReadStrategy::kNonRequired);
+    case BlendMode::kSrc:
+      if (caps.supports_dual_source_blending) {
+        return MakeDualSourcePlan(blend_mode, GPUBlendFactor::kOne,
+                                  HWBlendOutput::kCoverage);
+      }
+      break;
+    case BlendMode::kDst:
+      return MakePlan(blend_mode, HWBlendOutput::kNone, HWBlendOutput::kNone,
+                      GPUBlendFactor::kZero, GPUBlendFactor::kOne,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kSrcOver:
+      return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kOne,
+                      GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kDstOver:
+      return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kOneMinusDstAlpha,
+                      GPUBlendFactor::kOne, GPUBlendOperation::kAdd,
+                      DstReadStrategy::kNonRequired);
+    case BlendMode::kSrcIn:
+      if (caps.supports_dual_source_blending) {
+        return MakeDualSourcePlan(blend_mode, GPUBlendFactor::kDstAlpha,
+                                  HWBlendOutput::kCoverage);
+      }
+      break;
+    case BlendMode::kDstIn:
+      return MakePlan(
+          blend_mode, HWBlendOutput::kOneMinusSourceAlphaTimesCoverage,
+          HWBlendOutput::kNone, GPUBlendFactor::kDst, GPUBlendFactor::kOne,
+          GPUBlendOperation::kReverseSubtract, DstReadStrategy::kNonRequired);
+    case BlendMode::kSrcOut:
+      if (caps.supports_dual_source_blending) {
+        return MakeDualSourcePlan(blend_mode, GPUBlendFactor::kOneMinusDstAlpha,
+                                  HWBlendOutput::kCoverage);
+      }
+      break;
+    case BlendMode::kDstOut:
+      return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kZero,
+                      GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kSrcATop:
+      return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kDstAlpha,
+                      GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kDstATop:
+      if (caps.supports_dual_source_blending) {
+        return MakeDualSourcePlan(
+            blend_mode, GPUBlendFactor::kOneMinusDstAlpha,
+            HWBlendOutput::kOneMinusSourceAlphaTimesCoverage);
+      }
+      break;
+    case BlendMode::kXor:
+      return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kOneMinusDstAlpha,
+                      GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kModulate:
+      return MakePlan(blend_mode, HWBlendOutput::kOneMinusSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kDst,
+                      GPUBlendFactor::kOne, GPUBlendOperation::kReverseSubtract,
+                      DstReadStrategy::kNonRequired);
+    case BlendMode::kScreen:
+      return MakePlan(blend_mode, HWBlendOutput::kSourceTimesCoverage,
+                      HWBlendOutput::kNone, GPUBlendFactor::kOne,
+                      GPUBlendFactor::kOneMinusSrc, GPUBlendOperation::kAdd,
+                      DstReadStrategy::kNonRequired);
+    case BlendMode::kPlus:
+    default:
+      break;
+  }
+
+  return MakeProgrammablePlan(blend_mode, caps, supports_texture_copy_dst_read);
+}
+
+HWBlendPlan ResolveRegularPlan(BlendMode blend_mode, const GPUCaps& caps,
+                               bool supports_texture_copy_dst_read) {
+  switch (blend_mode) {
+    case BlendMode::kClear:
+      return MakePlan(blend_mode, HWBlendOutput::kNone, HWBlendOutput::kNone,
+                      GPUBlendFactor::kZero, GPUBlendFactor::kZero,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kSrc:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kOne, GPUBlendFactor::kZero,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kDst:
+      return MakePlan(blend_mode, HWBlendOutput::kNone, HWBlendOutput::kNone,
+                      GPUBlendFactor::kZero, GPUBlendFactor::kOne,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kSrcOver:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kOne, GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kDstOver:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kOneMinusDstAlpha, GPUBlendFactor::kOne,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kSrcIn:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kDstAlpha, GPUBlendFactor::kZero,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kDstIn:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kZero, GPUBlendFactor::kSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kSrcOut:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kOneMinusDstAlpha, GPUBlendFactor::kZero,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kDstOut:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kZero, GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kSrcATop:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kDstAlpha,
+                      GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kDstATop:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kOneMinusDstAlpha,
+                      GPUBlendFactor::kSrcAlpha, GPUBlendOperation::kAdd,
+                      DstReadStrategy::kNonRequired);
+    case BlendMode::kXor:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kOneMinusDstAlpha,
+                      GPUBlendFactor::kOneMinusSrcAlpha,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kPlus:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kOne, GPUBlendFactor::kOne,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kModulate:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kZero, GPUBlendFactor::kSrc,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    case BlendMode::kScreen:
+      return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                      GPUBlendFactor::kOne, GPUBlendFactor::kOneMinusSrc,
+                      GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
+    default:
+      break;
+  }
+
+  auto strategy =
+      ResolveDstReadStrategy(blend_mode, caps, supports_texture_copy_dst_read);
+  if (strategy == DstReadStrategy::kNativeBlend) {
+    auto operation = ToNativeBlendOp(blend_mode);
+    DEBUG_CHECK(operation.has_value());
+    return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                    GPUBlendFactor::kOne, GPUBlendFactor::kOneMinusSrcAlpha,
+                    *operation, strategy);
+  }
+  if (strategy == DstReadStrategy::kFramebufferFetch ||
+      strategy == DstReadStrategy::kTextureCopy) {
+    return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                    GPUBlendFactor::kOne, GPUBlendFactor::kZero,
+                    GPUBlendOperation::kAdd, strategy);
+  }
+
+  // Preserve the legacy source-replacement fallback when the backend cannot
+  // read destination color for an advanced blend mode.
+  return MakePlan(blend_mode, HWBlendOutput::kSource, HWBlendOutput::kNone,
+                  GPUBlendFactor::kOne, GPUBlendFactor::kZero,
+                  GPUBlendOperation::kAdd, DstReadStrategy::kNonRequired);
 }
 
 }  // namespace
 
-bool HWBlendPlan::SupportsFragmentMask() const {
-  return dst_read_strategy == DstReadStrategy::kFramebufferFetch ||
-         dst_read_strategy == DstReadStrategy::kTextureCopy ||
-         LegacyFormulaHandlesFragmentMask(blend_mode);
+HWBlendPlan ResolveCoefficientBlendPlan(BlendMode blend_mode) {
+  DEBUG_CHECK(blend_mode <= BlendMode::kLastCoeffMode);
+  return ResolveRegularPlan(blend_mode, GPUCaps{},
+                            /*supports_texture_copy_dst_read=*/false);
 }
 
-HWBlendPlan ResolveHWBlendPlan(BlendMode blend_mode, bool has_fragment_mask,
-                               const GPUCaps& caps,
-                               bool supports_texture_copy_dst_read) {
-  auto strategy =
-      ResolveDstReadStrategy(blend_mode, caps, supports_texture_copy_dst_read);
-  if (has_fragment_mask && !LegacyFormulaHandlesFragmentMask(blend_mode)) {
-    if (caps.supports_framebuffer_fetch) {
-      strategy = DstReadStrategy::kFramebufferFetch;
-    } else if (supports_texture_copy_dst_read) {
-      strategy = DstReadStrategy::kTextureCopy;
-    }
+std::optional<HWBlendPlan> ResolveHWBlendPlan(
+    BlendMode blend_mode, bool has_fragment_mask, bool source_is_opaque,
+    const GPUCaps& caps, bool supports_texture_copy_dst_read) {
+  if (has_fragment_mask) {
+    return ResolveCoveragePlan(blend_mode, source_is_opaque, caps,
+                               supports_texture_copy_dst_read);
   }
-
-  return {blend_mode, strategy};
-}
-
-HWBlendFormula ResolveHWBlendFormula(const HWBlendPlan& blend_plan,
-                                     const GPUCaps& caps,
-                                     bool shader_side_blending) {
-  if (shader_side_blending) {
-    return {GPUBlendFactor::kOne, GPUBlendFactor::kZero};
-  }
-
-  if (caps.supports_native_advanced_blend &&
-      IsAdvancedBlendMode(blend_plan.blend_mode)) {
-    if (auto operation = ToNativeBlendOp(blend_plan.blend_mode)) {
-      return {GPUBlendFactor::kOne, GPUBlendFactor::kOneMinusSrcAlpha,
-              *operation};
-    }
-  }
-
-  return ResolveLegacyFormula(blend_plan.blend_mode);
+  return ResolveRegularPlan(blend_mode, caps, supports_texture_copy_dst_read);
 }
 
 }  // namespace skity

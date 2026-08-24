@@ -34,26 +34,18 @@ static bool UsesFramebufferFetch(uint32_t programmable_blending) {
 }
 
 static void setup_blending_state(GPURenderPipelineDescriptor& gpu_desc,
-                                 const HWPipelineDescriptor& hw_desc,
-                                 const GPUCaps& caps,
-                                 bool shader_side_blending) {
+                                 const HWPipelineDescriptor& hw_desc) {
   gpu_desc.target.format = hw_desc.color_format;
   gpu_desc.target.write_mask = hw_desc.color_mask;
-
-  auto formula =
-      ResolveHWBlendFormula(hw_desc.blend_plan, caps, shader_side_blending);
+  const auto& formula = hw_desc.blend_plan.formula;
   gpu_desc.target.src_blend_factor = formula.src_factor;
   gpu_desc.target.dst_blend_factor = formula.dst_factor;
   gpu_desc.target.blend_op = formula.operation;
 }
 
 HWPipeline::HWPipeline(GPUDevice* device, GPUBackendType backend,
-                       std::unique_ptr<GPURenderPipeline> base_pipeline,
-                       bool shader_side_blending)
-    : gpu_device_(device),
-      backend_(backend),
-      gpu_pipelines_(),
-      shader_side_blending_(shader_side_blending) {
+                       std::unique_ptr<GPURenderPipeline> base_pipeline)
+    : gpu_device_(device), backend_(backend), gpu_pipelines_() {
   gpu_pipelines_.emplace_back(std::move(base_pipeline));
 }
 
@@ -68,8 +60,7 @@ GPURenderPipeline* HWPipeline::GetPipeline(const HWPipelineDescriptor& desc) {
 
   auto gpu_desc = base_pipeline->GetDescriptor();
 
-  setup_blending_state(gpu_desc, desc, gpu_device_->GetCaps(),
-                       shader_side_blending_);
+  setup_blending_state(gpu_desc, desc);
   gpu_desc.depth_stencil = desc.depth_stencil;
   gpu_desc.sample_count = desc.sample_count;
 
@@ -92,8 +83,7 @@ bool HWPipeline::PipelineMatch(GPURenderPipeline* pipeline,
 
   const auto& gpu_desc = pipeline->GetDescriptor();
 
-  auto formula = ResolveHWBlendFormula(desc.blend_plan, gpu_device_->GetCaps(),
-                                       shader_side_blending_);
+  const auto& formula = desc.blend_plan.formula;
 
   return gpu_desc.target.write_mask == desc.color_mask &&
          gpu_desc.target.src_blend_factor == formula.src_factor &&
@@ -193,10 +183,7 @@ std::unique_ptr<HWPipeline> HWPipelineLib::CreatePipeline(
     return std::unique_ptr<HWPipeline>();
   }
 
-  bool shader_side_blending = IsShaderSideBlending(key.programmable_blending);
-
-  setup_blending_state(gpu_pso_desc, desc, gpu_device_->GetCaps(),
-                       shader_side_blending);
+  setup_blending_state(gpu_pso_desc, desc);
   gpu_pso_desc.depth_stencil = desc.depth_stencil;
 
   auto gpu_pipeline = gpu_device_->CreateRenderPipeline(gpu_pso_desc);
@@ -205,8 +192,8 @@ std::unique_ptr<HWPipeline> HWPipelineLib::CreatePipeline(
     return std::unique_ptr<HWPipeline>();
   }
 
-  return std::make_unique<HWPipeline>(
-      gpu_device_, backend_, std::move(gpu_pipeline), shader_side_blending);
+  return std::make_unique<HWPipeline>(gpu_device_, backend_,
+                                      std::move(gpu_pipeline));
 }
 
 void HWPipelineLib::SetupShaderFunction(GPURenderPipelineDescriptor& desc,
@@ -256,7 +243,7 @@ std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
     module_desc.source = shader_generator->GenVertexWGSL();
     DEBUG_CHECK(!module_desc.source.empty());
   } else if (stage == GPUShaderStage::kFragment) {
-    module_desc.source = shader_generator->GenFragmentWGSL();
+    module_desc.source = shader_generator->GenFragmentWGSL(function_key);
     DEBUG_CHECK(!module_desc.source.empty());
   } else {
     return {};
@@ -292,6 +279,9 @@ std::shared_ptr<GPUShaderFunction> HWPipelineLib::GetShaderFunction(
     }
     if (UsesFramebufferFetch(pipeline_key.programmable_blending)) {
       desc.features.framebuffer_fetch = true;
+    }
+    if (pipeline_key.secondary_blend_output != HWBlendOutput::kNone) {
+      desc.features.dual_source_blending = true;
     }
   }
 

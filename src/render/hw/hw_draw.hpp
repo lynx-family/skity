@@ -80,8 +80,7 @@ inline HWDrawState operator|=(HWDrawState& lhs, HWDrawState rhs) {
 
 class HWDraw {
  public:
-  explicit HWDraw(Matrix transform, BlendMode blend_mode = BlendMode::kSrcOver)
-      : transform_(transform), blend_plan_{blend_mode} {}
+  explicit HWDraw(Matrix transform) : transform_(transform) {}
 
   virtual ~HWDraw() = default;
 

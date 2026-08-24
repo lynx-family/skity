@@ -8,6 +8,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "src/render/hw/draw/hw_wgsl_fragment.hpp"
@@ -23,17 +24,23 @@ class HWWGSLShaderWriter {
       : geometry_(geometry), fragment_(fragment) {}
 
   std::string GenVSSourceWGSL() const;
-  std::string GenFSSourceWGSL() const;
+  std::string GenFSSourceWGSL(
+      HWBlendOutput primary = HWBlendOutput::kSource,
+      HWBlendOutput secondary = HWBlendOutput::kNone) const;
   std::string GetVSShaderName() const;
   std::string GetFSShaderName() const;
 
   HWFunctionBaseKey GetVSKey() const;
   HWFunctionBaseKey GetFSKey() const;
 
-  HWPipelineKey GetPipelineKey() const {
+  HWPipelineKey GetPipelineKey(
+      HWBlendOutput primary = HWBlendOutput::kSource,
+      HWBlendOutput secondary = HWBlendOutput::kNone) const {
     HWPipelineKey key;
     key.base_key = MakePipelineBaseKey(GetVSKey(), GetFSKey());
     key.compose_keys = GetComposeKeys(key.base_key);
+    key.primary_blend_output = primary;
+    key.secondary_blend_output = secondary;
     key.programmable_blending =
         fragment_->GetProgrammableBlending()
             ? fragment_->GetProgrammableBlending()->GetProgrammableBlendingKey()
@@ -58,10 +65,14 @@ class HWWGSLShaderWriter {
   void WriteVSAssgnShadingVarings(std::stringstream& ss) const;
   void WriteVSMain(std::stringstream& ss) const;
 
-  void WriteFSFunctionsAndStructs(std::stringstream& ss) const;
+  void WriteFSFunctionsAndStructs(std::stringstream& ss,
+                                  HWBlendOutput secondary) const;
   void WriteFSUniforms(std::stringstream& ss) const;
   void WriteFSInput(std::stringstream& ss) const;
-  void WriteFSMain(std::stringstream& ss) const;
+  void WriteFSMain(std::stringstream& ss, HWBlendOutput primary,
+                   HWBlendOutput secondary) const;
+  void WriteBlendOutput(std::stringstream& ss, HWBlendOutput output,
+                        std::string_view target) const;
 
   void WriteVaryings(std::stringstream& ss) const;
   bool HasVarings() const;

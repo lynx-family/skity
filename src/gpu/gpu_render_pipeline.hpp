@@ -144,12 +144,13 @@ enum class GPUBlendFactor {
   kOneMinusSrc1Alpha,
 };
 
-// Fixed-function blend equation. kAdd is the default and covers every
-// Porter-Duff mode; the advanced ops map to GL_KHR_blend_equation_advanced /
-// VK_EXT_blend_operation_advanced. kModulate has no hardware equivalent and is
-// intentionally absent (handled via the shader fallback path).
+// Fixed-function blend equation. kAdd and kReverseSubtract are coefficient
+// operations; the remaining values map to
+// GL_KHR_blend_equation_advanced / VK_EXT_blend_operation_advanced.
 enum class GPUBlendOperation {
   kAdd,
+  kReverseSubtract,
+  kLastCoefficientOperation = kReverseSubtract,
   kMultiply,
   kScreen,
   kOverlay,
@@ -166,6 +167,10 @@ enum class GPUBlendOperation {
   kHslColor,
   kHslLuminosity,
 };
+
+constexpr bool IsAdvancedBlendOperation(GPUBlendOperation operation) {
+  return operation > GPUBlendOperation::kLastCoefficientOperation;
+}
 
 struct GPUColorTargetState {
   GPUTextureFormat format = GPUTextureFormat::kBGRA8Unorm;

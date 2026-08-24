@@ -21,6 +21,7 @@
 #include "src/render/hw/draw/hw_dynamic_path_clip.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/filters/hw_filters.hpp"
 #include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/layer/hw_filter_layer.hpp"
@@ -394,7 +395,7 @@ void HWCanvas::DrawGlyphsInternal(uint32_t count, const GlyphID* glyphs,
       // TODO(ColdPaleLight): create glyph draw fragments after the dst-read
       // strategy is known, or let glyph draws rebuild programmable blending
       // state here.
-      SetupBlendPlanForDraw(draw, paint.GetBlendMode());
+      SetupBlendPlanForDraw(draw, paint);
       CurrentLayer()->AddDraw(draw);
     }
   }
@@ -445,7 +446,7 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
       draw->SetLayerSpaceBounds(
           draw->GetLayerSpaceBounds().MakeOutset(1.f, 1.f));
     }
-    SetupBlendPlanForDraw(draw, paint.GetBlendMode(),
+    SetupBlendPlanForDraw(draw, paint,
                           analytical_aa != AnalyticalAAMode::kNone);
     CurrentLayer()->AddDraw(draw);
   };
@@ -503,11 +504,11 @@ HWCanvas::AnalyticalAAMode HWCanvas::SelectAnalyticalAA(
   }
 
   if (surface_->IsCoverageAAEnabled()) {
-    if (!transform.HasPersp() && CanUseFragmentMask(paint.GetBlendMode())) {
+    if (!transform.HasPersp() && CanUseFragmentMask(paint)) {
       return AnalyticalAAMode::kCoverage;
     }
   } else if (surface_->GetGPUContext()->IsEnableContourAA() &&
-             CanUseFragmentMask(paint.GetBlendMode())) {
+             CanUseFragmentMask(paint)) {
     return AnalyticalAAMode::kContour;
   }
 
@@ -524,7 +525,7 @@ bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
     return true;
   }
 
-  if (!CanUseFragmentMask(paint.GetBlendMode())) {
+  if (!CanUseFragmentMask(paint)) {
     return true;
   }
 
@@ -581,7 +582,7 @@ void HWCanvas::DrawRRectInternal(const RRect& rrect, const Paint& paint,
     auto bounds = use_stroke ? paint.ComputeFastBounds(rrect.GetBounds())
                              : rrect.GetBounds();
     SetupLayerSpaceBoundsForDraw(draw, bounds);
-    SetupBlendPlanForDraw(draw, paint.GetBlendMode(),
+    SetupBlendPlanForDraw(draw, paint,
                           /*has_fragment_mask=*/true);
     CurrentLayer()->AddDraw(draw);
   };
@@ -875,7 +876,7 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
   layer->SetLayerSpaceBounds(transformed_bounds);
   layer->SetEnableMergingDrawCall(
       surface_->GetGPUContext()->IsEnableMergingDrawCall());
-  SetupBlendPlanForDraw(layer, paint.GetBlendMode());
+  SetupBlendPlanForDraw(layer, paint);
   layer->SetRTOrigin(
       ResolveLayerRTOrigin(surface_->GetGPUContext()->GetBackendType()));
 
@@ -900,21 +901,37 @@ bool HWCanvas::NeesOffScreenLayer(const Paint& paint) const {
   return false;
 }
 
-void HWCanvas::SetupBlendPlanForDraw(HWDraw* draw, BlendMode blend_mode,
+void HWCanvas::SetupBlendPlanForDraw(HWDraw* draw, const Paint& paint,
                                      bool has_fragment_mask) {
   const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
-  draw->SetBlendPlan(
-      ResolveHWBlendPlan(blend_mode, has_fragment_mask, caps,
-                         CurrentLayer()->SupportsTextureCopyDstRead()));
+  auto plan = ResolveHWBlendPlan(paint.GetBlendMode(), has_fragment_mask,
+                                 IsPaintSourceOpaque(paint), caps,
+                                 CurrentLayer()->SupportsTextureCopyDstRead());
+  DEBUG_CHECK(plan.has_value());
+  draw->SetBlendPlan(*plan);
 }
 
-bool HWCanvas::CanUseFragmentMask(BlendMode blend_mode) const {
+bool HWCanvas::CanUseFragmentMask(const Paint& paint) const {
   DEBUG_CHECK(!layer_stack_.empty());
 
   const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
-  return ResolveHWBlendPlan(blend_mode, /*has_fragment_mask=*/true, caps,
-                            layer_stack_.back()->SupportsTextureCopyDstRead())
-      .SupportsFragmentMask();
+  auto supports_style = [&](Paint::Style style) {
+    Paint work_paint(paint);
+    work_paint.SetStyle(style);
+    return ResolveHWBlendPlan(paint.GetBlendMode(), /*has_fragment_mask=*/true,
+                              IsPaintSourceOpaque(work_paint), caps,
+                              layer_stack_.back()->SupportsTextureCopyDstRead())
+        .has_value();
+  };
+
+  bool result = true;
+  if (paint.GetStyle() != Paint::kFill_Style) {
+    result = result && supports_style(Paint::kStroke_Style);
+  }
+  if (paint.GetStyle() != Paint::kStroke_Style) {
+    result = result && supports_style(Paint::kFill_Style);
+  }
+  return result;
 }
 
 }  // namespace skity

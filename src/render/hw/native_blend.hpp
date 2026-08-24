@@ -16,17 +16,15 @@ namespace skity {
 // the hardware exposes GL_KHR_blend_equation_advanced /
 // VK_EXT_blend_operation_advanced.
 //
-// Returns std::nullopt for kModulate: GL_MULTIPLY_KHR (s*(1-da)+d*(1-sa)+s*d)
-// is NOT equal to skity's kModulate (s*d), which is used mainly for saveLayer
-// compositing and must stay on the shader path.
+// GL_MULTIPLY_KHR (s*(1-da)+d*(1-sa)+s*d) is not equal to skity's kModulate
+// (s*d). kModulate and kScreen are coefficient modes and are handled before
+// callers reach this function.
 //
-// Modes <= kPlus (Porter-Duff) never reach this function — they use
+// Modes <= kLastCoeffMode never reach this function — they use
 // fixed-function ADD. Callers are expected to gate with IsAdvancedBlendMode
 // first.
 constexpr std::optional<GPUBlendOperation> ToNativeBlendOp(BlendMode mode) {
   switch (mode) {
-    case BlendMode::kScreen:
-      return GPUBlendOperation::kScreen;
     case BlendMode::kOverlay:
       return GPUBlendOperation::kOverlay;
     case BlendMode::kDarken:
