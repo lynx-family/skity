@@ -613,6 +613,9 @@ const std::vector<std::string>& VulkanContextState::GetEnabledInstanceLayers()
 
 bool VulkanContextState::Initialize(const GPUContextInfoVK& info) {
   Reset();
+  // A fresh device is being created; re-arm the lost flag only after the old
+  // (possibly lost) device has been torn down safely.
+  device_lost_ = false;
   LOGD("Initializing VulkanContextState");
 
 #if defined(SKITY_ANDROID)
@@ -663,6 +666,12 @@ void VulkanContextState::CollectPendingSubmissions(bool wait_all) const {
       if (result != VK_SUCCESS) {
         LOGW("Failed to wait Vulkan pending submissions: {}",
              static_cast<int32_t>(result));
+        if (result == VK_ERROR_DEVICE_LOST) {
+          LOGE(
+              "Vulkan logical device lost while waiting for pending "
+              "submissions");
+          MarkDeviceLost();
+        }
       }
     }
 
@@ -682,13 +691,20 @@ void VulkanContextState::CollectPendingSubmissions(bool wait_all) const {
       if (result != VK_NOT_READY) {
         LOGW("Failed to query Vulkan fence status: {}",
              static_cast<int32_t>(result));
+        if (result == VK_ERROR_DEVICE_LOST) {
+          LOGE(
+              "Vulkan logical device lost: fence reported "
+              "VK_ERROR_DEVICE_LOST");
+          MarkDeviceLost();
+        }
       }
       ++it;
     }
   }
 
   for (auto& submission : completed_submissions) {
-    if (submission.owns_fence && submission.fence != VK_NULL_HANDLE) {
+    if (!IsDeviceLost() && submission.owns_fence &&
+        submission.fence != VK_NULL_HANDLE) {
       functions_.device.vkDestroyFence(logical_device_, submission.fence,
                                        nullptr);
       submission.fence = VK_NULL_HANDLE;
@@ -701,7 +717,7 @@ void VulkanContextState::CollectPendingSubmissions(bool wait_all) const {
     }
     submission.cleanup_actions.clear();
 
-    if (submission.command_pool != VK_NULL_HANDLE) {
+    if (!IsDeviceLost() && submission.command_pool != VK_NULL_HANDLE) {
       functions_.device.vkDestroyCommandPool(logical_device_,
                                              submission.command_pool, nullptr);
       submission.command_pool = VK_NULL_HANDLE;

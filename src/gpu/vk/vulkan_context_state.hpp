@@ -134,6 +134,18 @@ class VulkanContextState {
 
   void CollectPendingSubmissions(bool wait_all) const;
 
+  /**
+   * Returns true once the logical device has been reported lost (e.g. by
+   * vkQueueSubmit / vkQueuePresentKHR / fence query). After a device loss the
+   * only useful recovery is to tear the whole context down and recreate it;
+   * destroying individual Vulkan objects against the lost device is UB and
+   * faults some drivers (e.g. MediaTek mt6855). GPU resources must therefore
+   * skip their Vulkan-handle destruction while this returns true.
+   */
+  bool IsDeviceLost() const { return device_lost_; }
+
+  void MarkDeviceLost() const { device_lost_ = true; }
+
   VkRenderPass GetOrCreateLegacyRenderPass(
       const LegacyRenderPassKey& key) const;
 
@@ -183,6 +195,7 @@ class VulkanContextState {
   bool advanced_blend_coherent_ = false;
   bool dual_source_blending_enabled_ = false;
   VulkanDebugRuntimeState debug_runtime_ = {};
+  mutable bool device_lost_ = false;
 #if defined(SKITY_ANDROID)
   Fn_AHardwareBuffer_describe fn_ahb_describe_ = nullptr;
 #endif

@@ -386,6 +386,12 @@ GPUPresenterStatus GPUPresenterVK::Present(
       fns_.vkQueuePresentKHR(present_queue_, &present_info_vk);
   has_outstanding_surface_ = false;
   current_frame_ = (current_frame_ + 1) % frame_slots_.size();
+  if (result == VK_ERROR_DEVICE_LOST) {
+    LOGE("Vulkan logical device lost during vkQueuePresentKHR");
+    state_->MarkDeviceLost();
+    broken_ = true;
+    return GPUPresenterStatus::kError;
+  }
   if (result == VK_SUCCESS) {
     return GPUPresenterStatus::kSuccess;
   }
@@ -681,7 +687,8 @@ bool GPUPresenterVK::CreateFrameSlots() {
 }
 
 void GPUPresenterVK::DestroyFrameSlots() {
-  if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE) {
+  if (state_ == nullptr || state_->IsDeviceLost() ||
+      state_->GetLogicalDevice() == VK_NULL_HANDLE) {
     frame_slots_.clear();
     image_present_semaphores_.clear();
     return;
@@ -710,7 +717,8 @@ void GPUPresenterVK::DestroyFrameSlots() {
 }
 
 void GPUPresenterVK::DestroySwapchainImageViews() {
-  if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE) {
+  if (state_ == nullptr || state_->IsDeviceLost() ||
+      state_->GetLogicalDevice() == VK_NULL_HANDLE) {
     swapchain_image_views_.clear();
     return;
   }
@@ -726,7 +734,8 @@ void GPUPresenterVK::DestroySwapchainImageViews() {
 }
 
 void GPUPresenterVK::DestroySwapchain() {
-  if (state_ != nullptr && state_->GetLogicalDevice() != VK_NULL_HANDLE &&
+  if (state_ != nullptr && !state_->IsDeviceLost() &&
+      state_->GetLogicalDevice() != VK_NULL_HANDLE &&
       swapchain_ != VK_NULL_HANDLE && fns_.vkDestroySwapchainKHR != nullptr) {
     fns_.vkDestroySwapchainKHR(state_->GetLogicalDevice(), swapchain_, nullptr);
   }

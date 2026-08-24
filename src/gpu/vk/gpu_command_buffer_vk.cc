@@ -267,7 +267,15 @@ bool GPUCommandBufferVK::Submit(const GPUSubmitInfo* submit_info) {
   if (result != VK_SUCCESS) {
     LOGE("Failed to submit Vulkan command buffer: {}",
          static_cast<int32_t>(result));
-    if (owns_fence) {
+    if (result == VK_ERROR_DEVICE_LOST) {
+      LOGE("Vulkan logical device lost during submission of command buffer");
+      // The logical device is gone. Destroying any Vulkan object created on
+      // it (command pool, VMA buffers, textures) faults some drivers (e.g.
+      // MediaTek mt6855), so mark the state lost and let all GPU resources
+      // skip their handle destruction while the context is recreated.
+      state_->MarkDeviceLost();
+    }
+    if (owns_fence && !state_->IsDeviceLost()) {
       device_fns.vkDestroyFence(state_->GetLogicalDevice(), fence, nullptr);
     }
     return false;
@@ -317,6 +325,18 @@ void GPUCommandBufferVK::ApplyDebugLabelsIfNeeded() {
 void GPUCommandBufferVK::Reset() {
   stage_buffers_.clear();
   cleanup_actions_.clear();
+
+  // stage_buffers_/cleanup_actions_ are destroyed above; on a lost device the
+  // GPUBufferVK/GPUTextureVK destructors already skip their driver calls via
+  // GPUObjectVK::LockState(). The command pool is owned here, so guard it
+  // explicitly: destroying it against a lost device is UB.
+  if (state_ != nullptr && state_->IsDeviceLost()) {
+    command_buffer_ = VK_NULL_HANDLE;
+    command_pool_ = VK_NULL_HANDLE;
+    recording_ = false;
+    submitted_ = false;
+    return;
+  }
 
   if (state_ != nullptr && command_pool_ != VK_NULL_HANDLE &&
       state_->GetLogicalDevice() != VK_NULL_HANDLE &&
