@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "src/gpu/gpu_buffer.hpp"
+#include "src/gpu/vk/gpu_object_vk.hpp"
 
 namespace skity {
 
@@ -20,7 +21,7 @@ enum class GPUBufferVKMemoryType {
   kHostVisible,
 };
 
-class GPUBufferVK : public GPUBuffer {
+class GPUBufferVK : public GPUBuffer, public GPUObjectVK {
  public:
   GPUBufferVK(
       const GPUBufferDescriptor& desc,
@@ -51,7 +52,6 @@ class GPUBufferVK : public GPUBuffer {
   bool CreateBuffer(VkDeviceSize size);
   void DestroyBuffer();
 
-  std::shared_ptr<const VulkanContextState> state_ = {};
   GPUBufferVKMemoryType memory_type_ = GPUBufferVKMemoryType::kDeviceLocal;
   VkBuffer buffer_ = VK_NULL_HANDLE;
   VmaAllocation allocation_ = nullptr;

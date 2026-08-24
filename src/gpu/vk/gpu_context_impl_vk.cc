@@ -1137,8 +1137,13 @@ std::shared_ptr<Data> GPUContextVK::OnReadPixels(
 
   // Keep the command buffer alive through the cleanup action so the staging
   // buffer remains valid after CollectPendingSubmissions destroys the pending
-  // submission objects. The shared_ptr prevents early destruction.
-  command_buffer->RecordCleanupAction([command_buffer] {});
+  // submission objects. A weak_ptr is used on purpose: a strong capture
+  // would create a state -> pending submission -> cleanup lambda ->
+  // command buffer -> state reference cycle, which leads to re-entrant
+  // destruction of the VulkanContextState.
+  command_buffer->RecordCleanupAction(
+      [weak_command_buffer =
+           std::weak_ptr<GPUCommandBufferVK>(command_buffer)] {});
 
   if (!command_buffer->Submit()) {
     LOGE("GPUContextVK::OnReadPixels: failed to submit command buffer");

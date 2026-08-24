@@ -11,6 +11,7 @@
 
 #include "src/gpu/backend_cast.hpp"
 #include "src/gpu/gpu_texture.hpp"
+#include "src/gpu/vk/gpu_object_vk.hpp"
 
 namespace skity {
 
@@ -40,6 +41,7 @@ inline VkImageAspectFlags VkFormatAspectMaskForBarrier(VkFormat format) {
 }
 
 class GPUTextureVK : public GPUTexture,
+                     public GPUObjectVK,
                      public std::enable_shared_from_this<GPUTextureVK> {
  public:
   GPUTextureVK(std::shared_ptr<const VulkanContextState> state,
@@ -87,7 +89,6 @@ class GPUTextureVK : public GPUTexture,
   SKT_BACKEND_CAST(GPUTextureVK, GPUTexture)
 
  private:
-  std::shared_ptr<const VulkanContextState> state_ = {};
   VkImage image_ = VK_NULL_HANDLE;
   VmaAllocation allocation_ = nullptr;
   VkImageView image_view_ = VK_NULL_HANDLE;

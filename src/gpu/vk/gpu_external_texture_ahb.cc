@@ -20,18 +20,18 @@ GPUExternalTextureAHB::GPUExternalTextureAHB(
     : GPUTextureVK(state, descriptor, image,
                    /*allocation=*/nullptr, image_view, preferred_layout, format,
                    /*owns_image=*/false, /*owns_image_view=*/false),
-      state_(std::move(state)),
       memory_(memory) {
   SetCurrentLayout(initial_layout);
 }
 
 GPUExternalTextureAHB::~GPUExternalTextureAHB() {
-  if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE) {
+  const auto state = LockState();
+  if (state == nullptr || state->GetLogicalDevice() == VK_NULL_HANDLE) {
     return;
   }
 
-  VkDevice device = state_->GetLogicalDevice();
-  const auto& fns = state_->DeviceFns();
+  VkDevice device = state->GetLogicalDevice();
+  const auto& fns = state->DeviceFns();
 
   if (GetImageView() != VK_NULL_HANDLE && fns.vkDestroyImageView != nullptr) {
     fns.vkDestroyImageView(device, GetImageView(), nullptr);

@@ -9,12 +9,13 @@
 
 #include "src/gpu/backend_cast.hpp"
 #include "src/gpu/gpu_sampler.hpp"
+#include "src/gpu/vk/gpu_object_vk.hpp"
 
 namespace skity {
 
 class VulkanContextState;
 
-class GPUSamplerVK : public GPUSampler {
+class GPUSamplerVK : public GPUSampler, public GPUObjectVK {
  public:
   GPUSamplerVK(std::shared_ptr<const VulkanContextState> state,
                const GPUSamplerDescriptor& desc, VkSampler sampler);
@@ -28,7 +29,6 @@ class GPUSamplerVK : public GPUSampler {
   SKT_BACKEND_CAST(GPUSamplerVK, GPUSampler)
 
  private:
-  std::shared_ptr<const VulkanContextState> state_ = {};
   VkSampler sampler_ = VK_NULL_HANDLE;
 };
 

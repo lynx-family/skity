@@ -292,7 +292,7 @@ GPUTextureVK::GPUTextureVK(std::shared_ptr<const VulkanContextState> state,
                            VkImageLayout preferred_layout, VkFormat format,
                            bool owns_image, bool owns_image_view)
     : GPUTexture(descriptor),
-      state_(std::move(state)),
+      GPUObjectVK(std::move(state)),
       image_(image),
       allocation_(allocation),
       image_view_(image_view),
@@ -302,16 +302,17 @@ GPUTextureVK::GPUTextureVK(std::shared_ptr<const VulkanContextState> state,
       owns_image_view_(owns_image_view) {}
 
 GPUTextureVK::~GPUTextureVK() {
-  if (state_ != nullptr && state_->GetLogicalDevice() != VK_NULL_HANDLE &&
+  const auto state = LockState();
+  if (state != nullptr && state->GetLogicalDevice() != VK_NULL_HANDLE &&
       owns_image_view_ && image_view_ != VK_NULL_HANDLE &&
-      state_->DeviceFns().vkDestroyImageView != nullptr) {
-    state_->DeviceFns().vkDestroyImageView(state_->GetLogicalDevice(),
-                                           image_view_, nullptr);
+      state->DeviceFns().vkDestroyImageView != nullptr) {
+    state->DeviceFns().vkDestroyImageView(state->GetLogicalDevice(),
+                                          image_view_, nullptr);
   }
 
-  if (state_ != nullptr && state_->GetAllocator() != nullptr && owns_image_ &&
+  if (state != nullptr && state->GetAllocator() != nullptr && owns_image_ &&
       image_ != VK_NULL_HANDLE && allocation_ != nullptr) {
-    vmaDestroyImage(state_->GetAllocator(), image_, allocation_);
+    vmaDestroyImage(state->GetAllocator(), image_, allocation_);
   }
 }
 
@@ -462,19 +463,19 @@ size_t GPUTextureVK::GetBytes() const {
 
 void GPUTextureVK::UploadData(uint32_t offset_x, uint32_t offset_y,
                               uint32_t width, uint32_t height, void* data) {
-  if (state_ == nullptr || data == nullptr || width == 0 || height == 0) {
+  const auto state = LockState();
+  if (state == nullptr || data == nullptr || width == 0 || height == 0) {
     return;
   }
 
-  auto command_buffer = std::make_shared<GPUCommandBufferVK>(state_);
+  auto command_buffer = std::make_shared<GPUCommandBufferVK>(state);
   if (!command_buffer->Init()) {
     return;
   }
 
   command_buffer->SetLabel("VkUploadTextureData");
 
-  auto blit_pass =
-      std::make_shared<GPUBlitPassVK>(state_, command_buffer.get());
+  auto blit_pass = std::make_shared<GPUBlitPassVK>(state, command_buffer.get());
   blit_pass->UploadTextureData(shared_from_this(), offset_x, offset_y, width,
                                height, data);
   blit_pass->End();

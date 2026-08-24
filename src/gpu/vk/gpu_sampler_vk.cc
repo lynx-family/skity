@@ -10,17 +10,18 @@ namespace skity {
 
 GPUSamplerVK::GPUSamplerVK(std::shared_ptr<const VulkanContextState> state,
                            const GPUSamplerDescriptor& desc, VkSampler sampler)
-    : GPUSampler(desc), state_(std::move(state)), sampler_(sampler) {}
+    : GPUSampler(desc), GPUObjectVK(std::move(state)), sampler_(sampler) {}
 
 GPUSamplerVK::~GPUSamplerVK() {
-  if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE ||
+  const auto state = LockState();
+  if (state == nullptr || state->GetLogicalDevice() == VK_NULL_HANDLE ||
       sampler_ == VK_NULL_HANDLE) {
     return;
   }
 
-  if (state_->DeviceFns().vkDestroySampler != nullptr) {
-    state_->DeviceFns().vkDestroySampler(state_->GetLogicalDevice(), sampler_,
-                                         nullptr);
+  if (state->DeviceFns().vkDestroySampler != nullptr) {
+    state->DeviceFns().vkDestroySampler(state->GetLogicalDevice(), sampler_,
+                                        nullptr);
   }
   sampler_ = VK_NULL_HANDLE;
 }
