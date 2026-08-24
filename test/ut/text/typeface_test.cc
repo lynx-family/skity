@@ -5,14 +5,20 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <condition_variable>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <skity/text/font.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/typeface.hpp>
+#include <string>
+#include <thread>
+#include <type_traits>
 #include <vector>
 
 #include "concurrent_runner.h"
+#include "src/text/ports/freetype_face.hpp"
 #include "src/text/ports/scaler_context_freetype.hpp"
 #include "src/text/scaler_context.hpp"
 #include "src/text/scaler_context_desc.hpp"
@@ -23,6 +29,64 @@ constexpr int kThreadCount = 8;
 constexpr int kIterations = 500;
 constexpr const char* kRobotoRegular =
     SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf";
+
+class ReusableBarrier {
+ public:
+  explicit ReusableBarrier(int participant_count)
+      : participant_count_(participant_count) {}
+
+  void Wait() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    const int generation = generation_;
+
+    if (++arrived_count_ == participant_count_) {
+      arrived_count_ = 0;
+      ++generation_;
+      condition_.notify_all();
+      return;
+    }
+
+    condition_.wait(lock, [&] { return generation_ != generation; });
+  }
+
+ private:
+  const int participant_count_;
+  int arrived_count_ = 0;
+  int generation_ = 0;
+  std::mutex mutex_;
+  std::condition_variable condition_;
+};
+
+static_assert(!std::is_copy_constructible<FontScanner>::value,
+              "FontScanner must not duplicate its FreeType library reference");
+static_assert(!std::is_copy_assignable<FontScanner>::value,
+              "FontScanner must not duplicate its FreeType library reference");
+
+void ExpectRobotoScan(FontScanner* scanner, const std::shared_ptr<Data>& data) {
+  int num_fonts = 0;
+  const bool recognized = scanner->RecognizedFont(data, &num_fonts);
+  EXPECT_TRUE(recognized);
+  if (recognized) {
+    EXPECT_EQ(num_fonts, 1);
+  }
+
+  std::string family_name;
+  FontStyle style;
+  bool is_fixed_pitch = true;
+  FontScanner::AxisDefinitions axes{};
+  const bool scanned =
+      scanner->ScanFont(data, 0, &family_name, &style, &is_fixed_pitch, &axes);
+  EXPECT_TRUE(scanned);
+  if (!scanned) {
+    return;
+  }
+
+  EXPECT_EQ(family_name, "Roboto");
+  EXPECT_EQ(style.weight(), FontStyle::kNormal_Weight);
+  EXPECT_EQ(style.width(), FontStyle::kNormal_Width);
+  EXPECT_EQ(style.slant(), FontStyle::kUpright_Slant);
+  EXPECT_FALSE(is_fixed_pitch);
+}
 
 struct RasterizedGlyph {
   float origin_x = 0.f;
@@ -243,6 +307,83 @@ TEST_F(TypefaceTest, UnicharsToGlyphsThreadSafe) {
       EXPECT_NE(g, 0);
     }
   });
+}
+
+TEST(TypefaceFreeTypeTest, MakeFromDataThreadSafe) {
+  auto data = Data::MakeFromFileName(kRobotoRegular);
+  ASSERT_NE(data, nullptr);
+
+  // Warm up the default FontManager before exercising the target race.
+  ASSERT_NE(Typeface::MakeFromData(data), nullptr);
+
+  constexpr int kMakeFromDataThreadCount = 16;
+  ReusableBarrier iteration_start(kMakeFromDataThreadCount);
+  ConcurrentRunner runner(kMakeFromDataThreadCount, 5000);
+  runner.Run([&](int) {
+    // Re-synchronize every iteration so concurrent MakeFromData calls do not
+    // drift apart after the initial start barrier.
+    iteration_start.Wait();
+    auto typeface = Typeface::MakeFromData(data);
+    EXPECT_NE(typeface, nullptr);
+  });
+}
+
+TEST(FontScannerFreeTypeTest, ScansRobotoData) {
+  auto data = Data::MakeFromFileName(kRobotoRegular);
+  ASSERT_NE(data, nullptr);
+
+  FontScanner scanner;
+  ExpectRobotoScan(&scanner, data);
+}
+
+TEST(TypefaceFreeTypeTest, LazyFaceDestructionKeepsLibraryUsable) {
+  auto data = Data::MakeFromFileName(kRobotoRegular);
+  ASSERT_NE(data, nullptr);
+
+  auto typeface = Typeface::MakeFromData(data);
+  ASSERT_NE(typeface, nullptr);
+  EXPECT_GT(typeface->CountTables(), 0);
+  EXPECT_GT(typeface->GetUnitsPerEm(), 0u);
+
+  typeface.reset();
+
+  auto reloaded_typeface = Typeface::MakeFromData(data);
+  ASSERT_NE(reloaded_typeface, nullptr);
+  EXPECT_GT(reloaded_typeface->CountTables(), 0);
+}
+
+TEST(FreeTypeLibraryTest, ScannerAndLazyTypefaceLifetimesInterleave) {
+  auto data = Data::MakeFromFileName(kRobotoRegular);
+  ASSERT_NE(data, nullptr);
+
+  constexpr int kLibraryThreadCount = 8;
+  constexpr int kLibraryIterations = 500;
+  ReusableBarrier iteration_start(kLibraryThreadCount);
+  std::vector<std::thread> threads;
+  threads.reserve(kLibraryThreadCount);
+
+  for (int thread_index = 0; thread_index < kLibraryThreadCount;
+       ++thread_index) {
+    threads.emplace_back([&, thread_index] {
+      for (int iteration = 0; iteration < kLibraryIterations; ++iteration) {
+        iteration_start.Wait();
+        if ((thread_index & 1) == 0) {
+          FontScanner scanner;
+          ExpectRobotoScan(&scanner, data);
+        } else {
+          auto typeface = Typeface::MakeFromData(data);
+          EXPECT_NE(typeface, nullptr);
+          if (typeface) {
+            EXPECT_GT(typeface->CountTables(), 0);
+          }
+        }
+      }
+    });
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
 }
 
 TEST_F(TypefaceTest, TableCountAndTagsConsistent) {

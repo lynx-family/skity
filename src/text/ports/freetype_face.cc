@@ -30,19 +30,22 @@ static FreeTypeLibrary* global_freetype_library;
 FreetypeFace::FreetypeFace(const std::shared_ptr<Data>& stream,
                            const FontArguments& font_args)
     : data_(stream) {
-  RefFreeTypeLibrary();
-  const void* memoryBase = data_->RawData();
-  if (memoryBase) {
-    FT_Open_Args args;
-    memset(&args, 0, sizeof(args));
-    args.flags = FT_OPEN_MEMORY;
-    args.memory_base = (const FT_Byte*)memoryBase;
-    args.memory_size = data_->Size();
+  {
+    std::lock_guard<std::mutex> lock(FreeTypeLibrary::Mutex());
+    RefFreeTypeLibrary();
+    const void* memoryBase = data_->RawData();
+    if (memoryBase) {
+      FT_Open_Args args;
+      memset(&args, 0, sizeof(args));
+      args.flags = FT_OPEN_MEMORY;
+      args.memory_base = (const FT_Byte*)memoryBase;
+      args.memory_size = data_->Size();
 
-    FT_Face face;
-    if (!FT_Open_Face(global_freetype_library->library(), &args,
-                      font_args.GetCollectionIndex(), &face)) {
-      ft_face_.reset(face);
+      FT_Face face;
+      if (!FT_Open_Face(global_freetype_library->library(), &args,
+                        font_args.GetCollectionIndex(), &face)) {
+        ft_face_.reset(face);
+      }
     }
   }
 
@@ -50,6 +53,7 @@ FreetypeFace::FreetypeFace(const std::shared_ptr<Data>& stream,
 }
 
 FreetypeFace::~FreetypeFace() {
+  std::lock_guard<std::mutex> lock(FreeTypeLibrary::Mutex());
   if (Valid()) {
     ft_face_.reset();  // Must release face before the library, the library
                        // frees existing faces.
@@ -158,7 +162,10 @@ void FreetypeFace::UnrefFreeTypeLibrary() {
 }
 
 FontScanner::FontScanner() {
-  FreetypeFace::RefFreeTypeLibrary();
+  {
+    std::lock_guard<std::mutex> lock(FreeTypeLibrary::Mutex());
+    FreetypeFace::RefFreeTypeLibrary();
+  }
   weight_map_.emplace("all", FontStyle::kNormal_Weight);
   weight_map_.emplace("black", FontStyle::kBlack_Weight);
   weight_map_.emplace("bold", FontStyle::kBold_Weight);
@@ -187,11 +194,14 @@ FontScanner::FontScanner() {
   weight_map_.emplace("ultralight", FontStyle::kExtraLight_Weight);
 }
 
-FontScanner::~FontScanner() { FreetypeFace::UnrefFreeTypeLibrary(); }
+FontScanner::~FontScanner() {
+  std::lock_guard<std::mutex> lock(FreeTypeLibrary::Mutex());
+  FreetypeFace::UnrefFreeTypeLibrary();
+}
 
 bool FontScanner::RecognizedFont(std::shared_ptr<Data> stream,
                                  int* num_fonts) const {
-  std::lock_guard<std::mutex> lock(library_mutex_);
+  std::lock_guard<std::mutex> lock(FreeTypeLibrary::Mutex());
 
   FT_StreamRec streamRec;
   UniqueFTFace face(this->OpenFace(std::move(stream), -1, &streamRec));
@@ -216,7 +226,7 @@ static std::string LowerString(std::string s) {
 bool FontScanner::ScanFont(std::shared_ptr<Data> stream, int ttcIndex,
                            std::string* name, FontStyle* style,
                            bool* is_fixed_pitch, AxisDefinitions* axes) const {
-  std::lock_guard<std::mutex> lock(library_mutex_);
+  std::lock_guard<std::mutex> lock(FreeTypeLibrary::Mutex());
 
   FT_StreamRec streamRec;
   UniqueFTFace face(OpenFace(stream, ttcIndex, &streamRec));
