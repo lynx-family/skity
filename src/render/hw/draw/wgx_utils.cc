@@ -9,7 +9,6 @@
 #include "src/effect/pixmap_shader.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
-#include "src/graphic/blend_mode_priv.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
@@ -844,14 +843,12 @@ void ConfigureShadingFragment(HWDrawContext* context, const Paint& paint,
     fragment->SetFilter(WGXFilterFragment::Make(paint.GetColorFilter().get()));
   }
 
-  if (!IsAdvancedBlendMode(paint.GetBlendMode())) {
-    return;
-  }
-
-  if (blend_plan.dst_read_strategy != DstReadStrategy::kNativeBlend) {
+  if (blend_plan.dst_read_strategy == DstReadStrategy::kFramebufferFetch ||
+      blend_plan.dst_read_strategy == DstReadStrategy::kTextureCopy) {
     fragment->SetProgrammableBlending(WGXProgrammableBlending::Make(
         blend_plan.blend_mode, blend_plan.dst_read_strategy));
-  } else if (context->gpuContext->GetGPUDevice()
+  } else if (blend_plan.dst_read_strategy == DstReadStrategy::kNativeBlend &&
+             context->gpuContext->GetGPUDevice()
                  ->GetCaps()
                  .native_blend_shader_variant) {
     fragment->SetUsesNativeAdvancedBlend(true);

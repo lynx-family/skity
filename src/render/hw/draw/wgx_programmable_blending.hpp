@@ -8,11 +8,15 @@
 #include <memory>
 #include <skity/graphic/blend_mode.hpp>
 #include <string>
+#include <string_view>
 
 namespace skity {
 
 struct Command;
 struct HWDrawContext;
+
+std::string GenBlendFunctionWGSL(BlendMode blend_mode,
+                                 std::string_view function_name);
 
 enum class DstReadStrategy {
   kNonRequired,

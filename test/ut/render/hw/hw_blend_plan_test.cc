@@ -82,11 +82,74 @@ TEST(HWBlendPlan, CarriesResolvedDestinationReadStrategy) {
   GPUCaps caps = {};
   caps.supports_framebuffer_fetch = true;
 
-  auto plan =
-      skity::ResolveHWBlendPlan(BlendMode::kOverlay, caps,
-                                /*supports_texture_copy_dst_read=*/true);
+  auto plan = skity::ResolveHWBlendPlan(
+      BlendMode::kOverlay, /*has_fragment_mask=*/false, caps,
+      /*supports_texture_copy_dst_read=*/true);
   EXPECT_EQ(plan.blend_mode, BlendMode::kOverlay);
   EXPECT_EQ(plan.dst_read_strategy, skity::DstReadStrategy::kFramebufferFetch);
+}
+
+TEST(HWBlendPlan, FragmentMaskUsesProgrammableDestinationRead) {
+  GPUCaps caps = {};
+  caps.supports_framebuffer_fetch = true;
+
+  auto framebuffer_fetch = skity::ResolveHWBlendPlan(
+      BlendMode::kSrc, /*has_fragment_mask=*/true, caps,
+      /*supports_texture_copy_dst_read=*/true);
+  EXPECT_EQ(framebuffer_fetch.dst_read_strategy,
+            skity::DstReadStrategy::kFramebufferFetch);
+  EXPECT_TRUE(framebuffer_fetch.SupportsFragmentMask());
+
+  auto plus = skity::ResolveHWBlendPlan(
+      BlendMode::kPlus, /*has_fragment_mask=*/true, caps,
+      /*supports_texture_copy_dst_read=*/true);
+  EXPECT_EQ(plus.dst_read_strategy, skity::DstReadStrategy::kFramebufferFetch);
+  EXPECT_TRUE(plus.SupportsFragmentMask());
+
+  auto unmasked = skity::ResolveHWBlendPlan(
+      BlendMode::kSrc, /*has_fragment_mask=*/false, caps,
+      /*supports_texture_copy_dst_read=*/true);
+  EXPECT_EQ(unmasked.dst_read_strategy, skity::DstReadStrategy::kNonRequired);
+
+  caps.supports_framebuffer_fetch = false;
+  auto texture_copy = skity::ResolveHWBlendPlan(
+      BlendMode::kSrc, /*has_fragment_mask=*/true, caps,
+      /*supports_texture_copy_dst_read=*/true);
+  EXPECT_EQ(texture_copy.dst_read_strategy,
+            skity::DstReadStrategy::kTextureCopy);
+  EXPECT_TRUE(texture_copy.SupportsFragmentMask());
+
+  auto legacy = skity::ResolveHWBlendPlan(
+      BlendMode::kSrc, /*has_fragment_mask=*/true, caps,
+      /*supports_texture_copy_dst_read=*/false);
+  EXPECT_EQ(legacy.dst_read_strategy, skity::DstReadStrategy::kNonRequired);
+  EXPECT_FALSE(legacy.SupportsFragmentMask());
+}
+
+TEST(HWBlendPlan, FragmentMaskKeepsCompatibleLegacyFormulas) {
+  constexpr BlendMode kModes[] = {
+      BlendMode::kDst,    BlendMode::kSrcOver, BlendMode::kDstOver,
+      BlendMode::kDstOut, BlendMode::kSrcATop, BlendMode::kXor,
+  };
+  GPUCaps caps = {};
+  caps.supports_framebuffer_fetch = true;
+
+  for (auto mode : kModes) {
+    auto plan =
+        skity::ResolveHWBlendPlan(mode, /*has_fragment_mask=*/true, caps,
+                                  /*supports_texture_copy_dst_read=*/true);
+    EXPECT_EQ(plan.dst_read_strategy, skity::DstReadStrategy::kNonRequired);
+    EXPECT_TRUE(plan.SupportsFragmentMask());
+  }
+}
+
+TEST(HWBlendPlan, ShaderSideBlendReplacesDestination) {
+  GPUCaps caps = {};
+  auto formula = skity::ResolveHWBlendFormula({BlendMode::kSrcOver}, caps,
+                                              /*shader_side_blending=*/true);
+  EXPECT_EQ(formula.src_factor, GPUBlendFactor::kOne);
+  EXPECT_EQ(formula.dst_factor, GPUBlendFactor::kZero);
+  EXPECT_EQ(formula.operation, GPUBlendOperation::kAdd);
 }
 
 }  // namespace

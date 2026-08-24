@@ -468,6 +468,8 @@ std::string GetSolidColorFS() {
 fn fs_main() -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
+  var mask_alpha: f32 = 1.0;
+  color = color * mask_alpha;
   return color;
 }
 )";
@@ -560,51 +562,8 @@ var result: vec4<f32>;
 fn fs_main(@color(0) dst_color: vec4<f32>) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
-  color = blending(color, dst_color);
-  return color;
-}
-)";
-}
-
-std::string GetSolidColorWithTextureCopyProgrammableBlendingFS() {
-  return R"(
-fn blend_overlay_component(s: vec2<f32>, d: vec2<f32>) -> f32 {
-  if 2.0 * d.x <= d.y {
-    return 2.0 * s.x * d.x;
-  } else {
-    return s.y * d.y - 2.0 * (d.y - d.x) * (s.y - s.x);
-  }
-}
-fn blending(src: vec4<f32>, dst: vec4<f32>) -> vec4<f32> {
-var result: vec4<f32>;
-
-  result = vec4<f32>(blend_overlay_component(src.ra, dst.ra),
-                     blend_overlay_component(src.ga, dst.ga),
-                     blend_overlay_component(src.ba, dst.ba),
-                     src.a + (1.0 - src.a) * dst.a);
-
-  var extra: vec4<f32> = dst * (1.0 - src.a) + src * (1.0 - dst.a);
-  extra.a = 0.0;
-  result += extra;
-      return result;
-}
-
-@group(2) @binding(0) var<uniform> uDstUVMapping: vec4<f32>;
-@group(2) @binding(1) var uDstSampler: sampler;
-@group(2) @binding(2) var uDstTexture: texture_2d<f32>;
-@group(1) @binding(0) var<uniform> uColor: vec4<f32>;
-
-struct FSInput {
-  @builtin(position) frag_pos: vec4<f32>,
-};
-
-@fragment
-fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
-  var color : vec4<f32>;
-  color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
-  let dst_uv = input.frag_pos.xy * uDstUVMapping.xy + uDstUVMapping.zw;
-  let dst_color = textureSample(uDstTexture, uDstSampler, dst_uv);
-  color = blending(color, dst_color);
+  var mask_alpha: f32 = 1.0;
+  color = mix(dst_color, blending(color, dst_color), mask_alpha);
   return color;
 }
 )";
@@ -673,6 +632,8 @@ struct FSInput {
 fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = generate_gradient_color(input.f_param_pos);
+  var mask_alpha: f32 = 1.0;
+  color = color * mask_alpha;
   return color;
 }
 )";
@@ -789,7 +750,7 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
 
   if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) || (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0))
   {
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
 
   uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
@@ -801,6 +762,8 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
 
   color *= image_color_info.global_alpha;
 
+  var mask_alpha: f32 = 1.0;
+  color = color * mask_alpha;
   return color;
 }
 )";
@@ -845,7 +808,7 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
 
   if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) || (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0))
   {
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
 
   uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
@@ -1709,7 +1672,7 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
 
   if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) || (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0))
   {
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
 
   uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
@@ -2162,6 +2125,38 @@ TEST(ShaderWriter, PathAAWithSolidColorAndColorFilter) {
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAWithCFFS()));
 }
 
+TEST(ShaderWriter, ComposeBlendColorFiltersUseSharedBlendFunctions) {
+  auto path = MakePath();
+  skity::Paint paint;
+  skity::WGSLPathGeometry geometry{path, paint, false};
+  skity::WGSLSolidColor fragment{paint.GetColor4f()};
+  auto filter = skity::ColorFilters::Compose(
+      skity::ColorFilters::Blend(0xff00ff00, skity::BlendMode::kSrcATop),
+      skity::ColorFilters::Blend(0xffff0000, skity::BlendMode::kPlus));
+  fragment.SetFilter(skity::WGXFilterFragment::Make(filter.get()));
+
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+  auto fs = shader_writer.GenFSSourceWGSL();
+  EXPECT_NE(fs.find("fn blend_color_filter_0(src: vec4<f32>, dst: "
+                    "vec4<f32>)"),
+            std::string::npos);
+  EXPECT_NE(fs.find("fn blend_color_filter_1(src: vec4<f32>, dst: "
+                    "vec4<f32>)"),
+            std::string::npos);
+  EXPECT_NE(fs.find("return blend_color_filter_0(uBlendSrcColor_0, "
+                    "input_color);"),
+            std::string::npos);
+  EXPECT_NE(fs.find("return blend_color_filter_1(uBlendSrcColor_1, "
+                    "input_color);"),
+            std::string::npos);
+
+  auto program = wgx::Program::Parse(fs);
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+  wgx::SpirvOptions options;
+  EXPECT_TRUE(program->WriteToSpirv("fs_main", options).success);
+}
+
 TEST(ShaderWriter, PathWithSolidColorAndProgrammableBlending) {
   auto path = MakePath();
   skity::Paint paint;
@@ -2228,7 +2223,36 @@ TEST(ShaderWriter, PathWithSolidColorAndTextureCopyProgrammableBlending) {
           "var dst_color: vec4<f32> = textureSample(uDstTexture, uDstSampler, "
           "dst_uv);"),
       std::string::npos);
-  ASSERT_NE(fs.find("color = blending(color, dst_color);"), std::string::npos);
+  ASSERT_NE(fs.find("var mask_alpha: f32 = 1.0;"), std::string::npos);
+  ASSERT_NE(fs.find("color = mix(dst_color, blending(color, dst_color), "
+                    "mask_alpha);"),
+            std::string::npos);
+}
+
+TEST(ShaderWriter, PathAAPlusTextureCopyBlendsWithFragmentMask) {
+  auto path = MakePath();
+  skity::Paint paint;
+  paint.SetColor(0xff00ff00);
+  skity::WGSLPathAAGeometry geometry{path, paint};
+  skity::WGSLSolidColor fragment{paint.GetColor4f()};
+  fragment.SetProgrammableBlending(skity::WGXProgrammableBlending::Make(
+      skity::BlendMode::kPlus, skity::DstReadStrategy::kTextureCopy));
+
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+  auto fs = shader_writer.GenFSSourceWGSL();
+  EXPECT_EQ(fs.find("color = color * mask_alpha;"), std::string::npos);
+  EXPECT_NE(fs.find("result = min(src + dst, vec4<f32>(1.0));"),
+            std::string::npos);
+  EXPECT_NE(fs.find("if mask_alpha <= 0.0"), std::string::npos);
+  EXPECT_NE(fs.find("color = mix(dst_color, blending(color, dst_color), "
+                    "mask_alpha);"),
+            std::string::npos);
+
+  auto program = wgx::Program::Parse(fs);
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+  wgx::SpirvOptions options;
+  EXPECT_TRUE(program->WriteToSpirv("fs_main", options).success);
 }
 
 TEST(ShaderWriter, RRectWithSolidColor) {

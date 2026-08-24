@@ -298,6 +298,8 @@ class FakeRootLayer : public HWRootLayer {
       : HWRootLayer(width, height, bounds, format),
         last_draw_state_(last_draw_state) {}
 
+  bool SupportsTextureCopyDstRead() const override { return true; }
+
  private:
   std::shared_ptr<GPURenderPass> OnBeginRenderPass(GPUCommandBuffer* cmd,
                                                    bool force_load) override {
@@ -326,6 +328,11 @@ class FakeRootLayer : public HWRootLayer {
   }
 
   void OnPostDraw(GPURenderPass*, GPUCommandBuffer*) override {}
+
+  bool OnCopyToDstTexture(GPUCommandBuffer*, std::shared_ptr<GPUTexture>,
+                          GPURegion) const override {
+    return true;
+  }
 
  private:
   HWDrawState* last_draw_state_ = nullptr;
