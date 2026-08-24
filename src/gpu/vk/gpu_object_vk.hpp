@@ -7,10 +7,9 @@
 
 #include <memory>
 
+#include "src/gpu/vk/vulkan_context_state.hpp"
+
 namespace skity {
-
-class VulkanContextState;
-
 /**
  * Base class for Vulkan GPU objects that need access to the
  * VulkanContextState to destroy their Vulkan handles.
@@ -36,7 +35,14 @@ class GPUObjectVK {
    * destruction must be skipped since the device/allocator are gone.
    */
   std::shared_ptr<const VulkanContextState> LockState() const {
-    return state_.lock();
+    const auto state = state_.lock();
+    if (state == nullptr || state->IsDeviceLost()) {
+      // A lost device invalidates every Vulkan object created on it.
+      // Destroying handles against it is UB and crashes some drivers, so
+      // treat the state as gone and skip destruction.
+      return {};
+    }
+    return state;
   }
 
  private:
