@@ -40,7 +40,6 @@ class GPUExternalTextureAHB : public GPUTextureVK {
                         VkImageLayout initial_layout,
                         VkImageLayout preferred_layout, VkFormat format);
 
-  std::shared_ptr<const VulkanContextState> state_;
   VkDeviceMemory memory_ = VK_NULL_HANDLE;
 };
 

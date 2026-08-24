@@ -34,7 +34,9 @@ VkBufferUsageFlags ConvertGPUBufferUsageMask(GPUBufferUsageMask usage) {
 GPUBufferVK::GPUBufferVK(const GPUBufferDescriptor& desc,
                          std::shared_ptr<const VulkanContextState> state,
                          GPUBufferVKMemoryType memory_type)
-    : GPUBuffer(desc), state_(std::move(state)), memory_type_(memory_type) {}
+    : GPUBuffer(desc),
+      GPUObjectVK(std::move(state)),
+      memory_type_(memory_type) {}
 
 GPUBufferVK::~GPUBufferVK() { DestroyBuffer(); }
 
@@ -60,7 +62,8 @@ bool GPUBufferVK::UploadData(const void* data, size_t size) {
     return false;
   }
 
-  if (state_ == nullptr || state_->GetAllocator() == nullptr ||
+  const auto state = LockState();
+  if (state == nullptr || state->GetAllocator() == nullptr ||
       allocation_ == nullptr) {
     LOGE("Failed to upload Vulkan buffer data: allocator is unavailable");
     return false;
@@ -73,8 +76,8 @@ bool GPUBufferVK::UploadData(const void* data, size_t size) {
     return false;
   }
 
-  const VkResult result = vmaCopyMemoryToAllocation(state_->GetAllocator(),
-                                                    data, allocation_, 0, size);
+  const VkResult result = vmaCopyMemoryToAllocation(state->GetAllocator(), data,
+                                                    allocation_, 0, size);
   if (result != VK_SUCCESS) {
     LOGE("Failed to upload {} bytes to Vulkan buffer: {}", size,
          static_cast<int32_t>(result));
@@ -87,8 +90,9 @@ bool GPUBufferVK::UploadData(const void* data, size_t size) {
 bool GPUBufferVK::CreateBuffer(VkDeviceSize size) {
   DestroyBuffer();
 
-  if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE ||
-      state_->GetAllocator() == nullptr) {
+  const auto state = LockState();
+  if (state == nullptr || state->GetLogicalDevice() == VK_NULL_HANDLE ||
+      state->GetAllocator() == nullptr) {
     LOGE("Failed to create Vulkan buffer: device or allocator is unavailable");
     return false;
   }
@@ -117,7 +121,7 @@ bool GPUBufferVK::CreateBuffer(VkDeviceSize size) {
 
   VmaAllocationInfo vma_info = {};
   const VkResult result =
-      vmaCreateBuffer(state_->GetAllocator(), &buffer_info, &allocation_info,
+      vmaCreateBuffer(state->GetAllocator(), &buffer_info, &allocation_info,
                       &buffer_, &allocation_, &vma_info);
   if (result != VK_SUCCESS || buffer_ == VK_NULL_HANDLE ||
       allocation_ == nullptr) {
@@ -133,9 +137,10 @@ bool GPUBufferVK::CreateBuffer(VkDeviceSize size) {
 }
 
 void GPUBufferVK::DestroyBuffer() {
-  if (state_ != nullptr && state_->GetAllocator() != nullptr &&
+  const auto state = LockState();
+  if (state != nullptr && state->GetAllocator() != nullptr &&
       buffer_ != VK_NULL_HANDLE && allocation_ != nullptr) {
-    vmaDestroyBuffer(state_->GetAllocator(), buffer_, allocation_);
+    vmaDestroyBuffer(state->GetAllocator(), buffer_, allocation_);
   }
 
   buffer_ = VK_NULL_HANDLE;
