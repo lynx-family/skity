@@ -22,6 +22,11 @@ class GPUSurfaceVK : public GPUSurfaceImpl {
   struct PresentInfo {
     const void* owner = nullptr;
     uint32_t image_index = 0;
+    // Generation of the swapchain the image was acquired from. Used to reject
+    // surfaces that outlive a swapchain recreation (e.g. on resize / rotation):
+    // presenting a retired image against the new swapchain is UB and faults
+    // some Android drivers inside vkQueueSignalReleaseImageANDROID.
+    uint64_t generation = 0;
   };
 
   GPUSurfaceVK(const GPUSurfaceDescriptor& desc, GPUContextImpl* ctx,

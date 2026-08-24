@@ -339,6 +339,7 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   GPUSurfaceVK::PresentInfo present_info = {};
   present_info.owner = this;
   present_info.image_index = image_index;
+  present_info.generation = swapchain_generation_;
   surface->SetPresentInfo(present_info);
   has_outstanding_surface_ = true;
   result.status = GPUPresenterStatus::kSuccess;
@@ -367,6 +368,16 @@ GPUPresenterStatus GPUPresenterVK::Present(
       present_info->image_index >= image_present_semaphores_.size() ||
       present_info->image_index >= swapchain_images_.size()) {
     LOGE("Failed to present Vulkan surface: presenter state is invalid");
+    return GPUPresenterStatus::kError;
+  }
+  if (present_info->generation != swapchain_generation_) {
+    // The swapchain was recreated (e.g. resize / rotation) after this surface
+    // was acquired. Its image belongs to a retired swapchain; presenting it
+    // against the new one is UB and faults some Android drivers.
+    LOGE(
+        "Failed to present Vulkan surface: acquired from a retired swapchain "
+        "(generation {} vs {})",
+        present_info->generation, swapchain_generation_);
     return GPUPresenterStatus::kError;
   }
 
@@ -630,6 +641,10 @@ bool GPUPresenterVK::CreateSwapchain() {
   }
   swapchain_images_.resize(swapchain_image_count);
   image_in_flight_fences_.assign(swapchain_image_count, VK_NULL_HANDLE);
+  // Bump the swapchain generation so surfaces acquired from a previous,
+  // retired swapchain can be rejected at Present instead of feeding a stale
+  // image index into the driver.
+  ++swapchain_generation_;
   return true;
 }
 
@@ -747,9 +762,13 @@ void GPUPresenterVK::DestroySwapchain() {
 void GPUPresenterVK::Reset() {
   std::lock_guard<std::mutex> lock(mutex_);
   if (has_outstanding_surface_) {
-    LOGE(
-        "Resetting Vulkan presenter with an outstanding surface: its "
-        "swapchain image will leak from the presentation queue");
+    // The caller still holds a surface acquired from the to-be-destroyed
+    // swapchain. Destroying the swapchain below returns that image to the
+    // BufferQueue, so this is not a leak; the surface merely becomes stale and
+    // must not be presented (Present() rejects it via the generation check).
+    LOGW(
+        "Resetting Vulkan presenter with an outstanding surface from a "
+        "retired swapchain; it will be rejected at Present");
   }
   if (state_ != nullptr && state_->GetLogicalDevice() != VK_NULL_HANDLE &&
       state_->DeviceFns().vkDeviceWaitIdle != nullptr) {
@@ -762,6 +781,9 @@ void GPUPresenterVK::Reset() {
   DestroySwapchainImageViews();
   DestroySwapchain();
   current_frame_ = 0;
+  // Outstanding surfaces were acquired from the old swapchain; their images
+  // are returned to the BufferQueue by the swapchain destruction above and
+  // any later Present is rejected by the generation check.
   has_outstanding_surface_ = false;
   broken_ = false;
 }

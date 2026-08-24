@@ -67,6 +67,7 @@ class GPUPresenterVK : public GPUPresenter {
   struct SurfacePresentInfo {
     const GPUPresenterVK* owner = nullptr;
     uint32_t image_index = 0;
+    uint64_t generation = 0;
   };
 
   bool LoadPresenterFns();
@@ -86,6 +87,7 @@ class GPUPresenterVK : public GPUPresenter {
   VkQueue present_queue_ = VK_NULL_HANDLE;
   int32_t present_queue_family_index_ = -1;
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
+  uint64_t swapchain_generation_ = 0;
   VkExtent2D swapchain_extent_ = {};
   VkFormat swapchain_format_ = VK_FORMAT_UNDEFINED;
   VkImageUsageFlags swapchain_image_usage_ =
