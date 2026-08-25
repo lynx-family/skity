@@ -10,6 +10,7 @@
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_device.hpp"
 #include "src/render/hw/layer/hw_sub_layer.hpp"
+#include "src/utils/arena_allocator.hpp"
 
 namespace skity {
 namespace {
@@ -91,6 +92,60 @@ class FailingGPUContext : public GPUContextImpl {
   }
 };
 
+// Minimal HWLayer that hosts child draws without a texture backend, used to
+// verify that a child's prepare error is propagated to the parent.
+class TestParentLayer : public HWLayer {
+ public:
+  TestParentLayer(const Rect& bounds, uint32_t width, uint32_t height)
+      : HWLayer(Matrix{}, 0, bounds, width, height) {}
+
+ protected:
+  std::shared_ptr<GPURenderPass> OnBeginRenderPass(GPUCommandBuffer*,
+                                                   bool) override {
+    return {};
+  }
+
+  void OnPostDraw(GPURenderPass*, GPUCommandBuffer*) override {}
+};
+
+// Stub draw that always returns the given prepare state.
+class StubDraw : public HWDraw {
+ public:
+  explicit StubDraw(HWDrawState state) : HWDraw(Matrix{}), state_(state) {}
+
+  void Draw(GPURenderPass*, GPUCommandBuffer*) override {}
+
+ protected:
+  HWDrawState OnPrepare(HWDrawContext*) override { return state_; }
+
+  void OnGenerateCommand(HWDrawContext*, HWDrawState) override {}
+
+ private:
+  HWDrawState state_;
+};
+
+// Minimal GPUTexture that does not touch a real GPU, used to give a sub
+// layer a valid color/back texture so its own texture guard does not trigger.
+class TestGPUTexture : public GPUTexture {
+ public:
+  explicit TestGPUTexture(const GPUTextureDescriptor& desc)
+      : GPUTexture(desc) {}
+
+  size_t GetBytes() const override { return 0; }
+
+  void UploadData(uint32_t, uint32_t, uint32_t, uint32_t, void*) override {}
+};
+
+// HWSubLayer that lets tests inject a texture without a working device.
+class TestSubLayer : public HWSubLayer {
+ public:
+  using HWSubLayer::HWSubLayer;
+
+  void SetLayerTexture(const std::shared_ptr<GPUTexture>& texture) {
+    SetTextures(texture, texture);
+  }
+};
+
 }  // namespace
 }  // namespace skity
 
@@ -138,4 +193,125 @@ TEST(HWSubLayerDiscard, RenderTargetCacheHandlesAllocationFailure) {
   ASSERT_NE(resource, nullptr);
   EXPECT_EQ(resource->GetValue(), nullptr);
   EXPECT_EQ(resource->GetBytes(), static_cast<size_t>(0));
+}
+
+// A failing child must make its parent's prepare report kDrawStateError, so the
+// error can keep bubbling up to the root layer.
+TEST(HWSubLayerDiscard, PropagatesChildPrepareErrorToParent) {
+  skity::FailingGPUContext context;
+  ASSERT_TRUE(context.Init());
+
+  skity::ArenaAllocator arena;
+  skity::TestParentLayer parent(skity::Rect::MakeXYWH(0.f, 0.f, 100.f, 100.f),
+                                100, 100);
+  parent.SetArenaAllocator(&arena);
+  parent.SetClipDepth(0);
+
+  skity::StubDraw failing_draw(skity::HWDrawState::kDrawStateError);
+  failing_draw.SetLayerSpaceBounds(skity::Rect::MakeWH(100.f, 100.f));
+  parent.AddDraw(&failing_draw);
+
+  skity::HWDrawContext draw_context;
+  draw_context.total_clip_depth = 1;
+  draw_context.gpuContext = &context;
+  draw_context.arena_allocator = &arena;
+
+  auto state = parent.Prepare(&draw_context);
+  EXPECT_NE(state & skity::HWDrawState::kDrawStateError,
+            skity::HWDrawState::kDrawStateNone);
+}
+
+// A parent whose children all prepare successfully must NOT report an error.
+TEST(HWSubLayerDiscard, ParentHasNoErrorWhenChildrenPrepareFine) {
+  skity::FailingGPUContext context;
+  ASSERT_TRUE(context.Init());
+
+  skity::ArenaAllocator arena;
+  skity::TestParentLayer parent(skity::Rect::MakeXYWH(0.f, 0.f, 100.f, 100.f),
+                                100, 100);
+  parent.SetArenaAllocator(&arena);
+  parent.SetClipDepth(0);
+
+  skity::StubDraw passing_draw(skity::HWDrawState::kDrawStateNone);
+  passing_draw.SetLayerSpaceBounds(skity::Rect::MakeWH(100.f, 100.f));
+  parent.AddDraw(&passing_draw);
+
+  skity::HWDrawContext draw_context;
+  draw_context.total_clip_depth = 1;
+  draw_context.gpuContext = &context;
+  draw_context.arena_allocator = &arena;
+
+  auto state = parent.Prepare(&draw_context);
+  EXPECT_EQ(state & skity::HWDrawState::kDrawStateError,
+            skity::HWDrawState::kDrawStateNone);
+}
+
+// A sub layer with a valid texture that still aggregates a failing child's
+// prepare error and reports it upward.
+TEST(HWSubLayerDiscard, SubLayerPropagatesChildPrepareErrorUpward) {
+  skity::FailingGPUContext context;
+  ASSERT_TRUE(context.Init());
+
+  skity::ArenaAllocator arena;
+
+  skity::GPUTextureDescriptor desc;
+  desc.width = 100;
+  desc.height = 100;
+  desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  auto texture = std::make_shared<skity::TestGPUTexture>(desc);
+
+  skity::TestSubLayer layer(skity::Matrix{}, 1,
+                            skity::Rect::MakeXYWH(0.f, 0.f, 100.f, 100.f), 100,
+                            100);
+  layer.SetArenaAllocator(&arena);
+  layer.SetClipDepth(0);
+  layer.SetLayerTexture(texture);
+
+  skity::StubDraw failing_draw(skity::HWDrawState::kDrawStateError);
+  failing_draw.SetLayerSpaceBounds(skity::Rect::MakeWH(100.f, 100.f));
+  layer.AddDraw(&failing_draw);
+
+  skity::HWDrawContext draw_context;
+  draw_context.total_clip_depth = 1;
+  draw_context.gpuContext = &context;
+  draw_context.arena_allocator = &arena;
+
+  auto state = layer.Prepare(&draw_context);
+  EXPECT_NE(state & skity::HWDrawState::kDrawStateError,
+            skity::HWDrawState::kDrawStateNone);
+}
+
+// A sub layer with a valid texture and healthy children must not report an
+// error (proves the error above comes from the child, not the layer texture).
+TEST(HWSubLayerDiscard, SubLayerHasNoErrorWhenChildrenPrepareFine) {
+  skity::FailingGPUContext context;
+  ASSERT_TRUE(context.Init());
+
+  skity::ArenaAllocator arena;
+
+  skity::GPUTextureDescriptor desc;
+  desc.width = 100;
+  desc.height = 100;
+  desc.format = skity::GPUTextureFormat::kRGBA8Unorm;
+  auto texture = std::make_shared<skity::TestGPUTexture>(desc);
+
+  skity::TestSubLayer layer(skity::Matrix{}, 1,
+                            skity::Rect::MakeXYWH(0.f, 0.f, 100.f, 100.f), 100,
+                            100);
+  layer.SetArenaAllocator(&arena);
+  layer.SetClipDepth(0);
+  layer.SetLayerTexture(texture);
+
+  skity::StubDraw passing_draw(skity::HWDrawState::kDrawStateNone);
+  passing_draw.SetLayerSpaceBounds(skity::Rect::MakeWH(100.f, 100.f));
+  layer.AddDraw(&passing_draw);
+
+  skity::HWDrawContext draw_context;
+  draw_context.total_clip_depth = 1;
+  draw_context.gpuContext = &context;
+  draw_context.arena_allocator = &arena;
+
+  auto state = layer.Prepare(&draw_context);
+  EXPECT_EQ(state & skity::HWDrawState::kDrawStateError,
+            skity::HWDrawState::kDrawStateNone);
 }
