@@ -19,6 +19,12 @@ HWDrawState HWFilterLayer::OnPrepare(HWDrawContext* context) {
   auto device = context->gpuContext->GetGPUDevice();
   auto input_texture = device->CreateTexture(desc);
 
+  // If the filter input texture cannot be created, discard this layer
+  // instead of running the filter against a null attachment.
+  if (!input_texture) {
+    return HWDrawState::kDrawStateNone;
+  }
+
   HWFilterOutput filter_result{
       input_texture,
       GetBounds(),

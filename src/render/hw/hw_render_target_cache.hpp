@@ -54,11 +54,16 @@ class HWRenderTarget
       : texture_(texture) {}
 
   const GPUTextureDescriptor& GetKey() const override {
-    return texture_->GetDescriptor();
+    // A texture allocation failure yields a null GPUTexture. Keep the cache
+    // operations (byte accounting, key comparison) safe in that case.
+    static const GPUTextureDescriptor kEmptyDescriptor{};
+    return texture_ ? texture_->GetDescriptor() : kEmptyDescriptor;
   }
   std::shared_ptr<GPUTexture> GetValue() const override { return texture_; }
 
-  size_t GetBytes() const override { return texture_->GetBytes(); }
+  size_t GetBytes() const override {
+    return texture_ ? texture_->GetBytes() : 0;
+  }
 
  private:
   std::shared_ptr<GPUTexture> texture_;

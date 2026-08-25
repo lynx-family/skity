@@ -363,6 +363,12 @@ std::shared_ptr<Shader> HWLayer::CreateDrawLayerShader(
     GPUContext* gpu_context, std::shared_ptr<GPUTexture> gpu_texture,
     const Rect& bounds) const {
   (void)gpu_context;
+  if (!gpu_texture) {
+    LOGE(
+        "HWLayer::CreateDrawLayerShader: gpu_texture is null, skip layer back "
+        "draw");
+    return {};
+  }
   auto texture = std::make_shared<InternalTexture>(
       gpu_texture, AlphaType::kPremul_AlphaType);
 

@@ -14,6 +14,13 @@ namespace skity {
 HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
   InitTexture(context->gpuContext, context->pool);
 
+  // If either the color attachment or the layer back texture cannot be created
+  // (e.g. GPU texture allocation failure), there is nothing meaningful to
+  // render, so discard this layer entirely.
+  if (!color_texture_ || !layer_back_draw_texture_) {
+    return HWDrawState::kDrawStateNone;
+  }
+
   // prepare layer back draw
   {
     auto bounds = GetLayerBackDrawBounds();
@@ -50,9 +57,21 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
 }
 
 void HWSubLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
+  if (!color_texture_ || !layer_back_draw_texture_) {
+    return;
+  }
+
   HWLayer::OnGenerateCommand(context, state);
 
   layer_back_draw_->GenerateCommand(context, state);
+}
+
+void HWSubLayer::Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {
+  if (!color_texture_ || !layer_back_draw_texture_) {
+    return;
+  }
+
+  HWLayer::Draw(render_pass, cmd);
 }
 
 std::shared_ptr<GPURenderPass> HWSubLayer::OnBeginRenderPass(
