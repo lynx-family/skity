@@ -39,6 +39,11 @@ class FreeTypeLibrary {
   FreeTypeLibrary();
   ~FreeTypeLibrary();
 
+  static std::mutex& Mutex() {
+    static NoDestructor<std::mutex> mutex;
+    return *mutex;
+  }
+
   FT_Library library() { return ft_library_; }
 
  private:
@@ -75,7 +80,9 @@ class FreetypeFace {
 
   // Private to ref_ft_library and unref_ft_library
   static int library_ref_count_;
+  // The caller must hold FreeTypeLibrary::Mutex().
   static bool RefFreeTypeLibrary();
+  // The caller must hold FreeTypeLibrary::Mutex().
   static void UnrefFreeTypeLibrary();
 
   friend class FontScanner;
@@ -87,6 +94,8 @@ class FontScanner {
  public:
   FontScanner();
   ~FontScanner();
+  FontScanner(const FontScanner&) = delete;
+  FontScanner& operator=(const FontScanner&) = delete;
   struct AxisDefinition {
     FourByteTag fTag;
     int32_t fMinimum;
@@ -105,11 +114,11 @@ class FontScanner {
       FT_Face face, FT_Library library);
 
  private:
+  // The caller must hold FreeTypeLibrary::Mutex().
   FT_Face OpenFace(std::shared_ptr<Data> stream, int ttcIndex,
                    FT_Stream ftStream) const;
 
   std::unordered_map<std::string, int> weight_map_;
-  mutable std::mutex library_mutex_;
 };
 
 }  // namespace skity

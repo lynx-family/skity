@@ -81,6 +81,13 @@ cmake_dependent_option(
   OFF
 )
 
+cmake_dependent_option(
+  SKITY_TEST_TSAN "option for enabling ThreadSanitizer in unit tests"
+  OFF
+  [[SKITY_TEST AND SKITY_TEST_UT AND NOT SKITY_TEST_BENCH AND NOT SKITY_TEST_GOLDEN AND NOT SKITY_TEST_COVERAGE]]
+  OFF
+)
+
 option(SKITY_LOG "option for logging" OFF)
 option(SKITY_CT_FONT "option for open CoreText font backend on Darwin" OFF)
 

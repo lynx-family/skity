@@ -108,6 +108,10 @@ TypefaceFreeType::TypefaceFreeType(const class FontStyle& style)
 
 TypefaceFreeType::~TypefaceFreeType() {
   ScalerContextCache::GlobalScalerContextCache()->PurgeByTypeface(typeface_id_);
+  if (freetype_face_holder_) {
+    std::lock_guard<std::mutex> lock(FreetypeFace::f_t_mutex());
+    freetype_face_holder_.reset();
+  }
 }
 
 int TypefaceFreeType::OnGetTableTags(FontTableTag tags[]) const {

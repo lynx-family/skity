@@ -143,7 +143,16 @@ if (${SKITY_TEST_COVERAGE} AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 
     target_compile_options(skity_unit_test PRIVATE --coverage -O0 -g)
     target_link_options(skity_unit_test PRIVATE --coverage)
-else()
+elseif (${SKITY_TEST_TSAN} AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(skity PRIVATE
+        -fsanitize=thread
+        -fno-omit-frame-pointer
+        -g
+    )
+    target_link_options(skity PRIVATE
+        -fsanitize=thread
+    )
+
     target_compile_options(skity_unit_test PRIVATE
         -fsanitize=thread
         -fno-omit-frame-pointer
