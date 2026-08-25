@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include <memory>
-
 #include <skity/geometry/rect.hpp>
 
 #include "src/gpu/gpu_context_impl.hpp"
@@ -20,8 +19,7 @@ namespace {
 // the layer discard path never reaches them.
 class FailingGPUDevice : public GPUDevice {
  public:
-  std::unique_ptr<GPUBuffer> CreateBuffer(
-      const GPUBufferDescriptor&) override {
+  std::unique_ptr<GPUBuffer> CreateBuffer(const GPUBufferDescriptor&) override {
     return {};
   }
 
@@ -68,8 +66,7 @@ class FailingGPUContext : public GPUContextImpl {
   ~FailingGPUContext() override = default;
 
  protected:
-  std::unique_ptr<GPUSurface> CreateSurface(
-      GPUSurfaceDescriptor*) override {
+  std::unique_ptr<GPUSurface> CreateSurface(GPUSurfaceDescriptor*) override {
     return {};
   }
 
@@ -77,8 +74,9 @@ class FailingGPUContext : public GPUContextImpl {
     return std::make_unique<FailingGPUDevice>();
   }
 
-  std::shared_ptr<GPUTexture> OnWrapTexture(
-      GPUBackendTextureInfo*, ReleaseCallback, ReleaseUserData) override {
+  std::shared_ptr<GPUTexture> OnWrapTexture(GPUBackendTextureInfo*,
+                                            ReleaseCallback,
+                                            ReleaseUserData) override {
     return {};
   }
 

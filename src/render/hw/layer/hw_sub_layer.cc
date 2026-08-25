@@ -5,6 +5,7 @@
 #include "src/render/hw/layer/hw_sub_layer.hpp"
 
 #include "src/gpu/gpu_context_impl.hpp"
+#include "src/logging.hpp"
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/hw_render_pass_builder.hpp"
@@ -18,6 +19,10 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
   // (e.g. GPU texture allocation failure), there is nothing meaningful to
   // render, so discard this layer entirely.
   if (!color_texture_ || !layer_back_draw_texture_) {
+    LOGE(
+        "HWSubLayer::OnPrepare: failed to allocate layer texture ({}, {}), "
+        "discarding layer",
+        GetWidth(), GetHeight());
     return HWDrawState::kDrawStateNone;
   }
 
