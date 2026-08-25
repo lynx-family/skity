@@ -58,6 +58,8 @@ enum HWDrawState : uint32_t {
   kDrawStateNone = 0,
   kDrawStateStencil = 1 << 0,
   kDrawStateDepth = 1 << 1,
+  // A child draw/layer failed to prepare (e.g. GPU texture allocation failed).
+  kDrawStateError = 1 << 2,
 };
 
 inline HWDrawState operator|(HWDrawState lhs, HWDrawState rhs) {

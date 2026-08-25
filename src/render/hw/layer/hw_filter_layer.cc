@@ -26,7 +26,7 @@ HWDrawState HWFilterLayer::OnPrepare(HWDrawContext* context) {
     LOGE(
         "HWFilterLayer::OnPrepare: failed to allocate filter input texture, "
         "discarding layer");
-    return HWDrawState::kDrawStateNone;
+    return HWDrawState::kDrawStateError;
   }
 
   HWFilterOutput filter_result{

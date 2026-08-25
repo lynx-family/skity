@@ -114,7 +114,8 @@ TEST(HWSubLayerDiscard, SkipsLayerWhenBackTextureCreationFails) {
 
   // Prepare must not crash and must report that the layer is skipped.
   auto state = layer.Prepare(&draw_context);
-  EXPECT_EQ(state, skity::HWDrawState::kDrawStateNone);
+  EXPECT_NE(state & skity::HWDrawState::kDrawStateError,
+            skity::HWDrawState::kDrawStateNone);
 
   EXPECT_NO_FATAL_FAILURE(layer.GenerateCommand(&draw_context, state));
   EXPECT_NO_FATAL_FAILURE(layer.Draw(nullptr, nullptr));

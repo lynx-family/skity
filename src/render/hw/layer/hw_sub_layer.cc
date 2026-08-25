@@ -23,7 +23,7 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
         "HWSubLayer::OnPrepare: failed to allocate layer texture ({}, {}), "
         "discarding layer",
         GetWidth(), GetHeight());
-    return HWDrawState::kDrawStateNone;
+    return HWDrawState::kDrawStateError;
   }
 
   // prepare layer back draw
@@ -54,7 +54,7 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
 
   // need to prepare self before all children
   // so can make sure self layer texture is not used by children layer
-  HWLayer::OnPrepare(context);
+  state |= HWLayer::OnPrepare(context);
 
   PrepareRenderPassDesc(context);
 

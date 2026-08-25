@@ -282,8 +282,9 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
     layer_state_ |= kDrawStateDepth | kDrawStateStencil;
   }
 
-  // abstract layer no need stencil test and depth for itself
-  return HWDrawState::kDrawStateNone;
+  // abstract layer no need stencil test and depth for itself, but propagate
+  // an error from any child draw/layer to the root layer.
+  return layer_state_ & HWDrawState::kDrawStateError;
 }
 
 void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
