@@ -9,10 +9,11 @@
 
 namespace skity {
 
+class GPUDeviceGL;
+
 class GPUCommandBufferGL : public GPUCommandBuffer {
  public:
-  explicit GPUCommandBufferGL(bool support_msaa)
-      : context_support_msaa_(support_msaa) {}
+  explicit GPUCommandBufferGL(GPUDeviceGL* device) : device_(device) {}
 
   ~GPUCommandBufferGL() override = default;
 
@@ -22,6 +23,9 @@ class GPUCommandBufferGL : public GPUCommandBuffer {
   std::shared_ptr<GPUBlitPass> BeginBlitPass() override;
 
   bool Submit(const GPUSubmitInfo* submit_info = nullptr) override;
+
+  std::shared_ptr<GPURenderPass> CreateRenderPassForFBO(
+      const GPURenderPassDescriptor& desc, uint32_t fbo_id) const;
 
  private:
   std::shared_ptr<GPURenderPass> BeginDirectRenderPass(
@@ -36,7 +40,7 @@ class GPUCommandBufferGL : public GPUCommandBuffer {
 #endif
 
  private:
-  bool context_support_msaa_;
+  GPUDeviceGL* device_;
 };
 
 }  // namespace skity

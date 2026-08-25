@@ -5,6 +5,7 @@
 #include "src/gpu/gl/gpu_device_gl.hpp"
 
 #include <cstring>
+#include <string>
 
 #include "src/gpu/gl/gl_interface.hpp"
 #include "src/gpu/gl/gpu_buffer_gl.hpp"
@@ -16,6 +17,54 @@
 #include "src/tracing.hpp"
 
 namespace skity {
+namespace {
+
+std::string GetGLString(GLenum name) {
+  const auto* value = GL_CALL(GetString, name);
+  return value ? reinterpret_cast<const char*>(value) : "";
+}
+
+constexpr char kClearDrawVertexShader[] = R"(
+void main() {
+  vec2 position = vec2(-1.0, -1.0);
+  if (gl_VertexID == 1) {
+    position = vec2(3.0, -1.0);
+  } else if (gl_VertexID == 2) {
+    position = vec2(-1.0, 3.0);
+  }
+  gl_Position = vec4(position, -1.0, 1.0);
+}
+)";
+
+constexpr char kClearDrawFragmentShader[] = R"(
+layout(location = 0) out vec4 frag_color;
+void main() {
+  frag_color = vec4(0.0);
+}
+)";
+
+GLuint CreateClearDrawProgram(bool is_gles) {
+  const char* version = is_gles ? "#version 300 es\n" : "#version 330 core\n";
+  const char* fragment_precision = is_gles ? "precision mediump float;\n" : "";
+  const std::string vertex_source =
+      std::string(version) + kClearDrawVertexShader;
+  const std::string fragment_source =
+      std::string(version) + fragment_precision + kClearDrawFragmentShader;
+
+  GPUShaderFunctionGL vertex(GPULabel{std::string("GLClearDrawVertex")},
+                             GPUShaderStage::kVertex, vertex_source.c_str(),
+                             {});
+  GPUShaderFunctionGL fragment(GPULabel{std::string("GLClearDrawFragment")},
+                               GPUShaderStage::kFragment,
+                               fragment_source.c_str(), {});
+  if (!vertex.IsValid() || !fragment.IsValid()) {
+    return 0;
+  }
+
+  return CreateGLProgram(vertex.GetShader(), fragment.GetShader());
+}
+
+}  // namespace
 
 GPUDeviceGL::GPUDeviceGL() {
   auto gpu_caps = std::make_unique<GPUCaps>();
@@ -31,10 +80,26 @@ GPUDeviceGL::GPUDeviceGL() {
       gl_interface->ext_khr_blend_equation_advanced;
   gpu_caps->supports_dual_source_blending =
       !is_gles_ || gl_interface->ext_blend_func_extended;
+
+  driver_info_ = GLDriverInfo::FromStrings(GetGLString(GL_VENDOR),
+                                           GetGLString(GL_RENDERER),
+                                           GetGLString(GL_VERSION));
+  driver_workarounds_ = ResolveGLDriverWorkarounds(driver_info_);
   InitCaps(std::move(gpu_caps));
+
+  if (driver_workarounds_.use_draw_for_clear) {
+    clear_draw_program_ = CreateClearDrawProgram(is_gles_);
+    if (clear_draw_program_ == 0) {
+      LOGE("Failed to initialize GL clear-as-draw workaround");
+    }
+  }
 }
 
-GPUDeviceGL::~GPUDeviceGL() = default;
+GPUDeviceGL::~GPUDeviceGL() {
+  if (clear_draw_program_ != 0) {
+    GL_CALL(DeleteProgram, clear_draw_program_);
+  }
+}
 
 std::unique_ptr<GPUBuffer> GPUDeviceGL::CreateBuffer(
     const GPUBufferDescriptor& desc) {
@@ -91,7 +156,7 @@ std::unique_ptr<GPURenderPipeline> GPUDeviceGL::ClonePipeline(
 }
 
 std::shared_ptr<GPUCommandBuffer> GPUDeviceGL::CreateCommandBuffer() {
-  return std::make_shared<GPUCommandBufferGL>(CanUseMSAA());
+  return std::make_shared<GPUCommandBufferGL>(this);
 }
 
 std::shared_ptr<GPUSampler> GPUDeviceGL::CreateSampler(
@@ -233,8 +298,8 @@ void GPUDeviceGL::InitGLVersion() {
 
   auto version = GL_CALL(GetString, GL_VERSION);
 
-  if (std::strstr(reinterpret_cast<const char*>(version), "OpenGL ES") !=
-      nullptr) {
+  if (version != nullptr && std::strstr(reinterpret_cast<const char*>(version),
+                                        "OpenGL ES") != nullptr) {
     is_gles_ = true;
   }
 }

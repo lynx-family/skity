@@ -8,6 +8,38 @@
 
 namespace skity {
 
+GLuint CreateGLProgram(GLuint vertex_shader, GLuint fragment_shader,
+                       GPUShaderFunctionErrorCallback error_callback) {
+  GLuint program = GL_CALL(CreateProgram);
+  if (program == 0) {
+    constexpr char kError[] = "OpenGL CreateProgram failed.";
+    LOGE("{}", kError);
+    if (error_callback) {
+      error_callback(kError);
+    }
+    return 0;
+  }
+
+  GL_CALL(AttachShader, program, vertex_shader);
+  GL_CALL(AttachShader, program, fragment_shader);
+  GL_CALL(LinkProgram, program);
+
+  GLint linked = GL_FALSE;
+  GL_CALL(GetProgramiv, program, GL_LINK_STATUS, &linked);
+  if (linked == GL_TRUE) {
+    return program;
+  }
+
+  GLchar info_log[1024] = {};
+  GL_CALL(GetProgramInfoLog, program, sizeof(info_log), nullptr, info_log);
+  LOGE("OpenGL program link error: {}", info_log);
+  if (error_callback) {
+    error_callback(info_log);
+  }
+  GL_CALL(DeleteProgram, program);
+  return 0;
+}
+
 GLProgram::~GLProgram() {
   if (program_ != 0) {
     GL_CALL(DeleteProgram, program_);
@@ -37,28 +69,11 @@ GLuint GLProgram::GetUniformBlockIndex(const std::string name) {
 GPURenderPipelineGL::GPURenderPipelineGL(
     const GPURenderPipelineDescriptor& desc)
     : GPURenderPipeline(desc) {
-  GLuint program = GL_CALL(CreateProgram);
-  GLint success;
   auto vs = static_cast<GPUShaderFunctionGL*>(desc.vertex_function.get())
                 ->GetShader();
   auto fs = static_cast<GPUShaderFunctionGL*>(desc.fragment_function.get())
                 ->GetShader();
-
-  GL_CALL(AttachShader, program, vs);
-  GL_CALL(AttachShader, program, fs);
-  GL_CALL(LinkProgram, program);
-  GL_CALL(GetProgramiv, program, GL_LINK_STATUS, &success);
-
-  if (!success) {
-    GLchar info_log[1024];
-    GL_CALL(GetProgramInfoLog, program, 1024, nullptr, info_log);
-    LOGE("OpenGL program link error : {}", info_log);
-    GL_CALL(DeleteProgram, program);
-    if (desc.error_callback) {
-      desc.error_callback(info_log);
-    }
-    program = 0;
-  }
+  GLuint program = CreateGLProgram(vs, fs, desc.error_callback);
 
   bool is_gles =
       static_cast<GPUShaderFunctionGL*>(desc.vertex_function.get())->IsGLES();

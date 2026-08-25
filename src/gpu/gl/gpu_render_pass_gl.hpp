@@ -7,15 +7,19 @@
 
 #include <functional>
 #include <unordered_map>
+#include <utility>
 
 #include "src/gpu/gpu_render_pass.hpp"
 
 namespace skity {
 
+class GPUDeviceGL;
+
 class GPURenderPassGL : public GPURenderPass {
  public:
-  GPURenderPassGL(const GPURenderPassDescriptor& desc, uint32_t target_fbo)
-      : GPURenderPass(desc), target_fbo_(target_fbo) {}
+  GPURenderPassGL(const GPURenderPassDescriptor& desc, uint32_t target_fbo,
+                  GPUDeviceGL* device)
+      : GPURenderPass(desc), target_fbo_(target_fbo), device_(device) {}
 
   ~GPURenderPassGL() override = default;
 
@@ -34,6 +38,10 @@ class GPURenderPassGL : public GPURenderPass {
 
  private:
   void Clear();
+
+  void ClearWithDraw();
+
+  void ResetState();
 
   void SetScissorBox(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 
@@ -66,12 +74,14 @@ class GPURenderPassGL : public GPURenderPass {
   GPUScissorRect scissor_box_ = {};
   std::unordered_map<uint32_t, uint32_t> bound_buffer_ = {};
   std::function<void()> after_cleanup_action_ = nullptr;
+  GPUDeviceGL* device_;
 };
 
 class GLMSAAResolveRenderPass : public GPURenderPassGL {
  public:
   GLMSAAResolveRenderPass(const GPURenderPassDescriptor& desc,
-                          uint32_t target_fbo, uint32_t resolve_fbo);
+                          uint32_t target_fbo, uint32_t resolve_fbo,
+                          GPUDeviceGL* device);
 
   ~GLMSAAResolveRenderPass() override = default;
 
