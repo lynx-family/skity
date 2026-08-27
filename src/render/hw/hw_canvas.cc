@@ -713,19 +713,25 @@ void HWCanvas::OnFlush() {
 
     auto state = root_layer_->Prepare(&draw_context);
 
-    // currently root layer must contain stencil attachment
-    root_layer_->GenerateCommand(&draw_context, state);
+    if (state & HWDrawState::kDrawStateError) {
+      LOGE(
+          "HWCanvas::OnFlush: GPU resource allocation failed, discarding "
+          "frame");
+    } else {
+      // currently root layer must contain stencil attachment
+      root_layer_->GenerateCommand(&draw_context, state);
 
-    UploadMesh(cmd.get());
+      UploadMesh(cmd.get());
 
-    cmd->HoldResource(gpu_buffer_->GetGPUBufferOwner());
-    cmd->HoldResource(gpu_buffer_->GetGPUIndexBufferOwner());
-    cmd->HoldResource(static_buffer_->GetGPUBufferOwner());
-    cmd->HoldResource(static_buffer_->GetGPUIndexBufferOwner());
+      cmd->HoldResource(gpu_buffer_->GetGPUBufferOwner());
+      cmd->HoldResource(gpu_buffer_->GetGPUIndexBufferOwner());
+      cmd->HoldResource(static_buffer_->GetGPUBufferOwner());
+      cmd->HoldResource(static_buffer_->GetGPUIndexBufferOwner());
 
-    root_layer_->Draw(nullptr, cmd.get());
+      root_layer_->Draw(nullptr, cmd.get());
 
-    cmd->Submit(surface_->GetSubmitInfo());
+      cmd->Submit(surface_->GetSubmitInfo());
+    }
   }
 
   layer_stack_.clear();

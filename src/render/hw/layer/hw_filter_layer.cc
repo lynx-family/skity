@@ -5,6 +5,7 @@
 #include "src/render/hw/layer/hw_filter_layer.hpp"
 
 #include "src/gpu/gpu_context_impl.hpp"
+#include "src/logging.hpp"
 #include "src/render/hw/hw_render_pass_builder.hpp"
 
 namespace skity {
@@ -18,6 +19,15 @@ HWDrawState HWFilterLayer::OnPrepare(HWDrawContext* context) {
   auto desc = GetColorTextureDesc();
   auto device = context->gpuContext->GetGPUDevice();
   auto input_texture = device->CreateTexture(desc);
+
+  // If the filter input texture cannot be created, discard this layer
+  // instead of running the filter against a null attachment.
+  if (!input_texture) {
+    LOGE(
+        "HWFilterLayer::OnPrepare: failed to allocate filter input texture, "
+        "discarding layer");
+    return HWDrawState::kDrawStateError;
+  }
 
   HWFilterOutput filter_result{
       input_texture,

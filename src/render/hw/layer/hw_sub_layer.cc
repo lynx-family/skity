@@ -5,6 +5,7 @@
 #include "src/render/hw/layer/hw_sub_layer.hpp"
 
 #include "src/gpu/gpu_context_impl.hpp"
+#include "src/logging.hpp"
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/hw_render_pass_builder.hpp"
@@ -13,6 +14,17 @@ namespace skity {
 
 HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
   InitTexture(context->gpuContext, context->pool);
+
+  // If either the color attachment or the layer back texture cannot be created
+  // (e.g. GPU texture allocation failure), there is nothing meaningful to
+  // render, so discard this layer entirely.
+  if (!color_texture_ || !layer_back_draw_texture_) {
+    LOGE(
+        "HWSubLayer::OnPrepare: failed to allocate layer texture ({}, {}), "
+        "discarding layer",
+        GetWidth(), GetHeight());
+    return HWDrawState::kDrawStateError;
+  }
 
   // prepare layer back draw
   {
@@ -42,7 +54,7 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
 
   // need to prepare self before all children
   // so can make sure self layer texture is not used by children layer
-  HWLayer::OnPrepare(context);
+  state |= HWLayer::OnPrepare(context);
 
   PrepareRenderPassDesc(context);
 
@@ -50,9 +62,21 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
 }
 
 void HWSubLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
+  if (!color_texture_ || !layer_back_draw_texture_) {
+    return;
+  }
+
   HWLayer::OnGenerateCommand(context, state);
 
   layer_back_draw_->GenerateCommand(context, state);
+}
+
+void HWSubLayer::Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) {
+  if (!color_texture_ || !layer_back_draw_texture_) {
+    return;
+  }
+
+  HWLayer::Draw(render_pass, cmd);
 }
 
 std::shared_ptr<GPURenderPass> HWSubLayer::OnBeginRenderPass(

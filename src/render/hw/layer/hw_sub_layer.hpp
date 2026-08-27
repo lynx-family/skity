@@ -24,6 +24,8 @@ class HWSubLayer : public HWLayer {
 
   void SetAlpha(float alpha) { alpha_ = alpha; }
 
+  void Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) override;
+
   void ExpandTextureSizeToNextPow2() {
     texture_size_ = MakeApprox(texture_size_);
   }

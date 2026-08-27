@@ -273,6 +273,14 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
           static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
       desc.storage_mode = GPUTextureStorageMode::kPrivate;
       copy_info.texture = gpu_device_->CreateTexture(desc);
+      if (!copy_info.texture) {
+        LOGE(
+            "HWLayer::OnPrepare: failed to allocate dst read copy texture "
+            "({}x{}), discarding frame",
+            desc.width, desc.height);
+        layer_state_ |= HWDrawState::kDrawStateError;
+        continue;
+      }
       GPUSamplerDescriptor sampler_desc;
       copy_info.sampler = gpu_device_->CreateSampler(sampler_desc);
     }
@@ -282,8 +290,9 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
     layer_state_ |= kDrawStateDepth | kDrawStateStencil;
   }
 
-  // abstract layer no need stencil test and depth for itself
-  return HWDrawState::kDrawStateNone;
+  // abstract layer no need stencil test and depth for itself, but propagate
+  // an error from any child draw/layer to the root layer.
+  return layer_state_ & HWDrawState::kDrawStateError;
 }
 
 void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
@@ -363,6 +372,12 @@ std::shared_ptr<Shader> HWLayer::CreateDrawLayerShader(
     GPUContext* gpu_context, std::shared_ptr<GPUTexture> gpu_texture,
     const Rect& bounds) const {
   (void)gpu_context;
+  if (!gpu_texture) {
+    LOGE(
+        "HWLayer::CreateDrawLayerShader: gpu_texture is null, skip layer back "
+        "draw");
+    return {};
+  }
   auto texture = std::make_shared<InternalTexture>(
       gpu_texture, AlphaType::kPremul_AlphaType);
 
