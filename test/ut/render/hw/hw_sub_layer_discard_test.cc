@@ -146,6 +146,24 @@ class TestSubLayer : public HWSubLayer {
   }
 };
 
+// A GPU device that hands out stub textures while every other resource API
+// keeps failing. Control group for the dst-copy failure test: prepare stays
+// error-free as long as the copy texture itself can be allocated.
+class SucceedingGPUDevice : public FailingGPUDevice {
+ public:
+  std::shared_ptr<GPUTexture> CreateTexture(
+      const GPUTextureDescriptor& desc) override {
+    return std::make_shared<TestGPUTexture>(desc);
+  }
+};
+
+class SucceedingGPUContext : public FailingGPUContext {
+ protected:
+  std::unique_ptr<GPUDevice> CreateGPUDevice() override {
+    return std::make_unique<SucceedingGPUDevice>();
+  }
+};
+
 }  // namespace
 }  // namespace skity
 
@@ -312,6 +330,65 @@ TEST(HWSubLayerDiscard, SubLayerHasNoErrorWhenChildrenPrepareFine) {
   draw_context.arena_allocator = &arena;
 
   auto state = layer.Prepare(&draw_context);
+  EXPECT_EQ(state & skity::HWDrawState::kDrawStateError,
+            skity::HWDrawState::kDrawStateNone);
+}
+
+// The dst-read copy texture is allocated during prepare (hw_layer.cc). When
+// that allocation fails, the layer must report kDrawStateError instead of
+// leaving a null texture for the blit pass and dst-read sampling at draw time.
+TEST(HWSubLayerDiscard, DstCopyTextureFailurePropagatesError) {
+  skity::FailingGPUContext context;
+  ASSERT_TRUE(context.Init());
+
+  skity::ArenaAllocator arena;
+  skity::TestParentLayer parent(skity::Rect::MakeXYWH(0.f, 0.f, 100.f, 100.f),
+                                100, 100);
+  parent.SetArenaAllocator(&arena);
+  parent.SetClipDepth(0);
+
+  skity::HWBlendPlan blend_plan;
+  blend_plan.dst_read_strategy = skity::DstReadStrategy::kTextureCopy;
+  skity::StubDraw dst_read_draw(skity::HWDrawState::kDrawStateNone);
+  dst_read_draw.SetBlendPlan(blend_plan);
+  dst_read_draw.SetLayerSpaceBounds(skity::Rect::MakeWH(100.f, 100.f));
+  parent.AddDraw(&dst_read_draw);
+
+  skity::HWDrawContext draw_context;
+  draw_context.total_clip_depth = 1;
+  draw_context.gpuContext = &context;
+  draw_context.arena_allocator = &arena;
+
+  auto state = parent.Prepare(&draw_context);
+  EXPECT_NE(state & skity::HWDrawState::kDrawStateError,
+            skity::HWDrawState::kDrawStateNone);
+}
+
+// Control group for the test above: the same dst-read draw must not produce
+// an error when the copy texture can be allocated.
+TEST(HWSubLayerDiscard, DstCopyTextureSuccessHasNoError) {
+  skity::SucceedingGPUContext context;
+  ASSERT_TRUE(context.Init());
+
+  skity::ArenaAllocator arena;
+  skity::TestParentLayer parent(skity::Rect::MakeXYWH(0.f, 0.f, 100.f, 100.f),
+                                100, 100);
+  parent.SetArenaAllocator(&arena);
+  parent.SetClipDepth(0);
+
+  skity::HWBlendPlan blend_plan;
+  blend_plan.dst_read_strategy = skity::DstReadStrategy::kTextureCopy;
+  skity::StubDraw dst_read_draw(skity::HWDrawState::kDrawStateNone);
+  dst_read_draw.SetBlendPlan(blend_plan);
+  dst_read_draw.SetLayerSpaceBounds(skity::Rect::MakeWH(100.f, 100.f));
+  parent.AddDraw(&dst_read_draw);
+
+  skity::HWDrawContext draw_context;
+  draw_context.total_clip_depth = 1;
+  draw_context.gpuContext = &context;
+  draw_context.arena_allocator = &arena;
+
+  auto state = parent.Prepare(&draw_context);
   EXPECT_EQ(state & skity::HWDrawState::kDrawStateError,
             skity::HWDrawState::kDrawStateNone);
 }

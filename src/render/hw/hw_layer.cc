@@ -273,6 +273,14 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
           static_cast<GPUTextureUsageMask>(GPUTextureUsage::kTextureBinding);
       desc.storage_mode = GPUTextureStorageMode::kPrivate;
       copy_info.texture = gpu_device_->CreateTexture(desc);
+      if (!copy_info.texture) {
+        LOGE(
+            "HWLayer::OnPrepare: failed to allocate dst read copy texture "
+            "({}x{}), discarding frame",
+            desc.width, desc.height);
+        layer_state_ |= HWDrawState::kDrawStateError;
+        continue;
+      }
       GPUSamplerDescriptor sampler_desc;
       copy_info.sampler = gpu_device_->CreateSampler(sampler_desc);
     }
