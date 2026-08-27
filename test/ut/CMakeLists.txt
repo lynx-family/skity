@@ -59,6 +59,12 @@ add_executable(skity_unit_test
     utils/array_list_test.cc
 )
 
+if(${SKITY_GL_BACKEND})
+    target_sources(skity_unit_test PRIVATE
+        gpu/gl/gpu_driver_info_gl_test.cc
+    )
+endif()
+
 if(CMAKE_SYSTEM_NAME MATCHES "Windows")
     target_sources(skity_unit_test PRIVATE
         base/platform/win/str_conversion_test.cc

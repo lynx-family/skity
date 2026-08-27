@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "src/gpu/gl/gpu_driver_info_gl.hpp"
 #include "src/gpu/gpu_device.hpp"
 
 namespace skity {
@@ -44,6 +45,14 @@ class GPUDeviceGL : public GPUDevice {
 
   uint32_t GetMaxTextureSize() override;
 
+  uint32_t GetClearDrawProgram() const { return clear_draw_program_; }
+
+  const GLDriverInfo& GetDriverInfo() const { return driver_info_; }
+
+  const GLDriverWorkarounds& GetDriverWorkarounds() const {
+    return driver_workarounds_;
+  }
+
   std::shared_ptr<GPUShaderFunction> CreateShaderFunctionFromModule(
       const GPUShaderFunctionDescriptor& desc);
 
@@ -57,6 +66,9 @@ class GPUDeviceGL : public GPUDevice {
   int32_t gl_version_major_ = 0;
   int32_t gl_version_minor_ = 0;
   bool is_gles_ = false;
+  uint32_t clear_draw_program_ = 0;
+  GLDriverInfo driver_info_ = {};
+  GLDriverWorkarounds driver_workarounds_ = {};
 };
 
 }  // namespace skity

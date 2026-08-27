@@ -453,6 +453,8 @@ if(${SKITY_HW_RENDERER})
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_command_buffer_gl.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_device_gl.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_device_gl.hpp
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_driver_info_gl.cc
+      ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_driver_info_gl.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_context_impl_gl.cc
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_context_impl_gl.hpp
       ${CMAKE_CURRENT_LIST_DIR}/gpu/gl/gpu_render_pass_gl.cc

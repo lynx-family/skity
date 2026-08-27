@@ -10,6 +10,7 @@
 
 #include "src/geometry/glm_helper.hpp"
 #include "src/gpu/gl/gpu_buffer_gl.hpp"
+#include "src/gpu/gl/gpu_command_buffer_gl.hpp"
 #include "src/gpu/gl/gpu_render_pass_gl.hpp"
 #include "src/gpu/gl/gpu_texture_gl.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
@@ -90,7 +91,8 @@ std::shared_ptr<GPURenderPass> GLDirectRootLayer::OnBeginRenderPass(
   render_pass_desc.depth_attachment.store_op = GPUStoreOp::kDiscard;
   render_pass_desc.depth_attachment.clear_value = 0.f;
 
-  return std::make_shared<GPURenderPassGL>(render_pass_desc, fbo_id_);
+  return static_cast<GPUCommandBufferGL *>(cmd)->CreateRenderPassForFBO(
+      render_pass_desc, fbo_id_);
 }
 
 bool GLDirectRootLayer::OnCopyToDstTexture(
@@ -285,11 +287,13 @@ void GLDrawTextureLayer::OnPostDraw(GPURenderPass *, GPUCommandBuffer *cmd) {
   fake_desc.depth_attachment.store_op = GPUStoreOp::kDiscard;
   fake_desc.depth_attachment.clear_value = 0.f;
 
-  GPURenderPassGL fake_render_pass(fake_desc, resolve_fbo_);
+  auto fake_render_pass =
+      static_cast<GPUCommandBufferGL *>(cmd)->CreateRenderPassForFBO(
+          fake_desc, resolve_fbo_);
 
-  layer_back_draw_->Draw(&fake_render_pass, cmd);
+  layer_back_draw_->Draw(fake_render_pass.get(), cmd);
 
-  fake_render_pass.EncodeCommands(
+  fake_render_pass->EncodeCommands(
       GetViewport(), GPUScissorRect{0, 0, GetWidth(), GetHeight()});
 }
 
@@ -383,9 +387,11 @@ void GLPartialDrawTextureLayer::OnPostDraw(GPURenderPass *render_pass,
   fake_desc.depth_attachment.store_op = GPUStoreOp::kStore;
   fake_desc.depth_attachment.clear_value = 0.f;
 
-  GPURenderPassGL fake_render_pass(fake_desc, resolve_fbo_);
+  auto fake_render_pass =
+      static_cast<GPUCommandBufferGL *>(cmd)->CreateRenderPassForFBO(
+          fake_desc, resolve_fbo_);
 
-  layer_back_draw_->Draw(&fake_render_pass, cmd);
+  layer_back_draw_->Draw(fake_render_pass.get(), cmd);
 
   GPUViewport viewport{0.f,
                        0.f,
@@ -401,7 +407,7 @@ void GLPartialDrawTextureLayer::OnPostDraw(GPURenderPass *render_pass,
       target_height_,
   };
 
-  fake_render_pass.EncodeCommands(viewport, scissor);
+  fake_render_pass->EncodeCommands(viewport, scissor);
 }
 
 }  // namespace skity

@@ -13,6 +13,9 @@
 
 namespace skity {
 
+GLuint CreateGLProgram(GLuint vertex_shader, GLuint fragment_shader,
+                       GPUShaderFunctionErrorCallback error_callback = {});
+
 class GLProgram {
  public:
   explicit GLProgram(GLuint program, bool ubo_slot_in_shader)

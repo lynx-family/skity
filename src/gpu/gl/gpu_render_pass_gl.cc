@@ -8,6 +8,7 @@
 
 #include "src/gpu/gl/formats_gl.h"
 #include "src/gpu/gl/gpu_buffer_gl.hpp"
+#include "src/gpu/gl/gpu_device_gl.hpp"
 #include "src/gpu/gl/gpu_render_pipeline_gl.hpp"
 #include "src/gpu/gl/gpu_sampler_gl.hpp"
 #include "src/gpu/gl/gpu_texture_gl.hpp"
@@ -51,25 +52,14 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
       target_height,
   });
 
+  SetScissorBox(s.x, target_height - s.y - s.height, s.width, s.height);
+
+  ResetState();
+  Clear();
   GL_CALL(Viewport, v.x,                   // x
           target_height - v.y - v.height,  // y
           v.width,                         // width
           v.height);                       // height
-
-  SetScissorBox(s.x, target_height - s.y - s.height, s.width, s.height);
-
-  // sync state to default
-  GL_CALL(Disable, GL_STENCIL_TEST);
-  GL_CALL(StencilFunc, GL_ALWAYS, 0, 0xFF);
-  GL_CALL(StencilOp, GL_KEEP, GL_KEEP, GL_KEEP);
-  GL_CALL(StencilMask, 0xFF);
-  GL_CALL(ColorMask, 1, 1, 1, 1);
-  GL_CALL(Enable, GL_BLEND);
-  GL_CALL(BlendFunc, GL_ZERO, GL_ZERO);
-
-  SetDepthState(true, true, GPUCompareFunction::kAlways);
-
-  Clear();
   if (after_cleanup_action_) {
     after_cleanup_action_();
   }
@@ -107,7 +97,7 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
                   depth_stencil.depth_state.compare);
 
     // Set program
-    GL_CALL(UseProgram, pipeline->GetProgramId());
+    UseProgram(pipeline->GetProgramId());
 
     BindBuffer(GL_ARRAY_BUFFER,
                static_cast<GPUBufferGL*>(command->vertex_buffer.buffer)
@@ -262,8 +252,12 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
 }
 
 void GPURenderPassGL::Clear() {
-  const auto& desc = GetDescriptor();
+  if (device_->GetDriverWorkarounds().use_draw_for_clear) {
+    ClearWithDraw();
+    return;
+  }
 
+  const auto& desc = GetDescriptor();
   GLuint clear_mask = 0;
 
   if (desc.color_attachment.load_op == GPULoadOp::kClear) {
@@ -287,6 +281,71 @@ void GPURenderPassGL::Clear() {
   if (clear_mask) {
     GL_CALL(Clear, clear_mask);
   }
+}
+
+void GPURenderPassGL::ClearWithDraw() {
+  const auto& desc = GetDescriptor();
+  const bool clear_color = desc.color_attachment.texture &&
+                           desc.color_attachment.load_op == GPULoadOp::kClear;
+  const bool clear_depth = desc.depth_attachment.texture &&
+                           desc.depth_attachment.load_op == GPULoadOp::kClear;
+  const bool clear_stencil =
+      desc.stencil_attachment.texture &&
+      desc.stencil_attachment.load_op == GPULoadOp::kClear;
+  if (!clear_color && !clear_depth && !clear_stencil) {
+    return;
+  }
+
+  DEBUG_CHECK(!clear_color || (desc.color_attachment.clear_value.r == 0.0 &&
+                               desc.color_attachment.clear_value.g == 0.0 &&
+                               desc.color_attachment.clear_value.b == 0.0 &&
+                               desc.color_attachment.clear_value.a == 0.0));
+  DEBUG_CHECK(!clear_depth || desc.depth_attachment.clear_value == 0.f);
+  DEBUG_CHECK(!clear_stencil || desc.stencil_attachment.clear_value == 0u);
+
+  const GLuint program = device_->GetClearDrawProgram();
+  DEBUG_CHECK(program != 0);
+  if (program == 0) {
+    LOGE("GL clear-as-draw is unavailable; skipping attachment clear");
+    return;
+  }
+
+  GL_CALL(Disable, GL_BLEND);
+  SetColorWriteMask(clear_color);
+  SetDepthState(clear_depth, true, GPUCompareFunction::kAlways);
+  if (clear_stencil) {
+    GL_CALL(Enable, GL_STENCIL_TEST);
+    GL_CALL(StencilFunc, GL_ALWAYS, 0, 0xFF);
+    GL_CALL(StencilOp, GL_REPLACE, GL_REPLACE, GL_REPLACE);
+    GL_CALL(StencilMask, 0xFF);
+  } else {
+    GL_CALL(Disable, GL_STENCIL_TEST);
+  }
+  UseProgram(program);
+  GL_CALL(Viewport, 0, 0, desc.GetTargetWidth(), desc.GetTargetHeight());
+  GL_CALL(DrawArrays, GL_TRIANGLES, 0, 3);
+
+  // The synthetic clear bypasses the render-pass state cache.
+  ResetState();
+}
+
+void GPURenderPassGL::ResetState() {
+  GL_CALL(Disable, GL_STENCIL_TEST);
+  GL_CALL(StencilFunc, GL_ALWAYS, 0, 0xFF);
+  GL_CALL(StencilOp, GL_KEEP, GL_KEEP, GL_KEEP);
+  GL_CALL(StencilMask, 0xFF);
+  GL_CALL(ColorMask, 1, 1, 1, 1);
+  GL_CALL(Enable, GL_BLEND);
+  GL_CALL(BlendFunc, GL_ZERO, GL_ZERO);
+  SetDepthState(true, true, GPUCompareFunction::kAlways);
+
+  enable_color_write_ = true;
+  enable_stencil_test_ = false;
+  stencil_reference_ = 0;
+  stencil_state_ = {};
+  blend_src_ = GL_ZERO;
+  blend_dst_ = GL_ZERO;
+  disable_blend_ = false;
 }
 
 void GPURenderPassGL::SetScissorBox(uint32_t x, uint32_t y, uint32_t width,
@@ -447,8 +506,8 @@ void GPURenderPassGL::BlitFramebuffer(uint32_t src_fbo, uint32_t dst_fbo,
 
 GLMSAAResolveRenderPass::GLMSAAResolveRenderPass(
     const skity::GPURenderPassDescriptor& desc, uint32_t target_fbo,
-    uint32_t resolve_fbo)
-    : GPURenderPassGL(desc, target_fbo), resolve_fbo_(resolve_fbo) {}
+    uint32_t resolve_fbo, GPUDeviceGL* device)
+    : GPURenderPassGL(desc, target_fbo, device), resolve_fbo_(resolve_fbo) {}
 
 void GLMSAAResolveRenderPass::EncodeCommands(
     std::optional<GPUViewport> viewport,

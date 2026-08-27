@@ -6,6 +6,7 @@
 
 #include "src/gpu/gl/gl_interface.hpp"
 #include "src/gpu/gl/gpu_blit_pass_gl.hpp"
+#include "src/gpu/gl/gpu_device_gl.hpp"
 #include "src/gpu/gl/gpu_render_pass_gl.hpp"
 #include "src/gpu/gl/gpu_texture_gl.hpp"
 
@@ -14,7 +15,7 @@ namespace skity {
 std::shared_ptr<GPURenderPass> GPUCommandBufferGL::BeginRenderPass(
     const GPURenderPassDescriptor& desc) {
   // this render pass needs msaa resolve
-  if (desc.color_attachment.resolve_texture && context_support_msaa_) {
+  if (desc.color_attachment.resolve_texture && device_->CanUseMSAA()) {
 #ifdef SKITY_ANDROID
     if (GLInterface::GlobalInterface()->ext_multisampled_render_to_texture !=
         0) {
@@ -37,6 +38,11 @@ std::shared_ptr<GPUBlitPass> GPUCommandBufferGL::BeginBlitPass() {
 bool GPUCommandBufferGL::Submit(const GPUSubmitInfo* submit_info) {
   (void)submit_info;
   return true;
+}
+
+std::shared_ptr<GPURenderPass> GPUCommandBufferGL::CreateRenderPassForFBO(
+    const GPURenderPassDescriptor& desc, uint32_t fbo_id) const {
+  return std::make_shared<GPURenderPassGL>(desc, fbo_id, device_);
 }
 
 std::shared_ptr<GPURenderPass> GPUCommandBufferGL::BeginDirectRenderPass(
@@ -85,7 +91,7 @@ std::shared_ptr<GPURenderPass> GPUCommandBufferGL::BeginDirectRenderPass(
 
   GL_CALL(BindFramebuffer, GL_FRAMEBUFFER, 0);
 
-  return std::make_shared<GPURenderPassGL>(desc, fbo_id);
+  return CreateRenderPassForFBO(desc, fbo_id);
 }
 
 std::shared_ptr<GPURenderPass> GPUCommandBufferGL::BeginMSAAResolveRenderPass(
@@ -157,7 +163,7 @@ std::shared_ptr<GPURenderPass> GPUCommandBufferGL::BeginMSAAResolveRenderPass(
   }
 
   return std::make_shared<GLMSAAResolveRenderPass>(desc, render_fbo,
-                                                   resolve_fbo);
+                                                   resolve_fbo, device_);
 }
 
 #ifdef SKITY_ANDROID
@@ -218,7 +224,7 @@ std::shared_ptr<GPURenderPass> GPUCommandBufferGL::BeginTileMSAARenderPass(
 
   GL_CALL(BindFramebuffer, GL_FRAMEBUFFER, 0);
 
-  return std::make_shared<GPURenderPassGL>(desc, fbo_id);
+  return CreateRenderPassForFBO(desc, fbo_id);
 }
 
 #endif

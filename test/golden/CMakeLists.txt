@@ -32,6 +32,7 @@ set(SKITY_GOLDEN_TEST_SOURCES
   ${CMAKE_CURRENT_LIST_DIR}/common/gl/golden_test_env_gl.hpp
   ${CMAKE_CURRENT_LIST_DIR}/common/gl/golden_test_env_gl.cc
   ${CMAKE_CURRENT_LIST_DIR}/common/gl/golden_texture_gl.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/common/gl/gpu_clear_draw_gl_test.cc
 )
 
 # Vulkan backend code
@@ -57,6 +58,7 @@ target_include_directories(skity_golden_test
   ${CMAKE_SOURCE_DIR}
   ${CMAKE_SOURCE_DIR}/module/wgx/include
   ${CMAKE_SOURCE_DIR}/third_party/glm
+  ${CMAKE_SOURCE_DIR}/third_party/glad/include
   ${CMAKE_SOURCE_DIR}/third_party/libSwAngle/include
 )
 
