@@ -21,7 +21,20 @@ constexpr auto Atlas_Padding = 2;
 constexpr glm::ivec4 INVALID_LOC = glm::ivec4{-1, -1, 0, 0};
 
 struct AtlasConfig {
-  explicit AtlasConfig(AtlasFormat format, bool enable_larger_atlas) {
+  explicit AtlasConfig(AtlasFormat format, bool enable_larger_atlas,
+                       bool enable_large_emoji_atlas = false) {
+    if (format == AtlasFormat::RGBA32 && enable_large_emoji_atlas) {
+      is_large_emoji_atlas = true;
+      max_num_bitmap_per_texture = 1;
+      max_num_bitmap_per_atlas = MAX_NUM_TEXTURE_PER_ATLAS;
+      col_mask = 0;
+      row_mask = 0;
+      row_shift = 0;
+      max_bitmap_size = 2048;
+      max_texture_size = 2048;
+      return;
+    }
+
     // There are 4 or 16 bitmaps to be uploaded onto one texture, and 4 textures
     // to be used dynamiclly, regardless of format. We only config different
     // size of bitmap to match different formats.
@@ -50,6 +63,7 @@ struct AtlasConfig {
   std::uint16_t row_shift;
   std::uint16_t max_bitmap_size;
   std::uint16_t max_texture_size;
+  bool is_large_emoji_atlas = false;
   // Sync with the number of textures in fragment shader
   static constexpr std::uint16_t MAX_NUM_TEXTURE_PER_ATLAS = 4;
 };

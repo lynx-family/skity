@@ -650,6 +650,24 @@ GlyphRunList GlyphRun::MakeInternal(
   float sy = Vec2{transform.GetSkewX(), transform.GetScaleY()}.Length();
   float maximun_text_scale =
       std::abs(glm::max(sx * context_scale, sy * context_scale));
+  if (format == AtlasFormat::RGBA32 &&
+      atlas_manager->IsLargeEmojiAtlasEnabled() && !transform.HasPersp()) {
+    constexpr float kMaxLargeEmojiTextSize = 1024.f;
+    const float effective_text_size = font.GetSize() * maximun_text_scale;
+    if (effective_text_size >= paint.GetFontThreshold() &&
+        effective_text_size < kMaxLargeEmojiTextSize) {
+      Atlas* atlas = atlas_manager->GetAtlas(format);
+      if (atlas->GetConfig().is_large_emoji_atlas) {
+        Paint working_paint = paint;
+        working_paint.SetStyle(Paint::kFill_Style);
+        return DirectGlyphRun::SubRunListByTexture(
+            count, glyphs, origin, position_x, position_y, font, working_paint,
+            format, context_scale, transform, false, atlas_manager,
+            arena_allocator);
+      }
+    }
+  }
+
   if (control.CanUseDirect(font.GetSize() * maximun_text_scale, transform,
                            paint, font.GetTypeface())) {
     // texture
