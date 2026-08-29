@@ -292,10 +292,11 @@ class SKITY_API GPUContext {
 
   /**
    * Use a larger atlas cache for better performance, but with that comes a
-   * larger memory overhead. There are 4 times more memory if the corresponding
-   * bit is set.
+   * larger memory overhead. The overhead depends on the selected format and
+   * atlas layout.
    * @param larger_atlas_mask  bit 0 represents the A8 format for normal texts,
-   * and bit 1 represents the RGBA32 format for emoji texts.
+   * bit 1 represents the RGBA32 format for emoji texts, bit 2 is reserved, and
+   * bit 3 enables the 2048x2048 large Emoji atlas.
    */
   void SetLargerAtlasMask(std::uint8_t larger_atlas_mask) {
     larger_atlas_mask_ = larger_atlas_mask;

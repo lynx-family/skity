@@ -44,10 +44,17 @@ Atlas* AtlasManager::GetAtlas(AtlasFormat format) {
   if (!atlas_[index]) {
     bool enable_larger_atlas =
         gpu_context_->GetLargerAtlasMask() & (1 << index);
-    atlas_[index] =
-        std::make_unique<Atlas>(format, gpu_device_, enable_larger_atlas);
+    bool enable_large_emoji_atlas =
+        format == AtlasFormat::RGBA32 && IsLargeEmojiAtlasEnabled();
+    atlas_[index] = std::make_unique<Atlas>(
+        format, gpu_device_, enable_larger_atlas, enable_large_emoji_atlas);
   }
   return atlas_[index].get();
+}
+
+bool AtlasManager::IsLargeEmojiAtlasEnabled() const {
+  constexpr size_t kRGBA32Index = static_cast<size_t>(AtlasFormat::RGBA32);
+  return gpu_context_->GetLargerAtlasMask() & (1 << (kRGBA32Index + 2));
 }
 
 void AtlasManager::ClearExtraRes() {
@@ -60,10 +67,10 @@ void AtlasManager::ClearExtraRes() {
 
 /// Atlas
 Atlas::Atlas(AtlasFormat format, GPUDevice* gpu_device,
-             bool enable_larger_atlas)
+             bool enable_larger_atlas, bool enable_large_emoji_atlas)
     : format_(format),
       gpu_device_(gpu_device),
-      atlas_config_(format, enable_larger_atlas) {
+      atlas_config_(format, enable_larger_atlas, enable_large_emoji_atlas) {
   switch (format_) {
     case AtlasFormat::A8:
       bytes_per_pixel_ = 1;
