@@ -43,12 +43,19 @@ if (${SKITY_GL_BACKEND})
   target_compile_definitions(skity-capi PRIVATE -DSKITY_OPENGL)
 endif()
 
+# Vulkan-only wrapper sources depend on the vendored Vulkan headers, so they
+# are only compiled when the Vulkan backend is enabled.
+set(SKITY_CAPI_VULKAN_SOURCES)
 if (${SKITY_VK_BACKEND})
   target_compile_definitions(skity-capi PRIVATE -DSKITY_VULKAN)
   # skity keeps this include path private, so its C API target must add the
   # vendored Vulkan headers for its own wrapper sources.
   target_include_directories(skity-capi PRIVATE
     ${SKITY_ROOT}/third_party/Vulkan-Headers/include
+  )
+  list(APPEND SKITY_CAPI_VULKAN_SOURCES
+    ${CMAKE_CURRENT_LIST_DIR}/src/semaphore_vk.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/native_window_vk.cpp
   )
 endif()
 
@@ -84,8 +91,7 @@ target_sources(
     ${CMAKE_CURRENT_LIST_DIR}/src/handle.hpp
     ${CMAKE_CURRENT_LIST_DIR}/src/context_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/surface_c.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/semaphore_vk.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/native_window_vk.cpp
+    ${SKITY_CAPI_VULKAN_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/src/canvas_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/paint_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/path_c.cpp
