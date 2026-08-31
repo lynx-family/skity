@@ -362,8 +362,8 @@ These modules have complete (or near-complete) C coverage of their core:
 - Effects: `color_filter`, `mask_filter`, `path_effect`, `image_filter`
   (all factories)
 - `FontManager` + `FontStyleSet`
-- `PictureRecorder` + `DisplayList` (core record / replay; introspection is
-  not — see below)
+- `PictureRecorder` + `DisplayList` (record / replay / cull-rect replay /
+  rtree search / properties / per-op paint lookup)
 - `PrecompileContext`
 - `Texture` (create / wrap-external / upload / deferred-upload)
 - `GPUContext` (create, `set_error_callback`, all `set_enable_*` tuning,
@@ -382,20 +382,20 @@ gaps — they are listed in the next table.
 
 ### Partially covered (gaps remain)
 
-Priority tags: **P0/P1/P2** are planned for the next pass; **P3** is deferred.
+Priority tags: **P3** is deferred / low-value.
 
 | Module | Covered | Missing (priority) |
 |---|---|---|
-| `Paint` | all setters (style/stroke/color/alpha/blend/aa/text-size), attach shader/filter/effect/typeface | **P0**: fill/stroke split-color (`set/get_stroke_color`, `set/get_fill_color`); getters (`get_stroke_miter/cap/join`, `get_text_size`, `get_shader`/`get_color_filter`/…). **P3**: `get_color4f`, `get_alpha_f`, SDF / font-threshold |
-| `Shader` | gradient factories (linear/radial/sweep/conical) + image shader | **P0**: `set/get_local_matrix` (gradient transform). **P3**: `is_opaque`, `as_gradient` introspection |
-| `GPUSurface` | create, `lock_canvas`, `flush`, `read_pixels`, size getters | **P0**: GL `surface_mode` + `can_blit_from_target_fbo` on `surface_create_info_gl`. **P3**: per-surface CoverageAAMode, `add_external_wait_semaphore` (needs semaphore) |
-| `Path` | construction, tangent `arc_to`, `add_*`, boolean ops, `PathMeasure`, `transform`, `count`/`get_point`/`is_rect` | **P1**: oval `arc_to(oval,start,sweep)` + SVG `arc_to(rx,ry,rot,ArcSize,sweep,x,y)` (+ `ArcSize` enum), per-corner `add_round_rect(radii[])`, `get/set_last_pt`, `AddMode` (extend), `copy_with_matrix/scale`. **P3**: convexity / segment-masks introspection |
-| `Image` | 5 factories + `read_pixels` + size getters | **P1**: `scale_pixels`; `make_from_pixels` variant taking a `GPUContext`. **P3**: alpha/type/backend introspection |
-| `Font` | create, set typeface/size, `get_metrics`, rendering-quality switches, `make_with_size`, `get_widths` | **P0**: rendering-switch getters (`is_subpixel`/…), `get_size`, `get_typeface`. **P1**: `scale_x/skew_x` (+ 4-arg ctor). **P3**: `get_widths` bounds overload, `LoadGlyph*` (needs GlyphData) |
-| `Typeface` | `make_from_file`, `get_default`, `unichars_to_glyphs`/`unichar_to_glyph` | **P1**: `make_from_data` (in-memory load, pairs with `skity_data`). **P3**: `get_font_style`/`is_bold`/`is_italic`, `contain_glyph`, `units_per_em`/`contains_color_table`, table / variation / descriptor |
-| `TextBlob` | build (UTF-8) + draw | **P2**: `get_bounds_rect`, `compute_bounds`. **P3**: `get_text_run`; multi-font fallback via `TypefaceDelegate` (large, separate increment) |
+| `Paint` | all setters + getters, fill/stroke split colors, effect/typeface attach | **P3**: `get_color4f`, `get_alpha_f`, SDF / font-threshold |
+| `Shader` | gradient factories (linear/radial/sweep/conical) + image shader + `set/get_local_matrix` | **P3**: `is_opaque`, `as_gradient` introspection |
+| `GPUSurface` | create, `lock_canvas`, `flush`, `read_pixels`, size getters, GL `surface_mode` + `can_blit_from_target_fbo` | **P3**: per-surface CoverageAAMode, `add_external_wait_semaphore` (needs semaphore) |
+| `Path` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii), boolean ops, `PathMeasure`, `transform`, last-pt get/set, `copy_with_matrix/scale`, counts / `get_point` / `is_rect` | **P3**: convexity / segment-masks introspection, verb iteration (`get_verb` / `Iter`), `add_path` extend mode (`AddMode`) |
+| `Image` | 5 factories (incl. the `GPUContext` variant) + `read_pixels` + `scale_pixels` + size getters | **P3**: alpha/type/backend introspection |
+| `Font` | create (incl. scale/skew ctor), typeface/size get/set, rendering-quality switch get/set, `get_metrics`, `make_with_size`, `get_widths` | **P3**: `get_widths` bounds overload, `LoadGlyph*` (needs GlyphData) |
+| `Typeface` | `make_from_file`, `make_from_data`, `get_default`, `unichars_to_glyphs`/`unichar_to_glyph` | **P3**: `get_font_style`/`is_bold`/`is_italic`, `contain_glyph`, `units_per_em`/`contains_color_table`, table / variation / descriptor |
+| `TextBlob` | build (UTF-8) + draw, `get_bounds`, `compute_bounds`, `TypefaceDelegate` fallback (ordered-list + custom-fallback-callback) | **P3**: `get_text_run`; fully custom `BreakTextRun` delegate (caller-driven segmentation) |
 | `Canvas` | full draw + state + clip + text/glyphs | **P3**: per-corner RRect draw/clip/drrect, `get_global_clip_bounds`, `draw_image` sampling overloads |
-| `DisplayList` | draw / bounds / op_count | **P3**: `search` (RTree) + property getters (`has_shader`, …) — needs `build_rtree` option + `RecordedOpOffset` as a set |
+| `DisplayList` | draw / cull-rect draw / bounds / op_count / properties / rtree search (+ non-overlapping rects) / per-op paint lookup, `begin_recording` with build options | `RecordedOpOffset` is exposed as a plain `int32_t` (round-trips through the public `RecordedOpOffset::Make`) — no opaque set type |
 | `GPUContext` | (see Fully covered) | **P3**: `create_texture_with_desc` (mipmap), `is_gpu_backend_supported`, `get_backend_type` |
 
 ### Not yet covered (whole module missing)
@@ -414,25 +414,12 @@ Priority tags: **P0/P1/P2** are planned for the next pass; **P3** is deferred.
 
 ### Suggested priorities
 
-**P0** — high-value, low-cost (next pass):
-
-- ☐ `Paint` fill/stroke split-color setters + getters; remaining `Paint` getters
-- ☐ `Font` rendering-switch getters + `get_size` / `get_typeface`
-- ☐ `Shader::set/get_local_matrix` (gradient transforms)
-- ☐ GL `surface_mode` on `surface_create_info_gl` (only functional GL gap)
-
-**P1** — core capability:
-
-- ☐ `Path` arc family (oval arc, SVG arc + `ArcSize`) + per-corner round-rect
-- ☐ `Image::scale_pixels` + `make_from_pixels(context)`
-- ☐ `Typeface` / `FontManager::make_from_data` (in-memory font load)
-- ☐ `Font::scale_x/skew_x` (+ 4-arg ctor)
-
-**P2** — measurement:
-
-- ☐ `TextBlob::get_bounds_rect` / `compute_bounds`
-
-**P3** — deferred. Detailed backlog by module:
+The original **P0–P2** backlog (paint getters, shader local matrix, GL
+`surface_mode`, path arc family, image `scale_pixels`, typeface
+`make_from_data`, font `scale_x/skew_x`, text-blob bounds) plus the
+**TypefaceDelegate fallback** and **DisplayList partial-redraw** increments
+have all landed. What remains is **P3** — deferred. Detailed backlog by
+module:
 
 - **Paint**: `get_color4f`, `get_alpha_f`; SDF / font-threshold
   (`set/is_sdf_for_small_text`, `get/set_font_threshold`).
@@ -454,15 +441,13 @@ Priority tags: **P0/P1/P2** are planned for the next pass; **P3** is deferred.
   variable fonts (`get_variation_design_position` / `parameters`,
   `make_variation`, +`FontArguments`); cache keys (`typeface_id`,
   `get_font_descriptor`).
-- **TextBlob**: `get_text_run` (+`TextRun` projection); **`TypefaceDelegate`
-  multi-font fallback** — the largest text gap (CJK/emoji auto-fallback).
+- **TextBlob**: `get_text_run` (+`TextRun` projection); a fully custom
+  `BreakTextRun` delegate (caller-driven run segmentation — the current
+  `skity_typeface_delegate_create_fallback` keeps the built-in policy and only
+  overrides the typeface choice).
 - **Canvas**: per-corner RRect `draw_rrect` / `clip_rrect` / `draw_drrect`
   (+RRect projection or 8-radii); `get_global_clip_bounds`; `draw_image`
   sampling/paint overloads; `draw_color(color4f, blend)`.
-- **DisplayList**: `search` / `search_non_overlapping_drawn_rects` (RTree);
-  property getters (`has_save_layer` / `has_shader` / …); `get_op_paint_by_offset`
-  (+`RecordedOpOffset`); `draw(canvas, cull_rect)`; prerequisite
-  `begin_recording(rect, DisplayListBuildOptions)` (+`build_rtree` option).
 - **GPUContext**: `create_texture_with_desc` (mipmap, +`TextureDescriptor`
   mirror); `is_gpu_backend_supported`; `get_backend_type`.
 
