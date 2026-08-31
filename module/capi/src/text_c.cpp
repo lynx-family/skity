@@ -177,9 +177,10 @@ skity_typeface_delegate skity_typeface_delegate_create_simple(
   if (delegate == nullptr) {
     return nullptr;
   }
+  std::shared_ptr<skity::TypefaceDelegate> impl(std::move(delegate));
   return skity::capi::alloc_handle<skity_typeface_delegate_s>(
       SKITY_OBJECT_TYPE_TYPEFACE_DELEGATE, SKITY_HANDLE_OWNING,
-      std::move(delegate));
+      std::move(impl));
 }
 
 skity_typeface_delegate skity_typeface_delegate_create_fallback(

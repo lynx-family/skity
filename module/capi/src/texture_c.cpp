@@ -15,6 +15,12 @@
 #include <skity/gpu/gpu_context_gl.hpp>
 #endif
 
+#if defined(SKITY_VULKAN)
+#include <skity_c/skity_texture_vk.h>
+
+#include <skity/gpu/gpu_context_vk.hpp>
+#endif
+
 #include "handle.hpp"
 
 namespace {
@@ -160,34 +166,53 @@ skity_texture skity_texture_create_from_backend(
   if (ctx == nullptr) {
     return nullptr;
   }
+  auto st = info->p_next != nullptr
+                ? *static_cast<const skity_structure_type*>(info->p_next)
+                : SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO;
+  std::shared_ptr<skity::Texture> tex;
 #if defined(SKITY_OPENGL)
-  const skity_backend_texture_info_gl* gl = nullptr;
-  if (info->p_next != nullptr) {
-    auto st = *static_cast<const skity_structure_type*>(info->p_next);
-    if (st == SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_GL) {
-      gl = static_cast<const skity_backend_texture_info_gl*>(info->p_next);
-    }
+  if (st == SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_GL) {
+    const auto* gl =
+        static_cast<const skity_backend_texture_info_gl*>(info->p_next);
+    skity::GPUBackendTextureInfoGL bi{};
+    bi.backend = skity::GPUBackendType::kOpenGL;
+    bi.width = info->width;
+    bi.height = info->height;
+    bi.format = static_cast<skity::TextureFormat>(info->format);
+    bi.alpha_type = static_cast<skity::AlphaType>(info->alpha_type);
+    bi.tex_id = gl->texture_id;
+    bi.owned_by_engine = gl->owned_by_engine != 0;
+    tex = ctx->WrapTexture(&bi, release, userdata);
   }
-  if (gl == nullptr) {
-    return nullptr;
+#endif
+
+#if defined(SKITY_VULKAN)
+  if (st == SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_VK) {
+    const auto* vk =
+        static_cast<const skity_backend_texture_info_vk*>(info->p_next);
+    skity::GPUBackendTextureInfoVK bi{};
+    bi.backend = skity::GPUBackendType::kVulkan;
+    bi.width = info->width;
+    bi.height = info->height;
+    bi.format = static_cast<skity::TextureFormat>(info->format);
+    bi.alpha_type = static_cast<skity::AlphaType>(info->alpha_type);
+    bi.image = vk->image;
+    bi.image_view = vk->image_view;
+    bi.vk_format = vk->vk_format;
+    bi.image_usage = vk->image_usage;
+    bi.initial_layout = vk->initial_layout;
+    bi.final_layout = vk->final_layout;
+    bi.owns_image = vk->owns_image != 0;
+    bi.owns_image_view = vk->owns_image_view != 0;
+    tex = ctx->WrapTexture(&bi, release, userdata);
   }
-  skity::GPUBackendTextureInfoGL bi{};
-  bi.backend = skity::GPUBackendType::kOpenGL;
-  bi.width = info->width;
-  bi.height = info->height;
-  bi.format = static_cast<skity::TextureFormat>(info->format);
-  bi.alpha_type = static_cast<skity::AlphaType>(info->alpha_type);
-  bi.tex_id = gl->texture_id;
-  bi.owned_by_engine = gl->owned_by_engine != 0;
-  auto tex = ctx->WrapTexture(&bi, release, userdata);
+#endif
+
   if (tex == nullptr) {
     return nullptr;
   }
   return skity::capi::alloc_handle<skity_texture_s>(
       SKITY_OBJECT_TYPE_TEXTURE, SKITY_HANDLE_OWNING, std::move(tex));
-#else
-  return nullptr;
-#endif
 }
 
 }  // extern "C"

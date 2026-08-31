@@ -30,10 +30,23 @@ cmake -DSKITY_EXAMPLE=ON -DSKITY_CAPI_MODULE=ON ...
 cmake --build . --target skity-c-api
 ```
 
+The Vulkan counterpart is
+[`../../example/case/c_api_vk/main.cc`](../../example/case/c_api_vk/main.cc).
+Build it with `SKITY_CAPI_MODULE=ON`, `SKITY_VK_BACKEND=ON`, and
+`SKITY_EXAMPLE=ON`, then target `skity-c-api-vk`.
+
 ## Usage
 
 ```c
 #include <skity_c/skity.h>
+
+/* For Vulkan-specific entry points:
+#include <skity_c/skity_context_vk.h>
+#include <skity_c/skity_surface_vk.h>
+#include <skity_c/skity_texture_vk.h>
+#include <skity_c/skity_semaphore_vk.h>
+#include <skity_c/skity_native_window_vk.h>
+*/
 
 skity_context ctx;
 skity_context_create_gl(my_gl_get_proc, &ctx);

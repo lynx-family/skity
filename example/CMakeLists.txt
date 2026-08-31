@@ -43,6 +43,9 @@ add_subdirectory(case/text)
 
 if (${SKITY_CAPI_MODULE})
   add_subdirectory(case/c_api)
+  if (${SKITY_VK_BACKEND})
+    add_subdirectory(case/c_api_vk)
+  endif()
 endif()
 
 if (${SKITY_IO_MODULE})

@@ -191,6 +191,10 @@ typedef enum {
   SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO,   /**< base backend texture info */
   SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_GL, /**< OpenGL-specific backend
                                                    texture info */
+  SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_VK,  /**< Vulkan-specific surface
+                                                   creation info */
+  SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_VK, /**< Vulkan-specific backend
+                                                   texture info */
 } skity_structure_type;
 
 /**

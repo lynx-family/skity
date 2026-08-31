@@ -272,13 +272,20 @@ skity_result skity_context_create_gl(skity_gl_get_proc get_proc,
 
 Vulkan types (`PFN_vkGetInstanceProcAddr`, `VkInstance`, …) are already C and
 ABI-stable, so the C API reuses them directly rather than redefining wrappers.
-The two overloads mirror
+The simple constructor mirrors the engine-created overload of
 [`CreateGPUContextVK`](../../include/skity/gpu/gpu_context_vk.hpp):
 
 ```c
 skity_result skity_context_create_vk(PFN_vkGetInstanceProcAddr get_proc,
                                      skity_context* out_context);
 ```
+
+For applications that need to share their Vulkan instance, device, queues, and
+extension sets with skity, `skity_context_vk.h` also declares
+`skity_context_create_vk_ex` and `skity_context_create_info_vk`. Vulkan-only
+surface, texture, and semaphore wrappers are declared in `skity_surface_vk.h`,
+`skity_texture_vk.h`, and `skity_semaphore_vk.h` so non-Vulkan consumers do not
+need to include `<vulkan/vulkan.h>`.
 
 ### Metal (Stage 2)
 
@@ -388,7 +395,7 @@ Priority tags: **P3** is deferred / low-value.
 |---|---|---|
 | `Paint` | all setters + getters, fill/stroke split colors, effect/typeface attach | **P3**: `get_color4f`, `get_alpha_f`, SDF / font-threshold |
 | `Shader` | gradient factories (linear/radial/sweep/conical) + image shader + `set/get_local_matrix` | **P3**: `is_opaque`, `as_gradient` introspection |
-| `GPUSurface` | create, `lock_canvas`, `flush`, `read_pixels`, size getters, GL `surface_mode` + `can_blit_from_target_fbo` | **P3**: per-surface CoverageAAMode, `add_external_wait_semaphore` (needs semaphore) |
+| `GPUSurface` | create, `lock_canvas`, `flush`, `read_pixels`, size getters, GL `surface_mode` + `can_blit_from_target_fbo`, Vulkan image/swapchain-image wrapping, external wait semaphore | **P3**: per-surface CoverageAAMode |
 | `Path` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii), boolean ops, `PathMeasure`, `transform`, last-pt get/set, `copy_with_matrix/scale`, counts / `get_point` / `is_rect` | **P3**: convexity / segment-masks introspection, verb iteration (`get_verb` / `Iter`), `add_path` extend mode (`AddMode`) |
 | `Image` | 5 factories (incl. the `GPUContext` variant) + `read_pixels` + `scale_pixels` + size getters | **P3**: alpha/type/backend introspection |
 | `Font` | create (incl. scale/skew ctor), typeface/size get/set, rendering-quality switch get/set, `get_metrics`, `make_with_size`, `get_widths` | **P3**: `get_widths` bounds overload, `LoadGlyph*` (needs GlyphData) |
@@ -397,13 +404,13 @@ Priority tags: **P3** is deferred / low-value.
 | `Canvas` | full draw + state + clip + text/glyphs | **P3**: per-corner RRect draw/clip/drrect, `get_global_clip_bounds`, `draw_image` sampling overloads |
 | `DisplayList` | draw / cull-rect draw / bounds / op_count / properties / rtree search (+ non-overlapping rects) / per-op paint lookup, `begin_recording` with build options | `RecordedOpOffset` is exposed as a plain `int32_t` (round-trips through the public `RecordedOpOffset::Make`) — no opaque set type |
 | `GPUContext` | (see Fully covered) | **P3**: `create_texture_with_desc` (mipmap), `is_gpu_backend_supported`, `get_backend_type` |
+| `GPUNativeWindowVK` / `GPUPresenter` | Vulkan native-window creation, swapchain resize, surface acquire/present | complete |
 
 ### Not yet covered (whole module missing)
 
 | Module | Purpose | Why deferred |
 |---|---|---|
-| `GPUPresenter` | Vulkan swapchain present (`acquire_next_surface` / `present` / `resize`) | `Present()` consumes a `unique_ptr<GPUSurface>`, incompatible with the shared_ptr handle model (same blocker as `MakeSnapshot`). Vulkan-only; revisit alongside a transfer-ownership path. |
-| `GPUSemaphore` | cross-GPU / cross-process texture sync | `ImportSemaphore` takes a backend-specific derived struct (`GPUSemaphoreImportInfoVK`); the import path is Vulkan-only and unverified on the GL build. Will land together with `GPUPresenter`. |
+| `GPUPresenter` | Vulkan swapchain present (`acquire_next_surface` / `present` / `resize`) through `skity_native_window_vk` | C wrappers consume the acquired `unique_ptr` and explicitly invalidate the surface handle. |
 | `GlyphData` | glyph bitmap / path query (used by `Font::LoadGlyph*`) | exposing it cleanly needs a richer query surface |
 | `gpu_context_mtl` / `gpu_context_web` | Metal / WebGPU context | platform backends (Stage 2) |
 | `utils` (settings / trace) | config / tracing | minor |
@@ -451,7 +458,6 @@ module:
 - **GPUContext**: `create_texture_with_desc` (mipmap, +`TextureDescriptor`
   mirror); `is_gpu_backend_supported`; `get_backend_type`.
 
-> `GPUPresenter` / `GPUSemaphore` / `MakeSnapshot` remain blocked on the
-> `unique_ptr`-ownership / Vulkan-only constraints (see "Not yet covered").
+> `MakeSnapshot` remains blocked on the `unique_ptr`-ownership constraint.
 > The CPU raster backend (`Canvas::MakeSoftwareCanvas`) is intentionally
 > deferred — GPU paths are the current priority.

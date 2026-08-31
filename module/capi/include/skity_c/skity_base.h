@@ -53,6 +53,7 @@ typedef enum {
   SKITY_ERROR_OUT_OF_HOST_MEMORY = -4, /**< host memory allocation failed */
   SKITY_ERROR_NOT_SUPPORTED =
       -5, /**< the operation is not supported on this build/backend */
+  SKITY_ERROR_NEED_RECREATE = -6, /**< a swapchain/resize retry is required */
 } skity_result;
 
 #ifdef __cplusplus

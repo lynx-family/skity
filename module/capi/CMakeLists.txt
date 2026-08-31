@@ -84,6 +84,8 @@ target_sources(
     ${CMAKE_CURRENT_LIST_DIR}/src/handle.hpp
     ${CMAKE_CURRENT_LIST_DIR}/src/context_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/surface_c.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/semaphore_vk.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/native_window_vk.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/canvas_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/paint_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/path_c.cpp

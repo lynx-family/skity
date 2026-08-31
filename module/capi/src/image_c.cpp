@@ -116,7 +116,8 @@ std::shared_ptr<skity::Texture> promise_get_thunk2(
   // Wrap the GPUContext as a non-owning handle for the duration of the call.
   skity_context ch = nullptr;
   if (gpu_ctx != nullptr) {
-    std::shared_ptr<void> non_owning(gpu_ctx, [](void*) {});
+    std::shared_ptr<skity::GPUContext> non_owning(gpu_ctx,
+                                                  [](skity::GPUContext*) {});
     ch = skity::capi::alloc_handle<skity_context_s>(SKITY_OBJECT_TYPE_CONTEXT,
                                                     0, std::move(non_owning));
   }
@@ -189,13 +190,12 @@ void skity_image_destroy(skity_image image) {
 
 uint32_t skity_image_get_width(skity_image image) {
   auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
-  return w ? (uint32_t) static_cast<skity::Image*>(w->impl.get())->Width() : 0u;
+  return w ? (uint32_t)static_cast<skity::Image*>(w->impl.get())->Width() : 0u;
 }
 
 uint32_t skity_image_get_height(skity_image image) {
   auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
-  return w ? (uint32_t) static_cast<skity::Image*>(w->impl.get())->Height()
-           : 0u;
+  return w ? (uint32_t)static_cast<skity::Image*>(w->impl.get())->Height() : 0u;
 }
 
 skity_image skity_image_create_from_texture(skity_texture texture) {

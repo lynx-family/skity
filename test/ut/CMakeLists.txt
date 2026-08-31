@@ -134,6 +134,14 @@ if (${SKITY_CAPI_MODULE})
         capi/recorder_c_test.cc
         capi/text_delegate_c_test.cc
     )
+    if (${SKITY_VK_BACKEND})
+        target_sources(skity_unit_test PRIVATE
+            capi/vulkan_c_test.cc
+        )
+        target_include_directories(skity_unit_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include
+        )
+    endif()
 
     target_include_directories(skity_unit_test PRIVATE
         ${CMAKE_SOURCE_DIR}/module/capi/include

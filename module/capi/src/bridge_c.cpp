@@ -28,7 +28,8 @@ SKITY_C_API skity_canvas skity_canvas_from_native(void* native) {
   }
   // Non-owning: the no-op deleter means skity_canvas_destroy only reclaims the
   // wrapper struct and never touches the caller's Canvas.
-  std::shared_ptr<void> impl(native, [](void*) {});
+  std::shared_ptr<skity::Canvas> impl(static_cast<skity::Canvas*>(native),
+                                      [](skity::Canvas*) {});
   return skity::capi::alloc_handle<skity_canvas_s>(SKITY_OBJECT_TYPE_CANVAS, 0u,
                                                    std::move(impl));
 }
