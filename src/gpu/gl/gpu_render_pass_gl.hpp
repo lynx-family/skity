@@ -51,7 +51,7 @@ class GPURenderPassGL : public GPURenderPass {
 
   void SetStencilState(bool enable, const GPUStencilState& state, uint32_t ref);
 
-  void SetBlendFunc(uint32_t src, uint32_t dst);
+  void SetBlendFunc(GPUBlendFactor src, GPUBlendFactor dst);
 
   void SetBlendEquation(uint32_t eq);
 
@@ -66,8 +66,8 @@ class GPURenderPassGL : public GPURenderPass {
   bool enable_stencil_test_ = false;
   uint32_t used_program_ = 0;
   uint32_t stencil_reference_ = 0;
-  uint32_t blend_src_ = 0;
-  uint32_t blend_dst_ = 0;
+  GPUBlendFactor blend_src_ = GPUBlendFactor::kZero;
+  GPUBlendFactor blend_dst_ = GPUBlendFactor::kZero;
   uint32_t blend_equation_ = 0;
   bool disable_blend_ = false;
   GPUStencilState stencil_state_ = {};

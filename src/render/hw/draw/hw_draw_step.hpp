@@ -59,8 +59,11 @@ class HWDrawStep : public HWShaderGenerator {
     }
   }
 
-  HWPipelineKey GetPipelineKey() const {
-    return shader_writer_.GetPipelineKey();
+  HWPipelineKey GetPipelineKey(const HWBlendPlan& blend_plan) const {
+    const HWBlendFormula formula =
+        RequireColorWrite() ? blend_plan.formula : HWBlendFormula{};
+    return shader_writer_.GetPipelineKey(formula.primary_output,
+                                         formula.secondary_output);
   }
 
   HWFunctionBaseKey GetVertexKey() const { return shader_writer_.GetVSKey(); }
@@ -87,9 +90,10 @@ class HWDrawStep : public HWShaderGenerator {
 
   HWFunctionBaseKey GetFragmentKey() const { return shader_writer_.GetFSKey(); }
 
-  std::string GenFragmentWGSL() const override {
+  std::string GenFragmentWGSL(const HWFunctionKey& key) const override {
     if (fragment_->IsSnippet()) {
-      return shader_writer_.GenFSSourceWGSL();
+      return shader_writer_.GenFSSourceWGSL(key.primary_blend_output,
+                                            key.secondary_blend_output);
     } else {
       return fragment_->GenSourceWGSL();
     }

@@ -17,6 +17,17 @@
 
 namespace skity {
 
+namespace {
+
+constexpr bool IsDualSourceBlendFactor(GPUBlendFactor factor) {
+  return factor == GPUBlendFactor::kSrc1 ||
+         factor == GPUBlendFactor::kOneMinusSrc1 ||
+         factor == GPUBlendFactor::kSrc1Alpha ||
+         factor == GPUBlendFactor::kOneMinusSrc1Alpha;
+}
+
+}  // namespace
+
 void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
                                      std::optional<GPUScissorRect> scissor) {
   SKITY_TRACE_EVENT(GPURenderPassGL_EncodeCommands);
@@ -78,9 +89,8 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
 
     auto pipeline = static_cast<skity::GPURenderPipelineGL*>(command->pipeline);
     // Set blending
-    SetBlendFunc(
-        ToBlendFactor(pipeline->GetDescriptor().target.src_blend_factor),
-        ToBlendFactor(pipeline->GetDescriptor().target.dst_blend_factor));
+    SetBlendFunc(pipeline->GetDescriptor().target.src_blend_factor,
+                 pipeline->GetDescriptor().target.dst_blend_factor);
     SetBlendEquation(
         ToGLBlendEquation(pipeline->GetDescriptor().target.blend_op));
 
@@ -188,7 +198,7 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
     // the blended result. Coherent mode issues no barrier.
     auto const& target = pipeline->GetDescriptor().target;
     auto* gl = GLInterface::GlobalInterface();
-    if (target.blend_op != GPUBlendOperation::kAdd &&
+    if (IsAdvancedBlendOperation(target.blend_op) &&
         gl->ext_khr_blend_equation_advanced &&
         !gl->ext_khr_blend_equation_advanced_coherent && gl->fBlendBarrierKHR) {
       gl->fBlendBarrierKHR();
@@ -343,8 +353,8 @@ void GPURenderPassGL::ResetState() {
   enable_stencil_test_ = false;
   stencil_reference_ = 0;
   stencil_state_ = {};
-  blend_src_ = GL_ZERO;
-  blend_dst_ = GL_ZERO;
+  blend_src_ = GPUBlendFactor::kZero;
+  blend_dst_ = GPUBlendFactor::kZero;
   disable_blend_ = false;
 }
 
@@ -421,10 +431,19 @@ void GPURenderPassGL::SetStencilState(bool enable, const GPUStencilState& state,
   stencil_reference_ = ref;
 }
 
-void GPURenderPassGL::SetBlendFunc(uint32_t src, uint32_t dst) {
-  bool disable = src == GL_ONE && dst == GL_ZERO;
+void GPURenderPassGL::SetBlendFunc(GPUBlendFactor src, GPUBlendFactor dst) {
+  bool disable = src == GPUBlendFactor::kOne && dst == GPUBlendFactor::kZero;
   if (disable != disable_blend_) {
     if (disable) {
+      // Adreno 5xx, 620, and 640 drivers may keep using Src1 factors after
+      // GL_BLEND is disabled. Reset them first so an opaque draw does not
+      // accidentally reuse a previous dual-source blend state.
+      if (IsDualSourceBlendFactor(blend_src_) ||
+          IsDualSourceBlendFactor(blend_dst_)) {
+        GL_CALL(BlendFunc, GL_ONE, GL_ZERO);
+        blend_src_ = GPUBlendFactor::kOne;
+        blend_dst_ = GPUBlendFactor::kZero;
+      }
       GL_CALL(Disable, GL_BLEND);
     } else {
       GL_CALL(Enable, GL_BLEND);
@@ -440,7 +459,7 @@ void GPURenderPassGL::SetBlendFunc(uint32_t src, uint32_t dst) {
     return;
   }
 
-  GL_CALL(BlendFunc, src, dst);
+  GL_CALL(BlendFunc, ToBlendFactor(src), ToBlendFactor(dst));
 
   blend_src_ = src;
   blend_dst_ = dst;

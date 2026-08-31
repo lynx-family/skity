@@ -99,6 +99,8 @@ VkBlendOp ToVkBlendOp(GPUBlendOperation op) {
   switch (op) {
     case GPUBlendOperation::kAdd:
       return VK_BLEND_OP_ADD;
+    case GPUBlendOperation::kReverseSubtract:
+      return VK_BLEND_OP_REVERSE_SUBTRACT;
     case GPUBlendOperation::kMultiply:
       return VK_BLEND_OP_MULTIPLY_EXT;
     case GPUBlendOperation::kScreen:
@@ -910,7 +912,7 @@ std::unique_ptr<GPURenderPipelineVK> GPUDeviceVK::CreateRenderPipelineInternal(
 
   VkPipelineColorBlendAttachmentState color_blend_attachment = {};
   VkPipelineColorBlendAdvancedStateCreateInfoEXT advanced_blend_state = {};
-  if (desc.target.blend_op != GPUBlendOperation::kAdd) {
+  if (IsAdvancedBlendOperation(desc.target.blend_op)) {
     // Native advanced blend: the advanced equation ignores the RGB blend
     // factors, and the spec blends alpha "as if VK_BLEND_OP_ADD" (source-over)
     // regardless of alphaBlendOp. VUID-...-advancedBlendAlphaBlendOp-01409
@@ -943,12 +945,12 @@ std::unique_ptr<GPURenderPipelineVK> GPUDeviceVK::CreateRenderPipelineInternal(
         ToVkBlendFactor(desc.target.src_blend_factor);
     color_blend_attachment.dstColorBlendFactor =
         ToVkBlendFactor(desc.target.dst_blend_factor);
-    color_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+    color_blend_attachment.colorBlendOp = ToVkBlendOp(desc.target.blend_op);
     color_blend_attachment.srcAlphaBlendFactor =
         ToVkBlendFactor(desc.target.src_blend_factor);
     color_blend_attachment.dstAlphaBlendFactor =
         ToVkBlendFactor(desc.target.dst_blend_factor);
-    color_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    color_blend_attachment.alphaBlendOp = ToVkBlendOp(desc.target.blend_op);
     color_blend_attachment.colorWriteMask =
         ToVkColorWriteMask(desc.target.write_mask);
   }
@@ -960,7 +962,7 @@ std::unique_ptr<GPURenderPipelineVK> GPUDeviceVK::CreateRenderPipelineInternal(
   color_blend_state.pAttachments = &color_blend_attachment;
   // The advanced-state struct must hang off the state create-info pNext, not
   // the attachment pNext.
-  if (desc.target.blend_op != GPUBlendOperation::kAdd) {
+  if (IsAdvancedBlendOperation(desc.target.blend_op)) {
     color_blend_state.pNext = &advanced_blend_state;
   }
 

@@ -294,11 +294,15 @@ class FakeGPUDevice : public GPUDevice {
 class FakeRootLayer : public HWRootLayer {
  public:
   FakeRootLayer(uint32_t width, uint32_t height, const Rect& bounds,
-                GPUTextureFormat format, HWDrawState* last_draw_state)
+                GPUTextureFormat format, HWDrawState* last_draw_state,
+                bool supports_texture_copy_dst_read)
       : HWRootLayer(width, height, bounds, format),
-        last_draw_state_(last_draw_state) {}
+        last_draw_state_(last_draw_state),
+        supports_texture_copy_dst_read_(supports_texture_copy_dst_read) {}
 
-  bool SupportsTextureCopyDstRead() const override { return true; }
+  bool SupportsTextureCopyDstRead() const override {
+    return supports_texture_copy_dst_read_;
+  }
 
  private:
   std::shared_ptr<GPURenderPass> OnBeginRenderPass(GPUCommandBuffer* cmd,
@@ -336,6 +340,7 @@ class FakeRootLayer : public HWRootLayer {
 
  private:
   HWDrawState* last_draw_state_ = nullptr;
+  bool supports_texture_copy_dst_read_ = true;
 };
 
 class FakeGPUSurface : public GPUSurfaceImpl {
@@ -350,11 +355,15 @@ class FakeGPUSurface : public GPUSurfaceImpl {
 
   HWDrawState last_draw_state() const { return last_draw_state_; }
 
+  void SetSupportsTextureCopyDstRead(bool supports) {
+    supports_texture_copy_dst_read_ = supports;
+  }
+
  protected:
   HWRootLayer* OnBeginNextFrame(bool clear) override {
     auto* root_layer = GetArenaAllocator()->Make<FakeRootLayer>(
         GetWidth(), GetHeight(), Rect::MakeWH(GetWidth(), GetHeight()),
-        GetGPUFormat(), &last_draw_state_);
+        GetGPUFormat(), &last_draw_state_, supports_texture_copy_dst_read_);
     root_layer->SetClearSurface(clear);
     root_layer->SetSampleCount(GetSampleCount());
     root_layer->SetArenaAllocator(GetArenaAllocator());
@@ -366,6 +375,7 @@ class FakeGPUSurface : public GPUSurfaceImpl {
  private:
   GPUTextureFormat format_;
   HWDrawState last_draw_state_ = HWDrawState::kDrawStateNone;
+  bool supports_texture_copy_dst_read_ = true;
 };
 
 class FakeGPUContext : public GPUContextImpl {
@@ -807,6 +817,37 @@ TEST(PrecompileDrawTest, SurfaceCanEnableCoverageAAWithoutContextDefault) {
   EXPECT_EQ(device->coverage_aa_line_texture_count(), 1u);
 }
 
+TEST(PrecompileDrawTest, FallsBackWhenFragmentMaskBlendIsUnsupported) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableCoverageAA(true);
+  context.SetEnableSimpleShapePipeline(true);
+  auto* device = context.device();
+  ASSERT_NE(device, nullptr);
+
+  GPUSurfaceDescriptor surface_desc{};
+  surface_desc.width = 64;
+  surface_desc.height = 64;
+  auto surface = context.CreateSurface(&surface_desc);
+  static_cast<FakeGPUSurface*>(surface.get())
+      ->SetSupportsTextureCopyDstRead(false);
+  auto* canvas = surface->LockCanvas(true);
+  ASSERT_NE(canvas, nullptr);
+
+  Paint paint;
+  paint.SetAntiAlias(true);
+  paint.SetColor(0x80FFFFFF);
+  paint.SetBlendMode(BlendMode::kSrc);
+  canvas->DrawRRect(RRect::MakeRectXY(Rect::MakeLTRB(8, 8, 56, 56), 8.f, 8.f),
+                    paint);
+  canvas->Flush();
+
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("RRect"));
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("CoverageAA"));
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("Path"));
+  EXPECT_EQ(device->coverage_aa_line_texture_count(), 0u);
+}
+
 TEST(PrecompileDrawTest, SurfaceCanSelectConflationCorrection) {
   FakeGPUContext context;
   ASSERT_TRUE(context.Init());
@@ -1139,6 +1180,23 @@ TEST(PrecompileDrawTest, PrecompiledRRectPipelineIsHitByRealDraw) {
   ExpectRealDrawHitsPrecompiledPipeline(
       context, PrecompileDrawType::kDrawRRect, paint, false,
       [&](Canvas* canvas) { canvas->DrawRRect(rrect, paint); });
+}
+
+TEST(PrecompileDrawTest,
+     PrecompiledOpaqueAndTranslucentRRectPipelinesAreHitByRealDraw) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableSimpleShapePipeline(true);
+
+  auto rrect = RRect::MakeRectXY(Rect::MakeWH(24.f, 24.f), 4.f, 4.f);
+  for (auto color : {0xFFFFFFFF, 0x80FFFFFF}) {
+    Paint paint;
+    paint.SetColor(color);
+    paint.SetBlendMode(BlendMode::kSrc);
+    ExpectRealDrawHitsPrecompiledPipeline(
+        context, PrecompileDrawType::kDrawRRect, paint, false,
+        [&](Canvas* canvas) { canvas->DrawRRect(rrect, paint); });
+  }
 }
 
 TEST(PrecompileDrawTest, PrecompiledImagePathPipelineIsHitByRealDraw) {

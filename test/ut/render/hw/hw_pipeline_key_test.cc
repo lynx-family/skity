@@ -572,7 +572,8 @@ TEST(HWPipelineKey, RRect_SolidVertex_Compose) {
   EXPECT_EQ(steps[0]->GetFragmentName(),
             "FS_SolidVertexColor_RRect_ComposeFilter_BlendSrcInFilter_"
             "BlendSrcATopFilter");
-  auto pipeline_key = steps[0]->GetPipelineKey();
+  auto pipeline_key =
+      steps[0]->GetPipelineKey(dynamic_rrect_draw.GetBlendPlan());
   ASSERT_TRUE(pipeline_key.compose_keys.has_value());
   EXPECT_EQ(pipeline_key.compose_keys.value().size(), 2);
   EXPECT_EQ(pipeline_key.compose_keys.value()[0], HWColorFilterKeyType::kSrcIn);
@@ -587,10 +588,37 @@ TEST(HWPipelineKey, RRect_SolidVertex_Compose) {
                                               HWColorFilterKeyType::kCompose));
   expected_pipeline_key.compose_keys = {HWColorFilterKeyType::kSrcIn,
                                         HWColorFilterKeyType::kSrcATop};
+  expected_pipeline_key.primary_blend_output = HWBlendOutput::kSource;
   EXPECT_EQ(pipeline_key, expected_pipeline_key);
   HWPipelineKeyHash pipeline_key_hash;
   EXPECT_EQ(pipeline_key_hash(pipeline_key),
             pipeline_key_hash(expected_pipeline_key));
+}
+
+TEST(HWPipelineKey, StencilStepIgnoresColorBlendOutputs) {
+  Path path;
+  path.MoveTo(10, 10);
+  path.LineTo(100, 100);
+  path.LineTo(200, 10);
+  path.LineTo(300, 300);
+  path.LineTo(10, 300);
+  path.Close();
+  Paint paint;
+  ArenaAllocator arena_allocator;
+  HWDrawContext draw_context;
+  draw_context.arena_allocator = &arena_allocator;
+  HWDynamicPathDraw draw(Matrix{}, path, paint, false, false);
+  draw.Prepare(&draw_context);
+
+  const auto& steps = draw.GetSteps();
+  ASSERT_EQ(steps.size(), 2u);
+  HWBlendPlan dual_source_plan;
+  dual_source_plan.formula.primary_output = HWBlendOutput::kSourceTimesCoverage;
+  dual_source_plan.formula.secondary_output = HWBlendOutput::kCoverage;
+
+  const auto key = steps[0]->GetPipelineKey(dual_source_plan);
+  EXPECT_EQ(key.primary_blend_output, HWBlendOutput::kSource);
+  EXPECT_EQ(key.secondary_blend_output, HWBlendOutput::kNone);
 }
 
 TEST(HWPipelineKey, ProgrammableBlendingHash) {

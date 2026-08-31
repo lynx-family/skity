@@ -110,7 +110,7 @@ GPURenderPipeline* HWDrawStep::GetPipeline(HWDrawContext* context,
 
   pipeline.shader_generator = this;
 
-  HWPipelineKey key = GetPipelineKey();
+  HWPipelineKey key = GetPipelineKey(blend_plan);
   return context->pipelineLib->GetPipeline(key, pipeline);
 }
 

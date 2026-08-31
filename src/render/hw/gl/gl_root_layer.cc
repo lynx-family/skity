@@ -16,6 +16,7 @@
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
+#include "src/render/hw/hw_blend_plan.hpp"
 #include "src/render/hw/hw_render_pass_builder.hpp"
 
 namespace skity {
@@ -183,6 +184,11 @@ HWDrawState GLDrawTextureLayer::OnPrepare(HWDrawContext *context) {
       .SetDrawState(GetLayerDrawState())
       .Build(render_pass_desc_);
 
+  // Since 'can_blit_from_target_fbo_' is an experimental feature, we still
+  // use 'kSrcOver' as the default blend mode.
+  BlendMode blend_mode =
+      can_blit_from_target_fbo_ ? BlendMode::kSrc : BlendMode::kSrcOver;
+
   // prepare layer back draw
   {
     const auto &bounds = GetBounds();
@@ -193,10 +199,6 @@ HWDrawState GLDrawTextureLayer::OnPrepare(HWDrawContext *context) {
     paint.SetStyle(Paint::kFill_Style);
     paint.SetShader(
         CreateDrawLayerShader(context->gpuContext, color_texture_, bounds));
-    // Since 'can_blit_from_target_fbo_' is a experimental feature, we still
-    // use 'kSrcOver' as the default blend mode.
-    BlendMode blend_mode =
-        can_blit_from_target_fbo_ ? BlendMode::kSrc : BlendMode::kSrcOver;
     paint.SetBlendMode(blend_mode);
     layer_back_draw_ = context->arena_allocator->Make<HWDynamicPathDraw>(
         GetTransform(), std::move(path), std::move(paint), false, false);
@@ -205,6 +207,8 @@ HWDrawState GLDrawTextureLayer::OnPrepare(HWDrawContext *context) {
   // If layer_back_draw_ is null means user want open WGSL pipeline
   // but the library does not open dynamic shader during compile time
   if (layer_back_draw_) {
+    layer_back_draw_->SetBlendPlan(ResolveCoefficientBlendPlan(blend_mode));
+
     layer_back_draw_->SetSampleCount(GetSampleCount());
     layer_back_draw_->SetColorFormat(GetColorFormat());
 
@@ -312,6 +316,11 @@ HWDrawState GLPartialDrawTextureLayer::OnPrepare(
       .SetDrawState(GetLayerDrawState())
       .Build(render_pass_desc_);
 
+  // Since 'can_blit_from_target_fbo_' is an experimental feature, we still
+  // use 'kSrcOver' as the default blend mode.
+  BlendMode blend_mode =
+      can_blit_from_target_fbo_ ? BlendMode::kSrc : BlendMode::kSrcOver;
+
   // prepare layer back draw
   {
     auto height = bottom_ - top_;
@@ -325,10 +334,6 @@ HWDrawState GLPartialDrawTextureLayer::OnPrepare(
     paint.SetStyle(Paint::kFill_Style);
     paint.SetShader(
         CreateDrawLayerShader(context->gpuContext, color_texture_, bounds));
-    // Since 'can_blit_from_target_fbo_' is a experimental feature, we still
-    // use 'kSrcOver' as the default blend mode.
-    BlendMode blend_mode =
-        can_blit_from_target_fbo_ ? BlendMode::kSrc : BlendMode::kSrcOver;
     paint.SetBlendMode(blend_mode);
     layer_back_draw_ = context->arena_allocator->Make<HWDynamicPathDraw>(
         GetTransform(), std::move(path), std::move(paint), false, false);
@@ -337,6 +342,8 @@ HWDrawState GLPartialDrawTextureLayer::OnPrepare(
   // If layer_back_draw_ is null means user want open WGSL pipeline
   // but the library does not open dynamic shader during compile time
   if (layer_back_draw_) {
+    layer_back_draw_->SetBlendPlan(ResolveCoefficientBlendPlan(blend_mode));
+
     layer_back_draw_->SetSampleCount(GetSampleCount());
     layer_back_draw_->SetColorFormat(GetColorFormat());
 

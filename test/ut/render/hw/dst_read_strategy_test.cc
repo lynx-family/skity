@@ -22,11 +22,17 @@ skity::GPUCaps MakeCaps(bool native_advanced, bool coherent,
 
 }  // namespace
 
-TEST(DstReadStrategy, NonAdvancedModeIsNonRequired) {
+TEST(DstReadStrategy, CoefficientModeIsNonRequired) {
   EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kSrcOver,
                                           MakeCaps(true, true, false)),
             skity::DstReadStrategy::kNonRequired);
   EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kPlus,
+                                          MakeCaps(true, true, true)),
+            skity::DstReadStrategy::kNonRequired);
+  EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kModulate,
+                                          MakeCaps(true, true, true)),
+            skity::DstReadStrategy::kNonRequired);
+  EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kScreen,
                                           MakeCaps(true, true, true)),
             skity::DstReadStrategy::kNonRequired);
 }
@@ -39,10 +45,7 @@ TEST(DstReadStrategy, CoherentNativeHasHighestPriority) {
   EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kMultiply,
                                           MakeCaps(true, true, false)),
             skity::DstReadStrategy::kNativeBlend);
-  // A few native-able modes resolve identically.
-  EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kScreen,
-                                          MakeCaps(true, true, false)),
-            skity::DstReadStrategy::kNativeBlend);
+  // Another native-able mode resolves identically.
   EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kLuminosity,
                                           MakeCaps(true, true, false)),
             skity::DstReadStrategy::kNativeBlend);
@@ -75,20 +78,6 @@ TEST(DstReadStrategy, AdvancedModeFallsBackToTextureCopy) {
 TEST(DstReadStrategy, AdvancedModeFallsBackToFramebufferFetch) {
   EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kMultiply,
                                           MakeCaps(false, false, true)),
-            skity::DstReadStrategy::kFramebufferFetch);
-}
-
-TEST(DstReadStrategy, ModulateNeverUsesNativeBlend) {
-  // kModulate has no hardware equivalent (ToNativeBlendOp == nullopt), so it
-  // never enters the native tiers even when native advanced blend is supported.
-  EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kModulate,
-                                          MakeCaps(true, true, false)),
-            skity::DstReadStrategy::kTextureCopy);
-  EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kModulate,
-                                          MakeCaps(true, true, true)),
-            skity::DstReadStrategy::kFramebufferFetch);
-  EXPECT_EQ(skity::ResolveDstReadStrategy(skity::BlendMode::kModulate,
-                                          MakeCaps(true, false, true)),
             skity::DstReadStrategy::kFramebufferFetch);
 }
 

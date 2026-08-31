@@ -21,7 +21,7 @@ namespace skity {
 
 HWDynamicPathDraw::HWDynamicPathDraw(Matrix transform, Path path, Paint paint,
                                      bool is_stroke, bool use_gpu_tessellation)
-    : HWDynamicDraw(transform, paint.GetBlendMode()),
+    : HWDynamicDraw(transform),
       path_(std::move(path)),
       paint_(std::move(paint)),
       is_stroke_(is_stroke),

@@ -469,7 +469,6 @@ fn fs_main() -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);
   var mask_alpha: f32 = 1.0;
-  color = color * mask_alpha;
   return color;
 }
 )";
@@ -633,7 +632,6 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var color : vec4<f32>;
   color = generate_gradient_color(input.f_param_pos);
   var mask_alpha: f32 = 1.0;
-  color = color * mask_alpha;
   return color;
 }
 )";
@@ -763,7 +761,6 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   color *= image_color_info.global_alpha;
 
   var mask_alpha: f32 = 1.0;
-  color = color * mask_alpha;
   return color;
 }
 )";
@@ -1769,7 +1766,8 @@ TEST(ShaderWriter, CoverageAAResolvesAlphaInFinalFragment) {
   skity::WGSLSolidColor fragment{skity::Color4f{1.0f, 1.0f, 1.0f, 1.0f}};
   skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
   std::string vs = shader_writer.GenVSSourceWGSL();
-  std::string fs = shader_writer.GenFSSourceWGSL();
+  std::string fs =
+      shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
 
   EXPECT_NE(vs.find("a_line_range: vec2<u32>"), std::string::npos);
   EXPECT_NE(vs.find("a_backdrop_and_fill_rule: vec2<i32>"), std::string::npos);
@@ -1820,7 +1818,8 @@ TEST(ShaderWriter, CoverageAAConflationCorrectionUsesDistinctShader) {
   skity::WGSLCoverageAATileGeometry geometry(nullptr, 0, 0, {}, true);
   skity::WGSLSolidColor fragment{skity::Color4f{1.0f, 1.0f, 1.0f, 1.0f}};
   skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
-  std::string fs = shader_writer.GenFSSourceWGSL();
+  std::string fs =
+      shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
 
   EXPECT_NE(fs.find("coverage_aa_sample_winding_delta"), std::string::npos);
   EXPECT_NE(fs.find("fn coverage_aa_resolve_pixel_with_conflation_correction("),
@@ -1889,7 +1888,8 @@ TEST(ShaderWriter, PathAAWithSolidColor) {
   skity::WGSLSolidColor fragment{color};
   skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
   std::string vs = shader_writer.GenVSSourceWGSL();
-  std::string fs = shader_writer.GenFSSourceWGSL();
+  std::string fs =
+      shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
   ASSERT_TRUE(geometry.IsSnippet());
   ASSERT_TRUE(fragment.IsSnippet());
   ASSERT_TRUE(geometry.AffectsFragment());
@@ -2011,7 +2011,8 @@ TEST(ShaderWriter, PathAAWithLinearGradient) {
 
   skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
   std::string vs = shader_writer.GenVSSourceWGSL();
-  std::string fs = shader_writer.GenFSSourceWGSL();
+  std::string fs =
+      shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
   ASSERT_TRUE(geometry.IsSnippet());
   ASSERT_TRUE(fragment.IsSnippet());
   ASSERT_TRUE(geometry.AffectsFragment());
@@ -2076,7 +2077,8 @@ TEST(ShaderWriter, PathAAWithTexture) {
                                       skity::Matrix{}, 500,     500};
   skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
   std::string vs = shader_writer.GenVSSourceWGSL();
-  std::string fs = shader_writer.GenFSSourceWGSL();
+  std::string fs =
+      shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
   ASSERT_TRUE(geometry.IsSnippet());
   ASSERT_TRUE(fragment.IsSnippet());
   ASSERT_TRUE(geometry.AffectsFragment());
@@ -2108,7 +2110,8 @@ TEST(ShaderWriter, PathAAWithSolidColorAndColorFilter) {
   fragment.SetFilter(skity::WGXFilterFragment::Make(filter.get()));
   skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
   std::string vs = shader_writer.GenVSSourceWGSL();
-  std::string fs = shader_writer.GenFSSourceWGSL();
+  std::string fs =
+      shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
   ASSERT_TRUE(geometry.IsSnippet());
   ASSERT_TRUE(fragment.IsSnippet());
   ASSERT_TRUE(geometry.AffectsFragment());
@@ -2255,6 +2258,56 @@ TEST(ShaderWriter, PathAAPlusTextureCopyBlendsWithFragmentMask) {
   EXPECT_TRUE(program->WriteToSpirv("fs_main", options).success);
 }
 
+TEST(ShaderWriter, PathAAWritesFixedCoverageOutput) {
+  auto path = MakePath();
+  skity::Paint paint;
+  skity::WGSLPathAAGeometry geometry{path, paint};
+  skity::WGSLSolidColor fragment{paint.GetColor4f()};
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+
+  auto fs = shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kCoverage);
+  EXPECT_NE(fs.find("color = vec4<f32>(mask_alpha);"), std::string::npos);
+  EXPECT_EQ(shader_writer.GetPipelineKey(skity::HWBlendOutput::kCoverage)
+                .primary_blend_output,
+            skity::HWBlendOutput::kCoverage);
+
+  auto program = wgx::Program::Parse(fs);
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+  wgx::SpirvOptions options;
+  EXPECT_TRUE(program->WriteToSpirv("fs_main", options).success);
+}
+
+TEST(ShaderWriter, PathAAWritesDualSourceOutputs) {
+  auto path = MakePath();
+  skity::Paint paint;
+  skity::WGSLPathAAGeometry geometry{path, paint};
+  skity::WGSLSolidColor fragment{paint.GetColor4f()};
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+
+  auto fs =
+      shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage,
+                                    skity::HWBlendOutput::kCoverage);
+  EXPECT_NE(fs.find("@location(0) @blend_src(0) primary"), std::string::npos);
+  EXPECT_NE(fs.find("@location(0) @blend_src(1) secondary"), std::string::npos);
+  EXPECT_NE(fs.find("output.primary = color * mask_alpha;"), std::string::npos);
+  EXPECT_NE(fs.find("output.secondary = vec4<f32>(mask_alpha);"),
+            std::string::npos);
+  auto dual_source_key =
+      shader_writer.GetPipelineKey(skity::HWBlendOutput::kSourceTimesCoverage,
+                                   skity::HWBlendOutput::kCoverage);
+  EXPECT_EQ(dual_source_key.secondary_blend_output,
+            skity::HWBlendOutput::kCoverage);
+
+  EXPECT_NE(dual_source_key, shader_writer.GetPipelineKey());
+
+  auto program = wgx::Program::Parse(fs);
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+  wgx::SpirvOptions options;
+  EXPECT_TRUE(program->WriteToSpirv("fs_main", options).success);
+}
+
 TEST(ShaderWriter, RRectWithSolidColor) {
   auto rrect =
       skity::RRect::MakeRectXY(skity::Rect::MakeLTRB(0, 0, 100, 100), 10, 10);
@@ -2266,7 +2319,8 @@ TEST(ShaderWriter, RRectWithSolidColor) {
   skity::WGSLSolidVertexColor fragment{};
   skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
   std::string vs = shader_writer.GenVSSourceWGSL();
-  std::string fs = shader_writer.GenFSSourceWGSL();
+  std::string fs =
+      shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
   ASSERT_TRUE(geometry.IsSnippet());
   ASSERT_TRUE(fragment.IsSnippet());
   ASSERT_TRUE(geometry.AffectsFragment());
@@ -2306,7 +2360,8 @@ TEST(ShaderWriter, RRectWithLinearGradient) {
                                        paint.GetAlphaF(), skity::Matrix{}};
   skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
   std::string vs = shader_writer.GenVSSourceWGSL();
-  std::string fs = shader_writer.GenFSSourceWGSL();
+  std::string fs =
+      shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
   ASSERT_TRUE(geometry.IsSnippet());
   ASSERT_TRUE(fragment.IsSnippet());
   ASSERT_TRUE(geometry.AffectsFragment());
@@ -2344,7 +2399,8 @@ TEST(ShaderWriter, RRectWithTexture) {
   skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
 
   std::string vs = shader_writer.GenVSSourceWGSL();
-  std::string fs = shader_writer.GenFSSourceWGSL();
+  std::string fs =
+      shader_writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
   ASSERT_TRUE(geometry.IsSnippet());
   ASSERT_TRUE(fragment.IsSnippet());
   ASSERT_TRUE(geometry.AffectsFragment());

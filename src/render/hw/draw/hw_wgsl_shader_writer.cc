@@ -22,12 +22,13 @@ std::string HWWGSLShaderWriter::GenVSSourceWGSL() const {
   return ss.str();
 }
 
-std::string HWWGSLShaderWriter::GenFSSourceWGSL() const {
+std::string HWWGSLShaderWriter::GenFSSourceWGSL(HWBlendOutput primary,
+                                                HWBlendOutput secondary) const {
   std::stringstream ss;
-  WriteFSFunctionsAndStructs(ss);
+  WriteFSFunctionsAndStructs(ss, secondary);
   WriteFSUniforms(ss);
   WriteFSInput(ss);
-  WriteFSMain(ss);
+  WriteFSMain(ss, primary, secondary);
   return ss.str();
 }
 
@@ -89,7 +90,7 @@ void HWWGSLShaderWriter::WriteVSAssgnShadingVarings(
 }
 
 void HWWGSLShaderWriter::WriteFSFunctionsAndStructs(
-    std::stringstream& ss) const {
+    std::stringstream& ss, HWBlendOutput secondary) const {
   DEBUG_CHECK(fragment_);
   fragment_->WriteFSFunctionsAndStructs(ss);
   if (geometry_ && geometry_->AffectsFragment()) {
@@ -100,6 +101,14 @@ void HWWGSLShaderWriter::WriteFSFunctionsAndStructs(
   }
   if (fragment_->GetProgrammableBlending()) {
     ss << fragment_->GetProgrammableBlending()->GenSourceWGSL();
+  }
+  if (secondary != HWBlendOutput::kNone) {
+    ss << R"(
+struct FSOutput {
+  @location(0) @blend_src(0) primary: vec4<f32>,
+  @location(0) @blend_src(1) secondary: vec4<f32>,
+};
+)";
   }
 }
 
@@ -130,7 +139,9 @@ struct FSInput {
 )";
 }
 
-void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
+void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss,
+                                     HWBlendOutput primary,
+                                     HWBlendOutput secondary) const {
   DEBUG_CHECK(fragment_);
   ss << "@fragment\n";
   ss << "fn fs_main(";
@@ -147,7 +158,11 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
       ss << ", " << fs_params[i];
     }
   }
-  ss << ") -> @location(0) vec4<f32> {\n";
+  if (secondary != HWBlendOutput::kNone) {
+    ss << ") -> FSOutput {\n";
+  } else {
+    ss << ") -> @location(0) vec4<f32> {\n";
+  }
   ss << "  var color : vec4<f32>;\n";
 
   fragment_->WriteFSMain(ss);
@@ -180,16 +195,45 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss) const {
     ss << R"(
   color = mix(dst_color, blending(color, dst_color), mask_alpha);
 )";
-  } else {
-    ss << R"(
-  color = color * mask_alpha;
-)";
   }
 
-  ss << R"(
-  return color;
+  if (secondary != HWBlendOutput::kNone) {
+    ss << "\n  var output: FSOutput;\n";
+    WriteBlendOutput(ss, primary, "output.primary");
+    WriteBlendOutput(ss, secondary, "output.secondary");
+    ss << "\n  return output;\n";
+  } else {
+    WriteBlendOutput(ss, primary, "color");
+    ss << "\n  return color;\n";
+  }
+  ss << "}\n";
 }
-)";
+
+void HWWGSLShaderWriter::WriteBlendOutput(std::stringstream& ss,
+                                          HWBlendOutput output,
+                                          std::string_view target) const {
+  switch (output) {
+    case HWBlendOutput::kNone:
+      ss << "\n  " << target << " = vec4<f32>(0.0);\n";
+      break;
+    case HWBlendOutput::kSource:
+      if (target != "color") {
+        ss << "\n  " << target << " = color;\n";
+      }
+      break;
+    case HWBlendOutput::kCoverage:
+      ss << "\n  " << target << " = vec4<f32>(mask_alpha);\n";
+      break;
+    case HWBlendOutput::kSourceTimesCoverage:
+      ss << "\n  " << target << " = color * mask_alpha;\n";
+      break;
+    case HWBlendOutput::kOneMinusSourceAlphaTimesCoverage:
+      ss << "\n  " << target << " = vec4<f32>((1.0 - color.a) * mask_alpha);\n";
+      break;
+    case HWBlendOutput::kOneMinusSourceTimesCoverage:
+      ss << "\n  " << target << " = (vec4<f32>(1.0) - color) * mask_alpha;\n";
+      break;
+  }
 }
 
 void HWWGSLShaderWriter::WriteVaryings(std::stringstream& ss) const {

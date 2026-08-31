@@ -12,8 +12,8 @@ namespace skity {
 
 class HWDynamicDraw : public HWDraw {
  public:
-  HWDynamicDraw(Matrix transform, BlendMode blend_mode)
-      : HWDraw(transform, blend_mode), steps_(), commands_() {}
+  explicit HWDynamicDraw(Matrix transform)
+      : HWDraw(transform), steps_(), commands_() {}
 
   ~HWDynamicDraw() override = default;
 
