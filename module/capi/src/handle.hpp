@@ -9,6 +9,39 @@
 #include <memory>
 #include <new>
 
+namespace skity {
+
+class Bitmap;
+class Camera;
+class Canvas;
+class ColorFilter;
+class Data;
+class DisplayList;
+class Font;
+class FontManager;
+class FontStyleSet;
+class GPUContext;
+class GPUNativeWindowVK;
+class GPUSemaphore;
+class GPUSurface;
+class Image;
+class ImageFilter;
+class MaskFilter;
+class Paint;
+class Path;
+class PathEffect;
+class PathMeasure;
+class PictureRecorder;
+class Pixmap;
+class PrecompileContext;
+class Shader;
+class TextBlob;
+class Texture;
+class Typeface;
+class TypefaceDelegate;
+
+}  // namespace skity
+
 /*
  * Object type tag + handle header. These are implementation details of the
  * wrapper and are intentionally NOT exposed in the public C headers — handles
@@ -43,6 +76,8 @@ typedef enum {
   SKITY_OBJECT_TYPE_CAMERA,
   SKITY_OBJECT_TYPE_DATA,
   SKITY_OBJECT_TYPE_TYPEFACE_DELEGATE,
+  SKITY_OBJECT_TYPE_SEMAPHORE,
+  SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK,
 } skity_object_type;
 
 /* When set, the wrapper owns the underlying object and releases it on destroy.
@@ -56,8 +91,8 @@ typedef struct skity_object_header {
 } skity_object_header;
 
 /*
- * Wrapper-internal struct definitions. Each is `header + impl` where impl is a
- * type-erased shared_ptr:
+ * Wrapper-internal struct definitions. Each derives from `skity_handle_base<T>`
+ * and therefore carries `header + impl` where impl is a typed shared_ptr<T>:
  *   - owning handles store a shared_ptr with the default deleter (or the
  *     factory's original shared_ptr), so destroying the wrapper releases the
  *     object;
@@ -68,109 +103,46 @@ typedef struct skity_object_header {
  * These structs live at global scope so they match the C-side typedefs
  * produced by SKITY_C_DEFINE_HANDLE.
  */
-struct skity_context_s {
+template <typename T>
+struct skity_handle_base {
   skity_object_header header;
-  std::shared_ptr<void> impl;
+  std::shared_ptr<T> impl;
+
+  using value_type = T;
 };
-struct skity_surface_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
+
+struct skity_context_s : skity_handle_base<skity::GPUContext> {};
+struct skity_surface_s : skity_handle_base<skity::GPUSurface> {
+  std::unique_ptr<skity::GPUSurface> owned_surface;
 };
-struct skity_canvas_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
+struct skity_canvas_s : skity_handle_base<skity::Canvas> {};
+struct skity_paint_s : skity_handle_base<skity::Paint> {};
+struct skity_path_s : skity_handle_base<skity::Path> {};
+struct skity_shader_s : skity_handle_base<skity::Shader> {};
+struct skity_color_filter_s : skity_handle_base<skity::ColorFilter> {};
+struct skity_image_filter_s : skity_handle_base<skity::ImageFilter> {};
+struct skity_mask_filter_s : skity_handle_base<skity::MaskFilter> {};
+struct skity_path_effect_s : skity_handle_base<skity::PathEffect> {};
+struct skity_typeface_s : skity_handle_base<skity::Typeface> {};
+struct skity_font_manager_s : skity_handle_base<skity::FontManager> {};
+struct skity_picture_recorder_s : skity_handle_base<skity::PictureRecorder> {};
+struct skity_display_list_s : skity_handle_base<skity::DisplayList> {};
+struct skity_image_s : skity_handle_base<skity::Image> {};
+struct skity_text_blob_s : skity_handle_base<skity::TextBlob> {};
+struct skity_texture_s : skity_handle_base<skity::Texture> {};
+struct skity_font_style_set_s : skity_handle_base<skity::FontStyleSet> {};
+struct skity_precompile_context_s
+    : skity_handle_base<skity::PrecompileContext> {};
+struct skity_font_s : skity_handle_base<skity::Font> {};
+struct skity_bitmap_s : skity_handle_base<skity::Bitmap> {};
+struct skity_pixmap_s : skity_handle_base<skity::Pixmap> {};
+struct skity_path_measure_s : skity_handle_base<skity::PathMeasure> {};
+struct skity_camera_s : skity_handle_base<skity::Camera> {};
+struct skity_data_s : skity_handle_base<skity::Data> {};
+struct skity_typeface_delegate_s : skity_handle_base<skity::TypefaceDelegate> {
 };
-struct skity_paint_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_path_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_shader_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_color_filter_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_image_filter_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_mask_filter_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_path_effect_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_typeface_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_font_manager_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_picture_recorder_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_display_list_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_image_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_text_blob_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_texture_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_font_style_set_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_precompile_context_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_font_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_bitmap_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_pixmap_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_path_measure_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_camera_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_data_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
-};
-struct skity_typeface_delegate_s {
-  skity_object_header header;
-  std::shared_ptr<void> impl;
+struct skity_semaphore_s : skity_handle_base<skity::GPUSemaphore> {};
+struct skity_native_window_vk_s : skity_handle_base<skity::GPUNativeWindowVK> {
 };
 
 namespace skity {
@@ -181,9 +153,9 @@ namespace capi {
  * failed allocation returns nullptr (the wrapper is built with -fno-exceptions,
  * matching the core skity library).
  */
-template <typename Wrapper>
+template <typename Wrapper, typename T = typename Wrapper::value_type>
 inline Wrapper* alloc_handle(skity_object_type type, uint32_t flags,
-                             std::shared_ptr<void> impl) {
+                             std::shared_ptr<T> impl) {
   Wrapper* w = new (std::nothrow) Wrapper{};
   if (w == nullptr) return nullptr;
   w->header.type = type;
@@ -220,7 +192,7 @@ inline void destroy_handle(void* handle, skity_object_type expected) {
  * Resolve a handle and return its impl re-typed to T. Returns an empty
  * shared_ptr on null / wrong type.
  */
-template <typename Wrapper, typename T>
+template <typename Wrapper, typename T = typename Wrapper::value_type>
 inline std::shared_ptr<T> get_impl(void* handle, skity_object_type expected) {
   Wrapper* w = resolve<Wrapper>(handle, expected);
   if (w == nullptr) return nullptr;

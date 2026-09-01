@@ -90,7 +90,7 @@ skity_canvas skity_picture_recorder_get_canvas(
   // The RecordingCanvas is owned by the recorder; wrap it non-owning.
   skity::Canvas* raw = r->GetRecordingCanvas();
   if (raw == nullptr) return nullptr;
-  std::shared_ptr<void> impl(raw, [](void*) {});
+  std::shared_ptr<skity::Canvas> impl(raw, [](skity::Canvas*) {});
   return skity::capi::alloc_handle<skity_canvas_s>(SKITY_OBJECT_TYPE_CANVAS, 0,
                                                    std::move(impl));
 }
@@ -105,7 +105,7 @@ skity_result skity_picture_recorder_finish(skity_picture_recorder recorder,
   if (dl == nullptr) {
     return SKITY_ERROR_INVALID_ARGUMENT;
   }
-  std::shared_ptr<void> impl(dl.release());
+  std::shared_ptr<skity::DisplayList> impl(dl.release());
   skity_display_list_s* w = skity::capi::alloc_handle<skity_display_list_s>(
       SKITY_OBJECT_TYPE_DISPLAY_LIST, SKITY_HANDLE_OWNING, std::move(impl));
   if (w == nullptr) {
@@ -222,7 +222,7 @@ skity_paint skity_display_list_get_op_paint_by_offset(skity_display_list list,
   // The paint lives inside the display list's storage; wrap it non-owning so
   // the handle stays valid for the list's lifetime and in-place edits are
   // visible to later replays.
-  std::shared_ptr<void> impl(paint, [](void*) {});
+  std::shared_ptr<skity::Paint> impl(paint, [](skity::Paint*) {});
   return skity::capi::alloc_handle<skity_paint_s>(SKITY_OBJECT_TYPE_PAINT, 0,
                                                   std::move(impl));
 }

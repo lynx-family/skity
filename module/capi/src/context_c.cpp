@@ -45,7 +45,7 @@ skity_result skity_context_create_gl(skity_gl_get_proc get_proc,
   if (ctx == nullptr) {
     return SKITY_ERROR_INITIALIZATION_FAILED;
   }
-  std::shared_ptr<void> impl(ctx.release());
+  std::shared_ptr<skity::GPUContext> impl(ctx.release());
   skity_context_s* w = skity::capi::alloc_handle<skity_context_s>(
       SKITY_OBJECT_TYPE_CONTEXT, SKITY_HANDLE_OWNING, std::move(impl));
   if (w == nullptr) {
@@ -131,7 +131,7 @@ skity_precompile_context skity_context_create_precompile_context(
   if (pc == nullptr) {
     return nullptr;
   }
-  std::shared_ptr<void> impl(pc.release());
+  std::shared_ptr<skity::PrecompileContext> impl(pc.release());
   return skity::capi::alloc_handle<skity_precompile_context_s>(
       SKITY_OBJECT_TYPE_PRECOMPILE_CONTEXT, SKITY_HANDLE_OWNING,
       std::move(impl));
@@ -149,7 +149,57 @@ skity_result skity_context_create_vk(
   if (ctx == nullptr) {
     return SKITY_ERROR_INITIALIZATION_FAILED;
   }
-  std::shared_ptr<void> impl(ctx.release());
+  std::shared_ptr<skity::GPUContext> impl(ctx.release());
+  skity_context_s* w = skity::capi::alloc_handle<skity_context_s>(
+      SKITY_OBJECT_TYPE_CONTEXT, SKITY_HANDLE_OWNING, std::move(impl));
+  if (w == nullptr) {
+    return SKITY_ERROR_OUT_OF_HOST_MEMORY;
+  }
+  *out_context = w;
+  return SKITY_SUCCESS;
+}
+
+skity_result skity_context_create_vk_ex(
+    const skity_context_create_info_vk* info, skity_context* out_context) {
+  if (info == nullptr || out_context == nullptr ||
+      info->get_instance_proc_addr == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->logical_device != VK_NULL_HANDLE &&
+      info->get_device_proc_addr == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+
+  skity::GPUContextInfoVK vk_info{};
+  vk_info.instance = info->instance;
+  vk_info.get_instance_proc_addr = info->get_instance_proc_addr;
+  vk_info.enabled_instance_extensions = info->enabled_instance_extensions;
+  vk_info.enabled_instance_extension_count =
+      info->enabled_instance_extension_count;
+  vk_info.enabled_instance_extensions_known =
+      info->enabled_instance_extensions_known != 0;
+  vk_info.physical_device = info->physical_device;
+  vk_info.logical_device = info->logical_device;
+  vk_info.get_device_proc_addr = info->get_device_proc_addr;
+  vk_info.enabled_device_extensions = info->enabled_device_extensions;
+  vk_info.enabled_device_extension_count = info->enabled_device_extension_count;
+  vk_info.enabled_device_extensions_known =
+      info->enabled_device_extensions_known != 0;
+  vk_info.dual_source_blending_enabled =
+      info->dual_source_blending_enabled != 0;
+  vk_info.graphics_queue = info->graphics_queue;
+  vk_info.graphics_queue_family_index = info->graphics_queue_family_index;
+  vk_info.compute_queue = info->compute_queue;
+  vk_info.compute_queue_family_index = info->compute_queue_family_index;
+  vk_info.transfer_queue = info->transfer_queue;
+  vk_info.transfer_queue_family_index = info->transfer_queue_family_index;
+  vk_info.enable_debug_runtime = info->enable_debug_runtime != 0;
+
+  std::unique_ptr<skity::GPUContext> ctx = skity::CreateGPUContextVK(&vk_info);
+  if (ctx == nullptr) {
+    return SKITY_ERROR_INITIALIZATION_FAILED;
+  }
+  std::shared_ptr<skity::GPUContext> impl(ctx.release());
   skity_context_s* w = skity::capi::alloc_handle<skity_context_s>(
       SKITY_OBJECT_TYPE_CONTEXT, SKITY_HANDLE_OWNING, std::move(impl));
   if (w == nullptr) {

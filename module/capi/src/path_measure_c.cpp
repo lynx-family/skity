@@ -31,7 +31,7 @@ skity_path_measure skity_path_measure_create(skity_path path,
                                              uint32_t force_closed,
                                              float res_scale) {
   auto p = path_shared(path);
-  std::shared_ptr<void> impl;
+  std::shared_ptr<skity::PathMeasure> impl;
   if (p != nullptr) {
     impl =
         std::make_shared<skity::PathMeasure>(*p, force_closed != 0, res_scale);

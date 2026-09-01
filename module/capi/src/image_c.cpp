@@ -116,7 +116,8 @@ std::shared_ptr<skity::Texture> promise_get_thunk2(
   // Wrap the GPUContext as a non-owning handle for the duration of the call.
   skity_context ch = nullptr;
   if (gpu_ctx != nullptr) {
-    std::shared_ptr<void> non_owning(gpu_ctx, [](void*) {});
+    std::shared_ptr<skity::GPUContext> non_owning(gpu_ctx,
+                                                  [](skity::GPUContext*) {});
     ch = skity::capi::alloc_handle<skity_context_s>(SKITY_OBJECT_TYPE_CONTEXT,
                                                     0, std::move(non_owning));
   }
