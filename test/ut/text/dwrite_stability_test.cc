@@ -2,8 +2,15 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+// clang-format off
+#include "src/text/ports/win/dwrite_version.hpp"
+#include <dwrite.h>
+#include <dwrite_3.h>
+// clang-format on
+
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <memory>
@@ -22,12 +29,17 @@
 #include <vector>
 
 #include "concurrent_runner.h"
+#include "src/base/platform/win/str_conversion.hpp"
 #include "src/render/text/text_transform.hpp"
+#include "src/text/ports/win/dwrite_utils.hpp"
+#include "src/text/ports/win/scoped_com_ptr.hpp"
 #include "src/text/scaler_context_desc.hpp"
 
 namespace skity {
 
 std::shared_ptr<FontManager> InitFontManagerDWrite();
+std::shared_ptr<Typeface> MakeFreeTypeTypefaceFromDWriteFontFace(
+    IDWriteFontFace* font_face);
 
 namespace {
 
@@ -76,6 +88,29 @@ std::shared_ptr<Typeface> MakeWeightVariation(
   FontArguments arguments;
   arguments.SetVariationDesignPosition(position);
   return typeface->MakeVariation(arguments);
+}
+
+ScopedComPtr<IDWriteFactory> MakeTestDWriteFactory() {
+  using DWriteCreateFactoryProc = decltype(DWriteCreateFactory)*;
+  DWriteCreateFactoryProc create_factory = nullptr;
+
+  LoadWinProc(&create_factory, L"DWriteCore.dll",
+              LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, "DWriteCoreCreateFactory");
+  if (!create_factory) {
+    LoadWinProc(&create_factory, L"dwrite.dll", LOAD_LIBRARY_SEARCH_SYSTEM32,
+                "DWriteCreateFactory");
+  }
+  if (!create_factory) {
+    return ScopedComPtr<IDWriteFactory>(nullptr);
+  }
+
+  IDWriteFactory* factory = nullptr;
+  if (FAILED(create_factory(DWRITE_FACTORY_TYPE_ISOLATED,
+                            __uuidof(IDWriteFactory),
+                            reinterpret_cast<IUnknown**>(&factory)))) {
+    return ScopedComPtr<IDWriteFactory>(nullptr);
+  }
+  return ScopedComPtr<IDWriteFactory>(factory);
 }
 
 const char* GlyphFormatName(GlyphFormat format) {
@@ -271,6 +306,85 @@ TEST(DWriteFontStabilityTest, VariableFontCanBeCreatedAndReleasedRepeatedly) {
                                       MakePaint(ColorSetRGB(20, 50, 100)),
                                       20.f + i % 4, false));
   }
+}
+
+TEST(DWriteFontStabilityTest,
+     LegacyFreeTypeBridgePreservesDWriteVariableWeight) {
+  auto factory = MakeTestDWriteFactory();
+  ASSERT_TRUE(factory);
+
+  std::wstring font_path;
+  ASSERT_TRUE(SUCCEEDED(StrConversion::StringToWideString(
+      FontPath("RobotoFlex-Regular.ttf"), &font_path)));
+
+  ScopedComPtr<IDWriteFontFile> font_file;
+  ASSERT_TRUE(SUCCEEDED(factory->CreateFontFileReference(font_path.c_str(),
+                                                         nullptr, &font_file)));
+
+  BOOL is_supported = FALSE;
+  DWRITE_FONT_FILE_TYPE file_type = DWRITE_FONT_FILE_TYPE_UNKNOWN;
+  DWRITE_FONT_FACE_TYPE face_type = DWRITE_FONT_FACE_TYPE_UNKNOWN;
+  UINT32 face_count = 0;
+  ASSERT_TRUE(SUCCEEDED(
+      font_file->Analyze(&is_supported, &file_type, &face_type, &face_count)));
+  ASSERT_TRUE(is_supported);
+  ASSERT_GT(face_count, 0u);
+
+  IDWriteFontFile* font_files[] = {font_file.get()};
+  ScopedComPtr<IDWriteFontFace> default_face;
+  ASSERT_TRUE(SUCCEEDED(factory->CreateFontFace(face_type, 1, font_files, 0,
+                                                DWRITE_FONT_SIMULATIONS_NONE,
+                                                &default_face)));
+
+  ScopedComPtr<IDWriteFontFace5> default_face5;
+  if (FAILED(default_face->QueryInterface(&default_face5)) ||
+      !default_face5->HasVariations()) {
+    GTEST_SKIP() << "DirectWrite variation APIs are unavailable.";
+  }
+
+  ScopedComPtr<IDWriteFontResource> font_resource;
+  ASSERT_TRUE(SUCCEEDED(default_face5->GetFontResource(&font_resource)));
+
+  const UINT32 axis_count = default_face5->GetFontAxisValueCount();
+  ASSERT_GT(axis_count, 0u);
+  std::vector<DWRITE_FONT_AXIS_VALUE> axis_values(axis_count);
+  ASSERT_TRUE(SUCCEEDED(
+      default_face5->GetFontAxisValues(axis_values.data(), axis_count)));
+
+  constexpr float kExpectedWeight = 500.f;
+  auto dwrite_weight = std::find_if(
+      axis_values.begin(), axis_values.end(), [](const auto& axis_value) {
+        return axis_value.axisTag == DWRITE_FONT_AXIS_TAG_WEIGHT;
+      });
+  ASSERT_NE(dwrite_weight, axis_values.end());
+  dwrite_weight->value = kExpectedWeight;
+
+  ScopedComPtr<IDWriteFontFace5> variation_face5;
+  ASSERT_TRUE(SUCCEEDED(font_resource->CreateFontFace(
+      default_face5->GetSimulations(), axis_values.data(), axis_count,
+      &variation_face5)));
+
+  ScopedComPtr<IDWriteFontFace> variation_face;
+  ASSERT_TRUE(SUCCEEDED(variation_face5->QueryInterface(&variation_face)));
+
+  auto typeface = MakeFreeTypeTypefaceFromDWriteFontFace(variation_face.get());
+  ASSERT_NE(typeface, nullptr);
+  EXPECT_EQ(typeface->GetFontDescriptor().factory_id,
+            SetFourByteTag('f', 'r', 'e', 'e'));
+  ASSERT_FALSE(typeface->GetVariationDesignParameters().empty());
+  const auto free_type_position = typeface->GetVariationDesignPosition();
+  const auto& free_type_coordinates = free_type_position.GetCoordinates();
+  auto free_type_weight = std::find_if(
+      free_type_coordinates.begin(), free_type_coordinates.end(),
+      [](const auto& coordinate) {
+        return coordinate.axis == SetFourByteTag('w', 'g', 'h', 't');
+      });
+  ASSERT_NE(free_type_weight, free_type_coordinates.end());
+  EXPECT_FLOAT_EQ(free_type_weight->value, kExpectedWeight);
+  EXPECT_EQ(typeface->GetFontStyle().weight(),
+            static_cast<int>(kExpectedWeight));
+  EXPECT_TRUE(ExerciseGlyphPipeline(
+      typeface, 'g', MakePaint(ColorSetRGB(246, 246, 246)), 14.f, false));
 }
 
 TEST(DWriteFontStabilityTest, ColorEmojiFakeBoldKeepsColorBitmapFormat) {

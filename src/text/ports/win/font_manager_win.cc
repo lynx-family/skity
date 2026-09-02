@@ -89,6 +89,42 @@ static constexpr uint32_t EndianSwap32(uint32_t value) {
          ((value & 0xFF0000) >> 8) | (value >> 24);
 }
 
+VariationPosition GetDWriteVariationDesignPosition(IDWriteFontFace* font_face) {
+  VariationPosition position;
+  if (!font_face) {
+    return position;
+  }
+
+  ScopedComPtr<IDWriteFontFace5> font_face5;
+  if (FAILED(font_face->QueryInterface(&font_face5)) ||
+      !font_face5->HasVariations()) {
+    return position;
+  }
+
+  ScopedComPtr<IDWriteFontResource> font_resource;
+  if (FAILED(font_face5->GetFontResource(&font_resource))) {
+    return {};
+  }
+
+  const UINT32 axis_count = font_face5->GetFontAxisValueCount();
+  std::vector<DWRITE_FONT_AXIS_VALUE> axis_values(axis_count);
+  if (axis_count == 0 ||
+      FAILED(font_face5->GetFontAxisValues(axis_values.data(), axis_count))) {
+    return {};
+  }
+
+  for (UINT32 i = 0; i < axis_count; ++i) {
+    if ((font_resource->GetFontAxisAttributes(i) &
+         DWRITE_FONT_AXIS_ATTRIBUTES_VARIABLE) == 0) {
+      continue;
+    }
+    position.AddCoordinate(
+        EndianSwap32(static_cast<uint32_t>(axis_values[i].axisTag)),
+        axis_values[i].value);
+  }
+  return position;
+}
+
 // Korean fonts Gulim, Dotum, Batang, Gungsuh have bitmap strikes that get
 // artifically emboldened by Windows without antialiasing. Korean users prefer
 // these over the synthetic boldening performed by Skia. So let's make an
@@ -874,15 +910,10 @@ static std::wstring GetFontFilePath(IDWriteFontFile* fontFile) {
   return path;
 }
 
-std::shared_ptr<Typeface> FontManagerWin::MakeTypefaceFromDWriteFont(
-    IDWriteFontFace* font_face, IDWriteFont* font,
-    IDWriteFontFamily* font_family) const {
-  (void)font;
-  (void)font_family;
-
-  auto cached_typeface = typeface_cache_.Find(font_face);
-  if (cached_typeface) {
-    return cached_typeface;
+std::shared_ptr<Typeface> MakeFreeTypeTypefaceFromDWriteFontFace(
+    IDWriteFontFace* font_face) {
+  if (!font_face) {
+    return nullptr;
   }
 
   std::vector<ScopedComPtr<IDWriteFontFile>> files;
@@ -896,6 +927,8 @@ std::shared_ptr<Typeface> FontManagerWin::MakeTypefaceFromDWriteFont(
     return nullptr;
   }
 
+  const VariationPosition variation_position =
+      GetDWriteVariationDesignPosition(font_face);
   for (auto& file : files) {
     std::wstring w_path = GetFontFilePath(file.get());
     if (!w_path.empty()) {
@@ -904,16 +937,42 @@ std::shared_ptr<Typeface> FontManagerWin::MakeTypefaceFromDWriteFont(
            "WideStringToString failed");
       LOGE("Font file path: {}\n", path);
       std::shared_ptr<Data> data = Data::MakeFromFileMapping(path.c_str());
-      UINT32 ttc_index = font_face->GetIndex();
-      auto typeface = TypefaceFreeType::Make(
-          data, FontArguments().SetCollectionIndex(ttc_index));
-      return typeface_cache_.AddOrGetExisting(font_face, std::move(typeface));
+      const UINT32 ttc_index = font_face->GetIndex();
+      FontArguments font_arguments;
+      font_arguments.SetCollectionIndex(ttc_index);
+      std::shared_ptr<Typeface> typeface =
+          TypefaceFreeType::Make(data, font_arguments);
+      if (typeface && !variation_position.GetCoordinates().empty()) {
+        font_arguments.SetVariationDesignPosition(variation_position);
+        auto variation_typeface = typeface->MakeVariation(font_arguments);
+        if (variation_typeface) {
+          typeface = std::move(variation_typeface);
+        } else {
+          LOGE("Could not apply DirectWrite variation position with FreeType");
+        }
+      }
+      return typeface;
     } else {
       LOGE("Font file path not available (maybe custom loader)");
     }
   }
 
   return nullptr;
+}
+
+std::shared_ptr<Typeface> FontManagerWin::MakeTypefaceFromDWriteFont(
+    IDWriteFontFace* font_face, IDWriteFont* font,
+    IDWriteFontFamily* font_family) const {
+  (void)font;
+  (void)font_family;
+
+  auto cached_typeface = typeface_cache_.Find(font_face);
+  if (cached_typeface) {
+    return cached_typeface;
+  }
+
+  auto typeface = MakeFreeTypeTypefaceFromDWriteFontFace(font_face);
+  return typeface_cache_.AddOrGetExisting(font_face, std::move(typeface));
 }
 
 static std::shared_ptr<FontManager> InitFontManagerWin() {
