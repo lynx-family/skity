@@ -142,6 +142,16 @@ SKITY_C_API void skity_canvas_draw_color(skity_canvas canvas, skity_color color,
                                          skity_blend_mode mode);
 
 /**
+ * @brief Fill the entire clip with @p color using @p mode.
+ * @param color  unpremultiplied RGBA, one float per channel
+ * @param mode   blend mode used to combine the source color with the
+ * destination
+ */
+SKITY_C_API void skity_canvas_draw_color4f(skity_canvas canvas,
+                                           skity_color4f color,
+                                           skity_blend_mode mode);
+
+/**
  * @brief Fill the entire clip using @p paint. The paint's color, shader,
  *        color filter, image filter, and blend mode all apply.
  * @param paint  graphics state used to fill the canvas
@@ -215,6 +225,20 @@ SKITY_C_API void skity_canvas_draw_round_rect(skity_canvas canvas,
                                               float ry, skity_paint paint);
 
 /**
+ * @brief Draw the rounded rectangle bounded by @p rect with per-corner radii
+ *        @p radii using @p paint. Unlike skity_canvas_draw_round_rect, each
+ *        corner can have independent x-axis and y-axis radii.
+ * @param rect   bounds of the rounded rectangle to draw
+ * @param radii  corner radii as (x, y) pairs in the order top-left,
+ *               top-right, bottom-right, bottom-left; four entries
+ * @param paint  stroke or fill, blend, color, and so on, used to draw
+ */
+SKITY_C_API void skity_canvas_draw_rrect(skity_canvas canvas,
+                                         const skity_rect* rect,
+                                         const skity_vec2* radii,
+                                         skity_paint paint);
+
+/**
  * @brief Draw @p path using @p paint.
  * @param path   path to draw
  * @param paint  stroke or fill, blend, color, and so on, used to draw
@@ -231,6 +255,35 @@ SKITY_C_API void skity_canvas_draw_path(skity_canvas canvas, skity_path path,
  */
 SKITY_C_API void skity_canvas_draw_image(skity_canvas canvas, skity_image image,
                                          float x, float y);
+
+/**
+ * @brief Draw @p image with its top-left corner at (@p x, @p y), filtered
+ *        with @p sampling and modulated by @p paint.
+ * @param image     image to draw
+ * @param x         position of the image's top-left corner on the x-axis
+ * @param y         position of the image's top-left corner on the y-axis
+ * @param sampling  sampling options used to filter the image; NULL to use the
+ * default
+ * @param paint     paint applied to modulate the image; NULL to draw without a
+ * paint
+ */
+SKITY_C_API void skity_canvas_draw_image_with_sampling(
+    skity_canvas canvas, skity_image image, float x, float y,
+    const skity_sampling_options* sampling, skity_paint paint);
+
+/**
+ * @brief Draw @p image scaled to fill @p dst, filtered with @p sampling and
+ *        modulated by @p paint.
+ * @param image     image to draw
+ * @param dst       destination rectangle to draw into
+ * @param sampling  sampling options used to filter the image; NULL to use the
+ * default
+ * @param paint     paint applied to modulate the image; NULL to draw without a
+ * paint
+ */
+SKITY_C_API void skity_canvas_draw_image_to_rect(
+    skity_canvas canvas, skity_image image, const skity_rect* dst,
+    const skity_sampling_options* sampling, skity_paint paint);
 
 /**
  * @brief Draw the sub-rectangle @p src of @p image into the destination
@@ -385,10 +438,22 @@ SKITY_C_API uint32_t skity_canvas_get_width(skity_canvas canvas);
 SKITY_C_API uint32_t skity_canvas_get_height(skity_canvas canvas);
 
 /**
- * @brief Release the non-owning canvas wrapper. The underlying Canvas object
- *        is owned by the surface and is not deleted here. Calling this is
- *        optional — the wrapper is small, but releasing it avoids leaking the
- *        wrapper struct across many frames.
+ * @brief Create a software (CPU-rasterized) canvas drawing into @p bitmap.
+ *
+ *        The returned canvas is owning: release it with skity_canvas_destroy,
+ *        which also deletes the underlying Canvas. The bitmap must outlive
+ *        the canvas.
+ *
+ * @param bitmap  bitmap that receives the drawing
+ * @return a canvas handle, or NULL on failure
+ */
+SKITY_C_API skity_canvas skity_canvas_make_software_canvas(skity_bitmap bitmap);
+
+/**
+ * @brief Release the canvas wrapper. For a canvas obtained from a surface or
+ *        recorder the underlying Canvas object is not deleted here; for a
+ *        canvas created with skity_canvas_make_software_canvas the underlying
+ *        object is deleted as well.
  */
 SKITY_C_API void skity_canvas_destroy(skity_canvas canvas);
 

@@ -7,6 +7,8 @@
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/rect.hpp>
 #include <skity/geometry/rrect.hpp>
+#include <skity/geometry/vector.hpp>
+#include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/image.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/graphic/path.hpp>
@@ -39,6 +41,18 @@ skity::Path* path_of(skity_path handle) {
 skity::Canvas::ClipOp to_clip_op(skity_clip_op op) {
   return op == SKITY_CLIP_OP_DIFFERENCE ? skity::Canvas::ClipOp::kDifference
                                         : skity::Canvas::ClipOp::kIntersect;
+}
+
+skity::SamplingOptions to_sampling_options(
+    const skity_sampling_options* sampling) {
+  skity::SamplingOptions so{};
+  if (sampling != nullptr) {
+    so.filter = static_cast<skity::FilterMode>(sampling->filter);
+    so.mipmap = static_cast<skity::MipmapMode>(sampling->mipmap);
+    so.cubic.B = sampling->cubic_b;
+    so.cubic.C = sampling->cubic_c;
+  }
+  return so;
 }
 
 skity::TextBlob* text_blob_of(skity_text_blob handle) {
@@ -133,6 +147,14 @@ void skity_canvas_draw_color(skity_canvas canvas, skity_color color,
   }
 }
 
+void skity_canvas_draw_color4f(skity_canvas canvas, skity_color4f color,
+                               skity_blend_mode mode) {
+  if (auto* c = canvas_of(canvas)) {
+    c->DrawColor(*reinterpret_cast<const skity::Color4f*>(&color),
+                 static_cast<skity::BlendMode>(mode));
+  }
+}
+
 void skity_canvas_draw_paint(skity_canvas canvas, skity_paint paint) {
   auto* c = canvas_of(canvas);
   auto* p = paint_of(paint);
@@ -187,6 +209,19 @@ void skity_canvas_draw_round_rect(skity_canvas canvas, const skity_rect* rect,
   }
 }
 
+void skity_canvas_draw_rrect(skity_canvas canvas, const skity_rect* rect,
+                             const skity_vec2* radii, skity_paint paint) {
+  auto* c = canvas_of(canvas);
+  auto* p = paint_of(paint);
+  if (c == nullptr || rect == nullptr || radii == nullptr || p == nullptr) {
+    return;
+  }
+  skity::RRect rr;
+  rr.SetRectRadii(*reinterpret_cast<const skity::Rect*>(rect),
+                  reinterpret_cast<const skity::Vec2*>(radii));
+  c->DrawRRect(rr, *p);
+}
+
 void skity_canvas_draw_path(skity_canvas canvas, skity_path path,
                             skity_paint paint) {
   auto* c = canvas_of(canvas);
@@ -205,6 +240,32 @@ void skity_canvas_draw_image(skity_canvas canvas, skity_image image, float x,
   if (c != nullptr && img != nullptr) {
     c->DrawImage(img, x, y);
   }
+}
+
+void skity_canvas_draw_image_with_sampling(
+    skity_canvas canvas, skity_image image, float x, float y,
+    const skity_sampling_options* sampling, skity_paint paint) {
+  auto* c = canvas_of(canvas);
+  auto img = skity::capi::get_impl<skity_image_s, skity::Image>(
+      image, SKITY_OBJECT_TYPE_IMAGE);
+  if (c == nullptr || img == nullptr) {
+    return;
+  }
+  c->DrawImage(img, x, y, to_sampling_options(sampling), paint_of(paint));
+}
+
+void skity_canvas_draw_image_to_rect(skity_canvas canvas, skity_image image,
+                                     const skity_rect* dst,
+                                     const skity_sampling_options* sampling,
+                                     skity_paint paint) {
+  auto* c = canvas_of(canvas);
+  auto img = skity::capi::get_impl<skity_image_s, skity::Image>(
+      image, SKITY_OBJECT_TYPE_IMAGE);
+  if (c == nullptr || img == nullptr || dst == nullptr) {
+    return;
+  }
+  c->DrawImage(img, *reinterpret_cast<const skity::Rect*>(dst),
+               to_sampling_options(sampling), paint_of(paint));
 }
 
 void skity_canvas_draw_image_rect(skity_canvas canvas, skity_image image,
@@ -346,6 +407,22 @@ uint32_t skity_canvas_get_width(skity_canvas canvas) {
 uint32_t skity_canvas_get_height(skity_canvas canvas) {
   auto* c = canvas_of(canvas);
   return c ? c->Height() : 0;
+}
+
+skity_canvas skity_canvas_make_software_canvas(skity_bitmap bitmap) {
+  auto b = skity::capi::get_impl<skity_bitmap_s, skity::Bitmap>(
+      bitmap, SKITY_OBJECT_TYPE_BITMAP);
+  if (b == nullptr) {
+    return nullptr;
+  }
+  std::unique_ptr<skity::Canvas> canvas =
+      skity::Canvas::MakeSoftwareCanvas(b.get());
+  if (canvas == nullptr) {
+    return nullptr;
+  }
+  std::shared_ptr<skity::Canvas> impl(canvas.release());
+  return skity::capi::alloc_handle<skity_canvas_s>(
+      SKITY_OBJECT_TYPE_CANVAS, SKITY_HANDLE_OWNING, std::move(impl));
 }
 
 void skity_canvas_destroy(skity_canvas canvas) {
