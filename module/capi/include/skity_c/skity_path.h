@@ -43,11 +43,47 @@ typedef enum {
   SKITY_ARC_SIZE_LARGE = 1, /**< sweep the larger of the two candidate arcs */
 } skity_arc_size;
 
+/** @brief Path verb kinds, in storage order. Values aligned with
+ *         skity::Path::Verb. */
+typedef enum {
+  SKITY_PATH_VERB_MOVE = 0, /**< begin a contour; 1 point */
+  SKITY_PATH_VERB_LINE,     /**< line segment; 2 points */
+  SKITY_PATH_VERB_QUAD,     /**< quadratic curve; 3 points */
+  SKITY_PATH_VERB_CONIC,    /**< conic curve; 3 points + weight */
+  SKITY_PATH_VERB_CUBIC,    /**< cubic curve; 4 points */
+  SKITY_PATH_VERB_CLOSE,    /**< close the contour; 1 point */
+  SKITY_PATH_VERB_DONE,     /**< no more verbs */
+} skity_path_verb;
+
+/** @brief Convexity classification. Values aligned with
+ *         skity::Path::ConvexityType. */
+typedef enum {
+  SKITY_CONVEXITY_UNKNOWN = 0, /**< not yet computed */
+  SKITY_CONVEXITY_CONVEX,      /**< all interior angles <= 180 degrees */
+  SKITY_CONVEXITY_CONCAVE,     /**< at least one interior angle > 180 degrees */
+} skity_convexity_type;
+
+/** @brief How an added path is appended to the existing contours. Values
+ *         aligned with skity::Path::AddMode. */
+typedef enum {
+  SKITY_PATH_ADD_MODE_APPEND =
+      0,                      /**< append src to the destination unaltered */
+  SKITY_PATH_ADD_MODE_EXTEND, /**< add a line to src if the prior contour is
+                                   not closed */
+} skity_path_add_mode;
+
 /** @brief Create an empty path. */
 SKITY_C_API skity_path skity_path_create(void);
 
 /** @brief Release the path handle and its underlying object. Safe on NULL. */
 SKITY_C_API void skity_path_destroy(skity_path path);
+
+/** @brief Create a new path that is a copy of @p src. */
+SKITY_C_API skity_path skity_path_clone(skity_path src);
+
+/** @brief Return whether the two paths hold equal verbs, points, and weights.
+ */
+SKITY_C_API uint32_t skity_path_is_equal(skity_path a, skity_path b);
 
 /** @brief Clear all verbs and points, leaving the path empty (fill type is
  *         retained). */
@@ -174,6 +210,22 @@ SKITY_C_API skity_path_fill_type skity_path_get_fill_type(skity_path path);
 SKITY_C_API void skity_path_add_path_matrix(skity_path path, skity_path src,
                                             const skity_matrix* matrix);
 
+/**
+ * @brief Append @p src to @p path under @p mode. With
+ *        SKITY_PATH_ADD_MODE_EXTEND, a line is added first when the prior
+ *        contour is not closed.
+ */
+SKITY_C_API void skity_path_add_path_with_mode(skity_path path, skity_path src,
+                                               skity_path_add_mode mode);
+
+/**
+ * @brief Append @p src to @p path under @p mode after transforming it by
+ *        @p matrix.
+ */
+SKITY_C_API void skity_path_add_path_matrix_with_mode(
+    skity_path path, skity_path src, const skity_matrix* matrix,
+    skity_path_add_mode mode);
+
 /** @brief Append the contours of @p src in reverse order to @p path. */
 SKITY_C_API void skity_path_reverse_add_path(skity_path path, skity_path src);
 
@@ -191,6 +243,26 @@ SKITY_C_API uint32_t skity_path_get_point(skity_path path, int32_t index,
                                           skity_vec4* out);
 
 /**
+ * @brief Return the verb kind at @p index. Pair with
+ *        skity_path_count_verbs / skity_path_count_points /
+ *        skity_path_get_point to walk the path by index.
+ *
+ *        Conic verbs carry a weight that the index-based walk cannot fetch;
+ *        it is only available through the C++ Path::Iter.
+ *
+ * @return the verb kind, or SKITY_PATH_VERB_DONE if @p index is out of range.
+ */
+SKITY_C_API skity_path_verb skity_path_get_verb(skity_path path, int32_t index);
+
+/**
+ * @brief Write the weight of the @p index -th conic segment into @p out.
+ *        The index counts conic verbs only, in storage order.
+ * @return 1 on success, 0 if @p index is out of range.
+ */
+SKITY_C_API uint32_t skity_path_get_conic_weight(skity_path path, int32_t index,
+                                                 float* out);
+
+/**
  * @brief Test whether the path is equivalent to a single rect when filled.
  * @param out_rect      if non-NULL and the test passes, receives the rect
  * @param out_is_closed if non-NULL and the test passes, set to 1 when the
@@ -199,6 +271,39 @@ SKITY_C_API uint32_t skity_path_get_point(skity_path path, int32_t index,
  */
 SKITY_C_API uint32_t skity_path_is_rect(skity_path path, skity_rect* out_rect,
                                         uint32_t* out_is_closed);
+
+/**
+ * @brief Return the convexity classification. SKITY_CONVEXITY_UNKNOWN is
+ *        computed on demand, so the first call may take time.
+ */
+SKITY_C_API skity_convexity_type skity_path_get_convexity_type(skity_path path);
+
+/** @brief Override the cached convexity classification. */
+SKITY_C_API void skity_path_set_convexity_type(skity_path path,
+                                               skity_convexity_type type);
+
+/**
+ * @brief Return a bit mask of the segment kinds present in the path:
+ *        bit 0 line, bit 1 quad, bit 2 conic, bit 3 cubic. Cached, very fast.
+ */
+SKITY_C_API uint32_t skity_path_get_segment_masks(skity_path path);
+
+/** @brief Return whether all points of the path are finite. */
+SKITY_C_API uint32_t skity_path_is_finite(skity_path path);
+
+/** @brief Return whether the path holds no verbs. */
+SKITY_C_API uint32_t skity_path_is_empty(skity_path path);
+
+/**
+ * @brief Test whether the path is equivalent to a single line segment.
+ * @param out_pts  if non-NULL and the test passes, receives the two endpoints
+ * @return 1 if the path is a line, 0 otherwise.
+ */
+SKITY_C_API uint32_t skity_path_is_line(skity_path path, skity_vec4* out_pts);
+
+/** @brief Write the point of the most recent Move verb into @p out. The
+ *         result of an empty path is unspecified. */
+SKITY_C_API void skity_path_get_last_move_pt(skity_path path, skity_vec4* out);
 
 /**
  * @brief Append an elliptical arc that lies on the ellipse bounded by @p oval.

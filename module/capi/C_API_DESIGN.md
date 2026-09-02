@@ -396,12 +396,12 @@ Priority tags: **P3** is deferred / low-value.
 | `Paint` | all setters + getters, fill/stroke split colors, effect/typeface attach | **P3**: `get_color4f`, `get_alpha_f`, SDF / font-threshold |
 | `Shader` | gradient factories (linear/radial/sweep/conical) + image shader + `set/get_local_matrix` | **P3**: `is_opaque`, `as_gradient` introspection |
 | `GPUSurface` | create, `lock_canvas`, `flush`, `read_pixels`, size getters, GL `surface_mode` + `can_blit_from_target_fbo`, Vulkan image/swapchain-image wrapping, external wait semaphore | **P3**: per-surface CoverageAAMode |
-| `Path` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii), boolean ops, `PathMeasure`, `transform`, last-pt get/set, `copy_with_matrix/scale`, counts / `get_point` / `is_rect` | **P3**: convexity / segment-masks introspection, verb iteration (`get_verb` / `Iter`), `add_path` extend mode (`AddMode`) |
+| `Path` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii), boolean ops, `PathMeasure`, `transform`, last-pt get/set, `copy_with_matrix/scale`, counts / `get_point` / `get_verb` / `get_conic_weight` / `is_rect` / `is_line` / `is_empty` / `is_finite`, convexity get/set, `get_segment_masks`, `add_path` append/extend modes, `clone`, `is_equal`, `get_last_move_pt` | `GetLastMovePt` has no failure signal on the C++ side (empty path result unspecified, mirrored here) |
 | `Image` | 5 factories (incl. the `GPUContext` variant) + `read_pixels` + `scale_pixels` + size getters | **P3**: alpha/type/backend introspection |
 | `Font` | create (incl. scale/skew ctor), typeface/size get/set, rendering-quality switch get/set, `get_metrics`, `make_with_size`, `get_widths` | **P3**: `get_widths` bounds overload, `LoadGlyph*` (needs GlyphData) |
 | `Typeface` | `make_from_file`, `make_from_data`, `get_default`, `unichars_to_glyphs`/`unichar_to_glyph` | **P3**: `get_font_style`/`is_bold`/`is_italic`, `contain_glyph`, `units_per_em`/`contains_color_table`, table / variation / descriptor |
 | `TextBlob` | build (UTF-8) + draw, `get_bounds`, `compute_bounds`, `TypefaceDelegate` fallback (ordered-list + custom-fallback-callback) | **P3**: `get_text_run`; fully custom `BreakTextRun` delegate (caller-driven segmentation) |
-| `Canvas` | full draw + state + clip + text/glyphs | **P3**: per-corner RRect draw/clip/drrect, `get_global_clip_bounds`, `draw_image` sampling overloads |
+| `Canvas` | full draw + state + clip + text/glyphs, `draw_image` sampling overloads, `draw_color4f`, per-corner-radii `draw_rrect`, `make_software_canvas` | **P3**: per-corner RRect clip/drrect, `get_global_clip_bounds` |
 | `DisplayList` | draw / cull-rect draw / bounds / op_count / properties / rtree search (+ non-overlapping rects) / per-op paint lookup, `begin_recording` with build options | `RecordedOpOffset` is exposed as a plain `int32_t` (round-trips through the public `RecordedOpOffset::Make`) — no opaque set type |
 | `GPUContext` | (see Fully covered) | **P3**: `create_texture_with_desc` (mipmap), `is_gpu_backend_supported`, `get_backend_type` |
 | `GPUNativeWindowVK` / `GPUPresenter` | Vulkan native-window creation, swapchain resize, surface acquire/present | complete |
@@ -452,9 +452,10 @@ module:
   `BreakTextRun` delegate (caller-driven run segmentation — the current
   `skity_typeface_delegate_create_fallback` keeps the built-in policy and only
   overrides the typeface choice).
-- **Canvas**: per-corner RRect `draw_rrect` / `clip_rrect` / `draw_drrect`
-  (+RRect projection or 8-radii); `get_global_clip_bounds`; `draw_image`
-  sampling/paint overloads; `draw_color(color4f, blend)`.
+- **Canvas**: per-corner RRect `clip_rrect` / `draw_drrect`
+  (+RRect projection or 8-radii); `get_global_clip_bounds`. (`draw_rrect`
+  with per-corner radii, the `draw_image` sampling/paint overloads, and
+  `draw_color(color4f, blend)` are covered since the Canvas gap fill.)
 - **GPUContext**: `create_texture_with_desc` (mipmap, +`TextureDescriptor`
   mirror); `is_gpu_backend_supported`; `get_backend_type`.
 

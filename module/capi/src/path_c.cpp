@@ -21,6 +21,10 @@ skity::Path::Direction to_dir(skity_path_direction d) {
   return static_cast<skity::Path::Direction>(d);
 }
 
+skity::Path::AddMode to_add_mode(skity_path_add_mode m) {
+  return static_cast<skity::Path::AddMode>(m);
+}
+
 }  // namespace
 
 extern "C" {
@@ -33,6 +37,21 @@ skity_path skity_path_create(void) {
 
 void skity_path_destroy(skity_path path) {
   skity::capi::destroy_handle<skity_path_s>(path, SKITY_OBJECT_TYPE_PATH);
+}
+
+skity_path skity_path_clone(skity_path src) {
+  auto* s = path_of(src);
+  if (s == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_path_s>(
+      SKITY_OBJECT_TYPE_PATH, SKITY_HANDLE_OWNING,
+      std::make_shared<skity::Path>(*s));
+}
+
+uint32_t skity_path_is_equal(skity_path a, skity_path b) {
+  auto* pa = path_of(a);
+  auto* pb = path_of(b);
+  if (pa == nullptr || pb == nullptr) return 0u;
+  return *pa == *pb ? 1u : 0u;
 }
 
 void skity_path_reset(skity_path path) {
@@ -160,6 +179,26 @@ void skity_path_add_path_matrix(skity_path path, skity_path src,
   }
 }
 
+void skity_path_add_path_with_mode(skity_path path, skity_path src,
+                                   skity_path_add_mode mode) {
+  auto* p = path_of(path);
+  auto* s = path_of(src);
+  if (p != nullptr && s != nullptr) {
+    p->AddPath(*s, to_add_mode(mode));
+  }
+}
+
+void skity_path_add_path_matrix_with_mode(skity_path path, skity_path src,
+                                          const skity_matrix* matrix,
+                                          skity_path_add_mode mode) {
+  auto* p = path_of(path);
+  auto* s = path_of(src);
+  if (p != nullptr && s != nullptr && matrix != nullptr) {
+    p->AddPath(*s, *reinterpret_cast<const skity::Matrix*>(matrix),
+               to_add_mode(mode));
+  }
+}
+
 void skity_path_reverse_add_path(skity_path path, skity_path src) {
   auto* p = path_of(path);
   auto* s = path_of(src);
@@ -171,6 +210,35 @@ void skity_path_reverse_add_path(skity_path path, skity_path src) {
 uint32_t skity_path_count_verbs(skity_path path) {
   auto* p = path_of(path);
   return p ? (uint32_t)p->CountVerbs() : 0u;
+}
+
+skity_path_verb skity_path_get_verb(skity_path path, int32_t index) {
+  auto* p = path_of(path);
+  if (p == nullptr || index < 0) {
+    return SKITY_PATH_VERB_DONE;
+  }
+  // skity::Path::Verb and skity_path_verb are value-aligned enums; out of
+  // range yields kDone on the C++ side as well.
+  return static_cast<skity_path_verb>(p->GetVerb(index));
+}
+
+uint32_t skity_path_get_conic_weight(skity_path path, int32_t index,
+                                     float* out) {
+  auto* p = path_of(path);
+  if (p == nullptr || out == nullptr || index < 0) return 0u;
+  // The weight array is indexed by conic order, so the valid range is found
+  // by counting the conic verbs.
+  int32_t conic_count = 0;
+  int32_t verb_count = static_cast<int32_t>(p->CountVerbs());
+  for (int32_t i = 0; i < verb_count; i++) {
+    if (p->GetVerb(i) != skity::Path::Verb::kConic) continue;
+    if (conic_count == index) {
+      *out = p->ConicWeights()[conic_count];
+      return 1u;
+    }
+    conic_count++;
+  }
+  return 0u;
 }
 
 uint32_t skity_path_count_points(skity_path path) {
@@ -202,6 +270,52 @@ uint32_t skity_path_is_rect(skity_path path, skity_rect* out_rect,
   }
   if (out_is_closed != nullptr) *out_is_closed = is_closed ? 1u : 0u;
   return 1u;
+}
+
+skity_convexity_type skity_path_get_convexity_type(skity_path path) {
+  auto* p = path_of(path);
+  // skity::Path::ConvexityType and skity_convexity_type are value-aligned.
+  return p ? static_cast<skity_convexity_type>(p->GetConvexityType())
+           : SKITY_CONVEXITY_UNKNOWN;
+}
+
+void skity_path_set_convexity_type(skity_path path, skity_convexity_type type) {
+  if (auto* p = path_of(path)) {
+    p->SetConvexityType(static_cast<skity::Path::ConvexityType>(type));
+  }
+}
+
+uint32_t skity_path_get_segment_masks(skity_path path) {
+  auto* p = path_of(path);
+  return p ? p->GetSegmentMasks() : 0u;
+}
+
+uint32_t skity_path_is_finite(skity_path path) {
+  auto* p = path_of(path);
+  return p && p->IsFinite() ? 1u : 0u;
+}
+
+uint32_t skity_path_is_empty(skity_path path) {
+  auto* p = path_of(path);
+  return p && p->IsEmpty() ? 1u : 0u;
+}
+
+uint32_t skity_path_is_line(skity_path path, skity_vec4* out_pts) {
+  auto* p = path_of(path);
+  if (p == nullptr) return 0u;
+  skity::Point pts[2];
+  if (!p->IsLine(pts)) return 0u;
+  if (out_pts != nullptr) {
+    reinterpret_cast<skity::Vec4*>(out_pts)[0] = pts[0];
+    reinterpret_cast<skity::Vec4*>(out_pts)[1] = pts[1];
+  }
+  return 1u;
+}
+
+void skity_path_get_last_move_pt(skity_path path, skity_vec4* out) {
+  auto* p = path_of(path);
+  if (p == nullptr || out == nullptr) return;
+  *reinterpret_cast<skity::Vec4*>(out) = p->GetLastMovePt();
 }
 
 void skity_path_arc_to_oval(skity_path path, const skity_rect* oval,
