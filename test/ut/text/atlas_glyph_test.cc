@@ -338,16 +338,19 @@ TEST(AtlasGlyphTest, ScalerPolicyFlagsParticipateInGlyphKey) {
   ScalerContextDesc configured_desc{};
   configured_desc.scaler_flags = ScalerContextDesc::kForceAutoHintingFlag |
                                  ScalerContextDesc::kEmbeddedBitmapsFlag |
-                                 ScalerContextDesc::kLinearMetricsFlag;
+                                 ScalerContextDesc::kLinearMetricsFlag |
+                                 ScalerContextDesc::kGenerateRawA8MaskFlag;
 
   EXPECT_FALSE(
       GlyphKey::Equal{}(GlyphKey(7, base_desc), GlyphKey(7, configured_desc)));
   EXPECT_FALSE(base_desc.IsForceAutoHinting());
   EXPECT_FALSE(base_desc.IsEmbeddedBitmaps());
   EXPECT_FALSE(base_desc.IsLinearMetrics());
+  EXPECT_FALSE(base_desc.ShouldGenerateRawA8Mask());
   EXPECT_TRUE(configured_desc.IsForceAutoHinting());
   EXPECT_TRUE(configured_desc.IsEmbeddedBitmaps());
   EXPECT_TRUE(configured_desc.IsLinearMetrics());
+  EXPECT_TRUE(configured_desc.ShouldGenerateRawA8Mask());
 }
 
 TEST(AtlasBitmapTest, CopiesGlyphWithPaddedRows) {

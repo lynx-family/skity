@@ -52,7 +52,7 @@
 namespace skity {
 namespace {
 
-static constexpr float kSkiaMaskGammaContrast = 128.f / 255.f;
+static constexpr float kA8MaskGammaContrast = 128.f / 255.f;
 
 static float ComputeFakeBoldScale(float text_size) {
   if (text_size <= 9.0f) {
@@ -369,14 +369,14 @@ static uint8_t Expand3BitLuminance(uint8_t value) {
   return value | (value >> 3) | (value >> 6);
 }
 
-static uint8_t SkiaCanonicalColorChannel(uint8_t value) {
+static uint8_t CanonicalizeColorChannel(uint8_t value) {
   return Expand3BitLuminance(static_cast<uint8_t>(value >> 5));
 }
 
-static uint8_t SkiaA8LuminanceTableIndex(Color foreground_color) {
-  uint8_t r = SkiaCanonicalColorChannel(ColorGetR(foreground_color));
-  uint8_t g = SkiaCanonicalColorChannel(ColorGetG(foreground_color));
-  uint8_t b = SkiaCanonicalColorChannel(ColorGetB(foreground_color));
+static uint8_t A8LuminanceTableIndex(Color foreground_color) {
+  uint8_t r = CanonicalizeColorChannel(ColorGetR(foreground_color));
+  uint8_t g = CanonicalizeColorChannel(ColorGetG(foreground_color));
+  uint8_t b = CanonicalizeColorChannel(ColorGetB(foreground_color));
   uint8_t luminance = static_cast<uint8_t>((r * 54 + g * 183 + b * 19) >> 8);
   return static_cast<uint8_t>(luminance >> 5);
 }
@@ -558,7 +558,7 @@ static bool DecodePngGlyphImageToBGRA(const void* data, size_t size,
   return true;
 }
 
-static std::array<std::array<uint8_t, 256>, 8> BuildSkiaMaskGammaTables() {
+static std::array<std::array<uint8_t, 256>, 8> BuildA8MaskGammaTables() {
   std::array<std::array<uint8_t, 256>, 8> tables{};
 
   for (size_t table_index = 0; table_index < tables.size(); table_index++) {
@@ -566,7 +566,7 @@ static std::array<std::array<uint8_t, 256>, 8> BuildSkiaMaskGammaTables() {
     float lin_src = SrgbToLinear(src);
     float dst = 1.f - src;
     float lin_dst = SrgbToLinear(dst);
-    float adjusted_contrast = kSkiaMaskGammaContrast * lin_dst;
+    float adjusted_contrast = kA8MaskGammaContrast * lin_dst;
 
     for (size_t alpha = 0; alpha < tables[table_index].size(); alpha++) {
       float raw_src_alpha = static_cast<float>(alpha) / 255.f;
@@ -588,10 +588,9 @@ static std::array<std::array<uint8_t, 256>, 8> BuildSkiaMaskGammaTables() {
   return tables;
 }
 
-static uint8_t ApplySkiaMaskGammaToAlpha(uint8_t alpha,
-                                         Color foreground_color) {
-  static const auto tables = BuildSkiaMaskGammaTables();
-  uint8_t table_index = SkiaA8LuminanceTableIndex(foreground_color);
+static uint8_t ApplyA8MaskGammaToAlpha(uint8_t alpha, Color foreground_color) {
+  static const auto tables = BuildA8MaskGammaTables();
+  uint8_t table_index = A8LuminanceTableIndex(foreground_color);
   return tables[table_index][alpha];
 }
 
@@ -2298,12 +2297,9 @@ class ScalerContextDWrite : public ScalerContext {
       return false;
     }
 
-    for (size_t i = 0; i < byte_size; i++) {
-      buffer[i] = ApplySkiaMaskGammaToAlpha(buffer[i], desc_.foreground_color);
-    }
-
     image.buffer = buffer;
     image.need_free = true;
+    ApplyA8MaskGammaForWindows(&image, desc_);
     GlyphDataWinAccess::SetImage(glyph, image);
     return true;
   }
@@ -2588,6 +2584,29 @@ class ScalerContextDWrite : public ScalerContext {
 };
 
 }  // namespace
+
+void ApplyA8MaskGammaForWindows(GlyphBitmapData* image,
+                                const ScalerContextDesc& desc) {
+  if (desc.ShouldGenerateRawA8Mask() || !image ||
+      image->format != BitmapFormat::kGray8 || !image->buffer ||
+      image->width <= 0.f || image->height <= 0.f) {
+    return;
+  }
+
+  const size_t width = static_cast<size_t>(image->width);
+  const size_t height = static_cast<size_t>(image->height);
+  const size_t row_bytes = image->RowBytes();
+  if (row_bytes < width) {
+    return;
+  }
+
+  for (size_t y = 0; y < height; y++) {
+    uint8_t* row = image->buffer + y * row_bytes;
+    for (size_t x = 0; x < width; x++) {
+      row[x] = ApplyA8MaskGammaToAlpha(row[x], desc.foreground_color);
+    }
+  }
+}
 
 std::unique_ptr<ScalerContext> MakeScalerContextDWrite(
     std::shared_ptr<Typeface> typeface, IDWriteFactory* factory,

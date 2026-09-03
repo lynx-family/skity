@@ -43,14 +43,15 @@ struct ScalerContextDesc {
   uint8_t subpixel_positioning{};
   uint8_t baseline_snap{};
   uint8_t edging{};
-  // Font options that affect scaler output but fit in one byte. Keeping these
-  // bits in the descriptor makes both scaler lookup and atlas lookup observe
-  // the same raster-policy identity without introducing structure padding.
+  // Options that affect scaler output but fit in one byte. Keeping these bits
+  // in the descriptor makes both scaler lookup and atlas lookup observe the
+  // same raster-policy identity without introducing structure padding.
   uint8_t scaler_flags{};
 
   static constexpr uint8_t kForceAutoHintingFlag = 1u << 0;
   static constexpr uint8_t kEmbeddedBitmapsFlag = 1u << 1;
   static constexpr uint8_t kLinearMetricsFlag = 1u << 2;
+  static constexpr uint8_t kGenerateRawA8MaskFlag = 1u << 3;
 
   friend inline bool operator==(const ScalerContextDesc& lhs,
                                 const ScalerContextDesc& rhs) {
@@ -95,6 +96,10 @@ struct ScalerContextDesc {
 
   bool IsLinearMetrics() const {
     return (scaler_flags & kLinearMetricsFlag) != 0;
+  }
+
+  bool ShouldGenerateRawA8Mask() const {
+    return (scaler_flags & kGenerateRawA8MaskFlag) != 0;
   }
 };
 
