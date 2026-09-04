@@ -6,6 +6,7 @@ on:
             - main
         paths:
             - '.github/workflows/ci.yml'
+            - '.github/actions/**'
             - 'include/**'
             - 'src/**'
             - 'module/**'
@@ -20,6 +21,7 @@ on:
             - main
         paths:
             - '.github/workflows/ci.yml'
+            - '.github/actions/**'
             - 'include/**'
             - 'src/**'
             - 'module/**'
