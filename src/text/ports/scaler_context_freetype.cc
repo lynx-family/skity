@@ -11,6 +11,12 @@
 
 #include "src/text/ports/scaler_context_freetype.hpp"
 
+#include <skity/macros.hpp>
+
+#if defined(SKITY_WIN)
+#include "src/text/ports/win/scaler_context_win.hpp"
+#endif
+
 #include <freetype/ftbitmap.h>
 #include <freetype/ftcolor.h>
 #include <freetype/ftoutln.h>
@@ -906,6 +912,10 @@ void ScalerContextFreetype::GenerateImage(PackedGlyphID id, GlyphData* glyph,
       info = {};
     }
   }
+
+#if defined(SKITY_WIN)
+  ApplyA8MaskGammaForWindows(&info, desc_);
+#endif
 }
 
 void ScalerContextFreetype::GenerateImageInfo(PackedGlyphID, GlyphData* glyph,

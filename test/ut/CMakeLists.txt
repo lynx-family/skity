@@ -69,6 +69,7 @@ endif()
 if(CMAKE_SYSTEM_NAME MATCHES "Windows")
     target_sources(skity_unit_test PRIVATE
         base/platform/win/str_conversion_test.cc
+        text/a8_mask_gamma_test.cc
         text/dwrite_stability_test.cc
     )
     target_compile_definitions(skity_unit_test PRIVATE

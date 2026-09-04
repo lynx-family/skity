@@ -118,6 +118,11 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font,
   ScalerContextDesc scaler_context_desc = ScalerContextDesc::MakeTransformed(
       raster_font, raster_paint, load_sdf ? 1.f : context_scale,
       raster_transform);
+  if (load_sdf) {
+    scaler_context_desc.scaler_flags |=
+        ScalerContextDesc::kGenerateRawA8MaskFlag;
+    scaler_context_desc.foreground_color = Color_TRANSPARENT;
+  }
   GlyphKey key(
       load_sdf ? PackedGlyphID(packed_glyph_id.GetGlyphID()) : packed_glyph_id,
       scaler_context_desc);

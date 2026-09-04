@@ -17,6 +17,9 @@
 
 namespace skity {
 
+void ApplyA8MaskGammaForWindows(GlyphBitmapData* image,
+                                const ScalerContextDesc& desc);
+
 std::unique_ptr<ScalerContext> MakeScalerContextDWrite(
     std::shared_ptr<Typeface> typeface, IDWriteFactory* factory,
     IDWriteFontFace* font_face, const ScalerContextDesc* desc);
