@@ -26,17 +26,22 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: resolve cache target slug
+      # cache keys cannot contain commas, so slug the target (module,ci -> module-ci)
+      shell: bash
+      run: echo "HAB_TARGET_SLUG=$(echo '${{ inputs.target }}' | tr ',' '-')" >> "$GITHUB_ENV"
+
     - name: setup cache action
       if: ${{ inputs.cache-backend == 'lynx-infra' }}
       uses: lynx-infra/cache@5c6160a6a4c7fca80a2f3057bb9dfc9513fcb732
       with:
         path: ~/.habitat_cache
-        key: hab${{ inputs.cache-key-prefix }}-${{ runner.os }}-${{ inputs.target }}-${{ hashFiles('./.habitat', './hab/DEPS', './hab/DEPS.ci', './hab/DEPS.dev', './hab/DEPS.module') }}
+        key: hab${{ inputs.cache-key-prefix }}-${{ runner.os }}-${{ env.HAB_TARGET_SLUG }}-${{ hashFiles('./.habitat', './hab/DEPS', './hab/DEPS.ci', './hab/DEPS.dev', './hab/DEPS.module') }}
         # the second restore key is the legacy prefix without the target
         # segment, kept so entries saved before the key change stay reachable;
         # drop it once main has rotated to the new key format
         restore-keys: |
-          hab${{ inputs.cache-key-prefix }}-${{ runner.os }}-${{ inputs.target }}-
+          hab${{ inputs.cache-key-prefix }}-${{ runner.os }}-${{ env.HAB_TARGET_SLUG }}-
           hab${{ inputs.cache-key-prefix }}-${{ runner.os }}-
 
     - name: run habitat sync
