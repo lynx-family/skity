@@ -6,6 +6,7 @@ on:
             - main
         paths:
             - '.github/workflows/ci.yml'
+            - '.github/actions/**'
             - 'include/**'
             - 'src/**'
             - 'module/**'
@@ -20,6 +21,7 @@ on:
             - main
         paths:
             - '.github/workflows/ci.yml'
+            - '.github/actions/**'
             - 'include/**'
             - 'src/**'
             - 'module/**'
@@ -122,8 +124,9 @@ jobs:
           - name: Download Source
             uses: actions/checkout@v4.2.2
           - name: Sync Dependencies
-            run: |
-                ./tools/hab sync -f --target module,ci
+            uses: ./.github/actions/sync-deps
+            with:
+              target: module,ci
           - name: Android Build Check
             uses: ./.github/actions/pack-android-aar
     ios_build_check:
