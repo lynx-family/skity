@@ -5,7 +5,9 @@
 #include <skity_c/skity_bitmap.h>
 
 #include <skity/graphic/bitmap.hpp>
+#include <skity/io/data.hpp>
 #include <skity/io/pixmap.hpp>
+#include <utility>
 
 #include "handle.hpp"
 
@@ -95,6 +97,47 @@ skity_pixmap skity_bitmap_get_pixmap(skity_bitmap bitmap) {
   if (pm == nullptr) return nullptr;
   return skity::capi::alloc_handle<skity_pixmap_s>(SKITY_OBJECT_TYPE_PIXMAP,
                                                    SKITY_HANDLE_OWNING, pm);
+}
+
+skity_pixmap skity_pixmap_create(skity_data data, size_t row_bytes,
+                                 uint32_t width, uint32_t height,
+                                 skity_alpha_type alpha_type,
+                                 skity_color_type color_type) {
+  auto d = skity::capi::get_impl<skity_data_s, skity::Data>(
+      data, SKITY_OBJECT_TYPE_DATA);
+  if (d == nullptr || width == 0 || height == 0) {
+    return nullptr;
+  }
+  auto pm = std::make_shared<skity::Pixmap>(
+      std::move(d), row_bytes, width, height,
+      static_cast<skity::AlphaType>(alpha_type),
+      static_cast<skity::ColorType>(color_type));
+  return skity::capi::alloc_handle<skity_pixmap_s>(
+      SKITY_OBJECT_TYPE_PIXMAP, SKITY_HANDLE_OWNING, std::move(pm));
+}
+
+skity_bitmap skity_bitmap_create_from_pixmap(skity_pixmap pixmap,
+                                             uint32_t read_only) {
+  auto pm = skity::capi::get_impl<skity_pixmap_s, skity::Pixmap>(
+      pixmap, SKITY_OBJECT_TYPE_PIXMAP);
+  if (pm == nullptr) {
+    return nullptr;
+  }
+  auto bp = std::make_shared<skity::Bitmap>(std::move(pm), read_only != 0);
+  return skity::capi::alloc_handle<skity_bitmap_s>(
+      SKITY_OBJECT_TYPE_BITMAP, SKITY_HANDLE_OWNING, std::move(bp));
+}
+
+skity_result skity_pixmap_set_color_info(skity_pixmap pixmap,
+                                         skity_alpha_type alpha_type,
+                                         skity_color_type color_type) {
+  auto* p = pixmap_of(pixmap);
+  if (p == nullptr) {
+    return SKITY_ERROR_INVALID_HANDLE;
+  }
+  bool ok = p->SetColorInfo(static_cast<skity::AlphaType>(alpha_type),
+                            static_cast<skity::ColorType>(color_type));
+  return ok ? SKITY_SUCCESS : SKITY_ERROR_INVALID_ARGUMENT;
 }
 
 }  // extern "C"

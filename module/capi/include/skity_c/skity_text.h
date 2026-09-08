@@ -7,6 +7,7 @@
 
 #include <skity_c/skity_base.h>
 #include <skity_c/skity_types.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -187,6 +188,28 @@ SKITY_C_API skity_text_blob skity_text_blob_create_with_delegate(
  */
 SKITY_C_API skity_text_blob skity_text_blob_create(const char* text,
                                                    skity_paint paint);
+
+/**
+ * @brief Build an immutable text blob from pre-shaped glyphs, mirroring
+ *        TextRun + TextBlob construction.
+ *
+ * This is the entry point for callers that run their own shaping engine:
+ * glyph ids and positions come from the caller, and @p font (size, typeface,
+ * hinting, embolden, skew — all settable via the skity_font API) is used
+ * verbatim for rasterization. All three arrays hold @p count elements; pass
+ * NULL @p pos_y for x-only positions, NULL for both to let skity advance
+ * glyphs by their natural widths.
+ *
+ * @param font      font used to rasterize the glyphs
+ * @param glyph_ids glyph ids for @p font's typeface
+ * @param pos_x     horizontal positions, or NULL
+ * @param pos_y     vertical positions, or NULL (requires @p pos_x when given)
+ * @param count     number of glyphs
+ * @return          the new text blob, or NULL on invalid arguments
+ */
+SKITY_C_API skity_text_blob skity_text_blob_create_from_glyphs(
+    skity_font font, const uint16_t* glyph_ids, const float* pos_x,
+    const float* pos_y, size_t count);
 
 /** @brief Release a text blob handle. Safe on NULL. */
 SKITY_C_API void skity_text_blob_destroy(skity_text_blob blob);

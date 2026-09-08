@@ -21,6 +21,15 @@ extern "C" {
 SKITY_C_DEFINE_HANDLE(skity_data);
 
 /**
+ * @brief Buffer release callback invoked when the last reference to a wrapped
+ *        buffer goes away. ABI-compatible with skity::Data::ReleaseProc.
+ *
+ * @param ptr     the buffer pointer originally wrapped
+ * @param context the opaque pointer passed at creation time
+ */
+typedef void (*skity_data_release_proc)(const void* ptr, void* context);
+
+/**
  * @brief Create a new buffer holding a copy of the first @p length bytes of
  *        @p data.
  * @param data   source bytes to copy (may be NULL when @p length is 0)
@@ -29,6 +38,25 @@ SKITY_C_DEFINE_HANDLE(skity_data);
  */
 SKITY_C_API skity_data skity_data_make_with_copy(const void* data,
                                                  size_t length);
+
+/**
+ * @brief Wrap an existing buffer without copying it; @p proc runs with
+ *        @p context once the last reference to the data is dropped.
+ *
+ * This is how foreign memory (locked AndroidBitmap pixels, a CG-owned raster,
+ * a malloc'ed plane) enters skity: the caller keeps writing through the
+ * original pointer while skity holds a reference, and the release callback is
+ * the place to unlock/free the source.
+ *
+ * @param ptr     buffer to wrap; must stay valid until @p proc runs
+ * @param length  size of the buffer in bytes
+ * @param proc    release callback, or NULL for no notification
+ * @param context opaque pointer passed back to @p proc
+ * @return        a new handle, or NULL on allocation failure
+ */
+SKITY_C_API skity_data skity_data_make_with_proc(const void* ptr, size_t length,
+                                                 skity_data_release_proc proc,
+                                                 void* context);
 
 /**
  * @brief Load a whole file into memory.

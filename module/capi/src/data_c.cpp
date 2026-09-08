@@ -26,6 +26,15 @@ skity_data skity_data_make_with_copy(const void* data, size_t length) {
       SKITY_OBJECT_TYPE_DATA, SKITY_HANDLE_OWNING, std::move(d));
 }
 
+skity_data skity_data_make_with_proc(const void* ptr, size_t length,
+                                     skity_data_release_proc proc,
+                                     void* context) {
+  auto d = skity::Data::MakeWithProc(ptr, length, proc, context);
+  if (d == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_data_s>(
+      SKITY_OBJECT_TYPE_DATA, SKITY_HANDLE_OWNING, std::move(d));
+}
+
 skity_data skity_data_make_from_file(const char* path) {
   if (path == nullptr) return nullptr;
   auto d = skity::Data::MakeFromFileName(path);

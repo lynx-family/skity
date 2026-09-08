@@ -10,7 +10,9 @@
 #include <skity/text/font.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/font_style.hpp>
+#include <skity/text/glyph.hpp>
 #include <skity/text/text_blob.hpp>
+#include <skity/text/text_run.hpp>
 #include <skity/text/typeface.hpp>
 #include <utility>
 #include <vector>
@@ -234,6 +236,36 @@ skity_text_blob skity_text_blob_create(const char* text, skity_paint paint) {
   if (blob == nullptr) {
     return nullptr;
   }
+  return skity::capi::alloc_handle<skity_text_blob_s>(
+      SKITY_OBJECT_TYPE_TEXT_BLOB, SKITY_HANDLE_OWNING, std::move(blob));
+}
+
+skity_text_blob skity_text_blob_create_from_glyphs(skity_font font,
+                                                   const uint16_t* glyph_ids,
+                                                   const float* pos_x,
+                                                   const float* pos_y,
+                                                   size_t count) {
+  auto* f = font_of(font);
+  if (f == nullptr || (glyph_ids == nullptr && count > 0)) {
+    return nullptr;
+  }
+  // pos_y without pos_x has no TextRun constructor to map onto.
+  if (pos_y != nullptr && pos_x == nullptr) {
+    return nullptr;
+  }
+  std::vector<skity::GlyphID> glyphs(glyph_ids, glyph_ids + count);
+  std::vector<skity::TextRun> runs;
+  if (pos_y != nullptr) {
+    runs.emplace_back(*f, std::move(glyphs),
+                      std::vector<float>(pos_x, pos_x + count),
+                      std::vector<float>(pos_y, pos_y + count));
+  } else if (pos_x != nullptr) {
+    runs.emplace_back(*f, std::move(glyphs),
+                      std::vector<float>(pos_x, pos_x + count));
+  } else {
+    runs.emplace_back(*f, std::move(glyphs));
+  }
+  auto blob = std::make_shared<skity::TextBlob>(std::move(runs));
   return skity::capi::alloc_handle<skity_text_blob_s>(
       SKITY_OBJECT_TYPE_TEXT_BLOB, SKITY_HANDLE_OWNING, std::move(blob));
 }

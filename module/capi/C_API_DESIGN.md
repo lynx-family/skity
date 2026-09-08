@@ -375,7 +375,9 @@ These modules have complete (or near-complete) C coverage of their core:
 - `Texture` (create / wrap-external / upload / deferred-upload)
 - `GPUContext` (create, `set_error_callback`, all `set_enable_*` tuning,
   precompile, `create_texture`, `wrap_texture`, `set_resource_cache_limit`)
-- `Bitmap` / `Pixmap` (pixel access), `image_read_pixels`
+- `Bitmap` / `Pixmap` (pixel access, buffer wrapping via
+  `data_make_with_proc` + `pixmap_create` + `bitmap_create_from_pixmap`,
+  `set_color_info`), `image_read_pixels`
 - 3D / misc: [`Camera`](./include/skity_c/skity_camera.h),
   [`Quaternion`](./include/skity_c/skity_quaternion.h),
   [`Stroke`](./include/skity_c/skity_stroke.h),
@@ -400,7 +402,7 @@ Priority tags: **P3** is deferred / low-value.
 | `Image` | 5 factories (incl. the `GPUContext` variant) + `read_pixels` + `scale_pixels` + size getters | **P3**: alpha/type/backend introspection |
 | `Font` | create (incl. scale/skew ctor), typeface/size get/set, rendering-quality switch get/set, `get_metrics`, `make_with_size`, `get_widths` | **P3**: `get_widths` bounds overload, `LoadGlyph*` (needs GlyphData) |
 | `Typeface` | `make_from_file`, `make_from_data`, `get_default`, `unichars_to_glyphs`/`unichar_to_glyph` | **P3**: `get_font_style`/`is_bold`/`is_italic`, `contain_glyph`, `units_per_em`/`contains_color_table`, table / variation / descriptor |
-| `TextBlob` | build (UTF-8) + draw, `get_bounds`, `compute_bounds`, `TypefaceDelegate` fallback (ordered-list + custom-fallback-callback) | **P3**: `get_text_run`; fully custom `BreakTextRun` delegate (caller-driven segmentation) |
+| `TextBlob` | build (UTF-8) + draw, pre-shaped glyph build (`create_from_glyphs`: caller-run shaping → glyph ids + positions), `get_bounds`, `compute_bounds`, `TypefaceDelegate` fallback (ordered-list + custom-fallback-callback) | **P3**: `get_text_run` (read-back — no caller demand found in the animax/clay reverse lookup; the proven need was the build side, now covered); fully custom `BreakTextRun` delegate (caller-driven segmentation) |
 | `Canvas` | full draw + state + clip + text/glyphs, `draw_image` sampling overloads, `draw_color4f`, per-corner-radii `draw_rrect`, `make_software_canvas` | **P3**: per-corner RRect clip/drrect, `get_global_clip_bounds` |
 | `DisplayList` | draw / cull-rect draw / bounds / op_count / properties / rtree search (+ non-overlapping rects) / per-op paint lookup, `begin_recording` with build options | `RecordedOpOffset` is exposed as a plain `int32_t` (round-trips through the public `RecordedOpOffset::Make`) — no opaque set type |
 | `GPUContext` | (see Fully covered) | **P3**: `create_texture_with_desc` (mipmap), `is_gpu_backend_supported`, `get_backend_type` |
@@ -448,8 +450,10 @@ module:
   variable fonts (`get_variation_design_position` / `parameters`,
   `make_variation`, +`FontArguments`); cache keys (`typeface_id`,
   `get_font_descriptor`).
-- **TextBlob**: `get_text_run` (+`TextRun` projection); a fully custom
-  `BreakTextRun` delegate (caller-driven run segmentation — the current
+- **TextBlob**: `get_text_run` (+`TextRun` projection — read-back has no
+  caller demand; the reverse lookup showed callers need to *inject* shaped
+  glyphs, which `skity_text_blob_create_from_glyphs` now covers); a fully
+  custom `BreakTextRun` delegate (caller-driven run segmentation — the current
   `skity_typeface_delegate_create_fallback` keeps the built-in policy and only
   overrides the typeface choice).
 - **Canvas**: per-corner RRect `clip_rrect` / `draw_drrect`
