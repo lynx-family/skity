@@ -8,6 +8,7 @@ enable_testing()
 
 # Test case list
 add_executable(skity_unit_test
+    base/lru_cache_test.cc
     effect/color_filter_test.cc
     effect/image_filter_test.cc
     effect/mask_filter_test.cc

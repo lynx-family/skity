@@ -8,6 +8,8 @@
 #include <cstddef>
 #include <list>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "src/logging.hpp"
 
@@ -45,22 +47,21 @@ class LRUCache {
     if (it == cache_map_.end()) {
       return nullptr;
     }
-    Entry* entry = it->second;
-    if (entry != cache_list_.front()) {
-      cache_list_.remove(entry);
-      cache_list_.push_front(entry);
-    }
-    return &entry->value;
+    cache_list_.splice(cache_list_.begin(), cache_list_, it->second);
+    return &it->second->value;
   }
 
   V* Insert(const K& key, V value) {
-    Entry* entry = new Entry(key, std::move(value));
-    cache_map_.emplace(key, entry);
-    cache_list_.push_front(entry);
-    while (cache_map_.size() > max_count_) {
-      this->Remove(cache_list_.back()->key);
+    if (auto* existing = Find(key)) {
+      *existing = std::move(value);
+      return existing;
     }
-    return &entry->value;
+    cache_list_.emplace_front(key, std::move(value));
+    cache_map_.emplace(key, cache_list_.begin());
+    while (cache_map_.size() > max_count_) {
+      this->Remove(cache_list_.back().key);
+    }
+    return &cache_list_.front().value;
   }
 
   std::vector<K> CollectKeys() {
@@ -79,21 +80,21 @@ class LRUCache {
       DEBUG_CHECK(false);
       return;
     }
-    Entry* entry = it->second;
+    auto entry = it->second;
     if (key != entry->key) {
       // error
       DEBUG_CHECK(false);
       return;
     }
-    cache_map_.erase(key);
-    cache_list_.remove(entry);
-    delete entry;
+    cache_map_.erase(it);
+    cache_list_.erase(entry);
   }
 
  private:
   size_t max_count_;
-  std::list<Entry*> cache_list_;
-  std::unordered_map<K, Entry*, Hash, Equal> cache_map_;
+  std::list<Entry> cache_list_;
+  std::unordered_map<K, typename std::list<Entry>::iterator, Hash, Equal>
+      cache_map_;
 
   LRUCache(const LRUCache&) = delete;
   LRUCache& operator=(const LRUCache&) = delete;
