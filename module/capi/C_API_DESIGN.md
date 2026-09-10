@@ -324,6 +324,49 @@ class Paint {  /* owning, destructor calls skity_paint_destroy */
 }  // namespace skity
 ```
 
+### 8.1 Why the wrapper is staged in `namespace skity::raii`
+
+The first implementation used plain `namespace skity` as shown above and
+crashed at `-O0`: whenever a wrapper member call is not inlined, the call
+site mangles to the same symbol as the *legacy* C++ class method that
+`libskity.so` still exports (the `SKITY_DLL` visibility leak — 400+ symbols).
+The dynamic linker binds the call to the legacy implementation, which then
+runs with the wrapper object as `this` and silently corrupts it (verified
+with a watchpoint: `Paint::SetStrokeWidth(2.f)` wrote the 2.0f bit pattern
+into the high half of `handle_`). Nested namespace `skity::raii` removes the
+collision; it collapses back to plain `skity` in the same Stage 3 bump that
+hides the C++ symbols and moves the headers.
+
+### 8.2 Why vulkan.hpp does not need this guard
+
+vulkan.hpp has no such problem, because its world already satisfies our
+Stage 3 end state:
+
+- `libvulkan` (loader, layers, drivers) exports **C symbols only** — there
+  has never been an official C++ ABI to collide with. An uninlined
+  `vk::`-wrapper call emits a weak inline symbol that the *static* linker
+  merges across TUs; the dynamic linker has no exported surface to bind to.
+- `vk::raii` exists for a different reason: three ownership models coexist
+  long-term — plain `vk::` handle wrappers (destructor does not destroy, like
+  our `Canvas` view), the legacy `vk::UniqueHandle` (deleter storage per
+  object), and `vk::raii` (move-only, created from a dispatcher-owning
+  context, zero deleter overhead). That layering is permanent.
+
+We borrow the *form* (a nested RAII namespace) but not the *reason*: ours is
+a temporary symbol-collision guard, and unlike vulkan we have no
+handle-wrapper/RAII split to preserve, so the layering disappears at Stage 3.
+The comparison also sharpens the prerequisite: the vulkan.hpp shape is only
+sound once the library exports nothing but C — hiding the legacy C++ symbols
+is not optional polish, it is what makes the wrapper's naming safe.
+
+Engineering conventions worth keeping from vulkan.hpp: a single configurable
+`VULKAN_HPP_INLINE`-style knob if we ever need to control inline fallback, a
+`detail` namespace for non-API entities (we have
+`skity::raii::detail::OwnHandle`), and the discipline of **zero out-of-line
+symbols** in the header-only layer — the few vulkan.hpp needs are gated by
+`VULKAN_HPP_STORAGE_API`; our wrapper is pure forwarding and should stay
+that way.
+
 ## 9. Gradual Migration
 
 | Stage | `libskity.so` | C API | header-only `skity.hpp` | old `include/skity/` C++ headers | Risk |
