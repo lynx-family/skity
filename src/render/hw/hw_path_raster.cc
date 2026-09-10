@@ -5,6 +5,7 @@
 #include "src/render/hw/hw_path_raster.hpp"
 
 #include "src/geometry/conic.hpp"
+#include "src/graphic/path_visitor.hpp"
 #include "src/logging.hpp"
 
 namespace skity {
@@ -77,6 +78,7 @@ void HWPathStrokeRaster::OnQuadTo(const Vec2& p1, const Vec2& p2,
 
   auto num = glm::ceil(wangs_formula::Quadratic(4.f, arc.data(), xform_));
 
+  num = ClampCurveSegments(num);
   if (num <= 1.f) {
     OnLineTo(p1, p3);
     return;
@@ -131,6 +133,7 @@ void HWPathStrokeRaster::OnConicTo(const Vec2& p1, const Vec2& p2,
 
   float num = glm::ceil(wangs_formula::Conic(4.f, arc.data(), weight, xform_));
 
+  num = ClampCurveSegments(num);
   if (num <= 1.f) {
     OnLineTo(p1, p3);
     return;
@@ -189,6 +192,7 @@ void HWPathStrokeRaster::OnCubicTo(const Vec2& p1, const Vec2& p2,
 
   auto num = glm::ceil(wangs_formula::Cubic(4.f, arc.data(), xform_));
 
+  num = ClampCurveSegments(num);
   if (num <= 1.f) {
     OnLineTo(p1, p4);
     return;
@@ -460,9 +464,9 @@ void HWPathStrokeRaster::GenerateCircleMesh(Vec2 const& center) {
     Vec2 p1 = center + Vec2{stroke_radius_, 0};
     Vec2 p2 = center + Vec2{0, stroke_radius_};
     std::array<const Vec2, 3> arc{p1, center, p2};
-    uint32_t semicircle_segments_num =
-        std::ceil(2 * wangs_formula::Conic(kPrecision, arc.data(),
-                                           FloatRoot2Over2, xform_));
+    uint32_t semicircle_segments_num = std::ceil(
+        ClampCurveSegments(2 * wangs_formula::Conic(kPrecision, arc.data(),
+                                                    FloatRoot2Over2, xform_)));
     semicircle_segments_num = std::max(semicircle_segments_num, 2u);
     float angle = FloatPI / semicircle_segments_num;
     circle_mesh_points_.reserve(2 * semicircle_segments_num + 1);

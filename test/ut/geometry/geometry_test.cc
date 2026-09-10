@@ -7,9 +7,12 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "src/geometry/math.hpp"
+#include "src/geometry/wangs_formula.hpp"
+#include "src/graphic/path_visitor.hpp"
 
 TEST(QUAD, tangents) {
   std::vector<std::array<skity::Point, 3>> pts = {
@@ -137,4 +140,90 @@ TEST(Geometry, CircleInterpolation) {
     EXPECT_TRUE(skity::FloatNearlyZero(cos01_prime - cos34_prime));
     EXPECT_TRUE(Vec2NearlyEqual(result[3], {1, 0}));
   }
+}
+
+TEST(CurveSegmentLimit, SegmentLimits) {
+  using skity::ClampCurveSegments;
+  for (float value : {0.f, 0.5f, 32.25f, 255.5f, 256.f}) {
+    EXPECT_FLOAT_EQ(ClampCurveSegments(value), value);
+  }
+  for (float value : {256.5f, 3.e9f, std::numeric_limits<float>::max(),
+                      std::numeric_limits<float>::infinity()}) {
+    EXPECT_FLOAT_EQ(ClampCurveSegments(value), 256.f);
+    EXPECT_EQ(static_cast<int>(std::ceil(ClampCurveSegments(value))) + 1, 257);
+  }
+  for (float value : {-1.f, -std::numeric_limits<float>::infinity(),
+                      std::numeric_limits<float>::quiet_NaN()}) {
+    EXPECT_FLOAT_EQ(ClampCurveSegments(value), 0.f);
+  }
+  EXPECT_FLOAT_EQ(ClampCurveSegments(2.f * ClampCurveSegments(200.f)), 256.f);
+}
+
+TEST(CurveSegmentLimit, RawCurveEstimates) {
+  using namespace skity::wangs_formula;
+  const skity::Vec2 normal[] = {{0, 0}, {20, 40}, {40, 0}, {60, 20}};
+  EXPECT_FLOAT_EQ(Quadratic(4.f, normal), Root4(QuadraticP4(4.f, normal)));
+  EXPECT_FLOAT_EQ(Cubic(4.f, normal), Root4(CubicP4(4.f, normal)));
+  EXPECT_FLOAT_EQ(Conic(4.f, normal, 0.7f),
+                  std::sqrt(ConicP2(4.f, normal, 0.7f)));
+  for (float scale : {1.e8f, 1.e20f}) {
+    const skity::Vec2 large[] = {
+        {0, 0}, {0, scale}, {scale, 0}, {scale, scale}};
+    EXPECT_GT(Quadratic(4.f, large), 256.f);
+    EXPECT_GT(Cubic(4.f, large), 256.f);
+    EXPECT_GT(Conic(4.f, large, 0.7f), 256.f);
+    EXPECT_GT(QuadraticP4(4.f, large), 256.f * 256.f * 256.f * 256.f);
+  }
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  const skity::Vec2 invalid[] = {
+      {nan, nan}, {nan, nan}, {nan, nan}, {nan, nan}};
+  EXPECT_TRUE(std::isnan(Quadratic(4.f, invalid)));
+  EXPECT_TRUE(std::isnan(Cubic(4.f, invalid)));
+  EXPECT_TRUE(std::isnan(Conic(4.f, invalid, 0.7f)));
+  const skity::Vec2 zero[4] = {};
+  EXPECT_FLOAT_EQ(Quadratic(4.f, zero), 0.f);
+  EXPECT_FLOAT_EQ(Cubic(4.f, zero), 0.f);
+  EXPECT_FLOAT_EQ(Conic(4.f, zero, 1.f), 0.f);
+}
+
+namespace {
+class CountingPathVisitor : public skity::PathVisitor {
+ public:
+  CountingPathVisitor() : PathVisitor(true, skity::Matrix{}) {}
+  int segments = 0;
+  skity::Vec2 end = {};
+
+ protected:
+  void OnBeginPath() override { segments = 0; }
+  void OnEndPath() override {}
+  void OnMoveTo(const skity::Vec2&) override {}
+  void OnLineTo(const skity::Vec2&, const skity::Vec2& p) override {
+    ++segments;
+    end = p;
+  }
+  void OnQuadTo(const skity::Vec2&, const skity::Vec2&,
+                const skity::Vec2&) override {}
+  void OnConicTo(const skity::Vec2&, const skity::Vec2&, const skity::Vec2&,
+                 float) override {}
+  void OnCubicTo(const skity::Vec2&, const skity::Vec2&, const skity::Vec2&,
+                 const skity::Vec2&) override {}
+  void OnClose() override {}
+};
+}  // namespace
+
+TEST(CurveSegmentLimit, PathVisitorBoundsLargeCurves) {
+  CountingPathVisitor visitor;
+  skity::Path quad;
+  quad.MoveTo(0, 0);
+  quad.QuadTo(0, 1.e20f, 10, 0);
+  visitor.VisitPath(quad, false);
+  EXPECT_EQ(visitor.segments, 256);
+  EXPECT_EQ(visitor.end, (skity::Vec2{10, 0}));
+
+  skity::Path cubic;
+  cubic.MoveTo(0, 0);
+  cubic.CubicTo(0, 1.e20f, 1.e20f, 0, 10, 0);
+  visitor.VisitPath(cubic, false);
+  EXPECT_EQ(visitor.segments, 256);
+  EXPECT_EQ(visitor.end, (skity::Vec2{10, 0}));
 }

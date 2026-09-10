@@ -137,7 +137,8 @@ struct TessPathFillVisitor {
     arc_[2] = p2;
     arc_[3] = p3;
 
-    uint32_t num = std::ceil(wangs_formula::Cubic(precision_, arc_, xform_));
+    uint32_t num = std::ceil(
+        ClampCurveSegments(wangs_formula::Cubic(precision_, arc_, xform_)));
     num = std::max(num, 1u);
 
     uint32_t count = DivCeil(num, kMaxNumSegmentsPerInstance);

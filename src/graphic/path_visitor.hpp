@@ -5,10 +5,25 @@
 #ifndef SRC_GRAPHIC_PATH_VISITOR_HPP
 #define SRC_GRAPHIC_PATH_VISITOR_HPP
 
+#include <algorithm>
+#include <cmath>
 #include <skity/geometry/matrix.hpp>
 #include <skity/graphic/path.hpp>
 
 namespace skity {
+
+constexpr float kMaxCurveSegments = 256.f;
+
+// Apply after segment multipliers and before converting to an integer.
+inline float ClampCurveSegments(float segments) {
+  if (std::isnan(segments) || segments < 0.f) {
+    return 0.f;
+  }
+  // Bound tessellation work for extreme inputs. Capping can exceed
+  // the requested approximation error; subdivide curves before tessellation
+  // if that error bound must be preserved.
+  return std::min(segments, kMaxCurveSegments);
+}
 
 /**
  * A abstract class to do common path processing.

@@ -202,7 +202,8 @@ struct TessPathStrokeVisitor {
     arc_[1] = p1;
     arc_[2] = p2;
     arc_[3] = p3;
-    uint32_t num = std::ceil(wangs_formula::Cubic(precision_, arc_, xform_));
+    uint32_t num = std::ceil(
+        ClampCurveSegments(wangs_formula::Cubic(precision_, arc_, xform_)));
     num = std::max(num, 1u);
 
     uint32_t count = DivCeil(num, kMaxNumSegmentsPerInstance);
@@ -307,8 +308,8 @@ struct TessPathStrokeVisitor {
       arc_[0] = center + Vec2{stroke_radius_, 0};
       arc_[1] = center;
       arc_[2] = center + Vec2{0, stroke_radius_};
-      num = std::ceil(
-          2 * wangs_formula::Conic(precision_, arc_, FloatRoot2Over2, xform_));
+      num = std::ceil(ClampCurveSegments(
+          2 * wangs_formula::Conic(precision_, arc_, FloatRoot2Over2, xform_)));
       num = std::max(num, 1u);
       semicircle_segments_num_ = num;
     } else {

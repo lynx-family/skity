@@ -125,11 +125,12 @@ void PathVisitor::HandleQuadTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,
     num = std::ceil(wangs_formula::Quadratic(
         kPrecision, arc.data(), wangs_formula::VectorXform(matrix_)));
   }
+  num = ClampCurveSegments(num);
   if (num <= 1.0f) {
     HandleLineTo(p1, p3);
     return;
   }
-  DEBUG_CHECK(num < (1 << 10));
+  DEBUG_CHECK(num <= kMaxCurveSegments);
 
   int segment_count = static_cast<int>(num);
   QuadCoeff coeff(arc);
@@ -188,11 +189,12 @@ void PathVisitor::HandleCubicTo(Vec2 const& p1, Vec2 const& p2, Vec2 const& p3,
     num = std::ceil(wangs_formula::Cubic(kPrecision, arc.data(),
                                          wangs_formula::VectorXform(matrix_)));
   }
+  num = ClampCurveSegments(num);
   if (num <= 1.0f) {
     HandleLineTo(p1, p4);
     return;
   }
-  DEBUG_CHECK(num < (1 << 10));
+  DEBUG_CHECK(num <= kMaxCurveSegments);
 
   int segment_count = static_cast<int>(num);
   CubicCoeff coeff(arc);
