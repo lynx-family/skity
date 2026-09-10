@@ -62,7 +62,7 @@ TEST(Path, test_iter) {
   EXPECT_EQ(skity::Path::Verb::kConic, iter.Next(pts));
 }
 
-static void check_move(skity::Path::RawIter *iter, float x0, float y0) {
+static void check_move(skity::Path::RawIter* iter, float x0, float y0) {
   skity::Point pts[4];
   auto v = iter->Next(pts);
   EXPECT_EQ(v, skity::Path::Verb::kMove);
@@ -70,7 +70,7 @@ static void check_move(skity::Path::RawIter *iter, float x0, float y0) {
   EXPECT_FLOAT_EQ(pts[0].y, y0);
 }
 
-static void check_line(skity::Path::RawIter *iter, float x1, float y1) {
+static void check_line(skity::Path::RawIter* iter, float x1, float y1) {
   skity::Point pts[4];
   auto v = iter->Next(pts);
   EXPECT_EQ(v, skity::Path::Verb::kLine);
@@ -78,7 +78,7 @@ static void check_line(skity::Path::RawIter *iter, float x1, float y1) {
   EXPECT_FLOAT_EQ(pts[1].y, y1);
 }
 
-static void check_quad(skity::Path::RawIter *iter, float x1, float y1, float x2,
+static void check_quad(skity::Path::RawIter* iter, float x1, float y1, float x2,
                        float y2) {
   skity::Point pts[4];
   auto v = iter->Next(pts);
@@ -89,19 +89,19 @@ static void check_quad(skity::Path::RawIter *iter, float x1, float y1, float x2,
   EXPECT_FLOAT_EQ(pts[2].y, y2);
 }
 
-static void check_done(skity::Path *, skity::Path::RawIter *iter) {
+static void check_done(skity::Path*, skity::Path::RawIter* iter) {
   skity::Point pts[4];
   auto v = iter->Next(pts);
   EXPECT_EQ(v, skity::Path::Verb::kDone);
 }
 
-static void check_done_and_reset(skity::Path *path,
-                                 skity::Path::RawIter *iter) {
+static void check_done_and_reset(skity::Path* path,
+                                 skity::Path::RawIter* iter) {
   check_done(path, iter);
   path->Reset();
 }
 
-static void check_path_is_line_and_reset(skity::Path *path, float x1,
+static void check_path_is_line_and_reset(skity::Path* path, float x1,
                                          float y1) {
   skity::Path::RawIter iter(*path);
   check_move(std::addressof(iter), 0, 0);
@@ -118,7 +118,7 @@ static void check_path_is_line(skity::Path *path, float x1, float y1) {
 }
 #endif
 
-static void check_path_is_line_pair_and_reset(skity::Path *path, float x1,
+static void check_path_is_line_pair_and_reset(skity::Path* path, float x1,
                                               float y1, float x2, float y2) {
   skity::Path::RawIter iter(*path);
   check_move(std::addressof(iter), 0, 0);
@@ -127,7 +127,7 @@ static void check_path_is_line_pair_and_reset(skity::Path *path, float x1,
   check_done_and_reset(path, std::addressof(iter));
 }
 
-static void check_path_is_quad_and_reset(skity::Path *path, float x1, float y1,
+static void check_path_is_quad_and_reset(skity::Path* path, float x1, float y1,
                                          float x2, float y2) {
   skity::Path::RawIter iter(*path);
   check_move(std::addressof(iter), 0, 0);
@@ -135,7 +135,7 @@ static void check_path_is_quad_and_reset(skity::Path *path, float x1, float y1,
   check_done_and_reset(path, std::addressof(iter));
 }
 
-static void check_Close(const skity::Path &path) {
+static void check_Close(const skity::Path& path) {
   for (int i = 0; i < 2; i++) {
     skity::Path::Iter iter(path, static_cast<bool>(i));
     skity::Point mv;
@@ -629,7 +629,7 @@ TEST(path, test_range_iter) {
 }
 
 struct IsRectTest {
-  skity::Vec2 *points;
+  skity::Vec2* points;
   size_t count;
   bool Close;
   bool is_rect;
@@ -713,7 +713,7 @@ TEST(path, IsRect) {
   };
 
   int32_t index = 0;
-  std::for_each(tests.begin(), tests.end(), [&index](IsRectTest const &test) {
+  std::for_each(tests.begin(), tests.end(), [&index](IsRectTest const& test) {
     skity::Path path;
     path.MoveTo(test.points[0].x, test.points[0].y);
 
@@ -1842,4 +1842,86 @@ TEST(Path, GetType_AfterModifications) {
   EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
   path.AddRoundRect(skity::Rect::MakeLTRB(10, 20, 100, 200), 10, 10);
   EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+}
+
+TEST(Path, ResetClearsStateAndRetainsStorage) {
+  skity::Path path;
+  path.MoveTo(10, 20)
+      .LineTo(30, 40)
+      .QuadTo(50, 60, 70, 80)
+      .ConicTo(90, 100, 110, 120, 0.5f)
+      .CubicTo(130, 140, 150, 160, 170, 180)
+      .Close()
+      .MoveTo(200, 210);
+  path.SetFillType(skity::Path::PathFillType::kEvenOdd);
+  path.SetFirstDirection(skity::Path::Direction::kCW);
+  EXPECT_FALSE(path.GetBounds().IsEmpty());
+  path.SetConvexityType(skity::Path::ConvexityType::kConcave);
+  const auto* points = path.Points();
+  const auto* verbs = path.VerbsBegin();
+  const auto* weights = path.ConicWeights();
+
+  EXPECT_EQ(&path.Reset(), &path);
+  skity::Path empty;
+  EXPECT_TRUE(path.IsEmpty());
+  EXPECT_EQ(path.CountPoints(), 0u);
+  EXPECT_EQ(path.CountVerbs(), 0u);
+  EXPECT_EQ(path.GetFillType(), empty.GetFillType());
+  EXPECT_EQ(path.GetFirstDirection(), empty.GetFirstDirection());
+  EXPECT_EQ(path.GetConvexityType(), empty.GetConvexityType());
+  EXPECT_EQ(path.IsFinite(), empty.IsFinite());
+  EXPECT_EQ(path.GetBounds(), empty.GetBounds());
+  EXPECT_EQ(path.GetSegmentMasks(), 0u);
+  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+  EXPECT_FALSE(path.Contains(20, 30));
+  skity::Point pts[4];
+  EXPECT_EQ(skity::Path::RawIter(path).Next(pts), skity::Path::Verb::kDone);
+
+  // An implicit move must start at the origin, not the previous contour.
+  path.ConicTo(2, 4, 6, 8, 0.75f).Close();
+  skity::Path::RawIter iter(path);
+  EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kMove);
+  EXPECT_EQ(pts[0], skity::Point(0, 0, 0, 1));
+  EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kConic);
+  EXPECT_FLOAT_EQ(iter.ConicWeight(), 0.75f);
+  EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kClose);
+  EXPECT_EQ(iter.Next(pts), skity::Path::Verb::kDone);
+  EXPECT_EQ(path.GetBounds(), skity::Rect::MakeLTRB(0, 0, 6, 8));
+  EXPECT_EQ(path.GetSegmentMasks(), skity::Path::SegmentMask::kConic);
+  EXPECT_EQ(path.Points(), points);
+  EXPECT_EQ(path.VerbsBegin(), verbs);
+  EXPECT_EQ(path.ConicWeights(), weights);
+}
+
+TEST(Path, ResetClearsNonFiniteAndSimpleShapeState) {
+  skity::Path path;
+  path.LineTo(1, 1).MoveTo(std::numeric_limits<float>::infinity(), 1);
+  EXPECT_FALSE(path.IsFinite());
+  path.Reset();
+  EXPECT_TRUE(path.IsFinite());
+  EXPECT_TRUE(path.GetBounds().IsEmpty());
+
+  for (auto type : {skity::Path::IsAType::kRect, skity::Path::IsAType::kOval,
+                    skity::Path::IsAType::kSimpleRRect}) {
+    const auto bounds = skity::Rect::MakeLTRB(10, 20, 110, 220);
+    if (type == skity::Path::IsAType::kRect) {
+      path.AddRect(bounds);
+    } else if (type == skity::Path::IsAType::kOval) {
+      path.AddOval(bounds);
+    } else {
+      path.AddRoundRect(bounds, 5, 10);
+    }
+    ASSERT_EQ(path.GetIsAType(), type);
+    EXPECT_EQ(path.GetBounds(), bounds);
+    path.Reset();
+    EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+    EXPECT_FALSE(path.IsSimpleRRect(nullptr));
+    EXPECT_FALSE(path.IsRect(nullptr));
+    EXPECT_TRUE(path.GetBounds().IsEmpty());
+  }
+  path.AddRoundRect(skity::Rect::MakeLTRB(0, 0, 40, 60), 2, 3);
+  skity::RRect rrect;
+  ASSERT_TRUE(path.IsSimpleRRect(&rrect));
+  EXPECT_EQ(rrect.GetSimpleRadii(), skity::Vec2(2, 3));
+  EXPECT_TRUE(path.Contains(20, 30));
 }

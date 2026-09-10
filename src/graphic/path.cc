@@ -939,7 +939,16 @@ Path& Path::AddRRect(RRect const& rrect, Direction dir, uint32_t start_index) {
 }
 
 Path& Path::Reset() {
-  *this = Path();
+  points_.clear();
+  verbs_.clear();
+  conic_weights_.clear();
+  last_move_to_index_ = ~0;
+  convexity_ = ConvexityType::kUnknown;
+  first_direction_ = Direction::kCCW;
+  is_finite_ = true;
+  bounds_ = Rect{};
+  fill_type_ = PathFillType::kWinding;
+  segment_masks_ = 0;
   type_ = IsAType::kGeneral;
   radii_ = Vec2{0.f, 0.f};
   MarkBoundsDirty();
