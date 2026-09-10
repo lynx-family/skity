@@ -308,4 +308,10 @@ if(${SKITY_CAPI_MODULE})
       DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
       COMPONENT Runtime
   )
+  # header-only RAII layer (consumers #include <skity_hpp/skity.hpp>)
+  install(
+      DIRECTORY "${CMAKE_SOURCE_DIR}/module/capi/include/skity_hpp"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
+      COMPONENT Runtime
+  )
 endif()
