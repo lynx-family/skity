@@ -1,5 +1,3 @@
-
-
 # glfw
 set(GLFW_INSTALL OFF CACHE BOOL "disable GLFW_INSTALL")
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glfw third_party/glfw)
@@ -80,5 +78,7 @@ target_include_directories(skity_example_common PUBLIC ${CMAKE_SOURCE_DIR}/third
 target_link_libraries(skity_example_common PUBLIC glfw skity::skity)
 target_link_libraries(skity_example_common PUBLIC skity::codec)
 
-target_compile_options(skity_example_common PRIVATE "-fobjc-arc")
+if (APPLE)
+  target_compile_options(skity_example_common PRIVATE "-fobjc-arc")
+endif()
 target_compile_definitions(skity_example_common PRIVATE -DEXAMPLE_DEFAULT_FONT="${CMAKE_SOURCE_DIR}/example/images/RobotoMonoNerdFont-Regular.ttf")

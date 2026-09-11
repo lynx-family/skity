@@ -167,13 +167,6 @@ if (NOT ${SKITY_CT_FONT})
 
   target_link_libraries(skity PRIVATE freetype2)
 
-  if (NOT USE_THIRD_PARTY_ZLIB)
-    # link system zlib
-    target_link_libraries(skity PRIVATE z)
-  else()
-    target_link_libraries(skity PRIVATE ${SKITY_ZLIB_NAME})
-  endif()
-
   target_include_directories(skity SYSTEM BEFORE PRIVATE ${FREETYPE_DIR}/include)
 
   if (NOT ANDROID AND NOT CMAKE_SYSTEM_NAME STREQUAL "OHOS" AND NOT EMSCRIPTEN)
@@ -188,6 +181,14 @@ if (NOT ${SKITY_CT_FONT})
     # use nanopng in android
     target_include_directories(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../third_party/nanopng/include)
     target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../third_party/nanopng/src/nanopng16.cc)
+  endif()
+
+  # Keep zlib after its dependents for linkers that process libraries in order.
+  if (NOT USE_THIRD_PARTY_ZLIB)
+    # link system zlib
+    target_link_libraries(skity PRIVATE z)
+  else()
+    target_link_libraries(skity PRIVATE ${SKITY_ZLIB_NAME})
   endif()
 
   target_sources(

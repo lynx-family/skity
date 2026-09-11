@@ -5,6 +5,7 @@
 #ifndef MODULE_CODEC_INCLUDE_SKITY_CODEC_CODEC_HPP
 #define MODULE_CODEC_INCLUDE_SKITY_CODEC_CODEC_HPP
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <skity/graphic/alpha_type.hpp>

@@ -7,6 +7,7 @@
 
 #include <assert.h>
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 

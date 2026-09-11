@@ -14,6 +14,7 @@
 #define WGX_API
 #endif
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>

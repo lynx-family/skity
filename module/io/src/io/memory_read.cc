@@ -4,6 +4,7 @@
 
 #include "src/io/memory_read.hpp"
 
+#include <cstring>
 #include <skity/codec/codec.hpp>
 #include <skity/io/picture.hpp>
 

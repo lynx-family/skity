@@ -3,6 +3,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <array>
+#include <cstring>
 #include <skity/io/picture.hpp>
 
 #include "src/io/memory_read.hpp"

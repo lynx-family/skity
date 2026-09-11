@@ -8,6 +8,7 @@
 #ifndef SRC_BASE_MAPPING_HPP
 #define SRC_BASE_MAPPING_HPP
 
+#include <cstdint>
 #include <initializer_list>
 #include <memory>
 #include <string>

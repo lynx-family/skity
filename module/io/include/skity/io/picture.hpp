@@ -86,7 +86,7 @@ class SKITY_API Picture final {
 
  private:
   std::unique_ptr<RecordPlayback> playback_;
-  std::unique_ptr<MemoryWriter32> writer_ = {};
+  std::unique_ptr<MemoryWriter32> writer_;
 
   Rect cull_rect_;
 };

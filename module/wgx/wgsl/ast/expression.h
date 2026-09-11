@@ -33,6 +33,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "wgsl/ast/identifier.h"
 #include "wgsl/ast/node.h"
 

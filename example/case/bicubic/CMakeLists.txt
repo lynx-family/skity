@@ -10,5 +10,7 @@ add_executable(bicubic_example
 
 target_compile_definitions(bicubic_example PRIVATE -DEXAMPLE_IMAGE_ROOT="${CMAKE_SOURCE_DIR}/example/images/")
 
-target_compile_options(bicubic_example PRIVATE "-fobjc-arc")
+if (APPLE)
+  target_compile_options(bicubic_example PRIVATE "-fobjc-arc")
+endif()
 target_link_libraries(bicubic_example PUBLIC skity::example_common)
