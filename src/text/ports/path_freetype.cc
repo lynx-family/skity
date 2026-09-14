@@ -23,6 +23,9 @@ struct FTOutlineExtractInfo {
 
 static int HandleMoveTo(const FT_Vector* to, void* user) {
   auto* info = static_cast<FTOutlineExtractInfo*>(user);
+  if (!info->path->IsEmpty()) {
+    info->path->Close();
+  }
   info->path->MoveTo(FixedDot6ToFloat(to->x), -FixedDot6ToFloat(to->y));
   return 0;
 }
