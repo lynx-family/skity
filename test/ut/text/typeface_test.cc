@@ -673,3 +673,44 @@ TEST(TypefaceFreeTypeTest, SynthesizedFontHeightsFollowHinting) {
                     -glyphs[1]->GetPath().GetBounds().Top());
   }
 }
+
+TEST(TypefaceFreeTypeTest, EveryGlyphOutlineContourIsExplicitlyClosed) {
+  auto typeface = Typeface::MakeFromFile(kRobotoRegular);
+  ASSERT_NE(typeface, nullptr);
+  const uint32_t character = 'A';
+  GlyphID id = 0;
+  typeface->UnicharsToGlyphs(&character, 1, &id);
+  Font font(typeface, 64.f);
+  const GlyphData* glyph = nullptr;
+  font.LoadGlyphPath(&id, 1, &glyph);
+  ASSERT_NE(glyph, nullptr);
+  Path::Iter iter(glyph->GetPath(), false);
+  Point points[4];
+  int moves = 0;
+  int closes = 0;
+  for (auto verb = iter.Next(points); verb != Path::Verb::kDone;
+       verb = iter.Next(points)) {
+    moves += verb == Path::Verb::kMove;
+    closes += verb == Path::Verb::kClose;
+  }
+  EXPECT_GE(moves, 2);
+  EXPECT_EQ(moves, closes);
+}
+
+TEST(TypefaceFreeTypeTest, TableReadsRejectMissingTagsAndClampRanges) {
+  auto typeface = Typeface::MakeFromFile(kRobotoRegular);
+  ASSERT_NE(typeface, nullptr);
+  const auto head = SetFourByteTag('h', 'e', 'a', 'd');
+  const auto missing = SetFourByteTag('N', 'O', 'N', 'E');
+  const size_t size = typeface->GetTableSize(head);
+  ASSERT_GT(size, 1u);
+  uint8_t bytes[4] = {0xAA, 0xAA, 0xAA, 0xAA};
+  EXPECT_EQ(typeface->GetTableSize(missing), 0u);
+  EXPECT_EQ(typeface->GetTableData(missing, 0, sizeof(bytes), bytes), 0u);
+  EXPECT_EQ(typeface->GetTableData(head, size + 1, sizeof(bytes), bytes), 0u);
+  EXPECT_EQ(bytes[0], 0xAA);
+  EXPECT_EQ(typeface->GetTableData(head, size - 1, sizeof(bytes), bytes), 1u);
+  EXPECT_EQ(bytes[1], 0xAA);
+  EXPECT_EQ(bytes[2], 0xAA);
+  EXPECT_EQ(bytes[3], 0xAA);
+}

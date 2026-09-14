@@ -22,6 +22,7 @@
 
 #include "harness/font/artifact/json_io.hpp"
 #include "harness/font/case/case_document.hpp"
+#include "harness/font/case/font_manager_contract.hpp"
 #include "harness/font/probe/backend_support.hpp"
 #include "harness/font/probe/typeface_identity.hpp"
 #include "src/render/text/text_transform.hpp"
@@ -56,6 +57,10 @@ struct FontProbeRequest {
 struct ParsedFontManagerRequest {
   std::string entry;
   std::string family_name;
+  bool null_family = true;
+  const char* FamilyName() const {
+    return null_family ? nullptr : family_name.c_str();
+  }
   FontStyle style = FontStyle::Normal();
   bool has_character = false;
   uint32_t character = 0;
@@ -592,6 +597,10 @@ Json::Value BuildFontManagerState(FontManager* font_manager,
   Json::Value state(Json::objectValue);
   const int family_count = font_manager->CountFamilies();
   state["family_count"] = family_count;
+  state["family_names"] = Json::Value(Json::arrayValue);
+  for (int i = 0; i < family_count; ++i) {
+    state["family_names"].append(font_manager->GetFamilyName(i));
+  }
   state["family_samples"] =
       BuildFamilySamples(font_manager, family_count, request.sample_limit);
 
@@ -625,9 +634,6 @@ Json::Value BuildStyleSetSummary(const std::string& label,
 
   const int style_count = style_set->Count();
   value["style_count"] = style_count;
-  if (style_count <= 0) {
-    errors->push_back(path + ".style_count is zero");
-  }
 
   Json::Value styles(Json::arrayValue);
   const int sample_count = std::min(style_count, request.sample_limit);
@@ -766,8 +772,9 @@ bool ParseFontManagerRequest(const Json::Value& root,
     valid = false;
   }
 
+  request->null_family = !value["family_name"].isString();
   ReadStringField(value, "family_name", &request->family_name);
-  if (RequiresFamilyName(request->entry) && request->family_name.empty()) {
+  if (request->entry == "CreateStyleSet" && request->family_name.empty()) {
     AddValidationError(report, "$.font_manager_request.family_name",
                        "family_name is required for this entry");
     valid = false;
@@ -848,6 +855,7 @@ Json::Value BuildFontManagerProbeReport(const Json::Value& root,
   Json::Value probe(Json::objectValue);
   probe["category"] = category;
   probe["request"] = ParsedRequestToJson(request);
+  probe["request_input"] = root["font_manager_request"];
   probe["font_manager"] = BuildFontManagerState(font_manager.get(), request);
   Json::Value matched_typefaces(Json::arrayValue);
 
@@ -863,13 +871,12 @@ Json::Value BuildFontManagerProbeReport(const Json::Value& root,
   } else if (request.entry == "MatchFamily") {
     operation["style_set"] = BuildStyleSetSummary(
         "FontManager.MatchFamily",
-        font_manager->MatchFamily(request.family_name.c_str()), request, glyphs,
+        font_manager->MatchFamily(request.FamilyName()), request, glyphs,
         "$.font_manager_probe.operation.style_set", &matched_typefaces, errors);
   } else if (request.entry == "MatchFamilyStyle") {
     Json::Value matched = BuildTypefaceSummary(
         "FontManager.MatchFamilyStyle",
-        font_manager->MatchFamilyStyle(request.family_name.c_str(),
-                                       request.style),
+        font_manager->MatchFamilyStyle(request.FamilyName(), request.style),
         request.font_request, glyphs,
         "$.font_manager_probe.operation.matched_typeface", errors);
     operation["matched_typeface"] = matched;
@@ -883,7 +890,7 @@ Json::Value BuildFontManagerProbeReport(const Json::Value& root,
     Json::Value matched = BuildTypefaceSummary(
         "FontManager.MatchFamilyStyleCharacter",
         font_manager->MatchFamilyStyleCharacter(
-            request.family_name.c_str(), request.style,
+            request.FamilyName(), request.style,
             bcp47.empty() ? nullptr : bcp47.data(),
             static_cast<int>(bcp47.size()),
             static_cast<Unichar>(request.character)),
@@ -909,7 +916,7 @@ Json::Value BuildFontManagerProbeReport(const Json::Value& root,
     }
     operation["match_family"] = BuildStyleSetSummary(
         "FontManager.MatchFamily",
-        font_manager->MatchFamily(request.family_name.c_str()), request, glyphs,
+        font_manager->MatchFamily(request.FamilyName()), request, glyphs,
         "$.font_manager_probe.operation.match_family", &matched_typefaces,
         errors);
   } else {
@@ -1004,6 +1011,11 @@ FontManagerProbeResult RunFontManagerProbe(
   result.report = BuildFontManagerProbeReport(
       root, validation, category, font_manager_request, &probe_errors);
 
+  ValidationContext match_errors;
+  ValidateFontManagerResult(root, result.report, &match_errors);
+  for (const auto& error : match_errors.Errors()) {
+    probe_errors.push_back(error.path + ": " + error.message);
+  }
   if (!probe_errors.empty()) {
     result.status = FontManagerProbeStatus::kProbeFailed;
     result.report["ok"] = false;

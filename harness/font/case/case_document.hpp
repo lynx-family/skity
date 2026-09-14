@@ -24,6 +24,7 @@ struct ResolvedFontFile {
 };
 
 struct CaseValidationResult {
+  std::filesystem::path repo_root;
   bool valid = false;
   std::string case_id;
   std::string backend;

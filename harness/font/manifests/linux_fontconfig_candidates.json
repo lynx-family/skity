@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "id": "linux_fontconfig_candidates",
+  "backend": "fontconfig",
+  "platforms": [
+    "linux-fontconfig"
+  ],
+  "target_platform": "linux-fontconfig",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "font_manager/default_regular_fontconfig.json",
+    "font_manager/default_bold_fontconfig.json",
+    "font_manager/default_italic_fontconfig.json",
+    "font_manager/alias_sans_serif_fontconfig.json",
+    "font_manager/alias_serif_fontconfig.json",
+    "font_manager/alias_monospace_fontconfig.json",
+    "font_manager/alias_harness_sans_fontconfig.json",
+    "font_manager/family_null_fontconfig.json",
+    "font_manager/family_missing_fontconfig.json",
+    "font_manager/family_empty_fontconfig.json",
+    "font_manager/family_unknown_fontconfig.json",
+    "font_manager/family_casefold_fontconfig.json",
+    "font_manager/style_medium_fontconfig.json",
+    "font_manager/style_bold_fontconfig.json",
+    "font_manager/style_condensed_fontconfig.json",
+    "font_manager/style_italic_fontconfig.json",
+    "font_manager/style_oblique_fontconfig.json",
+    "family_style_set/source_sans_pro_styles_fontconfig.json",
+    "family_style_set/noto_serif_create_style_set_fontconfig.json",
+    "family_style_set/unknown_style_set_fontconfig.json",
+    "font_manager/fallback_latin_fontconfig.json",
+    "font_manager/fallback_cjk_hans_fontconfig.json",
+    "font_manager/fallback_cjk_hant_fontconfig.json",
+    "font_manager/fallback_cjk_ja_fontconfig.json",
+    "font_manager/fallback_cjk_ko_fontconfig.json",
+    "font_manager/fallback_emoji_fontconfig.json",
+    "font_manager/fallback_missing_scalar_fontconfig.json",
+    "font_manager/fallback_no_family_fontconfig.json",
+    "font_manager/fallback_unknown_family_fontconfig.json",
+    "font_manager/fallback_multi_hans_ja_fontconfig.json",
+    "font_manager/fallback_multi_ja_hans_fontconfig.json",
+    "font_manager/fallback_language_unrelated_fontconfig.json",
+    "font_manager/ttc_family_fontconfig.json",
+    "font_manager/variable_default_fontconfig.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/linux-fontconfig/controlled",
+    "report_root": "local/font-harness/reports/linux-fontconfig"
+  }
+}

@@ -24,6 +24,8 @@ struct CompareRequest {
   std::filesystem::path case_path;
   std::filesystem::path expected_path;
   std::filesystem::path actual_path;
+  std::filesystem::path environment_path;
+  std::string profile = "auto";
   std::string backend;
 };
 

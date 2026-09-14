@@ -630,6 +630,7 @@ Json::Value BuildMetricsReport(
     errors->push_back("$.scaler_context_result.context is missing");
   } else {
     Json::Value scaler_result(Json::objectValue);
+    scaler_result["available"] = true;
     scaler_result["desc"] = ScalerContextDescToJson(desc);
     scaler_result["generate_metrics_entry"] =
         "ScalerContext::MakeGlyph -> GenerateMetrics";
@@ -690,6 +691,13 @@ MetricsProbeResult RunMetricsProbe(const MetricsProbeRequest& request) {
     result.report["validation_errors"] = validation.errors.ToJson();
     result.report["normalized_case"] = validation.normalized_case;
     return result;
+  }
+
+  if (!IsExplicitSourceCasePlatformAvailable(root, request.backend)) {
+    return BuildFailure(MetricsProbeStatus::kBackendUnavailable,
+                        validation.case_id, request.backend,
+                        "backend_unavailable",
+                        "case does not target the Linux FreeType host");
   }
 
   if (validation.backend != request.backend) {

@@ -34,6 +34,7 @@ class TestRunner:
         self.no_color = args.no_color or not sys.stdout.isatty()
         self.skip_configure = args.no_configure or args.run_only
         self.skip_build = args.no_build or args.run_only
+        self.args = args
         self.suite = args.suite
         self.backend = args.backend
         self.started = time.time()
@@ -156,6 +157,10 @@ class TestRunner:
             "-DSKITY_VK_BACKEND=ON",
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
         ]
+        if self.suite == "font-harness":
+            cmd = ["cmake", "-S", self.repo_root, "-B", self.build_dir,
+                   "-DSKITY_TEST=ON", "-DSKITY_ENABLE_FONT_HARNESS=ON",
+                   "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"]
         vk_test_loader = os.environ.get("SKITY_VK_TEST_USE_SYSTEM_LOADER", "")
         if vk_test_loader.upper() not in ("", "0", "OFF", "FALSE", "NO"):
             cmd.append("-DSKITY_VK_TEST_USE_SYSTEM_LOADER=ON")
@@ -179,6 +184,8 @@ class TestRunner:
     def build_project(self) -> Tuple[bool, str]:
         self.print_status(Colors.YELLOW, f"🔨 Building project with {self.parallel_jobs} parallel jobs...")
         cmd = ["cmake", "--build", self.build_dir, "--parallel", str(self.parallel_jobs)]
+        if self.suite == "font-harness":
+            cmd.extend(["--target", "skity-font"])
         exit_code, stdout, stderr = self.run_command(cmd)
         if exit_code != 0:
             self.print_status(Colors.RED, "❌ Build failed!")
@@ -199,12 +206,23 @@ class TestRunner:
             os.path.join(self.build_dir, "test"),
             self.build_dir,
         ]
+        if target_exe == "skity-font":
+            test_paths = [os.path.join(self.build_dir, "harness", "font"), self.build_dir]
+            test_paths += [
+                os.path.join(directory, config)
+                for directory in test_paths
+                for config in ("Debug", "Release", "RelWithDebInfo", "MinSizeRel")
+            ]
         executable_names = self._candidate_executable_names(target_exe)
         for directory in test_paths:
             for name in executable_names:
                 path = os.path.join(directory, name)
                 if os.path.exists(path) and os.access(path, os.X_OK):
                     return path
+
+        if target_exe == "skity-font":
+            # Nested build trees may contain stale or differently configured harnesses.
+            return None
                 
         for root, dirs, files in os.walk(self.build_dir):
             for file in files:
@@ -489,6 +507,9 @@ class TestRunner:
         # Dispatch by suite
         if self.suite in ("unit", "golden-shape", "golden-text"):
             report = self.run_gtest_suite()
+        elif self.suite == "font-harness":
+            from font_harness_runner import run_suite
+            report = run_suite(self, self.args)
         else:
             report = self._create_infra_error("usage_error", f"Suite '{self.suite}' is not implemented yet.", EXIT_USAGE_ERROR)
             self.print_agent_report(report)
@@ -510,7 +531,7 @@ class TestRunner:
 
 def main():
     parser = argparse.ArgumentParser(description='Skity Test Runner with AI Agent feedback loop')
-    parser.add_argument('--suite', default='unit', choices=['unit', 'golden-shape', 'golden-text'], help='Test suite to run')
+    parser.add_argument('--suite', default='unit', choices=['unit', 'golden-shape', 'golden-text', 'font-harness'], help='Test suite to run')
     parser.add_argument('--build-dir', default='build', help='Build directory (default: build)')
     parser.add_argument('--backend', default='metal', choices=['metal', 'gl', 'vulkan'], help='Golden test backend to run (default: metal)')
     parser.add_argument('--filter', default='', help='Run only tests matching pattern (e.g. for gtest)')
@@ -522,6 +543,8 @@ def main():
     parser.add_argument('--no-build', action='store_true', help='Skip build step')
     parser.add_argument('--run-only', action='store_true', help='Skip configure and build, run tests only')
 
+    from font_harness_runner import add_arguments
+    add_arguments(parser)
     args = parser.parse_args()
     if args.parallel <= 0:
         print("Error: --parallel must be > 0", file=sys.stderr)

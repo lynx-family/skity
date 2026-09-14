@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <!-- Controlled fixture: deliberately no host or user config includes. -->
+  <dir>@FONT_DIR@</dir>
+  <cachedir>@CACHE_DIR@</cachedir>
+  <config><rescan><int>0</int></rescan></config>
+  <alias binding="strong"><family>sans-serif</family><prefer><family>Source Sans Pro</family></prefer></alias>
+  <alias binding="strong"><family>serif</family><prefer><family>Noto Serif</family></prefer></alias>
+  <alias binding="strong"><family>monospace</family><prefer><family>Droid Sans Mono</family></prefer></alias>
+  <alias binding="strong"><family>Harness Sans</family><prefer><family>Source Sans Pro</family></prefer></alias>
+  <alias><family>sans-serif</family><accept><family>Noto Sans CJK SC</family><family>Noto Color Emoji</family></accept></alias>
+  <!-- Append a physical default after aliases; keep unknown strong families distinct. -->
+  <match target="pattern"><edit name="family" mode="append" binding="weak"><string>Source Sans Pro</string></edit></match>
+</fontconfig>

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "id": "linux_freetype_ttc_smoke",
+  "backend": "freetype",
+  "platforms": [
+    "linux-freetype"
+  ],
+  "target_platform": "linux-freetype",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "typeface_probe/noto_sans_cjk_ttc_file_index_0_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_file_index_1_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_file_index_2_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_file_index_3_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_file_index_4_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_data_index_0_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_data_index_1_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_data_index_2_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_data_index_3_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_data_index_4_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_file_all_freetype.json",
+    "typeface_probe/noto_sans_cjk_ttc_data_all_freetype.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/linux-freetype",
+    "report_root": "local/font-harness/reports/linux-freetype"
+  }
+}

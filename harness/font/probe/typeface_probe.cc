@@ -589,6 +589,13 @@ TypefaceProbeResult RunTypefaceProbe(const TypefaceProbeRequest& request) {
     return result;
   }
 
+  if (!IsExplicitSourceCasePlatformAvailable(root, request.backend)) {
+    return BuildFailure(TypefaceProbeStatus::kBackendUnavailable,
+                        validation.case_id, request.backend,
+                        "backend_unavailable",
+                        "case does not target the Linux FreeType host");
+  }
+
   if (validation.backend != request.backend) {
     TypefaceProbeResult result = BuildFailure(
         TypefaceProbeStatus::kSchemaValidationFailed, validation.case_id,

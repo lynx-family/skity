@@ -11,14 +11,17 @@
 #include <utility>
 #include <vector>
 
+#include "harness/font/artifact/artifact_validator.hpp"
 #include "harness/font/artifact/artifact_writer.hpp"
 #include "harness/font/artifact/json_io.hpp"
+#include "harness/font/artifact/provenance.hpp"
 #include "harness/font/case/case_document.hpp"
 #include "harness/font/case/manifest_document.hpp"
 #include "harness/font/case/platform_target.hpp"
 #include "harness/font/compare/compare_engine.hpp"
 #include "harness/font/platform/coretext/env_info.hpp"
 #include "harness/font/platform/directwrite/env_info.hpp"
+#include "harness/font/platform/linux/env_info.hpp"
 #include "harness/font/probe/font_manager_probe.hpp"
 #include "harness/font/probe/glyph_image_probe.hpp"
 #include "harness/font/probe/glyph_path_probe.hpp"
@@ -79,6 +82,8 @@ struct ManifestRunPaths {
   std::filesystem::path resolved_skia_dir;
   std::filesystem::path resolved_skity_dir;
   std::filesystem::path resolved_compare_dir;
+  std::filesystem::path environment;
+  std::string profile = "auto";
   std::string backend;
   std::string target_platform;
 };
@@ -107,8 +112,18 @@ void PrintUsage(std::ostream& out) {
       << "  probe         run a Skity font probe and write result JSON\n"
       << "  compare       compare Skia oracle and Skity result JSON\n"
       << "  run           run a manifest with existing Skia oracle data\n"
+      << "  artifact-check validate an existing expected/actual artifact\n"
       << "  dump-path     dump one normalized glyph path\n"
       << "  list-fonts    list visible families and styles for a backend\n"
+      << "\n"
+      << "artifact-check options:\n"
+      << "  --case <path> --artifact <path> --role expected|actual\n"
+      << "  --reference <path>  optional repeated Skia capture\n"
+      << "  --report <path> --repo-root <path>\n"
+      << "  --environment <path> current system/controlled font snapshot\n"
+      << "                       also accepted by probe/compare/run\n"
+      << "  --profile auto|explicit|controlled|system (default: auto)\n"
+      << "                       also accepted by compare/run\n"
       << "\n"
       << "case-info options:\n"
       << "  --case <path>       input case JSON\n"
@@ -181,6 +196,17 @@ std::string StablePathForRun(const std::filesystem::path& path,
     }
   }
   return path.lexically_normal().generic_string();
+}
+
+void AppendInputReproArgs(const std::filesystem::path& environment,
+                          const std::string& profile,
+                          std::vector<std::string>* args) {
+  if (!environment.empty()) {
+    args->insert(args->end(), {"--environment", PathArg(environment)});
+  }
+  if (profile != "auto") {
+    args->insert(args->end(), {"--profile", profile});
+  }
 }
 
 std::filesystem::path ResolveRunPath(const std::filesystem::path& repo_root,
@@ -413,7 +439,8 @@ int ExitCodeForCompareStatus(skity::font_harness::CompareStatus status) {
 
 ProbeInvocationResult RunSkityProbeForCase(
     const std::filesystem::path& repo_root,
-    const std::filesystem::path& case_path, const std::string& backend) {
+    const std::filesystem::path& case_path, const std::string& backend,
+    const std::filesystem::path& environment = {}) {
   ConfigureFontManagerBackend(backend);
 
   ProbeInvocationResult invocation;
@@ -474,6 +501,30 @@ ProbeInvocationResult RunSkityProbeForCase(
     invocation.case_id = std::move(result.case_id);
     invocation.backend = std::move(result.backend);
   }
+  if (invocation.exit_code == kExitSuccess) {
+    Json::Value input;
+    std::string error;
+    skity::font_harness::ValidationContext errors;
+    if (skity::font_harness::LoadJsonFile(case_path, &input, &error)) {
+      auto validation = skity::font_harness::ValidateCaseDocument(
+          input, skity::font_harness::RepoUriResolver(repo_root));
+      skity::font_harness::AttachProbeInputs(validation, environment,
+                                             &invocation.report, &errors);
+      auto contract = skity::font_harness::ValidateProbeForCase(
+          validation, invocation.report);
+      for (const auto& item : contract.errors.Errors()) {
+        errors.AddError(item.path, item.message);
+      }
+    } else {
+      errors.AddError("$", error);
+    }
+    if (!errors.IsValid()) {
+      invocation.exit_code = kExitSkityProbeFailure;
+      invocation.report["ok"] = false;
+      invocation.report["reason_code"] = "artifact_contract";
+      invocation.report["validation_errors"] = errors.ToJson();
+    }
+  }
   return invocation;
 }
 
@@ -481,13 +532,17 @@ CompareInvocationResult RunCompareForArtifacts(
     const std::filesystem::path& repo_root,
     const std::filesystem::path& case_path,
     const std::filesystem::path& expected_path,
-    const std::filesystem::path& actual_path, const std::string& backend) {
+    const std::filesystem::path& actual_path, const std::string& backend,
+    const std::filesystem::path& environment = {},
+    const std::string& profile = "auto") {
   CompareInvocationResult invocation;
   skity::font_harness::CompareRequest request;
   request.repo_root = repo_root;
   request.case_path = case_path;
   request.expected_path = expected_path;
   request.actual_path = actual_path;
+  request.environment_path = environment;
+  request.profile = profile;
   request.backend = backend;
   skity::font_harness::CompareResult result =
       skity::font_harness::RunCompare(request);
@@ -710,8 +765,8 @@ Json::Value RunManifestCase(Json::ArrayIndex index,
     return item;
   }
 
-  ProbeInvocationResult probe_invocation =
-      RunSkityProbeForCase(paths.repo_root, case_path, paths.backend);
+  ProbeInvocationResult probe_invocation = RunSkityProbeForCase(
+      paths.repo_root, case_path, paths.backend, paths.environment);
   item["probe_exit_code"] = probe_invocation.exit_code;
   skity::font_harness::ArtifactDescriptor probe_descriptor;
   probe_descriptor.kind = skity::font_harness::ArtifactKind::kSkityResult;
@@ -727,6 +782,7 @@ Json::Value RunManifestCase(Json::ArrayIndex index,
   probe_descriptor.repro_args = {"--case",
                                  StablePathForRun(case_path, paths.repo_root),
                                  "--backend", paths.backend};
+  AppendInputReproArgs(paths.environment, "auto", &probe_descriptor.repro_args);
 
   std::string write_error;
   std::string stable_probe_path;
@@ -758,7 +814,8 @@ Json::Value RunManifestCase(Json::ArrayIndex index,
   }
 
   CompareInvocationResult compare_invocation = RunCompareForArtifacts(
-      paths.repo_root, case_path, expected_path, actual_path, paths.backend);
+      paths.repo_root, case_path, expected_path, actual_path, paths.backend,
+      paths.environment, paths.profile);
   item["compare_exit_code"] = compare_invocation.exit_code;
 
   skity::font_harness::ArtifactDescriptor compare_descriptor;
@@ -776,6 +833,8 @@ Json::Value RunManifestCase(Json::ArrayIndex index,
       "--expected", StablePathForRun(expected_path, paths.repo_root),
       "--actual",   StablePathForRun(actual_path, paths.repo_root),
       "--backend",  paths.backend};
+  AppendInputReproArgs(paths.environment, paths.profile,
+                       &compare_descriptor.repro_args);
 
   std::string stable_compare_path;
   if (!WriteArtifactSilently(paths.repo_root, compare_descriptor,
@@ -859,6 +918,102 @@ int FinalizeManifestRunReport(Json::Value* report,
   (*report)["reason_code"] = reason_code;
   (*report)["passed"] = exit_code == kExitSuccess;
   return exit_code;
+}
+
+int RunArtifactCheckCommand(int argc, char** argv) {
+  std::filesystem::path repo_root(SKITY_FONT_HARNESS_REPO_ROOT);
+  std::filesystem::path case_path, artifact_path, environment, reference,
+      report_path;
+  std::string role = "expected", profile = "auto";
+  for (int i = 2; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (IsHelpArgument(arg)) {
+      PrintUsage(std::cout);
+      return kExitSuccess;
+    }
+    if (i + 1 >= argc) return kExitUsageError;
+    const std::string value = argv[++i];
+    if (arg == "--case")
+      case_path = value;
+    else if (arg == "--artifact")
+      artifact_path = value;
+    else if (arg == "--repo-root")
+      repo_root = value;
+    else if (arg == "--environment")
+      environment = value;
+    else if (arg == "--reference")
+      reference = value;
+    else if (arg == "--report")
+      report_path = value;
+    else if (arg == "--role")
+      role = value;
+    else if (arg == "--profile")
+      profile = value;
+    else
+      return kExitUsageError;
+  }
+  if (case_path.empty() || artifact_path.empty() ||
+      (role != "expected" && role != "actual"))
+    return kExitUsageError;
+  using namespace skity::font_harness;
+  Json::Value input, artifact, report(Json::objectValue);
+  ValidationContext errors;
+  std::string message;
+  if (!LoadJsonFile(case_path, &input, &message) ||
+      !LoadJsonFile(artifact_path, &artifact, &message)) {
+    errors.AddError("$", message);
+  } else {
+    const auto validation =
+        ValidateCaseDocument(input, RepoUriResolver(repo_root));
+    for (const auto& error : validation.errors.Errors()) {
+      errors.AddError(error.path, error.message);
+    }
+    if (validation.valid) {
+      auto check = [&](const Json::Value& value,
+                       const std::filesystem::path& path) {
+        const auto contract = ValidateProbeForCase(validation, value);
+        for (const auto& error : contract.errors.Errors()) {
+          errors.AddError(error.path, error.message);
+        }
+        if (contract.valid) {
+          ValidateArtifactInputs(validation, value, path, environment,
+                                 role == "expected", &errors);
+        }
+      };
+      check(artifact, artifact_path);
+      if (profile != "auto" && profile != CaseProfile(input)) {
+        errors.AddError("$.profile", "requested profile does not match case");
+      }
+      if (!reference.empty()) {
+        Json::Value repeated;
+        if (!LoadJsonFile(reference, &repeated, &message)) {
+          errors.AddError("$.reference", message);
+        } else {
+          check(repeated, reference);
+          for (const char* key : {"provenance", "artifacts"}) {
+            artifact.removeMember(key);
+            repeated.removeMember(key);
+          }
+          if (artifact != repeated) {
+            errors.AddError("$.reference", "repeated capture differs");
+          }
+        }
+      }
+    }
+  }
+  report["schema_version"] = 1;
+  report["artifact_type"] = "font_artifact_validation";
+  report["case_id"] = input.isObject() ? input.get("id", "") : Json::Value("");
+  report["role"] = role;
+  report["passed"] = errors.IsValid();
+  report["reason_code"] = errors.IsValid() ? "pass" : "invalid_artifact";
+  report["validation_errors"] = errors.ToJson();
+  if (!report_path.empty() && !WriteJsonFile(report_path, report, &message)) {
+    std::cerr << message << "\n";
+    return kExitIOFailure;
+  }
+  std::cout << WriteJsonString(report) << "\n";
+  return errors.IsValid() ? kExitSuccess : kExitCompareInputFailure;
 }
 
 int RunCaseInfo(int argc, char** argv) {
@@ -991,6 +1146,9 @@ int RunPlatformInfoCommand(int argc, char** argv, const std::string& command) {
     report = command == "list-fonts"
                  ? skity::font_harness::BuildDirectWriteFontList(request)
                  : skity::font_harness::BuildDirectWriteEnvInfo(request);
+  } else if (backend == "freetype" || backend == "fontconfig") {
+    report = skity::font_harness::BuildLinuxEnvInfo(repo_root, backend,
+                                                    command == "list-fonts");
   } else {
     report = BuildUnsupportedBackendReport(
         backend, command == "list-fonts" ? "font_list_fonts" : "font_env_info");
@@ -1091,6 +1249,7 @@ int RunDumpPathCommand(int argc, char** argv) {
 int RunProbeCommand(int argc, char** argv) {
   std::filesystem::path case_path;
   std::filesystem::path output_path;
+  std::filesystem::path environment;
   std::filesystem::path repo_root(SKITY_FONT_HARNESS_REPO_ROOT);
   std::string backend;
 
@@ -1114,6 +1273,9 @@ int RunProbeCommand(int argc, char** argv) {
         return kExitUsageError;
       }
       output_path = argv[++i];
+    } else if (arg == "--environment") {
+      if (i + 1 >= argc) return kExitUsageError;
+      environment = argv[++i];
     } else if (arg == "--repo-root") {
       if (i + 1 >= argc) {
         std::cerr << "--repo-root requires a path\n";
@@ -1139,7 +1301,7 @@ int RunProbeCommand(int argc, char** argv) {
   }
 
   ProbeInvocationResult invocation =
-      RunSkityProbeForCase(repo_root, case_path, backend);
+      RunSkityProbeForCase(repo_root, case_path, backend, environment);
 
   skity::font_harness::ArtifactDescriptor descriptor;
   descriptor.kind = skity::font_harness::ArtifactKind::kSkityResult;
@@ -1153,6 +1315,7 @@ int RunProbeCommand(int argc, char** argv) {
   descriptor.input_path = case_path;
   descriptor.explicit_output_path = output_path;
   descriptor.repro_args = {"--case", PathArg(case_path), "--backend", backend};
+  AppendInputReproArgs(environment, "auto", &descriptor.repro_args);
 
   return WriteCommandReport(std::move(invocation.report), repo_root, descriptor,
                             invocation.exit_code);
@@ -1279,8 +1442,10 @@ int RunCompareCommand(int argc, char** argv) {
   std::filesystem::path expected_path;
   std::filesystem::path actual_path;
   std::filesystem::path report_path;
+  std::filesystem::path environment;
   std::filesystem::path repo_root(SKITY_FONT_HARNESS_REPO_ROOT);
   std::string backend;
+  std::string profile = "auto";
 
   for (int i = 2; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -1314,6 +1479,12 @@ int RunCompareCommand(int argc, char** argv) {
         return kExitUsageError;
       }
       backend = argv[++i];
+    } else if (arg == "--profile") {
+      if (i + 1 >= argc) return kExitUsageError;
+      profile = argv[++i];
+    } else if (arg == "--environment") {
+      if (i + 1 >= argc) return kExitUsageError;
+      environment = argv[++i];
     } else if (arg == "--repo-root") {
       if (i + 1 >= argc) {
         std::cerr << "--repo-root requires a path\n";
@@ -1342,9 +1513,9 @@ int RunCompareCommand(int argc, char** argv) {
     backend = metadata.backend.empty() ? "unknown" : metadata.backend;
   }
 
-  CompareInvocationResult invocation =
-      RunCompareForArtifacts(repo_root, case_path, expected_path, actual_path,
-                             backend == "unknown" ? "" : backend);
+  CompareInvocationResult invocation = RunCompareForArtifacts(
+      repo_root, case_path, expected_path, actual_path,
+      backend == "unknown" ? "" : backend, environment, profile);
 
   skity::font_harness::ArtifactDescriptor descriptor;
   descriptor.kind = skity::font_harness::ArtifactKind::kCompareReport;
@@ -1362,6 +1533,7 @@ int RunCompareCommand(int argc, char** argv) {
     descriptor.repro_args.push_back("--backend");
     descriptor.repro_args.push_back(descriptor.backend);
   }
+  AppendInputReproArgs(environment, profile, &descriptor.repro_args);
 
   return WriteCommandReport(std::move(invocation.report), repo_root, descriptor,
                             invocation.exit_code);
@@ -1372,8 +1544,10 @@ int RunManifestCommand(int argc, char** argv) {
   std::filesystem::path skia_dir;
   std::filesystem::path skity_dir;
   std::filesystem::path report_path;
+  std::filesystem::path environment;
   std::filesystem::path repo_root(SKITY_FONT_HARNESS_REPO_ROOT);
   std::string backend;
+  std::string profile = "auto";
   bool skia_dir_overridden = false;
   bool skity_dir_overridden = false;
 
@@ -1411,6 +1585,12 @@ int RunManifestCommand(int argc, char** argv) {
         return kExitUsageError;
       }
       report_path = argv[++i];
+    } else if (arg == "--profile") {
+      if (i + 1 >= argc) return kExitUsageError;
+      profile = argv[++i];
+    } else if (arg == "--environment") {
+      if (i + 1 >= argc) return kExitUsageError;
+      environment = argv[++i];
     } else if (arg == "--repo-root") {
       if (i + 1 >= argc) {
         std::cerr << "--repo-root requires a path\n";
@@ -1586,6 +1766,8 @@ int RunManifestCommand(int argc, char** argv) {
   paths.resolved_compare_dir = resolved_compare_dir;
   paths.backend = backend;
   paths.target_platform = target_platform;
+  paths.environment = environment;
+  paths.profile = profile;
 
   ManifestRunCounts counts;
   Json::Value case_reports(Json::arrayValue);
@@ -1609,6 +1791,7 @@ int RunManifestCommand(int argc, char** argv) {
   descriptor.explicit_output_path = report_path;
   descriptor.repro_args = {"--manifest", PathArg(manifest_path), "--backend",
                            backend};
+  AppendInputReproArgs(environment, profile, &descriptor.repro_args);
   if (skia_dir_overridden && !skia_dir.empty()) {
     descriptor.repro_args.push_back("--skia-dir");
     descriptor.repro_args.push_back(PathArg(skia_dir));
@@ -1637,6 +1820,9 @@ int main(int argc, char** argv) {
     return kExitUsageError;
   }
 
+  if (command == "artifact-check") {
+    return RunArtifactCheckCommand(argc, argv);
+  }
   if (command == "case-info") {
     return RunCaseInfo(argc, argv);
   }

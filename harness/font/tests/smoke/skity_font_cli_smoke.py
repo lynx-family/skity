@@ -8,6 +8,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools"))
+from font_harness_metadata import input_fingerprint, sha256
+SYNTHETIC_REPO = None
+SNAPSHOT = {"schema_version": 1, "platform": "synthetic", "fonts": []}
+
+
 
 CASE_ID = "font.synthetic.typeface"
 FONT_MANAGER_CASE_ID = "font.synthetic.font_manager.default_typeface"
@@ -16,6 +22,8 @@ TARGET_PLATFORM = "macos-coretext"
 
 
 def write_json(path, value):
+    if value.get("artifact_type") == "font_probe_result":
+        value = decorate_artifact(path, value)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
@@ -201,6 +209,8 @@ def make_font_manager_probe_artifact(post_script_name, glyph_id):
 
 
 def run_command(args):
+    if len(args) > 1 and args[1] in ("compare", "run", "probe", "artifact-check"):
+        args = list(args) + ["--environment", SYNTHETIC_REPO / "environment.json"]
     return subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
@@ -254,11 +264,59 @@ def expect_report_has(path, field):
     return 0
 
 
+
+def decorate_artifact(path, value):
+    value = json.loads(json.dumps(value))
+    case = make_case() if value["case_id"] == CASE_ID else make_font_manager_case()
+    value["contract_version"] = 2
+    value["producer"] = "skity"
+    value["input_fingerprint"] = input_fingerprint(case, SYNTHETIC_REPO, SNAPSHOT)
+    if "typeface_result" in value:
+        face = value["typeface_result"]
+        face.update(collection_index=0, font_file_id="synthetic",
+                    font_file_uri="repo://fonts/synthetic.ttf", request_entry="MakeFromFile")
+        face["identity"] = dict(face["typeface"], units_per_em=1000, glyph_count=3)
+        for table in value["typeface_probe"]["tables"]:
+            table.update(full_copied_size=table["size"], full_digest="fnv1a64:fixture")
+        glyphs = value["typeface_probe"]["glyphs"]
+    else:
+        probe = value["font_manager_probe"]
+        probe["request_input"] = case["font_manager_request"]
+        face = probe["matched_typefaces"][0]
+        face["identity"] = face["descriptor"]
+        summary = face["probe_summary"]
+        summary["scaler_context_result"]["available"] = True
+        for branch in ("font_result", "scaler_context_result"):
+            metrics = summary[branch]["font_metrics"]
+            for field in ("top", "bottom", "x_height", "cap_height", "avg_char_width",
+                          "max_char_width", "x_min", "x_max", "underline_thickness",
+                          "underline_position", "strikeout_thickness", "strikeout_position"):
+                metrics[field] = 0
+        glyphs = summary["glyphs"]
+    for glyph in glyphs:
+        glyph.update(char=glyph["label"], contains=glyph["glyph_id"] != 0)
+    if path.name.endswith(".skia.json"):
+        value["runner"] = "skia"
+        capture = path.parent / "capture.txt"
+        capture.parent.mkdir(parents=True, exist_ok=True)
+        capture.write_bytes(b"synthetic CLI fixture")
+        value["provenance"] = {
+            "version": 2, "profile": "explicit" if case.get("font_files") else "system",
+            "skia_commit": "a" * 40,
+            "audit": {key: "b" * 64 for key in ("runner_source", "runner_binary", "skia_library", "gn_args")},
+            "attachments": [{"path": "capture.txt", "sha256": sha256(capture)}]}
+    return value
+
 def main():
-    if len(sys.argv) != 2:
+    global BACKEND, TARGET_PLATFORM, SYNTHETIC_REPO
+    if len(sys.argv) not in (2, 3):
         print("usage: skity_font_cli_smoke.py <skity-font>", file=sys.stderr)
         return 2
 
+    if len(sys.argv) == 3:
+        BACKEND = sys.argv[2]
+        TARGET_PLATFORM = {"freetype": "linux-freetype", "fontconfig": "linux-fontconfig",
+                           "coretext": "macos-coretext", "directwrite": "windows-directwrite"}[BACKEND]
     skity_font = Path(sys.argv[1])
     if not skity_font.is_file():
         print(f"skity-font binary does not exist: {skity_font}", file=sys.stderr)
@@ -267,6 +325,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="skity-font-cli-smoke-") as tmp:
         tmp_dir = Path(tmp)
         repo_root = tmp_dir / "repo"
+        SYNTHETIC_REPO = repo_root
+        write_json(repo_root / "environment.json", SNAPSHOT)
         case_path = repo_root / "cases/typeface.json"
         font_manager_case_path = repo_root / "cases/font_manager_default.json"
         manifest_path = repo_root / "manifests/smoke.json"

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "linux_freetype_metrics_smoke",
+  "backend": "freetype",
+  "platforms": [
+    "linux-freetype"
+  ],
+  "target_platform": "linux-freetype",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "font_metrics/roboto_regular_16_no_hinting_freetype.json",
+    "font_metrics/roboto_regular_32_no_hinting_freetype.json",
+    "font_metrics/roboto_regular_64_no_hinting_freetype.json",
+    "font_metrics/roboto_regular_96_no_hinting_freetype.json",
+    "glyph_metrics/roboto_regular_latin_normal_freetype.json",
+    "glyph_metrics/roboto_regular_latin_slight_freetype.json",
+    "glyph_metrics/roboto_regular_latin_full_freetype.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/linux-freetype",
+    "report_root": "local/font-harness/reports/linux-freetype"
+  }
+}

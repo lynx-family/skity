@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "linux_freetype_glyph_image_smoke",
+  "backend": "freetype",
+  "platforms": [
+    "linux-freetype"
+  ],
+  "target_platform": "linux-freetype",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "glyph_image/roboto_regular_latin_A_no_hinting_freetype.json",
+    "glyph_image/roboto_regular_latin_A_freetype.json",
+    "glyph_image/roboto_regular_latin_A_32_freetype.json",
+    "glyph_image/roboto_regular_latin_A_context_scale_2_freetype.json",
+    "glyph_image/roboto_regular_latin_A_stroke_freetype.json",
+    "glyph_image/roboto_regular_latin_A_diaeresis_freetype.json",
+    "glyph_image/noto_color_emoji_grinning_freetype.json",
+    "glyph_image/roboto_regular_space_descender_missing_freetype.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/linux-freetype",
+    "report_root": "local/font-harness/reports/linux-freetype"
+  }
+}

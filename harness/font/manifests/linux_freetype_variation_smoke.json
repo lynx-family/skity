@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "linux_freetype_variation_smoke",
+  "backend": "freetype",
+  "platforms": [
+    "linux-freetype"
+  ],
+  "target_platform": "linux-freetype",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "typeface_probe/roboto_flex_variation_axes_freetype.json",
+    "typeface_probe/roboto_flex_variation_wght_700_freetype.json",
+    "typeface_probe/roboto_flex_variation_wght_700_data_freetype.json",
+    "typeface_probe/roboto_flex_variation_multi_axis_freetype.json",
+    "typeface_probe/roboto_flex_variation_multi_axis_data_freetype.json",
+    "typeface_probe/roboto_flex_variation_hidden_axis_freetype.json",
+    "typeface_probe/roboto_flex_variation_hidden_axis_data_freetype.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/linux-freetype",
+    "report_root": "local/font-harness/reports/linux-freetype"
+  }
+}

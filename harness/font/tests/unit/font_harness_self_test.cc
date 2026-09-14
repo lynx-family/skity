@@ -8,17 +8,22 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <skity/graphic/path.hpp>
 #include <string>
 #include <string_view>
 
+#include "harness/font/artifact/artifact_validator.hpp"
 #include "harness/font/artifact/json_io.hpp"
+#include "harness/font/artifact/provenance.hpp"
 #include "harness/font/case/case_document.hpp"
+#include "harness/font/case/font_manager_contract.hpp"
 #include "harness/font/case/manifest_document.hpp"
 #include "harness/font/case/platform_target.hpp"
 #include "harness/font/case/repo_uri.hpp"
 #include "harness/font/compare/compare_engine.hpp"
 #include "harness/font/compare/path/path_normalizer.hpp"
+#include "harness/font/probe/backend_support.hpp"
 #if defined(_WIN32) && SKITY_FONT_HARNESS_HAS_DIRECTWRITE
 #include "harness/font/platform/directwrite/env_info.hpp"
 #endif
@@ -70,7 +75,48 @@ void WriteTextFile(const std::filesystem::path& path,
 
 void WriteJson(const std::filesystem::path& path, const Json::Value& root) {
   std::string error;
-  ASSERT_TRUE(WriteJsonFile(path, root, &error)) << error;
+  Json::Value value = root;
+  if (value["artifact_type"] == "font_probe_result") {
+    const auto repo = path.parent_path().parent_path();
+    Json::Value input;
+    for (const auto& entry :
+         std::filesystem::directory_iterator(repo / "cases")) {
+      ASSERT_TRUE(LoadJsonFile(entry.path(), &input, &error)) << error;
+      if (input["id"] == value["case_id"]) break;
+    }
+    const auto validation = ValidateCaseDocument(input, RepoUriResolver(repo));
+    ASSERT_TRUE(validation.valid)
+        << WriteJsonString(validation.errors.ToJson());
+    Json::Value environment(Json::objectValue);
+    environment["schema_version"] = 1;
+    environment["platform"] = "synthetic";
+    environment["fonts"] = Json::Value(Json::arrayValue);
+    const auto env_path = repo / "environment.json";
+    ASSERT_TRUE(WriteJsonFile(env_path, environment, &error)) << error;
+    ValidationContext errors;
+    AttachProbeInputs(validation, env_path, &value, &errors);
+    ASSERT_TRUE(errors.IsValid()) << WriteJsonString(errors.ToJson());
+    if (path.filename() == "expected.json") {
+      value["runner"] = "skia";
+      value["producer"] = "skia";
+      auto& p = value["provenance"];
+      p["version"] = 2;
+      p["profile"] = CaseProfile(input);
+      p["skia_commit"] = std::string(40, 'a');
+      for (const char* key :
+           {"runner_source", "runner_binary", "skia_library", "gn_args"}) {
+        p["audit"][key] = std::string(64, 'b');
+      }
+      WriteTextFile(path.parent_path() / "capture.txt",
+                    "synthetic unit fixture");
+      Json::Value attachment(Json::objectValue);
+      attachment["path"] = "capture.txt";
+      attachment["sha256"] = Sha256("synthetic unit fixture");
+      p["attachments"] = Json::Value(Json::arrayValue);
+      p["attachments"].append(attachment);
+    }
+  }
+  ASSERT_TRUE(WriteJsonFile(path, value, &error)) << error;
 }
 
 Json::Value MakeTypefaceCase() {
@@ -198,10 +244,39 @@ Json::Value MakeGlyphImageCase() {
 
 Json::Value MakeMetricSummary(double ascent) {
   Json::Value metrics(Json::objectValue);
+  for (const char* key :
+       {"top", "bottom", "x_height", "cap_height", "avg_char_width",
+        "max_char_width", "x_min", "x_max", "underline_thickness",
+        "underline_position", "strikeout_thickness", "strikeout_position"}) {
+    metrics[key] = 0.0;
+  }
   metrics["ascent"] = ascent;
   metrics["descent"] = 3.0;
   metrics["leading"] = 1.0;
   return metrics;
+}
+
+Json::Value MakeGlyphRequest() {
+  Json::Value glyph(Json::objectValue);
+  glyph["label"] = "U+0041";
+  glyph["char"] = "U+0041";
+  glyph["source"] = "char";
+  glyph["code_point"] = 65;
+  glyph["glyph_id"] = 1;
+  glyph["contains"] = true;
+  return glyph;
+}
+
+void AddProbeRequests(Json::Value* root, const std::string& key,
+                      const Json::Value& input) {
+  auto& probe = (*root)[key];
+  probe["category"] = input["category"];
+  probe["font_request"] = input["font_request"];
+  probe["typeface_source"]["entry"] = "MakeFromFile";
+  probe["typeface_source"]["font_file_id"] = "synthetic";
+  probe["typeface_source"]["collection_index"] = 0;
+  probe["glyph_requests"] = Json::Value(Json::arrayValue);
+  probe["glyph_requests"].append(MakeGlyphRequest());
 }
 
 Json::Value MakeProbeArtifact(int glyph_id) {
@@ -221,12 +296,21 @@ Json::Value MakeProbeArtifact(int glyph_id) {
   typeface["style"]["width"] = 5;
   typeface["style"]["slant"] = "upright";
   root["typeface_result"] = Json::Value(Json::objectValue);
+  root["typeface_result"]["identity"] = typeface;
+  root["typeface_result"]["identity"]["units_per_em"] = 1000;
+  root["typeface_result"]["identity"]["glyph_count"] = 3;
+  root["typeface_result"]["collection_index"] = 0;
+  root["typeface_result"]["request_entry"] = "MakeFromFile";
+  root["typeface_result"]["font_file_id"] = "synthetic";
+  root["typeface_result"]["font_file_uri"] = "repo://fonts/synthetic.ttf";
   root["typeface_result"]["typeface"] = std::move(typeface);
 
   Json::Value glyph(Json::objectValue);
   glyph["label"] = "U+0041";
   glyph["code_point"] = 65;
   glyph["glyph_id"] = glyph_id;
+  glyph["char"] = "U+0041";
+  glyph["contains"] = glyph_id != 0;
   root["typeface_probe"] = Json::Value(Json::objectValue);
   root["typeface_probe"]["units_per_em"] = 1000;
   root["typeface_probe"]["table_count"] = 1;
@@ -237,6 +321,8 @@ Json::Value MakeProbeArtifact(int glyph_id) {
   table["tag"] = "head";
   table["tag_value"] = 1751474532;
   table["size"] = 54;
+  table["full_copied_size"] = 54;
+  table["full_digest"] = "fnv1a64:fixture";
   root["typeface_probe"]["tables"] = Json::Value(Json::arrayValue);
   root["typeface_probe"]["tables"].append(std::move(table));
   return root;
@@ -256,6 +342,8 @@ Json::Value MakeFontManagerArtifact(bool available,
   root["font_manager_probe"] = Json::Value(Json::objectValue);
   root["font_manager_probe"]["operation"] = Json::Value(Json::objectValue);
   root["font_manager_probe"]["operation"]["entry"] = "MatchFamilyStyle";
+  root["font_manager_probe"]["request_input"] =
+      MakeFontManagerCase()["font_manager_request"];
   root["font_manager_probe"]["matched_typefaces"] =
       Json::Value(Json::arrayValue);
 
@@ -276,6 +364,7 @@ Json::Value MakeFontManagerArtifact(bool available,
     typeface["font_style"]["width"] = 5;
     typeface["font_style"]["slant"] = "upright";
     typeface["units_per_em"] = 1000;
+    typeface["identity"] = typeface["descriptor"];
   }
 
   typeface["probe_summary"] = Json::Value(Json::objectValue);
@@ -284,6 +373,7 @@ Json::Value MakeFontManagerArtifact(bool available,
       MakeMetricSummary(font_ascent);
   typeface["probe_summary"]["scaler_context_result"] =
       Json::Value(Json::objectValue);
+  typeface["probe_summary"]["scaler_context_result"]["available"] = true;
   typeface["probe_summary"]["scaler_context_result"]["font_metrics"] =
       MakeMetricSummary(scaler_ascent);
   typeface["probe_summary"]["glyphs"] = Json::Value(Json::arrayValue);
@@ -292,6 +382,8 @@ Json::Value MakeFontManagerArtifact(bool available,
   glyph["label"] = "U+0041";
   glyph["code_point"] = 65;
   glyph["glyph_id"] = glyph_id;
+  glyph["char"] = "U+0041";
+  glyph["contains"] = glyph_id != 0;
   typeface["probe_summary"]["glyphs"].append(std::move(glyph));
 
   root["font_manager_probe"]["matched_typefaces"].append(std::move(typeface));
@@ -314,14 +406,15 @@ void AddMatchedTypefaceTables(Json::Value* root, int head_table_size) {
 }
 
 void RunFontManagerCompare(TempDir* temp, const Json::Value& expected,
-                           const Json::Value& actual, CompareResult* result) {
+                           const Json::Value& actual, CompareResult* result,
+                           const Json::Value* case_override = nullptr) {
   const std::filesystem::path case_path =
       temp->root() / "cases/font_manager.json";
   const std::filesystem::path expected_path =
       temp->root() / "artifacts/expected.json";
   const std::filesystem::path actual_path =
       temp->root() / "artifacts/actual.json";
-  WriteJson(case_path, MakeFontManagerCase());
+  WriteJson(case_path, case_override ? *case_override : MakeFontManagerCase());
   WriteJson(expected_path, expected);
   WriteJson(actual_path, actual);
 
@@ -331,6 +424,7 @@ void RunFontManagerCompare(TempDir* temp, const Json::Value& expected,
   request.expected_path = expected_path;
   request.actual_path = actual_path;
   request.backend = kBackend;
+  request.environment_path = request.repo_root / "environment.json";
   *result = RunCompare(request);
 }
 
@@ -349,14 +443,17 @@ Json::Value MakeGlyphImageArtifact(double origin_y) {
   image["origin_y_for_raster"] = -46.0;
   image["width"] = 32.0;
   image["height"] = 48.0;
-  image["format"] = "A8";
+  image["format"] = "gray8";
   image["has_buffer"] = true;
   image["byte_size"] = 1536;
+  image["pixels_hex"] = std::string(3072, '0');
+  image["digest"] = "fnv1a64:6ab05ef9aa8b9b25";
 
   Json::Value glyph(Json::objectValue);
   glyph["label"] = "U+0041";
   glyph["code_point"] = 65;
   glyph["glyph_id"] = 1;
+  glyph["source"] = "char";
   glyph["image"] = std::move(image);
 
   root["glyph_image_probe"] = Json::Value(Json::objectValue);
@@ -365,6 +462,7 @@ Json::Value MakeGlyphImageArtifact(double origin_y) {
       Json::Value(Json::arrayValue);
   root["glyph_image_probe"]["font_result"]["glyph_images"].append(
       std::move(glyph));
+  AddProbeRequests(&root, "glyph_image_probe", MakeGlyphImageCase());
   return root;
 }
 
@@ -387,6 +485,7 @@ void RunGlyphImageCompare(TempDir* temp, const Json::Value& expected,
   request.expected_path = expected_path;
   request.actual_path = actual_path;
   request.backend = kBackend;
+  request.environment_path = request.repo_root / "environment.json";
   *result = RunCompare(request);
 }
 
@@ -412,7 +511,7 @@ Json::Value MakeSyntheticPath() {
   path["empty"] = false;
   path["finite"] = true;
   path["verb_count"] = 2;
-  path["point_count"] = 2;
+  path["point_count"] = 3;
   path["verb_sequence"] = Json::Value(Json::arrayValue);
   path["verb_sequence"].append("move");
   path["verb_sequence"].append("line");
@@ -460,6 +559,9 @@ Json::Value MakePathArtifact(bool use_normalized_path_field,
   glyph["label"] = "U+0041";
   glyph["code_point"] = 65;
   glyph["glyph_id"] = 1;
+  glyph["source"] = "char";
+  glyph["path_empty"] = false;
+  glyph["path_finite"] = true;
   glyph[use_normalized_path_field ? "normalized_path" : "path"] =
       MakeSyntheticPath();
 
@@ -476,11 +578,13 @@ Json::Value MakePathArtifact(bool use_normalized_path_field,
     root["glyph_path_probe"]["scaler_context_result"]["reason"] =
         "synthetic unavailable";
   } else {
+    root["glyph_path_probe"]["scaler_context_result"]["available"] = true;
     root["glyph_path_probe"]["scaler_context_result"]["glyph_paths"] =
         Json::Value(Json::arrayValue);
     root["glyph_path_probe"]["scaler_context_result"]["glyph_paths"].append(
         std::move(glyph));
   }
+  AddProbeRequests(&root, "glyph_path_probe", MakeGlyphPathCase());
   return root;
 }
 
@@ -492,10 +596,7 @@ Json::Value MakeMetricsArtifact(double ascent) {
   root["backend"] = kBackend;
   root["ok"] = true;
 
-  Json::Value font_metrics(Json::objectValue);
-  font_metrics["ascent"] = ascent;
-  font_metrics["descent"] = 3.0;
-  font_metrics["leading"] = 1.0;
+  Json::Value font_metrics = MakeMetricSummary(ascent);
 
   root["metrics_probe"] = Json::Value(Json::objectValue);
   root["metrics_probe"]["font_result"] = Json::Value(Json::objectValue);
@@ -504,6 +605,19 @@ Json::Value MakeMetricsArtifact(double ascent) {
       Json::Value(Json::objectValue);
   root["metrics_probe"]["scaler_context_result"]["font_metrics"] =
       std::move(font_metrics);
+  Json::Value glyph = MakeGlyphRequest();
+  glyph["glyph_data"]["glyph_id"] = 1;
+  for (const char* key :
+       {"advance_x", "advance_y", "left", "top", "width", "height"}) {
+    glyph["glyph_data"][key] = 0.0;
+  }
+  for (const char* branch : {"font_result", "scaler_context_result"}) {
+    auto& result = root["metrics_probe"][branch];
+    result["glyph_metrics"] = Json::Value(Json::arrayValue);
+    result["glyph_metrics"].append(glyph);
+  }
+  root["metrics_probe"]["scaler_context_result"]["available"] = true;
+  AddProbeRequests(&root, "metrics_probe", MakeMetricsCase());
   return root;
 }
 
@@ -519,7 +633,7 @@ TEST(FontHarnessCompareEngineTest,
       temp.root() / "artifacts/actual.json";
   WriteJson(case_path, MakeGlyphPathCase());
   WriteJson(expected_path, MakePathArtifact(/*use_normalized_path_field=*/false,
-                                            /*scaler_unavailable=*/true));
+                                            /*scaler_unavailable=*/false));
   WriteJson(actual_path, MakePathArtifact(/*use_normalized_path_field=*/true,
                                           /*scaler_unavailable=*/false));
 
@@ -529,6 +643,7 @@ TEST(FontHarnessCompareEngineTest,
   request.expected_path = expected_path;
   request.actual_path = actual_path;
   request.backend = kBackend;
+  request.environment_path = request.repo_root / "environment.json";
 
   CompareResult pass = RunCompare(request);
   EXPECT_EQ(CompareStatus::kPass, pass.status) << WriteJsonString(pass.report);
@@ -539,18 +654,20 @@ TEST(FontHarnessCompareEngineTest,
      ShortCircuitsFontManagerCompareWhenAvailabilityDiffers) {
   TempDir temp("font_manager_availability");
   CompareResult result;
-  RunFontManagerCompare(
-      &temp,
-      MakeFontManagerArtifact(/*available=*/false, "Synthetic-Regular",
-                              /*glyph_id=*/1, /*font_ascent=*/10.0,
-                              /*scaler_ascent=*/10.0),
-      MakeFontManagerArtifact(/*available=*/true, "Synthetic-Regular",
-                              /*glyph_id=*/2, /*font_ascent=*/12.0,
-                              /*scaler_ascent=*/12.0),
-      &result);
+  for (bool expected_available : {false, true}) {
+    RunFontManagerCompare(
+        &temp,
+        MakeFontManagerArtifact(expected_available, "Synthetic-Regular",
+                                /*glyph_id=*/1, /*font_ascent=*/10.0,
+                                /*scaler_ascent=*/10.0),
+        MakeFontManagerArtifact(!expected_available, "Synthetic-Regular",
+                                /*glyph_id=*/2, /*font_ascent=*/12.0,
+                                /*scaler_ascent=*/12.0),
+        &result);
 
-  ExpectSingleDiff(result, "selection_mismatch",
-                   "font_manager_probe.matched_typefaces[0].available");
+    ExpectSingleDiff(result, "selection_mismatch",
+                     "font_manager_probe.matched_typefaces[0].available");
+  }
 }
 
 TEST(FontHarnessCompareEngineTest,
@@ -861,6 +978,7 @@ TEST(FontHarnessCompareEngineTest, ReportsPassMismatchAndInputFailure) {
   request.expected_path = expected_path;
   request.actual_path = actual_path;
   request.backend = kBackend;
+  request.environment_path = request.repo_root / "environment.json";
 
   CompareResult pass = RunCompare(request);
   EXPECT_EQ(CompareStatus::kPass, pass.status);
@@ -903,6 +1021,7 @@ TEST(FontHarnessCompareEngineTest, ComparesMetricsWithEpsilon) {
   request.expected_path = expected_path;
   request.actual_path = actual_path;
   request.backend = kBackend;
+  request.environment_path = request.repo_root / "environment.json";
 
   CompareResult pass = RunCompare(request);
   EXPECT_EQ(CompareStatus::kPass, pass.status);
@@ -943,6 +1062,290 @@ TEST(FontHarnessPathNormalizerTest, DropsZeroLengthSegmentsAndRoundsPoints) {
   EXPECT_TRUE(normalized["contours"][0]["closed"].asBool());
   EXPECT_DOUBLE_EQ(0.0, normalized["verbs"][0]["points"][0]["x"].asDouble());
   EXPECT_DOUBLE_EQ(0.0, normalized["verbs"][0]["points"][0]["y"].asDouble());
+}
+
+TEST(FontHarnessFontManagerContractTest, PreservesNullEmptyAndMissingFamily) {
+  for (const auto& name :
+       {Json::Value(), Json::Value(""), Json::Value("missing")}) {
+    auto root = MakeFontManagerCase();
+    root["backend"] = "fontconfig";
+    root["platforms"][0] = "linux-fontconfig";
+    root["font_manager_request"]["entry"] = "MatchFamilyStyle";
+    root["font_manager_request"]["family_name"] = name;
+    ValidationContext errors;
+    ValidateFontManagerCase(root, &errors);
+    EXPECT_TRUE(errors.IsValid()) << WriteJsonString(errors.ToJson());
+    EXPECT_EQ(name, root["font_manager_request"]["family_name"]);
+  }
+  auto root = MakeFontManagerCase();
+  root["font_manager_request"].removeMember("family_name");
+  ValidationContext errors;
+  ValidateFontManagerCase(root, &errors);
+  EXPECT_TRUE(errors.IsValid());
+  EXPECT_FALSE(root["font_manager_request"].isMember("family_name"));
+}
+
+TEST(FontHarnessFontManagerContractTest,
+     ComparesAvailabilityWithoutExpectations) {
+  auto root = MakeFontManagerCase();
+  auto artifact = MakeFontManagerArtifact(false, "", 0, 0, 0);
+  for (bool available : {false, true}) {
+    artifact["font_manager_probe"]["matched_typefaces"][0]["available"] =
+        available;
+    ValidationContext unspecified;
+    ValidateFontManagerResult(root, artifact, &unspecified);
+    EXPECT_TRUE(unspecified.IsValid());
+    for (bool matched : {false, true}) {
+      root["font_manager_expectation"]["matched"] = matched;
+      ValidationContext explicit_expectation;
+      ValidateFontManagerResult(root, artifact, &explicit_expectation);
+      EXPECT_EQ(available == matched, explicit_expectation.IsValid());
+    }
+    root.removeMember("font_manager_expectation");
+  }
+  artifact["font_manager_probe"]["matched_typefaces"][0].removeMember(
+      "available");
+  ValidationContext missing_availability;
+  ValidateFontManagerResult(root, artifact, &missing_availability);
+  EXPECT_FALSE(missing_availability.IsValid());
+}
+
+TEST(FontHarnessFontManagerContractTest, PreservesDefaultMatchWithInventory) {
+  auto root = MakeFontManagerCase();
+  root["font_manager_expectation"]["inventory_count"] = 1;
+  auto artifact = MakeFontManagerArtifact(false, "", 0, 0, 0);
+  auto& state = artifact["font_manager_probe"]["font_manager"];
+  state["family_count"] = 1;
+  state["family_names"] = Json::Value(Json::arrayValue);
+  state["family_names"].append("Synthetic");
+  ValidationContext default_match;
+  ValidateFontManagerResult(root, artifact, &default_match);
+  EXPECT_FALSE(default_match.IsValid());
+
+  root["font_manager_expectation"]["matched"] = false;
+  ValidationContext explicit_absence;
+  ValidateFontManagerResult(root, artifact, &explicit_absence);
+  EXPECT_TRUE(explicit_absence.IsValid());
+}
+
+TEST(FontHarnessFontManagerContractTest, RejectsIncompleteInventory) {
+  auto root = MakeFontManagerCase();
+  root["font_manager_expectation"]["inventory_count"] = 2;
+  auto artifact = MakeFontManagerArtifact(true, "Synthetic-Regular", 1, 10, 10);
+  auto& state = artifact["font_manager_probe"]["font_manager"];
+  state["family_count"] = 2;
+  state["family_names"] = Json::Value(Json::arrayValue);
+  state["family_names"].append("One");
+  ValidationContext missing;
+  ValidateFontManagerResult(root, artifact, &missing);
+  EXPECT_FALSE(missing.IsValid());
+  state["family_names"].append("Two");
+  ValidationContext complete;
+  ValidateFontManagerResult(root, artifact, &complete);
+  EXPECT_TRUE(complete.IsValid());
+}
+
+TEST(FontHarnessFontManagerContractTest, RejectsInvalidScalarAndExpectation) {
+  auto root = MakeFontManagerCase();
+  root["font_manager_request"]["entry"] = "MatchFamilyStyleCharacter";
+  root["font_manager_request"]["character"] = "U+D800";
+  root["font_manager_expectation"]["matched"] = "yes";
+  ValidationContext errors;
+  ValidateFontManagerCase(root, &errors);
+  EXPECT_FALSE(errors.IsValid());
+  EXPECT_GE(errors.Errors().size(), 2u);
+}
+
+TEST(FontHarnessPlatformTargetTest,
+     SeparatesLinuxExplicitAndSystemCapabilities) {
+  ASSERT_NE(nullptr, FindPlatformTargetInfo("linux-freetype"));
+  ASSERT_NE(nullptr, FindPlatformTargetInfo("linux-fontconfig"));
+  EXPECT_TRUE(PlatformTargetMatchesBackend("freetype", "linux-freetype"));
+  EXPECT_FALSE(IsHostFontProbeBackendAvailable("freetype"));
+  EXPECT_FALSE(IsHostFontProbeBackendAvailable("fontconfig"));
+#if SKITY_FONT_HARNESS_HAS_FREETYPE
+  EXPECT_TRUE(IsExplicitSourceProbeBackendAvailable("freetype"));
+#endif
+}
+
+TEST(FontHarnessCompareEngineTest,
+     ComparesAbsenceAndEnforcesExplicitExpectation) {
+  TempDir temp("absence_contract");
+  auto absent = MakeFontManagerArtifact(false, "", 0, 0, 0);
+  CompareResult result;
+  RunFontManagerCompare(&temp, absent, absent, &result);
+  EXPECT_EQ(CompareStatus::kPass, result.status)
+      << WriteJsonString(result.report);
+  auto root = MakeFontManagerCase();
+  root["font_manager_expectation"]["matched"] = false;
+  RunFontManagerCompare(&temp, absent, absent, &result, &root);
+  EXPECT_EQ(CompareStatus::kPass, result.status)
+      << WriteJsonString(result.report);
+  root["font_manager_expectation"]["matched"] = true;
+  RunFontManagerCompare(&temp, absent, absent, &result, &root);
+  EXPECT_EQ(CompareStatus::kInputFailed, result.status);
+  EXPECT_FALSE(
+      result.report["artifact_validation"]["expected"]["valid"].asBool());
+  EXPECT_FALSE(
+      result.report["artifact_validation"]["actual"]["valid"].asBool());
+}
+
+TEST(FontHarnessFontManagerContractTest, EmptyStyleSetCannotReturnATypeface) {
+  auto root = MakeFontManagerCase();
+  root["category"] = "family_style_set";
+  root["font_manager_request"]["entry"] = "MatchFamily";
+  root["font_manager_expectation"]["style_count"] = 0;
+  Json::Value artifact(Json::objectValue);
+  auto& operation = artifact["font_manager_probe"]["operation"];
+  operation["entry"] = "MatchFamily";
+  auto& styles = operation["style_set"];
+  styles["style_count"] = 0;
+  styles["styles"] = Json::Value(Json::arrayValue);
+  styles["match_style"]["typeface"]["available"] = true;
+  ValidationContext wrong;
+  ValidateFontManagerResult(root, artifact, &wrong);
+  EXPECT_FALSE(wrong.IsValid());
+  styles["match_style"]["typeface"]["available"] = false;
+  ValidationContext empty;
+  ValidateFontManagerResult(root, artifact, &empty);
+  EXPECT_TRUE(empty.IsValid());
+}
+
+TEST(FontHarnessFingerprintTest, MatchesPublishedSha256Vectors) {
+  EXPECT_EQ("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            Sha256(""));
+  EXPECT_EQ("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            Sha256("abc"));
+  EXPECT_EQ("cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+            Sha256(std::string(1000000, 'a')));
+}
+
+TEST(FontHarnessFingerprintTest, IgnoresJsonLayoutButPreservesValues) {
+  Json::Value a(Json::objectValue), b(Json::objectValue);
+  a["number"] = 1;
+  a["name"] = "字体";
+  b["name"] = "字体";
+  b["number"] = 1.0;
+  EXPECT_EQ(JsonFingerprint(a), JsonFingerprint(b));
+  b["number"] = 2;
+  EXPECT_NE(JsonFingerprint(a), JsonFingerprint(b));
+  b["number"] = true;
+  EXPECT_NE(JsonFingerprint(a), JsonFingerprint(b));
+}
+
+TEST(FontHarnessArtifactContractTest, SameRulesForAllDesktopBackends) {
+  TempDir temp("desktop_contracts");
+  WriteTextFile(temp.root() / "fonts/synthetic.ttf", "synthetic font bytes");
+  for (const auto& backend : {"freetype", "directwrite", "coretext"}) {
+    auto input = MakeTypefaceCase();
+    input["backend"] = backend;
+    input["platforms"][0] =
+        std::string(backend) == "freetype"      ? "linux-freetype"
+        : std::string(backend) == "directwrite" ? "windows-directwrite"
+                                                : "macos-coretext";
+    auto artifact = MakeProbeArtifact(1);
+    artifact["backend"] = backend;
+    artifact["contract_version"] = 2;
+    const auto c = ValidateCaseDocument(input, RepoUriResolver(temp.root()));
+    auto valid = ValidateProbeForCase(c, artifact);
+    ASSERT_TRUE(valid.valid) << WriteJsonString(valid.errors.ToJson());
+    artifact["typeface_probe"]["glyphs"].clear();
+    EXPECT_FALSE(ValidateProbeForCase(c, artifact).valid);
+    artifact["typeface_probe"] = "malformed";
+    EXPECT_FALSE(ValidateProbeForCase(c, artifact).valid);
+  }
+}
+
+TEST(FontHarnessArtifactContractTest,
+     BothSidesMissingRequestCannotPassCompare) {
+  TempDir temp("same_omission");
+  WriteTextFile(temp.root() / "fonts/synthetic.ttf", "synthetic font bytes");
+  const auto case_path = temp.root() / "cases/case.json";
+  WriteJson(case_path, MakeTypefaceCase());
+  auto artifact = MakeProbeArtifact(1);
+  artifact["typeface_probe"]["glyphs"].clear();
+  const auto expected = temp.root() / "artifacts/expected.json";
+  const auto actual = temp.root() / "artifacts/actual.json";
+  WriteJson(expected, artifact);
+  WriteJson(actual, artifact);
+  CompareRequest request;
+  request.repo_root = temp.root();
+  request.case_path = case_path;
+  request.expected_path = expected;
+  request.actual_path = actual;
+  const auto result = RunCompare(request);
+  EXPECT_EQ(CompareStatus::kInputFailed, result.status);
+  EXPECT_EQ("artifact_schema", result.report["stage"].asString());
+}
+
+TEST(FontHarnessArtifactContractTest, RejectsOldVersionAndTruncatedPixels) {
+  TempDir temp("image_contract");
+  WriteTextFile(temp.root() / "fonts/synthetic.ttf", "synthetic font bytes");
+  auto c =
+      ValidateCaseDocument(MakeGlyphImageCase(), RepoUriResolver(temp.root()));
+  auto a = MakeGlyphImageArtifact(0);
+  EXPECT_FALSE(ValidateProbeForCase(c, a).valid);
+  a["contract_version"] = 2;
+  ASSERT_TRUE(ValidateProbeForCase(c, a).valid);
+  auto& images = a["glyph_image_probe"]["font_result"]["glyph_images"];
+  images[0]["image"]["pixels_hex"] = "00";
+  EXPECT_FALSE(ValidateProbeForCase(c, a).valid);
+  a = MakeGlyphImageArtifact(0);
+  a["contract_version"] = 2;
+  auto& image =
+      a["glyph_image_probe"]["font_result"]["glyph_images"][0]["image"];
+  image["byte_size"] = 0;
+  image["pixels_hex"] = "";
+  EXPECT_FALSE(ValidateProbeForCase(c, a).valid);
+  image["width"] = 0;
+  image["height"] = 0;
+  EXPECT_TRUE(ValidateProbeForCase(c, a).valid);
+}
+
+TEST(FontHarnessArtifactContractTest, AcceptsExactFloatRequestRepresentation) {
+  TempDir temp("float_request");
+  WriteTextFile(temp.root() / "fonts/synthetic.ttf", "synthetic font bytes");
+  auto input = MakeMetricsCase();
+  input["font_request"]["skew_x"] = 0.2;
+  const auto c = ValidateCaseDocument(input, RepoUriResolver(temp.root()));
+  auto artifact = MakeMetricsArtifact(1);
+  artifact["contract_version"] = 2;
+  artifact["metrics_probe"]["font_request"]["skew_x"] = 0.2f;
+  EXPECT_TRUE(ValidateProbeForCase(c, artifact).valid);
+  artifact["metrics_probe"]["font_request"]["skew_x"] = 0.21f;
+  EXPECT_FALSE(ValidateProbeForCase(c, artifact).valid);
+}
+
+TEST(FontHarnessArtifactContractTest, RejectsWrongLabelsAndNonfiniteMetrics) {
+  TempDir temp("metrics_contract");
+  WriteTextFile(temp.root() / "fonts/synthetic.ttf", "synthetic font bytes");
+  auto c =
+      ValidateCaseDocument(MakeMetricsCase(), RepoUriResolver(temp.root()));
+  auto a = MakeMetricsArtifact(1);
+  a["contract_version"] = 2;
+  ASSERT_TRUE(ValidateProbeForCase(c, a).valid);
+  a["metrics_probe"]["font_result"]["glyph_metrics"][0]["label"] = "U+0042";
+  EXPECT_FALSE(ValidateProbeForCase(c, a).valid);
+  a = MakeMetricsArtifact(std::numeric_limits<double>::infinity());
+  a["contract_version"] = 2;
+  EXPECT_FALSE(ValidateProbeForCase(c, a).valid);
+}
+
+TEST(FontHarnessArtifactContractTest,
+     RejectsInvalidPathsAndMissingScalerCapture) {
+  TempDir temp("path_contract");
+  WriteTextFile(temp.root() / "fonts/synthetic.ttf", "synthetic font bytes");
+  auto c =
+      ValidateCaseDocument(MakeGlyphPathCase(), RepoUriResolver(temp.root()));
+  auto a = MakePathArtifact(false, false);
+  a["contract_version"] = 2;
+  ASSERT_TRUE(ValidateProbeForCase(c, a).valid);
+  auto& paths = a["glyph_path_probe"]["font_result"]["glyph_paths"];
+  paths[0]["path"]["verbs"][0]["points"].clear();
+  EXPECT_FALSE(ValidateProbeForCase(c, a).valid);
+  a = MakePathArtifact(false, true);
+  a["contract_version"] = 2;
+  EXPECT_FALSE(ValidateProbeForCase(c, a).valid);
 }
 
 }  // namespace
