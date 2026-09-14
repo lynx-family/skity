@@ -37,6 +37,8 @@ GPUSurfaceImpl::GPUSurfaceImpl(const GPUSurfaceDescriptor& desc,
       content_scale_(desc.content_scale),
       coverage_aa_mode_(
           ResolveCoverageAAMode(desc.render_options.coverage_aa, *ctx)),
+      enable_path_shape_recognition_(
+          desc.render_options.enable_path_shape_recognition),
       ctx_(ctx),
       stage_buffer_(),
       canvas_() {}
@@ -50,6 +52,8 @@ GPUSurfaceImpl::GPUSurfaceImpl(const GPUSurfaceDescriptor& desc,
       content_scale_(desc.content_scale),
       coverage_aa_mode_(
           ResolveCoverageAAMode(desc.render_options.coverage_aa, *ctx)),
+      enable_path_shape_recognition_(
+          desc.render_options.enable_path_shape_recognition),
       ctx_(ctx),
       stage_buffer_(),
       static_buffer_(std::move(static_buffer)),

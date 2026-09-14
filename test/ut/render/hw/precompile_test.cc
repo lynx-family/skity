@@ -4,8 +4,12 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <array>
+#include <chrono>
 #include <memory>
 #include <skity/effect/color_filter.hpp>
+#include <skity/effect/path_effect.hpp>
 #include <skity/effect/shader.hpp>
 #include <skity/geometry/rrect.hpp>
 #include <skity/graphic/image.hpp>
@@ -86,11 +90,25 @@ class FakeBlitPass : public GPUBlitPass {
 
 class FakeRenderPass : public GPURenderPass {
  public:
-  explicit FakeRenderPass(const GPURenderPassDescriptor& desc)
-      : GPURenderPass(desc) {}
+  FakeRenderPass(const GPURenderPassDescriptor& desc,
+                 std::vector<uint32_t>& instance_counts, uint32_t& rrect_draws)
+      : GPURenderPass(desc),
+        instance_counts_(instance_counts),
+        rrect_draws_(rrect_draws) {}
 
   void EncodeCommands(std::optional<GPUViewport> = std::nullopt,
-                      std::optional<GPUScissorRect> = std::nullopt) override {}
+                      std::optional<GPUScissorRect> = std::nullopt) override {
+    for (const auto* command : GetCommands()) {
+      instance_counts_.push_back(command->instance_count);
+      if (command->pipeline->GetDescriptor().vertex_function->GetLabel().find(
+              "RRect") != std::string::npos)
+        ++rrect_draws_;
+    }
+  }
+
+ private:
+  std::vector<uint32_t>& instance_counts_;
+  uint32_t& rrect_draws_;
 };
 
 class FakeCommandBuffer : public GPUCommandBuffer {
@@ -98,7 +116,8 @@ class FakeCommandBuffer : public GPUCommandBuffer {
   std::shared_ptr<GPURenderPass> BeginRenderPass(
       const GPURenderPassDescriptor& desc) override {
     render_pass_count_++;
-    return std::make_shared<FakeRenderPass>(desc);
+    return std::make_shared<FakeRenderPass>(desc, instance_counts_,
+                                            rrect_draws_);
   }
 
   std::shared_ptr<GPUBlitPass> BeginBlitPass() override {
@@ -108,9 +127,16 @@ class FakeCommandBuffer : public GPUCommandBuffer {
   bool Submit(const GPUSubmitInfo* = nullptr) override { return true; }
 
   uint32_t render_pass_count() const { return render_pass_count_; }
+  uint32_t rrect_draws() const { return rrect_draws_; }
+
+  const std::vector<uint32_t>& instance_counts() const {
+    return instance_counts_;
+  }
 
  private:
   uint32_t render_pass_count_ = 0;
+  uint32_t rrect_draws_ = 0;
+  std::vector<uint32_t> instance_counts_;
 };
 
 class FakeGPUDevice : public GPUDevice {
@@ -219,6 +245,16 @@ class FakeGPUDevice : public GPUDevice {
     return last_command_buffer_ == nullptr
                ? 0u
                : last_command_buffer_->render_pass_count();
+  }
+
+  std::vector<uint32_t> last_instance_counts() const {
+    return last_command_buffer_ == nullptr
+               ? std::vector<uint32_t>{}
+               : last_command_buffer_->instance_counts();
+  }
+
+  uint32_t last_rrect_draws() const {
+    return last_command_buffer_ ? last_command_buffer_->rrect_draws() : 0;
   }
 
   uint32_t disallowed_shader_function_count() const {
@@ -1180,6 +1216,289 @@ TEST(PrecompileDrawTest, PrecompiledRRectPipelineIsHitByRealDraw) {
   ExpectRealDrawHitsPrecompiledPipeline(
       context, PrecompileDrawType::kDrawRRect, paint, false,
       [&](Canvas* canvas) { canvas->DrawRRect(rrect, paint); });
+}
+
+Path MakeCanvasRRectPath(bool closed = true) {
+  Path path;
+  path.MoveTo(-6, -6).LineTo(6, -6).ArcTo(8, -6, 8, -4, 2);
+  path.LineTo(8, 4).ArcTo(8, 6, 6, 6, 2);
+  path.LineTo(-6, 6).ArcTo(-8, 6, -8, 4, 2);
+  path.LineTo(-8, -4).ArcTo(-8, -6, -6, -6, 2);
+  if (closed) path.Close();
+  return path;
+}
+
+TEST(SimpleShapeDrawTest, AffinePathsUseRRectPipelineAndMerge) {
+  Path paths[4];
+  const Rect bounds = Rect::MakeLTRB(-8.f, -6.f, 8.f, 6.f);
+  paths[0].AddRect(bounds);
+  paths[1].AddOval(bounds);
+  paths[2].AddRoundRect(bounds, 2.f, 3.f);
+  paths[3] = MakeCanvasRRectPath();
+  ASSERT_EQ(paths[3].GetIsAType(), Path::IsAType::kGeneral);
+
+  // Exact 90 degrees has zero diagonal entries but is still invertible.
+  Matrix quarter_turn = Matrix::Scale(0.f, 0.f);
+  quarter_turn.SetSkewX(-1.f);
+  quarter_turn.SetSkewY(1.f);
+  const Matrix transforms[] = {
+      Matrix::RotateDeg(5.f), Matrix::RotateDeg(45.f), quarter_turn,
+      Matrix::Skew(0.4f, -0.2f),
+      Matrix::RotateDeg(30.f) * Matrix::Scale(-2.f, 0.5f)};
+  for (size_t shape = 0; shape < 4; ++shape) {
+    for (size_t transform = 0; transform < 5; ++transform) {
+      for (auto style : {Paint::kFill_Style, Paint::kStroke_Style}) {
+        if (shape == 0 && style == Paint::kFill_Style) continue;
+        SCOPED_TRACE(::testing::Message()
+                     << "shape=" << shape << " transform=" << transform
+                     << " style=" << static_cast<int>(style));
+        FakeGPUContext context;
+        ASSERT_TRUE(context.Init());
+        context.SetEnableSimpleShapePipeline(true);
+        context.SetEnableGPUTessellation(false);
+        context.SetEnableMergingDrawCall(true);
+        GPUSurfaceDescriptor desc{};
+        desc.width = 128;
+        desc.height = 128;
+        desc.render_options.enable_path_shape_recognition = true;
+        auto surface = context.CreateSurface(&desc);
+        auto* canvas = surface->LockCanvas();
+        Paint paint;
+        paint.SetAntiAlias(true);
+        paint.SetStyle(style);
+        paint.SetStrokeWidth(2.f);
+        for (int i = 0; i < 2; ++i) {
+          canvas->SetMatrix(
+              Matrix::Translate(32.f + i * 64.f, 32.f + i * 64.f) *
+              transforms[transform]);
+          canvas->DrawPath(paths[shape], paint);
+        }
+        canvas->Flush();
+        surface->Flush();
+        EXPECT_TRUE(
+            context.device()->HasVertexFunctionLabelContaining("RRect"));
+        EXPECT_FALSE(
+            context.device()->HasVertexFunctionLabelContaining("Path"));
+        EXPECT_EQ(context.device()->last_instance_counts(),
+                  std::vector<uint32_t>{2u});
+        EXPECT_EQ(paths[3].GetIsAType(), Path::IsAType::kGeneral);
+      }
+    }
+  }
+}
+
+TEST(SimpleShapeDrawTest, CanvasRRectRecognitionIsDrawLocal) {
+  auto draw = [](const Path& path, const Paint& paint, bool enabled,
+                 bool expect_rrect) {
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    context.SetEnableSimpleShapePipeline(enabled);
+    context.SetEnableGPUTessellation(false);
+    GPUSurfaceDescriptor desc{};
+    desc.width = 64;
+    desc.height = 64;
+    desc.render_options.enable_path_shape_recognition = true;
+    auto surface = context.CreateSurface(&desc);
+    auto* canvas = surface->LockCanvas();
+    canvas->Translate(32, 32);
+    const auto direction = path.GetFirstDirection();
+    const auto fill = path.GetFillType();
+    const std::vector<Point> points(path.Points(),
+                                    path.Points() + path.CountPoints());
+    const std::vector<Path::Verb> verbs(path.VerbsBegin(), path.VerbsEnd());
+    const std::vector<float> weights(path.ConicWeights(),
+                                     path.ConicWeights() + 4);
+    ASSERT_EQ(path.GetIsAType(), Path::IsAType::kGeneral);
+    canvas->DrawPath(path, paint);
+    canvas->Flush();
+    surface->Flush();
+    EXPECT_EQ(context.device()->HasVertexFunctionLabelContaining("RRect"),
+              expect_rrect);
+    EXPECT_FALSE(context.device()->last_instance_counts().empty());
+    EXPECT_EQ(path.GetIsAType(), Path::IsAType::kGeneral);
+    EXPECT_EQ(path.GetFirstDirection(), direction);
+    EXPECT_EQ(path.GetFillType(), fill);
+    EXPECT_EQ(
+        std::vector<Point>(path.Points(), path.Points() + path.CountPoints()),
+        points);
+    EXPECT_EQ(std::vector<Path::Verb>(path.VerbsBegin(), path.VerbsEnd()),
+              verbs);
+    EXPECT_EQ(std::vector<float>(path.ConicWeights(), path.ConicWeights() + 4),
+              weights);
+  };
+  Path path = MakeCanvasRRectPath(false);
+  path.SetFillType(Path::PathFillType::kEvenOdd);
+  Paint paint;
+  paint.SetAntiAlias(true);
+  draw(path, paint, true, true);
+  for (auto style : {Paint::kStroke_Style, Paint::kStrokeAndFill_Style}) {
+    paint.SetStyle(style);
+    paint.SetStrokeWidth(2);
+    draw(path, paint, true, false);
+  }
+  paint.SetStyle(Paint::kFill_Style);
+  path.Close();
+  draw(path, paint, false, false);
+  draw(path, paint, true, true);
+  // Draw cannot leave a success/failure cache behind on this mutable Path.
+  path.SetLastPt(-5, -6);
+  draw(path, paint, true, false);
+  path.SetLastPt(-6, -6);
+  draw(path, paint, true, true);
+  path.MoveTo(10, 10).LineTo(12, 12).Close();
+  draw(path, paint, true, false);
+
+  path = MakeCanvasRRectPath();
+  paint.SetStyle(Paint::kStroke_Style);
+  paint.SetStrokeWidth(2);
+  float intervals[] = {3, 2};
+  paint.SetPathEffect(PathEffect::MakeDashPathEffect(intervals, 2, 1));
+  draw(path, paint, true, false);
+}
+
+TEST(SimpleShapeDrawTest, RecognitionIsOptInPerSurface) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableSimpleShapePipeline(true);
+  context.SetEnableGPUTessellation(false);
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 64;
+  ASSERT_FALSE(desc.render_options.enable_path_shape_recognition);
+  auto disabled = context.CreateSurface(&desc);
+  desc.render_options.enable_path_shape_recognition = true;
+  auto enabled = context.CreateSurface(&desc);
+  // Descriptors are captured at construction, not referenced by the Surface.
+  desc.render_options.enable_path_shape_recognition = false;
+  auto path = MakeCanvasRRectPath();
+  path.SetFillType(Path::PathFillType::kEvenOdd);
+  const Path original = path;
+  auto draw = [&](GPUSurface* surface, const Path& input, bool save_layer,
+                  bool expect_rrect) {
+    SCOPED_TRACE(::testing::Message()
+                 << "layer=" << save_layer << " expected=" << expect_rrect);
+    auto* canvas = surface->LockCanvas();
+    canvas->SetMatrix(Matrix::Translate(32, 32));
+    if (save_layer)
+      canvas->SaveLayer(Rect::MakeLTRB(-16, -16, 16, 16), Paint{});
+    Paint paint;
+    paint.SetStyle(Paint::kStroke_Style);
+    paint.SetStrokeWidth(2);
+    canvas->DrawPath(input, paint);
+    if (save_layer) canvas->Restore();
+    canvas->Flush();
+    surface->Flush();
+    EXPECT_EQ(context.device()->last_rrect_draws() != 0, expect_rrect);
+    EXPECT_FALSE(context.device()->last_instance_counts().empty());
+  };
+  for (bool pipeline : {false, true}) {
+    context.SetEnableSimpleShapePipeline(pipeline);
+    for (bool layer : {false, true}) {
+      draw(disabled.get(), path, layer, false);
+      draw(enabled.get(), path, layer, pipeline);
+      draw(disabled.get(), path, layer, false);
+      ASSERT_EQ(path.CountPoints(), original.CountPoints());
+      ASSERT_EQ(path.CountVerbs(), original.CountVerbs());
+      for (size_t i = 0; i < path.CountPoints(); ++i)
+        EXPECT_EQ(path.GetPoint(i), original.GetPoint(i));
+      for (size_t i = 0; i < path.CountVerbs(); ++i)
+        EXPECT_EQ(path.GetVerb(i), original.GetVerb(i));
+      for (int i = 0; i < 4; ++i)
+        EXPECT_EQ(path.ConicWeights()[i], original.ConicWeights()[i]);
+      EXPECT_EQ(path.GetIsAType(), Path::IsAType::kGeneral);
+      EXPECT_EQ(path.GetFillType(), original.GetFillType());
+      EXPECT_EQ(path.GetFirstDirection(), original.GetFirstDirection());
+    }
+  }
+  // Existing metadata still dispatches with recognition disabled.
+  std::array<Path, 3> known;
+  known[0].AddRect(Rect::MakeLTRB(-8, -6, 8, 6));
+  known[1].AddOval(Rect::MakeLTRB(-8, -6, 8, 6));
+  known[2].AddRoundRect(Rect::MakeLTRB(-8, -6, 8, 6), 2, 2);
+  for (const auto& shape : known) {
+    draw(disabled.get(), shape.CopyWithScale(-2), false, true);
+  }
+  for (bool recognition : {false, true}) {
+    GPURenderTargetDescriptor target_desc{};
+    target_desc.width = target_desc.height = 64;
+    target_desc.render_options.enable_path_shape_recognition = recognition;
+    auto target = context.CreateRenderTarget(target_desc);
+    ASSERT_NE(target, nullptr);
+    target->GetCanvas()->Translate(32, 32);
+    target->GetCanvas()->DrawPath(path, Paint{});
+    ASSERT_NE(context.MakeSnapshot(std::move(target)), nullptr);
+    EXPECT_EQ(context.device()->last_rrect_draws() != 0, recognition);
+  }
+}
+
+// CPU DrawPath recording only. Flush/compilation, setup and inspection are not
+// timed; fake GPU results say nothing about real GPU time or frame throughput.
+TEST(SimpleShapeDrawTest, DISABLED_RecognitionDrawMicrobenchmark) {
+  Path triangle;
+  triangle.MoveTo(-8, -6).LineTo(8, -6).LineTo(0, 6).Close();
+  const auto rrect = MakeCanvasRRectPath();
+  for (const auto& path : {triangle, rrect}) {
+    for (bool recognition : {false, true}) {
+      FakeGPUContext context;
+      ASSERT_TRUE(context.Init());
+      context.SetEnableSimpleShapePipeline(true);
+      context.SetEnableGPUTessellation(false);
+      GPUSurfaceDescriptor desc{};
+      desc.width = desc.height = 64;
+      desc.render_options.enable_path_shape_recognition = recognition;
+      auto surface = context.CreateSurface(&desc);
+      std::array<double, 5> samples;
+      for (auto& sample : samples) {
+        auto* canvas = surface->LockCanvas();
+        canvas->SetMatrix(Matrix::Translate(32, 32));
+        Paint paint;
+        const auto start = std::chrono::steady_clock::now();
+        for (int i = 0; i < 5000; ++i) canvas->DrawPath(path, paint);
+        const auto end = std::chrono::steady_clock::now();
+        sample = std::chrono::duration<double, std::nano>(end - start).count() /
+                 5000;
+        canvas->Flush();
+        surface->Flush();
+        EXPECT_EQ(context.device()->last_rrect_draws() != 0,
+                  recognition && path.CountVerbs() == 14);
+      }
+      std::sort(samples.begin(), samples.end());
+      RecordProperty(
+          std::string(path.CountVerbs() == 14 ? "rrect" : "triangle") +
+              (recognition ? "_on_median_ns" : "_off_median_ns"),
+          std::to_string(samples[2]));
+    }
+  }
+}
+
+TEST(SimpleShapeDrawTest, UnsupportedMatricesKeepPathFallback) {
+  Matrix non_planar;
+  non_planar.Set(0, 2, 0.25f);
+  non_planar.Set(2, 0, 0.25f);
+  Matrix perspective;
+  perspective.Set(3, 0, 0.01f);
+  Path explicit_shape;
+  explicit_shape.AddRoundRect(Rect::MakeXYWH(-8, -6, 16, 12), 2, 2);
+  for (const auto& transform : {non_planar, perspective, Matrix::Skew(1.f, 1.f),
+                                Matrix::Scale(0.f, 1.f)}) {
+    for (const auto& path : {explicit_shape, MakeCanvasRRectPath()}) {
+      FakeGPUContext context;
+      ASSERT_TRUE(context.Init());
+      context.SetEnableSimpleShapePipeline(true);
+      context.SetEnableGPUTessellation(false);
+      GPUSurfaceDescriptor desc{};
+      desc.width = 64;
+      desc.height = 64;
+      desc.render_options.enable_path_shape_recognition = true;
+      auto surface = context.CreateSurface(&desc);
+      auto* canvas = surface->LockCanvas();
+      canvas->Translate(32, 32);
+      canvas->Concat(transform);
+      canvas->DrawPath(path, Paint{});
+      canvas->Flush();
+      surface->Flush();
+      EXPECT_FALSE(context.device()->HasVertexFunctionLabelContaining("RRect"));
+    }
+  }
 }
 
 TEST(PrecompileDrawTest,

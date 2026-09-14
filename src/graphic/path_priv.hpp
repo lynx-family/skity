@@ -18,6 +18,13 @@ namespace skity {
 
 class PathPriv {
  public:
+  // Recognize four exact quarter conics and their tangent sides in either
+  // direction, starting at any tangent. Redundant zero-length lines are
+  // allowed. allow_open permits implicit closing for fill-only draws, never
+  // strokes. Does not change path metadata. On failure, leaves rrect unchanged.
+  static bool RecognizeCanvasRRect(const Path& path, RRect* rrect,
+                                   bool allow_open = false);
+
   struct Iterate {
     explicit Iterate(Path const& path)
         : Iterate(path.VerbsBegin(),

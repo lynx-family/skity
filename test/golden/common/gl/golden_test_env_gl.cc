@@ -134,6 +134,9 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvGL::RenderToTexture(
   surface_desc.has_stencil_attachment = has_stencil_attachment;
   surface_desc.surface_mode = surface_mode_.value_or(GLSurfaceMode::kAuto);
 
+  surface_desc.render_options.enable_path_shape_recognition =
+      IsPathShapeRecognitionEnabled();
+
   auto surface = GetGPUContext()->CreateSurface(&surface_desc);
 
   if (!surface) {

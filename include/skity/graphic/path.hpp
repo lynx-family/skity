@@ -573,6 +573,7 @@ class SKITY_API Path {
   int LeadingMoveToCount() const;
   inline const Point& AtPoint(int32_t index) const { return points_[index]; }
   bool HasOnlyMoveTos() const;
+  void PreserveSimpleShape(const Path& src, const Matrix& matrix);
   void MarkBoundsDirty() const { bounds_dirty_ = true; }
 
   bool IsZeroLengthSincePoint(int startPtIndex) const;

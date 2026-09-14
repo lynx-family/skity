@@ -4,7 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <skity/io/parse_path.hpp>
 #include <skity/recorder/picture_recorder.hpp>
@@ -12,6 +14,7 @@
 #include <string>
 
 #include "common/golden_test_check.hpp"
+#include "common/golden_test_env.hpp"
 
 static const char* kGoldenTestImageSimpleDir = CASE_DIR;
 static const char* kGoldenTestImageCPUTessDir = CASE_DIR "cpu_tess_images/";
@@ -619,4 +622,536 @@ TEST(SimpleShapeGolden, DrawDRRect2) {
   PathListContext context("draw_drrect2.png");
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 240, 240,
                                                    context.ToPathList()));
+}
+
+// Compare transformed metadata dispatch with explicit shapes, and effect
+// fallback with the exact original verbs. Both renders enable the pipeline.
+TEST(SimpleShapeGolden, PreservedPathSemantics) {
+  using P = skity::Path;
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  auto* gpu = env->GetGPUContext();
+  const bool was_enabled = gpu->IsEnableSimpleShapePipeline();
+  const bool was_recognition = env->IsPathShapeRecognitionEnabled();
+  const bool was_gpu_tessellation = gpu->IsEnableGPUTessellation();
+  env->SetPathShapeRecognition(true);
+  gpu->SetEnableSimpleShapePipeline(true);
+  gpu->SetEnableGPUTessellation(false);
+  auto render = [](skity::Canvas* canvas, bool reference) {
+    for (int shape = 0; shape < 4; ++shape) {
+      for (int style = 0; style < 7; ++style) {
+        P src;
+        auto rect = skity::Rect::MakeWH(40, 30);
+        if (shape == 0) src.AddRect(rect, P::Direction::kCCW, 2);
+        if (shape == 1) src.AddOval(rect, P::Direction::kCCW, 3);
+        if (shape == 2) src.AddRoundRect(rect, 5, 8, P::Direction::kCCW);
+        if (shape == 3) {
+          // Canvas clockwise round rect, with arcTo's repeated tangent lines.
+          src.MoveTo(5, 0).LineTo(35, 0).ArcTo(40, 0, 40, 5, 5);
+          src.LineTo(40, 25).ArcTo(40, 30, 35, 30, 5);
+          src.LineTo(5, 30).ArcTo(0, 30, 0, 25, 5);
+          src.LineTo(0, 5).ArcTo(0, 0, 5, 0, 5).Close();
+          EXPECT_EQ(src.GetIsAType(), P::IsAType::kGeneral);
+        }
+        P path;
+        // Preserve reflection coverage for explicit metadata; keep the Canvas
+        // contour clockwise so its final command pattern is recognized at Draw.
+        auto matrix = skity::Matrix::Scale(shape == 3 ? 2 : -2, 1.5f);
+        matrix.SetTranslateX((shape == 3 ? 20 : 100) + shape * 120);
+        matrix.SetTranslateY(20 + style * 85);
+        if (style % 2) {
+          path = src.CopyWithMatrix(matrix);
+        } else {
+          path.AddPath(src, matrix);
+        }
+        EXPECT_EQ(path.GetIsAType(), src.GetIsAType());
+        skity::Paint paint;
+        paint.SetAntiAlias(true);
+        paint.SetColor(skity::Color_GREEN);
+        paint.SetStrokeWidth(5);
+        paint.SetStrokeCap(skity::Paint::kRound_Cap);
+        paint.SetStyle(style == 0 ? skity::Paint::kFill_Style
+                                  : skity::Paint::kStroke_Style);
+        skity::Point pts[] = {{0, 0, 0, 1}, {360, 450, 0, 1}};
+        skity::Vec4 colors[] = {skity::Color4fFromColor(skity::Color_RED),
+                                skity::Color4fFromColor(skity::Color_BLUE)};
+        paint.SetShader(skity::Shader::MakeLinear(pts, colors, nullptr, 2));
+        if (style == 2) {
+          float intervals[] = {11, 7};
+          paint.SetPathEffect(
+              skity::PathEffect::MakeDashPathEffect(intervals, 2, 3));
+        } else if (style == 3) {
+          paint.SetPathEffect(skity::PathEffect::MakeDiscretePathEffect(7, 2));
+        } else if (style == 4) {
+          // Editing must invalidate the retained metadata.
+          auto last = path.GetPoint(path.CountPoints() - 1);
+          path.SetLastPt(last.x + 4, last.y + 3);
+          EXPECT_EQ(path.GetIsAType(), P::IsAType::kGeneral);
+        }
+        canvas->Save();
+        if (style == 5) {
+          canvas->Rotate(5, 100 + shape * 120, 20 + style * 85);
+        } else if (style == 6) {
+          skity::Matrix transform;
+          transform.Set(0, 2, 0.25f);
+          transform.Set(2, 0, 0.25f);
+          canvas->Concat(transform);
+        }
+        if (reference && (style < 2 || style == 5)) {
+          skity::RRect rr;
+          if (shape == 0) rr.SetRect(path.GetBounds());
+          if (shape == 1) rr.SetOval(path.GetBounds());
+          if (shape == 2) rr.SetRectXY(path.GetBounds(), 10, 12);
+          if (shape == 3) rr.SetRectXY(path.GetBounds(), 10, 7.5f);
+          canvas->DrawRRect(rr, paint);
+        } else {
+          if (reference) {
+            auto last = path.GetPoint(path.CountPoints() - 1);
+            path.SetLastPt(last.x, last.y);
+          }
+          canvas->DrawPath(path, paint);
+        }
+        canvas->Restore();
+      }
+    }
+  };
+  auto reference = env->RenderToTexture(
+      500, 620, [&](skity::Canvas* canvas) { render(canvas, true); });
+  env->SetPathShapeRecognition(was_recognition);
+  gpu->SetEnableSimpleShapePipeline(was_enabled);
+  gpu->SetEnableGPUTessellation(was_gpu_tessellation);
+  ASSERT_NE(reference, nullptr);
+  auto expected = std::filesystem::temp_directory_path() /
+                  "skity_preserved_path_semantics.png";
+  ASSERT_TRUE(env->SaveGoldenImage(reference->ReadPixels(), expected.c_str()));
+  skity::testing::GoldenTestEnvConfig config;
+  config.enable_simple_shape_pipeline = true;
+  config.enable_path_shape_recognition = true;
+  config.require_exact_pixel_match = true;
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      500, 620, expected.c_str(), config,
+      [&](skity::Canvas* canvas) { render(canvas, false); }));
+  if (!::testing::Test::HasFailure()) std::filesystem::remove(expected);
+}
+
+TEST(SimpleShapeGolden, ThinStrokeDeviceWidthAndCoverage) {
+  struct StrokeCase {
+    float width;
+    float scale_x;
+    float scale_y;
+    float device_width_x;
+    float device_width_y;
+  };
+  const StrokeCase cases[] = {
+      {0.25f, 8.f, 8.f, 2.f, 2.f},     {0.25f, 2.f, 2.f, 0.5f, 0.5f},
+      {0.75f, 1.f, 1.f, 0.75f, 0.75f}, {0.01f, 8.f, 8.f, 0.5f, 0.5f},
+      {0.f, 8.f, 8.f, 0.5f, 0.5f},     {0.25f, 8.f, 2.f, 2.f, 0.5f},
+      {0.25f, -8.f, 2.f, 2.f, 0.5f},
+  };
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  auto* gpu = env->GetGPUContext();
+  const bool was_enabled = gpu->IsEnableSimpleShapePipeline();
+  const bool was_recognition = env->IsPathShapeRecognitionEnabled();
+  const auto sample_count = env->GetSampleCount();
+  for (const auto& stroke : cases) {
+    for (int shape = 0; shape < 3; ++shape) {
+      for (auto samples : {1u, 4u}) {
+        for (float phase : {0.f, 0.5f}) {
+          SCOPED_TRACE(::testing::Message()
+                       << "width=" << stroke.width
+                       << " scale=" << stroke.scale_x << "," << stroke.scale_y
+                       << " shape=" << shape << " samples=" << samples
+                       << " phase=" << phase);
+          env->SetPathShapeRecognition(true);
+          gpu->SetEnableSimpleShapePipeline(true);
+          env->SetSampleCount(samples);
+          auto texture =
+              env->RenderToTexture(128, 128, [&](skity::Canvas* canvas) {
+                canvas->Clear(skity::Color_TRANSPARENT);
+                canvas->Translate(80.f + phase, 16.f + phase);
+                canvas->Scale(stroke.scale_x, stroke.scale_y);
+                skity::Paint paint;
+                paint.SetColor(skity::Color_WHITE);
+                paint.SetAntiAlias(true);
+                paint.SetStyle(skity::Paint::kStroke_Style);
+                paint.SetStrokeWidth(stroke.width);
+                auto rect = skity::Rect::MakeWH(8.f, 8.f);
+                if (shape == 0) {
+                  skity::Path source;
+                  source.AddRect(rect);
+                  // Exercise metadata newly preserved by CopyWithMatrix.
+                  canvas->DrawPath(source.CopyWithMatrix(skity::Matrix{}),
+                                   paint);
+                } else if (shape == 1) {
+                  skity::Path path;
+                  path.MoveTo(2, 0).LineTo(6, 0).ArcTo(8, 0, 8, 2, 2);
+                  path.LineTo(8, 6).ArcTo(8, 8, 6, 8, 2);
+                  path.LineTo(2, 8).ArcTo(0, 8, 0, 6, 2);
+                  path.LineTo(0, 2).ArcTo(0, 0, 2, 0, 2).Close();
+                  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+                  canvas->DrawPath(path, paint);
+                  EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+                } else {
+                  canvas->DrawRRect(skity::RRect::MakeRectXY(rect, 2.f, 2.f),
+                                    paint);
+                }
+              });
+          env->SetPathShapeRecognition(was_recognition);
+          gpu->SetEnableSimpleShapePipeline(was_enabled);
+          env->SetSampleCount(sample_count);
+          ASSERT_NE(texture, nullptr);
+          auto pixels = texture->ReadPixels();
+          ASSERT_NE(pixels, nullptr);
+          // Away from corners, coverage is the exact overlap of the stroke
+          // band and a unit pixel. Check both edges under nonuniform scale.
+          for (int offset = -5; offset <= 5; ++offset) {
+            for (int axis = 0; axis < 2; ++axis) {
+              const float width =
+                  axis == 0 ? stroke.device_width_x : stroke.device_width_y;
+              const float overlap =
+                  std::max(0.f, std::min(offset + 1.f - phase, width * 0.5f) -
+                                    std::max(offset - phase, -width * 0.5f));
+              const int x = axis == 0
+                                ? 80 + offset
+                                : 80 + static_cast<int>(4 * stroke.scale_x);
+              const int y = axis == 1
+                                ? 16 + offset
+                                : 16 + static_cast<int>(4 * stroke.scale_y);
+              EXPECT_NEAR(pixels->Addr8(x, y)[3], overlap * 255.f, 1.f)
+                  << "axis=" << axis << " offset=" << offset;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+TEST(SimpleShapeGolden, RotatedRRectAAOutset) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  auto* gpu = env->GetGPUContext();
+  const bool simple = gpu->IsEnableSimpleShapePipeline();
+  const auto samples = env->GetSampleCount();
+  gpu->SetEnableSimpleShapePipeline(true);
+  env->SetSampleCount(1);
+  auto texture = env->RenderToTexture(128, 128, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_TRANSPARENT);
+    canvas->Translate(64.2f, 64.6f);
+    canvas->Rotate(45.f);
+    skity::Path path;
+    path.AddRoundRect(skity::Rect::MakeLTRB(-20, -20, 20, 20), 2, 2);
+    skity::Paint paint;
+    paint.SetAntiAlias(true);
+    paint.SetColor(skity::Color_WHITE);
+    canvas->DrawPath(path, paint);
+  });
+  gpu->SetEnableSimpleShapePipeline(simple);
+  env->SetSampleCount(samples);
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+  // This point lies on the straight bottom edge, well away from the corners.
+  // Apply the pipeline's specified one-device-pixel linear AA ramp.
+  const float distance =
+      ((79.5f - 64.6f) - (50.5f - 64.2f)) / std::sqrt(2.f) - 20.f;
+  const float expected = (0.5f - distance) * 255.f;
+  RecordProperty("alpha", static_cast<int>(pixels->Addr8(50, 79)[3]));
+  RecordProperty("expected_alpha", std::to_string(expected));
+  EXPECT_NEAR(pixels->Addr8(50, 79)[3], expected, 1.f);
+}
+
+TEST(SimpleShapeGolden, AffineRRectGradientCoverage) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  auto* gpu = env->GetGPUContext();
+  const bool simple = gpu->IsEnableSimpleShapePipeline();
+  const auto samples = env->GetSampleCount();
+  gpu->SetEnableSimpleShapePipeline(true);
+  env->SetSampleCount(1);
+  auto texture = env->RenderToTexture(128, 128, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_TRANSPARENT);
+    canvas->Translate(64.f, 64.f);
+    canvas->Rotate(45.f);
+    canvas->Scale(2.f, 0.5f);
+    skity::Path path;
+    path.AddRoundRect(skity::Rect::MakeLTRB(-20, -20, 20, 20), 2, 2);
+    skity::Paint paint;
+    paint.SetAntiAlias(true);
+    paint.SetColor(skity::Color_WHITE);
+    canvas->DrawPath(path, paint);
+  });
+  gpu->SetEnableSimpleShapePipeline(simple);
+  env->SetSampleCount(samples);
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+  // This point lies on the straight right edge, well away from the corners.
+  // Apply the pipeline's specified one-device-pixel linear AA ramp.
+  const float distance =
+      ((92.5f - 64.f) + (92.5f - 64.f)) / std::sqrt(2.f) - 40.f;
+  const float expected = (0.5f - distance) * 255.f;
+  RecordProperty("alpha", static_cast<int>(pixels->Addr8(92, 92)[3]));
+  RecordProperty("expected_alpha", std::to_string(expected));
+  EXPECT_NEAR(pixels->Addr8(92, 92)[3], expected, 1.f);
+}
+
+TEST(SimpleShapeGolden, AffineRRectCoverageMatchesImplicitReference) {
+  // Matrices are written in mathematical row order, independently of the
+  // column-major shader instance data. Include rotation, reflection and shear.
+  // Keep raster vertices on a 1/16-device-pixel grid: SwiftShader rounds
+  // vertex positions to four subpixel bits before interpolating varyings.
+  // Dyadic transforms, translation, radii and stroke outsets avoid testing
+  // that backend-specific rounding against an unquantized CPU reference.
+  // The two 45-degree transforms also have uniform scale sqrt(2).
+  const std::array<double, 4> transforms[] = {
+      {1, 0, 0, 1},        {1, -1, 1, 1},  {1, 1, -1, 1},   {2, -0.5, 2, 0.5},
+      {-2, -0.5, -2, 0.5}, {1, 0.5, 0, 1}, {1, -0.5, 0, 1}, {0, -1, 1, 0},
+  };
+  constexpr float kTranslateX = 64.25f;
+  constexpr float kTranslateY = 64.5f;
+  constexpr double kHalfSize = 20;
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  auto* gpu = env->GetGPUContext();
+  const bool was_enabled = gpu->IsEnableSimpleShapePipeline();
+  const auto sample_count = env->GetSampleCount();
+  for (const auto& values : transforms) {
+    skity::Matrix transform;
+    transform.SetScaleX(values[0]);
+    transform.SetSkewX(values[1]);
+    transform.SetSkewY(values[2]);
+    transform.SetScaleY(values[3]);
+    transform.SetTranslateX(kTranslateX);
+    transform.SetTranslateY(kTranslateY);
+    // Use the float coefficients actually sent to the renderer.
+    const double a = transform.GetScaleX(), b = transform.GetSkewX();
+    const double c = transform.GetSkewY(), d = transform.GetScaleY();
+    const double det = a * d - b * c;
+    auto to_local = [&](double x, double y) {
+      x -= kTranslateX;
+      y -= kTranslateY;
+      return std::array<double, 2>{(d * x - b * y) / det,
+                                   (a * y - c * x) / det};
+    };
+    // Perpendicular distances to the transformed straight edges follow from
+    // the area of a parallelogram divided by its edge length.
+    const double edge_scale_x = std::abs(det) / std::hypot(b, d);
+    const double edge_scale_y = std::abs(det) / std::hypot(a, c);
+    for (float radius : {0.25f, 2.f, 8.f}) {
+      for (float width : {0.f, 0.75f, 3.f}) {
+        // Collapsed inner corners are a separate, existing stroke limitation.
+        if (width >= 2 * radius) continue;
+        for (bool draw_path : {false, true}) {
+          SCOPED_TRACE(::testing::Message()
+                       << "matrix=" << a << "," << b << "," << c << "," << d
+                       << " radius=" << radius << " width=" << width
+                       << " path=" << draw_path);
+          gpu->SetEnableSimpleShapePipeline(true);
+          env->SetSampleCount(1);
+          auto texture =
+              env->RenderToTexture(128, 128, [&](skity::Canvas* canvas) {
+                canvas->Clear(skity::Color_TRANSPARENT);
+                canvas->Concat(transform);
+                skity::Paint paint;
+                paint.SetAntiAlias(true);
+                paint.SetColor(skity::Color_WHITE);
+                if (width > 0) {
+                  paint.SetStyle(skity::Paint::kStroke_Style);
+                  paint.SetStrokeWidth(width);
+                }
+                auto rrect = skity::RRect::MakeRectXY(
+                    skity::Rect::MakeLTRB(-20, -20, 20, 20), radius, radius);
+                if (draw_path) {
+                  skity::Path path;
+                  path.AddRRect(rrect);
+                  canvas->DrawPath(path, paint);
+                } else {
+                  canvas->DrawRRect(rrect, paint);
+                }
+              });
+          gpu->SetEnableSimpleShapePipeline(was_enabled);
+          env->SetSampleCount(sample_count);
+          ASSERT_NE(texture, nullptr);
+          auto pixels = texture->ReadPixels();
+          ASSERT_NE(pixels, nullptr);
+          double max_error = 0;
+          int worst_x = 0, worst_y = 0;
+          int fractional_pixels = 0;
+          for (int y = 0; y < 128; ++y) {
+            for (int x = 0; x < 128; ++x) {
+              const auto local = to_local(x + 0.5, y + 0.5);
+              const double core = kHalfSize - radius;
+              auto distance = [&](double outset) {
+                double edge = std::max(
+                    (std::abs(local[0]) - kHalfSize - outset) * edge_scale_x,
+                    (std::abs(local[1]) - kHalfSize - outset) * edge_scale_y);
+                if (std::abs(local[0]) > core && std::abs(local[1]) > core) {
+                  // Evaluate the circle equation in device coordinates and
+                  // differentiate numerically. This exercises the fragment
+                  // gradient without reproducing its matrix multiplication.
+                  auto f = [&](double px, double py) {
+                    const auto p = to_local(px, py);
+                    const double u = std::abs(p[0]) - core;
+                    const double v = std::abs(p[1]) - core;
+                    return u * u + v * v -
+                           (radius + outset) * (radius + outset);
+                  };
+                  constexpr double h = 0.001;
+                  const double px = x + 0.5, py = y + 0.5;
+                  const double dx = (f(px + h, py) - f(px - h, py)) / (2 * h);
+                  const double dy = (f(px, py + h) - f(px, py - h)) / (2 * h);
+                  edge = std::max(edge, f(px, py) / std::hypot(dx, dy));
+                }
+                return edge;
+              };
+              // Match the specified linear AA model, not exact pixel-area
+              // integration or a second render through the same shader.
+              const double outer =
+                  std::clamp(0.5 - distance(width / 2), 0., 1.);
+              const double inner =
+                  width > 0 ? std::clamp(0.5 - distance(-width / 2), 0., 1.)
+                            : 0.;
+              const double expected = (outer - inner) * 255;
+              if (expected > 1 && expected < 254) ++fractional_pixels;
+              // Compare quantized alpha, allowing one UNORM8 step for GPU
+              // arithmetic and coverage conversion.
+              const double error =
+                  std::abs(pixels->Addr8(x, y)[3] - std::round(expected));
+              if (error > max_error) {
+                max_error = error;
+                worst_x = x;
+                worst_y = y;
+              }
+            }
+          }
+          EXPECT_GT(fractional_pixels, 20);
+          EXPECT_LE(max_error, 1.) << "pixel=" << worst_x << "," << worst_y;
+        }
+      }
+    }
+  }
+}
+
+TEST(SimpleShapeGolden, RRectRegionBoundaryDoesNotBecomeOpaque) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  auto* gpu = env->GetGPUContext();
+  const bool was_enabled = gpu->IsEnableSimpleShapePipeline();
+  const auto sample_count = env->GetSampleCount();
+  for (float origin : {0.f, 4096.f, -4096.f, 65536.f, -65536.f}) {
+    for (bool quarter_turn : {false, true}) {
+      SCOPED_TRACE(::testing::Message()
+                   << "origin=" << origin << " quarter_turn=" << quarter_turn);
+      gpu->SetEnableSimpleShapePipeline(true);
+      env->SetSampleCount(1);
+      auto texture = env->RenderToTexture(128, 128, [&](skity::Canvas* canvas) {
+        canvas->Clear(skity::Color_TRANSPARENT);
+        canvas->Translate(64.25f, 64.5f);
+        if (quarter_turn) {
+          skity::Matrix rotation = skity::Matrix::Scale(0.f, 0.f);
+          rotation.SetSkewX(-1.f);
+          rotation.SetSkewY(1.f);
+          canvas->Concat(rotation);
+        }
+        canvas->Translate(-origin, -origin);
+        skity::Paint paint;
+        paint.SetColor(skity::Color_WHITE);
+        paint.SetAntiAlias(true);
+        canvas->DrawRRect(skity::RRect::MakeRectXY(
+                              skity::Rect::MakeLTRB(origin - 20, origin - 20,
+                                                    origin + 20, origin + 20),
+                              2, 2),
+                          paint);
+      });
+      gpu->SetEnableSimpleShapePipeline(was_enabled);
+      env->SetSampleCount(sample_count);
+      ASSERT_NE(texture, nullptr);
+      auto pixels = texture->ReadPixels();
+      ASSERT_NE(pixels, nullptr);
+      // On the y=82.5 corner/edge boundary, a nominally zero region varying can
+      // interpolate slightly positive. It must not trigger the opaque shortcut.
+      EXPECT_EQ(pixels->Addr8(43, 82)[3], 0);
+      EXPECT_NEAR(pixels->Addr8(44, 82)[3], 0.75f * 255.f, 1.f);
+      EXPECT_EQ(pixels->Addr8(64, 64)[3], 255);
+    }
+  }
+}
+
+TEST(SimpleShapeGolden, RecognizedRRectStartDirectionAndClosure) {
+  using P = skity::Path;
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  auto* gpu = env->GetGPUContext();
+  const bool was_pipeline = gpu->IsEnableSimpleShapePipeline();
+  const bool was_recognition = env->IsPathShapeRecognitionEnabled();
+  const bool was_tessellation = gpu->IsEnableGPUTessellation();
+  auto render = [](skity::Canvas* canvas, bool reference) {
+    const auto rr = skity::RRect::MakeRectXY(skity::Rect::MakeWH(32, 24), 6, 8);
+    for (int variant = 0; variant < 32; ++variant) {
+      P canonical;
+      canonical.AddRRect(rr,
+                         variant & 8 ? P::Direction::kCCW : P::Direction::kCW,
+                         variant % 8);
+      for (int style = 0; style < 6; ++style) {
+        P path;
+        P::RawIter iter(canonical);
+        skity::Point pts[4];
+        for (auto verb = iter.Next(pts); verb != P::Verb::kDone;
+             verb = iter.Next(pts)) {
+          switch (verb) {
+            case P::Verb::kMove:
+              path.MoveTo(pts[0]);
+              break;
+            case P::Verb::kLine:
+              path.LineTo(pts[1]);
+              break;
+            case P::Verb::kConic:
+              if (variant & 16) path.LineTo(pts[0]);
+              path.ConicTo(pts[1], pts[2], iter.ConicWeight());
+              break;
+            default:
+              break;
+          }
+        }
+        const bool closed = style < 2;
+        if (closed) path.Close();
+        EXPECT_EQ(path.GetIsAType(), P::IsAType::kGeneral);
+        skity::Paint paint;
+        paint.SetAntiAlias(true);
+        paint.SetColor(skity::Color_BLUE);
+        paint.SetStrokeWidth(3);
+        paint.SetStyle(style == 0 || style == 2 ? skity::Paint::kFill_Style
+                       : style == 4 ? skity::Paint::kStrokeAndFill_Style
+                                    : skity::Paint::kStroke_Style);
+        paint.SetStrokeCap(static_cast<skity::Paint::Cap>(variant % 3));
+        if (style == 5) {
+          float intervals[] = {5, 3};
+          paint.SetPathEffect(
+              skity::PathEffect::MakeDashPathEffect(intervals, 2, 1));
+        }
+        canvas->Save();
+        canvas->Translate(8 + (variant % 8) * 48,
+                          8 + (variant / 8 * 6 + style) * 40);
+        if (reference && (closed || style == 2))
+          canvas->DrawRRect(rr, paint);
+        else
+          canvas->DrawPath(path, paint);
+        canvas->Restore();
+      }
+    }
+  };
+  gpu->SetEnableSimpleShapePipeline(true);
+  gpu->SetEnableGPUTessellation(false);
+  env->SetPathShapeRecognition(false);
+  auto reference = env->RenderToTexture(
+      392, 968, [&](skity::Canvas* canvas) { render(canvas, true); });
+  gpu->SetEnableSimpleShapePipeline(was_pipeline);
+  gpu->SetEnableGPUTessellation(was_tessellation);
+  env->SetPathShapeRecognition(was_recognition);
+  ASSERT_NE(reference, nullptr);
+  auto expected =
+      std::filesystem::temp_directory_path() / "skity_rrect_patterns.png";
+  ASSERT_TRUE(env->SaveGoldenImage(reference->ReadPixels(), expected.c_str()));
+  skity::testing::GoldenTestEnvConfig config;
+  config.enable_simple_shape_pipeline = true;
+  config.enable_path_shape_recognition = true;
+  config.require_exact_pixel_match = true;
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      392, 968, expected.c_str(), config,
+      [&](skity::Canvas* canvas) { render(canvas, false); }));
+  if (!::testing::Test::HasFailure()) std::filesystem::remove(expected);
 }

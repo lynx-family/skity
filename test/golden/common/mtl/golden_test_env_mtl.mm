@@ -50,6 +50,8 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvMTL::RenderToTexture(
   surface_descriptor.texture = texture;
   surface_descriptor.surface_type = skity::MTLSurfaceType::kTexture;
 
+  surface_descriptor.render_options.enable_path_shape_recognition = IsPathShapeRecognitionEnabled();
+
   auto surface = GetGPUContext()->CreateSurface(&surface_descriptor);
 
   if (surface == nullptr) {

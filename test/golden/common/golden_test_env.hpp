@@ -49,6 +49,14 @@ class GoldenTestEnv : public ::testing::Environment {
 
   uint32_t GetSampleCount() const { return sample_count_; }
 
+  void SetPathShapeRecognition(bool enable) {
+    enable_path_shape_recognition_ = enable;
+  }
+
+  bool IsPathShapeRecognitionEnabled() const {
+    return enable_path_shape_recognition_;
+  }
+
   virtual void SetGLSurfaceMode(std::optional<GLSurfaceMode> mode) {}
 
   virtual std::optional<GLSurfaceMode> GetGLSurfaceMode() const {
@@ -76,6 +84,7 @@ class GoldenTestEnv : public ::testing::Environment {
  private:
   std::unique_ptr<skity::GPUContext> gpu_context_ = nullptr;
   uint32_t sample_count_ = 4;
+  bool enable_path_shape_recognition_ = false;
 };
 
 }  // namespace testing

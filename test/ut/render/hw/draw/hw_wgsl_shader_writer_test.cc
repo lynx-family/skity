@@ -849,7 +849,8 @@ fn get_corner_sign(corner_idx: i32) -> vec2<f32> {
 }
 
 fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
-  var grid: vec2<f32> = j * g;
+  // j is the device-to-local Jacobian; g is a local row gradient.
+  var grid: vec2<f32> = g * j;
   return 1.0 / sqrt(dot(grid, grid));
 }
 
@@ -900,7 +901,8 @@ fn vs_main(input: VSInput) -> VSOutput {
   var center: vec2<f32> = (input.rect.xy + input.rect.zw) * 0.5;
   var harf_wh: vec2<f32> = center - input.rect.xy;
   var j: mat2x2<f32> = mat2x2<f32>(input.j.xy, input.j.zw);
-  var aa: vec2<f32> = abs(j * vec2<f32>(1.0, 1.0));
+  // Bound the inverse-mapped device AA square without signed cancellation.
+  var aa: vec2<f32> = abs(j[0]) + abs(j[1]);
   var stroke_vec: vec2<f32> = vec2<f32>(input.stroke.x);
 
   var r_outer: vec2<f32> = harf_wh + stroke_vec + aa;
@@ -958,7 +960,8 @@ fn vs_main(input: VSInput) -> VSOutput {
 std::string GetSolidColorRRectFS() {
   return R"(
 fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
-  var grid: vec2<f32> = j * g;
+  // j is the device-to-local Jacobian; g is a local row gradient.
+  var grid: vec2<f32> = g * j;
   return 1.0 / sqrt(dot(grid, grid));
 }
     
@@ -991,7 +994,9 @@ fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
 }
 
 fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect: vec4<f32>, v_radii: vec2<f32>, v_stroke: vec2<f32>, v_j: vec4<f32>, v_inv_grid: vec2<f32>) -> f32 {
-  if (v_region > 0.0 && v_stroke.x == 0.0) {
+  // Zero is shared with AA edges and can interpolate slightly positive.
+  // Leave a small region margin before taking the opaque shortcut.
+  if (v_region > 0.01 && v_stroke.x == 0.0) {
     return 1.0;
   } else {
     var alpha: f32 = 0.0;
@@ -1047,7 +1052,8 @@ fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect
       }
     }
   
-    alpha = linearstep(0.5, -0.5, max(d_outer, -d_inner));
+    // Subtract the hole's coverage so overlapping AA ramps preserve thin strokes.
+    alpha = clamp(linearstep(0.5, -0.5, d_outer) - linearstep(0.5, -0.5, d_inner), 0.0, 1.0);
     return alpha;
   }
 }
@@ -1099,7 +1105,8 @@ fn get_corner_sign(corner_idx: i32) -> vec2<f32> {
 }
 
 fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
-  var grid: vec2<f32> = j * g;
+  // j is the device-to-local Jacobian; g is a local row gradient.
+  var grid: vec2<f32> = g * j;
   return 1.0 / sqrt(dot(grid, grid));
 }
 
@@ -1149,7 +1156,8 @@ fn vs_main(input: VSInput) -> VSOutput {
   var center: vec2<f32> = (input.rect.xy + input.rect.zw) * 0.5;
   var harf_wh: vec2<f32> = center - input.rect.xy;
   var j: mat2x2<f32> = mat2x2<f32>(input.j.xy, input.j.zw);
-  var aa: vec2<f32> = abs(j * vec2<f32>(1.0, 1.0));
+  // Bound the inverse-mapped device AA square without signed cancellation.
+  var aa: vec2<f32> = abs(j[0]) + abs(j[1]);
   var stroke_vec: vec2<f32> = vec2<f32>(input.stroke.x);
 
   var r_outer: vec2<f32> = harf_wh + stroke_vec + aa;
@@ -1264,7 +1272,8 @@ fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
 }
 
 fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
-  var grid: vec2<f32> = j * g;
+  // j is the device-to-local Jacobian; g is a local row gradient.
+  var grid: vec2<f32> = g * j;
   return 1.0 / sqrt(dot(grid, grid));
 }
 
@@ -1297,7 +1306,9 @@ fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
 }
 
 fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect: vec4<f32>, v_radii: vec2<f32>, v_stroke: vec2<f32>, v_j: vec4<f32>, v_inv_grid: vec2<f32>) -> f32 {
-  if (v_region > 0.0 && v_stroke.x == 0.0) {
+  // Zero is shared with AA edges and can interpolate slightly positive.
+  // Leave a small region margin before taking the opaque shortcut.
+  if (v_region > 0.01 && v_stroke.x == 0.0) {
     return 1.0;
   } else {
     var alpha: f32 = 0.0;
@@ -1352,7 +1363,8 @@ fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect
       }
     }
 
-    alpha = linearstep(0.5, -0.5, max(d_outer, -d_inner));
+    // Subtract the hole's coverage so overlapping AA ramps preserve thin strokes.
+    alpha = clamp(linearstep(0.5, -0.5, d_outer) - linearstep(0.5, -0.5, d_inner), 0.0, 1.0);
     return alpha;
   }
 }
@@ -1405,7 +1417,8 @@ fn get_corner_sign(corner_idx: i32) -> vec2<f32> {
 }
 
 fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
-  var grid: vec2<f32> = j * g;
+  // j is the device-to-local Jacobian; g is a local row gradient.
+  var grid: vec2<f32> = g * j;
   return 1.0 / sqrt(dot(grid, grid));
 }
 
@@ -1463,7 +1476,8 @@ fn vs_main(input: VSInput) -> VSOutput {
   var center: vec2<f32> = (input.rect.xy + input.rect.zw) * 0.5;
   var harf_wh: vec2<f32> = center - input.rect.xy;
   var j: mat2x2<f32> = mat2x2<f32>(input.j.xy, input.j.zw);
-  var aa: vec2<f32> = abs(j * vec2<f32>(1.0, 1.0));
+  // Bound the inverse-mapped device AA square without signed cancellation.
+  var aa: vec2<f32> = abs(j[0]) + abs(j[1]);
   var stroke_vec: vec2<f32> = vec2<f32>(input.stroke.x);
 
   var r_outer: vec2<f32> = harf_wh + stroke_vec + aa;
@@ -1549,7 +1563,8 @@ struct ImageColorInfo {
 };
 
 fn inverse_grid_length(g: vec2<f32>, j : mat2x2<f32>) -> f32 {
-  var grid: vec2<f32> = j * g;
+  // j is the device-to-local Jacobian; g is a local row gradient.
+  var grid: vec2<f32> = g * j;
   return 1.0 / sqrt(dot(grid, grid));
 }
 
@@ -1582,7 +1597,9 @@ fn in_corner_region(pos_to_corner: vec2<f32>, corner_sign: vec2<f32>) -> bool {
 }
 
 fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect: vec4<f32>, v_radii: vec2<f32>, v_stroke: vec2<f32>, v_j: vec4<f32>, v_inv_grid: vec2<f32>) -> f32 {
-  if (v_region > 0.0 && v_stroke.x == 0.0) {
+  // Zero is shared with AA edges and can interpolate slightly positive.
+  // Leave a small region margin before taking the opaque shortcut.
+  if (v_region > 0.01 && v_stroke.x == 0.0) {
     return 1.0;
   } else {
     var alpha: f32 = 0.0;
@@ -1638,7 +1655,8 @@ fn calculate_mask_alpha(v_pos: vec2<f32>, corner_idx: i32, v_region: f32, v_rect
       }
     }
 
-    alpha = linearstep(0.5, -0.5, max(d_outer, -d_inner));
+    // Subtract the hole's coverage so overlapping AA ramps preserve thin strokes.
+    alpha = clamp(linearstep(0.5, -0.5, d_outer) - linearstep(0.5, -0.5, d_inner), 0.0, 1.0);
     return alpha;
   }
 }

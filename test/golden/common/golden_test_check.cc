@@ -256,8 +256,11 @@ struct AutoRestoreConfig {
     restore_config.gl_surface_mode = env->GetGLSurfaceMode();
     restore_config.gl_has_stencil_attachment = env->GetGLHasStencilAttachment();
     restore_config.sample_count = env->GetSampleCount();
+    restore_config.enable_path_shape_recognition =
+        env->IsPathShapeRecognitionEnabled();
 
     env->SetSampleCount(config.sample_count);
+    env->SetPathShapeRecognition(config.enable_path_shape_recognition);
     env->SetGLSurfaceMode(config.gl_surface_mode);
     env->SetGLHasStencilAttachment(config.gl_has_stencil_attachment);
     gpu_context->SetEnableGPUTessellation(config.enable_gpu_tessellation);
@@ -304,6 +307,7 @@ struct AutoRestoreConfig {
 
   ~AutoRestoreConfig() {
     env->SetSampleCount(restore_config.sample_count);
+    env->SetPathShapeRecognition(restore_config.enable_path_shape_recognition);
     env->SetGLSurfaceMode(restore_config.gl_surface_mode);
     env->SetGLHasStencilAttachment(restore_config.gl_has_stencil_attachment);
     gpu_context->SetEnableGPUTessellation(

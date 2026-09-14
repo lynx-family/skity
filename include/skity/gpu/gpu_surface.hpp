@@ -43,6 +43,13 @@ enum class CoverageAAMode : uint8_t {
 
 struct GPUSurfaceRenderOptions {
   CoverageAAMode coverage_aa = CoverageAAMode::kAuto;
+  /**
+   * Inspect general paths at draw time for simple shapes. Currently recognizes
+   * only the supported Canvas round-rect command pattern. Requires the
+   * GPUContext simple shape pipeline to be enabled. Does not affect paths with
+   * existing shape metadata. Captured when the surface is created.
+   */
+  bool enable_path_shape_recognition = false;
 };
 
 /**

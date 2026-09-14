@@ -235,6 +235,9 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvVK::RenderToTexture(
   surface_desc.owns_image = false;
   surface_desc.owns_image_view = false;
 
+  surface_desc.render_options.enable_path_shape_recognition =
+      IsPathShapeRecognitionEnabled();
+
   auto surface = GetGPUContext()->CreateSurface(&surface_desc);
   if (!surface) {
     std::cerr << "Failed to create Vulkan GPU surface" << std::endl;

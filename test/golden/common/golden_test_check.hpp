@@ -30,6 +30,7 @@ struct GoldenTestEnvConfig {
 
   bool enable_gpu_tessellation = false;
   bool enable_simple_shape_pipeline = false;
+  bool enable_path_shape_recognition = false;
   bool enable_coverage_aa = false;
   bool enable_contour_aa = false;
   bool enable_conflation_correction = false;

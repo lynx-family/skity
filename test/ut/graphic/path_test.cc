@@ -2,6 +2,10 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cmath>
 #include <random>
 #include <skity/geometry/stroke.hpp>
 #include <skity/graphic/path.hpp>
@@ -1924,4 +1928,568 @@ TEST(Path, ResetClearsNonFiniteAndSimpleShapeState) {
   ASSERT_TRUE(path.IsSimpleRRect(&rrect));
   EXPECT_EQ(rrect.GetSimpleRadii(), skity::Vec2(2, 3));
   EXPECT_TRUE(path.Contains(20, 30));
+}
+
+TEST(Path, PreserveSimpleShapeTransforms) {
+  using P = skity::Path;
+  const auto bounds = skity::Rect::MakeLTRB(10, 20, 100, 80);
+  for (auto direction : {P::Direction::kCW, P::Direction::kCCW}) {
+    std::array<P, 4> shapes;
+    shapes[0].AddRect(bounds, direction, 2);
+    shapes[1].AddOval(bounds, direction, 3);
+    shapes[2].AddRoundRect(bounds, 5, 8, direction);
+    shapes[3].AddCircle(40, 50, 20, direction);
+    for (auto& src : shapes) {
+      src.SetFillType(P::PathFillType::kEvenOdd);
+      for (float sx : {2.f, -2.f}) {
+        for (float sy : {3.f, -3.f}) {
+          auto matrix = skity::Matrix::Scale(sx, sy);
+          matrix.SetTranslateX(220);
+          matrix.SetTranslateY(260);
+          P appended;
+          appended.AddPath(src, matrix);
+          auto copied = src.CopyWithMatrix(matrix);
+          for (const auto* dst : {&appended, &copied}) {
+            EXPECT_EQ(dst->GetIsAType(), src.GetIsAType());
+            EXPECT_EQ(dst->GetFirstDirection(), (sx < 0) == (sy < 0) ? direction
+                                                : direction == P::Direction::kCW
+                                                    ? P::Direction::kCCW
+                                                    : P::Direction::kCW);
+            ASSERT_EQ(dst->CountVerbs(), src.CountVerbs());
+            ASSERT_EQ(dst->CountPoints(), src.CountPoints());
+            for (size_t i = 0; i < src.CountVerbs(); ++i) {
+              EXPECT_EQ(dst->GetVerb(i), src.GetVerb(i));
+            }
+            for (size_t i = 0; i < src.CountPoints(); ++i) {
+              EXPECT_EQ(dst->GetPoint(i), matrix * src.GetPoint(i));
+            }
+            skity::RRect rrect;
+            if (dst->IsSimpleRRect(&rrect)) {
+              EXPECT_EQ(rrect.GetSimpleRadii(), skity::Vec2(10, 24));
+            }
+            size_t weight = 0;
+            for (size_t i = 0; i < src.CountVerbs(); ++i) {
+              if (src.GetVerb(i) == P::Verb::kConic) {
+                EXPECT_EQ(dst->ConicWeights()[weight],
+                          src.ConicWeights()[weight]);
+                ++weight;
+              }
+            }
+          }
+          EXPECT_EQ(copied.GetFillType(), src.GetFillType());
+          EXPECT_EQ(appended.GetFillType(), P::PathFillType::kWinding);
+        }
+      }
+      auto scaled = src.CopyWithScale(-2);
+      EXPECT_EQ(scaled.GetIsAType(), src.GetIsAType());
+      EXPECT_EQ(scaled.GetFirstDirection(), direction);
+      EXPECT_EQ(scaled.GetFillType(), src.GetFillType());
+      scaled.SetLastPt(1, 2);
+      EXPECT_EQ(scaled.GetIsAType(), P::IsAType::kGeneral);
+    }
+  }
+}
+
+TEST(Path, PreserveSimpleShapeRejectsUnsafeTransforms) {
+  using P = skity::Path;
+  std::vector<skity::Matrix> matrices{
+      skity::Matrix::Scale(0, 2), skity::Matrix::RotateDeg(30),
+      skity::Matrix::Skew(0.2f, 0), skity::Matrix::Scale(1e38f, 1),
+      skity::Matrix::Translate(1e30f, 0)};
+  // Each otherwise-identity z/perspective component must be rejected.
+  for (auto rc : {skity::Vec2(0, 2), skity::Vec2(1, 2), skity::Vec2(2, 0),
+                  skity::Vec2(2, 1), skity::Vec2(2, 2), skity::Vec2(2, 3),
+                  skity::Vec2(3, 0), skity::Vec2(3, 1), skity::Vec2(3, 2),
+                  skity::Vec2(3, 3)}) {
+    skity::Matrix matrix;
+    matrix.Set(rc.x, rc.y, 2);
+    matrices.push_back(matrix);
+  }
+  for (float bad : {std::numeric_limits<float>::infinity(),
+                    std::numeric_limits<float>::quiet_NaN()}) {
+    matrices.push_back(skity::Matrix::Scale(bad, 1));
+    matrices.push_back(skity::Matrix::Translate(bad, 0));
+  }
+  std::array<P, 3> shapes;
+  shapes[0].AddRect(skity::Rect::MakeWH(100, 80));
+  shapes[1].AddOval(skity::Rect::MakeWH(100, 80));
+  shapes[2].AddRoundRect(skity::Rect::MakeWH(100, 80), 5, 8);
+  for (const auto& src : shapes) {
+    for (const auto& matrix : matrices) {
+      P dst;
+      dst.AddPath(src, matrix);
+      EXPECT_EQ(dst.GetIsAType(), P::IsAType::kGeneral);
+      EXPECT_EQ(src.CopyWithMatrix(matrix).GetIsAType(), P::IsAType::kGeneral);
+    }
+    EXPECT_EQ(src.CopyWithScale(0).GetIsAType(), P::IsAType::kGeneral);
+    P dst;
+    dst.MoveTo(1, 2);
+    dst.AddPath(src);
+    EXPECT_EQ(dst.GetIsAType(), P::IsAType::kGeneral);
+    dst = src;
+    dst.AddPath(src);
+    EXPECT_EQ(dst.GetIsAType(), P::IsAType::kGeneral);
+    for (auto mode : {P::AddMode::kAppend, P::AddMode::kExtend}) {
+      dst = src;
+      dst.AddPath(dst, skity::Matrix(), mode);
+      EXPECT_EQ(dst.GetIsAType(), P::IsAType::kGeneral);
+      EXPECT_GT(dst.CountVerbs(), src.CountVerbs());
+    }
+    dst.Reset();
+    dst.AddPath(src, P::AddMode::kExtend);
+    EXPECT_EQ(dst.GetIsAType(), P::IsAType::kGeneral);
+    dst = src.CopyWithScale(2);
+    dst.LineTo(1, 2);
+    EXPECT_EQ(dst.GetIsAType(), P::IsAType::kGeneral);
+  }
+  P collapsed;
+  collapsed.AddRect(skity::Rect::MakeWH(0, 10));
+  EXPECT_EQ(collapsed.CopyWithScale(2).GetIsAType(), P::IsAType::kGeneral);
+  P rounded;
+  rounded.AddRoundRect(skity::Rect::MakeWH(100, 80), 0.125f, 8);
+  EXPECT_EQ(
+      rounded.CopyWithMatrix(skity::Matrix::Translate(1e7f, 0)).GetIsAType(),
+      P::IsAType::kGeneral);
+}
+
+TEST(Path, PreserveSimpleShapeRejectsInvalidSource) {
+  using P = skity::Path;
+  for (float invalid : {std::numeric_limits<float>::infinity(),
+                        std::numeric_limits<float>::quiet_NaN()}) {
+    P path;
+    path.AddRect(skity::Rect::MakeLTRB(invalid, 0, 100, 80));
+    EXPECT_EQ(path.CopyWithScale(2).GetIsAType(), P::IsAType::kGeneral);
+  }
+  P path;
+  path.MoveTo(0, 0).Close();
+  path.AddRect(skity::Rect::MakeWH(100, 80));
+  EXPECT_EQ(path.CopyWithScale(2).GetIsAType(), P::IsAType::kGeneral);
+}
+
+TEST(Path, PreserveSimpleShapeAllStartsAndRepeatedTransforms) {
+  using P = skity::Path;
+  const auto bounds = skity::Rect::MakeLTRB(-20, -12, 36, 28);
+  const auto rr = skity::RRect::MakeRectXY(bounds, 4, 6);
+  for (auto direction : {P::Direction::kCW, P::Direction::kCCW}) {
+    for (int start = 0; start < 8; ++start) {
+      std::array<P, 3> shapes;
+      shapes[0].AddRect(bounds, direction, start);
+      shapes[1].AddOval(bounds, direction, start);
+      shapes[2].AddRRect(rr, direction, start);
+      for (const auto& src : shapes) {
+        SCOPED_TRACE(::testing::Message()
+                     << "start=" << start
+                     << " direction=" << static_cast<int>(direction)
+                     << " type=" << static_cast<int>(src.GetIsAType()));
+        auto current = src;
+        for (int step = 0; step < 4; ++step) {
+          auto matrix = skity::Matrix::Scale(-2, 0.5f);
+          matrix.SetTranslateX(128);
+          matrix.SetTranslateY(32);
+          auto copy = current.CopyWithMatrix(matrix);
+          P append;
+          append.AddPath(current, matrix);
+          EXPECT_EQ(copy.GetIsAType(), src.GetIsAType());
+          EXPECT_EQ(append.GetIsAType(), src.GetIsAType());
+          EXPECT_EQ(copy.GetBounds(), append.GetBounds());
+          EXPECT_EQ(copy.GetFirstDirection(), append.GetFirstDirection());
+          for (size_t i = 0; i < src.CountPoints(); ++i) {
+            EXPECT_EQ(copy.GetPoint(i), matrix * current.GetPoint(i));
+            EXPECT_EQ(append.GetPoint(i), copy.GetPoint(i));
+          }
+          current = copy;
+        }
+        auto scaled = src.CopyWithScale(-2);
+        EXPECT_EQ(scaled.GetIsAType(), src.GetIsAType());
+        EXPECT_EQ(scaled.GetFirstDirection(), src.GetFirstDirection());
+      }
+    }
+  }
+}
+
+TEST(Path, PreserveSimpleShapeRejectsEmptyContoursAndCenterOverflow) {
+  using P = skity::Path;
+  for (int shape = 0; shape < 3; ++shape) {
+    P path;
+    // Empty closed contours must prevent constructor metadata too.
+    for (int i = 0; i < 32; ++i) path.MoveTo(i, i).Close();
+    auto bounds = skity::Rect::MakeWH(100, 80);
+    if (shape == 0) path.AddRect(bounds);
+    if (shape == 1) path.AddOval(bounds);
+    if (shape == 2) path.AddRoundRect(bounds, 4, 6);
+    ASSERT_EQ(path.GetIsAType(), P::IsAType::kGeneral);
+    EXPECT_EQ(path.CopyWithScale(2).GetIsAType(), P::IsAType::kGeneral);
+    P append;
+    append.AddPath(path);
+    EXPECT_EQ(append.GetIsAType(), P::IsAType::kGeneral);
+  }
+  P oval;
+  // Finite bounds but (left + right) overflows while constructing the center.
+  oval.AddOval(skity::Rect::MakeLTRB(2e38f, 0, 3e38f, 80));
+  EXPECT_EQ(oval.CopyWithScale(0.5f).GetIsAType(), P::IsAType::kGeneral);
+  EXPECT_EQ(oval.CopyWithMatrix(skity::Matrix::Scale(0.5f, 1)).GetIsAType(),
+            P::IsAType::kGeneral);
+  P append;
+  append.AddPath(oval);
+  EXPECT_EQ(append.GetIsAType(), P::IsAType::kGeneral);
+}
+
+TEST(Path, PreserveSimpleShapeRejectsRoundedOvalCenter) {
+  skity::Path oval;
+  oval.AddOval(skity::Rect::MakeWH(1, 2));
+  auto matrix = skity::Matrix::Scale(3, 3);
+  matrix.SetTranslateX(0.1f);
+  const auto left = matrix * skity::Point(0, 0, 0, 1);
+  const auto right = matrix * skity::Point(1, 0, 0, 1);
+  const auto center = matrix * skity::Point(0.5f, 0, 0, 1);
+  ASSERT_NE(center.x, (left.x + right.x) * 0.5f);
+  EXPECT_EQ(oval.CopyWithMatrix(matrix).GetIsAType(),
+            skity::Path::IsAType::kGeneral);
+  skity::Path append;
+  append.AddPath(oval, matrix);
+  EXPECT_EQ(append.GetIsAType(), skity::Path::IsAType::kGeneral);
+}
+
+// Opt in via the unified runner. Includes allocation and coordinate copying;
+// source construction and result inspection are outside the timed interval.
+TEST(Path, DISABLED_SimpleShapeTransformMicrobenchmark) {
+  using P = skity::Path;
+  std::array<P, 4> shapes;
+  const auto bounds = skity::Rect::MakeLTRB(10, 20, 100, 80);
+  shapes[0].AddRect(bounds);
+  shapes[1].AddOval(bounds);
+  shapes[2].AddRoundRect(bounds, 5, 8);
+  shapes[3].MoveTo(0, 0).LineTo(10, 0).LineTo(5, 10).Close();
+  const char* names[] = {"rect", "oval", "rrect", "general"};
+  const char* operations[] = {"append", "matrix", "scale"};
+  auto matrix = skity::Matrix::Scale(-2, 3);
+  matrix.SetTranslateX(220);
+  matrix.SetTranslateY(260);
+  for (size_t shape = 0; shape < shapes.size(); ++shape) {
+    for (int operation = 0; operation < 3; ++operation) {
+      for (bool read_bounds : {false, true}) {
+        std::array<double, 5> samples;
+        for (auto& sample : samples) {
+          std::vector<P> sources(20000, shapes[shape]);
+          std::vector<P> results(sources.size());
+          float width_sum = 0;
+          const auto start = std::chrono::steady_clock::now();
+          for (size_t i = 0; i < sources.size(); ++i) {
+            if (operation == 0) results[i].AddPath(sources[i], matrix);
+            if (operation == 1) results[i] = sources[i].CopyWithMatrix(matrix);
+            if (operation == 2) results[i] = sources[i].CopyWithScale(-2);
+            if (read_bounds) width_sum += results[i].GetBounds().Width();
+          }
+          const auto end = std::chrono::steady_clock::now();
+          sample =
+              std::chrono::duration<double, std::nano>(end - start).count() /
+              sources.size();
+          if (read_bounds) EXPECT_GT(width_sum, 0);
+          for (const auto& result : results) {
+            ASSERT_EQ(result.GetIsAType(), shapes[shape].GetIsAType());
+            ASSERT_EQ(result.CountPoints(), shapes[shape].CountPoints());
+          }
+        }
+        std::sort(samples.begin(), samples.end());
+        RecordProperty(
+            std::string(names[shape]) + "_" + operations[operation] +
+                (read_bounds ? "_with_bounds_median_ns" : "_median_ns"),
+            std::to_string(samples[2]));
+      }
+    }
+  }
+}
+
+static skity::Path CanvasRoundRect() {
+  skity::Path path;
+  path.MoveTo(15, 20);
+  path.LineTo(95, 20);
+  path.ArcTo(100, 20, 100, 25, 5);
+  path.LineTo(100, 55);
+  path.ArcTo(100, 60, 95, 60, 5);
+  path.LineTo(15, 60);
+  path.ArcTo(10, 60, 10, 55, 5);
+  path.LineTo(10, 25);
+  path.ArcTo(10, 20, 15, 20, 5);
+  return path;
+}
+
+// Opt in with GTEST_ALSO_RUN_DISABLED_TESTS=1 and the test-runner filter.
+// Measures the read-only query and hit counting, excluding construction/draw.
+TEST(Path, DISABLED_CanvasRRectRecognitionMicrobenchmark) {
+  skity::Path triangle;
+  triangle.MoveTo(0, 0).LineTo(10, 0).LineTo(5, 10).Close();
+  auto rounded = CanvasRoundRect();
+  rounded.Close();
+  for (const auto& src : {triangle, rounded}) {
+    std::array<double, 5> samples;
+    size_t hits = 0;
+    for (auto& sample : samples) {
+      std::vector<skity::Path> paths(50000, src);
+      hits = 0;
+      skity::RRect rrect;
+      const auto start = std::chrono::steady_clock::now();
+      for (const auto& path : paths) {
+        hits += skity::PathPriv::RecognizeCanvasRRect(path, &rrect);
+      }
+      const auto end = std::chrono::steady_clock::now();
+      sample = std::chrono::duration<double, std::nano>(end - start).count() /
+               paths.size();
+    }
+    std::sort(samples.begin(), samples.end());
+    const std::string key = src.CountVerbs() == 4 ? "triangle" : "rrect";
+    RecordProperty(key + "_median_ns", std::to_string(samples[2]));
+    RecordProperty(key + "_hits_per_50000", std::to_string(hits));
+    EXPECT_EQ(hits, src.CountVerbs() == 4 ? 0u : 50000u);
+  }
+}
+
+TEST(Path, CanvasRoundRectCloseAndRecognitionKeepMetadataUnchanged) {
+  using P = skity::Path;
+  auto path = CanvasRoundRect();
+  ASSERT_EQ(path.CountVerbs(), 13u);
+  ASSERT_EQ(path.CountPoints(), 17u);
+  auto original = path;
+  auto untouched = skity::RRect::MakeRectXY(skity::Rect::MakeWH(12, 14), 2, 3);
+  EXPECT_FALSE(skity::PathPriv::RecognizeCanvasRRect(path, &untouched));
+  EXPECT_EQ(untouched.GetRect(), skity::Rect::MakeWH(12, 14));
+  EXPECT_EQ(untouched.GetSimpleRadii(), skity::Vec2(2, 3));
+
+  path.SetFillType(P::PathFillType::kEvenOdd);
+  path.Close();
+  path.Close();
+  EXPECT_EQ(path.CountVerbs(), 14u);
+  EXPECT_EQ(path.GetIsAType(), P::IsAType::kGeneral);
+  EXPECT_FALSE(path.IsSimpleRRect(nullptr));
+  auto direction = path.GetFirstDirection();
+  skity::RRect rr;
+  ASSERT_TRUE(skity::PathPriv::RecognizeCanvasRRect(path, &rr));
+  EXPECT_EQ(rr.GetBounds(), skity::Rect::MakeLTRB(10, 20, 100, 60));
+  EXPECT_EQ(rr.GetSimpleRadii(), skity::Vec2(5, 5));
+  EXPECT_EQ(path.GetIsAType(), P::IsAType::kGeneral);
+  EXPECT_EQ(path.GetFirstDirection(), direction);
+  EXPECT_EQ(path.GetFillType(), P::PathFillType::kEvenOdd);
+  EXPECT_EQ(path.GetLastMovePt(), original.GetPoint(0));
+  for (size_t i = 0; i < original.CountPoints(); ++i)
+    EXPECT_EQ(path.GetPoint(i), original.GetPoint(i));
+  for (size_t i = 0; i < original.CountVerbs(); ++i)
+    EXPECT_EQ(path.GetVerb(i), original.GetVerb(i));
+  for (int i = 0; i < 4; ++i)
+    EXPECT_EQ(path.ConicWeights()[i], original.ConicWeights()[i]);
+
+  P appended;
+  appended.AddPath(path, skity::Matrix::Scale(2, 3));
+  for (const auto& copied :
+       {appended, path.CopyWithMatrix(skity::Matrix::Scale(2, 3))}) {
+    EXPECT_EQ(copied.GetIsAType(), P::IsAType::kGeneral);
+    ASSERT_TRUE(skity::PathPriv::RecognizeCanvasRRect(copied, &rr));
+    EXPECT_EQ(rr.GetSimpleRadii(), skity::Vec2(10, 15));
+  }
+  auto scaled = path.CopyWithScale(2);
+  EXPECT_EQ(scaled.GetIsAType(), P::IsAType::kGeneral);
+  EXPECT_TRUE(skity::PathPriv::RecognizeCanvasRRect(scaled, nullptr));
+  // Reflected contours retain the same exact quarter arcs.
+  EXPECT_TRUE(skity::PathPriv::RecognizeCanvasRRect(
+      path.CopyWithMatrix(skity::Matrix::Scale(-2, 3)), nullptr));
+}
+
+TEST(Path, CanvasRoundRectRejectsNearMatches) {
+  using P = skity::Path;
+  auto original = CanvasRoundRect();
+  std::array<skity::Point, 17> points;
+  std::copy(original.Points(), original.Points() + points.size(),
+            points.begin());
+  std::array<float, 4> weights;
+  std::copy(original.ConicWeights(), original.ConicWeights() + 4,
+            weights.begin());
+  auto rebuild = [&]() {
+    P path;
+    path.MoveTo(points[0]);
+    for (size_t i = 0; i < 4; ++i) {
+      path.LineTo(points[4 * i + 1]);
+      path.LineTo(points[4 * i + 2]);
+      path.ConicTo(points[4 * i + 3], points[4 * i + 4], weights[i]);
+    }
+    path.Close();
+    return path;
+  };
+  ASSERT_TRUE(skity::PathPriv::RecognizeCanvasRRect(rebuild(), nullptr));
+  for (auto& point : points) {
+    for (int axis = 0; axis < 2; ++axis) {
+      float saved = point[axis];
+      for (float changed :
+           {std::nextafter(saved, INFINITY), std::nextafter(saved, -INFINITY),
+            std::numeric_limits<float>::infinity(),
+            std::numeric_limits<float>::quiet_NaN()}) {
+        point[axis] = changed;
+        EXPECT_FALSE(skity::PathPriv::RecognizeCanvasRRect(rebuild(), nullptr));
+      }
+      point[axis] = saved;
+    }
+  }
+  for (auto& weight : weights) {
+    float saved = weight;
+    for (float changed :
+         {std::nextafter(saved, 1.f), std::nextafter(saved, 0.f), 0.5f,
+          std::numeric_limits<float>::infinity(),
+          std::numeric_limits<float>::quiet_NaN()}) {
+      weight = changed;
+      EXPECT_FALSE(skity::PathPriv::RecognizeCanvasRRect(rebuild(), nullptr));
+    }
+    weight = saved;
+  }
+  // Collapsed width and unequal corner radii must not be tagged.
+  auto saved_points = points;
+  for (auto& point : points) point.x = 10;
+  EXPECT_FALSE(skity::PathPriv::RecognizeCanvasRRect(rebuild(), nullptr));
+  points = saved_points;
+  points[1].x = points[2].x = 94;
+  points[4].y = 26;
+  EXPECT_FALSE(skity::PathPriv::RecognizeCanvasRRect(rebuild(), nullptr));
+  P multi;
+  multi.MoveTo(1, 1).LineTo(2, 2).Close();
+  multi.AddPath(original).Close();
+  EXPECT_FALSE(skity::PathPriv::RecognizeCanvasRRect(multi, nullptr));
+  P reverse;
+  original.Close();
+  P extended;
+  extended.AddPath(original, P::AddMode::kExtend);
+  EXPECT_EQ(extended.GetIsAType(), P::IsAType::kGeneral);
+  // Draw-time recognition depends on the final contour, not append/extend
+  // history.
+  EXPECT_TRUE(skity::PathPriv::RecognizeCanvasRRect(extended, nullptr));
+  auto nonplanar = CanvasRoundRect();
+  skity::Matrix matrix;
+  matrix.Set(2, 3, 1);
+  nonplanar = nonplanar.CopyWithMatrix(matrix);
+  nonplanar.Close();
+  EXPECT_FALSE(skity::PathPriv::RecognizeCanvasRRect(nonplanar, nullptr));
+  reverse.ReverseAddPath(original);
+  EXPECT_TRUE(skity::PathPriv::RecognizeCanvasRRect(reverse, nullptr));
+  // Canonical commands are recognized even after constructor metadata is lost.
+  P direct;
+  direct.AddRoundRect(skity::Rect::MakeLTRB(10, 20, 100, 60), 5, 5);
+  auto last = direct.GetPoint(direct.CountPoints() - 1);
+  direct.SetLastPt(last.x, last.y);
+  direct.Close();
+  EXPECT_TRUE(skity::PathPriv::RecognizeCanvasRRect(direct, nullptr));
+}
+
+TEST(Path, CanvasRoundRectRecognitionUsesCurrentContents) {
+  using P = skity::Path;
+  auto original = CanvasRoundRect();
+  original.Close();
+  ASSERT_TRUE(skity::PathPriv::RecognizeCanvasRRect(original, nullptr));
+  for (int mutation = 0; mutation < 9; ++mutation) {
+    P path = original;
+    switch (mutation) {
+      case 0:
+        path.MoveTo(1, 2);
+        break;
+      case 1:
+        path.LineTo(1, 2);
+        break;
+      case 2:
+        path.QuadTo(1, 2, 3, 4);
+        break;
+      case 3:
+        path.ConicTo(1, 2, 3, 4, 0.5f);
+        break;
+      case 4:
+        path.CubicTo(1, 2, 3, 4, 5, 6);
+        break;
+      case 5:
+        path.SetLastPt(1, 2);
+        break;
+      case 6:
+        path.AddPath(original);
+        break;
+      case 7:
+        path.Reset();
+        break;
+      case 8:
+        path.ArcTo(100, 20, 100, 25, 5);
+        break;
+    }
+    path.Close();
+    EXPECT_EQ(path.GetIsAType(), P::IsAType::kGeneral);
+    EXPECT_FALSE(skity::PathPriv::RecognizeCanvasRRect(path, nullptr));
+  }
+}
+
+TEST(Path, CanvasRoundRectStartDirectionAndClosure) {
+  using P = skity::Path;
+  const auto rr = skity::RRect::MakeRectXY(skity::Rect::MakeWH(40, 30), 5, 7);
+  for (auto direction : {P::Direction::kCW, P::Direction::kCCW}) {
+    for (uint32_t start = 0; start < 8; ++start) {
+      for (bool duplicates : {false, true}) {
+        P canonical;
+        canonical.AddRRect(rr, direction, start);
+        P path;
+        P::RawIter iter(canonical);
+        skity::Point pts[4];
+        for (auto verb = iter.Next(pts); verb != P::Verb::kDone;
+             verb = iter.Next(pts)) {
+          switch (verb) {
+            case P::Verb::kMove:
+              path.MoveTo(pts[0]);
+              break;
+            case P::Verb::kLine:
+              path.LineTo(pts[1]);
+              break;
+            case P::Verb::kConic:
+              if (duplicates) path.LineTo(pts[0]);
+              path.ConicTo(pts[1], pts[2], iter.ConicWeight());
+              break;
+            default:
+              break;  // Deliberately omit Close first.
+          }
+        }
+        SCOPED_TRACE(::testing::Message()
+                     << start << " " << int(direction) << " " << duplicates);
+        EXPECT_EQ(path.GetIsAType(), P::IsAType::kGeneral);
+        EXPECT_FALSE(skity::PathPriv::RecognizeCanvasRRect(path, nullptr));
+        skity::RRect actual;
+        ASSERT_TRUE(skity::PathPriv::RecognizeCanvasRRect(path, &actual, true));
+        EXPECT_EQ(actual.GetRect(), rr.GetRect());
+        EXPECT_EQ(actual.GetSimpleRadii(), rr.GetSimpleRadii());
+        path.Close();
+        EXPECT_TRUE(skity::PathPriv::RecognizeCanvasRRect(path, nullptr));
+        // A nearly matching endpoint must not become a closing side.
+        auto last = path.GetPoint(path.CountPoints() - 1);
+        path.SetLastPt(last.x + 0.001f, last.y);
+        EXPECT_FALSE(
+            skity::PathPriv::RecognizeCanvasRRect(path, nullptr, true));
+      }
+    }
+  }
+}
+
+TEST(Path, ShapeConstructorsRequireSingleContour) {
+  using P = skity::Path;
+  for (int shape = 0; shape < 3; ++shape) {
+    for (int prefix = 0; prefix < 4; ++prefix) {
+      P path;
+      if (prefix > 0) path.MoveTo(-20, -30).MoveTo(-10, -15);
+      if (prefix == 2) path.Close();
+      if (prefix == 3) path.LineTo(-5, -5).Close();
+      const auto bounds = skity::Rect::MakeWH(100, 80);
+      if (shape == 0) path.AddRect(bounds);
+      if (shape == 1) path.AddOval(bounds);
+      if (shape == 2) path.AddRoundRect(bounds, 4, 6);
+      SCOPED_TRACE(::testing::Message() << shape << " " << prefix);
+      const bool single = prefix < 2;
+      EXPECT_EQ(path.GetIsAType() != P::IsAType::kGeneral, single);
+      EXPECT_EQ(path.CopyWithScale(-2).GetIsAType(), path.GetIsAType());
+      if (single) {
+        // A leading Move is replaced, not retained as an extra contour.
+        EXPECT_EQ(path.GetBounds(), bounds);
+        path.LineTo(123, 456);
+        EXPECT_EQ(path.GetIsAType(), P::IsAType::kGeneral);
+      } else {
+        EXPECT_EQ(path.GetPoint(0), skity::Point(-10, -15, 0, 1));
+        EXPECT_EQ(path.GetVerb(prefix == 2 ? 1 : 2), P::Verb::kClose);
+      }
+    }
+  }
 }

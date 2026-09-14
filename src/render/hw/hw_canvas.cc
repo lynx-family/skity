@@ -14,6 +14,7 @@
 
 #include "src/effect/image_filter_base.hpp"
 #include "src/gpu/gpu_surface_impl.hpp"
+#include "src/graphic/path_priv.hpp"
 #include "src/logging.hpp"
 #include "src/render/canvas_state.hpp"
 #include "src/render/hw/coverage/coverage_aa_renderer.hpp"
@@ -149,18 +150,32 @@ void HWCanvas::OnDrawLine(float x0, float y0, float x1, float y1,
 
 void HWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
   SKITY_TRACE_EVENT(HWCanvas_OnDrawPath);
-  if (surface_->GetGPUContext()->IsEnableSimpleShapePipeline() &&
-      path.GetIsAType() != Path::IsAType::kGeneral) {
+  if (CurrentLayer() == nullptr) {
+    return;
+  }
+  if (surface_->GetGPUContext()->IsEnableSimpleShapePipeline()) {
     RRect rrect;
+    bool has_rrect = true;
     if (path.GetIsAType() == Path::IsAType::kRect) {
       rrect.SetRect(path.GetBounds());
     } else if (path.GetIsAType() == Path::IsAType::kOval) {
       rrect.SetOval(path.GetBounds());
     } else if (path.GetIsAType() == Path::IsAType::kSimpleRRect) {
-      path.IsSimpleRRect(&rrect);
+      has_rrect = path.IsSimpleRRect(&rrect);
+    } else {
+      // Only inspect general paths when this draw can benefit. The result is
+      // local to this draw; never mark or cache it on the caller's Path.
+      has_rrect = surface_->IsPathShapeRecognitionEnabled() &&
+                  paint.GetPathEffect() == nullptr &&
+                  PathPriv::RecognizeCanvasRRect(
+                      path, &rrect, paint.GetStyle() == Paint::kFill_Style);
     }
-    DrawShape(Shape(&rrect), paint);
-    return;
+    // A fallback must retain the original contour, start and direction (in
+    // particular for dash/discrete effects), rather than rebuild an RRect.
+    if (has_rrect && !NeedsFallbackToPathDraw(rrect, paint, CurrentMatrix())) {
+      DrawShape(Shape(&rrect), paint);
+      return;
+    }
   }
   DrawShape(Shape(&path), paint);
 }
@@ -565,7 +580,17 @@ bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
     }
   }
 
-  if (transform.HasPersp() || rrect.IsComplex()) {
+  // The instance stores a 2D affine transform. Rotation and skew are supported,
+  // but perspective and Z components cannot be represented by this pipeline.
+  if (!transform.IsFinite() || transform.HasPersp() || rrect.IsComplex() ||
+      transform.Get(0, 2) != 0.f || transform.Get(1, 2) != 0.f ||
+      transform.Get(2, 0) != 0.f || transform.Get(2, 1) != 0.f ||
+      transform.Get(2, 2) != 1.f || transform.Get(2, 3) != 0.f) {
+    return true;
+  }
+
+  Matrix inverse;
+  if (!transform.Invert(&inverse) || !inverse.IsFinite()) {
     return true;
   }
 

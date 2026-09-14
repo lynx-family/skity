@@ -4,6 +4,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <glm/gtc/matrix_transform.hpp>
@@ -815,7 +816,7 @@ Path& Path::ArcTo(float rx, float ry, float xAxisRotate, ArcSize largeArc,
 Path& Path::AddRect(Rect const& rect, Direction dir, uint32_t start) {
   this->SetFirstDirection(this->HasOnlyMoveTos() ? dir : Direction::kUnknown);
 
-  bool was_empty = HasOnlyMoveTos();
+  const bool was_empty = verbs_.size() <= 1;
 
   AutoDisableDirectionCheck addc{this};
   AutoPathBoundsUpdate adbu(this, rect);
@@ -895,7 +896,7 @@ Path& Path::AddRRect(RRect const& rrect, Direction dir, uint32_t start_index) {
   } else {
     this->SetFirstDirection(this->HasOnlyMoveTos() ? dir : Direction::kUnknown);
 
-    bool was_empty = HasOnlyMoveTos();
+    const bool was_empty = verbs_.size() <= 1;
 
     AutoPathBoundsUpdate apbu{this, bounds};
     AutoDisableDirectionCheck addc{this};
@@ -1021,8 +1022,8 @@ Path& Path::AddOval(const Rect& oval, Direction dir) {
 }
 
 Path& Path::AddOval(const Rect& oval, Direction dir, uint32_t start) {
-  bool is_oval = HasOnlyMoveTos();
-  if (is_oval) {
+  const bool is_oval = verbs_.size() <= 1;
+  if (HasOnlyMoveTos()) {
     first_direction_ = dir;
   } else {
     first_direction_ = Direction::kUnknown;
@@ -1190,7 +1191,13 @@ Path& Path::AddPath(const Path& src, const Matrix& matrix, AddMode mode) {
     return *this;
   }
 
+  // Iterators into the destination cannot survive appending to itself.
+  if (this == &src) {
+    return AddPath(Path(src), matrix, mode);
+  }
+
   if (mode == AddMode::kAppend) {
+    const bool was_empty = IsEmpty();
     if (src.last_move_to_index_ >= 0) {
       last_move_to_index_ =
           src.last_move_to_index_ + static_cast<int32_t>(CountPoints());
@@ -1216,6 +1223,10 @@ Path& Path::AddPath(const Path& src, const Matrix& matrix, AddMode mode) {
     }
     MarkBoundsDirty();
     type_ = IsAType::kGeneral;
+
+    if (was_empty) {
+      PreserveSimpleShape(src, matrix);
+    }
 
     return *this;
   }
@@ -1300,6 +1311,7 @@ Path Path::CopyWithMatrix(const Matrix& matrix) const {
   ret.is_finite_ = is_finite_;
   ret.MarkBoundsDirty();
   ret.type_ = IsAType::kGeneral;
+  ret.PreserveSimpleShape(*this, matrix);
 
   return ret;
 }
@@ -1329,8 +1341,105 @@ Path Path::CopyWithScale(float scale) const {
   ret.is_finite_ = is_finite_;
   ret.MarkBoundsDirty();
   ret.type_ = IsAType::kGeneral;
+  ret.PreserveSimpleShape(*this, Matrix::Scale(scale, scale));
 
   return ret;
+}
+
+// Check the finite coordinate set used by the shape constructors. This also
+// rejects rounding that makes the transformed points disagree with the shape.
+static bool TransformedShapeCoordinatesMatch(
+    Path::IsAType type, const Rect& before, const Rect& after,
+    const Vec2& src_radii, const Vec2& radii, const Matrix& matrix) {
+  using IsAType = Path::IsAType;
+  // Require the transformed canonical coordinates to agree exactly. Large
+  // translations and rounding can otherwise change a corner or oval center.
+  for (int axis = 0; axis < 2; ++axis) {
+    const float lo = axis == 0 ? before.Left() : before.Top();
+    const float hi = axis == 0 ? before.Right() : before.Bottom();
+    const float dst_lo = axis == 0 ? after.Left() : after.Top();
+    const float dst_hi = axis == 0 ? after.Right() : after.Bottom();
+    const float scale = matrix[axis][axis];
+    const float translate = matrix[3][axis];
+    std::array<float, 4> coords{lo, lo, hi, hi};
+    std::array<float, 4> expected{dst_lo, dst_lo, dst_hi, dst_hi};
+    if (type == IsAType::kSimpleRRect) {
+      coords[1] += src_radii[axis];
+      coords[2] -= src_radii[axis];
+      expected[1] += radii[axis];
+      expected[2] -= radii[axis];
+      if (expected[1] == dst_lo || expected[2] == dst_hi) {
+        return false;
+      }
+    } else if (type == IsAType::kOval) {
+      coords[1] = coords[2] = (lo + hi) * 0.5f;
+      expected[1] = expected[2] = (dst_lo + dst_hi) * 0.5f;
+    }
+    for (size_t i = 0; i < coords.size(); ++i) {
+      // The constructors use only these coordinate values. In particular,
+      // finite oval corners do not guarantee that their center sum is finite.
+      if (!std::isfinite(coords[i]) || !std::isfinite(expected[i]) ||
+          coords[i] * scale + translate != expected[scale < 0 ? 3 - i : i]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+void Path::PreserveSimpleShape(const Path& src, const Matrix& matrix) {
+  if (src.type_ == IsAType::kGeneral || !matrix.IsFinite() ||
+      !matrix.OnlyScaleAndTranslate() || matrix.GetScaleX() == 0 ||
+      matrix.GetScaleY() == 0) {
+    return;
+  }
+
+  // Constructors tag only a single canonical contour; mutations clear the
+  // type. Copy/append retain that layout, so no command validation is needed.
+  size_t corner = 0, opposite = 2;
+  if (src.type_ == IsAType::kOval) {
+    corner = 1;
+    opposite = 5;
+  } else if (src.type_ == IsAType::kSimpleRRect) {
+    corner = src.GetVerb(1) == Verb::kConic ? 1 : 2;
+    opposite = corner + 6;
+  }
+
+  // Opposite corners determine the bounds for every supported start/direction.
+  // Do not call GetBounds/IsFinite: dirty bounds would scan the entire path.
+  const auto& a = src.points_[corner];
+  const auto& b = src.points_[opposite];
+  const auto& c = points_[corner];
+  const auto& d = points_[opposite];
+  if (!PointIsFinite(a) || !PointIsFinite(b) || !PointIsFinite(c) ||
+      !PointIsFinite(d))
+    return;
+  const Rect before = Rect::MakeLTRB(a.x, a.y, b.x, b.y).MakeSorted();
+  const Rect after = Rect::MakeLTRB(c.x, c.y, d.x, d.y).MakeSorted();
+  if (before.IsEmpty() || after.IsEmpty() || !std::isfinite(after.Width()) ||
+      !std::isfinite(after.Height())) {
+    return;
+  }
+  const Vec2 radii{std::abs(matrix.GetScaleX()) * src.radii_.x,
+                   std::abs(matrix.GetScaleY()) * src.radii_.y};
+  if (src.type_ == IsAType::kSimpleRRect &&
+      (!(radii.x > 0 && radii.y > 0) || radii.x > after.Width() * 0.5f ||
+       radii.y > after.Height() * 0.5f)) {
+    return;
+  }
+
+  if (!TransformedShapeCoordinatesMatch(src.type_, before, after, src.radii_,
+                                        radii, matrix)) {
+    return;
+  }
+  type_ = src.type_;
+  radii_ = radii;
+  first_direction_ = src.first_direction_;
+  if ((matrix.GetScaleX() < 0) != (matrix.GetScaleY() < 0) &&
+      first_direction_ != Direction::kUnknown) {
+    first_direction_ =
+        first_direction_ == Direction::kCW ? Direction::kCCW : Direction::kCW;
+  }
 }
 
 void Path::InjectMoveToIfNeed() {

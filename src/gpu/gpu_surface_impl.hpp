@@ -44,6 +44,10 @@ class GPUSurfaceImpl : public GPUSurface {
     return coverage_aa_mode_ != CoverageAAMode::kDisabled;
   }
 
+  bool IsPathShapeRecognitionEnabled() const {
+    return enable_path_shape_recognition_;
+  }
+
   Canvas* LockCanvas(bool clear) override;
 
   void Flush() override;
@@ -71,6 +75,7 @@ class GPUSurfaceImpl : public GPUSurface {
   uint32_t sample_count_;
   float content_scale_;
   CoverageAAMode coverage_aa_mode_;
+  bool enable_path_shape_recognition_;
 
   GPUContextImpl* ctx_;
   std::unique_ptr<HWStageBuffer> stage_buffer_;
