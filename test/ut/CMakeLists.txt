@@ -62,8 +62,12 @@ add_executable(skity_unit_test
 )
 
 if(${SKITY_GL_BACKEND})
+    target_include_directories(skity_unit_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/third_party/glad/include
+    )
     target_sources(skity_unit_test PRIVATE
         gpu/gl/gpu_driver_info_gl_test.cc
+        gpu/gl/gpu_render_pass_gl_test.cc
     )
 endif()
 
