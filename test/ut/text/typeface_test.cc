@@ -20,6 +20,7 @@
 #include "concurrent_runner.h"
 #include "src/text/ports/freetype_face.hpp"
 #include "src/text/ports/scaler_context_freetype.hpp"
+#include "src/text/ports/test/font_manager_test.hpp"
 #include "src/text/scaler_context.hpp"
 #include "src/text/scaler_context_desc.hpp"
 
@@ -148,7 +149,7 @@ RasterizedGlyph RasterizeGlyph(
 class TypefaceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    auto font_manager = FontManager::RefDefault();
+    font_manager = std::make_shared<FontManagerTest>();
 
     default_typeface = font_manager->GetDefaultTypeface(FontStyle());
 
@@ -184,6 +185,7 @@ class TypefaceTest : public ::testing::Test {
     }
   }
 
+  std::shared_ptr<FontManager> font_manager;
   std::shared_ptr<skity::Typeface> default_typeface;
   std::vector<std::shared_ptr<skity::Typeface>> default_weighted_typefaces;
   std::vector<std::shared_ptr<skity::Typeface>> default_slanted_typefaces;
@@ -228,17 +230,17 @@ TEST_F(TypefaceTest, FontStyleFlagsAreConsistent) {
 TEST_F(TypefaceTest, TypefaceIdIsStable) {
   EXPECT_EQ(default_typeface->TypefaceId(), default_typeface->TypefaceId());
 
-  auto cjk_typeface1 = FontManager::RefDefault()->MatchFamilyStyleCharacter(
+  auto cjk_typeface1 = font_manager->MatchFamilyStyleCharacter(
       nullptr, FontStyle(), nullptr, 0, 23383);
-  auto cjk_typeface2 = FontManager::RefDefault()->MatchFamilyStyleCharacter(
+  auto cjk_typeface2 = font_manager->MatchFamilyStyleCharacter(
       nullptr, FontStyle(), nullptr, 0, 33410);
   EXPECT_EQ(cjk_typeface1->TypefaceId(), cjk_typeface2->TypefaceId());
 }
 
 TEST_F(TypefaceTest, MatchFamilyStyleCharacterFallsBackWhenBcp47Misses) {
   const char* bcp47[] = {"zz-Zzzz"};
-  auto typeface = FontManager::RefDefault()->MatchFamilyStyleCharacter(
-      nullptr, FontStyle(), bcp47, 1, 23383);
+  auto typeface = font_manager->MatchFamilyStyleCharacter(nullptr, FontStyle(),
+                                                          bcp47, 1, 23383);
 
   ASSERT_NE(typeface, nullptr);
   EXPECT_NE(typeface->UnicharToGlyph(23383), 0);
@@ -246,8 +248,8 @@ TEST_F(TypefaceTest, MatchFamilyStyleCharacterFallsBackWhenBcp47Misses) {
 
 TEST_F(TypefaceTest, MatchFamilyStyleCharacterFindsEmojiBcp47) {
   const char* bcp47[] = {"und-Zsye"};
-  auto typeface = FontManager::RefDefault()->MatchFamilyStyleCharacter(
-      nullptr, FontStyle(), bcp47, 1, 0x1F60A);
+  auto typeface = font_manager->MatchFamilyStyleCharacter(nullptr, FontStyle(),
+                                                          bcp47, 1, 0x1F60A);
 
   ASSERT_NE(typeface, nullptr);
   EXPECT_NE(typeface->UnicharToGlyph(0x1F60A), 0);
