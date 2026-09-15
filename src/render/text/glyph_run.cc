@@ -54,8 +54,9 @@ class DirectGlyphRun : public GlyphRun {
   ArrayList<GlyphRect, 16> Raster(float canvas_scale,
                                   ArenaAllocator* arena_allocator);
 
-  HWDraw* Draw(Matrix transform, ArenaAllocator* arena_allocator,
-               float canvas_scale, bool use_linear_text_filter) override;
+  HWDraw* Draw(Matrix transform, const Matrix& glyph_to_layer,
+               ArenaAllocator* arena_allocator, float canvas_scale,
+               bool use_linear_text_filter) override;
 
   Rect GetBounds() override { return bounds_; }
 
@@ -152,7 +153,8 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
   return glyph_rects;
 }
 
-HWDraw* DirectGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
+HWDraw* DirectGlyphRun::Draw(Matrix transform, const Matrix& glyph_to_layer,
+                             ArenaAllocator* arena_allocator,
                              float canvas_scale, bool use_linear_text_filter) {
   SKITY_TRACE_EVENT(DirectGlyphRun_Draw);
   ArrayList<GlyphRect, 16> glyph_rects = Raster(canvas_scale, arena_allocator);
@@ -169,7 +171,7 @@ HWDraw* DirectGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
   if (paint_.GetShader()) {
     geometry = arena_allocator->Make<WGSLTextGradientGeometry>(
         final_transform, std::move(glyph_rects),
-        paint_.GetShader()->GetLocalMatrix(), transform);
+        paint_.GetShader()->GetLocalMatrix(), glyph_to_layer * transform);
   } else {
     Paint paint_copy = paint_;
     paint_copy.SetFillColor(color);
@@ -207,8 +209,8 @@ HWDraw* DirectGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
     fragment->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
   }
 
-  HWDynamicTextDraw* text_draw =
-      arena_allocator->Make<HWDynamicTextDraw>(Matrix(), geometry, fragment);
+  HWDynamicTextDraw* text_draw = arena_allocator->Make<HWDynamicTextDraw>(
+      glyph_to_layer, geometry, fragment);
   bounds_ = text_draw->GetTransform().MapRect(bounds_);
   return text_draw;
 }
@@ -346,8 +348,9 @@ class SDFGlyphRun : public GlyphRun {
   ArrayList<GlyphRect, 16> Raster(float canvas_scale,
                                   ArenaAllocator* arena_allocator);
 
-  HWDraw* Draw(Matrix transform, ArenaAllocator* arena_allocator,
-               float canvas_scale, bool) override;
+  HWDraw* Draw(Matrix transform, const Matrix& glyph_to_layer,
+               ArenaAllocator* arena_allocator, float canvas_scale,
+               bool) override;
 
   Rect GetBounds() override { return bounds_; }
 
@@ -418,8 +421,9 @@ ArrayList<GlyphRect, 16> SDFGlyphRun::Raster(float canvas_scale,
   return glyph_rects;
 }
 
-HWDraw* SDFGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
-                          float canvas_scale, bool) {
+HWDraw* SDFGlyphRun::Draw(Matrix transform, const Matrix& glyph_to_layer,
+                          ArenaAllocator* arena_allocator, float canvas_scale,
+                          bool) {
   SKITY_TRACE_EVENT(SDFGlyphRun_Draw);
 
   ArrayList<GlyphRect, 16> glyph_rects = Raster(canvas_scale, arena_allocator);
@@ -445,8 +449,8 @@ HWDraw* SDFGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
   }
 
   // need to apply sdf scale to draw other than glyph
-  HWDynamicSdfTextDraw* text_draw =
-      arena_allocator->Make<HWDynamicSdfTextDraw>(Matrix(), geometry, fragment);
+  HWDynamicSdfTextDraw* text_draw = arena_allocator->Make<HWDynamicSdfTextDraw>(
+      glyph_to_layer, geometry, fragment);
   bounds_ = text_draw->GetTransform().MapRect(bounds_);
   return text_draw;
 }
@@ -529,8 +533,9 @@ class PathGlyphRun : public GlyphRun {
 
   ~PathGlyphRun() override = default;
 
-  HWDraw* Draw(Matrix transform, ArenaAllocator* arena_allocator,
-               float canvas_scale, bool) override;
+  HWDraw* Draw(Matrix transform, const Matrix& glyph_to_layer,
+               ArenaAllocator* arena_allocator, float canvas_scale,
+               bool) override;
 
   Rect GetBounds() override { return path_.GetBounds(); }
 
@@ -544,8 +549,9 @@ class PathGlyphRun : public GlyphRun {
   DrawPathFunc draw_path_func_;
 };
 
-HWDraw* PathGlyphRun::Draw(Matrix transform, ArenaAllocator* arena_allocator,
-                           float canvas_scale, bool) {
+HWDraw* PathGlyphRun::Draw(Matrix transform, const Matrix& glyph_to_layer,
+                           ArenaAllocator* arena_allocator, float canvas_scale,
+                           bool) {
   SKITY_TRACE_EVENT(PathGlyphRun_Draw);
   Matrix glyph_transform = Matrix::Translate(position_x_, position_y_);
   Path path = path_.CopyWithMatrix(glyph_transform);
