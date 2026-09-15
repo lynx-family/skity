@@ -225,8 +225,9 @@ class TransformedMaskGlyphRun final : public GlyphRun {
         atlas_(atlas),
         glyph_format_(glyph_format) {}
 
-  HWDraw* Draw(Matrix transform, ArenaAllocator* arena_allocator,
-               float canvas_scale, bool use_linear_text_filter) override;
+  HWDraw* Draw(Matrix transform, const Matrix& glyph_to_layer,
+               ArenaAllocator* arena_allocator, float canvas_scale,
+               bool use_linear_text_filter) override;
 
   Rect GetBounds() override { return bounds_; }
 
@@ -306,6 +307,7 @@ ArrayList<GlyphRect, 16> TransformedMaskGlyphRun::Raster(
 }
 
 HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
+                                      const Matrix& glyph_to_layer,
                                       ArenaAllocator* arena_allocator,
                                       float canvas_scale,
                                       bool use_linear_text_filter) {
@@ -325,8 +327,8 @@ HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
   Matrix view_difference;
   // Atlas quads are stored in creation space (C * local). The vertex shader
   // applies V = P * inverse(C), replacing C with the full perspective position
-  // matrix P. Surface density remains in MVP, so the final relation is
-  // MVP(D) * V * C * local = D * P * local.
+  // matrix P. Map the result back to layer coordinates before projection:
+  // MVP * glyph_to_layer * V * C * local.
   if (!ComputeViewDifference(position_matrix, creation_matrix_,
                              &view_difference)) {
     return nullptr;
@@ -341,7 +343,7 @@ HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
   if (atlas_->GetFormat() == AtlasFormat::A8 && paint_.GetShader()) {
     geometry = arena_allocator->Make<WGSLTextGradientGeometry>(
         Matrix(), std::move(glyph_rects), paint_.GetShader()->GetLocalMatrix(),
-        position_matrix);
+        glyph_to_layer * position_matrix);
   } else {
     Vector color = is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
     Paint paint_copy = paint_;
@@ -374,9 +376,9 @@ HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
     fragment->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
   }
 
-  auto* draw = arena_allocator->Make<HWDynamicTextDraw>(view_difference,
-                                                        geometry, fragment);
-  bounds_ = MapBounds(view_difference, bounds_);
+  auto* draw = arena_allocator->Make<HWDynamicTextDraw>(
+      glyph_to_layer * view_difference, geometry, fragment);
+  bounds_ = MapBounds(draw->GetTransform(), bounds_);
   return draw;
 }
 

@@ -39,8 +39,9 @@ class GlyphRun {
 
   virtual ~GlyphRun();
 
-  virtual HWDraw* Draw(Matrix transform, ArenaAllocator* arena_allocator,
-                       float canvas_scale, bool enable_text_linear_filter) = 0;
+  virtual HWDraw* Draw(Matrix transform, const Matrix& glyph_to_layer,
+                       ArenaAllocator* arena_allocator, float canvas_scale,
+                       bool enable_text_linear_filter) = 0;
 
   virtual Rect GetBounds() = 0;
 

@@ -400,16 +400,31 @@ void HWCanvas::DrawGlyphsInternal(uint32_t count, const GlyphID* glyphs,
                                   const Paint& paint, const Matrix& transform) {
   SKITY_TRACE_EVENT(HWCanvas_DrawGlyphsInternal);
 
+  Matrix glyph_transform = transform;
+  Matrix glyph_to_layer;
+  if (CurrentLayer() != root_layer_) {
+    // Glyph rasterization already applies the surface density. Include the
+    // layer's remaining scale and origin, then map glyph quads back to layer
+    // coordinates before projection into its render target.
+    Matrix layer_to_glyph = Matrix::Scale(1.f / ctx_scale_, 1.f / ctx_scale_) *
+                            CurrentLayer()->GetLayerPhysicalMatrix(Matrix{});
+    if (!layer_to_glyph.Invert(&glyph_to_layer)) {
+      return;
+    }
+    glyph_transform = layer_to_glyph * transform;
+  }
+
   GlyphRunList glyph_runs = GlyphRun::Make(
       count, glyphs, origin, position_x, position_y, font, paint, ctx_scale_,
-      transform, surface_->GetGPUContext()->GetAtlasManager(), arena_allocator_,
+      glyph_transform, surface_->GetGPUContext()->GetAtlasManager(),
+      arena_allocator_,
       [this, transform](const Path& path, const Paint& paint) {
         this->DrawPathInternal(path, paint, transform);
       });
   for (auto& glyph_run : glyph_runs) {
-    auto draw =
-        glyph_run->Draw(transform, arena_allocator_, ctx_scale_,
-                        surface_->GetGPUContext()->IsEnableTextLinearFilter());
+    auto draw = glyph_run->Draw(
+        glyph_transform, glyph_to_layer, arena_allocator_, ctx_scale_,
+        surface_->GetGPUContext()->IsEnableTextLinearFilter());
     if (draw) {
       draw->SetSampleCount(GetCanvasSampleCount());
       SetupLayerSpaceBoundsForDraw(
