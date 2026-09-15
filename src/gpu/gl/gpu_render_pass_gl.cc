@@ -165,6 +165,9 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
       GL_CALL(ActiveTexture, GL_TEXTURE0 + binding.index);
       track_texture_unit(binding.index);
       texture->Bind();
+      // Texture-only bindings must not inherit a previous draw's sampler.
+      // Explicit samplers for this draw are applied below.
+      GL_CALL(BindSampler, binding.index, 0);
 
       if (!pipeline->SupportBindingSlotInShader()) {
         // only query uniform location if ubo slot binding is not supported
