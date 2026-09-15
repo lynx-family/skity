@@ -983,6 +983,13 @@ FontManagerProbeResult RunFontManagerProbe(
     return result;
   }
 
+  if (!IsExplicitSourceCasePlatformAvailable(root, request.backend)) {
+    return BuildFailure(FontManagerProbeStatus::kBackendUnavailable,
+                        validation.case_id, validation.backend,
+                        "backend_unavailable",
+                        "case does not target this platform");
+  }
+
   std::string category;
   ReadStringField(root, "category", &category);
   if (!IsFontManagerCategory(category)) {

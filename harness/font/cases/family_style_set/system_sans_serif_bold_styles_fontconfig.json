@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "id": "font.family_style_set.fontconfig.system_sans_serif_bold_styles",
+  "category": "family_style_set",
+  "status": "active",
+  "backend": "fontconfig",
+  "platforms": [
+    "linux-fontconfig"
+  ],
+  "font_manager_request": {
+    "entry": "MatchFamily",
+    "style": {
+      "weight": 700,
+      "width": 5,
+      "slant": "upright"
+    },
+    "sample_limit": 32,
+    "family_name": "sans-serif"
+  },
+  "font_request": {
+    "size": 32,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "none"
+  },
+  "glyphs": {
+    "chars": [
+      "U+0041"
+    ]
+  },
+  "compare": {
+    "typeface_identity": "normalized_descriptor",
+    "font_style": "exact",
+    "font_metrics": {
+      "mode": "epsilon",
+      "epsilon": 0.001
+    }
+  },
+  "fontconfig_profile": "system"
+}

@@ -12,6 +12,10 @@ import tempfile
 import unittest
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools"))
+from font_harness_metadata import capture_environment, write_json
+
+
 @unittest.skipUnless(sys.platform == "linux", "Linux capability tests")
 class LinuxCapabilitiesTest(unittest.TestCase):
     @classmethod
@@ -20,7 +24,7 @@ class LinuxCapabilitiesTest(unittest.TestCase):
         cls.binary = os.environ["SKITY_FONT_HARNESS_TEST_BINARY"]
         cls.base = json.loads((cls.repo / "harness/font/cases/typeface_probe/roboto_regular_file_freetype.json").read_text())
 
-    def run_case(self, case, action="probe", backend="freetype"):
+    def run_case(self, case, action="probe", backend="freetype", env=None):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "case.json"
             output = Path(directory) / "report.json"
@@ -28,7 +32,18 @@ class LinuxCapabilitiesTest(unittest.TestCase):
             command = [self.binary, action, "--case", str(path), "--repo-root", str(self.repo), "--report", str(output)]
             if action != "case-info":
                 command += ["--backend", backend]
-            result = subprocess.run(command, cwd=self.repo, capture_output=True, text=True)
+                if backend == "fontconfig" and not case.get("font_files"):
+                    info = Path(directory) / "native-env.json"
+                    subprocess.run([self.binary, "env-info", "--backend", backend,
+                                    "--repo-root", str(self.repo), "--report", str(info)],
+                                   capture_output=True, text=True, env=env)
+                    inventory = json.loads(info.read_text()).get("fontconfig_inventory")
+                    snapshot = Path(directory) / "environment.json"
+                    write_json(snapshot, capture_environment(self.repo, backend, env, inventory)
+                               if inventory and inventory.get("initialized") else
+                               {"schema_version": 1, "platform": "Linux", "fonts": []})
+                    command += ["--environment", str(snapshot)]
+            result = subprocess.run(command, cwd=self.repo, capture_output=True, text=True, env=env)
             data = json.loads(output.read_text()) if output.exists() else {}
             return result.returncode, data
 
@@ -46,13 +61,44 @@ class LinuxCapabilitiesTest(unittest.TestCase):
         self.assertEqual(code, 5, data)
         self.assertEqual(data["reason_code"], "backend_unavailable")
 
-    def test_fontconfig_is_unavailable(self):
+    def test_fontconfig_availability_matches_build(self):
         case = {"schema_version": 1, "id": "font.synthetic.system", "category": "font_manager",
                 "status": "skity_gap", "backend": "fontconfig", "platforms": ["linux-fontconfig"],
-                "font_manager_request": {"entry": "GetDefaultTypeface"}}
+                "font_manager_request": {"entry": "GetDefaultTypeface"},
+                "compare": {"typeface_identity": "normalized_descriptor", "font_style": "exact"}}
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "env.json"
+            process = subprocess.run([self.binary, "env-info", "--backend", "fontconfig",
+                                      "--repo-root", str(self.repo), "--report", str(report)],
+                                     capture_output=True, text=True)
+            available = json.loads(report.read_text())["backend_available"]
         code, data = self.run_case(case, backend="fontconfig")
-        self.assertEqual(code, 5, data)
-        self.assertEqual(data["reason_code"], "backend_unavailable")
+        if available:
+            self.assertEqual(code, 0, data)
+            self.assertTrue(data["ok"])
+        else:
+            self.assertEqual(code, 5, data)
+            self.assertEqual(data["reason_code"], "backend_unavailable")
+
+    def test_invalid_fontconfig_is_reported_without_host_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "bad.conf"
+            config.write_text("<fontconfig><broken>")
+            env = dict(os.environ, FONTCONFIG_FILE=str(config))
+            case = json.loads((self.repo / "harness/font/cases/font_manager/default_regular_fontconfig.json").read_text())
+            code, data = self.run_case(case, backend="fontconfig", env=env)
+            self.assertEqual(code, 5, data)
+            self.assertEqual(data["reason_code"], "backend_unavailable")
+            # Explicit files stay usable even when the system manager failed.
+            code, data = self.run_case(self.base, env=env)
+            self.assertEqual(code, 0, data)
+
+    def test_fontconfig_cannot_run_another_platform_case(self):
+        case = copy.deepcopy(self.base)
+        case["backend"] = "fontconfig"
+        case["platforms"] = ["android-freetype"]
+        code, data = self.run_case(case, backend="fontconfig")
+        self.assertNotEqual(code, 0, data)
 
     def test_manager_source_cannot_bypass_explicit_gate(self):
         case = copy.deepcopy(self.base)

@@ -80,6 +80,7 @@ def make_font_manager_case():
         "schema_version": 1,
         "id": FONT_MANAGER_CASE_ID,
         "category": "font_manager",
+        **({"fontconfig_profile": "system"} if BACKEND == "fontconfig" else {}),
         "status": "active",
         "backend": BACKEND,
         "platforms": [TARGET_PLATFORM],
@@ -282,6 +283,8 @@ def decorate_artifact(path, value):
     else:
         probe = value["font_manager_probe"]
         probe["request_input"] = case["font_manager_request"]
+        if BACKEND == "fontconfig":
+            probe["font_manager"] = {"family_count": 1, "family_names": ["Synthetic"]}
         face = probe["matched_typefaces"][0]
         face["identity"] = face["descriptor"]
         summary = face["probe_summary"]
@@ -322,6 +325,8 @@ def main():
         print(f"skity-font binary does not exist: {skity_font}", file=sys.stderr)
         return 2
 
+    if BACKEND == "fontconfig":
+        SNAPSHOT["fontconfig"] = {"version": 21701, "files": [], "config_files": []}
     with tempfile.TemporaryDirectory(prefix="skity-font-cli-smoke-") as tmp:
         tmp_dir = Path(tmp)
         repo_root = tmp_dir / "repo"

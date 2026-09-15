@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "id": "linux_fontconfig_candidates",
+  "id": "linux_fontconfig_full",
   "backend": "fontconfig",
   "platforms": [
     "linux-fontconfig"
@@ -41,10 +41,23 @@
     "font_manager/fallback_multi_ja_hans_fontconfig.json",
     "font_manager/fallback_language_unrelated_fontconfig.json",
     "font_manager/ttc_family_fontconfig.json",
-    "font_manager/variable_default_fontconfig.json"
+    "font_manager/variable_default_fontconfig.json",
+    "family_style_set/family_null_fontconfig.json",
+    "family_style_set/family_empty_fontconfig.json",
+    "family_style_set/family_casefold_fontconfig.json",
+    "family_style_set/source_sans_pro_bold_fontconfig.json",
+    "family_style_set/source_sans_pro_italic_fontconfig.json",
+    "typeface_probe/roboto_regular_file_fontconfig.json",
+    "typeface_probe/roboto_regular_data_fontconfig.json",
+    "glyph_path/source_sans_regular_fontconfig.json",
+    "glyph_path/source_sans_bold_fontconfig.json",
+    "glyph_path/noto_cjk_tc_fontconfig.json",
+    "glyph_image/source_sans_regular_fontconfig.json"
   ],
   "artifacts": {
     "root": "local/font-harness/artifacts/linux-fontconfig/controlled",
     "report_root": "local/font-harness/reports/linux-fontconfig"
-  }
+  },
+  "fontconfig_profile": "controlled",
+  "fontconfig_fixture": "controlled"
 }

@@ -202,10 +202,19 @@ void ValidateFontManagerResult(const Json::Value& root,
                        "match violates expectation");
     }
   }
-  if (expectation.isMember("inventory_count")) {
+  if (root["backend"] == "fontconfig" ||
+      expectation.isMember("inventory_count")) {
     const auto& inventory = probe["font_manager"];
+    if (!inventory.isObject() || !inventory["family_count"].isInt() ||
+        inventory["family_count"].asInt() < 0) {
+      errors->AddError("$.font_manager_probe.font_manager",
+                       "missing or invalid family count");
+      return;
+    }
     const auto& names = inventory["family_names"];
-    const int count = expectation["inventory_count"].asInt();
+    const int count = expectation.isMember("inventory_count")
+                          ? expectation["inventory_count"].asInt()
+                          : inventory["family_count"].asInt();
     std::set<std::string> unique;
     if (names.isArray()) {
       for (const auto& name : names) {

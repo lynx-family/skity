@@ -16,7 +16,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools"))
-from font_harness_metadata import input_fingerprint, sha256, write_json
+from font_harness_metadata import capture_environment, input_fingerprint, sha256, write_json
 from font_harness_runner import run_suite
 
 
@@ -61,9 +61,11 @@ class OracleContractTest(unittest.TestCase):
         if repo == self.repo:
             write_json(self.oracle_path, artifact if artifact is not None else self.oracle)
         report = repo / "validation.json"
+        environment = repo / "environment.json"
+        options = ["--environment", str(environment)] if environment.is_file() else []
         result = subprocess.run([self.binary, "artifact-check", "--case", str(repo / "case.json"),
                                  "--artifact", str(repo / "oracle.json"), "--repo-root", str(repo),
-                                 "--report", str(report)], capture_output=True, text=True)
+                                 "--report", str(report), *options], capture_output=True, text=True)
         data = json.loads(report.read_text())
         self.assertEqual(result.returncode, expected_code, (result.stderr, data))
         self.assertEqual(data["passed"], expected_code == 0, data)
@@ -142,6 +144,72 @@ class OracleContractTest(unittest.TestCase):
                  typeface_results=[face], typeface_probes=[probe])
         a["input_fingerprint"] = input_fingerprint(self.case, self.repo)
         self.check(6, a)
+
+    def prepare_fontconfig(self, profile="controlled"):
+        self.case = {"schema_version": 1, "id": "font.synthetic", "backend": "fontconfig",
+                     "platforms": ["linux-fontconfig"], "category": "font_manager", "status": "active",
+                     "font_manager_request": {"entry": "MatchFamilyStyleCharacter", "character": "U+10FFFF"},
+                     "compare": {"typeface_identity": "normalized_descriptor"}}
+        if profile == "system":
+            self.case["fontconfig_profile"] = profile
+        write_json(self.case_path, self.case)
+        write_json(self.repo / "harness/font/platform/linux/fontconfig/fonts.json",
+                   {"font_files": ["repo://font.ttf"]})
+        (self.repo / "fonts.conf").write_text("<fontconfig><include>rules.conf</include></fontconfig>")
+        (self.repo / "rules.conf").write_text("<fontconfig/>")
+        self.inventory = {"version": 21701, "files": [str(self.repo / "font.ttf")],
+                          "config_files": [str(self.repo / "fonts.conf"), str(self.repo / "rules.conf")]}
+        self.refresh_fontconfig_environment()
+        self.oracle.pop("typeface_result")
+        self.oracle.pop("typeface_probe")
+        self.oracle.update(backend="fontconfig",
+                           input_fingerprint=input_fingerprint(self.case, self.repo, self.environment),
+                           fontconfig_inventory={"files": ["repo://font.ttf"]},
+                           font_manager_probe={
+                               "request_input": self.case["font_manager_request"],
+                               "operation": {"entry": "MatchFamilyStyleCharacter",
+                                             "matched_typeface": {"available": False}},
+                               "matched_typefaces": [{"available": False}],
+                               "font_manager": {"family_count": 1, "family_names": ["Fixture"]}})
+        self.oracle["provenance"].update(profile=profile, controlled_fonts=["repo://font.ttf"])
+        self.check()
+
+    def refresh_fontconfig_environment(self):
+        self.environment = capture_environment(self.repo, "fontconfig", fontconfig_inventory=self.inventory)
+        write_json(self.repo / "environment.json", self.environment)
+
+    def test_changed_included_fontconfig_rules_stale_oracle(self):
+        self.prepare_fontconfig()
+        (self.repo / "rules.conf").write_text("<fontconfig><!--changed--></fontconfig>")
+        self.refresh_fontconfig_environment()
+        data = self.check(6)
+        self.assertIn("stale artifact", json.dumps(data))
+
+    def test_fontconfig_version_and_inventory_changes_stale_oracle(self):
+        self.prepare_fontconfig()
+        original = copy.deepcopy(self.inventory)
+        for field, value in (("version", 21702), ("files", []), ("config_files", [])):
+            with self.subTest(field=field):
+                self.inventory = dict(original, **{field: value})
+                self.refresh_fontconfig_environment()
+                self.assertIn("stale artifact", json.dumps(self.check(6)))
+
+    def test_unlisted_controlled_font_is_rejected(self):
+        self.prepare_fontconfig()
+        for field in (self.oracle["fontconfig_inventory"]["files"],
+                      self.oracle["provenance"]["controlled_fonts"]):
+            field.append("repo://unlisted.ttf")
+        self.assertIn("controlled fixture", json.dumps(self.check(6)))
+
+    def test_fontconfig_case_cannot_be_relabelled_as_system(self):
+        self.prepare_fontconfig()
+        self.oracle["provenance"]["profile"] = "system"
+        self.assertIn("profile does not match", json.dumps(self.check(6)))
+
+    def test_unmatched_system_fonts_require_complete_inventory(self):
+        self.prepare_fontconfig("system")
+        self.oracle["font_manager_probe"]["font_manager"]["family_names"] = []
+        self.assertIn("family inventory", json.dumps(self.check(6)))
 
     def run_native_summary(self, items, exit_code=0):
         manifest = {"schema_version": 1, "id": "synthetic", "backend": "freetype",

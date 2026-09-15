@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "id": "font.font_manager.fontconfig.language_policy_multi_ja_hans",
+  "category": "font_manager",
+  "status": "active",
+  "backend": "fontconfig",
+  "platforms": [
+    "linux-fontconfig"
+  ],
+  "font_manager_request": {
+    "entry": "MatchFamilyStyleCharacter",
+    "style": {
+      "weight": 400,
+      "width": 5,
+      "slant": "upright"
+    },
+    "sample_limit": 32,
+    "family_name": "Source Sans Pro",
+    "character": "U+4E00",
+    "bcp47": [
+      "ja",
+      "zh-Hans"
+    ]
+  },
+  "font_request": {
+    "size": 32,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "none"
+  },
+  "glyphs": {
+    "chars": [
+      "U+4E00"
+    ]
+  },
+  "compare": {
+    "typeface_identity": "normalized_descriptor",
+    "font_style": "exact",
+    "font_metrics": {
+      "mode": "epsilon",
+      "epsilon": 0.001
+    }
+  },
+  "font_manager_expectation": {
+    "inventory_count": 11
+  },
+  "fontconfig_fixture": "language"
+}

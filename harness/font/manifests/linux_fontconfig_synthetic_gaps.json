@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "id": "linux_fontconfig_empty_candidates",
+  "id": "linux_fontconfig_synthetic_gaps",
   "backend": "fontconfig",
   "platforms": [
     "linux-fontconfig"
@@ -8,10 +8,12 @@
   "target_platform": "linux-fontconfig",
   "case_root": "harness/font/cases",
   "cases": [
-    "font_manager/empty_inventory_fontconfig.json"
+    "glyph_path/fontconfig_embolden_fontconfig.json"
   ],
   "artifacts": {
-    "root": "local/font-harness/artifacts/linux-fontconfig/empty",
+    "root": "local/font-harness/artifacts/linux-fontconfig/controlled",
     "report_root": "local/font-harness/reports/linux-fontconfig"
-  }
+  },
+  "fontconfig_profile": "controlled",
+  "fontconfig_fixture": "synthetic"
 }

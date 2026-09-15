@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "linux_fontconfig_synthetic",
+  "backend": "fontconfig",
+  "platforms": [
+    "linux-fontconfig"
+  ],
+  "target_platform": "linux-fontconfig",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "glyph_path/fontconfig_matrix_fontconfig.json",
+    "font_manager/fontconfig_matrix_identity_fontconfig.json",
+    "font_manager/fontconfig_embolden_identity_fontconfig.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/linux-fontconfig/controlled",
+    "report_root": "local/font-harness/reports/linux-fontconfig"
+  },
+  "fontconfig_profile": "controlled",
+  "fontconfig_fixture": "synthetic"
+}

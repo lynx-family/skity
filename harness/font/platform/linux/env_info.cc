@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <skity/text/font_manager.hpp>
 #include <vector>
 
 #include "harness/font/probe/backend_support.hpp"
@@ -26,15 +27,49 @@ Json::Value BuildLinuxEnvInfo(const std::filesystem::path& repo_root,
   report["artifact_type"] = list_fonts ? "font_list_fonts" : "font_env_info";
   report["backend"] = backend;
   report["target_platform"] = "linux-" + backend;
-  const bool available =
-      backend == "freetype" && IsExplicitSourceProbeBackendAvailable(backend);
+  const bool available = backend == "freetype"
+                             ? IsExplicitSourceProbeBackendAvailable(backend)
+                             : IsHostFontProbeBackendAvailable(backend);
   report["backend_available"] = available;
   report["ok"] = available;
   report["reason_code"] = available ? "ok" : "backend_unavailable";
+#if SKITY_FONT_HARNESS_HAS_FONTCONFIG
+  report["font_manager"] = "fontconfig";
+#else
   report["font_manager"] = "test_fixture";
+#endif
   report["capabilities"]["explicit_typeface"] = available;
-  report["capabilities"]["system_font_matching"] = false;
-  report["font_inventory_scope"] = "repository_fixture_files";
+  report["capabilities"]["system_font_matching"] =
+      backend == "fontconfig" && available;
+  report["font_inventory_scope"] =
+      backend == "fontconfig"
+          ? (std::getenv("FONTCONFIG_FILE") ? "configured_fonts"
+                                            : "system_fonts")
+          : "repository_fixture_files";
+#if SKITY_FONT_HARNESS_HAS_FONTCONFIG
+  if (backend == "fontconfig") {
+    const auto info = GetDefaultFontConfigInfo();
+    auto& inventory = report["fontconfig_inventory"];
+    inventory["version"] = info.runtime_version;
+    inventory["initialized"] = info.initialized;
+    inventory["files"] = Json::Value(Json::arrayValue);
+    inventory["config_files"] = Json::Value(Json::arrayValue);
+    for (const auto& file : info.font_files) {
+      inventory["files"].append(file);
+    }
+    for (const auto& file : info.config_files) {
+      inventory["config_files"].append(file);
+    }
+    if (list_fonts) {
+      auto manager = FontManager::RefDefault();
+      report["families"] = Json::Value(Json::arrayValue);
+      for (int i = 0; i < manager->CountFamilies(); ++i) {
+        report["families"].append(manager->GetFamilyName(i));
+      }
+      report["family_count"] = manager->CountFamilies();
+    }
+  }
+#endif
   report["repo_root"] = repo_root.string();
   for (const char* name : {"LANG", "LC_ALL", "LC_CTYPE", "FONTCONFIG_FILE",
                            "FONTCONFIG_PATH", "FONTCONFIG_SYSROOT"}) {
@@ -71,7 +106,7 @@ Json::Value BuildLinuxEnvInfo(const std::filesystem::path& repo_root,
             ? HostFontBackendUnavailableMessage(backend, "env-info")
             : ExplicitSourceBackendUnavailableMessage(backend, "env-info");
   }
-  if (list_fonts) {
+  if (list_fonts && backend == "freetype") {
     report["font_files"] = Json::Value(Json::arrayValue);
     const auto directory = repo_root / "test/fonts/resources";
     std::error_code error;
