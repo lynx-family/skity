@@ -198,28 +198,34 @@ bool IsMatrixVectorBinary(ast::BinaryOp op, ir::TypeId lhs_type,
     return false;
   }
 
-  if (!type_table->IsMatrixType(lhs_type) ||
-      !type_table->IsVectorType(rhs_type)) {
+  const bool vector_on_left = type_table->IsVectorType(lhs_type);
+  const ir::TypeId matrix_id = vector_on_left ? rhs_type : lhs_type;
+  const ir::TypeId vector_id = vector_on_left ? lhs_type : rhs_type;
+  if (!type_table->IsMatrixType(matrix_id) ||
+      !type_table->IsVectorType(vector_id)) {
     return false;
   }
 
-  const ir::Type* matrix_type = type_table->GetType(lhs_type);
+  const ir::Type* matrix_type = type_table->GetType(matrix_id);
   if (matrix_type == nullptr ||
       matrix_type->element_type != type_table->GetF32Type()) {
     return false;
   }
 
-  if (type_table->GetComponentType(rhs_type) != type_table->GetF32Type()) {
+  if (type_table->GetComponentType(vector_id) != type_table->GetF32Type()) {
     return false;
   }
 
   const uint32_t columns = matrix_type->count2;
   const uint32_t rows = matrix_type->count;
-  if (columns != type_table->GetVectorComponentCount(rhs_type)) {
+  const uint32_t input_size = vector_on_left ? rows : columns;
+  const uint32_t output_size = vector_on_left ? columns : rows;
+  if (input_size != type_table->GetVectorComponentCount(vector_id)) {
     return false;
   }
 
-  *result_type = type_table->GetVectorType(type_table->GetF32Type(), rows);
+  *result_type =
+      type_table->GetVectorType(type_table->GetF32Type(), output_size);
   return *result_type != ir::kInvalidTypeId;
 }
 

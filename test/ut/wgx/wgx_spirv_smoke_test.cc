@@ -4014,6 +4014,76 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsInstruction(words, SpvOpReturn));
 }
 
+TEST(WgxSpirvSmokeTest, EmitsVectorMatrixMultiplyWithMatchingDimensions) {
+  for (uint32_t columns = 2; columns <= 4; ++columns) {
+    for (uint32_t rows = 2; rows <= 4; ++rows) {
+      for (bool vector_on_left : {false, true}) {
+        const std::string matrix = "mat" + std::to_string(columns) + "x" +
+                                   std::to_string(rows) + "<f32>";
+        SCOPED_TRACE(matrix + (vector_on_left ? " vector * matrix"
+                                              : " matrix * vector"));
+        const uint32_t input_size = vector_on_left ? rows : columns;
+        const uint32_t output_size = vector_on_left ? columns : rows;
+        const std::string source =
+            "@group(0) @binding(0) var<uniform> m: " + matrix + ";\n" +
+            "@vertex fn vs_main(@location(0) v: vec" +
+            std::to_string(input_size) +
+            "<f32>) -> @builtin(position) "
+            "vec4<f32> { let product: vec" +
+            std::to_string(output_size) +
+            "<f32> = " + (vector_on_left ? "v * m" : "m * v") +
+            "; return vec4<f32>(product.x, product.y, 0.0, 1.0); }";
+        auto program = wgx::Program::Parse(source.c_str());
+        ASSERT_NE(program, nullptr);
+        ASSERT_FALSE(program->GetDiagnosis().has_value());
+        auto result = program->WriteToSpirv("vs_main", wgx::SpirvOptions{});
+        ASSERT_TRUE(result.success);
+        const SpvOp opcode =
+            vector_on_left ? SpvOpVectorTimesMatrix : SpvOpMatrixTimesVector;
+        EXPECT_TRUE(ContainsInstruction(result.spirv, opcode));
+        EXPECT_FALSE(ContainsInstruction(result.spirv, SpvOpFMul));
+        // Check the inferred result width, especially for non-square matrices.
+        std::unordered_map<uint32_t, uint32_t> vector_sizes;
+        for (size_t offset = 5; offset < result.spirv.size();) {
+          const auto& words = result.spirv;
+          const uint32_t count = words[offset] >> SpvWordCountShift;
+          ASSERT_GT(count, 0u);
+          ASSERT_LE(offset + count, words.size());
+          const auto op = static_cast<SpvOp>(words[offset] & SpvOpCodeMask);
+          if (op == SpvOpTypeVector) {
+            vector_sizes[words[offset + 1]] = words[offset + 3];
+          } else if (op == opcode) {
+            EXPECT_EQ(vector_sizes.at(words[offset + 1]), output_size);
+          }
+          offset += count;
+        }
+        DumpSpirvBinary("wgx_vs_vector_matrix_" + std::to_string(columns) +
+                            "x" + std::to_string(rows) +
+                            (vector_on_left ? "_left.spv" : "_right.spv"),
+                        result.spirv);
+      }
+    }
+  }
+}
+
+TEST(WgxSpirvSmokeTest, RejectsInvalidVectorMatrixBinary) {
+  for (const char* expression :
+       {"vec3<f32>(1.0) * m", "m * vec3<f32>(1.0)", "vec2<i32>(1) * m",
+        "vec2<f32>(1.0) + m", "vec2<f32>(1.0) / m"}) {
+    SCOPED_TRACE(expression);
+    const std::string source =
+        "@group(0) @binding(0) var<uniform> m: mat2x2<f32>;\n"
+        "@vertex fn vs_main() -> @builtin(position) vec4<f32> {"
+        " let product: vec2<f32> = " +
+        std::string(expression) +
+        "; return vec4<f32>(product.x, product.y, 0.0, 1.0); }";
+    auto program = wgx::Program::Parse(source.c_str());
+    ASSERT_NE(program, nullptr);
+    ASSERT_FALSE(program->GetDiagnosis().has_value());
+    EXPECT_FALSE(program->WriteToSpirv("vs_main", wgx::SpirvOptions{}).success);
+  }
+}
+
 TEST(WgxSpirvSmokeTest, EmitsSpirvWithMat2x2ConstructorAndMultiply) {
   auto program = wgx::Program::Parse(R"(
 @vertex
