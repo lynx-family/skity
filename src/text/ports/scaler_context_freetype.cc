@@ -588,7 +588,8 @@ bool ScalerContextFreetype::GetCBoxForLetter(char letter, FT_BBox* bbox) {
   if (!glyph_id) {
     return false;
   }
-  if (FT_Load_Glyph(face, glyph_id, FT_LOAD_BITMAP_METRICS_ONLY)) {
+  // Synthesized font heights must use the same hinting and transform as glyphs.
+  if (FT_Load_Glyph(face, glyph_id, load_glyph_flags_)) {
     return false;
   }
   if (face->glyph->format != FT_GLYPH_FORMAT_OUTLINE) {

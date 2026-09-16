@@ -627,3 +627,49 @@ TEST_F(TypefaceTest, MakeVariationThreadSafe) {
     EXPECT_EQ(style.slant(), FontStyle::Slant::kItalic_Slant);
   });
 }
+
+TEST(TypefaceFreeTypeTest, SynthesizedFontHeightsFollowHinting) {
+  auto data = Data::MakeFromFileName(kRobotoRegular);
+  ASSERT_NE(data, nullptr);
+  std::vector<uint8_t> bytes(data->Bytes(), data->Bytes() + data->Size());
+  auto read_u32 = [&](size_t offset) {
+    return (uint32_t(bytes[offset]) << 24) |
+           (uint32_t(bytes[offset + 1]) << 16) |
+           (uint32_t(bytes[offset + 2]) << 8) | uint32_t(bytes[offset + 3]);
+  };
+  // Force the fallback using a private copy of the fixture's OS/2 table.
+  ASSERT_GE(bytes.size(), 12u);
+  const size_t count = (size_t(bytes[4]) << 8) | bytes[5];
+  ASSERT_GE(bytes.size(), 12 + count * 16);
+  size_t os2 = 0;
+  for (size_t i = 0; i < count; ++i) {
+    const size_t record = 12 + i * 16;
+    if (read_u32(record) == SetFourByteTag('O', 'S', '/', '2')) {
+      os2 = read_u32(record + 8);
+      break;
+    }
+  }
+  ASSERT_NE(os2, 0u);
+  ASSERT_GE(bytes.size(), os2 + 90);
+  for (size_t i = os2 + 86; i < os2 + 90; ++i) {
+    bytes[i] = 0;  // sxHeight and sCapHeight
+  }
+  auto typeface =
+      Typeface::MakeFromData(Data::MakeWithCopy(bytes.data(), bytes.size()));
+  ASSERT_NE(typeface, nullptr);
+  for (auto hinting : {Font::FontHinting::kNone, Font::FontHinting::kNormal}) {
+    Font font(typeface, 32.f);
+    font.SetHinting(hinting);
+    FontMetrics metrics;
+    font.GetMetrics(&metrics);
+    const GlyphID ids[] = {typeface->UnicharToGlyph('x'),
+                           typeface->UnicharToGlyph('H')};
+    const GlyphData* glyphs[2] = {};
+    font.LoadGlyphPath(ids, 2, glyphs);
+    ASSERT_NE(glyphs[0], nullptr);
+    ASSERT_NE(glyphs[1], nullptr);
+    EXPECT_FLOAT_EQ(metrics.x_height_, -glyphs[0]->GetPath().GetBounds().Top());
+    EXPECT_FLOAT_EQ(metrics.cap_height_,
+                    -glyphs[1]->GetPath().GetBounds().Top());
+  }
+}
