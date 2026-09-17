@@ -65,24 +65,30 @@ bool IsMatrixVectorMultiply(const ir::Instruction& inst,
 
   const ir::TypeId lhs_type = inst.operands[0].type;
   const ir::TypeId rhs_type = inst.operands[1].type;
-  if (!type_table->IsMatrixType(lhs_type) ||
-      !type_table->IsVectorType(rhs_type) ||
+  const bool vector_on_left = type_table->IsVectorType(lhs_type);
+  const ir::TypeId matrix_id = vector_on_left ? rhs_type : lhs_type;
+  const ir::TypeId vector_id = vector_on_left ? lhs_type : rhs_type;
+  if (!type_table->IsMatrixType(matrix_id) ||
+      !type_table->IsVectorType(vector_id) ||
       !type_table->IsVectorType(inst.result_type)) {
     return false;
   }
 
-  const ir::Type* matrix_type = type_table->GetType(lhs_type);
+  const ir::Type* matrix_type = type_table->GetType(matrix_id);
   if (matrix_type == nullptr ||
       matrix_type->element_type != type_table->GetF32Type()) {
     return false;
   }
 
-  return type_table->GetComponentType(rhs_type) == type_table->GetF32Type() &&
+  const uint32_t input_size =
+      vector_on_left ? matrix_type->count : matrix_type->count2;
+  const uint32_t output_size =
+      vector_on_left ? matrix_type->count2 : matrix_type->count;
+  return type_table->GetComponentType(vector_id) == type_table->GetF32Type() &&
          type_table->GetComponentType(inst.result_type) ==
              type_table->GetF32Type() &&
-         matrix_type->count2 == type_table->GetVectorComponentCount(rhs_type) &&
-         matrix_type->count ==
-             type_table->GetVectorComponentCount(inst.result_type);
+         input_size == type_table->GetVectorComponentCount(vector_id) &&
+         output_size == type_table->GetVectorComponentCount(inst.result_type);
 }
 
 bool IsMatrixMatrixMultiply(const ir::Instruction& inst,
@@ -1399,8 +1405,11 @@ bool ModuleBuilder::EmitBinary(const ir::Instruction& inst) {
 
   if (IsMatrixVectorMultiply(inst, type_table)) {
     uint32_t result_id = ids_.Allocate();
+    const SpvOp op = type_table->IsVectorType(inst.operands[0].type)
+                         ? SpvOpVectorTimesMatrix
+                         : SpvOpMatrixTimesVector;
     AppendInstruction(
-        &sections_->functions, SpvOpMatrixTimesVector,
+        &sections_->functions, op,
         {GetSpirvTypeId(inst.result_type), result_id, lhs_id, rhs_id});
     value_map_[inst.result_id] = result_id;
     return true;

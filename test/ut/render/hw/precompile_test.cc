@@ -86,11 +86,19 @@ class FakeBlitPass : public GPUBlitPass {
 
 class FakeRenderPass : public GPURenderPass {
  public:
-  explicit FakeRenderPass(const GPURenderPassDescriptor& desc)
-      : GPURenderPass(desc) {}
+  FakeRenderPass(const GPURenderPassDescriptor& desc,
+                 std::vector<uint32_t>& instance_counts)
+      : GPURenderPass(desc), instance_counts_(instance_counts) {}
 
   void EncodeCommands(std::optional<GPUViewport> = std::nullopt,
-                      std::optional<GPUScissorRect> = std::nullopt) override {}
+                      std::optional<GPUScissorRect> = std::nullopt) override {
+    for (const auto* command : GetCommands()) {
+      instance_counts_.push_back(command->instance_count);
+    }
+  }
+
+ private:
+  std::vector<uint32_t>& instance_counts_;
 };
 
 class FakeCommandBuffer : public GPUCommandBuffer {
@@ -98,7 +106,7 @@ class FakeCommandBuffer : public GPUCommandBuffer {
   std::shared_ptr<GPURenderPass> BeginRenderPass(
       const GPURenderPassDescriptor& desc) override {
     render_pass_count_++;
-    return std::make_shared<FakeRenderPass>(desc);
+    return std::make_shared<FakeRenderPass>(desc, instance_counts_);
   }
 
   std::shared_ptr<GPUBlitPass> BeginBlitPass() override {
@@ -109,8 +117,13 @@ class FakeCommandBuffer : public GPUCommandBuffer {
 
   uint32_t render_pass_count() const { return render_pass_count_; }
 
+  const std::vector<uint32_t>& instance_counts() const {
+    return instance_counts_;
+  }
+
  private:
   uint32_t render_pass_count_ = 0;
+  std::vector<uint32_t> instance_counts_;
 };
 
 class FakeGPUDevice : public GPUDevice {
@@ -219,6 +232,12 @@ class FakeGPUDevice : public GPUDevice {
     return last_command_buffer_ == nullptr
                ? 0u
                : last_command_buffer_->render_pass_count();
+  }
+
+  std::vector<uint32_t> last_instance_counts() const {
+    return last_command_buffer_ == nullptr
+               ? std::vector<uint32_t>{}
+               : last_command_buffer_->instance_counts();
   }
 
   uint32_t disallowed_shader_function_count() const {
@@ -1180,6 +1199,61 @@ TEST(PrecompileDrawTest, PrecompiledRRectPipelineIsHitByRealDraw) {
   ExpectRealDrawHitsPrecompiledPipeline(
       context, PrecompileDrawType::kDrawRRect, paint, false,
       [&](Canvas* canvas) { canvas->DrawRRect(rrect, paint); });
+}
+
+TEST(SimpleShapeDrawTest, AffinePathsUseRRectPipelineAndMerge) {
+  Path paths[3];
+  const Rect bounds = Rect::MakeLTRB(-8.f, -6.f, 8.f, 6.f);
+  paths[0].AddRect(bounds);
+  paths[1].AddOval(bounds);
+  paths[2].AddRoundRect(bounds, 2.f, 3.f);
+
+  // Exact 90 degrees has zero diagonal entries but is still invertible.
+  Matrix quarter_turn = Matrix::Scale(0.f, 0.f);
+  quarter_turn.SetSkewX(-1.f);
+  quarter_turn.SetSkewY(1.f);
+  const Matrix transforms[] = {
+      Matrix::RotateDeg(5.f), Matrix::RotateDeg(45.f), quarter_turn,
+      Matrix::Skew(0.4f, -0.2f),
+      Matrix::RotateDeg(30.f) * Matrix::Scale(-2.f, 0.5f)};
+  for (size_t shape = 0; shape < 3; ++shape) {
+    for (size_t transform = 0; transform < 5; ++transform) {
+      for (auto style : {Paint::kFill_Style, Paint::kStroke_Style}) {
+        if (shape == 0 && style == Paint::kFill_Style) continue;
+        SCOPED_TRACE(::testing::Message()
+                     << "shape=" << shape << " transform=" << transform
+                     << " style=" << static_cast<int>(style));
+        FakeGPUContext context;
+        ASSERT_TRUE(context.Init());
+        context.SetEnableSimpleShapePipeline(true);
+        context.SetEnableGPUTessellation(false);
+        context.SetEnableMergingDrawCall(true);
+        GPUSurfaceDescriptor desc{};
+        desc.width = 128;
+        desc.height = 128;
+        auto surface = context.CreateSurface(&desc);
+        auto* canvas = surface->LockCanvas();
+        Paint paint;
+        paint.SetAntiAlias(true);
+        paint.SetStyle(style);
+        paint.SetStrokeWidth(2.f);
+        for (int i = 0; i < 2; ++i) {
+          canvas->SetMatrix(
+              Matrix::Translate(32.f + i * 64.f, 32.f + i * 64.f) *
+              transforms[transform]);
+          canvas->DrawPath(paths[shape], paint);
+        }
+        canvas->Flush();
+        surface->Flush();
+        EXPECT_TRUE(
+            context.device()->HasVertexFunctionLabelContaining("RRect"));
+        EXPECT_FALSE(
+            context.device()->HasVertexFunctionLabelContaining("Path"));
+        EXPECT_EQ(context.device()->last_instance_counts(),
+                  std::vector<uint32_t>{2u});
+      }
+    }
+  }
 }
 
 TEST(PrecompileDrawTest,
