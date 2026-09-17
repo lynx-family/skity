@@ -85,6 +85,14 @@ GPUDeviceGL::GPUDeviceGL() {
                                            GetGLString(GL_RENDERER),
                                            GetGLString(GL_VERSION));
   driver_workarounds_ = ResolveGLDriverWorkarounds(driver_info_);
+  ApplyGLDriverWorkarounds(driver_workarounds_, *gpu_caps);
+  LOGW(
+      "GPUDeviceGL effective_blend_caps=[fb_fetch={},native={},coherent={},"
+      "dual_src={}]",
+      gpu_caps->supports_framebuffer_fetch,
+      gpu_caps->supports_native_advanced_blend,
+      gpu_caps->supports_native_advanced_blend_coherent,
+      gpu_caps->supports_dual_source_blending);
   InitCaps(std::move(gpu_caps));
 
   if (driver_workarounds_.use_draw_for_clear) {
