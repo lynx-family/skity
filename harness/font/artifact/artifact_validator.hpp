@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "harness/font/case/validation.hpp"
+#include "harness/font/case/case_document.hpp"
 
 namespace skity {
 namespace font_harness {
@@ -20,6 +20,8 @@ struct ArtifactValidationResult {
 };
 
 ArtifactValidationResult ValidateProbeResultDocument(const Json::Value& root);
+ArtifactValidationResult ValidateProbeForCase(const CaseValidationResult& input,
+                                              const Json::Value& artifact);
 ArtifactValidationResult ValidateCompareReportDocument(const Json::Value& root);
 
 }  // namespace font_harness

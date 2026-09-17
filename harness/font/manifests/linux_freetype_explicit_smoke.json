@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "linux_freetype_explicit_smoke",
+  "backend": "freetype",
+  "platforms": [
+    "linux-freetype"
+  ],
+  "target_platform": "linux-freetype",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "typeface_probe/roboto_regular_file_freetype.json",
+    "typeface_probe/roboto_regular_data_freetype.json",
+    "typeface_probe/roboto_regular_glyphs_freetype.json",
+    "typeface_probe/noto_color_emoji_glyphs_freetype.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/linux-freetype",
+    "report_root": "local/font-harness/reports/linux-freetype"
+  }
+}

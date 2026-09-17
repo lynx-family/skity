@@ -67,6 +67,10 @@ struct PaintRequest {
 struct FontManagerTypefaceRequest {
   std::string entry;
   std::string family_name;
+  bool null_family = true;
+  const char* FamilyName() const {
+    return null_family ? nullptr : family_name.c_str();
+  }
   FontStyle style = FontStyle::Normal();
   bool has_character = false;
   uint32_t character = 0;
@@ -484,14 +488,8 @@ bool ParseFontManagerTypefaceRequest(const Json::Value& root,
                        "MatchFamilyStyle, and MatchFamilyStyleCharacter");
   }
 
+  request->null_family = !value["family_name"].isString();
   ReadStringField(value, "family_name", &request->family_name);
-  if ((request->entry == "MatchFamilyStyle" ||
-       request->entry == "MatchFamilyStyleCharacter") &&
-      request->family_name.empty()) {
-    AddValidationError(report, "$.font_manager_request.family_name",
-                       "family_name is required for this entry");
-    valid = false;
-  }
 
   valid =
       ParseStyle(value, "$.font_manager_request", &request->style, report) &&
@@ -547,8 +545,7 @@ std::shared_ptr<Typeface> MakeTypefaceFromFontManager(
     return font_manager->GetDefaultTypeface(request.style);
   }
   if (request.entry == "MatchFamilyStyle") {
-    return font_manager->MatchFamilyStyle(request.family_name.c_str(),
-                                          request.style);
+    return font_manager->MatchFamilyStyle(request.FamilyName(), request.style);
   }
   if (request.entry == "MatchFamilyStyleCharacter") {
     std::vector<const char*> bcp47;
@@ -557,7 +554,7 @@ std::shared_ptr<Typeface> MakeTypefaceFromFontManager(
       bcp47.push_back(tag.c_str());
     }
     return font_manager->MatchFamilyStyleCharacter(
-        request.family_name.c_str(), request.style,
+        request.FamilyName(), request.style,
         bcp47.empty() ? nullptr : bcp47.data(), static_cast<int>(bcp47.size()),
         static_cast<Unichar>(request.character));
   }
@@ -935,15 +932,26 @@ Json::Value GlyphImageToJson(const GlyphData& glyph, const std::string& path,
     const size_t source_row_bytes = image.RowBytes();
     if (source_row_bytes < tight_row_bytes) {
       errors->push_back(path + ".row_bytes is smaller than the image width");
-    } else if (source_row_bytes == tight_row_bytes) {
-      value["digest"] = DigestBytes(image.buffer, byte_size);
     } else {
       std::vector<uint8_t> tight_pixels(byte_size);
       for (size_t y = 0; y < height; ++y) {
         std::memcpy(tight_pixels.data() + y * tight_row_bytes,
                     image.buffer + y * source_row_bytes, tight_row_bytes);
       }
+      if (image.format == BitmapFormat::kBGRA8) {
+        value["native_format"] = "bgra8";
+        value["format"] = "rgba8";
+        for (size_t i = 0; i < tight_pixels.size(); i += 4) {
+          std::swap(tight_pixels[i], tight_pixels[i + 2]);
+        }
+      }
       value["digest"] = DigestBytes(tight_pixels.data(), tight_pixels.size());
+      std::ostringstream hex;
+      for (uint8_t byte : tight_pixels) {
+        hex << std::hex << std::setw(2) << std::setfill('0')
+            << static_cast<int>(byte);
+      }
+      value["pixels_hex"] = hex.str();
     }
   }
   return value;
@@ -1085,6 +1093,13 @@ GlyphImageProbeResult RunGlyphImageProbe(
     return result;
   }
 
+  if (!IsExplicitSourceCasePlatformAvailable(root, request.backend)) {
+    return BuildFailure(GlyphImageProbeStatus::kBackendUnavailable,
+                        validation.case_id, request.backend,
+                        "backend_unavailable",
+                        "case does not target the Linux FreeType host");
+  }
+
   if (validation.backend != request.backend) {
     GlyphImageProbeResult result = BuildFailure(
         GlyphImageProbeStatus::kSchemaValidationFailed, validation.case_id,
@@ -1163,6 +1178,13 @@ GlyphImageProbeResult RunGlyphImageProbe(
     typeface_source =
         ExplicitTypefaceSourceToJson(entry, font_file_id, *font_file);
   } else {
+    if (!IsHostFontProbeBackendAvailable(request.backend)) {
+      return BuildFailure(GlyphImageProbeStatus::kBackendUnavailable,
+                          validation.case_id, request.backend,
+                          "backend_unavailable",
+                          HostFontBackendUnavailableMessage(
+                              request.backend, "glyph_image probe"));
+    }
     FontManagerTypefaceRequest font_manager_request;
     if (!ParseFontManagerTypefaceRequest(root, &font_manager_request,
                                          &scratch_report)) {

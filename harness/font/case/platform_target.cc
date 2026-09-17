@@ -22,6 +22,8 @@ const std::vector<PlatformTargetInfo>& PlatformTargetRegistry() {
       {"android-freetype", "freetype", "android-adb"},
       {"windows-directwrite", "directwrite", "windows-host"},
       {"host-ft", "host-ft", "host-cli"},
+      {"linux-freetype", "freetype", "host-cli"},
+      {"linux-fontconfig", "fontconfig", "host-cli"},
   };
   return entries;
 }
@@ -37,8 +39,8 @@ const std::vector<PlatformAliasEntry>& PlatformTargetAliases() {
 }  // namespace
 
 const std::vector<std::string>& AllowedBackendIds() {
-  static const std::vector<std::string> values = {"coretext", "freetype",
-                                                  "directwrite", "host-ft"};
+  static const std::vector<std::string> values = {
+      "coretext", "freetype", "directwrite", "host-ft", "fontconfig"};
   return values;
 }
 

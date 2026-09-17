@@ -40,7 +40,9 @@ ArtifactValidationResult ValidateBaseArtifact(
 ArtifactValidationResult ValidateProbeResultDocument(const Json::Value& root) {
   ArtifactValidationResult result =
       ValidateBaseArtifact(root, "font_probe_result");
-  RequireStringField(root, "backend", "$", &result.errors, nullptr);
+  if (root.isObject()) {
+    RequireStringField(root, "backend", "$", &result.errors, nullptr);
+  }
   result.valid = result.errors.IsValid();
   return result;
 }
@@ -49,8 +51,10 @@ ArtifactValidationResult ValidateCompareReportDocument(
     const Json::Value& root) {
   ArtifactValidationResult result =
       ValidateBaseArtifact(root, "font_compare_report");
-  RequireStringField(root, "stage", "$", &result.errors, nullptr);
-  RequireStringField(root, "reason_code", "$", &result.errors, nullptr);
+  if (root.isObject()) {
+    RequireStringField(root, "stage", "$", &result.errors, nullptr);
+    RequireStringField(root, "reason_code", "$", &result.errors, nullptr);
+  }
   result.valid = result.errors.IsValid();
   return result;
 }

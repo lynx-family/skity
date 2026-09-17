@@ -20,9 +20,13 @@ endif()
 
 add_library(skity_font_harness STATIC
   ${CMAKE_CURRENT_LIST_DIR}/artifact/artifact_validator.cc
+  artifact/probe_contract.cc
+  artifact/fingerprint.cc
+  artifact/provenance.cc
   ${CMAKE_CURRENT_LIST_DIR}/artifact/artifact_writer.cc
   ${CMAKE_CURRENT_LIST_DIR}/artifact/json_io.cc
   ${CMAKE_CURRENT_LIST_DIR}/case/case_document.cc
+  ${CMAKE_CURRENT_LIST_DIR}/case/font_manager_contract.cc
   ${CMAKE_CURRENT_LIST_DIR}/case/manifest_document.cc
   ${CMAKE_CURRENT_LIST_DIR}/case/platform_target.cc
   ${CMAKE_CURRENT_LIST_DIR}/case/repo_uri.cc
@@ -31,6 +35,7 @@ add_library(skity_font_harness STATIC
   ${CMAKE_CURRENT_LIST_DIR}/compare/path/path_normalizer.cc
   ${CMAKE_CURRENT_LIST_DIR}/platform/coretext/env_info.cc
   ${CMAKE_CURRENT_LIST_DIR}/platform/directwrite/env_info.cc
+  ${CMAKE_CURRENT_LIST_DIR}/platform/linux/env_info.cc
   ${CMAKE_CURRENT_LIST_DIR}/probe/font_manager_probe.cc
   ${CMAKE_CURRENT_LIST_DIR}/probe/glyph_image_probe.cc
   ${CMAKE_CURRENT_LIST_DIR}/probe/glyph_path_probe.cc
@@ -45,6 +50,7 @@ add_library(skity_font_harness STATIC
 
 set(SKITY_FONT_HARNESS_HAS_CORETEXT 0)
 set(SKITY_FONT_HARNESS_HAS_DIRECTWRITE 0)
+set(SKITY_FONT_HARNESS_HAS_FREETYPE 0)
 set(SKITY_FONT_HARNESS_TARGET_PLATFORM "unknown")
 set(SKITY_FONT_HARNESS_IS_IOS_PLATFORM OFF)
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_OSX_SYSROOT MATCHES "iphone")
@@ -75,6 +81,14 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
   set(SKITY_FONT_HARNESS_TARGET_PLATFORM "windows-directwrite")
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET freetype2 AND NOT SKITY_CT_FONT)
+  set(SKITY_FONT_HARNESS_HAS_FREETYPE 1)
+  set(SKITY_FONT_HARNESS_TARGET_PLATFORM "linux-freetype")
+  target_link_libraries(skity_font_harness PRIVATE freetype2)
+  target_include_directories(skity_font_harness PRIVATE
+    ${CMAKE_SOURCE_DIR}/third_party/freetype2/include)
+endif()
+
 target_include_directories(
   skity_font_harness
   PUBLIC
@@ -92,6 +106,7 @@ target_compile_definitions(
   SKITY_FONT_HARNESS_ENABLE_FONT_HARNESS=$<BOOL:${SKITY_ENABLE_FONT_HARNESS}>
   SKITY_FONT_HARNESS_HAS_CORETEXT=${SKITY_FONT_HARNESS_HAS_CORETEXT}
   SKITY_FONT_HARNESS_HAS_DIRECTWRITE=${SKITY_FONT_HARNESS_HAS_DIRECTWRITE}
+  SKITY_FONT_HARNESS_HAS_FREETYPE=${SKITY_FONT_HARNESS_HAS_FREETYPE}
   SKITY_FONT_HARNESS_TARGET_PLATFORM="${SKITY_FONT_HARNESS_TARGET_PLATFORM}"
 )
 target_link_libraries(

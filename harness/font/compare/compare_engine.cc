@@ -14,7 +14,9 @@
 #include "harness/font/artifact/artifact_validator.hpp"
 #include "harness/font/artifact/artifact_writer.hpp"
 #include "harness/font/artifact/json_io.hpp"
+#include "harness/font/artifact/provenance.hpp"
 #include "harness/font/case/case_document.hpp"
+#include "harness/font/case/font_manager_contract.hpp"
 #include "harness/font/case/validation.hpp"
 
 namespace skity {
@@ -1453,9 +1455,9 @@ CompareResult RunCompare(const CompareRequest& request) {
   }
 
   ArtifactValidationResult expected_validation =
-      ValidateProbeResultDocument(expected_root);
+      ValidateProbeForCase(case_validation, expected_root);
   ArtifactValidationResult actual_validation =
-      ValidateProbeResultDocument(actual_root);
+      ValidateProbeForCase(case_validation, actual_root);
   if (!expected_validation.valid || !actual_validation.valid) {
     CompareResult result = BuildInputFailure(
         case_validation.case_id, backend, request, "artifact_schema",
@@ -1488,9 +1490,70 @@ CompareResult RunCompare(const CompareRequest& request) {
     return result;
   }
 
+  ValidationContext expected_inputs, actual_inputs;
+  if (request.profile != "auto" && request.profile != CaseProfile(case_root)) {
+    expected_inputs.AddError("$.profile",
+                             "requested profile does not match case");
+  }
+  ValidateArtifactInputs(case_validation, expected_root, request.expected_path,
+                         request.environment_path, true, &expected_inputs);
+  ValidateArtifactInputs(case_validation, actual_root, request.actual_path,
+                         request.environment_path, false, &actual_inputs);
+  if (!expected_inputs.IsValid() || !actual_inputs.IsValid()) {
+    auto failure =
+        BuildInputFailure(case_validation.case_id, backend, request,
+                          "artifact_inputs", "stale_or_invalid_artifact",
+                          "artifact input/provenance validation failed");
+    failure.report["expected_errors"] = expected_inputs.ToJson();
+    failure.report["actual_errors"] = actual_inputs.ToJson();
+    return failure;
+  }
   CompareConfig config = ParseCompareConfig(case_root);
   std::vector<Diff> diffs;
   RunCategoryCompare(expected_root, actual_root, config, &diffs);
+  if (case_root["font_manager_expectation"].isMember("inventory_count")) {
+    auto names = [](const Json::Value& source) {
+      std::vector<std::string> sorted;
+      for (const auto& name : source) {
+        sorted.push_back(name.asString());
+      }
+      std::sort(sorted.begin(), sorted.end());
+      Json::Value result(Json::arrayValue);
+      for (const auto& name : sorted) {
+        result.append(name);
+      }
+      return result;
+    };
+    auto expected = names(
+        expected_root["font_manager_probe"]["font_manager"]["family_names"]);
+    auto actual = names(
+        actual_root["font_manager_probe"]["font_manager"]["family_names"]);
+    CompareSelectionSubset(expected, actual,
+                           "font_manager_probe.font_manager.family_names",
+                           "exact", &diffs);
+  }
+  if (case_root["font_manager_expectation"].isMember("style_count")) {
+    const char* key =
+        case_root["font_manager_request"]["entry"] == "MatchFamily"
+            ? "style_set"
+            : "create_style_set";
+    const auto& expected =
+        expected_root["font_manager_probe"]["operation"][key]["styles"];
+    const auto& actual =
+        actual_root["font_manager_probe"]["operation"][key]["styles"];
+    for (Json::ArrayIndex i = 0; i < expected.size(); ++i) {
+      CompareSelectionSubset(expected[i]["style"], actual[i]["style"],
+                             "font_manager_probe.operation.styles[" +
+                                 std::to_string(i) + "].style",
+                             "exact", &diffs);
+      CompareSelectionSubset(
+          NormalizeTypefaceSelection(expected[i]["create_typeface"]),
+          NormalizeTypefaceSelection(actual[i]["create_typeface"]),
+          "font_manager_probe.operation.styles[" + std::to_string(i) +
+              "].create_typeface",
+          "exact", &diffs);
+    }
+  }
 
   CompareResult result;
   result.case_id = case_validation.case_id;

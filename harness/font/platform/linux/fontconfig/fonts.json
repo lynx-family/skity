@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "font_files": [
+    "repo://test/fonts/resources/SourceSansPro-Regular.ttf",
+    "repo://test/fonts/resources/SourceSansPro-Bold.ttf",
+    "repo://test/fonts/resources/SourceSansPro-Italic.ttf",
+    "repo://test/fonts/resources/SourceSansPro-BoldItalic.ttf",
+    "repo://test/fonts/resources/SourceSansPro-SemiBold.ttf",
+    "repo://test/fonts/resources/SourceSansPro-SemiBoldItalic.ttf",
+    "repo://test/fonts/resources/NotoSerif-Regular.ttf",
+    "repo://test/fonts/resources/NotoSerif-Bold.ttf",
+    "repo://test/fonts/resources/NotoSerif-Italic.ttf",
+    "repo://test/fonts/resources/NotoSerif-BoldItalic.ttf",
+    "repo://test/fonts/resources/DroidSansMono.ttf",
+    "repo://test/fonts/resources/NotoSansCJK-Regular.ttc",
+    "repo://test/fonts/resources/NotoColorEmoji.ttf",
+    "repo://test/fonts/resources/RobotoFlex-Regular.ttf"
+  ]
+}

@@ -8,12 +8,18 @@
 #include <skity/utils/settings.hpp>
 #include <string>
 
+#include "harness/font/case/platform_target.hpp"
+
 #ifndef SKITY_FONT_HARNESS_HAS_CORETEXT
 #define SKITY_FONT_HARNESS_HAS_CORETEXT 0
 #endif
 
 #ifndef SKITY_FONT_HARNESS_HAS_DIRECTWRITE
 #define SKITY_FONT_HARNESS_HAS_DIRECTWRITE 0
+#endif
+
+#ifndef SKITY_FONT_HARNESS_HAS_FREETYPE
+#define SKITY_FONT_HARNESS_HAS_FREETYPE 0
 #endif
 
 namespace skity {
@@ -55,19 +61,35 @@ inline std::string HostFontBackendUnavailableMessage(
 #endif
     return "DirectWrite backend is unavailable; build on Windows";
   }
+  if (backend == "fontconfig" || backend == "freetype") {
+    return "Linux system font matching is unavailable; Skity Fontconfig "
+           "FontManager is not implemented";
+  }
   return probe_name + " supports only the coretext and directwrite backends";
 }
 
+inline bool IsExplicitSourceCasePlatformAvailable(const Json::Value& root,
+                                                  const std::string& backend) {
+  return backend != "freetype" ||
+         PlatformArrayContainsTarget(root["platforms"], "linux-freetype");
+}
+
 inline bool IsExplicitSourceProbeBackend(const std::string& backend) {
-  return IsHostFontProbeBackend(backend);
+  return backend == "freetype" || IsHostFontProbeBackend(backend);
 }
 
 inline bool IsExplicitSourceProbeBackendAvailable(const std::string& backend) {
-  return IsHostFontProbeBackendAvailable(backend);
+  return backend == "freetype"
+             ? static_cast<bool>(SKITY_FONT_HARNESS_HAS_FREETYPE)
+             : IsHostFontProbeBackendAvailable(backend);
 }
 
 inline std::string ExplicitSourceBackendUnavailableMessage(
     const std::string& backend, const std::string& probe_name) {
+  if (backend == "freetype") {
+    return "Explicit FreeType backend is unavailable; build on Linux with "
+           "the FreeType target enabled";
+  }
   return HostFontBackendUnavailableMessage(backend, probe_name);
 }
 

@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "harness/font/case/font_manager_contract.hpp"
 #include "harness/font/case/platform_target.hpp"
 
 namespace skity {
@@ -55,7 +56,12 @@ bool ValidateGlyphChar(const std::string& value) {
       return false;
     }
   }
-  return true;
+  try {
+    const auto scalar = std::stoul(value.substr(2), nullptr, 16);
+    return scalar <= 0x10FFFF && !(scalar >= 0xD800 && scalar <= 0xDFFF);
+  } catch (...) {
+    return false;
+  }
 }
 
 bool ValidateColorString(const std::string& value) {
@@ -397,6 +403,7 @@ void ValidateTypefaceRequest(
 CaseValidationResult ValidateCaseDocument(const Json::Value& root,
                                           const RepoUriResolver& resolver) {
   CaseValidationResult result;
+  result.repo_root = resolver.RepoRoot();
   result.normalized_case = root;
 
   if (!RequireObject(root, "$", &result.errors)) {
@@ -434,6 +441,7 @@ CaseValidationResult ValidateCaseDocument(const Json::Value& root,
 
   const auto font_files = ValidateFontFiles(root, resolver, &result);
   ValidateTypefaceRequest(root, category, font_files, &result.errors);
+  ValidateFontManagerCase(root, &result.errors);
   ValidateFontRequest(root, &result.errors);
   ValidatePaintRequest(root, &result.errors);
   ValidateGlyphs(root, &result.errors);

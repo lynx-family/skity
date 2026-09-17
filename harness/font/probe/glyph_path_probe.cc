@@ -63,6 +63,10 @@ struct PathCompareConfig {
 struct FontManagerTypefaceRequest {
   std::string entry;
   std::string family_name;
+  bool null_family = true;
+  const char* FamilyName() const {
+    return null_family ? nullptr : family_name.c_str();
+  }
   FontStyle style = FontStyle::Normal();
   bool has_character = false;
   uint32_t character = 0;
@@ -458,14 +462,8 @@ bool ParseFontManagerTypefaceRequest(const Json::Value& root,
         "MatchFamilyStyleCharacter");
   }
 
+  request->null_family = !value["family_name"].isString();
   ReadStringField(value, "family_name", &request->family_name);
-  if ((request->entry == "MatchFamilyStyle" ||
-       request->entry == "MatchFamilyStyleCharacter") &&
-      request->family_name.empty()) {
-    AddValidationError(report, "$.font_manager_request.family_name",
-                       "family_name is required for this entry");
-    valid = false;
-  }
 
   valid =
       ParseStyle(value, "$.font_manager_request", &request->style, report) &&
@@ -521,8 +519,7 @@ std::shared_ptr<Typeface> MakeTypefaceFromFontManager(
     return font_manager->GetDefaultTypeface(request.style);
   }
   if (request.entry == "MatchFamilyStyle") {
-    return font_manager->MatchFamilyStyle(request.family_name.c_str(),
-                                          request.style);
+    return font_manager->MatchFamilyStyle(request.FamilyName(), request.style);
   }
   if (request.entry == "MatchFamilyStyleCharacter") {
     std::vector<const char*> bcp47;
@@ -531,7 +528,7 @@ std::shared_ptr<Typeface> MakeTypefaceFromFontManager(
       bcp47.push_back(tag.c_str());
     }
     return font_manager->MatchFamilyStyleCharacter(
-        request.family_name.c_str(), request.style,
+        request.FamilyName(), request.style,
         bcp47.empty() ? nullptr : bcp47.data(), static_cast<int>(bcp47.size()),
         static_cast<Unichar>(request.character));
   }
@@ -893,6 +890,7 @@ Json::Value BuildGlyphPathBody(const Json::Value& root,
         "missing");
   } else {
     Json::Value scaler_result(Json::objectValue);
+    scaler_result["available"] = true;
     scaler_result["desc"] = ScalerContextDescToJson(desc);
     scaler_result["load_path_entry"] = "ScalerContext::GetPath";
     scaler_result["glyph_paths"] = BuildScalerGlyphPaths(
@@ -978,6 +976,13 @@ GlyphPathProbeResult RunGlyphPathInternal(const GlyphPathProbeRequest& request,
     return result;
   }
 
+  if (!IsExplicitSourceCasePlatformAvailable(root, request.backend)) {
+    return BuildFailure(GlyphPathProbeStatus::kBackendUnavailable,
+                        validation.case_id, request.backend,
+                        "backend_unavailable", output_mode,
+                        "case does not target the Linux FreeType host");
+  }
+
   if (validation.backend != request.backend) {
     GlyphPathProbeResult result = BuildFailure(
         GlyphPathProbeStatus::kSchemaValidationFailed, validation.case_id,
@@ -1058,6 +1063,13 @@ GlyphPathProbeResult RunGlyphPathInternal(const GlyphPathProbeRequest& request,
       return result;
     }
   } else {
+    if (!IsHostFontProbeBackendAvailable(request.backend)) {
+      return BuildFailure(GlyphPathProbeStatus::kBackendUnavailable,
+                          validation.case_id, request.backend,
+                          "backend_unavailable", output_mode,
+                          HostFontBackendUnavailableMessage(
+                              request.backend, "glyph_path probe"));
+    }
     FontManagerTypefaceRequest font_manager_request;
     if (!ParseFontManagerTypefaceRequest(root, &font_manager_request,
                                          &scratch_report)) {
