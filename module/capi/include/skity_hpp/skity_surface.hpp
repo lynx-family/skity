@@ -13,8 +13,10 @@
 
 #include <cstdint>
 #include <skity_hpp/skity_base.hpp>
+#include <skity_hpp/skity_bitmap.hpp>
 #include <skity_hpp/skity_canvas.hpp>
 #include <skity_hpp/skity_context.hpp>
+#include <skity_hpp/skity_types.hpp>
 
 namespace skity {
 namespace raii {
@@ -49,6 +51,15 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
 
   /** Present the rendering result; the canvas must be flushed first. */
   void Flush() { skity_surface_flush(get()); }
+
+  /**
+   * Read pixels back to CPU memory (@p rect selects a sub-region; an empty
+   * rect reads the whole surface). Returns an empty wrapper on failure.
+   */
+  Pixmap ReadPixels(const Rect& rect = Rect::MakeEmpty()) const {
+    bool whole = rect.IsEmpty();
+    return Pixmap(skity_surface_read_pixels(get(), whole ? nullptr : &rect));
+  }
 
   uint32_t GetWidth() const { return skity_surface_get_width(get()); }
   uint32_t GetHeight() const { return skity_surface_get_height(get()); }
