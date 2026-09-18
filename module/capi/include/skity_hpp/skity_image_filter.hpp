@@ -32,8 +32,7 @@ class ImageFilter
 
   /** Morphology dilate (max); radii in pixels. */
   static ImageFilter Dilate(float radius_x, float radius_y) {
-    return ImageFilter(
-        skity_image_filter_create_dilate(radius_x, radius_y));
+    return ImageFilter(skity_image_filter_create_dilate(radius_x, radius_y));
   }
 
   /** Morphology erode (min); radii in pixels. */
@@ -43,8 +42,7 @@ class ImageFilter
 
   /** Transform the filtered result by @p matrix. */
   static ImageFilter MatrixTransform(const Matrix& matrix) {
-    return ImageFilter(
-        skity_image_filter_create_matrix_transform(&matrix));
+    return ImageFilter(skity_image_filter_create_matrix_transform(&matrix));
   }
 
   /** Wrap a color filter so it can be chained / attached as an image filter. */
@@ -54,7 +52,8 @@ class ImageFilter
   }
 
   /** Chain two filters: result = outer(inner(src)). */
-  static ImageFilter Compose(const ImageFilter& outer, const ImageFilter& inner) {
+  static ImageFilter Compose(const ImageFilter& outer,
+                             const ImageFilter& inner) {
     return ImageFilter(
         skity_image_filter_create_compose(outer.get(), inner.get()));
   }
@@ -70,7 +69,8 @@ class ImageFilter
     return ImageFilter(skity_image_filter_create_drop_shadow(
         dx, dy, sigma_x, sigma_y, color, input.get(), nullptr));
   }
-  /** Drop shadow of the source primitive directly (no input filter, no crop). */
+  /** Drop shadow of the source primitive directly (no input filter, no crop).
+   */
   static ImageFilter DropShadow(float dx, float dy, float sigma_x,
                                 float sigma_y, Color color) {
     return ImageFilter(skity_image_filter_create_drop_shadow(
