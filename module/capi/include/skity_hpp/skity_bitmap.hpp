@@ -35,9 +35,9 @@ class Pixmap : public detail::OwnHandle<skity_pixmap, skity_pixmap_destroy> {
    * exceed width * bytes-per-pixel; the buffer must hold at least
    * @p row_bytes * height bytes.
    */
-  static Pixmap MakeFromData(const Data& data, size_t row_bytes,
-                             uint32_t width, uint32_t height,
-                             AlphaType alpha_type, ColorType color_type) {
+  static Pixmap MakeFromData(const Data& data, size_t row_bytes, uint32_t width,
+                             uint32_t height, AlphaType alpha_type,
+                             ColorType color_type) {
     return Pixmap(skity_pixmap_create(data.get(), row_bytes, width, height,
                                       to_c(alpha_type), to_c(color_type)));
   }
@@ -97,9 +97,7 @@ class Bitmap : public detail::OwnHandle<skity_bitmap, skity_bitmap_destroy> {
    * Borrow the writable pixel view of this bitmap (writes through it are
    * visible here). The returned pixmap keeps the pixels alive.
    */
-  Pixmap GetPixmap() const {
-    return Pixmap(skity_bitmap_get_pixmap(get()));
-  }
+  Pixmap GetPixmap() const { return Pixmap(skity_bitmap_get_pixmap(get())); }
 
  private:
   explicit Bitmap(skity_bitmap h) : OwnHandle(h) {}

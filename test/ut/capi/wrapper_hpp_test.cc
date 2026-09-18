@@ -8,9 +8,9 @@
 // include/skity/ — see the namespace-collision note in skity_hpp/skity.hpp.
 
 #include <gtest/gtest.h>
-#include <skity_hpp/skity.hpp>
 
 #include <cstdint>
+#include <skity_hpp/skity.hpp>
 #include <vector>
 
 namespace {
@@ -19,10 +19,10 @@ using skity::raii::Bitmap;
 using skity::raii::BlendMode;
 using skity::raii::BlurStyle;
 using skity::raii::Canvas;
-using skity::raii::ColorFilter;
-using skity::raii::ColorPackRGBA;
 using skity::raii::Color_BLACK;
 using skity::raii::Color_WHITE;
+using skity::raii::ColorFilter;
+using skity::raii::ColorPackRGBA;
 using skity::raii::Data;
 using skity::raii::DisplayList;
 using skity::raii::DisplayListBuildOptions;
@@ -121,7 +121,7 @@ TEST(WrapperHpp, PaintEffectsRoundTrip) {
       0.3f, 0.6f, 0.1f, 0.f, 0.f,  //
       0.3f, 0.6f, 0.1f, 0.f, 0.f,  //
       0.3f, 0.6f, 0.1f, 0.f, 0.f,  //
-      0.f, 0.f, 0.f, 1.f, 0.f,
+      0.f,  0.f,  0.f,  1.f, 0.f,
   };
   paint.SetColorFilter(ColorFilter::Matrix(matrix20));
   paint.SetImageFilter(ImageFilter::Blur(2.f, 2.f));
@@ -155,10 +155,9 @@ TEST(WrapperHpp, ShaderFactories) {
   ASSERT_TRUE(image);
   EXPECT_EQ(image.Width(), 2u);
   EXPECT_TRUE(Shader::MakeShader(image));
-  EXPECT_TRUE(
-      Shader::MakeShader(image, skity::raii::SamplingOptions(
-                                    skity::raii::FilterMode::kLinear,
-                                    skity::raii::MipmapMode::kNone)));
+  EXPECT_TRUE(Shader::MakeShader(
+      image, skity::raii::SamplingOptions(skity::raii::FilterMode::kLinear,
+                                          skity::raii::MipmapMode::kNone)));
 }
 
 TEST(WrapperHpp, PathConstructionAndQueries) {
@@ -175,14 +174,14 @@ TEST(WrapperHpp, PathConstructionAndQueries) {
   arc.MoveTo(50.f, 10.f);
   arc.ArcTo(Rect::MakeWH(100.f, 100.f), 0.f, 90.f, true);
   arc.MoveTo(0.f, 0.f);
-  arc.ArcTo(30.f, 30.f, 0.f, Path::ArcSize::kLarge, Path::Direction::kCW,
-            100.f, 100.f);
+  arc.ArcTo(30.f, 30.f, 0.f, Path::ArcSize::kLarge, Path::Direction::kCW, 100.f,
+            100.f);
   arc.ArcTo(0.f, 0.f, 100.f, 0.f, 25.f);
   EXPECT_FALSE(arc.IsEmpty());
 
   Path round;
-  const Vec2 radii[4] = {
-      Vec2{4.f, 4.f}, Vec2{8.f, 8.f}, Vec2{12.f, 12.f}, Vec2{16.f, 16.f}};
+  const Vec2 radii[4] = {Vec2{4.f, 4.f}, Vec2{8.f, 8.f}, Vec2{12.f, 12.f},
+                         Vec2{16.f, 16.f}};
   round.AddRoundRect(Rect::MakeWH(100.f, 80.f), radii);
   Rect as_rect;
   EXPECT_FALSE(round.IsRect(&as_rect));
@@ -449,11 +448,13 @@ TEST(WrapperHpp, TextFontTypeface) {
   ASSERT_TRUE(blob);
   EXPECT_GT(blob.GetBounds().Width(), 0.f);
 
-  TextBlob glyphs_blob = TextBlob::MakeFromGlyphs(font, ids, nullptr, nullptr, 2);
+  TextBlob glyphs_blob =
+      TextBlob::MakeFromGlyphs(font, ids, nullptr, nullptr, 2);
   ASSERT_TRUE(glyphs_blob);
   const float pos_x[] = {0.f, 24.f};
   const float pos_y[] = {0.f, 0.f};
-  Rect run_bounds = TextBlob::ComputeRunBounds(2, ids, pos_x, pos_y, font, paint);
+  Rect run_bounds =
+      TextBlob::ComputeRunBounds(2, ids, pos_x, pos_y, font, paint);
   EXPECT_GT(run_bounds.Width(), 0.f);
 }
 
@@ -488,7 +489,8 @@ TEST(WrapperHpp, SoftwareCanvasDraws) {
   canvas.DrawRect(Rect::MakeWH(4.f, 4.f), paint);
   {
     // RGBA bytes read back as little-endian words: red = 0xFF0000FF.
-    const auto* px = static_cast<const uint32_t*>(bitmap.GetPixmap().GetPixels());
+    const auto* px =
+        static_cast<const uint32_t*>(bitmap.GetPixmap().GetPixels());
     ASSERT_NE(px, nullptr);
     EXPECT_EQ(px[0], 0xFF0000FFu);
     EXPECT_EQ(px[8 * 7 + 7], 0xFFFFFFFFu);
@@ -499,8 +501,8 @@ TEST(WrapperHpp, SoftwareCanvasDraws) {
   canvas.DrawCircle(2.f, 2.f, 1.f, paint);
   canvas.DrawOval(Rect::MakeWH(4.f, 2.f), paint);
   canvas.DrawRoundRect(Rect::MakeWH(6.f, 6.f), 1.f, 1.f, paint);
-  const Vec2 radii[4] = {
-      Vec2{1.f, 1.f}, Vec2{1.f, 1.f}, Vec2{1.f, 1.f}, Vec2{1.f, 1.f}};
+  const Vec2 radii[4] = {Vec2{1.f, 1.f}, Vec2{1.f, 1.f}, Vec2{1.f, 1.f},
+                         Vec2{1.f, 1.f}};
   canvas.DrawRRect(Rect::MakeWH(8.f, 8.f), radii, paint);
   RRect rrect;
   rrect.SetRect(Rect::MakeWH(8.f, 8.f));

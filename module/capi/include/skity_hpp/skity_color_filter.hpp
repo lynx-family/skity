@@ -30,7 +30,8 @@ class ColorFilter
   }
 
   /** Apply @p outer after @p inner: result = outer(inner(src)). */
-  static ColorFilter Compose(const ColorFilter& outer, const ColorFilter& inner) {
+  static ColorFilter Compose(const ColorFilter& outer,
+                             const ColorFilter& inner) {
     return ColorFilter(
         skity_color_filter_create_compose(outer.get(), inner.get()));
   }
