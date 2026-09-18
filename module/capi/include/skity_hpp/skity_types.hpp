@@ -74,6 +74,71 @@ inline constexpr skity_tile_mode to_c(TileMode mode) {
   return static_cast<skity_tile_mode>(mode);
 }
 
+/** Pixel alpha interpretation, mirroring the legacy skity::AlphaType. */
+enum class AlphaType : uint32_t {
+  kUnknown_AlphaType = SKITY_ALPHA_TYPE_UNKNOWN,
+  kOpaque_AlphaType = SKITY_ALPHA_TYPE_OPAQUE,
+  kPremul_AlphaType = SKITY_ALPHA_TYPE_PREMUL,
+  kUnpremul_AlphaType = SKITY_ALPHA_TYPE_UNPREMUL,
+};
+
+inline constexpr skity_alpha_type to_c(AlphaType type) {
+  return static_cast<skity_alpha_type>(type);
+}
+
+/** Pixel color packing, mirroring the legacy skity::ColorType. */
+enum class ColorType : uint32_t {
+  kUnknown = SKITY_COLOR_TYPE_UNKNOWN,
+  kRGBA = SKITY_COLOR_TYPE_RGBA,
+  kBGRA = SKITY_COLOR_TYPE_BGRA,
+  kRGB565 = SKITY_COLOR_TYPE_RGB565,
+};
+
+inline constexpr skity_color_type to_c(ColorType type) {
+  return static_cast<skity_color_type>(type);
+}
+
+/** Image min/mag filter, mirroring the legacy skity::FilterMode. */
+enum class FilterMode : uint32_t {
+  kNearest = SKITY_FILTER_MODE_NEAREST,
+  kLinear = SKITY_FILTER_MODE_LINEAR,
+};
+
+/** Mipmap sampling mode, mirroring the legacy skity::MipmapMode. */
+enum class MipmapMode : uint32_t {
+  kNone = SKITY_MIPMAP_MODE_NONE,
+  kNearest = SKITY_MIPMAP_MODE_NEAREST,
+  kLinear = SKITY_MIPMAP_MODE_LINEAR,
+};
+
+/**
+ * Image sampling options: filter + mipmap modes plus optional
+ * Mitchell-Netravali cubic coefficients (cubic sampling is active when either
+ * coefficient is non-zero). Binary-compatible with skity_sampling_options.
+ */
+class SamplingOptions : public skity_sampling_options {
+ public:
+  constexpr SamplingOptions()
+      : skity_sampling_options{SKITY_FILTER_MODE_NEAREST,
+                               SKITY_MIPMAP_MODE_NONE, 0.f, 0.f} {}
+
+  constexpr SamplingOptions(FilterMode filter, MipmapMode mipmap)
+      : skity_sampling_options{static_cast<skity_filter_mode>(filter),
+                               static_cast<skity_mipmap_mode>(mipmap), 0.f,
+                               0.f} {}
+
+  /** Cubic (Mitchell-Netravali B/C) sampling; active when B or C != 0. */
+  constexpr SamplingOptions(float cubic_b, float cubic_c)
+      : skity_sampling_options{SKITY_FILTER_MODE_NEAREST,
+                               SKITY_MIPMAP_MODE_NONE, cubic_b, cubic_c} {}
+
+  constexpr bool UseCubic() const { return cubic_b != 0.f || cubic_c != 0.f; }
+};
+
+static_assert(sizeof(SamplingOptions) == sizeof(skity_sampling_options),
+              "SamplingOptions must stay binary-compatible with "
+              "skity_sampling_options");
+
 // Color helpers mirroring the legacy skity:: Color utilities. Colors are
 // unpremultiplied ARGB packed as 0xAARRGGBB.
 inline constexpr Color ColorSetA(Color c, uint8_t a) {

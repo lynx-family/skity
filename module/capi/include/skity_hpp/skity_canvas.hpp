@@ -158,12 +158,23 @@ class Canvas {
   void DrawImage(skity_image image, float x, float y) {
     skity_canvas_draw_image(canvas_, image, x, y);
   }
+  void DrawImageWithSampling(skity_image image, float x, float y,
+                             const SamplingOptions& sampling,
+                             const Paint& paint) {
+    skity_canvas_draw_image_with_sampling(canvas_, image, x, y, &sampling,
+                                          paint.get());
+  }
   void DrawImageRect(skity_image image, const Rect& dst, const Paint& paint) {
     skity_canvas_draw_image_to_rect(canvas_, image, &dst, nullptr, paint.get());
   }
   void DrawImageRect(skity_image image, const Rect& src, const Rect& dst,
                      const Paint& paint) {
     skity_canvas_draw_image_rect(canvas_, image, &src, &dst, nullptr,
+                                 paint.get());
+  }
+  void DrawImageRect(skity_image image, const Rect& src, const Rect& dst,
+                     const SamplingOptions& sampling, const Paint& paint) {
+    skity_canvas_draw_image_rect(canvas_, image, &src, &dst, &sampling,
                                  paint.get());
   }
 
@@ -182,22 +193,49 @@ class Canvas {
   /** Submit draw commands to the GPU backend; call before Surface::Flush. */
   void Flush() { skity_canvas_flush(canvas_); }
 
- private:
+ protected:
+  /** Give up the handle without destroying (ownership transfer helper). */
+  skity_canvas Steal() {
+    skity_canvas c = canvas_;
+    canvas_ = nullptr;
+    return c;
+  }
+
   skity_canvas canvas_ = nullptr;
 };
 
 /**
  * Owning canvas over a CPU bitmap (skity_canvas_make_software_canvas).
- * Implicitly converts to the non-owning Canvas view for drawing calls.
- * The bitmap must outlive the canvas.
+ * It IS a Canvas (all draw calls available directly); destruction deletes
+ * the underlying software canvas. The bitmap must outlive the canvas.
  */
-class SoftwareCanvas
-    : public detail::OwnHandle<skity_canvas, skity_canvas_destroy> {
+class SoftwareCanvas : public Canvas {
  public:
   explicit SoftwareCanvas(skity_bitmap bitmap)
-      : OwnHandle(skity_canvas_make_software_canvas(bitmap)) {}
+      : Canvas(skity_canvas_make_software_canvas(bitmap)) {}
 
-  operator Canvas() const { return Canvas(get()); }
+  SoftwareCanvas(SoftwareCanvas&& other) noexcept : Canvas(other.Steal()) {}
+
+  SoftwareCanvas& operator=(SoftwareCanvas&& other) noexcept {
+    if (this != &other) {
+      Destroy();
+      canvas_ = other.Steal();
+    }
+    return *this;
+  }
+
+  SoftwareCanvas(const SoftwareCanvas&) = delete;
+  SoftwareCanvas& operator=(const SoftwareCanvas&) = delete;
+
+  ~SoftwareCanvas() { Destroy(); }
+
+ private:
+  void Destroy() {
+    if (canvas_ != nullptr) {
+      skity_canvas_destroy(canvas_);
+      canvas_ = nullptr;
+    }
+  }
 };
 
 }  // namespace raii

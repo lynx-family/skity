@@ -36,6 +36,12 @@ class PathEffect
     return PathEffect(skity_path_effect_create_dash(intervals, count, phase));
   }
 
+  /**
+   * Adopt an owning C handle (e.g. from skity_paint_get_path_effect);
+   * destroying the wrapper releases the shared reference.
+   */
+  static PathEffect Adopt(skity_path_effect h) { return PathEffect(h); }
+
  private:
   explicit PathEffect(skity_path_effect h) : OwnHandle(h) {}
 };
