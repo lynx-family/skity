@@ -8,7 +8,9 @@
 #include <memory>
 #include <skity/effect/color_filter.hpp>
 #include <skity/effect/shader.hpp>
+#include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/graphic/sampling_options.hpp>
 #include <skity/graphic/tile_mode.hpp>
 #include <skity/recorder/picture_recorder.hpp>
 #include <skity/text/font.hpp>
@@ -266,6 +268,70 @@ TEST(TextGolden, CoverageAwareBlending) {
   config.supports_native_advanced_blend_coherent = false;
   config.supports_dual_source_blending =
       skity::testing::SupportsDualSourceBlending();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), kWidth, kHeight, golden_path.c_str(), config));
+}
+
+TEST(TextGolden, ShaderVariantsExact) {
+  constexpr float kWidth = 520.f;
+  constexpr float kHeight = 480.f;
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(kWidth, kHeight));
+  auto* canvas = recorder.GetRecordingCanvas();
+  canvas->Clear(skity::Color_WHITE);
+
+  auto typeface = skity::Typeface::MakeFromFile(kRobotoRegular);
+  ASSERT_NE(typeface, nullptr);
+
+  skity::Bitmap bitmap(4, 1);
+  bitmap.SetPixel(0, 0, skity::ColorSetARGB(255, 244, 67, 54));
+  bitmap.SetPixel(1, 0, skity::ColorSetARGB(255, 33, 150, 243));
+  bitmap.SetPixel(2, 0, skity::ColorSetARGB(255, 76, 175, 80));
+  bitmap.SetPixel(3, 0, skity::ColorSetARGB(255, 255, 193, 7));
+  auto image = skity::Image::MakeImage(bitmap.GetPixmap());
+  ASSERT_NE(image, nullptr);
+
+  skity::Color4f colors[] = {skity::Colors::kRed, skity::Colors::kGreen,
+                             skity::Colors::kBlue, skity::Colors::kRed};
+  float positions[] = {0.f, 0.33f, 0.66f, 1.f};
+  skity::Point linear_points[] = {{24.f, 0.f, 0.f, 1.f},
+                                  {440.f, 0.f, 0.f, 1.f}};
+  const char* labels[] = {"IMAGE", "LINEAR", "RADIAL", "SWEEP", "CONICAL"};
+  float baselines[] = {78.f, 170.f, 262.f, 354.f, 446.f};
+  std::shared_ptr<skity::Shader> shaders[] = {
+      skity::Shader::MakeShader(
+          image,
+          skity::SamplingOptions{skity::FilterMode::kNearest,
+                                 skity::MipmapMode::kNone},
+          skity::TileMode::kClamp, skity::TileMode::kClamp,
+          skity::Matrix::Scale(64.f, 64.f)),
+      skity::Shader::MakeLinear(linear_points, colors, positions, 4),
+      skity::Shader::MakeRadial({180.f, 230.f, 0.f, 1.f}, 220.f, colors,
+                                positions, 4),
+      skity::Shader::MakeSweep(180.f, 322.f, 0.f, 360.f, colors, positions, 4),
+      skity::Shader::MakeTwoPointConical({180.f, 414.f, 0.f, 1.f}, 30.f,
+                                         {180.f, 414.f, 0.f, 1.f}, 300.f,
+                                         colors, positions, 4),
+  };
+
+  skity::Paint paint;
+  paint.SetAntiAlias(true);
+  paint.SetStyle(skity::Paint::kFill_Style);
+  paint.SetTypeface(typeface);
+  for (size_t i = 0; i < 5; ++i) {
+    auto text = MakeSubpixelTextBlob(labels[i], typeface, 64.f);
+    ASSERT_NE(text, nullptr);
+    ASSERT_NE(shaders[i], nullptr);
+    paint.SetShader(shaders[i]);
+    canvas->DrawTextBlob(text.get(), 24.f, baselines[i], paint);
+  }
+
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append("text_shader_variants_exact.png");
+  auto dl = recorder.FinishRecording();
+  skity::testing::GoldenTestEnvConfig config;
+  config.sample_count = 1;
+  config.require_exact_pixel_match = true;
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(
       dl.get(), kWidth, kHeight, golden_path.c_str(), config));
 }
