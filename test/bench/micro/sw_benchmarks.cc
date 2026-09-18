@@ -17,7 +17,7 @@ static void BM_SWExamplePremulAlpha(benchmark::State& state) {
   paint.SetColor(skity::Color_WHITE);
   for (auto _ : state) {
     canvas->DrawPaint(paint);
-    skity::example::basic::draw_canvas(canvas.get());
+    skity::example::basic::draw_canvas(*canvas);
   }
 }
 BENCHMARK(BM_SWExamplePremulAlpha)->Unit(benchmark::kMicrosecond);
@@ -29,7 +29,7 @@ static void BM_SWExampleUnpremulAlpha(benchmark::State& state) {
   paint.SetColor(skity::Color_WHITE);
   for (auto _ : state) {
     canvas->DrawPaint(paint);
-    skity::example::basic::draw_canvas(canvas.get());
+    skity::example::basic::draw_canvas(*canvas);
   }
 }
 BENCHMARK(BM_SWExampleUnpremulAlpha)->Unit(benchmark::kMicrosecond);
@@ -42,7 +42,7 @@ static void BM_SWExampleUnpremulAlphaWithClip(benchmark::State& state) {
   for (auto _ : state) {
     canvas->ClipRect(skity::Rect::MakeLTRB(100, 100, 200, 200));
     canvas->DrawPaint(paint);
-    skity::example::basic::draw_canvas(canvas.get());
+    skity::example::basic::draw_canvas(*canvas);
   }
 }
 BENCHMARK(BM_SWExampleUnpremulAlphaWithClip)->Unit(benchmark::kMicrosecond);
@@ -93,7 +93,7 @@ static void BM_SWDrawBigImage(benchmark::State& state) {
   skity::Paint paint;
   paint.SetColor(skity::Color_WHITE);
   canvas1->DrawPaint(paint);
-  skity::example::basic::draw_canvas(canvas1.get());
+  skity::example::basic::draw_canvas(*canvas1);
 
   skity::Bitmap bitmap2(1000, 800, skity::AlphaType::kPremul_AlphaType);
   auto canvas2 = skity::Canvas::MakeSoftwareCanvas(&bitmap2);
@@ -114,7 +114,7 @@ static void BM_SWDrawBigImageLinear(benchmark::State& state) {
   skity::Paint paint;
   paint.SetColor(skity::Color_WHITE);
   canvas1->DrawPaint(paint);
-  skity::example::basic::draw_canvas(canvas1.get());
+  skity::example::basic::draw_canvas(*canvas1);
 
   skity::Bitmap bitmap2(1000, 800, skity::AlphaType::kPremul_AlphaType);
   auto canvas2 = skity::Canvas::MakeSoftwareCanvas(&bitmap2);
@@ -138,7 +138,7 @@ static void BM_SWDrawBigImageWithBlur(benchmark::State& state) {
   skity::Paint paint;
   paint.SetColor(skity::Color_WHITE);
   canvas1->DrawPaint(paint);
-  skity::example::basic::draw_canvas(canvas1.get());
+  skity::example::basic::draw_canvas(*canvas1);
 
   skity::Bitmap bitmap2(1000, 800, skity::AlphaType::kPremul_AlphaType);
   auto canvas2 = skity::Canvas::MakeSoftwareCanvas(&bitmap2);
