@@ -35,8 +35,7 @@ enum class PathOp : uint32_t {
 inline bool Op(const Path& one, const Path& two, PathOp op, Path* out) {
   return out != nullptr &&
          skity_path_op_execute(one.get(), two.get(),
-                               static_cast<skity_path_op>(op),
-                               out->get()) != 0;
+                               static_cast<skity_path_op>(op), out->get()) != 0;
 }
 
 }  // namespace raii

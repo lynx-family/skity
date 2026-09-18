@@ -18,7 +18,6 @@
 #include <skity_hpp/skity_canvas.hpp>
 #include <skity_hpp/skity_paint.hpp>
 #include <skity_hpp/skity_types.hpp>
-
 #include <vector>
 
 namespace skity {
@@ -77,9 +76,7 @@ class DisplayList
   }
 
   /** Number of recorded draw ops. */
-  uint32_t GetOpCount() const {
-    return skity_display_list_get_op_count(get());
-  }
+  uint32_t GetOpCount() const { return skity_display_list_get_op_count(get()); }
 
   /** Property bitmask (a combination of Property values). */
   uint32_t GetProperties() const {

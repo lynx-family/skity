@@ -33,8 +33,8 @@ class PathMeasure
    */
   explicit PathMeasure(const Path& path, bool force_closed = false,
                        float res_scale = 1.f)
-      : OwnHandle(skity_path_measure_create(path.get(),
-                                            force_closed ? 1u : 0u, res_scale)) {}
+      : OwnHandle(skity_path_measure_create(path.get(), force_closed ? 1u : 0u,
+                                            res_scale)) {}
 
   /** Re-bind to @p path (an empty path detaches). */
   void SetPath(const Path& path, bool force_closed = false) {
@@ -49,7 +49,8 @@ class PathMeasure
    * [0, length]); either output may be NULL. False when no path is bound or
    * the contour is zero-length.
    */
-  bool GetPosTan(float distance, Point* out_position, Point* out_tangent) const {
+  bool GetPosTan(float distance, Point* out_position,
+                 Point* out_tangent) const {
     return skity_path_measure_get_pos_tan(get(), distance, out_position,
                                           out_tangent) != 0;
   }

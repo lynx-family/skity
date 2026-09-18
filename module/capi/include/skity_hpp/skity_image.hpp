@@ -61,8 +61,8 @@ class Image : public detail::OwnHandle<skity_image, skity_image_destroy> {
    */
   static Image MakeDeferred(skity_texture_format format, uint32_t width,
                             uint32_t height, AlphaType alpha_type) {
-    return Image(skity_image_create_deferred(format, width, height,
-                                              to_c(alpha_type)));
+    return Image(
+        skity_image_create_deferred(format, width, height, to_c(alpha_type)));
   }
 
   /**
@@ -76,8 +76,8 @@ class Image : public detail::OwnHandle<skity_image, skity_image_destroy> {
                            skity_promise_release_callback release,
                            void* userdata) {
     return Image(skity_image_create_promise(format, width, height,
-                                             to_c(alpha_type), get_texture,
-                                             release, userdata));
+                                            to_c(alpha_type), get_texture,
+                                            release, userdata));
   }
 
   /** Promise variant whose callback also receives the GPU context in use. */
@@ -87,8 +87,8 @@ class Image : public detail::OwnHandle<skity_image, skity_image_destroy> {
                             skity_promise_release_callback release,
                             void* userdata) {
     return Image(skity_image_create_promise2(format, width, height,
-                                              to_c(alpha_type), get_texture,
-                                              release, userdata));
+                                             to_c(alpha_type), get_texture,
+                                             release, userdata));
   }
 
   /** Bind a texture to a deferred image; no-op semantics on other kinds. */
@@ -114,8 +114,8 @@ class Image : public detail::OwnHandle<skity_image, skity_image_destroy> {
                                     &sampling) != 0;
   }
   bool ScalePixels(Pixmap& dst, const Context& context) const {
-    return skity_image_scale_pixels(get(), dst.get(), context.get(),
-                                    nullptr) != 0;
+    return skity_image_scale_pixels(get(), dst.get(), context.get(), nullptr) !=
+           0;
   }
 
  private:
