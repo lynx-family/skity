@@ -12,9 +12,18 @@
 
 #include <cstdint>
 #include <skity_hpp/skity_base.hpp>
+#include <skity_hpp/skity_color_filter.hpp>
+#include <skity_hpp/skity_image_filter.hpp>
+#include <skity_hpp/skity_mask_filter.hpp>
 #include <skity_hpp/skity_path_effect.hpp>
 #include <skity_hpp/skity_shader.hpp>
 #include <skity_hpp/skity_types.hpp>
+
+// skity_hpp/skity_text.hpp is intentionally NOT included here: it includes
+// this header (TextBlob::Make takes a Paint), so the dependency must stay
+// one-directional. The Typeface members therefore use the raw skity_typeface
+// handle (available through skity_c/skity_paint.h); wrap results with
+// Typeface::Adopt.
 
 namespace skity {
 namespace raii {
@@ -56,6 +65,18 @@ class Paint : public detail::OwnHandle<skity_paint, skity_paint_destroy> {
   static constexpr Join kBevel_Join{Join::kBevel};
 
   Paint() : OwnHandle(skity_paint_create()) {}
+
+  /**
+   * Wrap an existing handle. For handles owning a paint reference this
+   * adopts it (destroy releases the paint); for non-owning handles borrowed
+   * from a DisplayList's storage, skity_paint_destroy only reclaims the
+   * wrapper, so adopting those is equally safe.
+   */
+  static Paint Adopt(skity_paint h) {
+    Paint p;
+    p.reset(h);
+    return p;
+  }
 
   void Reset() { skity_paint_reset(get()); }
 
@@ -129,11 +150,10 @@ class Paint : public detail::OwnHandle<skity_paint, skity_paint_destroy> {
   float GetTextSize() const { return skity_paint_get_text_size(get()); }
 
   /**
-   * Attach an effect or typeface. The paint takes a shared reference, so the
-   * passed (owning) handle may be destroyed immediately afterwards — passing
-   * e.g. a temporary wrapper works: `paint.SetShader(shader.get());`.
-   * Effect getters returning owning handles are not wrapped yet; until
-   * filter wrappers exist, use the raw C functions.
+   * Attach an effect or typeface (raw-handle overloads). The paint takes a
+   * shared reference, so the passed (owning) handle may be destroyed
+   * immediately afterwards — passing e.g. a temporary wrapper works:
+   * `paint.SetShader(shader.get());`.
    */
   void SetShader(skity_shader shader) { skity_paint_set_shader(get(), shader); }
   void SetColorFilter(skity_color_filter filter) {
@@ -154,7 +174,53 @@ class Paint : public detail::OwnHandle<skity_paint, skity_paint_destroy> {
 
   /** Wrapper-object overloads (accept temporaries: the paint shares). */
   void SetShader(const Shader& shader) { SetShader(shader.get()); }
+  void SetColorFilter(const ColorFilter& filter) {
+    SetColorFilter(filter.get());
+  }
+  void SetImageFilter(const ImageFilter& filter) {
+    SetImageFilter(filter.get());
+  }
+  void SetMaskFilter(const MaskFilter& filter) { SetMaskFilter(filter.get()); }
   void SetPathEffect(const PathEffect& effect) { SetPathEffect(effect.get()); }
+
+  /**
+   * Effect getters: the returned wrappers own a shared reference (adopting
+   * the handle the C layer created), so they keep the effect alive even if
+   * the paint is destroyed; empty when none is attached.
+   */
+  Shader GetShader() const {
+    return Shader::Adopt(skity_paint_get_shader(get()));
+  }
+  ColorFilter GetColorFilter() const {
+    return ColorFilter::Adopt(skity_paint_get_color_filter(get()));
+  }
+  ImageFilter GetImageFilter() const {
+    return ImageFilter::Adopt(skity_paint_get_image_filter(get()));
+  }
+  MaskFilter GetMaskFilter() const {
+    return MaskFilter::Adopt(skity_paint_get_mask_filter(get()));
+  }
+  PathEffect GetPathEffect() const {
+    return PathEffect::Adopt(skity_paint_get_path_effect(get()));
+  }
+
+  /**
+   * Typeface access through the raw handle (see the include note above):
+   * wrap with Typeface::Adopt. NULL when none is attached.
+   */
+  skity_typeface GetTypeface() const { return skity_paint_get_typeface(get()); }
+
+  /** Split stroke / fill colors as floating-point RGBA (legacy getters). */
+  Color4f GetStrokeColor() const {
+    Color4f out{};
+    skity_paint_get_stroke_color(get(), &out);
+    return out;
+  }
+  Color4f GetFillColor() const {
+    Color4f out{};
+    skity_paint_get_fill_color(get(), &out);
+    return out;
+  }
 };
 
 }  // namespace raii

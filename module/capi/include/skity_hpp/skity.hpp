@@ -66,12 +66,22 @@
 #include <skity_c/skity.h>
 
 #include <skity_hpp/skity_base.hpp>
+#include <skity_hpp/skity_bitmap.hpp>
 #include <skity_hpp/skity_canvas.hpp>
+#include <skity_hpp/skity_color_filter.hpp>
 #include <skity_hpp/skity_context.hpp>
+#include <skity_hpp/skity_data.hpp>
+#include <skity_hpp/skity_image.hpp>
+#include <skity_hpp/skity_image_filter.hpp>
+#include <skity_hpp/skity_mask_filter.hpp>
 #include <skity_hpp/skity_paint.hpp>
 #include <skity_hpp/skity_path.hpp>
 #include <skity_hpp/skity_path_effect.hpp>
+#include <skity_hpp/skity_path_measure.hpp>
+#include <skity_hpp/skity_path_op.hpp>
+#include <skity_hpp/skity_recorder.hpp>
 #include <skity_hpp/skity_shader.hpp>
+#include <skity_hpp/skity_stroke.hpp>
 #include <skity_hpp/skity_surface.hpp>
 #include <skity_hpp/skity_text.hpp>
 #include <skity_hpp/skity_types.hpp>
