@@ -15,7 +15,7 @@ void draw_with_recorder(skity::Canvas* canvas) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording();
 
-  skity::example::basic::draw_canvas(recorder.GetRecordingCanvas());
+  skity::example::basic::draw_canvas(*recorder.GetRecordingCanvas());
   std::unique_ptr<skity::DisplayList> display_list = recorder.FinishRecording();
   display_list->Draw(canvas);
 }
