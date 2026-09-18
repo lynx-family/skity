@@ -29,7 +29,7 @@ void draw_save_layer(skity::Canvas* canvas, float time) {
 
   canvas->ClipRect(bounds, skity::Canvas::ClipOp::kDifference);
 
-  skity::example::basic::draw_canvas(canvas);
+  skity::example::basic::draw_canvas(*canvas);
 
   canvas->Restore();
 
@@ -38,7 +38,7 @@ void draw_save_layer(skity::Canvas* canvas, float time) {
 
   canvas->SaveLayer(bounds, paint);
 
-  skity::example::basic::draw_canvas(canvas);
+  skity::example::basic::draw_canvas(*canvas);
 
   canvas->Restore();
 }
