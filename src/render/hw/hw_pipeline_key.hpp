@@ -22,19 +22,18 @@ struct HWGeometryKeyType {
     kPathAA = 2,
     kTessFill = 3,
     kTessStroke = 4,
-    kColorText = 5,
-    kGradientText = 6,
-    kRRect = 7,
-    kClip = 8,
-    kFilter = 9,
-    kCoverageAA = 10,
+    kText = 5,
+    kRRect = 6,
+    kClip = 7,
+    kFilter = 8,
+    kCoverageAA = 9,
     kLast = kCoverageAA,
   };
 };
 static_assert(HWGeometryKeyType::Value::kLast < 0xFF);
 
-// Fragment shader sub keys for coverage masks supplied by geometry.
-struct HWFragmentMaskKeyType {
+// Fragment shader sub keys for effects supplied by geometry.
+struct HWGeometryFSKeyType {
   static constexpr uint32_t kFragmentOnlyStart = 0x80;
 
   enum Value : uint32_t {
@@ -43,12 +42,16 @@ struct HWFragmentMaskKeyType {
     kRRect = HWGeometryKeyType::kRRect,
     kCoverageAA = HWGeometryKeyType::kCoverageAA,
     kCoverageAAConflationCorrection = kFragmentOnlyStart,
-    kLast = kCoverageAAConflationCorrection,
+    kTextA8 = kFragmentOnlyStart + 1,
+    kTextSDF = kFragmentOnlyStart + 2,
+    kTextColor = kFragmentOnlyStart + 3,
+    kTextColorSwizzleRB = kFragmentOnlyStart + 4,
+    kLast = kTextColorSwizzleRB,
   };
 };
 static_assert(HWGeometryKeyType::Value::kLast <
-              HWFragmentMaskKeyType::kFragmentOnlyStart);
-static_assert(HWFragmentMaskKeyType::Value::kLast < 0xFF);
+              HWGeometryFSKeyType::kFragmentOnlyStart);
+static_assert(HWGeometryFSKeyType::Value::kLast < 0xFF);
 
 struct HWFragmentKeyType {
   enum Value : uint32_t {
@@ -58,12 +61,7 @@ struct HWFragmentKeyType {
     kTexture = 4,
     kStencil = 5,
     kBlur = 6,
-    kColorText = 7,
-    kEmojiText = 8,
-    kGradientText = 9,
-    kSDFText = 10,
-    kTextureText = 11,
-    kImageFilter = 12,
+    kImageFilter = 7,
     kLast = kImageFilter,
   };
 };

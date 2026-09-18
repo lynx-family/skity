@@ -56,11 +56,7 @@ TEST(HWBufferLayoutMap, GetBufferLayout) {
             skity::WGSLTessPathStrokeGeometry::GetBufferLayout();
         EXPECT_EQ(expected_buffer_layout, actual_buffer_layout);
         break;
-      case skity::HWGeometryKeyType::kColorText:
-        expected_buffer_layout = skity::WGSLTextGeometry::GetBufferLayout();
-        EXPECT_EQ(expected_buffer_layout, actual_buffer_layout);
-        break;
-      case skity::HWGeometryKeyType::kGradientText:
+      case skity::HWGeometryKeyType::kText:
         expected_buffer_layout = skity::WGSLTextGeometry::GetBufferLayout();
         EXPECT_EQ(expected_buffer_layout, actual_buffer_layout);
         break;
