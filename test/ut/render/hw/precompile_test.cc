@@ -1401,6 +1401,22 @@ TEST(PrecompileDrawTest, SupportsTextDraw) {
   EXPECT_EQ(device->sampler_count(), 0u);
 }
 
+TEST(PrecompileDrawTest, TextPrecompilesLegacyMaskedBlendFallback) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto* device = context.device();
+  auto precompile_context = MakePrecompileContext(context, false);
+
+  Paint paint;
+  paint.SetBlendMode(BlendMode::kOverlay);
+  const auto pipeline_count = device->render_pipeline_count();
+  precompile_context->PrecompileDraw(PrecompileDrawType::kDrawText, paint);
+
+  // The fake device has neither framebuffer fetch nor dual-source blending:
+  // precompile the normal texture-copy plan and the no-copy legacy fallback.
+  EXPECT_EQ(device->render_pipeline_count() - pipeline_count, 2u);
+}
+
 TEST(PrecompileDrawTest, SupportsGradientTextDraw) {
   FakeGPUContext context;
   ASSERT_TRUE(context.Init());
@@ -1415,6 +1431,19 @@ TEST(PrecompileDrawTest, SupportsGradientTextDraw) {
 
   EXPECT_GT(device->shader_function_count(), 0u);
   EXPECT_GT(device->render_pipeline_count(), 0u);
+  EXPECT_EQ(device->texture_count(), 0u);
+  EXPECT_EQ(device->sampler_count(), 0u);
+}
+
+TEST(PrecompileDrawTest, SupportsTextureTextDrawWithoutGPUResources) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto* device = context.device();
+  Paint paint = MakeImagePaint(MakeTestImage());
+
+  PrecompileDraw(context, false, PrecompileDrawType::kDrawText, paint);
+
+  EXPECT_TRUE(device->HasFragmentFunctionLabel("FS_Texture_TextA8"));
   EXPECT_EQ(device->texture_count(), 0u);
   EXPECT_EQ(device->sampler_count(), 0u);
 }
@@ -1446,10 +1475,10 @@ TEST(PrecompileDrawTest, SupportsEmojiTextDraw) {
   EXPECT_EQ(device->texture_count(), 0u);
   EXPECT_EQ(device->sampler_count(), 0u);
   EXPECT_TRUE(
-      device->HasFragmentFunctionLabel("FS_ColorEmojiNoSwizzleFragmentWGSL"));
-  EXPECT_TRUE(
-      device->HasFragmentFunctionLabel("FS_ColorEmojiSwizzleRBFragmentWGSL"));
-  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("TextWGSL"));
+      device->HasFragmentFunctionLabel("FS_SolidVertexColor_TextColor"));
+  EXPECT_TRUE(device->HasFragmentFunctionLabel(
+      "FS_SolidVertexColor_TextColorSwizzleRB"));
+  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("Emoji"));
 
   auto shader_function_count = device->shader_function_count();
   auto render_pipeline_count = device->render_pipeline_count();
@@ -1458,6 +1487,21 @@ TEST(PrecompileDrawTest, SupportsEmojiTextDraw) {
 
   EXPECT_EQ(device->shader_function_count(), shader_function_count);
   EXPECT_EQ(device->render_pipeline_count(), render_pipeline_count);
+}
+
+TEST(PrecompileDrawTest, EmojiPrecompilesNoTextureCopyFallback) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto* device = context.device();
+  ASSERT_NE(device, nullptr);
+
+  Paint paint;
+  paint.SetBlendMode(BlendMode::kOverlay);
+  const auto pipeline_count = device->render_pipeline_count();
+  PrecompileDraw(context, false, PrecompileDrawType::kDrawEmojiText, paint);
+
+  // RGBA and BGRA each need a texture-copy plan and its no-copy fallback.
+  EXPECT_EQ(device->render_pipeline_count() - pipeline_count, 4u);
 }
 
 TEST(PrecompileDrawTest, SupportsGradientEmojiTextDraw) {
@@ -1477,10 +1521,10 @@ TEST(PrecompileDrawTest, SupportsGradientEmojiTextDraw) {
   EXPECT_EQ(device->texture_count(), 0u);
   EXPECT_EQ(device->sampler_count(), 0u);
   EXPECT_TRUE(
-      device->HasFragmentFunctionLabel("FS_ColorEmojiNoSwizzleFragmentWGSL"));
-  EXPECT_TRUE(
-      device->HasFragmentFunctionLabel("FS_ColorEmojiSwizzleRBFragmentWGSL"));
-  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("TextWGSL"));
+      device->HasFragmentFunctionLabel("FS_SolidVertexColor_TextColor"));
+  EXPECT_TRUE(device->HasFragmentFunctionLabel(
+      "FS_SolidVertexColor_TextColorSwizzleRB"));
+  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("Emoji"));
 
   auto shader_function_count = device->shader_function_count();
   auto render_pipeline_count = device->render_pipeline_count();

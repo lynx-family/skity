@@ -86,8 +86,8 @@ HWFunctionBaseKey WGSLCoverageAATileGeometry::GetMainKey() const {
 
 HWFunctionBaseKey WGSLCoverageAATileGeometry::GetFSSubKey() const {
   return enable_conflation_correction_
-             ? HWFragmentMaskKeyType::kCoverageAAConflationCorrection
-             : HWFragmentMaskKeyType::kCoverageAA;
+             ? HWGeometryFSKeyType::kCoverageAAConflationCorrection
+             : HWGeometryFSKeyType::kCoverageAA;
 }
 
 void WGSLCoverageAATileGeometry::WriteVSFunctionsAndStructs(

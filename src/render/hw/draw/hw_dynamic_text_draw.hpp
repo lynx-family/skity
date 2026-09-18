@@ -5,17 +5,21 @@
 #ifndef SRC_RENDER_HW_DRAW_HW_DYNAMIC_TEXT_DRAW_HPP
 #define SRC_RENDER_HW_DRAW_HW_DYNAMIC_TEXT_DRAW_HPP
 
+#include <optional>
+
+#include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/draw/hw_dynamic_draw.hpp"
-#include "src/render/hw/draw/hw_wgsl_fragment.hpp"
-#include "src/render/hw/draw/hw_wgsl_geometry.hpp"
 
 namespace skity {
 
-class HWDynamicTextDraw : public HWDynamicDraw {
+class HWDynamicTextDraw final : public HWDynamicDraw {
  public:
-  HWDynamicTextDraw(const Matrix& transform, HWWGSLGeometry* geometry,
-                    HWWGSLFragment* fragment)
-      : HWDynamicDraw(transform), geometry_(geometry), fragment_(fragment) {}
+  HWDynamicTextDraw(Matrix draw_transform, const Matrix& glyph_transform,
+                    ArrayList<GlyphRect, 16> glyph_rects, Paint paint,
+                    WGSLTextGeometry::BatchedTexture textures,
+                    std::shared_ptr<GPUSampler> sampler, TextAtlasEffect effect,
+                    bool is_stroke,
+                    std::optional<Matrix> device_to_local = std::nullopt);
 
   ~HWDynamicTextDraw() override = default;
 
@@ -26,30 +30,19 @@ class HWDynamicTextDraw : public HWDynamicDraw {
   static Matrix CalcTransform(const Matrix& canvas_transform,
                               const Matrix& text_transform);
 
- protected:
-  void OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
-                          HWDrawContext* context) override;
-
-  HWWGSLGeometry* geometry_;
-  HWWGSLFragment* fragment_;
-};
-
-class HWDynamicSdfTextDraw : public HWDynamicDraw {
- public:
-  HWDynamicSdfTextDraw(const Matrix& transform, HWWGSLGeometry* geometry,
-                       HWWGSLFragment* fragment)
-      : HWDynamicDraw(transform), geometry_(geometry), fragment_(fragment) {}
-
-  ~HWDynamicSdfTextDraw() override = default;
-
-  static Matrix CalcTransform(const Matrix& transform, const float scale);
+  static Matrix CalcSDFTransform(const Matrix& transform, float scale);
 
  protected:
   void OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                           HWDrawContext* context) override;
 
-  HWWGSLGeometry* geometry_;
-  HWWGSLFragment* fragment_;
+ private:
+  std::vector<BatchGroup<GlyphRect>> glyph_rects_;
+  WGSLTextGeometry::BatchedTexture textures_;
+  std::shared_ptr<GPUSampler> sampler_;
+  TextAtlasEffect effect_;
+  bool is_stroke_;
+  std::optional<Matrix> device_to_local_;
 };
 
 }  // namespace skity

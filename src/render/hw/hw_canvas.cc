@@ -422,17 +422,37 @@ void HWCanvas::DrawGlyphsInternal(uint32_t count, const GlyphID* glyphs,
         this->DrawPathInternal(path, paint, transform);
       });
   for (auto& glyph_run : glyph_runs) {
-    auto draw = glyph_run->Draw(
+    const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
+    auto plan =
+        ResolveHWBlendPlan(paint.GetBlendMode(), glyph_run->HasCoverageMask(),
+                           glyph_run->IsSourceOpaque(), caps,
+                           CurrentLayer()->SupportsTextureCopyDstRead());
+    if (!plan.has_value()) {
+      plan = ResolveLegacyCoverageBlendPlan(
+          paint.GetBlendMode(), caps,
+          CurrentLayer()->SupportsTextureCopyDstRead());
+    }
+    const bool requires_non_overlapping_draws =
+        !glyph_run->HasCoverageMask() &&
+        plan->dst_read_strategy == DstReadStrategy::kNativeBlend &&
+        !caps.supports_native_advanced_blend_coherent;
+    const bool split_overlapping_glyphs =
+        plan->dst_read_strategy == DstReadStrategy::kTextureCopy ||
+        requires_non_overlapping_draws;
+    auto glyph_draws = glyph_run->Draw(
         glyph_transform, glyph_to_layer, arena_allocator_, ctx_scale_,
-        surface_->GetGPUContext()->IsEnableTextLinearFilter());
-    if (draw) {
+        surface_->GetGPUContext()->IsEnableTextLinearFilter(),
+        split_overlapping_glyphs);
+
+    for (auto& glyph_draw : glyph_draws) {
+      auto* draw = glyph_draw.draw;
+      if (draw == nullptr) {
+        continue;
+      }
       draw->SetSampleCount(GetCanvasSampleCount());
-      SetupLayerSpaceBoundsForDraw(
-          draw, paint.ComputeFastBounds(glyph_run->GetBounds()), Matrix{});
-      // TODO(ColdPaleLight): create glyph draw fragments after the dst-read
-      // strategy is known, or let glyph draws rebuild programmable blending
-      // state here.
-      SetupBlendPlanForDraw(draw, paint);
+      SetupLayerSpaceBoundsForDraw(draw, glyph_draw.bounds, Matrix{});
+      draw->SetBlendPlan(*plan);
+      draw->SetRequiresNonOverlappingDraws(requires_non_overlapping_draws);
       CurrentLayer()->AddDraw(draw);
     }
   }

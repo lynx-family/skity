@@ -25,6 +25,7 @@
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
+#include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace {
@@ -1715,6 +1716,31 @@ skity::Path MakePath() {
   return path;
 }
 
+class PrimitiveColorGeometry final : public skity::HWWGSLGeometry {
+ public:
+  PrimitiveColorGeometry()
+      : HWWGSLGeometry(Flags::kSnippet | Flags::kAffectsFragment) {}
+
+  skity::HWFunctionBaseKey GetMainKey() const override {
+    return skity::HWGeometryKeyType::kPathAA;
+  }
+
+  skity::HWFunctionBaseKey GetFSSubKey() const override {
+    return skity::HWGeometryFSKeyType::kPathAA;
+  }
+
+  void WriteFSColor(std::stringstream& ss) const override {
+    ss << "\n  color = color * vec4<f32>(0.5);\n";
+  }
+
+  void WriteFSAlphaMask(std::stringstream& ss) const override {
+    ss << "\n  mask_alpha = 0.5;\n";
+  }
+
+  void PrepareCMD(skity::Command*, skity::HWDrawContext*, const skity::Matrix&,
+                  float, skity::Command*) override {}
+};
+
 static std::string ltrim(const std::string& s) {
   size_t start = s.find_first_not_of(" \t\r\n");
   return (start == std::string::npos) ? "" : s.substr(start);
@@ -1829,7 +1855,7 @@ TEST(ShaderWriter, CoverageAAResolvesAlphaInFinalFragment) {
   EXPECT_EQ(
       shader_writer.GetFSKey(),
       skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
-                                 skity::HWFragmentMaskKeyType::kCoverageAA));
+                                 skity::HWGeometryFSKeyType::kCoverageAA));
 }
 
 TEST(ShaderWriter, CoverageAAConflationCorrectionUsesDistinctShader) {
@@ -1876,7 +1902,7 @@ TEST(ShaderWriter, CoverageAAConflationCorrectionUsesDistinctShader) {
   EXPECT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(
                 skity::HWFragmentKeyType::kSolid,
-                skity::HWFragmentMaskKeyType::kCoverageAAConflationCorrection));
+                skity::HWGeometryFSKeyType::kCoverageAAConflationCorrection));
 
   auto program = wgx::Program::Parse(fs);
   ASSERT_NE(program, nullptr);
@@ -1918,7 +1944,7 @@ TEST(ShaderWriter, PathAAWithSolidColor) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor_AA");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
-                                       skity::HWFragmentMaskKeyType::kPathAA));
+                                       skity::HWGeometryFSKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAFS()));
 }
@@ -2045,7 +2071,7 @@ TEST(ShaderWriter, PathAAWithLinearGradient) {
       shader_writer.GetFSKey(),
       skity::MakeFunctionBaseKey(
           skity::MakeMainKey(skity::HWFragmentKeyType::kGradient, 0b11001001),
-          skity::HWFragmentMaskKeyType::kPathAA));
+          skity::HWGeometryFSKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryGradientVS()));
   ASSERT_TRUE(CompareShader(fs, GetLinearGradientAAFS()));
 }
@@ -2108,7 +2134,7 @@ TEST(ShaderWriter, PathAAWithTexture) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_Texture_AA");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kTexture,
-                                       skity::HWFragmentMaskKeyType::kPathAA));
+                                       skity::HWGeometryFSKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAATextureVS()));
   ASSERT_TRUE(CompareShader(fs, GetTextureAAFS()));
 }
@@ -2140,10 +2166,117 @@ TEST(ShaderWriter, PathAAWithSolidColorAndColorFilter) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor_AA_MatrixFilter");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
-                                       skity::HWFragmentMaskKeyType::kPathAA,
+                                       skity::HWGeometryFSKeyType::kPathAA,
                                        skity::HWColorFilterKeyType::kMatrix));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAWithCFFS()));
+}
+
+TEST(ShaderWriter, GeometryColorRunsBeforeFilterAndCoverage) {
+  PrimitiveColorGeometry geometry;
+  skity::WGSLSolidColor fragment{skity::Colors::kWhite};
+  float color_matrix[20] = {0, 1, 0, 0, 0,  //
+                            1, 0, 0, 0, 0,  //
+                            0, 0, 1, 0, 0,  //
+                            0, 0, 0, 1, 0};
+  auto filter = skity::ColorFilters::Matrix(color_matrix);
+  fragment.SetFilter(skity::WGXFilterFragment::Make(filter.get()));
+
+  skity::HWWGSLShaderWriter writer{&geometry, &fragment};
+  auto fs = writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
+
+  const auto source = fs.find("color = vec4<f32>(uColor.rgb");
+  const auto primitive = fs.find("color = color * vec4<f32>(0.5)");
+  const auto color_filter = fs.find("color = filter_color(color)");
+  const auto coverage = fs.find("mask_alpha = 0.5");
+  ASSERT_NE(source, std::string::npos);
+  ASSERT_NE(primitive, std::string::npos);
+  ASSERT_NE(color_filter, std::string::npos);
+  ASSERT_NE(coverage, std::string::npos);
+  EXPECT_LT(source, primitive);
+  EXPECT_LT(primitive, color_filter);
+  EXPECT_LT(color_filter, coverage);
+
+  auto program = wgx::Program::Parse(fs);
+  ASSERT_NE(program, nullptr);
+  ASSERT_FALSE(program->GetDiagnosis().has_value());
+}
+
+TEST(ShaderWriter, TextGeometryEffectsProduceDistinctValidShaders) {
+  skity::WGSLSolidVertexColor fragment;
+  struct TestCase {
+    skity::TextAtlasEffect effect;
+    skity::HWGeometryFSKeyType::Value key;
+    const char* expected;
+  };
+  const TestCase cases[] = {
+      {skity::TextAtlasEffect::kA8Coverage, skity::HWGeometryFSKeyType::kTextA8,
+       "mask_alpha = get_text_atlas_color"},
+      {skity::TextAtlasEffect::kSDFCoverage,
+       skity::HWGeometryFSKeyType::kTextSDF, "mask_alpha = smoothstep"},
+      {skity::TextAtlasEffect::kColor, skity::HWGeometryFSKeyType::kTextColor,
+       "color = get_text_atlas_color"},
+      {skity::TextAtlasEffect::kColorSwizzleRB,
+       skity::HWGeometryFSKeyType::kTextColorSwizzleRB, "color = color.bgra"},
+  };
+
+  for (const auto& test : cases) {
+    skity::WGSLTextGeometry geometry({}, {}, {}, test.effect);
+    skity::HWWGSLShaderWriter writer(&geometry, &fragment);
+    const auto vs = writer.GenVSSourceWGSL();
+    const auto fs =
+        writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
+
+    EXPECT_EQ(writer.GetFSKey(),
+              skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolidVertex,
+                                         test.key));
+    EXPECT_NE(fs.find(test.expected), std::string::npos);
+    if (test.effect == skity::TextAtlasEffect::kColor ||
+        test.effect == skity::TextAtlasEffect::kColorSwizzleRB) {
+      EXPECT_EQ(fs.find("mask_alpha = get_text_atlas_color"),
+                std::string::npos);
+      EXPECT_NE(fs.find("color *= text_paint_alpha"), std::string::npos);
+    }
+
+    auto fs_program = wgx::Program::Parse(fs);
+    ASSERT_NE(fs_program, nullptr);
+    ASSERT_FALSE(fs_program->GetDiagnosis().has_value())
+        << fs_program->GetDiagnosis()->message << " at "
+        << fs_program->GetDiagnosis()->line << ":"
+        << fs_program->GetDiagnosis()->column << "\n"
+        << fs;
+    auto vs_program = wgx::Program::Parse(vs);
+    ASSERT_NE(vs_program, nullptr);
+    ASSERT_FALSE(vs_program->GetDiagnosis().has_value());
+  }
+}
+
+TEST(ShaderWriter, TextGeometryComposesWithGenericGradient) {
+  skity::Color4f colors[2] = {skity::Colors::kRed, skity::Colors::kBlue};
+  float positions[2] = {0.f, 1.f};
+  skity::Point points[2] = {{0.f, 0.f, 0.f, 1.f}, {16.f, 0.f, 0.f, 1.f}};
+  auto shader = skity::Shader::MakeLinear(points, colors, positions, 2);
+  skity::Shader::GradientInfo info;
+  const auto type = shader->AsGradient(&info);
+  skity::WGSLGradientFragment fragment(info, type, 1.f,
+                                       shader->GetLocalMatrix());
+  skity::WGSLTextGeometry geometry(
+      {}, {}, {}, skity::TextAtlasEffect::kA8Coverage, skity::Matrix{});
+  skity::HWWGSLShaderWriter writer(&geometry, &fragment);
+
+  const auto vs = writer.GenVSSourceWGSL();
+  const auto fs =
+      writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
+  EXPECT_NE(vs.find("uTextDeviceToLocal"), std::string::npos);
+  EXPECT_NE(fs.find("generate_gradient_color"), std::string::npos);
+  EXPECT_NE(fs.find("mask_alpha = get_text_atlas_color"), std::string::npos);
+
+  auto vs_program = wgx::Program::Parse(vs);
+  ASSERT_NE(vs_program, nullptr);
+  ASSERT_FALSE(vs_program->GetDiagnosis().has_value());
+  auto fs_program = wgx::Program::Parse(fs);
+  ASSERT_NE(fs_program, nullptr);
+  ASSERT_FALSE(fs_program->GetDiagnosis().has_value());
 }
 
 TEST(ShaderWriter, ComposeBlendColorFiltersUseSharedBlendFunctions) {
@@ -2350,7 +2483,7 @@ TEST(ShaderWriter, RRectWithSolidColor) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidVertexColor_RRect");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolidVertex,
-                                       skity::HWFragmentMaskKeyType::kRRect));
+                                       skity::HWGeometryFSKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorRRectFS()));
 }
@@ -2394,7 +2527,7 @@ TEST(ShaderWriter, RRectWithLinearGradient) {
       shader_writer.GetFSKey(),
       skity::MakeFunctionBaseKey(
           skity::MakeMainKey(skity::HWFragmentKeyType::kGradient, 0b11001001),
-          skity::HWFragmentMaskKeyType::kRRect));
+          skity::HWGeometryFSKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectGeometryGradientVS()));
   ASSERT_TRUE(CompareShader(fs, GetLinearGradientRRectFS()));
 }
@@ -2430,7 +2563,7 @@ TEST(ShaderWriter, RRectWithTexture) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_Texture_RRect");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kTexture,
-                                       skity::HWFragmentMaskKeyType::kRRect));
+                                       skity::HWGeometryFSKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectTextureVS()));
   ASSERT_TRUE(CompareShader(fs, GetTextureRRectFS()));
 }
