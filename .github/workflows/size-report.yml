@@ -63,7 +63,11 @@ jobs:
                       let headFilter = headBranch;
                       const baseFullName = `${context.repo.owner}/${context.repo.repo}`;
                       if (headRepo.full_name && headRepo.full_name !== baseFullName) {
-                          headFilter = `${headRepo.login}:${headBranch}`;
+                          // minimal-repository payloads carry owner.login,
+                          // not a top-level login field
+                          const headLogin = (headRepo.owner && headRepo.owner.login) ||
+                              headRepo.full_name.split('/')[0];
+                          headFilter = `${headLogin}:${headBranch}`;
                       }
                       let pr = null;
                       if (headFilter) {
