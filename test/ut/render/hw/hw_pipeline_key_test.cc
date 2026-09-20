@@ -16,7 +16,7 @@
 #include "skity/graphic/path.hpp"
 #include "src/effect/gradient_shader.hpp"
 #include "src/render/hw/draw/fragment/wgsl_blur_filter.hpp"
-#include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
+#include "src/render/hw/draw/fragment/wgsl_solid_vertex_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 #include "src/render/hw/draw/geometry/wgsl_filter_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
@@ -157,7 +157,7 @@ TEST(HWPipelineKey, ConvexPath_SolidColor_AA) {
             MakeFunctionBaseKey(HWGeometryKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolid,
-                                HWFragmentMaskKeyType::kPathAA));
+                                HWGeometryFSKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetVertexName(), "VS_PathAA");
   EXPECT_EQ(steps[1]->GetFragmentName(), "FS_SolidColor_AA");
 
@@ -201,7 +201,7 @@ TEST(HWPipelineKey, ConcavePath_SolidColor_AA) {
             MakeFunctionBaseKey(HWGeometryKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolid,
-                                HWFragmentMaskKeyType::kPathAA));
+                                HWGeometryFSKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetVertexName(), "VS_PathAA");
   EXPECT_EQ(steps[1]->GetFragmentName(), "FS_SolidColor_AA");
 
@@ -243,7 +243,7 @@ TEST(HWPipelineKey, StrokePath_SolidColor_AA) {
             MakeFunctionBaseKey(HWGeometryKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolid,
-                                HWFragmentMaskKeyType::kPathAA));
+                                HWGeometryFSKeyType::kPathAA));
   EXPECT_EQ(steps[1]->GetVertexName(), "VS_PathAA");
   EXPECT_EQ(steps[1]->GetFragmentName(), "FS_SolidColor_AA");
 
@@ -486,7 +486,7 @@ TEST(HWPipelineKey, RRect_SolidVertexColor) {
                                 HWFragmentKeyType::kSolidVertex));
   EXPECT_EQ(steps[0]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex,
-                                HWFragmentMaskKeyType::kRRect));
+                                HWGeometryFSKeyType::kRRect));
   EXPECT_EQ(steps[0]->GetVertexName(), "VS_RRect_SolidVertexColor");
   EXPECT_EQ(steps[0]->GetFragmentName(), "FS_SolidVertexColor_RRect");
 }
@@ -511,7 +511,7 @@ TEST(HWPipelineKey, RRect_SolidVertex_LinearToSRGBGammaFilter) {
                                 HWFragmentKeyType::kSolidVertex));
   EXPECT_EQ(steps[0]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex,
-                                HWFragmentMaskKeyType::kRRect,
+                                HWGeometryFSKeyType::kRRect,
                                 HWColorFilterKeyType::kLinearToSRGBGamma));
 
   EXPECT_EQ(steps[0]->GetVertexName(), "VS_RRect_SolidVertexColor");
@@ -538,7 +538,7 @@ TEST(HWPipelineKey, RRect_SolidVertex_BlendSrcATop) {
                                 HWFragmentKeyType::kSolidVertex));
   EXPECT_EQ(steps[0]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex,
-                                HWFragmentMaskKeyType::kRRect,
+                                HWGeometryFSKeyType::kRRect,
                                 HWColorFilterKeyType::kSrcATop));
   EXPECT_EQ(steps[0]->GetVertexName(), "VS_RRect_SolidVertexColor");
   EXPECT_EQ(steps[0]->GetFragmentName(),
@@ -566,7 +566,7 @@ TEST(HWPipelineKey, RRect_SolidVertex_Compose) {
                                 HWFragmentKeyType::kSolidVertex));
   EXPECT_EQ(steps[0]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex,
-                                HWFragmentMaskKeyType::kRRect,
+                                HWGeometryFSKeyType::kRRect,
                                 HWColorFilterKeyType::kCompose));
   EXPECT_EQ(steps[0]->GetVertexName(), "VS_RRect_SolidVertexColor");
   EXPECT_EQ(steps[0]->GetFragmentName(),
@@ -584,7 +584,7 @@ TEST(HWPipelineKey, RRect_SolidVertex_Compose) {
       MakePipelineBaseKey(MakeFunctionBaseKey(HWGeometryKeyType::kRRect,
                                               HWFragmentKeyType::kSolidVertex),
                           MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex,
-                                              HWFragmentMaskKeyType::kRRect,
+                                              HWGeometryFSKeyType::kRRect,
                                               HWColorFilterKeyType::kCompose));
   expected_pipeline_key.compose_keys = {HWColorFilterKeyType::kSrcIn,
                                         HWColorFilterKeyType::kSrcATop};
@@ -727,70 +727,40 @@ TEST(HWPipelineKey, NativeAdvancedBlendKeyHashIsStable) {
 }
 
 TEST(HWPipelineKey, Text) {
-  {
-    auto geometry = WGSLTextSolidColorGeometry(Matrix{}, {}, Paint{});
-    EXPECT_EQ(geometry.GetMainKey(), HWGeometryKeyType::kColorText);
-    EXPECT_EQ(geometry.GetShaderName(), "TextSolidColorVertexWGSL");
-  }
-  {
-    auto geometry = WGSLTextGradientGeometry({}, {}, {}, {});
-    EXPECT_EQ(geometry.GetMainKey(), HWGeometryKeyType::kGradientText);
-    EXPECT_EQ(geometry.GetShaderName(), "TextGradientVertexWGSL");
-  }
-  {
-    auto fragment = WGSLColorTextFragment({}, nullptr);
+  WGSLSolidVertexColor fragment;
+  const std::pair<TextAtlasEffect, HWGeometryFSKeyType::Value> effects[] = {
+      {TextAtlasEffect::kA8Coverage, HWGeometryFSKeyType::kTextA8},
+      {TextAtlasEffect::kSDFCoverage, HWGeometryFSKeyType::kTextSDF},
+      {TextAtlasEffect::kColor, HWGeometryFSKeyType::kTextColor},
+      {TextAtlasEffect::kColorSwizzleRB,
+       HWGeometryFSKeyType::kTextColorSwizzleRB},
+  };
 
-    EXPECT_EQ(fragment.GetMainKey(), HWFragmentKeyType::kColorText);
-    EXPECT_EQ(fragment.GetShaderName(), "ColorTextFragmentWGSL");
-  }
-  {
-    bool swizzle_rb = false;
-    auto fragment1 = WGSLColorEmojiFragment({}, {}, swizzle_rb, 0);
-    EXPECT_EQ(fragment1.GetMainKey(), HWFragmentKeyType::kEmojiText);
-    EXPECT_EQ(fragment1.GetShaderName(), "ColorEmojiNoSwizzleFragmentWGSL");
-
-    swizzle_rb = true;
-    auto fragment2 = WGSLColorEmojiFragment({}, {}, swizzle_rb, 0);
-    EXPECT_EQ(fragment2.GetMainKey(), HWFragmentKeyType::kEmojiText | (1 << 8));
-    EXPECT_EQ(fragment2.GetShaderName(), "ColorEmojiSwizzleRBFragmentWGSL");
-  }
-  {
-    auto geometry = WGSLTextSolidColorGeometry(Matrix{}, {}, Paint{});
-    EXPECT_EQ(geometry.GetMainKey(), HWGeometryKeyType::kColorText);
-    EXPECT_EQ(geometry.GetShaderName(), "TextSolidColorVertexWGSL");
-
-    auto fragment = WGSLSdfColorTextFragment({}, nullptr, {});
-    EXPECT_EQ(fragment.GetMainKey(), HWFragmentKeyType::kSDFText);
-    EXPECT_EQ(fragment.GetShaderName(), "SdfColorTextFragmentWGSL");
-    auto step = ColorStep(&geometry, &fragment, CoverageType::kNone);
+  for (const auto& [effect, fs_key] : effects) {
+    WGSLTextGeometry geometry({}, {}, nullptr, effect);
+    ColorStep step(&geometry, &fragment, CoverageType::kNone);
+    EXPECT_EQ(geometry.GetMainKey(), HWGeometryKeyType::kText);
+    EXPECT_EQ(geometry.GetShaderName(), "Text");
     EXPECT_EQ(step.GetVertexKey(),
-              MakeFunctionBaseKey(HWGeometryKeyType::kColorText));
+              MakeFunctionBaseKey(HWGeometryKeyType::kText,
+                                  HWFragmentKeyType::kSolidVertex));
     EXPECT_EQ(step.GetFragmentKey(),
-              MakeFunctionBaseKey(HWFragmentKeyType::kSDFText));
+              MakeFunctionBaseKey(HWFragmentKeyType::kSolidVertex, fs_key));
+  }
+}
 
-    auto cf = ColorFilters::Blend(0xFF00FF00, BlendMode::kSrcATop);
-    fragment.SetFilter(WGXFilterFragment::Make(cf.get()));
-    EXPECT_EQ(fragment.GetMainKey(), HWFragmentKeyType::kSDFText);
-    EXPECT_EQ(fragment.GetShaderName(),
-              "SdfColorTextFragmentWGSL_BlendSrcATopFilter");
-    step = ColorStep(&geometry, &fragment, CoverageType::kNone);
-    EXPECT_EQ(step.GetVertexKey(),
-              MakeFunctionBaseKey(HWGeometryKeyType::kColorText));
-    EXPECT_EQ(step.GetFragmentKey(),
-              MakeFunctionBaseKey(HWFragmentKeyType::kSDFText, 0,
-                                  HWColorFilterKeyType::kSrcATop));
-  }
-  {
-    Color4f colors[2] = {Color4f{0, 0, 0, 0}, Color4f{1, 1, 1, 1}};
-    float pos[2] = {0, 1};
-    auto shader = LinearGradientShader::MakeSweep(0, 0, 0, 90, colors, pos, 2);
-    skity::Shader::GradientInfo info;
-    auto type = shader->AsGradient(&info);
-    auto fragment = WGSLGradientTextFragment({}, {}, info, type, 0);
-    EXPECT_EQ(fragment.GetMainKey(),
-              MakeMainKey(HWFragmentKeyType::kGradientText, 0b10001100));
-    EXPECT_EQ(fragment.GetShaderName(), "GradientSweep2ColorFastTextWGSL");
-  }
+TEST(HWPipelineKey, TextDeviceToLocalUsesDistinctVertexKey) {
+  WGSLSolidVertexColor fragment;
+  WGSLTextGeometry direct({}, {}, nullptr, TextAtlasEffect::kA8Coverage);
+  WGSLTextGeometry mapped({}, {}, nullptr, TextAtlasEffect::kA8Coverage,
+                          Matrix{});
+  ColorStep direct_step(&direct, &fragment, CoverageType::kNone);
+  ColorStep mapped_step(&mapped, &fragment, CoverageType::kNone);
+
+  EXPECT_EQ(direct.GetMainKey(), HWGeometryKeyType::kText);
+  EXPECT_EQ(mapped.GetMainKey(), MakeMainKey(HWGeometryKeyType::kText, 1));
+  EXPECT_NE(direct_step.GetVertexKey(), mapped_step.GetVertexKey());
+  EXPECT_EQ(direct_step.GetFragmentKey(), mapped_step.GetFragmentKey());
 }
 
 TEST(HWPipelineKey, BlurFilter) {
@@ -824,7 +794,7 @@ TEST(HWPipelineKey, Texture) {
                                 HWFragmentKeyType::kTexture));
   EXPECT_EQ(step.GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kTexture,
-                                HWFragmentMaskKeyType::kRRect));
+                                HWGeometryFSKeyType::kRRect));
   EXPECT_EQ(step.GetVertexName(), "VS_RRect_Texture");
   EXPECT_EQ(step.GetFragmentName(), "FS_Texture_RRect");
 }

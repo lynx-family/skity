@@ -8,19 +8,28 @@
 #include <skity/text/font_style.hpp>
 #include <skity/text/typeface.hpp>
 
+#include "src/render/text/glyph_run.hpp"
 #include "src/render/text/sdf_gen.hpp"
 #include "src/render/text/text_render_control.hpp"
 #include "src/render/text/text_transform.hpp"
 #include "src/text/scaler_context.hpp"
+#include "src/utils/arena_allocator.hpp"
 
 namespace skity {
 
-class ScalerContextEmpty : public ScalerContext {
+class MissingFormatScalerContext : public ScalerContext {
+ public:
+  MissingFormatScalerContext(std::weak_ptr<Typeface> typeface,
+                             const ScalerContextDesc* desc)
+      : ScalerContext(typeface, desc) {}
+
  protected:
-  void GenerateMetrics(GlyphData *) override {}
-  void GenerateImage(PackedGlyphID, GlyphData *, const StrokeDesc &) override {}
-  bool GeneratePath(GlyphData *) override { return true; }
-  void GenerateFontMetrics(FontMetrics *) override {}
+  void GenerateMetrics(GlyphData*) override {}
+  void GenerateImage(PackedGlyphID, GlyphData*, const StrokeDesc&) override {}
+  void GenerateImageInfo(PackedGlyphID, GlyphData*,
+                         const StrokeDesc&) override {}
+  bool GeneratePath(GlyphData*) override { return true; }
+  void GenerateFontMetrics(FontMetrics* metrics) override { *metrics = {}; }
   uint16_t OnGetFixedSize() override { return 0; }
 };
 
@@ -31,43 +40,43 @@ class ColorfulTypeface : public Typeface {
   ~ColorfulTypeface() override = default;
 
  public:
-  int OnGetTableTags(FontTableTag *tags) const override;
+  int OnGetTableTags(FontTableTag* tags) const override;
   size_t OnGetTableData(FontTableTag tag, size_t offset, size_t length,
-                        void *data) const override;
-  void OnCharsToGlyphs(const uint32_t *chars, int count,
-                       GlyphID *glyphs) const override;
+                        void* data) const override;
+  void OnCharsToGlyphs(const uint32_t* chars, int count,
+                       GlyphID* glyphs) const override;
   std::shared_ptr<Data> OnGetData() override;
   uint32_t OnGetUPEM() const override;
   bool OnContainsColorTable() const override;
   std::unique_ptr<ScalerContext> OnCreateScalerContext(
-      const ScalerContextDesc *desc) const override;
+      const ScalerContextDesc* desc) const override;
 
   VariationPosition OnGetVariationDesignPosition() const override;
   std::vector<VariationAxis> OnGetVariationDesignParameters() const override;
 
   std::shared_ptr<Typeface> OnMakeVariation(
-      const FontArguments &args) const override;
+      const FontArguments& args) const override;
 
-  void OnGetFontDescriptor(FontDescriptor &desc) const override {}
+  void OnGetFontDescriptor(FontDescriptor& desc) const override {}
 
  private:
   bool colorful_ = false;
 };
-int ColorfulTypeface::OnGetTableTags(FontTableTag *) const { return 0; }
+int ColorfulTypeface::OnGetTableTags(FontTableTag*) const { return 0; }
 size_t ColorfulTypeface::OnGetTableData(FontTableTag, size_t, size_t,
-                                        void *) const {
+                                        void*) const {
   return 0;
 }
-void ColorfulTypeface::OnCharsToGlyphs(const uint32_t *, int, GlyphID *) const {
-}
+void ColorfulTypeface::OnCharsToGlyphs(const uint32_t*, int, GlyphID*) const {}
 std::shared_ptr<Data> ColorfulTypeface::OnGetData() { return nullptr; }
 uint32_t ColorfulTypeface::OnGetUPEM() const { return 0; }
 
 bool ColorfulTypeface::OnContainsColorTable() const { return colorful_; }
 
 std::unique_ptr<ScalerContext> ColorfulTypeface::OnCreateScalerContext(
-    const ScalerContextDesc *) const {
-  return std::unique_ptr<ScalerContextEmpty>();
+    const ScalerContextDesc* desc) const {
+  return std::make_unique<MissingFormatScalerContext>(
+      const_cast<ColorfulTypeface*>(this)->shared_from_this(), desc);
 }
 
 VariationPosition ColorfulTypeface::OnGetVariationDesignPosition() const {
@@ -80,7 +89,7 @@ std::vector<VariationAxis> ColorfulTypeface::OnGetVariationDesignParameters()
 }
 
 std::shared_ptr<Typeface> ColorfulTypeface::OnMakeVariation(
-    const FontArguments &args) const {
+    const FontArguments& args) const {
   return nullptr;
 }
 
@@ -97,6 +106,23 @@ TEST(Font, BaselineSnapIsEnabledByDefault) {
 TEST(Font, EdgingDefaultsToAntiAlias) {
   skity::Font font;
   EXPECT_EQ(font.GetEdging(), skity::Font::Edging::kAntiAlias);
+}
+
+TEST(GlyphRun, SkipsGlyphWithoutFormat) {
+  auto typeface = std::make_shared<skity::ColorfulTypeface>(false);
+  skity::Font font(typeface, 14.f);
+  skity::Paint paint;
+  skity::ArenaAllocator arena;
+  const skity::GlyphID glyph = 1;
+  const float position_x = 0.f;
+  const float position_y = 0.f;
+
+  const auto runs =
+      skity::GlyphRun::Make(1, &glyph, {}, &position_x, &position_y, font,
+                            paint, 1.f, skity::Matrix{}, nullptr, &arena,
+                            [](const skity::Path&, const skity::Paint&) {});
+
+  EXPECT_TRUE(runs.empty());
 }
 
 TEST(TextRenderControl, disallow_sdf_test) {
@@ -174,10 +200,10 @@ TEST(TextRenderControl, allow_sdf_test) {
   }
 }
 
-void Another_QRDecompose(const skity::Matrix22 &m, skity::Matrix22 *q,
-                         skity::Matrix22 *r) {
-  const float &a = m.GetScaleX();
-  const float &b = m.GetSkewY();
+void Another_QRDecompose(const skity::Matrix22& m, skity::Matrix22* q,
+                         skity::Matrix22* r) {
+  const float& a = m.GetScaleX();
+  const float& b = m.GetSkewY();
   float c, s;
   if (0 == b) {
     c = std::copysign(1.f, a);

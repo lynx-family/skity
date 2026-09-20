@@ -67,7 +67,7 @@ class HWWGSLGeometry {
    * 'Flags::kAffectsFragment' is specified.
    */
   virtual HWFunctionBaseKey GetFSSubKey() const {
-    return HWFragmentMaskKeyType::kNone;
+    return HWGeometryFSKeyType::kNone;
   }
 
   /*
@@ -125,6 +125,14 @@ class HWWGSLGeometry {
    * 'Flags::kAffectsFragment' is specified.
    */
   virtual void WriteFSUniforms(std::stringstream& ss) const {}
+
+  /**
+   * Supplies primitive color logic used by the fragment shader. This method is
+   * called after the shading fragment has initialized `color` and before the
+   * color filter is applied. The default implementation leaves `color`
+   * unchanged.
+   */
+  virtual void WriteFSColor(std::stringstream& ss) const {}
 
   /**
    * Supplies mask alpha calculation used by the fragment shader. This
