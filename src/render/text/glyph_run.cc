@@ -32,16 +32,10 @@ struct GlyphRegionWithIndex {
 
 class DirectGlyphRun : public GlyphRun {
  public:
-  DirectGlyphRun(const uint32_t count, const GlyphID* glyphs,
-                 const Point& origin, const Font& font, float context_scale,
-                 const Paint& paint, const bool is_stroke,
+  DirectGlyphRun(const Point& origin, const Paint& paint, const bool is_stroke,
                  std::vector<GlyphRegionWithIndex> glyph_locs,
                  uint32_t group_index, Atlas* atlas, GlyphFormat glyph_format)
-      : count_(count),
-        glyphs_(glyphs, glyphs + count),
-        origin_(origin),
-        font_(font),
-        context_scale_(context_scale),
+      : origin_(origin),
         paint_(paint),
         is_stroke_(is_stroke),
         glyph_locs_(std::move(glyph_locs)),
@@ -70,11 +64,7 @@ class DirectGlyphRun : public GlyphRun {
       AtlasManager* atlas_manager, ArenaAllocator* arena_allocator);
 
  private:
-  uint32_t count_;
-  std::vector<GlyphID> glyphs_;
   const Point origin_;
-  const Font font_;
-  float context_scale_;
   const Paint paint_;
   const bool is_stroke_;
   std::vector<GlyphRegionWithIndex> glyph_locs_;
@@ -87,25 +77,6 @@ class DirectGlyphRun : public GlyphRun {
 
 ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
     float canvas_scale, ArenaAllocator* arena_allocator) {
-  float max_height = 0.f;
-  int16_t max_bearing_y = 0.f;
-
-  std::vector<const GlyphData*> glyph_info(count_);
-  Paint metrics_paint;
-  if (is_stroke_) {
-    metrics_paint.SetStyle(Paint::kStroke_Style);
-    metrics_paint.SetStrokeWidth(paint_.GetStrokeWidth());
-    metrics_paint.SetStrokeCap(paint_.GetStrokeCap());
-    metrics_paint.SetStrokeJoin(paint_.GetStrokeJoin());
-    metrics_paint.SetStrokeMiter(paint_.GetStrokeMiter());
-    metrics_paint.SetStrokeColor(paint_.GetStrokeColor());
-  } else {
-    metrics_paint.SetStyle(Paint::kFill_Style);
-    metrics_paint.SetFillColor(paint_.GetFillColor());
-  }
-  font_.LoadGlyphMetrics(glyphs_.data(), count_, glyph_info.data(),
-                         metrics_paint);
-
   ArrayList<GlyphRect, 16> glyph_rects;
   glyph_rects.SetArenaAllocator(arena_allocator);
   bounds_ = Rect::MakeEmpty();
@@ -114,8 +85,6 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
   }
 
   for (uint32_t k = 0; k < glyph_locs_.size(); k++) {
-    auto info = *(glyph_info[glyph_locs_[k].index]);
-
     Vec2 uv_lt = atlas_->CalculateUV(glyph_locs_[k].region.index_in_group,
                                      glyph_locs_[k].region.loc.x,
                                      glyph_locs_[k].region.loc.y);
@@ -132,14 +101,6 @@ ArrayList<GlyphRect, 16> DirectGlyphRun::Raster(
     float rw = (uv_rb.x - uv_lt.x) / canvas_scale;
     float rh = (uv_rb.y - uv_lt.y) / canvas_scale;
 
-    // if (font_.GetFixedSize() != 0.f) {
-    //   float scale = font_.GetSize() * canvas_scale / font_.GetFixedSize();
-    //   rw *= scale;
-    //   rh *= scale;
-    // }
-
-    max_height = std::max(rh, max_height);
-    max_bearing_y = std::fmax(max_bearing_y, info.GetHoriBearingY());
     if (rh == 0) {
       continue;
     }
@@ -288,9 +249,8 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
   if (draw_count == 1) {
     if (!glyph_regions.empty()) {
       run_list.push_back(arena_allocator->Make<DirectGlyphRun>(
-          count, glyphs, origin, font, context_scale, paint, is_stroke,
-          std::move(glyph_regions), static_cast<uint32_t>(0), atlas,
-          glyph_format));
+          origin, paint, is_stroke, std::move(glyph_regions),
+          static_cast<uint32_t>(0), atlas, glyph_format));
     }
   } else {
     std::vector<std::vector<GlyphRegionWithIndex>> glyph_region_groups(
@@ -310,9 +270,8 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
     for (uint32_t group_index = 0; group_index < glyph_region_groups.size();
          group_index++) {
       run_list.push_back(arena_allocator->Make<DirectGlyphRun>(
-          count, glyphs, origin, font, context_scale, paint, is_stroke,
-          std::move(glyph_region_groups[group_index]), group_index, atlas,
-          glyph_format));
+          origin, paint, is_stroke, std::move(glyph_region_groups[group_index]),
+          group_index, atlas, glyph_format));
     }
   }
 
