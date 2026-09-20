@@ -5,6 +5,7 @@
 #ifndef SRC_RECORDER_DISPLAY_LIST_BUILDER_HPP
 #define SRC_RECORDER_DISPLAY_LIST_BUILDER_HPP
 
+#include <algorithm>
 #include <memory>
 #include <skity/recorder/display_list.hpp>
 #include <skity/recorder/picture_recorder.hpp>
@@ -19,6 +20,15 @@ namespace skity {
 
 struct DisplayListBuilder {
   static constexpr Rect kMaxCullRect = Rect::MakeLTRB(-1E9F, -1E9F, 1E9F, 1E9F);
+
+  static size_t GrowCapacity(size_t allocated, size_t required) {
+    constexpr size_t kCapacityAlignment = 4096;
+    if (required <= allocated) {
+      return allocated;
+    }
+    const size_t capacity = std::max(required, allocated * 2);
+    return (capacity + kCapacityAlignment - 1) & ~(kCapacityAlignment - 1);
+  }
 
   explicit DisplayListBuilder(
       const Rect& cull_rect = kMaxCullRect,

@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <skity/effect/color_filter.hpp>
 #include <skity/effect/image_filter.hpp>
 #include <skity/effect/mask_filter.hpp>
@@ -12,7 +13,30 @@
 #include <skity/recorder/picture_recorder.hpp>
 #include <skity/skity.hpp>
 
+#include "src/recorder/display_list_builder.hpp"
+
 using testing::_;
+
+TEST(DisplayList, BufferCapacityBoundaries) {
+  using Builder = skity::DisplayListBuilder;
+  EXPECT_EQ(Builder::GrowCapacity(0, 0), 0u);
+  EXPECT_EQ(Builder::GrowCapacity(0, 1), 4096u);
+  EXPECT_EQ(Builder::GrowCapacity(0, 4096), 4096u);
+  EXPECT_EQ(Builder::GrowCapacity(4096, 4096), 4096u);
+  EXPECT_EQ(Builder::GrowCapacity(4096, 4097), 8192u);
+  EXPECT_EQ(Builder::GrowCapacity(4096, 16384), 16384u);
+  EXPECT_EQ(Builder::GrowCapacity(4096, 16385), 20480u);
+}
+
+TEST(DisplayList, StorageGrowthPreservesBytes) {
+  skity::DisplayListStorage storage;
+  storage.realloc(4096);
+  std::memset(storage.get(), 0xa5, 4096);
+  storage.realloc(8192);
+  for (size_t i = 0; i < 4096; ++i) {
+    ASSERT_EQ(storage.get()[i], 0xa5);
+  }
+}
 
 class MockCanvas : public skity::Canvas {
  public:
@@ -69,6 +93,133 @@ class MockCanvas : public skity::Canvas {
 
   MOCK_METHOD(uint32_t, OnGetHeight, (), (const, override));
 };
+
+TEST(DisplayList, NonzeroBufferAndResourceLifetimeAcrossGrowth) {
+  constexpr int kDrawCount = 10000;
+  skity::DisplayListBuilder builder;
+  builder.allocated_ = 4096;
+  builder.storage_.realloc(builder.allocated_);
+  std::memset(builder.storage_.get(), 0xa5, builder.allocated_);
+  skity::RecordingCanvas canvas;
+  canvas.BindDisplayListBuilder(&builder);
+  const auto rect = skity::Rect::MakeWH(20, 20);
+  skity::Paint paint;
+  auto filter =
+      skity::ColorFilters::Blend(skity::Color_RED, skity::BlendMode::kSrc);
+  std::weak_ptr<skity::ColorFilter> weak_filter = filter;
+  paint.SetColorFilter(filter);
+  skity::Path path;
+  path.AddRect(rect);
+  auto image = skity::Image::MakeDeferredTextureImage(
+      skity::TextureFormat::kRGBA, 20, 20, skity::AlphaType::kPremul_AlphaType);
+  std::weak_ptr<skity::Image> weak_image = image;
+  const skity::TextBlob blob({});
+  const skity::Font font;
+  const skity::GlyphID glyph = 1;
+  const float position = 3;
+
+  canvas.Save();
+  const auto save_offset = canvas.GetLastOpOffset();
+  canvas.SaveLayer(rect, paint);
+  const auto layer_offset = canvas.GetLastOpOffset();
+  canvas.DrawImageRect(image, rect, rect, skity::SamplingOptions{}, nullptr);
+  canvas.DrawTextBlob(&blob, 1, 2, paint);
+  canvas.DrawGlyphs(0, nullptr, nullptr, nullptr, font, paint);
+  canvas.DrawGlyphs(1, &glyph, &position, &position, font, paint);
+
+  size_t growths = 0;
+  for (int i = 0; i < kDrawCount; ++i) {
+    const size_t old_capacity = builder.allocated_;
+    canvas.DrawPath(path, paint);
+    if (builder.allocated_ != old_capacity) {
+      EXPECT_EQ(builder.allocated_, old_capacity * 2);
+      ++growths;
+      // Subsequent ops must work even when spare capacity is not zeroed.
+      std::memset(builder.storage_.get() + builder.used_, 0xa5,
+                  builder.allocated_ - builder.used_);
+    }
+  }
+  EXPECT_GT(growths, 1u);
+  EXPECT_LT(growths, 16u);
+  canvas.Restore();
+  const auto layer_end = canvas.GetLastOpOffset();
+  canvas.Restore();
+  const auto save_end = canvas.GetLastOpOffset();
+  auto* save = reinterpret_cast<skity::SaveOp*>(builder.storage_.get() +
+                                                save_offset.GetValue());
+  auto* layer = reinterpret_cast<skity::SaveLayerOp*>(builder.storage_.get() +
+                                                      layer_offset.GetValue());
+  EXPECT_EQ(save->restore_offset, save_end.GetValue());
+  EXPECT_EQ(layer->restore_offset, layer_end.GetValue());
+
+  auto list = builder.GetDisplayList();
+  // Save, SaveLayer, image, text blob, two glyph ops, and two restores.
+  EXPECT_EQ(list->OpCount(), kDrawCount + 8u);
+  testing::NiceMock<MockCanvas> target;
+  EXPECT_CALL(target, OnDrawPath(_, _)).Times(kDrawCount);
+  EXPECT_CALL(target, OnDrawImageRect(_, rect, rect, _, _))
+      .WillOnce([](auto, const auto&, const auto&, const auto&, const auto* p) {
+        ASSERT_NE(p, nullptr);
+        EXPECT_EQ(*p, skity::Paint{});
+      });
+  EXPECT_CALL(target, OnDrawBlob(_, 1, 2, _)).Times(1);
+  EXPECT_CALL(target, OnDrawGlyphs(0, _, _, _, _, _)).Times(1);
+  EXPECT_CALL(target, OnDrawGlyphs(1, _, _, _, _, _))
+      .WillOnce([](auto, const auto* g, const auto* x, const auto* y,
+                   const auto&, const auto&) {
+        EXPECT_EQ(g[0], 1u);
+        EXPECT_EQ(x[0], 3);
+        EXPECT_EQ(y[0], 3);
+      });
+  list->Draw(&target);
+  paint.SetColorFilter(nullptr);
+  filter.reset();
+  image.reset();
+  EXPECT_FALSE(weak_filter.expired());
+  EXPECT_FALSE(weak_image.expired());
+  list.reset();
+  EXPECT_TRUE(weak_filter.expired());
+  EXPECT_TRUE(weak_image.expired());
+}
+
+TEST(DisplayList, LargeRecordingKeepsEarlierListAndOffsets) {
+  constexpr int kDrawCount = 10000;
+  for (bool build_rtree : {false, true}) {
+    skity::PictureRecorder recorder;
+    skity::DisplayListBuildOptions options;
+    options.build_rtree = build_rtree;
+    const auto rect = skity::Rect::MakeWH(10, 10);
+    skity::Paint paint;
+    recorder.BeginRecording(rect, options);
+    recorder.GetRecordingCanvas()->DrawRect(rect, paint);
+    auto first = recorder.FinishRecording();
+
+    recorder.BeginRecording(rect, options);
+    auto* canvas = recorder.GetRecordingCanvas();
+    std::vector<skity::RecordedOpOffset> offsets;
+    for (int i = 0; i < kDrawCount; ++i) {
+      canvas->DrawRect(rect, paint);
+      offsets.push_back(canvas->GetLastOpOffset());
+    }
+    auto second = recorder.FinishRecording();
+    EXPECT_EQ(second->OpCount(), offsets.size());
+    EXPECT_EQ(second->GetBounds(), rect);
+    for (auto offset : offsets) {
+      ASSERT_NE(second->GetOpPaintByOffset(offset), nullptr);
+      EXPECT_EQ(*second->GetOpPaintByOffset(offset), paint);
+    }
+    if (build_rtree) {
+      EXPECT_EQ(second->Search(rect).size(), offsets.size());
+    }
+    testing::NiceMock<MockCanvas> target;
+    EXPECT_CALL(target, OnDrawRect(rect, paint)).Times(kDrawCount);
+    second->Draw(&target, rect);
+    testing::Mock::VerifyAndClearExpectations(&target);
+    second.reset();
+    EXPECT_CALL(target, OnDrawRect(rect, paint)).Times(1);
+    first->Draw(&target);
+  }
+}
 
 skity::Rect CalculateDisplayListBounds(
     skity::Rect cull_rect,
