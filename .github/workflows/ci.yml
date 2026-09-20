@@ -6,6 +6,9 @@ on:
             - main
         paths:
             - '.github/workflows/ci.yml'
+            - '.github/workflows/size-check.yml'
+            - '.github/workflows/size-report.yml'
+            - 'tools/size_report.py'
             - '.github/actions/**'
             - 'include/**'
             - 'src/**'
@@ -21,6 +24,9 @@ on:
             - main
         paths:
             - '.github/workflows/ci.yml'
+            - '.github/workflows/size-check.yml'
+            - '.github/workflows/size-report.yml'
+            - 'tools/size_report.py'
             - '.github/actions/**'
             - 'include/**'
             - 'src/**'

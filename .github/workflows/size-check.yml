@@ -1,0 +1,154 @@
+name: Size Check
+
+# Workflow A: build the release aar, measure jni/*/libskity.so sizes
+# (uncompressed + in-aar compressed), compare against the main baseline and
+# upload the result artifact. Runs on pull_request and on push to main
+# (where it also refreshes the baseline cache and the size-data trend
+# branch). Commenting happens in size-report.yml (workflow_run), which
+# keeps working for fork PRs where this workflow's token is read-only.
+
+on:
+    pull_request:
+        branches:
+            - main
+        paths:
+            - '.github/workflows/size-check.yml'
+            - '.github/workflows/size-report.yml'
+            - '.github/actions/**'
+            - 'tools/size_report.py'
+            - 'include/**'
+            - 'src/**'
+            - 'module/**'
+            - 'cmake/**'
+            - 'patches/**'
+            - 'platform/android/**'
+            - 'hab/**'
+            - 'CMakeLists.txt'
+    push:
+        branches:
+            - main
+        paths:
+            - '.github/workflows/size-check.yml'
+            - '.github/workflows/size-report.yml'
+            - '.github/actions/**'
+            - 'tools/size_report.py'
+            - 'include/**'
+            - 'src/**'
+            - 'module/**'
+            - 'cmake/**'
+            - 'patches/**'
+            - 'platform/android/**'
+            - 'hab/**'
+            - 'CMakeLists.txt'
+
+permissions:
+    contents: read
+
+jobs:
+    size_check:
+        name: android aar size
+        runs-on: ${{ vars.SIZE_RUNNER || 'lynx-ubuntu-22.04-medium' }}
+        timeout-minutes: 45
+        steps:
+            - name: Python Setup
+              uses: actions/setup-python@v5
+              with:
+                  python-version: '3.13'
+            - name: Java Setup
+              uses: actions/setup-java@v4
+              with:
+                  distribution: 'jetbrains'
+                  java-version: '21'
+            - name: Download Source
+              uses: actions/checkout@v4.2.2
+            - name: Sync Dependencies
+              uses: ./.github/actions/sync-deps
+              with:
+                  target: module,ci
+                  # lynx-infra cache is only reachable on internal runners;
+                  # origin sets vars.HAB_CACHE_BACKEND=lynx-infra, forks fall
+                  # back to a direct (uncached) sync from the public sources
+                  cache-backend: ${{ vars.HAB_CACHE_BACKEND || '' }}
+            # inlined from ./.github/actions/pack-android-aar (plus the NDK
+            # install) so the same workflow also runs on github-hosted runners
+            - name: Build Android AAR (Release)
+              shell: bash
+              run: |
+                  export ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+                  export PATH=$PWD/buildtools/ninja:$PATH
+                  cd platform/android
+                  rm -f "$ANDROID_HOME/SDK"
+                  echo "sdk.dir=$ANDROID_HOME" > local.properties
+                  # sdkmanager is on PATH on internal runners only; hosted
+                  # runners keep it under cmdline-tools
+                  SDKMANAGER=$(command -v sdkmanager || find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)
+                  "$SDKMANAGER" --sdk_root=$ANDROID_HOME --install "cmake;3.22.1" "ndk;21.3.6528147"
+                  ./gradlew :assembleRelease
+            - name: Collect Sizes
+              shell: bash
+              run: |
+                  python3 tools/size_report.py collect \
+                      --aar-glob 'platform/android/build/outputs/aar/*.aar' \
+                      --out out/size \
+                      --head-sha '${{ github.event.pull_request.head.sha || github.sha }}' \
+                      --pr-number '${{ github.event.number }}' \
+                      --event '${{ github.event_name }}'
+            - name: Restore Baseline
+              uses: actions/cache/restore@v4
+              with:
+                  path: size-baseline
+                  key: skity-size-baseline-v1-${{ github.run_number }}
+                  restore-keys: |
+                      skity-size-baseline-v1-
+            - name: Compare With Baseline
+              shell: bash
+              run: |
+                  python3 tools/size_report.py compare \
+                      --current out/size \
+                      --baseline size-baseline \
+                      --render out/size/comment.md \
+                      --top 15 \
+                      --max-pct 1.0
+                  cat out/size/comment.md >> "$GITHUB_STEP_SUMMARY"
+            - name: Upload Size Result
+              uses: actions/upload-artifact@v4
+              with:
+                  name: size-result
+                  path: out/size/
+            - name: Save Baseline
+              if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+              shell: bash
+              run: |
+                  rm -rf size-baseline
+                  mkdir -p size-baseline
+                  cp out/size/size-data.json out/size/*.nm.txt size-baseline/
+            - name: Persist Baseline
+              if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+              uses: actions/cache/save@v4
+              with:
+                  path: size-baseline
+                  key: skity-size-baseline-v1-${{ github.run_number }}
+
+    update_trend:
+        name: update size trend
+        needs: size_check
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        permissions:
+            contents: write
+        runs-on: ${{ vars.SIZE_RUNNER || 'lynx-ubuntu-22.04-medium' }}
+        timeout-minutes: 10
+        steps:
+            - name: Download Source
+              uses: actions/checkout@v4.2.2
+            - name: Download Size Result
+              uses: actions/download-artifact@v4
+              with:
+                  name: size-result
+                  path: out/size
+            - name: Update Trend Branch
+              shell: bash
+              run: |
+                  python3 tools/size_report.py trend \
+                      --data out/size/size-data.json \
+                      --branch size-data \
+                      --remote origin

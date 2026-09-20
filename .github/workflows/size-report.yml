@@ -1,0 +1,90 @@
+name: Size Report
+
+# Workflow B: post/update the PR comment from the size-result artifact
+# produced by Size Check. Triggered via workflow_run so it runs in the
+# default-branch context with a full-permission token, which is what keeps
+# commenting working for PRs opened from fork repositories (where the
+# pull_request workflow itself only gets a read-only token).
+#
+# NOTE: this workflow must exist on the default branch to fire at all, and
+# the copy that runs is always the default-branch one.
+
+on:
+    workflow_run:
+        workflows:
+            - Size Check
+        types:
+            - completed
+
+permissions:
+    pull-requests: write
+
+jobs:
+    comment:
+        name: comment size report
+        if: github.event.workflow_run.conclusion == 'success'
+        runs-on: ${{ vars.SIZE_RUNNER || 'lynx-ubuntu-22.04-medium' }}
+        timeout-minutes: 10
+        steps:
+            - name: Download Size Result
+              uses: actions/download-artifact@v4
+              with:
+                  name: size-result
+                  run-id: ${{ github.event.workflow_run.id }}
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  path: size-result
+            # only parses data files from the artifact; never executes
+            # anything out of it. The pull request is resolved from the
+            # trusted workflow_run head sha (event payload), never from
+            # artifact data, and all dynamic values reach the script via
+            # env so they can never be evaluated as script source.
+            - name: Comment On Pull Request
+              uses: actions/github-script@v7
+              env:
+                  REPORT_FILE: size-result/comment.md
+              with:
+                  script: |
+                      const fs = require('fs');
+                      let body;
+                      try {
+                          body = fs.readFileSync(process.env.REPORT_FILE, 'utf8');
+                      } catch (e) {
+                          core.info('no report found in artifact, skipping');
+                          return;
+                      }
+                      const headSha = context.payload.workflow_run.head_sha;
+                      const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          commit_sha: headSha,
+                      });
+                      const pr = prs.find((p) => p.state === 'open');
+                      if (!pr) {
+                          core.info(`no open pull request associated with ${headSha}, skipping`);
+                          return;
+                      }
+                      const marker = '<!-- skity-size-report -->';
+                      const { data: comments } = await github.rest.issues.listComments({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: pr.number,
+                          per_page: 100,
+                      });
+                      const previous = comments.find((c) => c.body && c.body.includes(marker));
+                      if (previous) {
+                          await github.rest.issues.updateComment({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              comment_id: previous.id,
+                              body,
+                          });
+                          core.info(`updated comment ${previous.html_url}`);
+                      } else {
+                          const { data: created } = await github.rest.issues.createComment({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              issue_number: pr.number,
+                              body,
+                          });
+                          core.info(`created comment ${created.html_url}`);
+                      }
