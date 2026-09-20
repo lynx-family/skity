@@ -53,14 +53,40 @@ jobs:
                           return;
                       }
                       const headSha = context.payload.workflow_run.head_sha;
-                      const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          commit_sha: headSha,
-                      });
-                      const pr = prs.find((p) => p.state === 'open');
+                      const headBranch = context.payload.workflow_run.head_branch;
+                      const headRepo = context.payload.workflow_run.head_repository || {};
+                      // resolve the PR from trusted event data only:
+                      // pulls.list with head filter works for both fork
+                      // PRs (user:branch) and same-repo PRs (branch),
+                      // unlike listPullRequestsAssociatedWithCommit which
+                      // misses fork commits
+                      let headFilter = headBranch;
+                      const baseFullName = `${context.repo.owner}/${context.repo.repo}`;
+                      if (headRepo.full_name && headRepo.full_name !== baseFullName) {
+                          headFilter = `${headRepo.login}:${headBranch}`;
+                      }
+                      let pr = null;
+                      if (headFilter) {
+                          const { data: headPrs } = await github.rest.pulls.list({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              head: headFilter,
+                              state: 'open',
+                              per_page: 10,
+                          });
+                          pr = headPrs.find((p) => p.head.sha === headSha) || null;
+                      }
                       if (!pr) {
-                          core.info(`no open pull request associated with ${headSha}, skipping`);
+                          // fallback for same-repo associations
+                          const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              commit_sha: headSha,
+                          });
+                          pr = prs.find((p) => p.state === 'open' && p.head.sha === headSha) || null;
+                      }
+                      if (!pr) {
+                          core.info(`no open pull request for ${headFilter || headSha}, skipping`);
                           return;
                       }
                       const marker = '<!-- skity-size-report -->';
