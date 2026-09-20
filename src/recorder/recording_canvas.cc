@@ -3,19 +3,12 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <cstddef>
-#include <cstring>
 #include <skity/recorder/recording_canvas.hpp>
 
 #include "src/recorder/display_list_builder.hpp"
 #include "src/recorder/recorded_op.hpp"
 
 namespace skity {
-
-#define DL_BUILDER_PAGE 4096
-
-static constexpr inline bool is_power_of_two(int value) {
-  return (value & (value - 1)) == 0;
-}
 
 template <typename T>
 static constexpr T Align4(T x) {
@@ -33,26 +26,22 @@ static constexpr T AlignPtr(T x) {
 
 template <typename T, typename... Args>
 void RecordingCanvas::Push(Args&&... args) {
-  size_t size = AlignPtr(sizeof(T));
-  if (dp_builder_->used_ + size > dp_builder_->allocated_) {
-    static_assert(is_power_of_two(DL_BUILDER_PAGE),
-                  "This math needs updating for non-pow2.");
-    dp_builder_->allocated_ =
-        (dp_builder_->used_ + size + DL_BUILDER_PAGE) & ~(DL_BUILDER_PAGE - 1);
-    dp_builder_->storage_.realloc(dp_builder_->allocated_);
-    std::memset(dp_builder_->storage_.get() + dp_builder_->used_, 0,
-                dp_builder_->allocated_ - dp_builder_->used_);
+  constexpr size_t size = AlignPtr(sizeof(T));
+  const size_t required = dp_builder_->used_ + size;
+  if (required > dp_builder_->allocated_) {
+    const size_t capacity =
+        DisplayListBuilder::GrowCapacity(dp_builder_->allocated_, required);
+    dp_builder_->storage_.realloc(capacity);
+    dp_builder_->allocated_ = capacity;
   }
 
   auto op =
       reinterpret_cast<T*>(dp_builder_->storage_.get() + dp_builder_->used_);
-  dp_builder_->last_op_offset_ = dp_builder_->used_;
-  dp_builder_->used_ += size;
-
   new (op) T{std::forward<Args>(args)...};
 
   op->size = size;
-
+  dp_builder_->last_op_offset_ = dp_builder_->used_;
+  dp_builder_->used_ = required;
   dp_builder_->render_op_count_++;
 }
 
