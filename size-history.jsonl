@@ -1,1 +1,2 @@
 {"date": "2026-09-20", "sha": "68c626656a", "sizes": {"arm64-v8a": {"compressed": 855987, "size": 1755424}, "armeabi-v7a": {"compressed": 720810, "size": 1189540}, "x86": {"compressed": 888197, "size": 1861260}, "x86_64": {"compressed": 882590, "size": 1935648}}}
+{"date": "2026-09-21", "sha": "43a1006b1a", "sizes": {"arm64-v8a": {"compressed": 855987, "size": 1755424}, "armeabi-v7a": {"compressed": 720810, "size": 1189540}, "x86": {"compressed": 888197, "size": 1861260}, "x86_64": {"compressed": 882590, "size": 1935648}}}
