@@ -416,10 +416,12 @@ std::shared_ptr<Typeface> FontManagerTest::OnMakeFromFile(const char path[],
   return this->OnMakeFromData(data, ttcIndex);
 }
 
+#ifndef SKITY_TEST_FONT_MANAGER_NO_DEFAULT
 std::shared_ptr<FontManager> FontManager::RefDefault() {
   static const NoDestructor<std::shared_ptr<FontManagerTest>> font_manager(
       [] { return std::make_shared<FontManagerTest>(); }());
   return *font_manager;
 }
+#endif
 
 }  // namespace skity

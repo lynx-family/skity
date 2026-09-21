@@ -91,6 +91,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AN
       ${CMAKE_SOURCE_DIR}/third_party/freetype2/include)
 
   target_sources(skity_unit_test PRIVATE text/typeface_test.cc)
+  if(SKITY_FONTCONFIG)
+    target_sources(skity_unit_test PRIVATE
+      text/font_manager_fontconfig_test.cc
+      ${CMAKE_SOURCE_DIR}/src/text/ports/test/font_manager_test.cc)
+    target_compile_definitions(skity_unit_test PRIVATE
+      SKITY_TEST_FONT_MANAGER_NO_DEFAULT=1
+      SKITY_TEST_FONT_ROOT="${CMAKE_SOURCE_DIR}/test/fonts/resources")
+  endif()
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_CT_FONT)
