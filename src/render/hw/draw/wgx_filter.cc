@@ -285,31 +285,51 @@ class WGXGammaFilter : public WGXFilterFragment {
   std::string GenSourceWGSL() const override {
     std::string wgsl_source = GenFunctionSignature();
 
+    // input_color is premultiplied, but the sRGB transfer functions are
+    // defined on straight components: unpremultiply before converting and
+    // premultiply the converted color again before returning.
     if (type_ == ColorFilterType::kLinearToSRGBGamma) {
       wgsl_source += R"(
         {
+            var alpha: f32 = input_color.a;
+            var color: vec3<f32> = input_color.rgb;
+            if alpha > 0.0 {
+                color = color / alpha;
+            } else {
+                color = vec3<f32>(0.0, 0.0, 0.0);
+            }
+
             for (var i: i32 = 0; i < 3; i++) {
-                if input_color[i] <= 0.0031308 {
-                    input_color[i] *= 12.92;
+                if color[i] <= 0.0031308 {
+                    color[i] *= 12.92;
                 } else {
-                    input_color[i] = 1.055 * pow(input_color[i], 1.0 / 2.4) - 0.055;
+                    color[i] = 1.055 * pow(color[i], 1.0 / 2.4) - 0.055;
                 }
             }
 
-            return input_color;
+            return vec4<f32>(color * alpha, alpha);
         }
       )";
     } else if (type_ == ColorFilterType::kSRGBToLinearGamma) {
       wgsl_source += R"(
         {
+            var alpha: f32 = input_color.a;
+            var color: vec3<f32> = input_color.rgb;
+            if alpha > 0.0 {
+                color = color / alpha;
+            } else {
+                color = vec3<f32>(0.0, 0.0, 0.0);
+            }
+
             for (var i: i32 = 0; i < 3; i++) {
-                if input_color[i] <= 0.04045 {
-                    input_color[i] /= 12.92;
+                if color[i] <= 0.04045 {
+                    color[i] /= 12.92;
                 } else {
-                    input_color[i] = pow((input_color[i] + 0.055) / 1.055, 2.4);
+                    color[i] = pow((color[i] + 0.055) / 1.055, 2.4);
                 }
             }
-            return input_color;
+
+            return vec4<f32>(color * alpha, alpha);
         }
       )";
     }
