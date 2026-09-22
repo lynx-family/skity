@@ -4,6 +4,7 @@
 
 #include "src/render/hw/hw_canvas.hpp"
 
+#include <optional>
 #include <skity/effect/mask_filter.hpp>
 #include <skity/effect/path_effect.hpp>
 #include <skity/effect/shader.hpp>
@@ -800,6 +801,7 @@ HWLayer* HWCanvas::CurrentLayer() {
 HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
                             const Matrix& local_to_layer) {
   SKITY_TRACE_EVENT(HWCanvas_GenLayer);
+  const Rect content_bounds = layer_bounds;
   Rect clip_bounds = CurrentLayer()->GetState()->CurrentClipBounds();
   auto state = CurrentLayer()->GetState();
 
@@ -866,6 +868,41 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
 
   float width_f = layer_bounds.Width() * scale.x;
   float height_f = layer_bounds.Height() * scale.y;
+  std::optional<Matrix> aligned_raster_matrix;
+
+  // Keep ordinary axis-aligned layers on their parent's pixel grid. Rounding
+  // only the texture size stretches fractional bounds and changes the scale
+  // and subpixel phase used to rasterize text inside the layer.
+  if (paint.GetImageFilter() == nullptr && paint.GetMaskFilter() == nullptr &&
+      paint.GetColorFilter() == nullptr &&
+      layer_matrix.OnlyScaleAndTranslate() && layer_matrix.IsFinite() &&
+      layer_matrix.GetScaleX() != 0.f && layer_matrix.GetScaleY() != 0.f &&
+      !transformed_bounds.IsEmpty()) {
+    Matrix inverse;
+    if (layer_matrix.InvertZ0Plane(&inverse)) {
+      auto aligned_bounds =
+          Rect::MakeLTRB(std::floor(transformed_bounds.Left()),
+                         std::floor(transformed_bounds.Top()),
+                         std::ceil(transformed_bounds.Right()),
+                         std::ceil(transformed_bounds.Bottom()));
+      inverse.MapRect(&layer_bounds, aligned_bounds);
+      transformed_bounds = aligned_bounds;
+      width_f = aligned_bounds.Width();
+      height_f = aligned_bounds.Height();
+      const float sx = layer_matrix.GetScaleX();
+      const float sy = layer_matrix.GetScaleY();
+      scale = {std::abs(sx), std::abs(sy)};
+      // Rasterize the child in its local orientation. The layer back draw
+      // already applies any reflection in the parent's transform.
+      const float origin_x =
+          sx > 0.f ? aligned_bounds.Left() : aligned_bounds.Right();
+      const float origin_y =
+          sy > 0.f ? aligned_bounds.Top() : aligned_bounds.Bottom();
+      aligned_raster_matrix =
+          Matrix::Scale(sx > 0.f ? 1.f : -1.f, sy > 0.f ? 1.f : -1.f) *
+          Matrix::Translate(-origin_x, -origin_y) * layer_matrix;
+    }
+  }
 
   // check if size is inf or nan
   if (std::isinf(width_f) || std::isnan(width_f) || std::isinf(height_f) ||
@@ -900,6 +937,10 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
     layer = arena_allocator_->Make<HWSubLayer>(local_to_layer,
                                                state->GetCurrentDepth() + 1,
                                                layer_bounds, width, height);
+  }
+  if (aligned_raster_matrix) {
+    layer->SetRasterMatrix(*aligned_raster_matrix);
+    layer->SetContentBounds(content_bounds);
   }
   layer->SetArenaAllocator(arena_allocator_);
   layer->SetColorFormat(surface_->GetGPUFormat());

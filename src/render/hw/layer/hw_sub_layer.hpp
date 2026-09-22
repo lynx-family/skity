@@ -6,6 +6,7 @@
 #define SRC_RENDER_HW_LAYER_HW_SUB_LAYER_HPP
 
 #include <memory>
+#include <optional>
 
 #include "src/geometry/math.hpp"
 #include "src/gpu/gpu_texture.hpp"
@@ -23,6 +24,9 @@ class HWSubLayer : public HWLayer {
   ~HWSubLayer() override = default;
 
   void SetAlpha(float alpha) { alpha_ = alpha; }
+
+  // Limit drawing and composition without changing the texture mapping.
+  void SetContentBounds(const Rect& bounds);
 
   void Draw(GPURenderPass* render_pass, GPUCommandBuffer* cmd) override;
 
@@ -86,6 +90,7 @@ class HWSubLayer : public HWLayer {
 
  private:
   float alpha_ = 1.0f;
+  std::optional<Rect> content_bounds_;
   HWDraw* layer_back_draw_ = {};
   std::shared_ptr<GPUTexture> color_texture_ = {};
   std::shared_ptr<GPUTexture> layer_back_draw_texture_ = {};

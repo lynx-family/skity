@@ -29,7 +29,92 @@ std::filesystem::path CoverageAAGoldenPath(const char* name) {
   return path;
 }
 
+void CheckFractionalLayerBounds(bool draw_color, bool clipped) {
+  SCOPED_TRACE(::testing::Message() << "parent_clip=" << clipped);
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  for (uint32_t samples : {1u, 4u}) {
+    for (auto mode : {skity::BlendMode::kSrcOver, skity::BlendMode::kSrc,
+                      skity::BlendMode::kClear}) {
+      for (float scale : {1.f, 1.25f}) {
+        for (auto reflection :
+             {skity::Vec2{1.f, 1.f}, skity::Vec2{-1.f, 1.f},
+              skity::Vec2{1.f, -1.f}, skity::Vec2{-1.f, -1.f}}) {
+          for (bool nested : {false, true}) {
+            SCOPED_TRACE(::testing::Message()
+                         << "samples=" << samples << " mode=" << int(mode)
+                         << " scale=" << scale << " reflection=" << reflection.x
+                         << "," << reflection.y << " nested=" << nested);
+            auto render = [&](bool use_layer) {
+              auto previous_samples = env->GetSampleCount();
+              env->SetSampleCount(samples);
+              auto texture =
+                  env->RenderToTexture(96, 96, [&](skity::Canvas* canvas) {
+                    canvas->Clear(skity::Color_GREEN);
+                    canvas->Translate(reflection.x < 0.f ? 96.f : 0.f,
+                                      reflection.y < 0.f ? 96.f : 0.f);
+                    canvas->Scale(reflection.x * scale, reflection.y * scale);
+                    if (clipped) {
+                      canvas->ClipRect(
+                          skity::Rect::MakeLTRB(25.25f, 0.f, 73.75f, 60.f));
+                    }
+                    if (nested) {
+                      canvas->SaveLayer(
+                          skity::Rect::MakeLTRB(10.3f, 10.3f, 70.3f, 70.3f),
+                          skity::Paint{});
+                      canvas->DrawColor(skity::Color_YELLOW);
+                    }
+                    auto bounds =
+                        skity::Rect::MakeLTRB(20.75f, 20.75f, 40.25f, 40.25f);
+                    skity::Paint paint;
+                    paint.SetBlendMode(mode);
+                    if (use_layer) {
+                      canvas->SaveLayer(bounds, paint);
+                      if (draw_color) {
+                        canvas->DrawColor(skity::Color_BLUE);
+                      }
+                      canvas->Restore();
+                    } else {
+                      paint.SetColor(draw_color ? skity::Color_BLUE
+                                                : skity::Color_TRANSPARENT);
+                      canvas->DrawRect(bounds, paint);
+                    }
+                    if (nested) {
+                      canvas->Restore();
+                    }
+                  });
+              env->SetSampleCount(previous_samples);
+              return texture;
+            };
+            auto reference = render(false);
+            auto layered = render(true);
+            ASSERT_NE(reference, nullptr);
+            ASSERT_NE(layered, nullptr);
+            auto reference_pixels = reference->ReadPixels();
+            auto layered_pixels = layered->ReadPixels();
+            ASSERT_NE(reference_pixels, nullptr);
+            ASSERT_NE(layered_pixels, nullptr);
+            auto diff = skity::testing::ComparePixelsExact(layered_pixels,
+                                                           reference_pixels);
+            ASSERT_EQ(diff.diff_pixel_count, 0u);
+          }
+        }
+      }
+    }
+  }
+}
+
 }  // namespace
+
+TEST(SaveLayerGolden, FractionalBoundsLimitDrawColor) {
+  CheckFractionalLayerBounds(true, false);
+  CheckFractionalLayerBounds(true, true);
+}
+
+TEST(SaveLayerGolden, FractionalBoundsLimitEmptyLayerComposition) {
+  CheckFractionalLayerBounds(false, false);
+  CheckFractionalLayerBounds(false, true);
+}
 
 TEST(SaveLayerGolden, TwoCircle) {
   skity::PictureRecorder recorder;
