@@ -37,18 +37,18 @@ std::string HWGeometryKeyTypeToName(HWGeometryKeyType::Value value) {
   }
 }
 
-std::string HWFragmentMaskKeyTypeToName(HWFragmentMaskKeyType::Value value) {
+std::string HWGeometryFSKeyTypeToName(HWGeometryFSKeyType::Value value) {
   switch (value) {
-    case HWFragmentMaskKeyType::kPathAA:
+    case HWGeometryFSKeyType::kPathAA:
       return "AA";
-    case HWFragmentMaskKeyType::kRRect:
+    case HWGeometryFSKeyType::kRRect:
       return "RRect";
-    case HWFragmentMaskKeyType::kCoverageAA:
+    case HWGeometryFSKeyType::kCoverageAA:
       return "CoverageAA";
-    case HWFragmentMaskKeyType::kCoverageAAConflationCorrection:
+    case HWGeometryFSKeyType::kCoverageAAConflationCorrection:
       return "CoverageAAConflationCorrection";
     default:
-      return "UnknownFragmentMask";
+      return "UnknownGeometryFS";
   }
 }
 
@@ -209,8 +209,8 @@ std::string FragmentKeyToShaderName(
   HWFunctionBaseKey filter = base_key & 0xFF;
   if (sub > 0) {
     ss << "_"
-       << HWFragmentMaskKeyTypeToName(
-              static_cast<HWFragmentMaskKeyType::Value>(sub));
+       << HWGeometryFSKeyTypeToName(
+              static_cast<HWGeometryFSKeyType::Value>(sub));
   }
   if (filter > 0) {
     ss << "_"

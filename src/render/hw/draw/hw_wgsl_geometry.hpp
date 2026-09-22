@@ -43,10 +43,15 @@ class HWWGSLGeometry {
       kSnippet = 0x0001,
       // Whether this affects the fragment shader generation;
       kAffectsFragment = 0x0002,
+      // Whether this supplies primitive color logic to the fragment shader.
+      // Requires kAffectsFragment.
+      kAffectsFragmentColor = 0x0004,
     };
   };
 
-  explicit HWWGSLGeometry(uint32_t flags = Flags::kNone) : flags_(flags) {}
+  explicit HWWGSLGeometry(uint32_t flags = Flags::kNone) : flags_(flags) {
+    DEBUG_CHECK(!AffectsFragmentColor() || AffectsFragment());
+  }
 
   virtual ~HWWGSLGeometry() = default;
 
@@ -65,9 +70,11 @@ class HWWGSLGeometry {
   /**
    * Supplies fragment shader sub key. This method is called only when
    * 'Flags::kAffectsFragment' is specified.
+   * The key must distinguish all geometry-provided fragment shader variants,
+   * including color and coverage logic.
    */
   virtual HWFunctionBaseKey GetFSSubKey() const {
-    return HWFragmentMaskKeyType::kNone;
+    return HWGeometryFSKeyType::kNone;
   }
 
   /*
@@ -127,6 +134,15 @@ class HWWGSLGeometry {
   virtual void WriteFSUniforms(std::stringstream& ss) const {}
 
   /**
+   * Supplies primitive color logic after the shading fragment initializes
+   * `color` and before the color filter, coverage, and blending are applied.
+   * Called only when AffectsFragmentColor() is true. Overrides must
+   * leave `color` premultiplied; the default implementation leaves it
+   * unchanged.
+   */
+  virtual void WriteFSColor(std::stringstream& ss) const {}
+
+  /**
    * Supplies mask alpha calculation used by the fragment shader. This
    * method is called only when 'Flags::kAffectsFragment' is specified.
    */
@@ -163,6 +179,10 @@ class HWWGSLGeometry {
 
   constexpr bool AffectsFragment() const {
     return (flags_ & Flags::kAffectsFragment) > 0;
+  }
+
+  constexpr bool AffectsFragmentColor() const {
+    return (flags_ & Flags::kAffectsFragmentColor) > 0;
   }
 
  private:

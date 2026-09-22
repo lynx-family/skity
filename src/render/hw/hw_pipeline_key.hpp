@@ -33,8 +33,8 @@ struct HWGeometryKeyType {
 };
 static_assert(HWGeometryKeyType::Value::kLast < 0xFF);
 
-// Fragment shader sub keys for coverage masks supplied by geometry.
-struct HWFragmentMaskKeyType {
+// Fragment shader sub keys for color and coverage logic supplied by geometry.
+struct HWGeometryFSKeyType {
   static constexpr uint32_t kFragmentOnlyStart = 0x80;
 
   enum Value : uint32_t {
@@ -47,8 +47,8 @@ struct HWFragmentMaskKeyType {
   };
 };
 static_assert(HWGeometryKeyType::Value::kLast <
-              HWFragmentMaskKeyType::kFragmentOnlyStart);
-static_assert(HWFragmentMaskKeyType::Value::kLast < 0xFF);
+              HWGeometryFSKeyType::kFragmentOnlyStart);
+static_assert(HWGeometryFSKeyType::Value::kLast < 0xFF);
 
 struct HWFragmentKeyType {
   enum Value : uint32_t {
