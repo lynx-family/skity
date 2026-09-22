@@ -12,6 +12,11 @@
 
 namespace skity {
 
+void HWSubLayer::SetContentBounds(const Rect& bounds) {
+  content_bounds_ = bounds;
+  AddRectClip(bounds, Matrix{});
+}
+
 HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
   InitTexture(context->gpuContext, context->pool);
 
@@ -28,16 +33,20 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
 
   // prepare layer back draw
   {
-    auto bounds = GetLayerBackDrawBounds();
+    auto texture_bounds = GetLayerBackDrawBounds();
+    auto draw_bounds = texture_bounds;
+    if (content_bounds_ && !draw_bounds.Intersect(*content_bounds_)) {
+      draw_bounds.SetEmpty();
+    }
     Path path;
-    path.AddRect(bounds);
+    path.AddRect(draw_bounds);
 
     Paint paint;
     paint.SetBlendMode(GetBlendPlan().blend_mode);
     paint.SetAlphaF(alpha_);
     paint.SetStyle(Paint::kFill_Style);
-    paint.SetShader(CreateDrawLayerShader(context->gpuContext,
-                                          layer_back_draw_texture_, bounds));
+    paint.SetShader(CreateDrawLayerShader(
+        context->gpuContext, layer_back_draw_texture_, texture_bounds));
 
     layer_back_draw_ = context->arena_allocator->Make<HWDynamicPathDraw>(
         GetTransform(), std::move(path), std::move(paint), false, false);

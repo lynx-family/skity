@@ -78,6 +78,12 @@ class HWLayer : public HWDraw {
 
   Matrix GetLayerPhysicalMatrix(const Matrix& matrix) const;
 
+  // Preserve the parent's exact scale and pixel phase for aligned layers.
+  // Reconstructing this matrix from inverse-mapped bounds can lose precision.
+  void SetRasterMatrix(const Matrix& matrix) {
+    bounds_to_physical_matrix_ = matrix;
+  }
+
   Rect CalculateLayerSpaceBounds(const Rect& local_rect,
                                  const Matrix& matrix) const;
 
