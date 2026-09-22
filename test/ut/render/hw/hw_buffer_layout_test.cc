@@ -30,14 +30,18 @@ bool operator==(const GPUVertexAttribute& a, const GPUVertexAttribute& b) {
 }  // namespace skity
 
 TEST(HWBufferLayoutMap, GetBufferLayout) {
-  for (uint32_t i = skity::HWGeometryKeyType::kPath;
-       i <= static_cast<uint32_t>(skity::HWGeometryKeyType::kLast); i++) {
+  for (auto type :
+       {skity::HWGeometryKeyType::kPath, skity::HWGeometryKeyType::kPathAA,
+        skity::HWGeometryKeyType::kTessFill,
+        skity::HWGeometryKeyType::kTessStroke, skity::HWGeometryKeyType::kText,
+        skity::HWGeometryKeyType::kRRect, skity::HWGeometryKeyType::kClip,
+        skity::HWGeometryKeyType::kFilter,
+        skity::HWGeometryKeyType::kCoverageAA}) {
     std::vector<skity::GPUVertexBufferLayout> expected_buffer_layout;
     std::vector<skity::GPUVertexBufferLayout> actual_buffer_layout =
-        *skity::HWBufferLayoutMap::GetInstance().GetBufferLayout(
-            static_cast<skity::HWGeometryKeyType::Value>(i));
+        *skity::HWBufferLayoutMap::GetInstance().GetBufferLayout(type);
 
-    switch (static_cast<skity::HWGeometryKeyType::Value>(i)) {
+    switch (type) {
       case skity::HWGeometryKeyType::kPath:
         expected_buffer_layout = skity::WGSLPathGeometry::GetBufferLayout();
         EXPECT_EQ(expected_buffer_layout, actual_buffer_layout);
@@ -56,11 +60,7 @@ TEST(HWBufferLayoutMap, GetBufferLayout) {
             skity::WGSLTessPathStrokeGeometry::GetBufferLayout();
         EXPECT_EQ(expected_buffer_layout, actual_buffer_layout);
         break;
-      case skity::HWGeometryKeyType::kColorText:
-        expected_buffer_layout = skity::WGSLTextGeometry::GetBufferLayout();
-        EXPECT_EQ(expected_buffer_layout, actual_buffer_layout);
-        break;
-      case skity::HWGeometryKeyType::kGradientText:
+      case skity::HWGeometryKeyType::kText:
         expected_buffer_layout = skity::WGSLTextGeometry::GetBufferLayout();
         EXPECT_EQ(expected_buffer_layout, actual_buffer_layout);
         break;

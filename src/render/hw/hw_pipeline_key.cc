@@ -20,10 +20,8 @@ std::string HWGeometryKeyTypeToName(HWGeometryKeyType::Value value) {
       return "TessPathFill";
     case HWGeometryKeyType::kTessStroke:
       return "TessPathStroke";
-    case HWGeometryKeyType::kColorText:
-      return "TextSolidColorVertexWGSL";
-    case HWGeometryKeyType::kGradientText:
-      return "TextGradientVertexWGSL";
+    case HWGeometryKeyType::kText:
+      return "Text";
     case HWGeometryKeyType::kRRect:
       return "RRect";
     case HWGeometryKeyType::kClip:
@@ -47,6 +45,14 @@ std::string HWGeometryFSKeyTypeToName(HWGeometryFSKeyType::Value value) {
       return "CoverageAA";
     case HWGeometryFSKeyType::kCoverageAAConflationCorrection:
       return "CoverageAAConflationCorrection";
+    case HWGeometryFSKeyType::kTextA8:
+      return "TextA8";
+    case HWGeometryFSKeyType::kTextSDF:
+      return "TextSDF";
+    case HWGeometryFSKeyType::kTextColor:
+      return "TextColor";
+    case HWGeometryFSKeyType::kTextColorSwizzleRB:
+      return "TextColorSwizzleRB";
     default:
       return "UnknownGeometryFS";
   }
@@ -104,17 +110,6 @@ std::string HWFragmentKeyTypeToName(HWFragmentKeyType::Value value,
       return "StencilFragmentWGSL";
     case HWFragmentKeyType::kBlur:
       return "BlurFragmentWGSL";
-    case HWFragmentKeyType::kColorText:
-      return "ColorTextFragmentWGSL";
-    case HWFragmentKeyType::kEmojiText:
-      return std::string("ColorEmoji") +
-             (custom > 0 ? "SwizzleRB" : "NoSwizzle") + "FragmentWGSL";
-    case HWFragmentKeyType::kGradientText:
-      return CustomKeyToGradientName(custom) + "TextWGSL";
-    case HWFragmentKeyType::kSDFText:
-      return "SdfColorTextFragmentWGSL";
-    case HWFragmentKeyType::kTextureText:
-      return "TextureText";
     case HWFragmentKeyType::kImageFilter:
       return "ImageFilterFragmentWGSL";
     default:

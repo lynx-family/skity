@@ -25,6 +25,7 @@
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
+#include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 
 namespace {
@@ -2269,6 +2270,95 @@ TEST(ShaderWriter, PathAAWithSolidColorAndColorFilter) {
                                        skity::HWColorFilterKeyType::kMatrix));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAWithCFFS()));
+}
+
+TEST(ShaderWriter, TextGeometryEffectsProduceDistinctValidShaders) {
+  skity::WGSLSolidVertexColor fragment;
+  struct TestCase {
+    skity::TextAtlasEffect effect;
+    skity::HWGeometryFSKeyType::Value key;
+    const char* expected;
+  };
+  const TestCase cases[] = {
+      {skity::TextAtlasEffect::kA8Coverage, skity::HWGeometryFSKeyType::kTextA8,
+       "mask_alpha = get_text_atlas_color"},
+      {skity::TextAtlasEffect::kSDFCoverage,
+       skity::HWGeometryFSKeyType::kTextSDF, "mask_alpha = smoothstep"},
+      {skity::TextAtlasEffect::kColor, skity::HWGeometryFSKeyType::kTextColor,
+       "color = get_text_atlas_color"},
+      {skity::TextAtlasEffect::kColorSwizzleRB,
+       skity::HWGeometryFSKeyType::kTextColorSwizzleRB, "color = color.bgra"},
+  };
+
+  for (const auto& test : cases) {
+    skity::WGSLTextGeometry geometry({}, {}, {}, test.effect);
+    EXPECT_TRUE(geometry.AffectsFragment());
+    EXPECT_EQ(geometry.AffectsFragmentColor(),
+              test.effect == skity::TextAtlasEffect::kColor ||
+                  test.effect == skity::TextAtlasEffect::kColorSwizzleRB);
+    skity::HWWGSLShaderWriter writer(&geometry, &fragment);
+    const auto vs = writer.GenVSSourceWGSL();
+    const auto fs =
+        writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
+
+    EXPECT_EQ(writer.GetFSKey(),
+              skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolidVertex,
+                                         test.key));
+    EXPECT_NE(fs.find(test.expected), std::string::npos);
+    if (test.effect == skity::TextAtlasEffect::kColor ||
+        test.effect == skity::TextAtlasEffect::kColorSwizzleRB) {
+      EXPECT_EQ(fs.find("mask_alpha = get_text_atlas_color"),
+                std::string::npos);
+      EXPECT_NE(fs.find("color *= text_paint_alpha"), std::string::npos);
+    }
+
+    auto fs_program = wgx::Program::Parse(fs);
+    ASSERT_NE(fs_program, nullptr);
+    ASSERT_FALSE(fs_program->GetDiagnosis().has_value())
+        << fs_program->GetDiagnosis()->message << " at "
+        << fs_program->GetDiagnosis()->line << ":"
+        << fs_program->GetDiagnosis()->column << "\n"
+        << fs;
+    auto vs_program = wgx::Program::Parse(vs);
+    ASSERT_NE(vs_program, nullptr);
+    ASSERT_FALSE(vs_program->GetDiagnosis().has_value());
+    EXPECT_TRUE(fs_program->WriteToMsl("fs_main", wgx::MslOptions{}).success);
+    EXPECT_TRUE(vs_program->WriteToMsl("vs_main", wgx::MslOptions{}).success);
+    EXPECT_TRUE(fs_program->WriteToGlsl("fs_main", wgx::GlslOptions{}).success);
+    EXPECT_TRUE(vs_program->WriteToGlsl("vs_main", wgx::GlslOptions{}).success);
+    EXPECT_TRUE(
+        fs_program->WriteToSpirv("fs_main", wgx::SpirvOptions{}).success);
+    EXPECT_TRUE(
+        vs_program->WriteToSpirv("vs_main", wgx::SpirvOptions{}).success);
+  }
+}
+
+TEST(ShaderWriter, TextGeometryComposesWithGenericGradient) {
+  skity::Color4f colors[2] = {skity::Colors::kRed, skity::Colors::kBlue};
+  float positions[2] = {0.f, 1.f};
+  skity::Point points[2] = {{0.f, 0.f, 0.f, 1.f}, {16.f, 0.f, 0.f, 1.f}};
+  auto shader = skity::Shader::MakeLinear(points, colors, positions, 2);
+  skity::Shader::GradientInfo info;
+  const auto type = shader->AsGradient(&info);
+  skity::WGSLGradientFragment fragment(info, type, 1.f,
+                                       shader->GetLocalMatrix());
+  skity::WGSLTextGeometry geometry(
+      {}, {}, {}, skity::TextAtlasEffect::kA8Coverage, skity::Matrix{});
+  skity::HWWGSLShaderWriter writer(&geometry, &fragment);
+
+  const auto vs = writer.GenVSSourceWGSL();
+  const auto fs =
+      writer.GenFSSourceWGSL(skity::HWBlendOutput::kSourceTimesCoverage);
+  EXPECT_NE(vs.find("uTextDeviceToLocal"), std::string::npos);
+  EXPECT_NE(fs.find("generate_gradient_color"), std::string::npos);
+  EXPECT_NE(fs.find("mask_alpha = get_text_atlas_color"), std::string::npos);
+
+  auto vs_program = wgx::Program::Parse(vs);
+  ASSERT_NE(vs_program, nullptr);
+  ASSERT_FALSE(vs_program->GetDiagnosis().has_value());
+  auto fs_program = wgx::Program::Parse(fs);
+  ASSERT_NE(fs_program, nullptr);
+  ASSERT_FALSE(fs_program->GetDiagnosis().has_value());
 }
 
 TEST(ShaderWriter, ComposeBlendColorFiltersUseSharedBlendFunctions) {

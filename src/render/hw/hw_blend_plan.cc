@@ -283,4 +283,15 @@ std::optional<HWBlendPlan> ResolveHWBlendPlan(
   return ResolveRegularPlan(blend_mode, caps, supports_texture_copy_dst_read);
 }
 
+HWBlendPlan ResolveLegacyCoverageBlendPlan(
+    BlendMode blend_mode, const GPUCaps& caps,
+    bool supports_texture_copy_dst_read) {
+  auto plan =
+      ResolveRegularPlan(blend_mode, caps, supports_texture_copy_dst_read);
+  if (plan.formula.primary_output == HWBlendOutput::kSource) {
+    plan.formula.primary_output = HWBlendOutput::kSourceTimesCoverage;
+  }
+  return plan;
+}
+
 }  // namespace skity
