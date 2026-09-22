@@ -166,6 +166,9 @@ void HWWGSLShaderWriter::WriteFSMain(std::stringstream& ss,
   ss << "  var color : vec4<f32>;\n";
 
   fragment_->WriteFSMain(ss);
+  if (geometry_ && geometry_->AffectsFragmentColor()) {
+    geometry_->WriteFSColor(ss);
+  }
   if (fragment_->GetFilter()) {
     ss << R"(
   color = filter_color(color);
@@ -311,7 +314,7 @@ HWFunctionBaseKey HWWGSLShaderWriter::GetFSKey() const {
   HWFunctionBaseKey filter_key = 0;
   if (geometry_ && geometry_->AffectsFragment()) {
     sub_key = geometry_->GetFSSubKey();
-    DEBUG_CHECK(sub_key != HWFragmentMaskKeyType::kNone);
+    DEBUG_CHECK(sub_key != HWGeometryFSKeyType::kNone);
   }
   if (fragment_->GetFilter()) {
     filter_key = fragment_->GetFilter()->GetType();

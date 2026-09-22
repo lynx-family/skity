@@ -29,6 +29,39 @@
 
 namespace {
 
+class FragmentColorGeometry : public skity::HWWGSLGeometry {
+ public:
+  explicit FragmentColorGeometry(
+      uint32_t fragment_flags = Flags::kAffectsFragment |
+                                Flags::kAffectsFragmentColor,
+      bool swizzle = true)
+      : HWWGSLGeometry(Flags::kSnippet | fragment_flags), swizzle_(swizzle) {}
+
+  skity::HWFunctionBaseKey GetMainKey() const override {
+    return skity::HWGeometryKeyType::kPath;
+  }
+  skity::HWFunctionBaseKey GetFSSubKey() const override {
+    // Reuse existing IDs for these test-only fragment variants.
+    return swizzle_ ? skity::HWGeometryFSKeyType::kPathAA
+                    : skity::HWGeometryFSKeyType::kRRect;
+  }
+  void WriteFSColor(std::stringstream& ss) const override {
+    if (swizzle_) {
+      ss << "  color = color.bgra;\n";
+    } else {
+      ss << "  color *= 0.5;\n";
+    }
+  }
+  void WriteFSAlphaMask(std::stringstream& ss) const override {
+    ss << "  mask_alpha = 0.75;\n";
+  }
+  void PrepareCMD(skity::Command*, skity::HWDrawContext*, const skity::Matrix&,
+                  float, skity::Command*) override {}
+
+ private:
+  bool swizzle_;
+};
+
 std::string GetPathGeometryVS() {
   return R"(
 struct CommonSlot {
@@ -1779,6 +1812,98 @@ TEST(ShaderWriter, PathWithSolidColor) {
   ASSERT_TRUE(CompareShader(fs, GetSolidColorFS()));
 }
 
+TEST(ShaderWriter, GeometryColorPrecedesFilterCoverageAndBlending) {
+  FragmentColorGeometry geometry;
+  skity::WGSLSolidColor fragment(skity::Colors::kWhite);
+  auto filter = skity::ColorFilters::LinearToSRGBGamma();
+  fragment.SetFilter(skity::WGXFilterFragment::Make(filter.get()));
+  for (bool programmable : {false, true}) {
+    SCOPED_TRACE(programmable);
+    if (programmable) {
+      fragment.SetProgrammableBlending(skity::WGXProgrammableBlending::Make(
+          skity::BlendMode::kOverlay, skity::DstReadStrategy::kTextureCopy));
+    }
+    skity::HWWGSLShaderWriter writer(&geometry, &fragment);
+    auto fs = writer.GenFSSourceWGSL(
+        programmable ? skity::HWBlendOutput::kSource
+                     : skity::HWBlendOutput::kSourceTimesCoverage);
+    const auto source =
+        fs.find("color = vec4<f32>(uColor.rgb * uColor.a, uColor.a);");
+    const auto primitive = fs.find("color = color.bgra;");
+    const auto filtered = fs.find("color = filter_color(color);");
+    const auto coverage = fs.find("mask_alpha = 0.75;");
+    const auto output = fs.find(
+        programmable
+            ? "color = mix(dst_color, blending(color, dst_color), mask_alpha);"
+            : "color = color * mask_alpha;");
+    ASSERT_NE(source, std::string::npos);
+    ASSERT_NE(primitive, std::string::npos);
+    ASSERT_NE(filtered, std::string::npos);
+    ASSERT_NE(coverage, std::string::npos);
+    ASSERT_NE(output, std::string::npos);
+    EXPECT_LT(source, primitive);
+    EXPECT_LT(primitive, filtered);
+    EXPECT_LT(filtered, coverage);
+    EXPECT_LT(coverage, output);
+    auto program = wgx::Program::Parse(fs);
+    ASSERT_NE(program, nullptr);
+    ASSERT_FALSE(program->GetDiagnosis().has_value());
+    EXPECT_TRUE(program->WriteToSpirv("fs_main", wgx::SpirvOptions{}).success);
+  }
+}
+
+TEST(ShaderWriter, GeometryWithoutFragmentFlagsDoesNotWriteFragmentCode) {
+  FragmentColorGeometry geometry(skity::HWWGSLGeometry::Flags::kNone);
+  skity::WGSLSolidColor fragment(skity::Colors::kWhite);
+  skity::HWWGSLShaderWriter writer(&geometry, &fragment);
+  skity::HWWGSLShaderWriter fragment_only(nullptr, &fragment);
+  EXPECT_EQ(writer.GenFSSourceWGSL(), fragment_only.GenFSSourceWGSL());
+  EXPECT_EQ(writer.GetFSKey(), fragment_only.GetFSKey());
+}
+
+TEST(ShaderWriter, CoverageOnlyGeometryDoesNotWriteColor) {
+  FragmentColorGeometry geometry(
+      skity::HWWGSLGeometry::Flags::kAffectsFragment);
+  EXPECT_TRUE(geometry.AffectsFragment());
+  EXPECT_FALSE(geometry.AffectsFragmentColor());
+  skity::WGSLSolidColor fragment(skity::Colors::kWhite);
+  skity::HWWGSLShaderWriter writer(&geometry, &fragment);
+  auto fs = writer.GenFSSourceWGSL();
+  EXPECT_EQ(fs.find("color = color.bgra;"), std::string::npos);
+  EXPECT_NE(fs.find("mask_alpha = 0.75;"), std::string::npos);
+}
+
+TEST(ShaderWriter, GeometryColorVariantsHaveDistinctFragmentKeys) {
+  FragmentColorGeometry swizzle;
+  FragmentColorGeometry alpha(
+      skity::HWWGSLGeometry::Flags::kAffectsFragment |
+          skity::HWWGSLGeometry::Flags::kAffectsFragmentColor,
+      false);
+  EXPECT_TRUE(swizzle.AffectsFragment());
+  EXPECT_TRUE(swizzle.AffectsFragmentColor());
+  skity::WGSLSolidColor fragment(skity::Colors::kWhite);
+  skity::HWWGSLShaderWriter first(&swizzle, &fragment);
+  skity::HWWGSLShaderWriter second(&alpha, &fragment);
+  EXPECT_EQ(first.GetVSKey(), second.GetVSKey());
+  EXPECT_NE(first.GetFSKey(), second.GetFSKey());
+  EXPECT_EQ(first.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
+                                       skity::HWGeometryFSKeyType::kPathAA));
+  EXPECT_EQ(second.GetFSKey(),
+            skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
+                                       skity::HWGeometryFSKeyType::kRRect));
+  EXPECT_NE(first.GetPipelineKey().base_key, second.GetPipelineKey().base_key);
+}
+
+TEST(ShaderWriter, GeometryColorFlagRequiresFragmentFlag) {
+  EXPECT_DEBUG_DEATH(
+      {
+        FragmentColorGeometry geometry(
+            skity::HWWGSLGeometry::Flags::kAffectsFragmentColor);
+      },
+      "");
+}
+
 TEST(ShaderWriter, CoverageAAResolvesAlphaInFinalFragment) {
   skity::WGSLCoverageAATileGeometry geometry(nullptr, 0, 0);
   skity::WGSLSolidColor fragment{skity::Color4f{1.0f, 1.0f, 1.0f, 1.0f}};
@@ -1829,7 +1954,7 @@ TEST(ShaderWriter, CoverageAAResolvesAlphaInFinalFragment) {
   EXPECT_EQ(
       shader_writer.GetFSKey(),
       skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
-                                 skity::HWFragmentMaskKeyType::kCoverageAA));
+                                 skity::HWGeometryFSKeyType::kCoverageAA));
 }
 
 TEST(ShaderWriter, CoverageAAConflationCorrectionUsesDistinctShader) {
@@ -1876,7 +2001,7 @@ TEST(ShaderWriter, CoverageAAConflationCorrectionUsesDistinctShader) {
   EXPECT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(
                 skity::HWFragmentKeyType::kSolid,
-                skity::HWFragmentMaskKeyType::kCoverageAAConflationCorrection));
+                skity::HWGeometryFSKeyType::kCoverageAAConflationCorrection));
 
   auto program = wgx::Program::Parse(fs);
   ASSERT_NE(program, nullptr);
@@ -1918,7 +2043,7 @@ TEST(ShaderWriter, PathAAWithSolidColor) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor_AA");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
-                                       skity::HWFragmentMaskKeyType::kPathAA));
+                                       skity::HWGeometryFSKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAFS()));
 }
@@ -2045,7 +2170,7 @@ TEST(ShaderWriter, PathAAWithLinearGradient) {
       shader_writer.GetFSKey(),
       skity::MakeFunctionBaseKey(
           skity::MakeMainKey(skity::HWFragmentKeyType::kGradient, 0b11001001),
-          skity::HWFragmentMaskKeyType::kPathAA));
+          skity::HWGeometryFSKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryGradientVS()));
   ASSERT_TRUE(CompareShader(fs, GetLinearGradientAAFS()));
 }
@@ -2108,7 +2233,7 @@ TEST(ShaderWriter, PathAAWithTexture) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_Texture_AA");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kTexture,
-                                       skity::HWFragmentMaskKeyType::kPathAA));
+                                       skity::HWGeometryFSKeyType::kPathAA));
   ASSERT_TRUE(CompareShader(vs, GetPathAATextureVS()));
   ASSERT_TRUE(CompareShader(fs, GetTextureAAFS()));
 }
@@ -2140,7 +2265,7 @@ TEST(ShaderWriter, PathAAWithSolidColorAndColorFilter) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidColor_AA_MatrixFilter");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolid,
-                                       skity::HWFragmentMaskKeyType::kPathAA,
+                                       skity::HWGeometryFSKeyType::kPathAA,
                                        skity::HWColorFilterKeyType::kMatrix));
   ASSERT_TRUE(CompareShader(vs, GetPathAAGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorAAWithCFFS()));
@@ -2350,7 +2475,7 @@ TEST(ShaderWriter, RRectWithSolidColor) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_SolidVertexColor_RRect");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kSolidVertex,
-                                       skity::HWFragmentMaskKeyType::kRRect));
+                                       skity::HWGeometryFSKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectGeometryVS()));
   ASSERT_TRUE(CompareShader(fs, GetSolidColorRRectFS()));
 }
@@ -2394,7 +2519,7 @@ TEST(ShaderWriter, RRectWithLinearGradient) {
       shader_writer.GetFSKey(),
       skity::MakeFunctionBaseKey(
           skity::MakeMainKey(skity::HWFragmentKeyType::kGradient, 0b11001001),
-          skity::HWFragmentMaskKeyType::kRRect));
+          skity::HWGeometryFSKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectGeometryGradientVS()));
   ASSERT_TRUE(CompareShader(fs, GetLinearGradientRRectFS()));
 }
@@ -2430,7 +2555,7 @@ TEST(ShaderWriter, RRectWithTexture) {
   ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_Texture_RRect");
   ASSERT_EQ(shader_writer.GetFSKey(),
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kTexture,
-                                       skity::HWFragmentMaskKeyType::kRRect));
+                                       skity::HWGeometryFSKeyType::kRRect));
   ASSERT_TRUE(CompareShader(vs, GetRRectTextureVS()));
   ASSERT_TRUE(CompareShader(fs, GetTextureRRectFS()));
 }
