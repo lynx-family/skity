@@ -135,10 +135,8 @@ std::string CaseProfile(const Json::Value& input) {
   if (input["font_files"].isArray() && !input["font_files"].empty()) {
     return "explicit";
   }
-  if (input["backend"] == "fontconfig" &&
-      (input.isMember("fontconfig_fixture") ||
-       input["font_manager_expectation"].isMember("inventory_count"))) {
-    return "controlled";
+  if (input["backend"] == "fontconfig") {
+    return input["fontconfig_profile"] == "system" ? "system" : "controlled";
   }
   return "system";
 }
@@ -152,6 +150,15 @@ void AttachProbeInputs(const CaseValidationResult& input,
   if (CaseProfile(input.normalized_case) != "explicit") {
     Json::Value snapshot;
     if (ReadEnvironment(environment, &snapshot, errors)) {
+      if (input.backend == "fontconfig") {
+        const auto& config = snapshot["fontconfig"];
+        if (!config.isObject() || !config["version"].isInt() ||
+            !config["files"].isArray() || !config["config_files"].isArray()) {
+          errors->AddError(
+              "$.environment.fontconfig",
+              "missing runtime version or effective font/config inputs");
+        }
+      }
       (*artifact)["input_fingerprint"]["environment_sha256"] =
           JsonFingerprint(snapshot);
     }

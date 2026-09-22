@@ -11,7 +11,6 @@ import os
 from pathlib import Path
 import platform
 import struct
-import subprocess
 
 
 def read_json(path):
@@ -79,28 +78,49 @@ def input_fingerprint(case, repo, environment=None):
     return result
 
 
-def capture_environment(repo, backend):
+def fontconfig_fingerprint(inventory, repo):
+    """Capture the exact files and configuration loaded by the reporting engine."""
+    if not isinstance(inventory, dict) or type(inventory.get("version")) is not int:
+        raise ValueError("missing Fontconfig version")
+    repo = Path(repo).resolve()
+    snapshot = {"version": inventory["version"]}
+    for key in ("files", "config_files"):
+        names = inventory[key]
+        if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+            raise ValueError("invalid Fontconfig " + key)
+        entries = []
+        for path in sorted({Path(name).resolve() for name in names}):
+            identity = "repo://" + path.relative_to(repo).as_posix() if path.is_relative_to(repo) else path.as_posix()
+            if path.is_file():
+                entries.append({"file": identity, "sha256": sha256(path)})
+            elif key == "config_files" and path.is_dir():
+                entries.append({"file": identity, "directory": sorted(p.name for p in path.iterdir())})
+            else:
+                raise ValueError("Fontconfig input is missing: " + str(path))
+        snapshot[key] = entries
+    return snapshot
+
+
+def capture_environment(repo, backend, environ=None, fontconfig_inventory=None):
     """Collect host inputs once per invocation, without judging font results."""
     repo = Path(repo).resolve()
+    environ = os.environ if environ is None else environ
     env = {"schema_version": 1, "platform": platform.system(),
            "os_version": platform.version(), "locale": list(locale.getlocale()),
-           "locale_env": {key: os.environ.get(key, "") for key in
+           "locale_env": {key: environ.get(key, "") for key in
                           ("LANG", "LC_ALL", "LC_CTYPE")}, "fonts": []}
     files = set()
     roots = []
     if backend == "fontconfig":
-        output = subprocess.check_output(["fc-list", "--format", "%{file}\n"],
-                                         text=True, encoding="utf-8")
-        files.update(Path(x).resolve() for x in output.splitlines() if x)
-        config = os.environ.get("FONTCONFIG_FILE")
-        if config:
-            text = Path(config).resolve().read_text().replace(str(repo), "$" + "{REPO}")
-            env["fontconfig_config_sha256"] = hashlib.sha256(text.encode()).hexdigest()
-        else:
-            roots.append(Path("/etc/fonts"))
+        # The engine reports its runtime version and effective config/font lists.
+        # An unavailable backend has no inventory and will fail at the native probe.
+        if fontconfig_inventory is not None:
+            env["fontconfig"] = fontconfig_fingerprint(fontconfig_inventory, repo)
+            env["fonts"] = env["fontconfig"]["files"]
+        return env
     elif backend == "directwrite":
-        roots = [Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts",
-                 Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Microsoft/Windows/Fonts"]
+        roots = [Path(environ.get("WINDIR", "C:/Windows")) / "Fonts",
+                 Path(environ.get("LOCALAPPDATA", Path.home())) / "Microsoft/Windows/Fonts"]
         if platform.system() == "Windows":
             import winreg
             for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
@@ -116,7 +136,7 @@ def capture_environment(repo, backend):
     elif backend == "coretext":
         roots = [Path("/System/Library/Fonts"), Path("/Library/Fonts"),
                  Path.home() / "Library/Fonts", Path("/System/Library/AssetsV2")]
-    roots.extend(Path(x) for x in os.environ.get("SKITY_FONT_HARNESS_EXTRA_FONT_DIRS", "").split(os.pathsep) if x)
+    roots.extend(Path(x) for x in environ.get("SKITY_FONT_HARNESS_EXTRA_FONT_DIRS", "").split(os.pathsep) if x)
     for root in roots:
         if root.is_dir():
             for base, _, names in os.walk(root):
@@ -143,5 +163,9 @@ if __name__ == "__main__":
     parser.add_argument("--repo-root", default=str(Path(__file__).resolve().parents[1]))
     parser.add_argument("--backend", required=True, choices=["freetype", "fontconfig", "directwrite", "coretext"])
     parser.add_argument("--out", required=True)
+    parser.add_argument("--fontconfig-env", help="Current engine env-info JSON for the fontconfig backend")
     options = parser.parse_args()
-    write_json(options.out, capture_environment(options.repo_root, options.backend))
+    if options.backend == "fontconfig" and not options.fontconfig_env:
+        parser.error("--fontconfig-env is required for the fontconfig backend")
+    inventory = read_json(options.fontconfig_env)["fontconfig_inventory"] if options.fontconfig_env else None
+    write_json(options.out, capture_environment(options.repo_root, options.backend, fontconfig_inventory=inventory))

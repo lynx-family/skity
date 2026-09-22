@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "linux_fontconfig_system",
+  "backend": "fontconfig",
+  "platforms": [
+    "linux-fontconfig"
+  ],
+  "target_platform": "linux-fontconfig",
+  "case_root": "harness/font/cases",
+  "cases": [
+    "font_manager/system_default_regular_fontconfig.json",
+    "font_manager/system_default_bold_fontconfig.json",
+    "font_manager/system_default_italic_fontconfig.json",
+    "font_manager/system_alias_sans_serif_fontconfig.json",
+    "font_manager/system_alias_serif_fontconfig.json",
+    "font_manager/system_alias_monospace_fontconfig.json",
+    "font_manager/system_family_unknown_fontconfig.json",
+    "font_manager/system_family_empty_fontconfig.json",
+    "font_manager/system_fallback_latin_fontconfig.json",
+    "font_manager/system_fallback_cjk_hans_fontconfig.json",
+    "font_manager/system_fallback_cjk_ja_fontconfig.json",
+    "font_manager/system_fallback_emoji_fontconfig.json",
+    "font_manager/system_fallback_missing_scalar_fontconfig.json",
+    "family_style_set/system_sans_serif_styles_fontconfig.json",
+    "family_style_set/system_sans_serif_bold_styles_fontconfig.json"
+  ],
+  "artifacts": {
+    "root": "local/font-harness/artifacts/linux-fontconfig/system",
+    "report_root": "local/font-harness/reports/linux-fontconfig"
+  },
+  "fontconfig_profile": "system"
+}

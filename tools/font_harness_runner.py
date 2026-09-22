@@ -30,6 +30,7 @@ def add_arguments(parser):
     parser.add_argument("--font-reference-oracle-dir", help="Check a repeated independent Skia capture")
     parser.add_argument("--font-artifact-root")
     parser.add_argument("--font-profile", default="auto", choices=["auto", "explicit", "controlled", "system"])
+    parser.add_argument("--fontconfig-file", help="Explicit Fontconfig configuration for this run")
     parser.add_argument("--font-environment", help="Existing current host snapshot; collected automatically if omitted")
 
 
@@ -47,6 +48,8 @@ def run_suite(runner, args):
     if platform.system() == "Linux":
         env.pop("DISPLAY", None)
         env.pop("WAYLAND_DISPLAY", None)
+    if getattr(args, "fontconfig_file", None):
+        env["FONTCONFIG_FILE"] = str(Path(args.fontconfig_file).resolve())
     records = []
 
     def invoke(command, report_path=None):
@@ -101,7 +104,13 @@ def run_suite(runner, args):
             if args.font_action != "case-info":
                 snapshot = Path(args.font_environment).resolve() if args.font_environment else output / "environment.json"
                 if not args.font_environment:
-                    write_json(snapshot, capture_environment(repo, backend))
+                    inventory = None
+                    if backend == "fontconfig":
+                        env_path = output / "env/native.json"
+                        _, info = invoke([executable, "env-info", "--backend", backend,
+                                          "--repo-root", repo, "--report", env_path], env_path)
+                        inventory = info.get("fontconfig_inventory")
+                    write_json(snapshot, capture_environment(repo, backend, env, inventory))
                 environment = ["--environment", snapshot]
 
             if manifest and args.font_action == "run" and not args.font_reference_oracle_dir:

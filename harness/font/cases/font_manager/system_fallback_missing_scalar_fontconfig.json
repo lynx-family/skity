@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "id": "font.font_manager.fontconfig.system_fallback_missing_scalar",
+  "category": "font_manager",
+  "status": "active",
+  "backend": "fontconfig",
+  "platforms": [
+    "linux-fontconfig"
+  ],
+  "font_manager_request": {
+    "entry": "MatchFamilyStyleCharacter",
+    "style": {
+      "weight": 400,
+      "width": 5,
+      "slant": "upright"
+    },
+    "sample_limit": 32,
+    "family_name": "sans-serif",
+    "character": "U+10FFFF",
+    "bcp47": []
+  },
+  "font_request": {
+    "size": 32,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "none"
+  },
+  "glyphs": {
+    "chars": [
+      "U+10FFFF"
+    ]
+  },
+  "compare": {
+    "typeface_identity": "normalized_descriptor",
+    "font_style": "exact",
+    "font_metrics": {
+      "mode": "epsilon",
+      "epsilon": 0.001
+    }
+  },
+  "font_manager_expectation": {
+    "matched": false
+  },
+  "fontconfig_profile": "system"
+}

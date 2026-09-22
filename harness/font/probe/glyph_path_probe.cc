@@ -452,14 +452,15 @@ bool ParseFontManagerTypefaceRequest(const Json::Value& root,
   }
 
   const bool known_entry = request->entry == "GetDefaultTypeface" ||
+                           request->entry == "MatchFamily" ||
                            request->entry == "MatchFamilyStyle" ||
                            request->entry == "MatchFamilyStyleCharacter";
   bool valid = known_entry;
   if (!known_entry) {
     AddValidationError(
         report, "$.font_manager_request.entry",
-        "glyph path probe supports GetDefaultTypeface, MatchFamilyStyle, and "
-        "MatchFamilyStyleCharacter");
+        "glyph path probe supports GetDefaultTypeface, MatchFamily, "
+        "MatchFamilyStyle, and MatchFamilyStyleCharacter");
   }
 
   request->null_family = !value["family_name"].isString();
@@ -517,6 +518,10 @@ std::shared_ptr<Typeface> MakeTypefaceFromFontManager(
   auto font_manager = FontManager::RefDefault();
   if (request.entry == "GetDefaultTypeface") {
     return font_manager->GetDefaultTypeface(request.style);
+  }
+  if (request.entry == "MatchFamily") {
+    auto styles = font_manager->MatchFamily(request.FamilyName());
+    return styles ? styles->MatchStyle(request.style) : nullptr;
   }
   if (request.entry == "MatchFamilyStyle") {
     return font_manager->MatchFamilyStyle(request.FamilyName(), request.style);

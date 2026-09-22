@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "id": "font.glyph_path.fontconfig.source_sans_regular",
+  "category": "glyph_path",
+  "status": "active",
+  "backend": "fontconfig",
+  "platforms": [
+    "linux-fontconfig"
+  ],
+  "font_request": {
+    "size": 64,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "none"
+  },
+  "glyphs": {
+    "chars": [
+      "U+0041"
+    ]
+  },
+  "path_expectation": {
+    "empty": false
+  },
+  "compare": {
+    "glyph_path": {
+      "mode": "path_normalized",
+      "epsilon": 0.0001
+    }
+  },
+  "font_manager_request": {
+    "entry": "MatchFamilyStyle",
+    "family_name": "Source Sans Pro",
+    "style": {
+      "weight": 400,
+      "width": 5,
+      "slant": "upright"
+    }
+  }
+}

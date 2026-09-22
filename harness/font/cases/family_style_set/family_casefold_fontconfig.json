@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "id": "font.family_style_set.fontconfig.family_casefold",
+  "category": "family_style_set",
+  "status": "active",
+  "backend": "fontconfig",
+  "platforms": [
+    "linux-fontconfig"
+  ],
+  "font_manager_request": {
+    "entry": "MatchFamily",
+    "style": {
+      "weight": 400,
+      "width": 5,
+      "slant": "upright"
+    },
+    "sample_limit": 32,
+    "family_name": "source sans pro"
+  },
+  "font_request": {
+    "size": 32,
+    "scale_x": 1,
+    "skew_x": 0,
+    "linear_metrics": false,
+    "subpixel": true,
+    "embolden": false,
+    "hinting": "none"
+  },
+  "glyphs": {
+    "chars": [
+      "U+0041"
+    ]
+  },
+  "compare": {
+    "typeface_identity": "normalized_descriptor",
+    "font_style": "exact",
+    "font_metrics": {
+      "mode": "epsilon",
+      "epsilon": 0.001
+    }
+  },
+  "font_manager_expectation": {
+    "style_count": 6,
+    "inventory_count": 11
+  }
+}

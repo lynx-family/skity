@@ -22,14 +22,30 @@
 #define SKITY_FONT_HARNESS_HAS_FREETYPE 0
 #endif
 
+#ifndef SKITY_FONT_HARNESS_HAS_FONTCONFIG
+#define SKITY_FONT_HARNESS_HAS_FONTCONFIG 0
+#endif
+
+#if SKITY_FONT_HARNESS_HAS_FONTCONFIG
+#include "src/text/ports/linux/font_manager_fontconfig.hpp"
+#endif
+
 namespace skity {
 namespace font_harness {
 
 inline bool IsHostFontProbeBackend(const std::string& backend) {
-  return backend == "coretext" || backend == "directwrite";
+  return backend == "coretext" || backend == "directwrite" ||
+         backend == "fontconfig";
 }
 
 inline bool IsHostFontProbeBackendAvailable(const std::string& backend) {
+  if (backend == "fontconfig") {
+#if SKITY_FONT_HARNESS_HAS_FONTCONFIG
+    return GetDefaultFontConfigInfo().initialized;
+#else
+    return false;
+#endif
+  }
   if (backend == "coretext") {
     return static_cast<bool>(SKITY_FONT_HARNESS_HAS_CORETEXT);
   }
@@ -61,17 +77,29 @@ inline std::string HostFontBackendUnavailableMessage(
 #endif
     return "DirectWrite backend is unavailable; build on Windows";
   }
-  if (backend == "fontconfig" || backend == "freetype") {
-    return "Linux system font matching is unavailable; Skity Fontconfig "
-           "FontManager is not implemented";
+  if (backend == "fontconfig") {
+#if SKITY_FONT_HARNESS_HAS_FONTCONFIG
+    return "Fontconfig configuration failed to initialize; check "
+           "FONTCONFIG_FILE";
+#else
+    return "Fontconfig backend is unavailable; build on Linux with "
+           "SKITY_FONTCONFIG=ON";
+#endif
   }
-  return probe_name + " supports only the coretext and directwrite backends";
+  if (backend == "freetype") {
+    return "The explicit FreeType backend does not perform system matching; "
+           "use the fontconfig backend";
+  }
+  return probe_name +
+         " supports only the coretext, directwrite, and fontconfig backends";
 }
 
 inline bool IsExplicitSourceCasePlatformAvailable(const Json::Value& root,
                                                   const std::string& backend) {
-  return backend != "freetype" ||
-         PlatformArrayContainsTarget(root["platforms"], "linux-freetype");
+  if (backend == "freetype" || backend == "fontconfig") {
+    return PlatformArrayContainsTarget(root["platforms"], "linux-" + backend);
+  }
+  return true;
 }
 
 inline bool IsExplicitSourceProbeBackend(const std::string& backend) {
