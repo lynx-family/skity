@@ -17,6 +17,21 @@
 
 namespace skity {
 
+// Resource binding convention for composed shaders:
+//   Group 0: shared vertex parameters. Binding 0 is CommonSlot, supplied by
+//            geometry; binding 1 is the paint fragment's vertex parameters.
+//            Do not add geometry-private resources to this group.
+//   Group 1: fragment shading resources, followed by ColorFilter resources
+//            starting at HWWGSLFragment::NextBindingIndex(). Keep that index
+//            past all shading bindings; composed filters advance it in order.
+//   Group 2: destination-read resources owned by programmable blending.
+//   Group 3: geometry-private resources, including uniforms, textures and
+//            samplers used by either shader stage.
+// Groups describe ownership, not shader stages: different resources must use
+// distinct (group, binding) pairs across VS and FS. A DrawStep has one
+// geometry, so different geometry implementations may reuse group 3 bindings.
+// Keep WGSL declarations and CPU resource uploads in sync when changing a
+// binding.
 class HWWGSLShaderWriter {
  public:
   HWWGSLShaderWriter(const HWWGSLGeometry* geometry,

@@ -7,13 +7,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <optional>
 #include <utility>
 #include <vector>
 
-#include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
 #include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/draw/hw_dynamic_text_draw.hpp"
-#include "src/render/hw/draw/wgx_filter.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -231,7 +231,13 @@ class TransformedMaskGlyphRun final : public GlyphRun {
 
   Rect GetBounds() override { return bounds_; }
 
-  bool IsStroke() override { return is_stroke_; }
+  bool HasCoverageMask() const override {
+    return glyph_format_ == GlyphFormat::A8;
+  }
+
+  bool IsSourceOpaque() const override {
+    return HasCoverageMask() && IsPaintSourceOpaque(paint_);
+  }
 
  private:
   ArrayList<GlyphRect, 16> Raster(ArenaAllocator* arena_allocator);
@@ -333,53 +339,35 @@ HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
                              &view_difference)) {
     return nullptr;
   }
+  const Matrix final_transform = glyph_to_layer * view_difference;
+
+  bounds_ = paint_.ComputeFastBounds(MapBounds(final_transform, bounds_));
 
   atlas_->UploadAtlas(group_index_);
   auto gpu_texture = atlas_->GetGPUTexture(group_index_);
   auto gpu_sampler =
       atlas_->GetGPUSampler(group_index_, GPUFilterMode::kLinear);
 
-  HWWGSLGeometry* geometry = nullptr;
-  if (atlas_->GetFormat() == AtlasFormat::A8 && paint_.GetShader()) {
-    geometry = arena_allocator->Make<WGSLTextGradientGeometry>(
-        Matrix(), std::move(glyph_rects), paint_.GetShader()->GetLocalMatrix(),
-        glyph_to_layer * position_matrix);
-  } else {
-    Vector color = is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
-    Paint paint_copy = paint_;
-    paint_copy.SetFillColor(color);
-    paint_copy.SetStrokeColor(color);
-    geometry = arena_allocator->Make<WGSLTextSolidColorGeometry>(
-        Matrix(), std::move(glyph_rects), paint_copy);
+  const auto effect = atlas_->GetFormat() == AtlasFormat::A8
+                          ? TextAtlasEffect::kA8Coverage
+                          : (glyph_format_ == GlyphFormat::BGRA32
+                                 ? TextAtlasEffect::kColorSwizzleRB
+                                 : TextAtlasEffect::kColor);
+  const Vector color =
+      is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
+  Paint paint_copy = paint_;
+  paint_copy.SetFillColor(color);
+  paint_copy.SetStrokeColor(color);
+  std::optional<Matrix> layer_to_local;
+  if (effect == TextAtlasEffect::kA8Coverage && paint_.GetShader()) {
+    Matrix inverse;
+    (glyph_to_layer * position_matrix).InvertZ0Plane(&inverse);
+    layer_to_local = inverse;
   }
 
-  HWWGSLFragment* fragment = nullptr;
-  if (atlas_->GetFormat() == AtlasFormat::A8) {
-    if (paint_.GetShader() && paint_.GetShader()->AsGradient(nullptr) !=
-                                  Shader::GradientType::kNone) {
-      Shader::GradientInfo info{};
-      auto type = paint_.GetShader()->AsGradient(&info);
-      fragment = arena_allocator->Make<WGSLGradientTextFragment>(
-          std::move(gpu_texture), std::move(gpu_sampler), info, type,
-          paint_.GetAlphaF());
-    } else {
-      fragment = arena_allocator->Make<WGSLColorTextFragment>(
-          std::move(gpu_texture), std::move(gpu_sampler));
-    }
-  } else {
-    fragment = arena_allocator->Make<WGSLColorEmojiFragment>(
-        std::move(gpu_texture), std::move(gpu_sampler),
-        glyph_format_ == GlyphFormat::BGRA32, paint_.GetAlphaF());
-  }
-
-  if (paint_.GetColorFilter()) {
-    fragment->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
-  }
-
-  auto* draw = arena_allocator->Make<HWDynamicTextDraw>(
-      glyph_to_layer * view_difference, geometry, fragment);
-  bounds_ = MapBounds(draw->GetTransform(), bounds_);
-  return draw;
+  return arena_allocator->Make<HWDynamicTextDraw>(
+      final_transform, Matrix(), std::move(glyph_rects), paint_copy,
+      gpu_texture, gpu_sampler, effect, is_stroke_, layer_to_local);
 }
 
 GlyphRegionGroup* GetOrAppendContiguousGroup(

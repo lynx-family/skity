@@ -15,7 +15,9 @@
 #include <skity/io/pixmap.hpp>
 #include <skity/render/canvas.hpp>
 #include <skity/render/precompile_context.hpp>
+#include <skity/text/text_blob.hpp>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -30,8 +32,11 @@
 #include "src/gpu/gpu_shader_module.hpp"
 #include "src/gpu/gpu_surface_impl.hpp"
 #include "src/gpu/gpu_texture.hpp"
+#include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/draw/hw_dynamic_coverage_path_draw.hpp"
+#include "src/render/hw/draw/hw_dynamic_text_draw.hpp"
 #include "src/render/hw/layer/hw_root_layer.hpp"
+#include "src/render/text/glyph_run.hpp"
 
 namespace skity {
 namespace {
@@ -128,6 +133,8 @@ class FakeCommandBuffer : public GPUCommandBuffer {
 
 class FakeGPUDevice : public GPUDevice {
  public:
+  using GPUDevice::InitCaps;
+
   FakeGPUDevice() {
     auto caps = std::make_unique<GPUCaps>();
     InitCaps(std::move(caps));
@@ -150,6 +157,8 @@ class FakeGPUDevice : public GPUDevice {
         desc.shader_source != nullptr) {
       auto source = static_cast<GPUShaderSourceWGX*>(desc.shader_source);
       function->SetWGXContext(source->context);
+      function->SetBindGroups(
+          source->module->GetProgram()->GetWGSLBindGroups(source->entry_point));
     }
     return function;
   }
@@ -188,8 +197,13 @@ class FakeGPUDevice : public GPUDevice {
 
   std::shared_ptr<GPUSampler> CreateSampler(
       const GPUSamplerDescriptor& desc) override {
-    sampler_count_++;
-    return std::make_shared<FakeSampler>(desc);
+    // Real devices share sampler identity, which text draw merging relies on.
+    auto [it, inserted] = samplers_.try_emplace(desc);
+    if (inserted) {
+      sampler_count_++;
+      it->second = std::make_shared<FakeSampler>(desc);
+    }
+    return it->second;
   }
 
   std::shared_ptr<GPUTexture> CreateTexture(
@@ -302,6 +316,7 @@ class FakeGPUDevice : public GPUDevice {
   uint32_t texture_count_ = 0;
   uint32_t coverage_aa_line_texture_count_ = 0;
   uint32_t sampler_count_ = 0;
+  GPUSamplerMap samplers_;
   std::vector<std::string> fragment_function_labels_;
   std::vector<std::string> vertex_function_labels_;
   std::shared_ptr<FakeCommandBuffer> last_command_buffer_;
@@ -1401,6 +1416,497 @@ TEST(PrecompileDrawTest, SupportsTextDraw) {
   EXPECT_EQ(device->sampler_count(), 0u);
 }
 
+TEST(PrecompileDrawTest, TextGeometryBorrowsResources) {
+  static_assert(
+      std::is_constructible_v<WGSLTextGeometry, const TextGeometryData&>);
+  static_assert(!std::is_constructible_v<WGSLTextGeometry, TextGeometryData&&>);
+  static_assert(
+      !std::is_constructible_v<WGSLTextGeometry, const TextGeometryData&&>);
+
+  auto texture = std::make_shared<FakeGPUTexture>(GPUTextureDescriptor{});
+  auto sampler = std::make_shared<FakeSampler>(GPUSamplerDescriptor{});
+  TextGeometryData data;
+  data.textures[0] = texture;
+  data.sampler = sampler;
+  WGSLTextGeometry geometry(data);
+
+  // Geometry borrows the resource holders without copying or moving them.
+  EXPECT_EQ(data.textures[0], texture);
+  EXPECT_EQ(data.sampler, sampler);
+  EXPECT_EQ(texture.use_count(), 2);
+  EXPECT_EQ(sampler.use_count(), 2);
+}
+
+TEST(PrecompileDrawTest, TextRunStoresWholeRunLayerBounds) {
+  for (bool emoji : {false, true}) {
+    auto typeface = Typeface::MakeFromFile(
+        emoji ? SKITY_FONT_DIR "fonts/resources/NotoColorEmoji.ttf"
+              : SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf");
+    ASSERT_NE(typeface, nullptr);
+    const GlyphID glyph = typeface->UnicharToGlyph(emoji ? 0x1F600 : 'O');
+    ASSERT_NE(glyph, 0);
+    const GlyphID glyphs[] = {glyph, glyph, glyph};
+    // Overlapping and distant glyphs all contribute to the same draw's bounds.
+    const float positions_x[] = {0.f, 0.f, 80.f};
+    const float positions_y[] = {0.f, 0.f, 0.f};
+    for (bool perspective : {false, true}) {
+      // Outline glyphs use paths under perspective; emoji uses atlas draws.
+      if (perspective && !emoji) {
+        continue;
+      }
+      SCOPED_TRACE(::testing::Message()
+                   << "emoji=" << emoji << " perspective=" << perspective);
+      FakeGPUContext context;
+      ASSERT_TRUE(context.Init());
+      ArenaAllocator arena;
+      Paint paint;
+      if (!emoji) {
+        paint.SetStyle(Paint::kStroke_Style);
+        paint.SetStrokeWidth(2.f);
+      }
+      Matrix transform = Matrix::Translate(4.f, 40.f);
+      if (perspective) {
+        transform.SetPersp0(0.001f);
+      }
+      const Matrix glyph_to_layer =
+          Matrix::Translate(7.f, 9.f) * Matrix::Scale(0.5f, 0.5f);
+      const Matrix layer_to_physical =
+          Matrix::Translate(-12.f, 18.f) * Matrix::Scale(2.f, 3.f);
+      FakeRootLayer layer(256, 192, Rect::MakeXYWH(6.f, -6.f, 128.f, 64.f),
+                          GPUTextureFormat::kRGBA8Unorm, nullptr, false);
+      auto runs = GlyphRun::Make(
+          3, glyphs, Point{0.f, 0.f, 0.f, 1.f}, positions_x, positions_y,
+          Font(typeface, 20.f), paint, 2.f, transform,
+          context.GetAtlasManager(), &arena, [](const Path&, const Paint&) {
+            ADD_FAILURE() << "Unexpected path";
+          });
+      ASSERT_EQ(runs.size(), 1u);
+      auto* draw = runs[0]->Draw(transform, glyph_to_layer, &arena, 2.f, false);
+      ASSERT_NE(draw, nullptr);
+      const Rect bounds = runs[0]->GetBounds();
+      // Canvas performs the final conversion using the current layer.
+      draw->SetLayerSpaceBounds(
+          layer.CalculateLayerSpaceBounds(bounds, Matrix{}));
+      const Matrix offset = Matrix::Translate(13.f, 17.f);
+      auto* shifted_draw =
+          runs[0]->Draw(transform, offset * glyph_to_layer, &arena, 2.f, false);
+      ASSERT_NE(shifted_draw, nullptr);
+      EXPECT_GT(bounds.Width(), 35.f);
+      EXPECT_GT(bounds.Height(), 0.f);
+      EXPECT_LT(bounds.Width(), 200.f);
+      EXPECT_LT(bounds.Height(), 200.f);
+      EXPECT_EQ(draw->GetLayerSpaceBounds(), layer_to_physical.MapRect(bounds));
+      const Rect expected = offset.MapRect(bounds);
+      const Rect shifted = runs[0]->GetBounds();
+      EXPECT_NEAR(shifted.Left(), expected.Left(), 1e-4f);
+      EXPECT_NEAR(shifted.Top(), expected.Top(), 1e-4f);
+      EXPECT_NEAR(shifted.Right(), expected.Right(), 1e-4f);
+      EXPECT_NEAR(shifted.Bottom(), expected.Bottom(), 1e-4f);
+      // Reusing a run must recompute bounds, not accumulate the shifted result.
+      ASSERT_NE(runs[0]->Draw(transform, glyph_to_layer, &arena, 2.f, false),
+                nullptr);
+      EXPECT_EQ(runs[0]->GetBounds(), bounds);
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, TextRunBoundsMatchSeparatePaintStyles) {
+  for (bool emoji : {false, true}) {
+    auto typeface = Typeface::MakeFromFile(
+        emoji ? SKITY_FONT_DIR "fonts/resources/NotoColorEmoji.ttf"
+              : SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf");
+    ASSERT_NE(typeface, nullptr);
+    const GlyphID glyph = typeface->UnicharToGlyph(emoji ? 0x1F600 : 'O');
+    ASSERT_NE(glyph, 0);
+    const float position_x = 0.f;
+    const float position_y = 0.f;
+    for (bool perspective : {false, true}) {
+      if (perspective && !emoji) {
+        continue;
+      }
+      FakeGPUContext context;
+      ASSERT_TRUE(context.Init());
+      ArenaAllocator arena;
+      Matrix transform = Matrix::Translate(4.f, 40.f);
+      if (perspective) {
+        transform.SetPersp0(0.001f);
+      }
+      auto make_runs = [&](const Paint& paint) {
+        return GlyphRun::Make(1, &glyph, Point{0.f, 0.f, 0.f, 1.f}, &position_x,
+                              &position_y, Font(typeface, 20.f), paint, 1.f,
+                              transform, context.GetAtlasManager(), &arena,
+                              [](const Path&, const Paint&) {
+                                ADD_FAILURE() << "Unexpected path";
+                              });
+      };
+      for (auto style :
+           {Paint::kStrokeAndFill_Style, Paint::kStrokeThenFill_Style}) {
+        SCOPED_TRACE(::testing::Message()
+                     << "emoji=" << emoji << " perspective=" << perspective
+                     << " style=" << style);
+        Paint paint;
+        paint.SetStyle(style);
+        paint.SetStrokeWidth(2.f);
+        auto runs = make_runs(paint);
+        ASSERT_EQ(runs.size(), emoji ? 1u : 2u);
+        for (size_t index = 0; index < runs.size(); ++index) {
+          Paint run_paint = paint;
+          const bool stroke =
+              !emoji &&
+              (style == Paint::kStrokeThenFill_Style ? index == 0 : index == 1);
+          run_paint.SetStyle(stroke ? Paint::kStroke_Style
+                                    : Paint::kFill_Style);
+          auto reference = make_runs(run_paint);
+          ASSERT_EQ(reference.size(), 1u);
+          ASSERT_NE(runs[index]->Draw(transform, Matrix{}, &arena, 1.f, false),
+                    nullptr);
+          ASSERT_NE(reference[0]->Draw(transform, Matrix{}, &arena, 1.f, false),
+                    nullptr);
+          // A fill run (including emoji) must not inherit stroke expansion
+          // from the original combined paint.
+          EXPECT_EQ(runs[index]->GetBounds(), reference[0]->GetBounds());
+        }
+      }
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, TextFillAndStrokeMergePreservingInstanceColors) {
+  auto typeface = Typeface::MakeFromFile(SKITY_FONT_DIR
+                                         "fonts/resources/Roboto-Regular.ttf");
+  ASSERT_NE(typeface, nullptr);
+  const GlyphID glyph = typeface->UnicharToGlyph('O');
+  ASSERT_NE(glyph, 0);
+  const float position = 0.f;
+  for (auto style :
+       {Paint::kStrokeAndFill_Style, Paint::kStrokeThenFill_Style}) {
+    SCOPED_TRACE(static_cast<int>(style));
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    ArenaAllocator arena;
+    Paint paint;
+    paint.SetStyle(style);
+    paint.SetStrokeWidth(2.f);
+    paint.SetFillColor(1.f, 0.f, 0.f, 0.5f);
+    paint.SetStrokeColor(0.f, 0.f, 1.f, 0.75f);
+    auto runs = GlyphRun::Make(
+        1, &glyph, Point{0.f, 0.f, 0.f, 1.f}, &position, &position,
+        Font(typeface, 20.f), paint, 1.f, Matrix{}, context.GetAtlasManager(),
+        &arena,
+        [](const Path&, const Paint&) { ADD_FAILURE() << "Unexpected path"; });
+    ASSERT_EQ(runs.size(), 2u);
+    auto* first = runs[0]->Draw(Matrix{}, Matrix{}, &arena, 1.f, false);
+    auto* second = runs[1]->Draw(Matrix{}, Matrix{}, &arena, 1.f, false);
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    first->SetScissorBox(Rect::MakeWH(32.f, 32.f));
+    second->SetScissorBox(Rect::MakeWH(32.f, 32.f));
+    auto plan = ResolveHWBlendPlan(BlendMode::kSrcOver, true, false,
+                                   context.device()->GetCaps(), true);
+    ASSERT_TRUE(plan.has_value());
+    first->SetBlendPlan(*plan);
+    second->SetBlendPlan(*plan);
+    ASSERT_TRUE(first->MergeIfPossible(second));
+
+    HWStageBuffer stage_buffer(context.device());
+    HWStaticBuffer static_buffer(context.device());
+    HWDrawContext draw_context{};
+    draw_context.arena_allocator = &arena;
+    draw_context.gpuContext = &context;
+    draw_context.pipelineLib = context.GetPipelineLib();
+    draw_context.stageBuffer = &stage_buffer;
+    draw_context.static_buffer = &static_buffer;
+    first->SetClipDepth(0);
+    auto state = first->Prepare(&draw_context);
+    first->GenerateCommand(&draw_context, state);
+    std::vector<uint32_t> instance_counts;
+    FakeRenderPass pass(GPURenderPassDescriptor{}, instance_counts);
+    first->Draw(&pass, nullptr);
+    ASSERT_EQ(pass.GetCommands().size(), 1u);
+    const auto* command = pass.GetCommands().front();
+    ASSERT_EQ(command->instance_count, 2u);
+    EXPECT_EQ(command->pipeline->GetDescriptor().fragment_function->GetLabel(),
+              "FS_SolidVertexColor_TextA8");
+    const auto& layout = command->pipeline->GetDescriptor().buffers->at(1);
+    // The last instance attribute is color; merging must preserve both the
+    // original draw order and each run's independently selected paint color.
+    for (size_t i = 0; i < 2; ++i) {
+      const auto* color = stage_buffer.ToInstance<Color4f>(
+          command->instance_buffer.offset + i * layout.array_stride +
+          layout.attributes.back().offset);
+      const bool stroke =
+          style == Paint::kStrokeThenFill_Style ? i == 0 : i == 1;
+      EXPECT_EQ(*color, stroke ? paint.GetStrokeColor() : paint.GetFillColor());
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, TextBlendRoutesKeepRunsWholeAndProtectDrawBoundaries) {
+  struct TestCase {
+    bool texture_copy;
+    bool native_blend;
+    bool coherent;
+  };
+  const TestCase cases[] = {{true, false, false},
+                            {true, true, false},
+                            {true, true, true},
+                            {false, false, false}};
+  struct DrawCase {
+    bool second_draw;
+    float offset_x;
+  };
+  const DrawCase draw_cases[] = {{false, 0.f}, {true, 0.f}, {true, 64.f}};
+  for (bool emoji : {false, true}) {
+    auto typeface = Typeface::MakeFromFile(
+        emoji ? SKITY_FONT_DIR "fonts/resources/NotoColorEmoji.ttf"
+              : SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf");
+    ASSERT_NE(typeface, nullptr);
+    const GlyphID glyph = typeface->UnicharToGlyph(emoji ? 0x1F600 : 'O');
+    ASSERT_NE(glyph, 0);
+    std::vector<TextRun> runs;
+    // Internal overlap is intentionally not split. FakeGPU only checks draw
+    // structure and pipeline selection, not pixels on restricted blend routes.
+    runs.emplace_back(Font(typeface, 20.f), std::vector<GlyphID>{glyph, glyph},
+                      std::vector<float>{0.f, 0.f},
+                      std::vector<float>{0.f, 0.f});
+    TextBlob blob(std::move(runs));
+    for (const auto& test : cases) {
+      for (const auto& draw_case : draw_cases) {
+        SCOPED_TRACE(::testing::Message()
+                     << "emoji=" << emoji << " copy=" << test.texture_copy
+                     << " native=" << test.native_blend
+                     << " coherent=" << test.coherent
+                     << " second_draw=" << draw_case.second_draw
+                     << " offset=" << draw_case.offset_x);
+        FakeGPUContext context;
+        ASSERT_TRUE(context.Init());
+        context.SetEnableMergingDrawCall(true);
+        auto* device = context.device();
+        auto caps = std::make_unique<GPUCaps>();
+        caps->supports_native_advanced_blend = test.native_blend;
+        caps->supports_native_advanced_blend_coherent = test.coherent;
+        caps->native_blend_shader_variant = test.native_blend;
+        device->InitCaps(std::move(caps));
+
+        Paint paint;
+        paint.SetBlendMode(BlendMode::kOverlay);
+        paint.SetAlphaF(0.5f);
+        PrecompileDraw(context, false,
+                       emoji ? PrecompileDrawType::kDrawEmojiText
+                             : PrecompileDrawType::kDrawText,
+                       paint);
+        const auto pipeline_count = device->render_pipeline_count();
+        // Layer-specific no-copy fallbacks are created on demand, not
+        // prewarmed.
+        device->set_disallow_shader_pipeline_creation(test.texture_copy);
+        GPUSurfaceDescriptor desc{};
+        desc.width = 160;
+        desc.height = 64;
+        desc.sample_count = 1;
+        auto surface = context.CreateSurface(&desc);
+        static_cast<FakeGPUSurface*>(surface.get())
+            ->SetSupportsTextureCopyDstRead(test.texture_copy);
+        auto* canvas = surface->LockCanvas(true);
+        canvas->DrawTextBlob(&blob, 8.f, 32.f, paint);
+        if (draw_case.second_draw) {
+          canvas->DrawTextBlob(&blob, 8.f + draw_case.offset_x, 32.f, paint);
+        }
+        canvas->Flush();
+        surface->Flush();
+
+        const bool needs_copy =
+            test.texture_copy && !(emoji && test.native_blend);
+        const bool non_coherent_native =
+            emoji && test.native_blend && !test.coherent;
+        const bool separate =
+            needs_copy || (non_coherent_native && draw_case.offset_x == 0.f);
+        EXPECT_EQ(device->last_instance_counts(),
+                  !draw_case.second_draw ? (std::vector<uint32_t>{2u})
+                  : separate             ? (std::vector<uint32_t>{2u, 2u})
+                                         : (std::vector<uint32_t>{4u}));
+        EXPECT_EQ(device->last_render_pass_count(),
+                  needs_copy ? (draw_case.second_draw ? 3u : 2u) : 1u);
+        EXPECT_EQ(device->render_pipeline_count() - pipeline_count,
+                  test.texture_copy ? 0u : 1u);
+        EXPECT_EQ(device->disallowed_shader_function_count(), 0u);
+        EXPECT_EQ(device->disallowed_render_pipeline_count(), 0u);
+        EXPECT_EQ(device->disallowed_clone_pipeline_count(), 0u);
+      }
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, TextPaintShadersHitPrecompiledPipelines) {
+  auto typeface = Typeface::MakeFromFile(SKITY_FONT_DIR
+                                         "fonts/resources/Roboto-Regular.ttf");
+  ASSERT_NE(typeface, nullptr);
+  const GlyphID glyph = typeface->UnicharToGlyph('O');
+  ASSERT_NE(glyph, 0);
+  std::vector<TextRun> runs;
+  runs.emplace_back(Font(typeface, 16.f), std::vector<GlyphID>{glyph},
+                    std::vector<float>{0.f}, std::vector<float>{0.f});
+  TextBlob blob(std::move(runs));
+  Paint gradient_paint;
+  Point points[] = {{0.f, 0.f, 0.f, 1.f}, {16.f, 16.f, 0.f, 1.f}};
+  Vec4 colors[] = {Colors::kRed, Colors::kBlue};
+  gradient_paint.SetShader(Shader::MakeLinear(points, colors, nullptr, 2));
+  const Paint paints[] = {gradient_paint, MakeImagePaint(MakeTestImage())};
+  for (const auto& paint : paints) {
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    ExpectRealDrawHitsPrecompiledPipeline(
+        context, PrecompileDrawType::kDrawText, paint, false,
+        [&](Canvas* canvas) { canvas->DrawTextBlob(&blob, 4.f, 24.f, paint); });
+    EXPECT_EQ(context.device()->last_instance_counts(),
+              std::vector<uint32_t>{1u});
+  }
+}
+
+TEST(PrecompileDrawTest, TextDrawSnapshotsShaderLocalMatrix) {
+  const Matrix matrices[] = {
+      Matrix::Translate(3.f, 5.f) * Matrix::Scale(2.f, 4.f),
+      Matrix::Translate(7.f, 11.f) * Matrix::Scale(4.f, 2.f)};
+  for (bool image_shader : {false, true}) {
+    for (auto effect :
+         {TextAtlasEffect::kA8Coverage, TextAtlasEffect::kSDFCoverage}) {
+      SCOPED_TRACE(::testing::Message()
+                   << "image=" << image_shader
+                   << " effect=" << static_cast<int>(effect));
+      FakeGPUContext context;
+      ASSERT_TRUE(context.Init());
+      ArenaAllocator arena;
+      Paint paint;
+      if (image_shader) {
+        paint = MakeImagePaint(MakeTestImage());
+      } else {
+        Point points[] = {{0.f, 0.f, 0.f, 1.f}, {16.f, 16.f, 0.f, 1.f}};
+        Vec4 colors[] = {Colors::kRed, Colors::kBlue};
+        paint.SetShader(Shader::MakeLinear(points, colors, nullptr, 2));
+      }
+      TextGeometryData::BatchedTexture textures{};
+      GPUTextureDescriptor texture_desc{};
+      texture_desc.width = texture_desc.height = 32;
+      textures[0] = context.device()->CreateTexture(texture_desc);
+      auto sampler = context.device()->CreateSampler(GPUSamplerDescriptor{});
+      auto plan = ResolveHWBlendPlan(BlendMode::kSrcOver, true, false,
+                                     context.device()->GetCaps(), true);
+      ASSERT_TRUE(plan.has_value());
+      std::vector<HWDynamicTextDraw*> draws;
+      for (const auto& matrix : matrices) {
+        paint.GetShader()->SetLocalMatrix(matrix);
+        ArrayList<GlyphRect, 16> glyph_rects;
+        glyph_rects.SetArenaAllocator(&arena);
+        glyph_rects.emplace_back(Vec4{0.f, 0.f, 16.f, 16.f}, Vec2{0.f, 0.f},
+                                 Vec2{16.f, 16.f});
+        auto* draw = arena.Make<HWDynamicTextDraw>(
+            Matrix{}, Matrix{}, std::move(glyph_rects), paint, textures,
+            sampler, effect, false, Matrix{});
+        draw->SetScissorBox(Rect::MakeWH(32.f, 32.f));
+        draw->SetClipDepth(0);
+        draw->SetBlendPlan(*plan);
+        draws.push_back(draw);
+      }
+      // Both draws are recorded before preparation, just as before Flush.
+      paint.GetShader()->SetLocalMatrix(Matrix::Translate(99.f, 101.f));
+      HWStageBuffer stage_buffer(context.device());
+      HWStaticBuffer static_buffer(context.device());
+      HWDrawContext draw_context{};
+      draw_context.arena_allocator = &arena;
+      draw_context.gpuContext = &context;
+      draw_context.pipelineLib = context.GetPipelineLib();
+      draw_context.stageBuffer = &stage_buffer;
+      draw_context.static_buffer = &static_buffer;
+      std::vector<uint32_t> instance_counts;
+      FakeRenderPass pass(GPURenderPassDescriptor{}, instance_counts);
+      for (auto* draw : draws) {
+        auto state = draw->Prepare(&draw_context);
+        draw->GenerateCommand(&draw_context, state);
+        draw->Draw(&pass, nullptr);
+      }
+      ASSERT_EQ(pass.GetCommands().size(), 2u);
+      // Matrix values must not introduce another shader/pipeline variant.
+      EXPECT_EQ(pass.GetCommands()[0]->pipeline,
+                pass.GetCommands()[1]->pipeline);
+      for (size_t i = 0; i < draws.size(); ++i) {
+        const auto* command = pass.GetCommands()[i];
+        const UniformBinding* matrix_binding = nullptr;
+        for (const auto& binding : command->uniform_bindings) {
+          if (binding.group == 0 && binding.binding == 1) {
+            matrix_binding = &binding;
+            break;
+          }
+        }
+        ASSERT_NE(matrix_binding, nullptr);
+        size_t offset = matrix_binding->buffer.offset;
+        if (image_shader) {
+          const auto* entry =
+              command->pipeline->GetBindingGroup(0)->GetEntry(1);
+          auto* info =
+              static_cast<wgx::StructDefinition*>(entry->type_definition.get());
+          offset += info->GetMember("inv_matrix")->offset;
+        }
+        Matrix expected;
+        ASSERT_TRUE(matrices[i].Invert(&expected));
+        EXPECT_EQ(*stage_buffer.ToInstance<Matrix>(offset), expected);
+      }
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, EmojiPaintShadersHitPrecompiledPipelines) {
+  auto typeface = Typeface::MakeFromFile(SKITY_FONT_DIR
+                                         "fonts/resources/NotoColorEmoji.ttf");
+  ASSERT_NE(typeface, nullptr);
+  const GlyphID glyph = typeface->UnicharToGlyph(0x1F600);
+  ASSERT_NE(glyph, 0);
+  std::vector<TextRun> runs;
+  runs.emplace_back(Font(typeface, 16.f), std::vector<GlyphID>{glyph},
+                    std::vector<float>{0.f}, std::vector<float>{0.f});
+  TextBlob blob(std::move(runs));
+
+  Paint gradient_paint;
+  Point points[] = {{0.f, 0.f, 0.f, 1.f}, {16.f, 16.f, 0.f, 1.f}};
+  Vec4 colors[] = {Colors::kRed, Colors::kBlue};
+  gradient_paint.SetShader(Shader::MakeLinear(points, colors, nullptr, 2));
+  const Paint paints[] = {gradient_paint, MakeImagePaint(MakeTestImage())};
+  for (auto paint : paints) {
+    paint.SetAlphaF(0.5f);
+    paint.SetColorFilter(ColorFilters::Blend(0xFF00FF00, BlendMode::kSrcATop));
+    const auto shader = paint.GetShader();
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    auto* device = context.device();
+
+    PrecompileDraw(context, false, PrecompileDrawType::kDrawEmojiText, paint);
+    EXPECT_EQ(device->texture_count(), 0u);
+    EXPECT_EQ(device->sampler_count(), 0u);
+    EXPECT_TRUE(device->HasFragmentFunctionLabelContaining("SolidVertexColor"));
+    EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("Gradient"));
+    EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("Texture"));
+
+    ExpectRealDrawHitsPrecompiledPipeline(
+        context, PrecompileDrawType::kDrawEmojiText, paint, false,
+        [&](Canvas* canvas) { canvas->DrawTextBlob(&blob, 4.f, 24.f, paint); });
+    EXPECT_EQ(device->last_instance_counts(), std::vector<uint32_t>{1u});
+    EXPECT_EQ(paint.GetShader(), shader);
+  }
+}
+
+TEST(PrecompileDrawTest, TextPrecompilesDefaultBlendPlan) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto* device = context.device();
+  auto precompile_context = MakePrecompileContext(context, false);
+
+  Paint paint;
+  paint.SetBlendMode(BlendMode::kOverlay);
+  const auto pipeline_count = device->render_pipeline_count();
+  precompile_context->PrecompileDraw(PrecompileDrawType::kDrawText, paint);
+
+  // Precompile only the normal texture-copy plan for this device.
+  EXPECT_EQ(device->render_pipeline_count() - pipeline_count, 1u);
+}
+
 TEST(PrecompileDrawTest, SupportsGradientTextDraw) {
   FakeGPUContext context;
   ASSERT_TRUE(context.Init());
@@ -1415,6 +1921,19 @@ TEST(PrecompileDrawTest, SupportsGradientTextDraw) {
 
   EXPECT_GT(device->shader_function_count(), 0u);
   EXPECT_GT(device->render_pipeline_count(), 0u);
+  EXPECT_EQ(device->texture_count(), 0u);
+  EXPECT_EQ(device->sampler_count(), 0u);
+}
+
+TEST(PrecompileDrawTest, SupportsTextureTextDrawWithoutGPUResources) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto* device = context.device();
+  Paint paint = MakeImagePaint(MakeTestImage());
+
+  PrecompileDraw(context, false, PrecompileDrawType::kDrawText, paint);
+
+  EXPECT_TRUE(device->HasFragmentFunctionLabel("FS_Texture_TextA8"));
   EXPECT_EQ(device->texture_count(), 0u);
   EXPECT_EQ(device->sampler_count(), 0u);
 }
@@ -1446,10 +1965,10 @@ TEST(PrecompileDrawTest, SupportsEmojiTextDraw) {
   EXPECT_EQ(device->texture_count(), 0u);
   EXPECT_EQ(device->sampler_count(), 0u);
   EXPECT_TRUE(
-      device->HasFragmentFunctionLabel("FS_ColorEmojiNoSwizzleFragmentWGSL"));
-  EXPECT_TRUE(
-      device->HasFragmentFunctionLabel("FS_ColorEmojiSwizzleRBFragmentWGSL"));
-  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("TextWGSL"));
+      device->HasFragmentFunctionLabel("FS_SolidVertexColor_TextColor"));
+  EXPECT_TRUE(device->HasFragmentFunctionLabel(
+      "FS_SolidVertexColor_TextColorSwizzleRB"));
+  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("Emoji"));
 
   auto shader_function_count = device->shader_function_count();
   auto render_pipeline_count = device->render_pipeline_count();
@@ -1458,6 +1977,21 @@ TEST(PrecompileDrawTest, SupportsEmojiTextDraw) {
 
   EXPECT_EQ(device->shader_function_count(), shader_function_count);
   EXPECT_EQ(device->render_pipeline_count(), render_pipeline_count);
+}
+
+TEST(PrecompileDrawTest, EmojiPrecompilesDefaultBlendPlan) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto* device = context.device();
+  ASSERT_NE(device, nullptr);
+
+  Paint paint;
+  paint.SetBlendMode(BlendMode::kOverlay);
+  const auto pipeline_count = device->render_pipeline_count();
+  PrecompileDraw(context, false, PrecompileDrawType::kDrawEmojiText, paint);
+
+  // RGBA and BGRA each precompile the normal texture-copy plan.
+  EXPECT_EQ(device->render_pipeline_count() - pipeline_count, 2u);
 }
 
 TEST(PrecompileDrawTest, SupportsGradientEmojiTextDraw) {
@@ -1477,10 +2011,10 @@ TEST(PrecompileDrawTest, SupportsGradientEmojiTextDraw) {
   EXPECT_EQ(device->texture_count(), 0u);
   EXPECT_EQ(device->sampler_count(), 0u);
   EXPECT_TRUE(
-      device->HasFragmentFunctionLabel("FS_ColorEmojiNoSwizzleFragmentWGSL"));
-  EXPECT_TRUE(
-      device->HasFragmentFunctionLabel("FS_ColorEmojiSwizzleRBFragmentWGSL"));
-  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("TextWGSL"));
+      device->HasFragmentFunctionLabel("FS_SolidVertexColor_TextColor"));
+  EXPECT_TRUE(device->HasFragmentFunctionLabel(
+      "FS_SolidVertexColor_TextColorSwizzleRB"));
+  EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("Emoji"));
 
   auto shader_function_count = device->shader_function_count();
   auto render_pipeline_count = device->render_pipeline_count();

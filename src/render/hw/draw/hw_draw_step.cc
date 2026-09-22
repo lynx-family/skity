@@ -81,8 +81,14 @@ GPURenderPipeline* HWDrawStep::GetPipeline(HWDrawContext* context,
 
   pipeline.color_format = target_format;
   pipeline.sample_count = sample_count;
-  pipeline.buffers = HWBufferLayoutMap::GetInstance().GetBufferLayout(
-      static_cast<HWGeometryKeyType::Value>(geometry_->GetMainKey()));
+  // Bits below kCustomKeyShift identify the geometry type; higher bits encode
+  // custom shader flags. All custom variants share the same vertex buffer
+  // layout, though shader code and resource bindings may differ. Mask out
+  // custom bits for this lookup only; the shader cache key retains them.
+  const auto geometry_type = static_cast<HWGeometryKeyType::Value>(
+      geometry_->GetMainKey() & ((1u << kCustomKeyShift) - 1u));
+  pipeline.buffers =
+      HWBufferLayoutMap::GetInstance().GetBufferLayout(geometry_type);
 
   if (state == HWDrawState::kDrawStateNone) {
     pipeline.depth_stencil.format = GPUTextureFormat::kInvalid;

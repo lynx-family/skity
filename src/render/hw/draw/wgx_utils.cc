@@ -724,9 +724,13 @@ bool WGXGradientFragment::SetupSweepInfo(
 }
 
 HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
-                                   bool is_stroke, bool has_color) {
+                                   bool is_stroke, bool has_color,
+                                   const Matrix* shader_local_matrix) {
   auto arena_allocator = context->arena_allocator;
   if (paint.GetShader()) {
+    const Matrix local_matrix = shader_local_matrix
+                                    ? *shader_local_matrix
+                                    : paint.GetShader()->GetLocalMatrix();
     auto type = paint.GetShader()->AsGradient(nullptr);
 
     if (type == Shader::GradientType::kNone) {
@@ -783,7 +787,7 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
             context->gpuContext->GetGPUDevice()->CreateSampler(descriptor);
 
         Matrix inv_local_matrix{};
-        pixmap_shader->GetLocalMatrix().Invert(&inv_local_matrix);
+        local_matrix.Invert(&inv_local_matrix);
 
         return arena_allocator->Make<WGSLTextureFragment>(
             pixmap_shader, texture, sampler, paint.GetAlphaF(),
@@ -802,6 +806,7 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
       Shader::GradientInfo info{};
 
       paint.GetShader()->AsGradient(&info);
+      info.local_matrix = local_matrix;
 
       Color4f fallback_color;
       if (NeedsFallbackToSolidColor(type, info, fallback_color)) {
@@ -813,7 +818,7 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
       }
 
       return arena_allocator->Make<WGSLGradientFragment>(
-          info, type, paint.GetAlphaF(), paint.GetShader()->GetLocalMatrix());
+          info, type, paint.GetAlphaF(), local_matrix);
     }
   } else {
     if (is_stroke) {
