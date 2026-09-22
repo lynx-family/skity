@@ -248,9 +248,14 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
       state_->GetLogicalDevice(), swapchain_, UINT64_MAX,
       frame_slot.acquire_semaphore, VK_NULL_HANDLE, &image_index);
   if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR ||
-      acquire_result == VK_SUBOPTIMAL_KHR) {
+      acquire_result == VK_SUBOPTIMAL_KHR ||
+      acquire_result == VK_ERROR_SURFACE_LOST_KHR) {
     // The acquire semaphore is left in an undefined state by the spec; the
     // caller must recreate the presenter (which builds fresh semaphores).
+    // VK_ERROR_SURFACE_LOST_KHR means the underlying window is gone, which
+    // is equally unrecoverable for this presenter: report kNeedRecreate so
+    // the caller rebuilds the native window instead of retrying a generic
+    // error it may just log.
     broken_ = true;
     result.status = GPUPresenterStatus::kNeedRecreate;
     return result;
@@ -406,7 +411,8 @@ GPUPresenterStatus GPUPresenterVK::Present(
   if (result == VK_SUCCESS) {
     return GPUPresenterStatus::kSuccess;
   }
-  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+      result == VK_ERROR_SURFACE_LOST_KHR) {
     broken_ = true;
     return GPUPresenterStatus::kNeedRecreate;
   }

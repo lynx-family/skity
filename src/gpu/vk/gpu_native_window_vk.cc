@@ -310,6 +310,15 @@ class GPUNativeWindowVKImpl final : public GPUNativeWindowVK {
       return false;
     }
 
+    // Same-extent resize must stay a no-op: every recreation tears down and
+    // rebuilds the swapchain, and embedder-driven update storms (e.g. layout
+    // passes during activity transitions) racing the window's BufferQueue
+    // teardown fault some Android Vulkan drivers inside QueuePresentKHR. A
+    // failed previous recreation (presenter_ == nullptr) is still retried.
+    if (width_ == width && height_ == height && presenter_ != nullptr) {
+      return true;
+    }
+
     return RecreatePresenter(width, height);
   }
 
