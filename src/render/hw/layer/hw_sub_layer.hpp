@@ -53,7 +53,7 @@ class HWSubLayer : public HWLayer {
   }
 
  protected:
-  const std::shared_ptr<GPUTexture>& GetColorTexture() {
+  const std::shared_ptr<GPUTexture>& GetColorTexture() const {
     return color_texture_;
   }
 

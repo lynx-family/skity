@@ -57,4 +57,19 @@ void HWFilterLayer::OnPostDraw(GPURenderPass* render_pass,
   HWSubLayer::OnPostDraw(render_pass, cmd);
 }
 
+// Children draw into the filter input texture; the filtered output texture only
+// holds pixels after the filter runs at post-draw time. Destination reads and
+// emulated MSAA loads inside this layer must therefore sample the input
+// texture, otherwise advanced blends lose the already-drawn backdrop.
+bool HWFilterLayer::OnCopyToDstTexture(GPUCommandBuffer* cmd,
+                                       std::shared_ptr<GPUTexture> dst_texture,
+                                       GPURegion copy_region) const {
+  return CopyRegionToDstTexture(cmd, GetColorTexture(), std::move(dst_texture),
+                                copy_region);
+}
+
+std::shared_ptr<GPUTexture> HWFilterLayer::GetResolveColorTexture() const {
+  return GetColorTexture();
+}
+
 }  // namespace skity
