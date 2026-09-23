@@ -6,6 +6,8 @@
 
 #include <array>
 #include <filesystem>
+#include <skity/effect/color_filter.hpp>
+#include <skity/effect/image_filter.hpp>
 #include <skity/graphic/blend_mode.hpp>
 #include <skity/graphic/color.hpp>
 #include <skity/graphic/paint.hpp>
@@ -127,6 +129,19 @@ static std::string ResolveBlendModeGoldenFileName(std::string_view file_name) {
         file_name.substr(kSaveLayerTextureCopySampleCount4Prefix.size());
     if (IsBasicSaveLayerBlendModeFileName(suffix)) {
       return "blend_mode_savelayer_texture_copy_sample_count_1_" +
+             std::string(suffix);
+    }
+  }
+
+  constexpr std::string_view
+      kSaveLayerImageFilterTextureCopySampleCount4Prefix =
+          "blend_mode_savelayer_image_filter_texture_copy_sample_count_4_";
+  if (HasPrefix(file_name,
+                kSaveLayerImageFilterTextureCopySampleCount4Prefix)) {
+    auto suffix = file_name.substr(
+        kSaveLayerImageFilterTextureCopySampleCount4Prefix.size());
+    if (IsBasicSaveLayerBlendModeFileName(suffix)) {
+      return "blend_mode_savelayer_image_filter_texture_copy_sample_count_1_" +
              std::string(suffix);
     }
   }
@@ -534,6 +549,59 @@ BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Hue)
 BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Saturation)
 BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Color)
 BLEND_MODE_SAVE_LAYER_TEXTURE_COPY_TEST(Luminosity)
+
+// Advanced blend inside a saveLayer whose paint carries an image filter (an
+// HWFilterLayer). While children are still drawing, the filter output texture
+// holds nothing yet, so the dst-copy backdrop and the emulated MSAA load must
+// read the filter INPUT texture. Reading the output texture instead loses the
+// already-drawn backdrop and collapses the blend to the source shape — the
+// failure AGame hits when lowering linearRGB feBlend into nested layers.
+static void DrawBlendModeImageFilterSaveLayer(skity::Canvas* canvas,
+                                              skity::BlendMode mode) {
+  skity::Paint layer_paint;
+  layer_paint.SetImageFilter(skity::ImageFilters::ColorFilter(
+      skity::ColorFilters::LinearToSRGBGamma()));
+
+  canvas->SaveLayer(skity::Rect::MakeLTRB(0, 0, 100, 100), layer_paint);
+
+  skity::Paint paint;
+  paint.SetColor(skity::ColorSetARGB(255, 233, 30, 99));
+  canvas->DrawRect(skity::Rect::MakeLTRB(10, 10, 70, 70), paint);
+
+  paint.SetBlendMode(mode);
+  paint.SetColor(skity::ColorSetARGB(255, 22, 150, 243));
+  canvas->DrawRect(skity::Rect::MakeLTRB(30, 30, 90, 90), paint);
+
+  canvas->Restore();
+}
+
+static void RunBlendModeImageFilterSaveLayerTextureCopyTest(
+    skity::BlendMode mode, const char* name, uint32_t sample_count) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(100.f, 100.f));
+  auto canvas = recorder.GetRecordingCanvas();
+
+  DrawBlendModeImageFilterSaveLayer(canvas, mode);
+
+  auto golden_path = MakeBlendModeGoldenPath(
+      std::string(
+          "blend_mode_savelayer_image_filter_texture_copy_sample_count_") +
+      std::to_string(sample_count) + "_" + name + ".png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      dl.get(), 100.f, 100.f, golden_path.c_str(),
+      TextureCopyConfig(sample_count)));
+}
+
+TEST(BlendModeGolden, SaveLayerImageFilter_TextureCopySampleCount1_Difference) {
+  RunBlendModeImageFilterSaveLayerTextureCopyTest(skity::BlendMode::kDifference,
+                                                  "Difference", 1);
+}
+
+TEST(BlendModeGolden, SaveLayerImageFilter_TextureCopySampleCount4_Difference) {
+  RunBlendModeImageFilterSaveLayerTextureCopyTest(skity::BlendMode::kDifference,
+                                                  "Difference", 4);
+}
 
 static void DrawBlendModeComposite(skity::Canvas* canvas) {
   skity::Paint paint;

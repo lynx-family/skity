@@ -26,6 +26,12 @@ class HWFilterLayer : public HWSubLayer {
 
   Rect GetLayerBackDrawBounds() override { return filted_bounds_; }
 
+  bool OnCopyToDstTexture(GPUCommandBuffer* cmd,
+                          std::shared_ptr<GPUTexture> dst_texture,
+                          GPURegion copy_region) const override;
+
+  std::shared_ptr<GPUTexture> GetResolveColorTexture() const override;
+
  private:
   std::shared_ptr<HWFilter> filter_;
   Rect filted_bounds_;
