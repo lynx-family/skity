@@ -388,8 +388,6 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_solid_vertex_color.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_stencil_fragment.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_stencil_fragment.hpp
-    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_text_fragment.cc
-    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_text_fragment.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_texture_fragment.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/fragment/wgsl_texture_fragment.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_clip_geometry.cc
