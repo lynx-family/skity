@@ -6,6 +6,7 @@
 
 #include <vk_mem_alloc.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <set>
 #include <string_view>
@@ -647,6 +648,7 @@ void VulkanContextState::CollectPendingSubmissions(bool wait_all) const {
 
   std::vector<VulkanPendingSubmission> completed_submissions;
   if (pending_submissions_.empty()) {
+    CollectRetiredBufferAllocations();
     return;
   }
 
@@ -721,6 +723,82 @@ void VulkanContextState::CollectPendingSubmissions(bool wait_all) const {
       functions_.device.vkDestroyCommandPool(logical_device_,
                                              submission.command_pool, nullptr);
       submission.command_pool = VK_NULL_HANDLE;
+    }
+  }
+
+  CollectRetiredBufferAllocations();
+}
+
+void VulkanContextState::RetireBufferAllocation(
+    VkBuffer buffer, VmaAllocation allocation) const {
+  if (buffer == VK_NULL_HANDLE || allocation == nullptr) {
+    return;
+  }
+
+  RetiredBufferAllocation retired;
+  retired.buffer = buffer;
+  retired.allocation = allocation;
+  for (const auto& submission : pending_submissions_) {
+    if (submission.fence != VK_NULL_HANDLE) {
+      retired.wait_fences.push_back(submission.fence);
+    }
+  }
+
+  if (retired.wait_fences.empty()) {
+    // Nothing submitted can reference the allocation anymore.
+    if (!IsDeviceLost() && allocator_ != nullptr) {
+      vmaDestroyBuffer(allocator_, retired.buffer, retired.allocation);
+    }
+    return;
+  }
+
+  retired_buffer_allocations_.push_back(std::move(retired));
+}
+
+void VulkanContextState::CollectRetiredBufferAllocations() const {
+  if (retired_buffer_allocations_.empty()) {
+    return;
+  }
+  if (logical_device_ == VK_NULL_HANDLE ||
+      functions_.device.vkGetFenceStatus == nullptr) {
+    return;
+  }
+
+  // A fence that is no longer tracked by a pending submission was signaled
+  // before the submission left the queue (and may already be destroyed or
+  // reset), so it imposes no wait anymore.
+  for (auto& entry : retired_buffer_allocations_) {
+    entry.wait_fences.erase(
+        std::remove_if(
+            entry.wait_fences.begin(), entry.wait_fences.end(),
+            [this](VkFence fence) {
+              return std::none_of(
+                  pending_submissions_.begin(), pending_submissions_.end(),
+                  [fence](const VulkanPendingSubmission& submission) {
+                    return submission.fence == fence;
+                  });
+            }),
+        entry.wait_fences.end());
+  }
+
+  auto it = retired_buffer_allocations_.begin();
+  while (it != retired_buffer_allocations_.end()) {
+    bool ready = true;
+    for (VkFence fence : it->wait_fences) {
+      if (functions_.device.vkGetFenceStatus(logical_device_, fence) !=
+          VK_SUCCESS) {
+        ready = false;
+        break;
+      }
+    }
+
+    if (ready) {
+      if (!IsDeviceLost() && allocator_ != nullptr) {
+        vmaDestroyBuffer(allocator_, it->buffer, it->allocation);
+      }
+      it = retired_buffer_allocations_.erase(it);
+    } else {
+      ++it;
     }
   }
 }
