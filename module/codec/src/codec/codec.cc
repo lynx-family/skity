@@ -7,10 +7,12 @@
 #include <skity/io/data.hpp>
 #include <vector>
 
+#if SKITY_ENABLE_CODEC_BMP
+#include "src/codec/bmp_codec.hpp"
+#endif
 #if SKITY_ENABLE_CODEC_GIF
 #include "src/codec/gif_codec.hpp"
 #endif
-#include "src/codec/bmp_codec.hpp"
 #include "src/codec/jpeg_codec.hpp"
 #include "src/codec/png_codec.hpp"
 
@@ -26,7 +28,9 @@ static std::mutex codec_mutex = {};
 void Codec::SetupCodecs() {
   codec_list.clear();
 
+#if SKITY_ENABLE_CODEC_BMP
   codec_list.emplace_back(std::make_shared<BMPCodec>());
+#endif
   codec_list.emplace_back(std::make_shared<PNGCodec>());
   codec_list.emplace_back(std::make_shared<JPEGCodec>());
 #if SKITY_ENABLE_CODEC_GIF
