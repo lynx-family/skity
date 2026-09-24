@@ -12,8 +12,6 @@
 #include <skity/render/canvas.hpp>
 
 TEST(BMPCodecTest, RecognizeFileType) {
-  auto png_data = skity::Data::MakeFromFileName(SKITY_TEST_PNG_FILE);
-
   const unsigned char bmp_header[] = {
       'B',  'M',               // signature
       0x36, 0x00, 0x00, 0x00,  // file size = 54
@@ -37,14 +35,21 @@ TEST(BMPCodecTest, RecognizeFileType) {
 
   auto codec = skity::Codec::MakeFromData(bmp_data);
 
+#if SKITY_ENABLE_CODEC_BMP
   ASSERT_TRUE(codec != nullptr) << "MakeFromData returned nullptr for BMP data";
+  auto png_data = skity::Data::MakeFromFileName(SKITY_TEST_PNG_FILE);
+  ASSERT_TRUE(png_data != nullptr);
 
   EXPECT_TRUE(codec->RecognizeFileType(
       reinterpret_cast<const char*>(bmp_header), sizeof(bmp_header)));
   EXPECT_FALSE(codec->RecognizeFileType(
       reinterpret_cast<const char*>(png_data->Bytes()), png_data->Size()));
+#else
+  EXPECT_EQ(codec, nullptr);
+#endif
 }
 
+#if SKITY_ENABLE_CODEC_BMP
 TEST(BMPCodecTest, Decode24Bit) {
   const unsigned char bmp_24bit[] = {
       'B',  'M',               // signature
@@ -426,3 +431,4 @@ TEST(BMPCodecTest, InvalidSize) {
 
   EXPECT_TRUE(codec == nullptr);
 }
+#endif

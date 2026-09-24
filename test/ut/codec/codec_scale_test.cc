@@ -522,6 +522,7 @@ TEST(CodecScaleTest, PNGDecodeScaledContent) {
   }
 }
 
+#if SKITY_ENABLE_CODEC_BMP
 TEST(CodecScaleTest, BMPDecodeScaled) {
   // BMP has no native scaling; encode a solid 64x64 image and decode it at
   // half size through the shared resampler. A minimal 1x1 24-bit header is
@@ -562,6 +563,8 @@ TEST(CodecScaleTest, BMPDecodeScaled) {
     }
   }
 }
+
+#endif
 
 TEST(CodecScaleTest, GIFDecodeScaled) {
   // Single-frame GIF (color wheel): intrinsic decode via wuffs, then

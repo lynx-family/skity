@@ -127,6 +127,9 @@ target_link_libraries(skity_unit_test
 )
 
 if (${SKITY_CODEC_MODULE})
+    target_compile_definitions(skity_unit_test PRIVATE
+        SKITY_ENABLE_CODEC_BMP=$<BOOL:${SKITY_ENABLE_CODEC_BMP}>
+    )
     target_sources(skity_unit_test
         PUBLIC
         codec/bmp_codec_test.cc

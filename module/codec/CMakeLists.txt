@@ -16,6 +16,7 @@ target_include_directories(skity-codec PRIVATE ${SKITY_ROOT}/include)
 
 option(SKITY_ENABLE_CODEC_WEBP "Enable WebP Codec" ON)
 option(SKITY_ENABLE_CODEC_GIF "Enable GIF Codec" ON)
+option(SKITY_ENABLE_CODEC_BMP "Enable BMP Codec" ON)
 
 target_include_directories(
   skity-codec
@@ -29,8 +30,6 @@ target_sources(
   skity-codec
   PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/include/skity/codec/codec.hpp
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/bmp_codec.cc
-  ${CMAKE_CURRENT_LIST_DIR}/src/codec/bmp_codec.hpp
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec_priv.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/codec_priv.hpp
@@ -38,6 +37,17 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/data_stream.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/data_stream.hpp
 )
+
+if (SKITY_ENABLE_CODEC_BMP)
+  target_sources(
+    skity-codec
+    PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/bmp_codec.cc
+    ${CMAKE_CURRENT_LIST_DIR}/src/codec/bmp_codec.hpp
+  )
+
+  target_compile_definitions(skity-codec PRIVATE -DSKITY_ENABLE_CODEC_BMP=1)
+endif()
 
 if (SKITY_ENABLE_CODEC_WEBP)
   target_sources(
