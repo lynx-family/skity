@@ -2,6 +2,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -11,7 +12,9 @@
 #include <skity/text/text_run.hpp>
 #include <string>
 
+#include "concurrent_runner.h"
 #include "src/text/scaler_context.hpp"
+#include "src/text/scaler_context_cache.hpp"
 
 using namespace skity;
 
@@ -54,6 +57,12 @@ class MockTypeface : public Typeface {
   }
 
   void OnGetFontDescriptor(FontDescriptor&) const override {}
+};
+
+class BoundsTypeface : public MockTypeface {
+ public:
+  MOCK_METHOD(std::unique_ptr<ScalerContext>, OnCreateScalerContext,
+              (const ScalerContextDesc*), (const, override));
 };
 
 }  // namespace
@@ -199,6 +208,39 @@ TEST_F(TextBlobTest, GetBoundsRectAutoLayoutMultipleGlyphs) {
   Vec2 size = blob.GetBoundSize();
   EXPECT_FLOAT_EQ(size.x, rect.Width());
   EXPECT_FLOAT_EQ(size.y, rect.Height());
+}
+
+TEST_F(TextBlobTest, CachesBoundsAcrossConcurrentReads) {
+  if (!HasRealTypeface()) {
+    GTEST_SKIP();
+  }
+
+  const auto glyph = default_typeface->UnicharToGlyph('A');
+  ASSERT_NE(glyph, 0u);
+  const auto expected =
+      TextBlob({TextRun(Font(default_typeface, 20.f), {glyph})})
+          .GetBoundsRect();
+  auto typeface = std::make_shared<BoundsTypeface>();
+  ON_CALL(*typeface, OnCreateScalerContext(testing::_))
+      .WillByDefault([&](const ScalerContextDesc* desc) {
+        return default_typeface->CreateScalerContext(desc);
+      });
+  EXPECT_CALL(*typeface, OnCreateScalerContext(testing::_)).Times(1);
+  const TextBlob blob({TextRun(Font(typeface, 20.f), {glyph})});
+
+  ConcurrentRunner runner(8, 16);
+  const auto read_bounds = [&](int) {
+    EXPECT_EQ(blob.GetBoundsRect(), expected);
+    const auto size = blob.GetBoundSize();
+    EXPECT_FLOAT_EQ(size.x, expected.Width());
+    EXPECT_FLOAT_EQ(size.y, expected.Height());
+  };
+  runner.Run(read_bounds);
+
+  // Repeated reads must not reload glyph metrics after their cache is purged.
+  ScalerContextCache::GlobalScalerContextCache()->PurgeByTypeface(
+      typeface->TypefaceId());
+  runner.Run(read_bounds);
 }
 
 TEST_F(TextBlobTest, ComputeBoundsMatchesManualFormula) {
