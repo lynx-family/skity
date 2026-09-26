@@ -118,7 +118,8 @@ void SWSpanBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
     }
     render_target_.BlendPixelH(x, y, color, length, blend_);
   } else {
-    std::vector<uint32_t> pm_colors(static_cast<size_t>(length));
+    auto& pm_colors = GetSpanColors();
+    pm_colors.resize(static_cast<size_t>(length));
 
     for (int32_t l = 0; l < length; l++) {
       PMColor color = CalculateColor(x + l, y);
@@ -659,9 +660,29 @@ void CalculateImageColorsNeon(int32_t p_x, int32_t p_y, int32_t p_alpha,
 void PixmapBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
   SKITY_TRACE_EVENT(PixmapBrush_BrushH);
 
+  if (filter_mode_ == FilterMode::kLinear && length > 1) {
+    // Keep CalculateColor's scalar mapping/sampling arithmetic unchanged. The
+    // pinned canvas creates PixmapBrush directly; qualified dispatch removes
+    // the virtual call for every linear-filter pixel without vectorizing or
+    // regrouping floating-point expressions.
+    auto& colors = GetSpanColors();
+    colors.resize(static_cast<size_t>(length));
+    ColorFilter* color_filter = GetColorFilter();
+    for (int32_t l = 0; l < length; ++l) {
+      PMColor color = PixmapBrush::CalculateColor(x + l, y);
+      if (alpha != 255) {
+        color = AlphaMulQ(color, alpha);
+      }
+      if (color_filter) {
+        color = color_filter->FilterColor(color);
+      }
+      colors[l] = color;
+    }
+    GetRenderTarget().BlendPixelH(x, y, colors.data(), length, GetBlendMode());
+    return;
+  }
 #ifdef SKITY_ARM_NEON
   if (filter_mode_ == FilterMode::kLinear) {
-    // TODO(zhangzhijian): Accelerate it via neon
     SWSpanBrush::BrushH(x, y, length, alpha);
     return;
   }

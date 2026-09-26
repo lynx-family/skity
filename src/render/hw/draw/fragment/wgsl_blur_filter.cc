@@ -44,11 +44,7 @@ std::string WGSLBlurFilter::GenSourceWGSL() const {
     @group(1) @binding(2) var          uTexture         : texture_2d<f32>;
 
     fn convert_radius_to_sigma(radius: f32) -> f32 {
-      if radius > 0.0 {
-        return radius * 0.57735 + 0.5;
-      } else {
-        return 0.0;
-      }
+      return radius / 3.0;
     }
 
     fn calculate_blur_norm(radius: f32) -> f32 {
@@ -77,7 +73,7 @@ std::string WGSLBlurFilter::GenSourceWGSL() const {
       var total    : f32       = norm;
       var acc      : vec4<f32> = decl_texture(uv) * norm;
 
-      var kernel_size : i32 = i32(radius);
+      var kernel_size : i32 = i32(ceil(radius));
 
       for (var i: i32 = 1; i <= kernel_size; i = i + 1) {
         var coffe  : f32       = calculate_blur_coffe(radius, norm, f32(i));

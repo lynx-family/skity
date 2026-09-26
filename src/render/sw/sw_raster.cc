@@ -51,6 +51,29 @@ void RealSpanBuilder::BuildSpans(int x, int y, const uint8_t antialias[],
   }
 }
 
+// Clamp the horizontal span [x, x + len) to the coverage row that starts at
+// `left` and holds `width` entries. Returns false when nothing remains. The
+// row is the only buffer the scanline walker writes, so this is the final
+// memory-safety boundary for edges whose fixed-point coordinates wrapped or
+// whose clip range was wider than the row.
+inline static bool clamp_span_to_row(int x, int len, int left, size_t width,
+                                     int* offset, int* skip, int* clamped) {
+  if (len <= 0) {
+    return false;
+  }
+  const int64_t start = static_cast<int64_t>(x) - left;
+  const int64_t end = start + len;
+  const int64_t row_start = std::max<int64_t>(start, 0);
+  const int64_t row_end = std::min<int64_t>(end, static_cast<int64_t>(width));
+  if (row_start >= row_end) {
+    return false;
+  }
+  *offset = static_cast<int>(row_start);
+  *skip = static_cast<int>(row_start - start);
+  *clamped = static_cast<int>(row_end - row_start);
+  return true;
+}
+
 inline static Alpha safely_add_alpha(Alpha alpha, Alpha delta) {
   if (static_cast<uint16_t>(alpha) + static_cast<uint16_t>(delta) > 255) {
     return 255;
@@ -60,21 +83,22 @@ inline static Alpha safely_add_alpha(Alpha alpha, Alpha delta) {
 }
 
 void SpanBuilder::BuildSpan(int x, int y, const uint8_t alpha) {
-  if (y < scan_bounds_.Top()) {
-    return;
-  }
-  FlushYIfNeed(y);
-  int offset = x - left_;
-  alphas_[offset] = safely_add_alpha(alphas_[offset], alpha);
+  BuildSpan(x, y, 1, alpha);
 }
 
 void SpanBuilder::BuildSpan(int x, int y, int width, const uint8_t alpha) {
   if (y < scan_bounds_.Top()) {
     return;
   }
+  int offset;
+  int skip;
+  int clamped;
+  if (!clamp_span_to_row(x, width, left_, alphas_.size(), &offset, &skip,
+                         &clamped)) {
+    return;
+  }
   FlushYIfNeed(y);
-  int offset = x - left_;
-  for (int i = 0; i < width; i++) {
+  for (int i = 0; i < clamped; i++) {
     alphas_[offset + i] = safely_add_alpha(alphas_[offset + i], alpha);
   }
 }
@@ -83,10 +107,17 @@ void SpanBuilder::BuildSpans(int x, int y, const uint8_t antialias[], int len) {
   if (y < scan_bounds_.Top()) {
     return;
   }
+  int offset;
+  int skip;
+  int clamped;
+  if (!clamp_span_to_row(x, len, left_, alphas_.size(), &offset, &skip,
+                         &clamped)) {
+    return;
+  }
   FlushYIfNeed(y);
-  int offset = x - left_;
-  for (int i = 0; i < len; i++) {
-    alphas_[offset + i] = safely_add_alpha(alphas_[offset + i], antialias[i]);
+  for (int i = 0; i < clamped; i++) {
+    alphas_[offset + i] =
+        safely_add_alpha(alphas_[offset + i], antialias[skip + i]);
   }
 }
 
@@ -743,8 +774,17 @@ void SWRaster::RastePath(Path const& path, Matrix const& transform,
       std::floor(scan_bounds.Left()), std::floor(scan_bounds.Top()),
       std::ceil(scan_bounds.Right()), std::ceil(scan_bounds.Bottom()));
 
-  if (!scan_bounds.Intersect(clip_bounds)) {
+  // Edge construction shifts scalar coordinates by 18 bits and the scanline
+  // walker works in 16.16 fixed point, so any device coordinate beyond this
+  // magnitude wraps. Everything the raster touches is kept inside it: the
+  // scan range, the coverage row, and (through BuildEdges) every edge.
+  if (!scan_bounds.Intersect(clip_bounds) ||
+      !scan_bounds.Intersect(kFixedPointSafeBounds)) {
     scan_bounds.SetEmpty();
+  }
+  if (!bounds_.Intersect(kFixedPointSafeBounds)) {
+    bounds_.SetEmpty();
+    return;
   }
   scan_bounds = Rect::MakeLTRB(
       std::floor(scan_bounds.Left()), std::floor(scan_bounds.Top()),
@@ -776,8 +816,8 @@ void SWRaster::RastePath(Path const& path, Matrix const& transform,
   // also needs to be modified.
   start_y = bounds_.Top();
   stop_y = scan_bounds.Bottom();
-  left_bound = static_cast<uint32_t>(scan_bounds.Left()) << 16;
-  right_bound = static_cast<uint32_t>(scan_bounds.Right()) << 16;
+  left_bound = SWIntToFixed(static_cast<int32_t>(scan_bounds.Left()));
+  right_bound = SWIntToFixed(static_cast<int32_t>(scan_bounds.Right()));
 
   WalkEdges(&head, &tail, path.GetFillType(), &span_builder, start_y, stop_y,
             left_bound, right_bound);

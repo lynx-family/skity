@@ -25,6 +25,8 @@ class SWRaster;
 class SWCanvas : public Canvas {
   struct State {
     std::vector<Span> clip_spans_ = {};
+    // Stable row lookup; the source vector order remains unchanged.
+    std::vector<size_t> clip_row_indices_ = {};
     ClipOp op = ClipOp::kIntersect;
 
     bool has_layer = false;

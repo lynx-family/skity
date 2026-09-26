@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/vk/gpu_command_buffer_vk.hpp"
@@ -16,6 +17,8 @@
 namespace skity {
 
 namespace {
+
+constexpr std::uint64_t kPresenterWaitTimeoutNanoseconds = 100'000'000;
 
 VkCompositeAlphaFlagBitsKHR ResolveCompositeAlpha(
     VkCompositeAlphaFlagBitsKHR preferred,
@@ -136,6 +139,14 @@ GPUPresenterVK::GPUPresenterVK(GPUContextImpl* context,
 
 GPUPresenterVK::~GPUPresenterVK() { Reset(); }
 
+void GPUPresenterVK::RetirePresenter(std::unique_ptr<GPUPresenterVK> presenter,
+                                     std::function<void()> completion) {
+  if (presenter != nullptr) {
+    retired_presenters_.emplace_back(std::move(presenter));
+    retirement_completions_.emplace_back(std::move(completion));
+  }
+}
+
 bool GPUPresenterVK::Init() {
   if (context_ == nullptr || state_ == nullptr ||
       desc_.surface == VK_NULL_HANDLE || desc_.width == 0 ||
@@ -225,30 +236,31 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   const auto& device_fns = state_->DeviceFns();
   FrameSlot& frame_slot = frame_slots_[current_frame_];
 
-  if (device_fns.vkWaitForFences(state_->GetLogicalDevice(), 1,
-                                 &frame_slot.in_flight, VK_TRUE,
-                                 UINT64_MAX) != VK_SUCCESS) {
-    LOGE("Failed to wait for Vulkan presenter fence");
+  const VkResult frame_wait_result = device_fns.vkWaitForFences(
+      state_->GetLogicalDevice(), 1, &frame_slot.in_flight, VK_TRUE, 0);
+  if (frame_wait_result == VK_TIMEOUT) {
+    result.status = GPUPresenterStatus::kRetryLater;
+    result.retry_reason = GPUSurfaceAcquireRetryReason::kFrameInFlight;
     return result;
   }
-
-  if (fns_.vkResetFences(state_->GetLogicalDevice(), 1,
-                         &frame_slot.in_flight) != VK_SUCCESS) {
-    LOGE("Failed to reset Vulkan presenter fence");
+  if (frame_wait_result != VK_SUCCESS) {
+    LOGE("Failed to wait for Vulkan presenter fence: {}",
+         static_cast<int32_t>(frame_wait_result));
     return result;
   }
+  state_->CollectPendingSubmissionsThroughFence(frame_slot.in_flight);
 
-  // From this point on the frame fence is unsignaled and only a completed
-  // surface hand-off (the caller submits rendering against its sync info and
-  // presents) can signal it again. Any failure below invalidates the slot
-  // and the presenter is marked broken so it fails fast instead of dead
-  // waiting on the unsignaled fence (or leaking the acquired image).
   uint32_t image_index = 0;
   const VkResult acquire_result = fns_.vkAcquireNextImageKHR(
-      state_->GetLogicalDevice(), swapchain_, UINT64_MAX,
-      frame_slot.acquire_semaphore, VK_NULL_HANDLE, &image_index);
+      state_->GetLogicalDevice(), swapchain_, 0, frame_slot.acquire_semaphore,
+      VK_NULL_HANDLE, &image_index);
+  if (acquire_result == VK_TIMEOUT || acquire_result == VK_NOT_READY) {
+    result.status = GPUPresenterStatus::kRetryLater;
+    result.retry_reason =
+        GPUSurfaceAcquireRetryReason::kSwapchainImageUnavailable;
+    return result;
+  }
   if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR ||
-      acquire_result == VK_SUBOPTIMAL_KHR ||
       acquire_result == VK_ERROR_SURFACE_LOST_KHR) {
     // The acquire semaphore is left in an undefined state by the spec; the
     // caller must recreate the presenter (which builds fresh semaphores).
@@ -260,7 +272,10 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
     result.status = GPUPresenterStatus::kNeedRecreate;
     return result;
   }
-  if (acquire_result != VK_SUCCESS) {
+  // VK_SUBOPTIMAL_KHR still acquires a valid image. Recreating immediately can
+  // livelock on Android surfaces that remain usable but report a persistent
+  // transform or extent mismatch during rotation.
+  if (acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR) {
     LOGE("Failed to acquire swapchain image: {}",
          static_cast<int32_t>(acquire_result));
     broken_ = true;
@@ -275,20 +290,40 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
     return result;
   }
 
+  if (image_presentations_pending_[image_index]) {
+    // Reacquiring an image proves its previous presentation has completed.
+    // Since presentation operations are ordered, presenters retired before
+    // the first presentation on this swapchain can now be released safely.
+    image_presentations_pending_[image_index] = false;
+    ReleaseRetiredPresenters();
+  }
+
   VkFence& image_fence = image_in_flight_fences_[image_index];
   if (image_fence != VK_NULL_HANDLE && image_fence != frame_slot.in_flight) {
-    if (device_fns.vkWaitForFences(state_->GetLogicalDevice(), 1, &image_fence,
-                                   VK_TRUE, UINT64_MAX) != VK_SUCCESS) {
-      LOGE("Failed to wait for Vulkan image fence");
+    const VkResult image_wait_result =
+        device_fns.vkWaitForFences(state_->GetLogicalDevice(), 1, &image_fence,
+                                   VK_TRUE, kPresenterWaitTimeoutNanoseconds);
+    if (image_wait_result != VK_SUCCESS) {
+      LOGE("Failed to wait for Vulkan image fence: {}",
+           static_cast<int32_t>(image_wait_result));
       broken_ = true;
       return result;
     }
+    state_->CollectPendingSubmissionsThroughFence(image_fence);
   }
   image_fence = frame_slot.in_flight;
 
+  if (fns_.vkResetFences(state_->GetLogicalDevice(), 1,
+                         &frame_slot.in_flight) != VK_SUCCESS) {
+    LOGE("Failed to reset Vulkan presenter fence");
+    return result;
+  }
+
   GPUSurfaceSyncInfoVK sync_info = {};
   sync_info.wait_semaphore = frame_slot.acquire_semaphore;
-  sync_info.wait_dst_stage_mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  // The first use includes an UNDEFINED-to-attachment layout transition.
+  // Wait before every command, including that transition, not only color writes.
+  sync_info.wait_dst_stage_mask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
   sync_info.signal_semaphore = image_present_semaphores_[image_index];
   sync_info.signal_fence = frame_slot.in_flight;
 
@@ -312,8 +347,8 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   surface_desc.sync_info = &sync_info;
 
   GPUTextureDescriptor texture_desc = {};
-  texture_desc.width = desc_.width;
-  texture_desc.height = desc_.height;
+  texture_desc.width = swapchain_extent_.width;
+  texture_desc.height = swapchain_extent_.height;
   texture_desc.mip_level_count = 1;
   texture_desc.sample_count = 1;
   texture_desc.format = surface_format;
@@ -408,10 +443,13 @@ GPUPresenterStatus GPUPresenterVK::Present(
     broken_ = true;
     return GPUPresenterStatus::kError;
   }
-  if (result == VK_SUCCESS) {
+  // A suboptimal presentation completed successfully. The owner can resize
+  // when its platform metrics settle without dropping this frame.
+  if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
+    image_presentations_pending_[present_info->image_index] = true;
     return GPUPresenterStatus::kSuccess;
   }
-  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+  if (result == VK_ERROR_OUT_OF_DATE_KHR ||
       result == VK_ERROR_SURFACE_LOST_KHR) {
     broken_ = true;
     return GPUPresenterStatus::kNeedRecreate;
@@ -647,6 +685,7 @@ bool GPUPresenterVK::CreateSwapchain() {
   }
   swapchain_images_.resize(swapchain_image_count);
   image_in_flight_fences_.assign(swapchain_image_count, VK_NULL_HANDLE);
+  image_presentations_pending_.assign(swapchain_image_count, false);
   // Bump the swapchain generation so surfaces acquired from a previous,
   // retired swapchain can be rejected at Present instead of feeding a stale
   // image index into the driver.
@@ -763,6 +802,33 @@ void GPUPresenterVK::DestroySwapchain() {
   swapchain_ = VK_NULL_HANDLE;
   swapchain_images_.clear();
   image_in_flight_fences_.clear();
+  image_presentations_pending_.clear();
+}
+
+void GPUPresenterVK::ReleaseRetiredPresenters() {
+  for (auto& presenter : retired_presenters_) {
+    presenter->ResetAfterPresentationRetirement();
+  }
+  retired_presenters_.clear();
+
+  auto completions = std::move(retirement_completions_);
+  retirement_completions_.clear();
+  for (auto& completion : completions) {
+    if (completion) {
+      completion();
+    }
+  }
+}
+
+void GPUPresenterVK::ResetAfterPresentationRetirement() {
+  ReleaseRetiredPresenters();
+  DestroyFrameSlots();
+  DestroySwapchainImageViews();
+  DestroySwapchain();
+  current_frame_ = 0;
+  has_outstanding_surface_ = false;
+  context_ = nullptr;
+  state_.reset();
 }
 
 void GPUPresenterVK::Reset() {
@@ -783,6 +849,7 @@ void GPUPresenterVK::Reset() {
   if (state_ != nullptr) {
     state_->CollectPendingSubmissions(true);
   }
+  ReleaseRetiredPresenters();
   DestroyFrameSlots();
   DestroySwapchainImageViews();
   DestroySwapchain();

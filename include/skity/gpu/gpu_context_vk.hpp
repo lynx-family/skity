@@ -678,6 +678,19 @@ class SKITY_API GPUNativeWindowVK {
    *         recreation fails.
    */
   virtual bool Resize(uint32_t width, uint32_t height) = 0;
+
+  /**
+   * Retire a previous native window after this window completes presentation.
+   *
+   * This avoids a synchronous device-idle wait when a platform replaces its
+   * native window during a lifecycle transition. Both windows must have been
+   * returned by `CreateGPUNativeWindowVK()` for the same `GPUContext`.
+   *
+   * @return true when ownership of `window` was accepted for deferred
+   *         retirement. On failure, the caller's unique pointer is unchanged.
+   */
+  virtual bool RetireWindow(
+      std::unique_ptr<GPUNativeWindowVK>&& window) = 0;
 };
 
 /**
@@ -712,8 +725,9 @@ CreateGPUContextVK(PFN_vkGetInstanceProcAddr get_instance_proc_addr);
  * Vulkan backend and must outlive the returned `GPUNativeWindowVK`.
  *
  * The returned object owns all Vulkan presentation resources created by Skity.
- * The native window itself is still owned by the caller and must outlive the
- * returned `GPUNativeWindowVK`.
+ * Native-window lifetime remains the caller's responsibility except on
+ * Android, where Skity retains the `ANativeWindow` while its `VkSurfaceKHR`
+ * exists.
  *
  * @note On Linux, this function creates a VkSurfaceKHR internally based on
  *       the VKNativeWindowType in GPUNativeWindowInfoVK. The available window

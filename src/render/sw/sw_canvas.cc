@@ -5,6 +5,7 @@
 #include "src/render/sw/sw_canvas.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <skity/effect/mask_filter.hpp>
@@ -40,39 +41,46 @@ constexpr ColorType ToColorType(BitmapFormat bitmap_format) {
 }
 }  // namespace
 
-static std::vector<Span> find_span_y(std::vector<Span> const& spans,
-                                     int32_t y) {
-  std::vector<Span> ret;
-
-  for (Span const& span : spans) {
-    if (span.y == y) {
-      ret.emplace_back(span);
-    }
-  }
-
-  return ret;
+// Group rows stably: overlapping spans in one row retain their original order.
+static void sort_spans_by_y(std::vector<Span>& spans) {
+  std::stable_sort(spans.begin(), spans.end(),
+                   [](Span const& a, Span const& b) { return a.y < b.y; });
 }
 
 static std::vector<Span> spans_subtraction(std::vector<Span> const& subtrahend,
                                            std::vector<Span> const& minuend) {
   std::vector<Span> ret;
 
+  // Incoming raster/recursive clip rows need not be ordered. Group a copy
+  // once, retaining each row's original order before its existing x sort.
+  auto rows = minuend;
+  sort_spans_by_y(rows);
+  for (auto row = rows.begin(); row != rows.end();) {
+    auto end = std::find_if(row, rows.end(),
+                            [y = row->y](Span const& item) {
+                              return item.y != y;
+                            });
+    std::sort(row, end,
+              [](Span const& a, Span const& b) { return a.x < b.x; });
+    row = end;
+  }
+
   for (Span const& span : subtrahend) {
-    auto ms = find_span_y(minuend, span.y);
+    const auto first = std::lower_bound(
+        rows.begin(), rows.end(), span.y,
+        [](Span const& item, int32_t y) { return item.y < y; });
 
     // no spans in this line means minus zero
-    if (ms.empty()) {
+    if (first == rows.end() || first->y != span.y) {
       ret.emplace_back(span);
       continue;
     }
 
-    std::sort(ms.begin(), ms.end(),
-              [](Span const& a, Span const& b) { return a.x < b.x; });
-
     int32_t curr_x = span.x;
     int32_t curr_len = span.len;
 
-    for (Span const& m : ms) {
+    for (auto it = first; it != rows.end() && it->y == span.y; ++it) {
+      Span const& m = *it;
       if (m.x + m.len < curr_x || m.x > curr_x + curr_len) {
         continue;
       }
@@ -92,8 +100,7 @@ static std::vector<Span> spans_subtraction(std::vector<Span> const& subtrahend,
           continue;
         }
 
-        ret.emplace_back(Span{curr_x, span.y, len, span.cover});
-
+        // This prefix lies inside the subtracted clip, so discard it.
         curr_x += len;
 
         curr_len = last - curr_x;
@@ -219,10 +226,13 @@ std::vector<Span> SWCanvas::State::PerformMerge(
 std::vector<Span> SWCanvas::State::FindSpan(Span const& span) {
   std::vector<Span> ret;
 
-  for (Span clip : clip_spans_) {
-    if (clip.y != span.y) {
-      continue;
-    }
+  // OnClipPath stably groups the stored clip rows before they are queried.
+  const auto first = std::lower_bound(
+      clip_row_indices_.begin(), clip_row_indices_.end(), span.y,
+      [this](size_t index, int32_t y) { return clip_spans_[index].y < y; });
+  for (auto it = first; it != clip_row_indices_.end() &&
+                        clip_spans_[*it].y == span.y; ++it) {
+    Span const& clip = clip_spans_[*it];
 
     if (clip.x < span.x) {
       if (clip.x + clip.len < span.x) {
@@ -333,6 +343,18 @@ void SWCanvas::OnClipPath(const Path& path, ClipOp op) {
     state_stack_.back().clip_spans_ = raster.CurrentSpans();
     state_stack_.back().op = op;
   }
+  // Preserve the original vector: PerformMerge uses an unstable whole-vector
+  // sort, so even moving only different rows could change its tie ordering.
+  auto& state = state_stack_.back();
+  state.clip_row_indices_.resize(state.clip_spans_.size());
+  for (size_t index = 0; index < state.clip_row_indices_.size(); ++index) {
+    state.clip_row_indices_[index] = index;
+  }
+  std::stable_sort(state.clip_row_indices_.begin(),
+                   state.clip_row_indices_.end(),
+                   [&state](size_t a, size_t b) {
+                     return state.clip_spans_[a].y < state.clip_spans_[b].y;
+                   });
 }
 
 void SWCanvas::DoBrush(const SWRaster& raster, const Paint& paint,
@@ -608,8 +630,23 @@ void SWCanvas::FillGlyphs(uint32_t count, const GlyphID* glyphs,
                       nullptr);
     } else {
       SWRaster raster;
-
-      raster.RastePath(path, CurrentTransform() * transform);
+      Matrix current = CurrentTransform();
+      if ((current.GetTranslateX() != 0.0f ||
+           current.GetTranslateY() != 0.0f) &&
+          current.OnlyScaleAndTranslate() &&
+          current.GetTranslateX() == std::round(current.GetTranslateX()) &&
+          current.GetTranslateY() == std::round(current.GetTranslateY())) {
+        Matrix global = current;
+        const float dx = global.GetTranslateX();
+        const float dy = global.GetTranslateY();
+        global.SetTranslateX(0.0f);
+        global.SetTranslateY(0.0f);
+        Path transformed = path.CopyWithMatrix(global * transform);
+        transformed = transformed.CopyWithMatrix(Matrix::Translate(dx, dy));
+        raster.RastePath(transformed, Matrix{}, GetScanClipBounds());
+      } else {
+        raster.RastePath(path, current * transform, GetScanClipBounds());
+      }
 
       DoBrush(raster, paint, false);
     }
@@ -632,7 +669,8 @@ void SWCanvas::StrokeGlyphs(uint32_t count, const GlyphID* glyphs,
 
     SWRaster raster;
 
-    raster.RastePath(outline, CurrentTransform() * transform);
+    raster.RastePath(outline, CurrentTransform() * transform,
+                     GetScanClipBounds());
 
     DoBrush(raster, paint, true);
   }

@@ -55,6 +55,12 @@ class SWSpanBrush {
 
   SWRenderTarget& GetRenderTarget() { return render_target_; }
 
+  ColorFilter* GetColorFilter() const { return color_filter_; }
+
+  // Brush() clips spans to the destination width. Scratch belongs to this
+  // short-lived brush, retains no rendered frame, and is reused only for rows.
+  std::vector<PMColor>& GetSpanColors() { return span_colors_; }
+
   virtual void BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha);
 
   virtual void OnPreBrush() {}
@@ -68,6 +74,7 @@ class SWSpanBrush {
   BlendMode blend_;
   uint8_t global_alpha_;
   SWRenderTarget render_target_;
+  std::vector<PMColor> span_colors_;
 };
 
 class SolidColorBrush : public SWSpanBrush {

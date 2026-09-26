@@ -22,6 +22,8 @@ enum class PortScaleType { kFull, kVertical };
 struct ScalerContextDesc {
   // The complete object representation is the cache identity. Keep every
   // member initialized and preserve the dense-layout assertions below.
+  // Zero selects legacy rasterization; 1..4 select native phases 0..3/4.
+  uint32_t native_raster_phase{};
   uint32_t typeface_id{};
   float text_size{};
   float scale_x{};
@@ -109,6 +111,7 @@ static_assert(std::is_trivially_copyable_v<Matrix22>,
               "Matrix22 must be trivially copyable");
 
 static_assert(sizeof(ScalerContextDesc) ==
+                  sizeof(ScalerContextDesc::native_raster_phase) +
                   sizeof(ScalerContextDesc::typeface_id) +
                       sizeof(ScalerContextDesc::text_size) +
                       sizeof(ScalerContextDesc::scale_x) +

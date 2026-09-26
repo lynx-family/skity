@@ -56,6 +56,22 @@ void SWRenderTarget::BlendPixelH(uint32_t x, uint32_t y, PMColor* pm_colors,
 
 void SWRenderTarget::BlendPixelH(uint32_t x, uint32_t y, PMColor pm_color,
                                  uint32_t len, BlendMode blend) {
+  // An opaque source replaces every covered destination in both modes. Avoid
+  // reading/unpremultiplying that destination for each pixel. Keep SetPixel's
+  // format conversion and read-only protection, and leave partial/out-of-range
+  // spans and the existing premultiplied NEON path unchanged.
+  if (pixel_addr_ && bitmap_->GetAlphaType() == kUnpremul_AlphaType &&
+      (bitmap_->GetColorType() == ColorType::kRGBA ||
+       bitmap_->GetColorType() == ColorType::kBGRA) &&
+      ColorGetA(pm_color) == 255 &&
+      (blend == BlendMode::kSrcOver || blend == BlendMode::kSrc) &&
+      y < bitmap_->Height() && x < bitmap_->Width() &&
+      len <= bitmap_->Width() - x) {
+    for (uint32_t offset = 0; offset < len; ++offset) {
+      bitmap_->SetPixel(x + offset, y, pm_color);
+    }
+    return;
+  }
 #ifdef SKITY_ARM_NEON
   if (bitmap_->GetAlphaType() == AlphaType::kPremul_AlphaType &&
       blend != BlendMode::kSoftLight) {

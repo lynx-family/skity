@@ -549,21 +549,43 @@ void ScalerContextDarwin::GenerateImage(PackedGlyphID id, GlyphData *glyph,
   const uint32_t height = static_cast<uint32_t>(glyph->image_.height);
 
   const bool is_color = glyph->image_.format == BitmapFormat::kBGRA8;
+  // Alpha-only contexts lose CoreText's color-sensitive font smoothing. For
+  // native phases, use a bounded opaque RGB scratch surface and recover scalar
+  // coverage against the opposite black/white background.
+  const bool native_gray =
+      !is_color && desc_.native_raster_phase != 0 &&
+      static_cast<uint64_t>(width) * height <= 4U * 1024U * 1024U;
+  const float luminance = ColorGetR(desc_.foreground_color) / 255.0f;
+  const float background = luminance > 0.5f ? 0.0f : 1.0f;
 
   OffScreenContext::Target target =
-      os_context_.PrepareContext(width, height, is_color);
+      os_context_.PrepareContext(width, height, is_color || native_gray);
   if (!target) {
     return;
   }
 
   CGContextRef cg_context = target.context;
   if (target.context_was_created) {
-    InitializeCGContext(cg_context, is_color);
+    InitializeCGContext(cg_context, is_color || native_gray);
+  }
+
+  if (native_gray) {
+    const uint8_t background_byte =
+        static_cast<uint8_t>(std::round(background * 255.0f));
+    for (uint32_t y = 0; y < height; ++y) {
+      std::memset(target.pixels + static_cast<size_t>(y) * target.row_bytes,
+                  background_byte, static_cast<size_t>(width) * 4);
+    }
+    CGContextSetGrayFillColor(cg_context, luminance, 1.0f);
+    CGContextSetAllowsFontSmoothing(cg_context, true);
+    CGContextSetShouldSmoothFonts(cg_context, true);
+  } else if (is_color) {
+    CGContextSetFillColorWithColor(cg_context, os_context_.GetCGColor());
   }
 
   // Skia chooses Core Graphics antialiasing from the glyph mask format:
   // BW (Font::Edging::kAlias) disables it, while A8/LCD/color masks enable it.
-  os_context_.SetShouldAntialias(is_color ||
+  os_context_.SetShouldAntialias(is_color || native_gray ||
                                  desc_.GetEdging() != Font::Edging::kAlias);
 
   CGPoint point = CGPointMake(glyph->image_.origin_x_for_raster,
@@ -579,8 +601,27 @@ void ScalerContextDarwin::GenerateImage(PackedGlyphID id, GlyphData *glyph,
                        stroke_desc.is_stroke ? &stroke_desc : nullptr);
   }
 
+  if (native_gray) {
+    CGContextFlush(cg_context);
+    // Pack A8 in place. Each destination row precedes its unread RGB source
+    // row, including when the reusable context has a larger row stride.
+    for (uint32_t y = 0; y < height; ++y) {
+      const uint8_t* source =
+          target.pixels + static_cast<size_t>(y) * target.row_bytes;
+      uint8_t* destination = target.pixels + static_cast<size_t>(y) * width;
+      for (uint32_t x = 0; x < width; ++x) {
+        const float value = source[static_cast<size_t>(x) * 4 + 1] / 255.0f;
+        const float coverage =
+            (value - background) / (luminance - background);
+        destination[x] = static_cast<uint8_t>(std::round(
+            std::clamp(coverage, 0.0f, 1.0f) * 255.0f));
+      }
+    }
+    glyph->image_.row_bytes = width;
+  } else {
+    glyph->image_.row_bytes = target.row_bytes;
+  }
   glyph->image_.buffer = target.pixels;
-  glyph->image_.row_bytes = target.row_bytes;
 }
 
 void ScalerContextDarwin::GenerateImageInfo(PackedGlyphID id, GlyphData *glyph,
@@ -642,25 +683,43 @@ void ScalerContextDarwin::GenerateImageInfo(PackedGlyphID id, GlyphData *glyph,
   point.x += 1 / context_scale_;
   point.y += 1 / context_scale_;
 
-  // Skia puts the two-bit phase in the glyph identity and draws the mask at
-  // the same quarter-pixel phase. Aligning the raster point here makes the
-  // phase-specific atlas quad land on integer physical pixels.
-  const CGFloat unaligned_point_x = point.x;
-  point.x = AlignRasterPointAtOrAbove(point.x, context_scale_,
-                                      id.GetSubpixelXPhase());
-  const CGFloat point_delta_x = point.x - unaligned_point_x;
-  width = std::ceil((raster_width + point_delta_x) * context_scale_) + 2;
+  const bool native_gray = !is_color && !working_stroke_desc.is_stroke &&
+                           desc_.native_raster_phase != 0;
+  CGFloat native_phase = 0.0;
+  if (native_gray) {
+    // Native grayscale phases rasterize inside integer atlas bounds. The draw
+    // position supplies the integer origin while CoreText consumes the phase.
+    native_phase = (desc_.native_raster_phase - 1) * 0.25;
+    const CGFloat left =
+        std::floor(-point.x * context_scale_ + native_phase);
+    const CGFloat bottom = std::floor(-point.y * context_scale_);
+    const CGFloat right = std::ceil(
+        (cg_bounds.origin.x + cg_bounds.size.width) * context_scale_ +
+        native_phase);
+    const CGFloat top = std::ceil(
+        (cg_bounds.origin.y + cg_bounds.size.height) * context_scale_);
+    point.x = -left / context_scale_;
+    point.y = -bottom / context_scale_;
+    width = static_cast<uint32_t>(right - left) + 2;
+    height = static_cast<uint32_t>(top - bottom) + 2;
+  } else {
+    // Packed glyph phases align ordinary atlas rasters to physical pixels.
+    const CGFloat unaligned_point_x = point.x;
+    point.x = AlignRasterPointAtOrAbove(point.x, context_scale_,
+                                        id.GetSubpixelXPhase());
+    const CGFloat point_delta_x = point.x - unaligned_point_x;
+    width = std::ceil((raster_width + point_delta_x) * context_scale_) + 2;
 
-  // Core Graphics uses an upward Y axis. Skia draws at
-  // glyph.top + glyph.height - subY, so convert the device-space phase before
-  // aligning the Core Graphics raster point.
-  const CGFloat unaligned_point_y = point.y;
-  point.y = AlignRasterPointAtOrAbove(
-      point.y, context_scale_, FlipGlyphSubpixelPhase(id.GetSubpixelYPhase()));
-  const CGFloat point_delta_y = point.y - unaligned_point_y;
-  height = std::ceil((raster_height + point_delta_y) * context_scale_) + 2;
+    // Core Graphics uses an upward Y axis. Skity draws at
+    // glyph.top + glyph.height - subY, so convert the device-space phase.
+    const CGFloat unaligned_point_y = point.y;
+    point.y = AlignRasterPointAtOrAbove(
+        point.y, context_scale_, FlipGlyphSubpixelPhase(id.GetSubpixelYPhase()));
+    const CGFloat point_delta_y = point.y - unaligned_point_y;
+    height = std::ceil((raster_height + point_delta_y) * context_scale_) + 2;
+  }
 
-  CGPoint src{point.x, point.y};
+  CGPoint src{point.x + native_phase / context_scale_, point.y};
   CGPoint dst = CGPointApplyAffineTransform(src, invert_transform_);
   glyph->image_.origin_x = -point.x;
   // the CoreGraphic coordinate needs to flip Y axis for our canvas rendering

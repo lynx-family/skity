@@ -136,9 +136,11 @@ GPUCommandBufferVK::GPUCommandBufferVK(
 GPUCommandBufferVK::~GPUCommandBufferVK() { Reset(); }
 
 bool GPUCommandBufferVK::Init() {
+#if !defined(SKITY_ANDROID)
   if (state_ != nullptr) {
     state_->CollectPendingSubmissions(false);
   }
+#endif
 
   if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE ||
       state_->GetGraphicsQueue() == VK_NULL_HANDLE ||
@@ -284,7 +286,9 @@ bool GPUCommandBufferVK::Submit(const GPUSubmitInfo* submit_info) {
   state_->EnqueuePendingSubmission(
       VulkanPendingSubmission(fence, command_pool_, std::move(stage_buffers_),
                               std::move(cleanup_actions_), owns_fence));
+#if !defined(SKITY_ANDROID)
   state_->CollectPendingSubmissions(false);
+#endif
 
   submitted_ = true;
   command_buffer_ = VK_NULL_HANDLE;

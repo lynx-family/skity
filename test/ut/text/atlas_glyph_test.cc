@@ -323,6 +323,26 @@ TEST(AtlasGlyphTest, SubpixelStateAndPackedPhaseParticipateInGlyphKey) {
                         GlyphKey(PackedGlyphID(7, 1, 0), second_desc)));
 }
 
+TEST(AtlasGlyphTest, NativeRasterPolicyParticipatesInGlyphKey) {
+  ScalerContextDesc ordinary_desc{};
+  ScalerContextDesc native_desc{};
+  native_desc.native_raster_phase = 1;
+  native_desc.foreground_color = ColorSetARGB(255, 127, 127, 127);
+
+  EXPECT_FALSE(
+      GlyphKey::Equal{}(GlyphKey(7, ordinary_desc), GlyphKey(7, native_desc)));
+
+  ScalerContextDesc other_phase = native_desc;
+  other_phase.native_raster_phase = 2;
+  EXPECT_FALSE(
+      GlyphKey::Equal{}(GlyphKey(7, native_desc), GlyphKey(7, other_phase)));
+
+  ScalerContextDesc other_luminance = native_desc;
+  other_luminance.foreground_color = ColorSetARGB(255, 128, 128, 128);
+  EXPECT_FALSE(GlyphKey::Equal{}(GlyphKey(7, native_desc),
+                                GlyphKey(7, other_luminance)));
+}
+
 TEST(AtlasGlyphTest, EdgingParticipatesInGlyphKey) {
   ScalerContextDesc alias_desc{};
   ScalerContextDesc antialias_desc{};

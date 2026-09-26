@@ -122,6 +122,14 @@ class SKITY_API Font {
   void LoadGlyphBitmapInfo(const GlyphID* glyphs, uint32_t count,
                            const GlyphData* glyph_data[], const Paint& paint,
                            float context_scale, const Matrix& transform) const;
+#if defined(__APPLE__)
+  // Native unit-scale alpha bitmap at one of four horizontal quarter-pixel
+  // phases. The caller places its integer origin; color/stroke/transform and
+  // invalid phase inputs retain LoadGlyphBitmap behavior. No Font layout change.
+  void LoadGlyphBitmapAtPhase(const GlyphID* glyphs, uint32_t count,
+                              const GlyphData* glyph_data[], const Paint& paint,
+                              uint32_t quarter_pixel_phase) const;
+#endif
   uint16_t GetFixedSize() const;
 
  private:
