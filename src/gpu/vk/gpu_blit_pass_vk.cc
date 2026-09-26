@@ -243,12 +243,45 @@ void GPUBlitPassVK::UploadBufferData(GPUBuffer* buffer, void* data,
     return;
   }
 
+  const VkCommandBuffer cmd_buf = command_buffer_->GetCommandBuffer();
+
+  // The destination is a persistent buffer whose vertex/index/uniform ranges
+  // are rewritten every frame. Barrier scopes follow submission order across
+  // vkQueueSubmit calls, so this orders the copy after draws of
+  // still-executing earlier submissions (write-after-read).
+  VkMemoryBarrier wait_pending_reads = {};
+  wait_pending_reads.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+  wait_pending_reads.srcAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+                                     VK_ACCESS_INDEX_READ_BIT |
+                                     VK_ACCESS_UNIFORM_READ_BIT;
+  wait_pending_reads.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  state_->DeviceFns().vkCmdPipelineBarrier(
+      cmd_buf,
+      VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &wait_pending_reads, 0, nullptr, 0,
+      nullptr);
+
   VkBufferCopy copy_region = {};
   copy_region.size = size;
 
-  state_->DeviceFns().vkCmdCopyBuffer(
-      command_buffer_->GetCommandBuffer(), staging_buffer->GetBuffer(),
-      destination_buffer->GetBuffer(), 1, &copy_region);
+  state_->DeviceFns().vkCmdCopyBuffer(cmd_buf, staging_buffer->GetBuffer(),
+                                      destination_buffer->GetBuffer(), 1,
+                                      &copy_region);
+
+  // Expose the copied ranges to the draws recorded after this blit pass in the
+  // same command buffer (read-after-write).
+  VkMemoryBarrier expose_copied_ranges = {};
+  expose_copied_ranges.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+  expose_copied_ranges.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  expose_copied_ranges.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+                                       VK_ACCESS_INDEX_READ_BIT |
+                                       VK_ACCESS_UNIFORM_READ_BIT;
+  state_->DeviceFns().vkCmdPipelineBarrier(
+      cmd_buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+      0, 1, &expose_copied_ranges, 0, nullptr, 0, nullptr);
 
   command_buffer_->RecordStageBuffer(std::move(staging_buffer));
 }

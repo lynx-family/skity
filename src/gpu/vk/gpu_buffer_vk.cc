@@ -88,7 +88,19 @@ bool GPUBufferVK::UploadData(const void* data, size_t size) {
 }
 
 bool GPUBufferVK::CreateBuffer(VkDeviceSize size) {
-  DestroyBuffer();
+  // The replaced allocation may still be referenced by an in-flight
+  // submission (the staging buffers are resized while earlier frames still
+  // execute); defer its destruction until those submissions complete instead
+  // of destroying the handles right away.
+  if (buffer_ != VK_NULL_HANDLE || allocation_ != nullptr) {
+    if (const auto state = LockState(); state != nullptr) {
+      state->RetireBufferAllocation(buffer_, allocation_);
+    }
+    buffer_ = VK_NULL_HANDLE;
+    allocation_ = nullptr;
+    mapped_data_ = nullptr;
+    size_ = 0;
+  }
 
   const auto state = LockState();
   if (state == nullptr || state->GetLogicalDevice() == VK_NULL_HANDLE ||
