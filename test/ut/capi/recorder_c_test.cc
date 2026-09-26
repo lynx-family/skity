@@ -11,6 +11,12 @@
 #include <skity_c/skity_paint.h>
 #include <skity_c/skity_recorder.h>
 #include <skity_c/skity_shader.h>
+#include <skity_c/skity_text.h>
+
+#include <memory>
+#include <skity/text/text_blob.hpp>
+
+#include "module/capi/src/handle.hpp"
 
 namespace {
 
@@ -23,6 +29,16 @@ struct RecorderGuard {
 struct PaintGuard {
   skity_paint p = skity_paint_create();
   ~PaintGuard() { skity_paint_destroy(p); }
+};
+
+struct CanvasGuard {
+  skity_canvas c = nullptr;
+  ~CanvasGuard() { skity_canvas_destroy(c); }
+};
+
+struct BlobGuard {
+  skity_text_blob b = nullptr;
+  ~BlobGuard() { skity_text_blob_destroy(b); }
 };
 
 struct DisplayListGuard {
@@ -89,6 +105,76 @@ skity_display_list ReplayIntoRecordingCanvas(skity_display_list list,
 TEST(CapiRecorder, GetLastOpOffsetBeforeBeginIsInvalid) {
   RecorderGuard recorder;
   EXPECT_EQ(skity_picture_recorder_get_last_op_offset(recorder.r), -1);
+}
+
+TEST(CapiRecorder, SharesTextBlobAfterHandleDestruction) {
+  auto typeface = skity_typeface_get_default();
+  if (typeface == nullptr) {
+    GTEST_SKIP() << "default typeface unavailable";
+  }
+  PaintGuard paint;
+  skity_paint_set_typeface(paint.p, typeface);
+  skity_typeface_destroy(typeface);
+  BlobGuard blob{skity_text_blob_create("AB", paint.p)};
+  ASSERT_NE(blob.b, nullptr);
+  // Inspect ownership without keeping an extra strong reference in the test.
+  const auto* original = blob.b->impl.get();
+  std::weak_ptr<skity::TextBlob> weak_blob = blob.b->impl;
+  ASSERT_EQ(original->GetTextRun().size(), 1u);
+  const auto glyphs = original->GetTextRun()[0].GetGlyphInfo();
+  ASSERT_EQ(glyphs.size(), 2u);
+
+  RecorderGuard source;
+  skity_picture_recorder_begin(source.r, &kBounds);
+  CanvasGuard source_canvas{skity_picture_recorder_get_canvas(source.r)};
+  skity_canvas_draw_text_blob(source_canvas.c, blob.b, 10.f, 30.f, paint.p);
+  DisplayListGuard upstream;
+  ASSERT_EQ(skity_picture_recorder_finish(source.r, &upstream.l),
+            SKITY_SUCCESS);
+  skity_text_blob_destroy(blob.b);
+  blob.b = nullptr;
+  ASSERT_FALSE(weak_blob.expired());
+
+  RecorderGuard target;
+  skity_picture_recorder_begin(target.r, &kBounds);
+  CanvasGuard target_canvas{skity_picture_recorder_get_canvas(target.r)};
+  skity_display_list_draw(upstream.l, target_canvas.c);
+  DisplayListGuard downstream;
+  ASSERT_EQ(skity_picture_recorder_finish(target.r, &downstream.l),
+            SKITY_SUCCESS);
+  skity_display_list_destroy(upstream.release());
+  ASSERT_FALSE(weak_blob.expired());
+  {
+    auto retained = weak_blob.lock();
+    EXPECT_EQ(retained.get(), original);
+    ASSERT_EQ(retained->GetTextRun().size(), 1u);
+    EXPECT_EQ(retained->GetTextRun()[0].GetGlyphInfo(), glyphs);
+  }
+
+  skity_picture_recorder_begin(source.r, &kBounds);
+  skity_display_list_draw(downstream.l, source_canvas.c);
+  DisplayListGuard replayed;
+  ASSERT_EQ(skity_picture_recorder_finish(source.r, &replayed.l),
+            SKITY_SUCCESS);
+  EXPECT_EQ(skity_display_list_get_op_count(replayed.l), 1u);
+  skity_display_list_destroy(downstream.release());
+  EXPECT_FALSE(weak_blob.expired());
+  skity_display_list_destroy(replayed.release());
+  EXPECT_TRUE(weak_blob.expired());
+}
+
+TEST(CapiRecorder, DrawTextBlobIgnoresNullAndWrongTypeHandles) {
+  RecorderGuard recorder;
+  skity_picture_recorder_begin(recorder.r, &kBounds);
+  CanvasGuard canvas{skity_picture_recorder_get_canvas(recorder.r)};
+  PaintGuard paint;
+  skity_canvas_draw_text_blob(canvas.c, nullptr, 10.f, 30.f, paint.p);
+  skity_canvas_draw_text_blob(canvas.c,
+                              reinterpret_cast<skity_text_blob>(paint.p), 10.f,
+                              30.f, paint.p);
+  DisplayListGuard list;
+  ASSERT_EQ(skity_picture_recorder_finish(recorder.r, &list.l), SKITY_SUCCESS);
+  EXPECT_EQ(skity_display_list_get_op_count(list.l), 0u);
 }
 
 TEST(CapiRecorder, BeginWithOptionsBuildsSearchableList) {

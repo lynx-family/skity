@@ -94,6 +94,189 @@ class MockCanvas : public skity::Canvas {
   MOCK_METHOD(uint32_t, OnGetHeight, (), (const, override));
 };
 
+TEST(DisplayList, SharesTextBlob) {
+  auto blob = std::make_shared<skity::TextBlob>(std::vector<skity::TextRun>{});
+  const auto* original = blob.get();
+  std::weak_ptr<skity::TextBlob> weak_blob = blob;
+  skity::Paint paint;
+  paint.SetColor(skity::Color_RED);
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording();
+  skity::Canvas* canvas = recorder.GetRecordingCanvas();
+  canvas->DrawTextBlob(blob, 1.f, 2.f, paint);
+  auto display_list = recorder.FinishRecording();
+  EXPECT_EQ(display_list->OpCount(), 1u);
+
+  // MockCanvas only implements the existing raw-pointer hook.
+  testing::StrictMock<MockCanvas> target;
+  EXPECT_CALL(target, OnDrawBlob(original, 1.f, 2.f, paint))
+      .Times(2)
+      .WillRepeatedly([](const auto* replayed, float, float, const auto&) {
+        EXPECT_TRUE(replayed->GetTextRun().empty());
+      });
+  display_list->Draw(&target);
+  blob.reset();
+  ASSERT_FALSE(weak_blob.expired());
+  display_list->Draw(&target);
+
+  display_list.reset();
+  EXPECT_TRUE(weak_blob.expired());
+}
+
+TEST(DisplayList, SharesTextBlobAcrossRecordings) {
+  for (bool partial_replay : {false, true}) {
+    SCOPED_TRACE(partial_replay);
+    auto blob =
+        std::make_shared<skity::TextBlob>(std::vector<skity::TextRun>{});
+    const auto* original = blob.get();
+    std::weak_ptr<skity::TextBlob> weak_blob = blob;
+    const skity::Paint paint;
+
+    skity::PictureRecorder recorder;
+    skity::DisplayListBuildOptions options;
+    options.build_rtree = true;
+    recorder.BeginRecording(skity::kMaxCullRect, options);
+    recorder.GetRecordingCanvas()->DrawTextBlob(blob, 1.f, 2.f, paint);
+    auto upstream = recorder.FinishRecording();
+    const auto bounds = upstream->GetBounds();
+    blob.reset();
+    ASSERT_FALSE(weak_blob.expired());
+
+    recorder.BeginRecording();
+    if (partial_replay) {
+      upstream->Draw(recorder.GetRecordingCanvas(), bounds);
+    } else {
+      upstream->Draw(recorder.GetRecordingCanvas());
+    }
+    upstream.reset();
+    ASSERT_FALSE(weak_blob.expired());
+    auto downstream = recorder.FinishRecording();
+    EXPECT_EQ(downstream->OpCount(), 1u);
+    EXPECT_EQ(downstream->GetBounds(), bounds);
+
+    testing::StrictMock<MockCanvas> target;
+    EXPECT_CALL(target, OnDrawBlob(original, 1.f, 2.f, paint))
+        .WillOnce([](const auto* replayed, float, float, const auto&) {
+          EXPECT_TRUE(replayed->GetTextRun().empty());
+        });
+    downstream->Draw(&target);
+    downstream.reset();
+    EXPECT_TRUE(weak_blob.expired());
+  }
+}
+
+TEST(DisplayList, ReleasesTextBlobWhenRecorderIsDestroyed) {
+  std::weak_ptr<skity::TextBlob> weak_blob;
+  {
+    skity::PictureRecorder recorder;
+    recorder.BeginRecording();
+    auto blob =
+        std::make_shared<skity::TextBlob>(std::vector<skity::TextRun>{});
+    weak_blob = blob;
+    recorder.GetRecordingCanvas()->DrawTextBlob(blob, 1.f, 2.f, skity::Paint{});
+    recorder.GetRecordingCanvas()->DrawTextBlob(blob, 3.f, 4.f, skity::Paint{});
+    blob.reset();
+    ASSERT_FALSE(weak_blob.expired());
+  }
+  EXPECT_TRUE(weak_blob.expired());
+}
+
+TEST(DisplayList, ReleasesTextBlobWhenRecordingRestarts) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording();
+  auto blob = std::make_shared<skity::TextBlob>(std::vector<skity::TextRun>{});
+  std::weak_ptr<skity::TextBlob> weak_blob = blob;
+  recorder.GetRecordingCanvas()->DrawTextBlob(blob, 1.f, 2.f, skity::Paint{});
+  blob.reset();
+  ASSERT_FALSE(weak_blob.expired());
+
+  recorder.BeginRecording();
+  EXPECT_TRUE(weak_blob.expired());
+  EXPECT_TRUE(recorder.Empty());
+  const auto rect = skity::Rect::MakeWH(10.f, 20.f);
+  const skity::Paint paint;
+  recorder.GetRecordingCanvas()->DrawRect(rect, paint);
+  auto display_list = recorder.FinishRecording();
+  EXPECT_EQ(display_list->OpCount(), 1u);
+  testing::StrictMock<MockCanvas> target;
+  EXPECT_CALL(target, OnDrawRect(rect, paint)).Times(1);
+  display_list->Draw(&target);
+}
+
+TEST(DisplayList, CopiesRawTextBlob) {
+  auto typeface = skity::Typeface::GetDefaultTypeface();
+  ASSERT_NE(typeface, nullptr);
+  const auto glyph_a = typeface->UnicharToGlyph('A');
+  const auto glyph_b = typeface->UnicharToGlyph('B');
+  ASSERT_NE(glyph_a, 0u);
+  ASSERT_NE(glyph_b, 0u);
+  const std::vector<skity::TextRun> runs = {
+      {skity::Font(typeface, 18.f),
+       {glyph_a, glyph_b},
+       {1.5f, 12.f},
+       {2.f, -3.f}},
+      {skity::Font(typeface, 24.f), {glyph_b}, {27.f}, {6.f}}};
+  auto blob = std::make_shared<skity::TextBlob>(runs);
+  std::weak_ptr<skity::TextBlob> weak_blob = blob;
+  const skity::TextBlob* original = blob.get();
+  skity::Paint paint;
+  paint.SetColor(skity::Color_RED);
+  paint.SetStyle(skity::Paint::kStroke_Style);
+  paint.SetStrokeWidth(3.f);
+  paint.SetColorFilter(
+      skity::ColorFilters::Blend(skity::Color_BLUE, skity::BlendMode::kSrc));
+  const auto bounds = paint.ComputeFastBounds(
+      blob->GetBoundsRect().MakeOffset(10.f, 20.f).MakeOutset(1.f, 1.f));
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording();
+  recorder.GetRecordingCanvas()->DrawTextBlob(original, 10.f, 20.f, paint);
+  auto display_list = recorder.FinishRecording();
+  EXPECT_EQ(display_list->OpCount(), 1u);
+  EXPECT_EQ(display_list->GetBounds(), bounds);
+  EXPECT_TRUE(display_list->HasColorFilter());
+
+  testing::StrictMock<MockCanvas> target;
+  EXPECT_CALL(target, OnDrawBlob(testing::Ne(original), 10.f, 20.f, paint))
+      .Times(2)
+      .WillRepeatedly([&](const auto* replayed, float, float, const auto&) {
+        ASSERT_NE(replayed, nullptr);
+        const auto& replayed_runs = replayed->GetTextRun();
+        ASSERT_EQ(replayed_runs.size(), runs.size());
+        for (size_t i = 0; i < runs.size(); ++i) {
+          EXPECT_EQ(replayed_runs[i].LockTypeface(), typeface);
+          EXPECT_EQ(replayed_runs[i].GetFontSize(), runs[i].GetFontSize());
+          EXPECT_EQ(replayed_runs[i].GetGlyphInfo(), runs[i].GetGlyphInfo());
+          EXPECT_EQ(replayed_runs[i].GetPosX(), runs[i].GetPosX());
+          EXPECT_EQ(replayed_runs[i].GetPosY(), runs[i].GetPosY());
+        }
+      });
+  display_list->Draw(&target);
+  blob.reset();
+  EXPECT_TRUE(weak_blob.expired());
+  display_list->Draw(&target);
+}
+
+TEST(DisplayList, IgnoresNullTextBlob) {
+  const std::shared_ptr<skity::TextBlob> blob;
+  const skity::Paint paint;
+  testing::StrictMock<MockCanvas> target;
+  target.DrawTextBlob(nullptr, 1.f, 2.f, paint);
+  target.DrawTextBlob(blob, 1.f, 2.f, paint);
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording();
+  skity::Canvas* canvas = recorder.GetRecordingCanvas();
+  canvas->DrawTextBlob(nullptr, 1.f, 2.f, paint);
+  canvas->DrawTextBlob(blob, 1.f, 2.f, paint);
+  auto display_list = recorder.FinishRecording();
+  EXPECT_TRUE(display_list->Empty());
+  EXPECT_EQ(display_list->OpCount(), 0u);
+  EXPECT_TRUE(display_list->GetBounds().IsEmpty());
+  display_list->Draw(&target);
+}
+
 TEST(DisplayList, NonzeroBufferAndResourceLifetimeAcrossGrowth) {
   constexpr int kDrawCount = 10000;
   skity::DisplayListBuilder builder;

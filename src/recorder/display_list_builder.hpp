@@ -37,6 +37,14 @@ struct DisplayListBuilder {
         cull_rect_(cull_rect),
         build_rtree_(options.build_rtree) {}
 
+  ~DisplayListBuilder() {
+    if (storage_.get()) {
+      // Reuse DisplayList's cleanup for recordings that were not transferred.
+      DisplayList discarded_list(std::move(storage_), used_, render_op_count_,
+                                 bounds_, properties_);
+    }
+  }
+
   DisplayListStorage storage_;
   size_t used_ = 0;
   size_t allocated_ = 0;
