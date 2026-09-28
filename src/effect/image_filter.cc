@@ -41,8 +41,9 @@ Rect ImageFilterBase::ApproximateFilteredBounds(const Rect& src, float radius_x,
 }
 
 std::shared_ptr<ImageFilter> ImageFilters::Blur(float sigma_x, float sigma_y) {
-  // ScalarNearlyZero or 0.5?
-  if (sigma_x <= 0.5 && sigma_y <= 0.5) {
+  // Only a negative sigma is invalid; sigma == 0 is legal and means no blur on
+  // that axis (the filter degenerates to a pass-through).
+  if (sigma_x < 0.f || sigma_y < 0.f) {
     return nullptr;
   }
   return std::make_shared<BlurImageFilter>(sigma_x, sigma_y);
@@ -51,7 +52,9 @@ std::shared_ptr<ImageFilter> ImageFilters::Blur(float sigma_x, float sigma_y) {
 std::shared_ptr<ImageFilter> ImageFilters::DropShadow(
     float dx, float dy, float sigma_x, float sigma_y, Color color,
     std::shared_ptr<ImageFilter> input, const Rect& crop_rect) {
-  if (sigma_x <= 0.5 && sigma_y <= 0.5) {
+  // sigma == 0 only skips the blur pass; offset, tinting and the final
+  // composite must still run, so it must not be rejected here.
+  if (sigma_x < 0.f || sigma_y < 0.f) {
     return nullptr;
   }
   return std::make_shared<DropShadowImageFilter>(dx, dy, sigma_x, sigma_y,
