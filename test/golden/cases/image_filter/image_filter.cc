@@ -75,13 +75,21 @@ TEST(ImageFilterGolden, BlurFilter_10_5_Perspective) {
   canvas->Save();
   canvas->Translate(50.f, 50.f);
   canvas->Concat(skity::Matrix{
-      2000, 0, 0,
+      2000,
+      0,
+      0,
       0,  //
-      0, 2000, 0,
+      0,
+      2000,
+      0,
       0,  //
-      800, 1200, 1,
+      800,
+      1200,
+      1,
       1,  //
-      0, 0, 2000,
+      0,
+      0,
+      2000,
       2000,  //
   });
   canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
@@ -140,6 +148,30 @@ TEST(ImageFilterGolden, BlurFilter_10_0) {
                                                    context.ToPathList()));
 }
 
+// sigma = 0.5 must still produce a minimal-neighborhood blur instead of
+// collapsing to an unfiltered draw.
+TEST(ImageFilterGolden, BlurFilter_0_5) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
+
+  skity::Paint paint;
+  paint.SetAntiAlias(true);
+  paint.SetStyle(skity::Paint::kFill_Style);
+  paint.SetColor(skity::Color_RED);
+  paint.SetImageFilter(skity::ImageFilters::Blur(0.5f, 0.5f));
+
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Save();
+  canvas->Translate(50.f, 50.f);
+  canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
+  canvas->Restore();
+
+  PathListContext context("blur_filter_0_5.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
+}
+
 TEST(ImageFilterGolden, DropShadow_0_0_10_10) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
@@ -179,6 +211,31 @@ TEST(ImageFilterGolden, DropShadow_10_n10_5_5) {
   canvas->Restore();
 
   PathListContext context("drop_shadow_10_n10_5_5.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
+}
+
+// sigma = 0 only skips the blur pass; the tinted, offset hard-edged shadow
+// and the source-over composite must still render.
+TEST(ImageFilterGolden, DropShadow_10_n10_0_0) {
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(200, 200));
+
+  skity::Paint paint;
+  paint.SetAntiAlias(true);
+  paint.SetStyle(skity::Paint::kFill_Style);
+  paint.SetColor(skity::Color_RED);
+  paint.SetImageFilter(skity::ImageFilters::DropShadow(
+      10, -10, 0, 0, skity::Color_GREEN, nullptr));
+
+  auto canvas = recorder.GetRecordingCanvas();
+  canvas->Save();
+  canvas->Translate(50.f, 50.f);
+  canvas->DrawRect(skity::Rect::MakeWH(100, 100), paint);
+  canvas->Restore();
+
+  PathListContext context("drop_shadow_10_n10_0_0.png");
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
                                                    context.ToPathList()));

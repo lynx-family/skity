@@ -78,6 +78,11 @@ std::string WGSLBlurFilter::GenSourceWGSL() const {
       var acc      : vec4<f32> = decl_texture(uv) * norm;
 
       var kernel_size : i32 = i32(radius);
+      // A fractional radius (0 < radius < 1) must still sample its immediate
+      // neighborhood, otherwise small sigma collapses to identity.
+      if (kernel_size < 1) {
+        kernel_size = 1;
+      }
 
       for (var i: i32 = 1; i <= kernel_size; i = i + 1) {
         var coffe  : f32       = calculate_blur_coffe(radius, norm, f32(i));
