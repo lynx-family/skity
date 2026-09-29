@@ -4,9 +4,11 @@
 
 #include <skity_c/skity_font.h>
 
+#include <skity/graphic/paint.hpp>
 #include <skity/text/font.hpp>
 #include <skity/text/font_metrics.hpp>
 #include <skity/text/typeface.hpp>
+#include <vector>
 
 #include "handle.hpp"
 
@@ -216,6 +218,25 @@ void skity_font_get_widths(skity_font font, const uint16_t* glyphs,
     return;
   }
   f->GetWidths(reinterpret_cast<const skity::GlyphID*>(glyphs), count, widths);
+}
+
+void skity_font_get_bounds(skity_font font, const uint16_t* glyphs,
+                           int32_t count, skity_rect* bounds) {
+  auto* f = font_of(font);
+  if (f == nullptr || glyphs == nullptr || bounds == nullptr || count <= 0) {
+    return;
+  }
+  // GetWidthsBounds fills skity::Rect entries; copy out field by field
+  // instead of relying on layout compatibility with skity_rect.
+  std::vector<skity::Rect> rects((size_t)count);
+  f->GetWidthsBounds(reinterpret_cast<const skity::GlyphID*>(glyphs), count,
+                     nullptr, rects.data(), skity::Paint());
+  for (int32_t i = 0; i < count; i++) {
+    bounds[i].left = rects[i].Left();
+    bounds[i].top = rects[i].Top();
+    bounds[i].right = rects[i].Right();
+    bounds[i].bottom = rects[i].Bottom();
+  }
 }
 
 }  // extern "C"
