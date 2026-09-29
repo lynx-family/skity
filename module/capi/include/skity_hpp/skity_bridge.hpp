@@ -14,11 +14,17 @@
  * direction of the eventual Stage 2 RAII wrapper (skity.hpp): here, C++
  * objects are bridged INTO C handles.
  *
- * The handles produced are non-owning (borrowed): they wrap the object with a
- * no-op deleter, exactly like the skity_canvas returned by
- * skity_surface_lock_canvas. The caller must keep the underlying object alive
- * for the handle's lifetime; skity_canvas_destroy only reclaims the small
- * wrapper struct and never deletes the object.
+ * The handles' ownership follows the native object's model. Canvas is a
+ * service owned by its surface, so skity_canvas_from_native borrows: it wraps
+ * the object with a no-op deleter, exactly like the skity_canvas returned by
+ * skity_surface_lock_canvas, and the caller must keep the underlying object
+ * alive for the handle's lifetime. Typeface is a shared_ptr-managed resource,
+ * so skity_typeface_from_native takes a strong reference (via
+ * enable_shared_from_this) and behaves like every other skity_typeface
+ * constructor. In both cases the capi-allocated wrapper struct itself must
+ * still be released with the corresponding destroy function; that call only
+ * reclaims the wrapper (plus, for owning handles, releases the reference) and
+ * never deletes a borrowed object.
  *
  * These entry points are declared here (and not in the public skity_c/
  * headers) because they are meaningful only to C++ callers: they take a
@@ -26,6 +32,7 @@
  */
 
 #include <skity_c/skity_canvas.h>  // skity_canvas, SKITY_C_API
+#include <skity_c/skity_text.h>    // skity_typeface
 
 extern "C" {
 
@@ -62,6 +69,36 @@ extern "C" {
  *         @p native is NULL
  */
 SKITY_C_API skity_canvas skity_canvas_from_native(void* native);
+
+/**
+ * @brief Wrap an existing native (C++) Typeface pointer as an owning
+ *        skity_typeface handle.
+ *
+ * Same TEMPORARY-bridge warning as skity_canvas_from_native, but the
+ * ownership differs because the underlying models do: unlike the borrowed
+ * canvas, this handle takes a strong reference to @p native through
+ * Typeface's enable_shared_from_this, giving it exactly the semantics of
+ * every other skity_typeface constructor (skity_typeface_make_from_file
+ * etc.):
+ *   - the typeface stays alive even after the caller drops their own
+ *     shared_ptr, so downstream handles (a Font, a Paint, a text blob) can
+ *     safely keep the typeface; and
+ *   - skity_typeface_destroy releases that reference in addition to
+ *     reclaiming the wrapper struct.
+ *
+ * @p native MUST be the raw pointer value of a @c skity::Typeface* that is
+ * currently owned by at least one shared_ptr. Every public skity API
+ * surfaces Typeface as shared_ptr, so this holds for any legitimately
+ * obtained pointer; bridging a pointer outside shared ownership (never
+ * shared, or bridged after the last shared_ptr was released) is undefined
+ * behaviour.
+ *
+ * @param native  raw pointer value of a skity::Typeface*, passed as @c void*;
+ *                NULL returns NULL
+ * @return an owning skity_typeface handle holding a strong reference to
+ *         @p native, or NULL if @p native is NULL
+ */
+SKITY_C_API skity_typeface skity_typeface_from_native(void* native);
 
 }  // extern "C"
 
