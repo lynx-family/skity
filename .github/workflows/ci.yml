@@ -136,7 +136,7 @@ jobs:
           - name: Android Build Check
             uses: ./.github/actions/pack-android-aar
     ios_build_check:
-        runs-on: lynx-darwin-14-medium
+        runs-on: lynx-darwin-15.6.1-medium
         timeout-minutes: 30
         steps:
           - name: Download Source
@@ -208,7 +208,7 @@ jobs:
                 ./skity_unit_test --gtest_color=no --gtest_print_time=1
 
     osx_metal_golden_test:
-        runs-on: lynx-darwin-14-medium
+        runs-on: lynx-darwin-15.6.1-medium
         timeout-minutes: 30
         env:
           ANGLE_DEFAULT_PLATFORM: "swiftshader"
@@ -245,7 +245,7 @@ jobs:
                 ./out/cmake_golden_test/test/golden/skity_golden_test_text --backend vulkan
 
     osx_metal_golden_test_ct:
-        runs-on: lynx-darwin-14-medium
+        runs-on: lynx-darwin-15.6.1-medium
         timeout-minutes: 30
         env:
           ANGLE_DEFAULT_PLATFORM: "swiftshader"
