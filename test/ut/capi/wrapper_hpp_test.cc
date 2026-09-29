@@ -418,6 +418,16 @@ TEST(WrapperHpp, TextFontTypeface) {
   typeface.UnicharsToGlyphs(code_points, 2, glyphs);
   EXPECT_NE(glyphs[0], 0);
 
+  Data font_data = typeface.GetData();
+  EXPECT_GT(font_data.GetSize(), 0u);
+  EXPECT_NE(font_data.GetData(), nullptr);
+  EXPECT_EQ(typeface.GetUnitsPerEm(), 2048u);  // Roboto's head.unitsPerEm.
+  skity_font_style style = typeface.GetFontStyle();
+  EXPECT_EQ(style.weight, 400);
+  EXPECT_EQ(style.slant, SKITY_FONT_SLANT_UPRIGHT);
+  const uint32_t unique_id = typeface.GetUniqueId();
+  EXPECT_NE(unique_id, 0u);
+
   Font font(typeface.get(), 32.f);
   EXPECT_FLOAT_EQ(font.GetSize(), 32.f);
   font.SetScaleX(1.5f);
@@ -433,6 +443,8 @@ TEST(WrapperHpp, TextFontTypeface) {
   Font bigger = font.MakeWithSize(64.f);
   EXPECT_FLOAT_EQ(bigger.GetSize(), 64.f);
   EXPECT_TRUE(bigger.GetTypeface());
+  // MakeWithSize copies the typeface shared_ptr: same instance, same id.
+  EXPECT_EQ(bigger.GetTypeface().GetUniqueId(), unique_id);
 
   skity_font_metrics metrics{};
   font.GetMetrics(&metrics);
@@ -440,6 +452,10 @@ TEST(WrapperHpp, TextFontTypeface) {
   float widths[2] = {};
   font.GetWidths(ids, 2, widths);
   EXPECT_GT(widths[0], 0.f);
+  Rect glyph_bounds[2];
+  font.GetBounds(ids, 2, glyph_bounds);
+  EXPECT_GT(glyph_bounds[0].right, glyph_bounds[0].left);
+  EXPECT_GT(glyph_bounds[0].bottom, glyph_bounds[0].top);
 
   Paint paint;
   paint.SetTypeface(typeface.get());

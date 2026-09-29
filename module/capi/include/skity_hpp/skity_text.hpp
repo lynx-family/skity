@@ -64,6 +64,24 @@ class Typeface
     return skity_typeface_unichar_to_glyph(get(), unichar);
   }
 
+  /** Raw font file bytes; empty wrapper when none are accessible. */
+  Data GetData() const { return Data(skity_typeface_get_data(get())); }
+
+  /** Font design units per em square (0 on an empty handle). */
+  uint32_t GetUnitsPerEm() const {
+    return skity_typeface_get_units_per_em(get());
+  }
+
+  /** Intrinsic weight / width / slant of the face. */
+  FontStyle GetFontStyle() const {
+    FontStyle style{};
+    skity_typeface_get_font_style(get(), &style);
+    return style;
+  }
+
+  /** Stable id; equal ids mean the same underlying typeface instance. */
+  uint32_t GetUniqueId() const { return skity_typeface_get_unique_id(get()); }
+
  private:
   explicit Typeface(skity_typeface h) : OwnHandle(h) {}
   friend class FontManager;
@@ -331,6 +349,16 @@ class Font : public detail::OwnHandle<skity_font, skity_font_destroy> {
   /** Advance widths of @p count glyphs; @p widths holds @p count entries. */
   void GetWidths(const uint16_t glyphs[], int32_t count, float widths[]) const {
     skity_font_get_widths(get(), glyphs, count, widths);
+  }
+
+  /**
+   * Axis-aligned bounds of @p count glyphs at the font's current size
+   * (baseline-relative, y growing downwards); @p bounds holds @p count
+   * entries. Companion of GetWidths, mirroring the legacy
+   * Font::GetWidthsBounds bounds-only overload.
+   */
+  void GetBounds(const uint16_t glyphs[], int32_t count, Rect bounds[]) const {
+    skity_font_get_bounds(get(), glyphs, count, bounds);
   }
 
  private:

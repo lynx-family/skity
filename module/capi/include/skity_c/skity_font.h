@@ -195,6 +195,21 @@ SKITY_C_API skity_font skity_font_make_with_size(skity_font font, float size);
 SKITY_C_API void skity_font_get_widths(skity_font font, const uint16_t* glyphs,
                                        int32_t count, float* widths);
 
+/**
+ * @brief Fetch the axis-aligned bounds of each glyph.
+ *
+ * Mirrors skity::Font::GetWidthsBounds with a default paint: entry @p i
+ * receives the bounds of glyph @p glyphs[i] at the font's current size, in
+ * baseline-relative coordinates (y grows downwards). The caller must ensure
+ * @p bounds points to at least @p count entries.
+ *
+ * @param glyphs  array of @p count glyph ids
+ * @param count   number of glyphs in @p glyphs
+ * @param bounds  output array receiving @p count skity_rect bounds
+ */
+SKITY_C_API void skity_font_get_bounds(skity_font font, const uint16_t* glyphs,
+                                       int32_t count, skity_rect* bounds);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

@@ -85,6 +85,34 @@ SKITY_C_API void skity_typeface_unichars_to_glyphs(skity_typeface typeface,
 SKITY_C_API uint16_t skity_typeface_unichar_to_glyph(skity_typeface typeface,
                                                      uint32_t unichar);
 
+/**
+ * @brief Return the raw font file bytes backing the typeface.
+ *
+ * The returned handle holds a shared reference to the typeface's internal
+ * data, so the caller may release it immediately. NULL when the typeface
+ * has no accessible data (e.g. an empty placeholder typeface).
+ */
+SKITY_C_API skity_data skity_typeface_get_data(skity_typeface typeface);
+
+/** @brief Return the number of font design units per em square, or 0 on an
+ *         invalid handle. */
+SKITY_C_API uint32_t skity_typeface_get_units_per_em(skity_typeface typeface);
+
+/**
+ * @brief Fetch the typeface's intrinsic style (weight / width / slant).
+ * @param out  receives the style; left untouched on an invalid handle
+ */
+SKITY_C_API void skity_typeface_get_font_style(skity_typeface typeface,
+                                               skity_font_style* out);
+
+/**
+ * @brief Return a stable identifier unique to the underlying typeface.
+ *
+ * Two handles wrap the same typeface instance if and only if their ids are
+ * equal (cheaper than comparing data pointers).
+ */
+SKITY_C_API uint32_t skity_typeface_get_unique_id(skity_typeface typeface);
+
 /** @brief Text blob handles and constructors. */
 
 /** @brief Forward declaration; skity_paint is defined in skity_paint.h. */

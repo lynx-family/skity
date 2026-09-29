@@ -160,6 +160,41 @@ uint16_t skity_typeface_unichar_to_glyph(skity_typeface typeface,
   return tf ? tf->UnicharToGlyph(unichar) : 0;
 }
 
+skity_data skity_typeface_get_data(skity_typeface typeface) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr) {
+    return nullptr;
+  }
+  auto data = tf->GetData();
+  if (data == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_data_s>(
+      SKITY_OBJECT_TYPE_DATA, SKITY_HANDLE_OWNING, std::move(data));
+}
+
+uint32_t skity_typeface_get_units_per_em(skity_typeface typeface) {
+  auto* tf = typeface_of(typeface);
+  return tf ? tf->GetUnitsPerEm() : 0u;
+}
+
+void skity_typeface_get_font_style(skity_typeface typeface,
+                                   skity_font_style* out) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr || out == nullptr) {
+    return;
+  }
+  skity::FontStyle style = tf->GetFontStyle();
+  out->weight = style.weight();
+  out->width = style.width();
+  out->slant = static_cast<skity_font_slant>(style.slant());
+}
+
+uint32_t skity_typeface_get_unique_id(skity_typeface typeface) {
+  auto* tf = typeface_of(typeface);
+  return tf ? tf->TypefaceId() : 0u;
+}
+
 skity_typeface_delegate skity_typeface_delegate_create_simple(
     const skity_typeface* typefaces, uint32_t count) {
   if (typefaces == nullptr || count == 0) {

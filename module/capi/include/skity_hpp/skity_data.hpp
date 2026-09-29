@@ -55,6 +55,7 @@ class Data : public detail::OwnHandle<skity_data, skity_data_destroy> {
 
  private:
   explicit Data(skity_data h) : OwnHandle(h) {}
+  friend class Typeface;
 };
 
 }  // namespace raii
