@@ -324,6 +324,90 @@ class Paint {  /* owning, destructor calls skity_paint_destroy */
 }  // namespace skity
 ```
 
+### 8.1 Why the wrapper is staged in `namespace skity::raii`
+
+The first implementation used plain `namespace skity` as shown above and
+crashed at `-O0`: whenever a wrapper member call is not inlined, the call
+site mangles to the same symbol as the *legacy* C++ class method that
+`libskity.so` still exports (the `SKITY_DLL` visibility leak — 400+ symbols).
+The dynamic linker binds the call to the legacy implementation, which then
+runs with the wrapper object as `this` and silently corrupts it (verified
+with a watchpoint: `Paint::SetStrokeWidth(2.f)` wrote the 2.0f bit pattern
+into the high half of `handle_`). Nested namespace `skity::raii` removes the
+collision; it collapses back to plain `skity` in the same Stage 3 bump that
+hides the C++ symbols and moves the headers.
+
+### 8.2 Why vulkan.hpp does not need this guard
+
+vulkan.hpp has no such problem, because its world already satisfies our
+Stage 3 end state:
+
+- `libvulkan` (loader, layers, drivers) exports **C symbols only** — there
+  has never been an official C++ ABI to collide with. An uninlined
+  `vk::`-wrapper call emits a weak inline symbol that the *static* linker
+  merges across TUs; the dynamic linker has no exported surface to bind to.
+- `vk::raii` exists for a different reason: three ownership models coexist
+  long-term — plain `vk::` handle wrappers (destructor does not destroy, like
+  our `Canvas` view), the legacy `vk::UniqueHandle` (deleter storage per
+  object), and `vk::raii` (move-only, created from a dispatcher-owning
+  context, zero deleter overhead). That layering is permanent.
+
+We borrow the *form* (a nested RAII namespace) but not the *reason*: ours is
+a temporary symbol-collision guard, and unlike vulkan we have no
+handle-wrapper/RAII split to preserve, so the layering disappears at Stage 3.
+The comparison also sharpens the prerequisite: the vulkan.hpp shape is only
+sound once the library exports nothing but C — hiding the legacy C++ symbols
+is not optional polish, it is what makes the wrapper's naming safe.
+
+Engineering conventions worth keeping from vulkan.hpp: a single configurable
+`VULKAN_HPP_INLINE`-style knob if we ever need to control inline fallback, a
+`detail` namespace for non-API entities (we have
+`skity::raii::detail::OwnHandle`), and the discipline of **zero out-of-line
+symbols** in the header-only layer — the few vulkan.hpp needs are gated by
+`VULKAN_HPP_STORAGE_API`; our wrapper is pure forwarding and should stay
+that way.
+
+### 8.3 Wrapper coverage
+
+One wrapper header per C domain header (`skity_c/skity_paint.h` →
+`skity_hpp/skity_paint.hpp`), aggregated by `skity_hpp/skity.hpp`. Following
+the coverage discipline of the C layer, the wrapper only forwards existing
+entry points — helper methods that had no C counterpart (Rect / Matrix
+arithmetic, color packing) are implemented inline in `skity_types.hpp`.
+`test/ut/capi/wrapper_hpp_test.cc` is the compile + CPU smoke gate.
+
+| C domain | Wrapper | Notes |
+|---|---|---|
+| `skity_types` | `skity_types.hpp` | Rect / Matrix / RRect value types (binary-compatible with the C PODs), BlendMode / TileMode / AlphaType / ColorType / SamplingOptions / FilterMode / MipmapMode enums, color helpers |
+| `skity_base` | `skity_base.hpp` | `detail::OwnHandle` (move-only owner) |
+| `skity_canvas` | `skity_canvas.hpp` | full draw / state / clip / text / image surface; `SoftwareCanvas` inherits the non-owning `Canvas` view and owns its handle |
+| `skity_paint` | `skity_paint.hpp` | all setters + getters, effect attach (raw + wrapper overloads), effect getters via `Adopt` |
+| `skity_path` | `skity_path.hpp` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii + `AddMode`), point / verb / conic-weight access, `IsRect` / `IsLine` / `IsEqual`, convexity, segment masks, last-pt family, `CopyWith*` |
+| `skity_path_effect` | `skity_path_effect.hpp` | discrete + dash |
+| `skity_path_measure` | `skity_path_measure.hpp` | length / pos-tan / segment / contour advance |
+| `skity_path_op` | `skity_path_op.hpp` | free function `Op(one, two, PathOp, out)` |
+| `skity_stroke` | `skity_stroke.hpp` | free functions `StrokePath` / `QuadPath` |
+| `skity_shader` | `skity_shader.hpp` | linear / radial / sweep / two-point conical gradients, image shader, local matrix |
+| `skity_color_filter` | `skity_color_filter.hpp` | all factories |
+| `skity_mask_filter` | `skity_mask_filter.hpp` | blur (+ `BlurStyle`) |
+| `skity_image_filter` | `skity_image_filter.hpp` | all factories |
+| `skity_data` | `skity_data.hpp` | copy / with-proc / from-file / empty + accessors |
+| `skity_bitmap` | `skity_bitmap.hpp` | `Bitmap` + `Pixmap` (incl. zero-copy wrap via `Data`) |
+| `skity_image` | `skity_image.hpp` | raster / texture / deferred / promise factories, read / scale pixels |
+| `skity_surface` | `skity_surface.hpp` | create / lock-canvas / flush / size / read-pixels (GL CreateInfo path) |
+| `skity_context` | `skity_context.hpp` | `CreateGL`, error callback, all `set_enable_*` tuning knobs, resource cache limit |
+| `skity_font` + `skity_text` | `skity_text.hpp` | `Typeface` (load / default / unichar→glyph), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / make-with-size), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
+| `skity_recorder` | `skity_recorder.hpp` | `PictureRecorder` (+ build options, last-op offset) and `DisplayList` (draw / cull-rect draw / bounds / op count / properties / rtree search / per-op paint mutation) |
+
+Not wrapped (intentionally, for now): the Vulkan-specific domains
+(`skity_context_vk` / `skity_surface_vk` / `skity_texture_vk` /
+`skity_semaphore_vk` / `skity_native_window_vk` — wrapping them would force
+`<vulkan/vulkan.h>` into every consumer), `skity_camera` /
+`skity_quaternion` (3D helpers), `skity_precompile`, and `skity_texture`
+(entered through `Image::MakeFromTexture` / promise callbacks instead).
+`skity_bridge.hpp` is the reverse direction (C++ objects lent INTO C
+handles) and is not part of the RAII layer.
+
 ## 9. Gradual Migration
 
 | Stage | `libskity.so` | C API | header-only `skity.hpp` | old `include/skity/` C++ headers | Risk |
