@@ -2,8 +2,6 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#define WUFFS_IMPLEMENTATION  // implementation in this source file
-
 // after wuffs macros
 #include "src/codec/wuffs/wuffs_module.hpp"
 
