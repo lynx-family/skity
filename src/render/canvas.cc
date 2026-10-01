@@ -301,7 +301,7 @@ void Canvas::DrawSimpleText2(const char *text, float x, float y,
 
   auto blob = builder.BuildTextBlob(text, work_paint);
 
-  this->DrawTextBlob(blob.get(), x, y, work_paint);
+  this->DrawTextBlob(blob, x, y, work_paint);
 }
 
 Vec2 Canvas::SimpleTextBounds(const char *text, const Paint &paint) {
@@ -342,6 +342,19 @@ void Canvas::DrawTextBlob(const TextBlob *blob, float x, float y,
   }
 
   this->OnDrawBlob(blob, x, y, paint);
+}
+
+void Canvas::DrawTextBlob(const std::shared_ptr<TextBlob> &blob, float x,
+                          float y, const Paint &paint) {
+  if (!blob) {
+    return;
+  }
+  this->OnDrawSharedBlob(blob, x, y, paint);
+}
+
+void Canvas::OnDrawSharedBlob(const std::shared_ptr<TextBlob> &blob, float x,
+                              float y, const Paint &paint) {
+  this->OnDrawBlob(blob.get(), x, y, paint);
 }
 
 void Canvas::DrawImage(const std::shared_ptr<Image> &image, float x, float y) {

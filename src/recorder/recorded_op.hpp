@@ -257,11 +257,14 @@ struct SaveLayerOp : RecordedOp {
 };
 
 struct DrawTextBlobOp : RecordedOp {
-  DrawTextBlobOp(const TextBlob* blob, float& x, float& y, Paint const& paint)
-      : RecordedOp(RecordedOpType::kDrawTextBlob), x(x), y(y), paint(paint) {
-    blob_ptr = std::make_unique<TextBlob>(blob->GetTextRun());
-  }
-  std::unique_ptr<TextBlob> blob_ptr;
+  DrawTextBlobOp(std::shared_ptr<TextBlob> blob, float& x, float& y,
+                 Paint const& paint)
+      : RecordedOp(RecordedOpType::kDrawTextBlob),
+        blob_ptr(std::move(blob)),
+        x(x),
+        y(y),
+        paint(paint) {}
+  std::shared_ptr<TextBlob> blob_ptr;
   float x;
   float y;
   Paint paint;

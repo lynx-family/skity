@@ -41,6 +41,8 @@ class SKITY_API RecordingCanvas : public Canvas {
   void OnSaveLayer(const Rect& bounds, const Paint& paint) override;
   void OnDrawBlob(const TextBlob* blob, float x, float y,
                   Paint const& paint) override;
+  void OnDrawSharedBlob(std::shared_ptr<TextBlob> const& blob, float x, float y,
+                        Paint const& paint) override;
   void OnDrawImageRect(std::shared_ptr<Image> image, const Rect& src,
                        const Rect& dst, const SamplingOptions& sampling,
                        Paint const* paint) override;

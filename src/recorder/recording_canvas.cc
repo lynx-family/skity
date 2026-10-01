@@ -110,6 +110,11 @@ void RecordingCanvas::OnSaveLayer(const Rect& bounds, const Paint& paint) {
 
 void RecordingCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
                                  Paint const& paint) {
+  OnDrawSharedBlob(std::make_shared<TextBlob>(blob->GetTextRun()), x, y, paint);
+}
+
+void RecordingCanvas::OnDrawSharedBlob(std::shared_ptr<TextBlob> const& blob,
+                                       float x, float y, Paint const& paint) {
   Push<DrawTextBlobOp>(blob, x, y, paint);
   auto bounds = blob->GetBoundsRect().MakeOffset(x, y);
   // Expand outward a little to prevent incomplete display of text content
