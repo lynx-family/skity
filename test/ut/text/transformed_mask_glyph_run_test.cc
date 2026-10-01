@@ -7,14 +7,78 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <initializer_list>
 #include <limits>
 
-#include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
-#include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/draw/hw_dynamic_text_draw.hpp"
 
 namespace skity {
 namespace transformed_mask {
+
+namespace {
+
+ArrayList<GlyphRect, 16> MakeGlyphRects() {
+  ArrayList<GlyphRect, 16> result;
+  result.emplace_back(Vec4{0.f, 0.f, 10.f, 10.f}, Vec2{0.f, 0.f},
+                      Vec2{10.f, 10.f});
+  return result;
+}
+
+ArrayList<GlyphRect, 16> MakeGlyphRects(std::initializer_list<Rect> bounds) {
+  ArrayList<GlyphRect, 16> result;
+  for (const auto& rect : bounds) {
+    result.emplace_back(
+        Vec4{rect.Left(), rect.Top(), rect.Right(), rect.Bottom()},
+        Vec2{0.f, 0.f}, Vec2{10.f, 10.f});
+  }
+  return result;
+}
+
+}  // namespace
+
+TEST(TransformedMaskGlyphRunTest, TextureCopyKeepsNonOverlappingGlyphsBatched) {
+  ArenaAllocator arena;
+  auto batches = BuildGlyphRectBatches(
+      MakeGlyphRects({Rect::MakeLTRB(0.f, 0.f, 10.f, 10.f),
+                      Rect::MakeLTRB(20.f, 0.f, 30.f, 10.f)}),
+      Matrix::Translate(5.f, 7.f), &arena,
+      /*split_overlapping_glyphs=*/true);
+
+  ASSERT_EQ(batches.size(), 1u);
+  EXPECT_EQ(batches[0].glyph_rects.size(), 2u);
+  EXPECT_EQ(batches[0].bounds, Rect::MakeLTRB(5.f, 7.f, 35.f, 17.f));
+}
+
+TEST(TransformedMaskGlyphRunTest, TextureCopySplitsOverlapsInPainterOrder) {
+  ArenaAllocator arena;
+  auto batches = BuildGlyphRectBatches(
+      MakeGlyphRects({Rect::MakeLTRB(0.f, 0.f, 10.f, 10.f),
+                      Rect::MakeLTRB(20.f, 0.f, 30.f, 10.f),
+                      Rect::MakeLTRB(5.f, 0.f, 25.f, 10.f),
+                      Rect::MakeLTRB(40.f, 0.f, 50.f, 10.f)}),
+      Matrix{}, &arena, /*split_overlapping_glyphs=*/true);
+
+  ASSERT_EQ(batches.size(), 2u);
+  ASSERT_EQ(batches[0].glyph_rects.size(), 2u);
+  ASSERT_EQ(batches[1].glyph_rects.size(), 2u);
+  EXPECT_EQ(batches[0].glyph_rects[0].vertex_coord.x, 0.f);
+  EXPECT_EQ(batches[0].glyph_rects[1].vertex_coord.x, 20.f);
+  EXPECT_EQ(batches[1].glyph_rects[0].vertex_coord.x, 5.f);
+  EXPECT_EQ(batches[1].glyph_rects[1].vertex_coord.x, 40.f);
+  EXPECT_EQ(batches[0].bounds, Rect::MakeLTRB(0.f, 0.f, 30.f, 10.f));
+  EXPECT_EQ(batches[1].bounds, Rect::MakeLTRB(5.f, 0.f, 50.f, 10.f));
+}
+
+TEST(TransformedMaskGlyphRunTest, NonTextureCopyNeverSplitsGlyphs) {
+  ArenaAllocator arena;
+  auto batches = BuildGlyphRectBatches(
+      MakeGlyphRects({Rect::MakeLTRB(0.f, 0.f, 10.f, 10.f),
+                      Rect::MakeLTRB(5.f, 0.f, 15.f, 10.f)}),
+      Matrix{}, &arena, /*split_overlapping_glyphs=*/false);
+
+  ASSERT_EQ(batches.size(), 1u);
+  EXPECT_EQ(batches[0].glyph_rects.size(), 2u);
+}
 
 TEST(TransformedMaskGlyphRunTest, BitmapOnlyStrokeFallsBackToStrokeColorFill) {
   Paint paint;
@@ -138,12 +202,10 @@ TEST(TransformedMaskGlyphRunTest, MergesTextDrawsWithSamePerspectiveTransform) {
   perspective.SetPersp0(0.002f);
   Matrix transform = Matrix::Translate(120.f, 80.f) * perspective *
                      Matrix::RotateDeg(-35.f, Vec3{1.f, 0.f, 0.f});
-  WGSLTextSolidColorGeometry first_geometry(Matrix{}, {}, Paint{});
-  WGSLTextSolidColorGeometry second_geometry(Matrix{}, {}, Paint{});
-  WGSLColorEmojiFragment first_fragment({}, nullptr, false, 1.f);
-  WGSLColorEmojiFragment second_fragment({}, nullptr, false, 1.f);
-  HWDynamicTextDraw first_draw(transform, &first_geometry, &first_fragment);
-  HWDynamicTextDraw second_draw(transform, &second_geometry, &second_fragment);
+  HWDynamicTextDraw first_draw(transform, Matrix{}, MakeGlyphRects(), Paint{},
+                               {}, nullptr, TextAtlasEffect::kColor, false);
+  HWDynamicTextDraw second_draw(transform, Matrix{}, MakeGlyphRects(), Paint{},
+                                {}, nullptr, TextAtlasEffect::kColor, false);
   first_draw.SetLayerSpaceBounds(Rect::MakeLTRB(0.f, 0.f, 10.f, 10.f));
   second_draw.SetLayerSpaceBounds(Rect::MakeLTRB(20.f, 20.f, 30.f, 30.f));
 
@@ -157,27 +219,49 @@ TEST(TransformedMaskGlyphRunTest, RejectsTextDrawsWithDifferentTransforms) {
   first_transform.SetPersp0(0.002f);
   Matrix second_transform = first_transform;
   second_transform.PostTranslate(1.f, 0.f);
-  WGSLTextSolidColorGeometry first_geometry(Matrix{}, {}, Paint{});
-  WGSLTextSolidColorGeometry second_geometry(Matrix{}, {}, Paint{});
-  WGSLColorEmojiFragment first_fragment({}, nullptr, false, 1.f);
-  WGSLColorEmojiFragment second_fragment({}, nullptr, false, 1.f);
-  HWDynamicTextDraw first_draw(first_transform, &first_geometry,
-                               &first_fragment);
-  HWDynamicTextDraw second_draw(second_transform, &second_geometry,
-                                &second_fragment);
+  HWDynamicTextDraw first_draw(first_transform, Matrix{}, MakeGlyphRects(),
+                               Paint{}, {}, nullptr, TextAtlasEffect::kColor,
+                               false);
+  HWDynamicTextDraw second_draw(second_transform, Matrix{}, MakeGlyphRects(),
+                                Paint{}, {}, nullptr, TextAtlasEffect::kColor,
+                                false);
 
   EXPECT_FALSE(first_draw.MergeIfPossible(&second_draw));
 }
 
 TEST(TransformedMaskGlyphRunTest, KeepsIdentityTextDrawMerging) {
-  WGSLTextSolidColorGeometry first_geometry(Matrix{}, {}, Paint{});
-  WGSLTextSolidColorGeometry second_geometry(Matrix{}, {}, Paint{});
-  WGSLColorTextFragment first_fragment({}, nullptr);
-  WGSLColorTextFragment second_fragment({}, nullptr);
-  HWDynamicTextDraw first_draw(Matrix{}, &first_geometry, &first_fragment);
-  HWDynamicTextDraw second_draw(Matrix{}, &second_geometry, &second_fragment);
+  HWDynamicTextDraw first_draw(Matrix{}, Matrix{}, MakeGlyphRects(), Paint{},
+                               {}, nullptr, TextAtlasEffect::kA8Coverage,
+                               false);
+  HWDynamicTextDraw second_draw(Matrix{}, Matrix{}, MakeGlyphRects(), Paint{},
+                                {}, nullptr, TextAtlasEffect::kA8Coverage,
+                                false);
 
   EXPECT_TRUE(first_draw.MergeIfPossible(&second_draw));
+}
+
+TEST(TransformedMaskGlyphRunTest, EnforcesNonOverlappingDrawConstraint) {
+  HWDynamicTextDraw first_draw(Matrix{}, Matrix{}, MakeGlyphRects(), Paint{},
+                               {}, nullptr, TextAtlasEffect::kColor, false);
+  HWDynamicTextDraw overlapping_draw(Matrix{}, Matrix{}, MakeGlyphRects(),
+                                     Paint{}, {}, nullptr,
+                                     TextAtlasEffect::kColor, false);
+  HWDynamicTextDraw disjoint_draw(Matrix{}, Matrix{}, MakeGlyphRects(), Paint{},
+                                  {}, nullptr, TextAtlasEffect::kColor, false);
+  HWDynamicTextDraw regular_draw(Matrix{}, Matrix{}, MakeGlyphRects(), Paint{},
+                                 {}, nullptr, TextAtlasEffect::kColor, false);
+
+  first_draw.SetLayerSpaceBounds(Rect::MakeLTRB(0.f, 0.f, 10.f, 10.f));
+  overlapping_draw.SetLayerSpaceBounds(Rect::MakeLTRB(5.f, 0.f, 15.f, 10.f));
+  disjoint_draw.SetLayerSpaceBounds(Rect::MakeLTRB(20.f, 0.f, 30.f, 10.f));
+  regular_draw.SetLayerSpaceBounds(Rect::MakeLTRB(40.f, 0.f, 50.f, 10.f));
+  first_draw.SetRequiresNonOverlappingDraws(true);
+  overlapping_draw.SetRequiresNonOverlappingDraws(true);
+  disjoint_draw.SetRequiresNonOverlappingDraws(true);
+
+  EXPECT_FALSE(first_draw.MergeIfPossible(&overlapping_draw));
+  EXPECT_TRUE(first_draw.MergeIfPossible(&disjoint_draw));
+  EXPECT_FALSE(first_draw.MergeIfPossible(&regular_draw));
 }
 
 }  // namespace transformed_mask

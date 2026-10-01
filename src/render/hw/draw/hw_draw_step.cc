@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "src/logging.hpp"
 #include "src/render/hw/hw_buffer_layout_map.hpp"
@@ -81,8 +82,10 @@ GPURenderPipeline* HWDrawStep::GetPipeline(HWDrawContext* context,
 
   pipeline.color_format = target_format;
   pipeline.sample_count = sample_count;
-  pipeline.buffers = HWBufferLayoutMap::GetInstance().GetBufferLayout(
-      static_cast<HWGeometryKeyType::Value>(geometry_->GetMainKey()));
+  const auto geometry_type = static_cast<HWGeometryKeyType::Value>(
+      static_cast<uint8_t>(geometry_->GetMainKey()));
+  pipeline.buffers =
+      HWBufferLayoutMap::GetInstance().GetBufferLayout(geometry_type);
 
   if (state == HWDrawState::kDrawStateNone) {
     pipeline.depth_stencil.format = GPUTextureFormat::kInvalid;

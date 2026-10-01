@@ -29,9 +29,7 @@ void HWBufferLayoutMap::RegisterAllBufferLayouts() {
       std::move(WGSLTessPathFillGeometry::GetBufferLayout());
   buffer_layout_map_[HWGeometryKeyType::kTessStroke] =
       std::move(WGSLTessPathStrokeGeometry::GetBufferLayout());
-  buffer_layout_map_[HWGeometryKeyType::kColorText] =
-      std::move(WGSLTextGeometry::GetBufferLayout());
-  buffer_layout_map_[HWGeometryKeyType::kGradientText] =
+  buffer_layout_map_[HWGeometryKeyType::kText] =
       std::move(WGSLTextGeometry::GetBufferLayout());
   buffer_layout_map_[HWGeometryKeyType::kRRect] =
       std::move(WGSLRRectGeometry::GetBufferLayout());

@@ -7,13 +7,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <optional>
 #include <utility>
 #include <vector>
 
-#include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
 #include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/draw/hw_dynamic_text_draw.hpp"
-#include "src/render/hw/draw/wgx_filter.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -225,13 +225,18 @@ class TransformedMaskGlyphRun final : public GlyphRun {
         atlas_(atlas),
         glyph_format_(glyph_format) {}
 
-  HWDraw* Draw(Matrix transform, const Matrix& glyph_to_layer,
-               ArenaAllocator* arena_allocator, float canvas_scale,
-               bool use_linear_text_filter) override;
+  GlyphDrawList Draw(Matrix transform, const Matrix& glyph_to_layer,
+                     ArenaAllocator* arena_allocator, float canvas_scale,
+                     bool use_linear_text_filter,
+                     bool split_overlapping_glyphs) override;
 
-  Rect GetBounds() override { return bounds_; }
+  bool HasCoverageMask() const override {
+    return glyph_format_ == GlyphFormat::A8;
+  }
 
-  bool IsStroke() override { return is_stroke_; }
+  bool IsSourceOpaque() const override {
+    return HasCoverageMask() && IsPaintSourceOpaque(paint_);
+  }
 
  private:
   ArrayList<GlyphRect, 16> Raster(ArenaAllocator* arena_allocator);
@@ -250,14 +255,12 @@ class TransformedMaskGlyphRun final : public GlyphRun {
   uint32_t group_index_;
   Atlas* atlas_;
   GlyphFormat glyph_format_;
-  Rect bounds_ = Rect::MakeEmpty();
 };
 
 ArrayList<GlyphRect, 16> TransformedMaskGlyphRun::Raster(
     ArenaAllocator* arena_allocator) {
   ArrayList<GlyphRect, 16> glyph_rects;
   glyph_rects.SetArenaAllocator(arena_allocator);
-  bounds_ = Rect::MakeEmpty();
   if (glyph_locs_.empty() || context_scale_ <= 0.f) {
     return glyph_rects;
   }
@@ -298,7 +301,6 @@ ArrayList<GlyphRect, 16> TransformedMaskGlyphRun::Raster(
       continue;
     }
 
-    bounds_.Join(Rect::MakeXYWH(left, top, width, height));
     glyph_rects.emplace_back(Vec4{left, top, left + width, top + height}, uv_lt,
                              uv_rb);
   }
@@ -306,21 +308,24 @@ ArrayList<GlyphRect, 16> TransformedMaskGlyphRun::Raster(
   return glyph_rects;
 }
 
-HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
-                                      const Matrix& glyph_to_layer,
-                                      ArenaAllocator* arena_allocator,
-                                      float canvas_scale,
-                                      bool use_linear_text_filter) {
+GlyphDrawList TransformedMaskGlyphRun::Draw(Matrix transform,
+                                            const Matrix& glyph_to_layer,
+                                            ArenaAllocator* arena_allocator,
+                                            float canvas_scale,
+                                            bool use_linear_text_filter,
+                                            bool split_overlapping_glyphs) {
   SKITY_TRACE_EVENT(TransformedMaskGlyphRun_Draw);
   (void)canvas_scale;
   (void)use_linear_text_filter;
+  GlyphDrawList draws;
+  draws.SetArenaAllocator(arena_allocator);
   if (!transform.IsFinite()) {
-    return nullptr;
+    return draws;
   }
 
   ArrayList<GlyphRect, 16> glyph_rects = Raster(arena_allocator);
   if (glyph_rects.empty()) {
-    return nullptr;
+    return draws;
   }
 
   Matrix position_matrix = transform * Matrix::Translate(origin_.x, origin_.y);
@@ -331,55 +336,44 @@ HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
   // MVP * glyph_to_layer * V * C * local.
   if (!ComputeViewDifference(position_matrix, creation_matrix_,
                              &view_difference)) {
-    return nullptr;
+    return draws;
   }
+  const Matrix final_transform = glyph_to_layer * view_difference;
+
+  auto batches =
+      BuildGlyphRectBatches(std::move(glyph_rects), Matrix{}, arena_allocator,
+                            split_overlapping_glyphs);
 
   atlas_->UploadAtlas(group_index_);
   auto gpu_texture = atlas_->GetGPUTexture(group_index_);
   auto gpu_sampler =
       atlas_->GetGPUSampler(group_index_, GPUFilterMode::kLinear);
 
-  HWWGSLGeometry* geometry = nullptr;
-  if (atlas_->GetFormat() == AtlasFormat::A8 && paint_.GetShader()) {
-    geometry = arena_allocator->Make<WGSLTextGradientGeometry>(
-        Matrix(), std::move(glyph_rects), paint_.GetShader()->GetLocalMatrix(),
-        glyph_to_layer * position_matrix);
-  } else {
-    Vector color = is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
-    Paint paint_copy = paint_;
-    paint_copy.SetFillColor(color);
-    paint_copy.SetStrokeColor(color);
-    geometry = arena_allocator->Make<WGSLTextSolidColorGeometry>(
-        Matrix(), std::move(glyph_rects), paint_copy);
+  const auto effect = atlas_->GetFormat() == AtlasFormat::A8
+                          ? TextAtlasEffect::kA8Coverage
+                          : (glyph_format_ == GlyphFormat::BGRA32
+                                 ? TextAtlasEffect::kColorSwizzleRB
+                                 : TextAtlasEffect::kColor);
+  const Vector color =
+      is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
+  Paint paint_copy = paint_;
+  paint_copy.SetFillColor(color);
+  paint_copy.SetStrokeColor(color);
+  std::optional<Matrix> device_to_local;
+  if (effect == TextAtlasEffect::kA8Coverage && paint_.GetShader()) {
+    Matrix inverse;
+    (glyph_to_layer * position_matrix).Invert(&inverse);
+    device_to_local = inverse;
   }
 
-  HWWGSLFragment* fragment = nullptr;
-  if (atlas_->GetFormat() == AtlasFormat::A8) {
-    if (paint_.GetShader() && paint_.GetShader()->AsGradient(nullptr) !=
-                                  Shader::GradientType::kNone) {
-      Shader::GradientInfo info{};
-      auto type = paint_.GetShader()->AsGradient(&info);
-      fragment = arena_allocator->Make<WGSLGradientTextFragment>(
-          std::move(gpu_texture), std::move(gpu_sampler), info, type,
-          paint_.GetAlphaF());
-    } else {
-      fragment = arena_allocator->Make<WGSLColorTextFragment>(
-          std::move(gpu_texture), std::move(gpu_sampler));
-    }
-  } else {
-    fragment = arena_allocator->Make<WGSLColorEmojiFragment>(
-        std::move(gpu_texture), std::move(gpu_sampler),
-        glyph_format_ == GlyphFormat::BGRA32, paint_.GetAlphaF());
+  for (auto& batch : batches) {
+    auto* draw = arena_allocator->Make<HWDynamicTextDraw>(
+        final_transform, Matrix(), std::move(batch.glyph_rects), paint_copy,
+        gpu_texture, gpu_sampler, effect, is_stroke_, device_to_local);
+    const Rect bounds = MapBounds(final_transform, batch.bounds);
+    draws.push_back({draw, paint_copy.ComputeFastBounds(bounds)});
   }
-
-  if (paint_.GetColorFilter()) {
-    fragment->SetFilter(WGXFilterFragment::Make(paint_.GetColorFilter().get()));
-  }
-
-  auto* draw = arena_allocator->Make<HWDynamicTextDraw>(
-      glyph_to_layer * view_difference, geometry, fragment);
-  bounds_ = MapBounds(draw->GetTransform(), bounds_);
-  return draw;
+  return draws;
 }
 
 GlyphRegionGroup* GetOrAppendContiguousGroup(

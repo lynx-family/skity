@@ -71,6 +71,13 @@ std::optional<HWBlendPlan> ResolveHWBlendPlan(
     BlendMode blend_mode, bool has_fragment_mask, bool source_is_opaque,
     const GPUCaps& caps, bool supports_texture_copy_dst_read);
 
+// Preserves the historical B(S * C, D) behavior when an exact coverage-aware
+// plan is unavailable. The geometry still supplies C; only the regular plan's
+// source output is folded by coverage.
+HWBlendPlan ResolveLegacyCoverageBlendPlan(BlendMode blend_mode,
+                                           const GPUCaps& caps,
+                                           bool supports_texture_copy_dst_read);
+
 }  // namespace skity
 
 #endif  // SRC_RENDER_HW_HW_BLEND_PLAN_HPP

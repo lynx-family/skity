@@ -5,8 +5,16 @@
 #ifndef SRC_RENDER_HW_DRAW_GEOMETRY_WGSL_TEXT_GEOMETRY_HPP
 #define SRC_RENDER_HW_DRAW_GEOMETRY_WGSL_TEXT_GEOMETRY_HPP
 
+#include <array>
+#include <memory>
+#include <optional>
+#include <vector>
+
+#include "src/gpu/gpu_sampler.hpp"
+#include "src/gpu/gpu_texture.hpp"
 #include "src/render/hw/draw/hw_wgsl_geometry.hpp"
-#include "src/render/hw/hw_pipeline_key.hpp"
+#include "src/utils/arena_allocator.hpp"
+#include "src/utils/array_list.hpp"
 #include "src/utils/batch_group.hpp"
 
 namespace skity {
@@ -22,102 +30,66 @@ struct GlyphRect {
   Vec2 texture_coord_br;
 };
 
-class WGSLTextGeometry : public HWWGSLGeometry {
+struct GlyphRectBatch {
+  ArrayList<GlyphRect, 16> glyph_rects;
+  Rect bounds = Rect::MakeEmpty();
+};
+
+std::vector<GlyphRectBatch> BuildGlyphRectBatches(
+    ArrayList<GlyphRect, 16> glyph_rects, const Matrix& transform,
+    ArenaAllocator* arena_allocator, bool split_overlapping_glyphs);
+
+enum class TextAtlasEffect {
+  kA8Coverage,
+  kSDFCoverage,
+  kColor,
+  kColorSwizzleRB,
+};
+
+class WGSLTextGeometry final : public HWWGSLGeometry {
  public:
-  static constexpr const char* kTextCommonVertex = R"(
-    struct TextVSInput {
-        @location(0) a_offset : vec4<f32>,
-        @location(1) a_pos    : vec4<f32>,
-        @location(2) a_uv     : vec4<f32>,
-        @location(3) a_color  : vec4<f32>
-    };
+  using BatchedTexture = std::array<std::shared_ptr<GPUTexture>, 4>;
 
-    fn get_texture_index(u: f32) -> i32 {
-        return i32(u) >> 14;
-    }
-
-    fn get_texture_uv(uv: vec2<f32>) -> vec2<f32> {
-        var u: i32 = i32(uv.x);
-
-        return vec2<f32>(f32(u & 0x3FFF), uv.y);
-    }
-
-    @group(0) @binding(0) var<uniform> common_slot: CommonSlot;
-  )";
-
-  explicit WGSLTextGeometry(const Matrix& transform,
-                            ArrayList<GlyphRect, 16> glyph_rects, Paint paint) {
-    for (auto&& glyph_rect : glyph_rects) {
-      auto rect = transform.MapRect(
-          {glyph_rect.vertex_coord.x, glyph_rect.vertex_coord.y,
-           glyph_rect.vertex_coord.z, glyph_rect.vertex_coord.w});
-      glyph_rect.vertex_coord = {rect.Left(), rect.Top(), rect.Right(),
-                                 rect.Bottom()};
-      glyph_rects_.emplace_back(BatchGroup<GlyphRect>(
-          {std::move(glyph_rect), std::move(paint), std::move(transform)}));
-    }
-  }
+  WGSLTextGeometry(std::vector<BatchGroup<GlyphRect>> glyph_rects,
+                   BatchedTexture textures, std::shared_ptr<GPUSampler> sampler,
+                   TextAtlasEffect effect,
+                   std::optional<Matrix> device_to_local = std::nullopt);
 
   ~WGSLTextGeometry() override = default;
 
   static std::vector<GPUVertexBufferLayout> GetBufferLayout();
 
-  bool CanMerge(const HWWGSLGeometry* other) const override;
+  HWFunctionBaseKey GetMainKey() const override;
 
-  void Merge(const HWWGSLGeometry* other) override;
+  HWFunctionBaseKey GetFSSubKey() const override;
+
+  void WriteVSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteVSUniforms(std::stringstream& ss) const override;
+
+  void WriteVSInput(std::stringstream& ss) const override;
+
+  void WriteVSMain(std::stringstream& ss) const override;
+
+  std::optional<std::vector<std::string>> GetVarings() const override;
+
+  void WriteFSFunctionsAndStructs(std::stringstream& ss) const override;
+
+  void WriteFSUniforms(std::stringstream& ss) const override;
+
+  void WriteFSColor(std::stringstream& ss) const override;
+
+  void WriteFSAlphaMask(std::stringstream& ss) const override;
 
   void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
                   float clip_depth, Command* stencil_cmd) override;
 
  private:
   std::vector<BatchGroup<GlyphRect>> glyph_rects_;
-};
-
-class WGSLTextSolidColorGeometry : public WGSLTextGeometry {
- public:
-  explicit WGSLTextSolidColorGeometry(const Matrix& transform,
-                                      ArrayList<GlyphRect, 16> glyph_rects,
-                                      Paint paint)
-      : WGSLTextGeometry(transform, std::move(glyph_rects), std::move(paint)) {}
-
-  ~WGSLTextSolidColorGeometry() override = default;
-
-  std::string GenSourceWGSL() const override;
-
-  HWFunctionBaseKey GetMainKey() const override {
-    return HWGeometryKeyType::kColorText;
-  }
-};
-
-class WGSLTextGradientGeometry : public WGSLTextGeometry {
- public:
-  explicit WGSLTextGradientGeometry(const Matrix& transform,
-                                    ArrayList<GlyphRect, 16> glyph_rects,
-                                    const Matrix& local_matrix,
-                                    const Matrix& local_to_device)
-      : WGSLTextGeometry(transform, std::move(glyph_rects), Paint()) {
-    Matrix local_inv;
-    local_matrix.Invert(&local_inv);
-    Matrix device_to_local;
-    local_to_device.Invert(&device_to_local);
-    inv_matrix_ = local_inv * device_to_local;
-  }
-
-  ~WGSLTextGradientGeometry() override = default;
-
-  std::string GenSourceWGSL() const override;
-
-  HWFunctionBaseKey GetMainKey() const override {
-    return HWGeometryKeyType::kGradientText;
-  }
-
-  bool CanMerge(const HWWGSLGeometry* other) const override;
-
-  void PrepareCMD(Command* cmd, HWDrawContext* context, const Matrix& transform,
-                  float clip_depth, Command* stencil_cmd) override;
-
- private:
-  Matrix inv_matrix_;
+  BatchedTexture textures_;
+  std::shared_ptr<GPUSampler> sampler_;
+  TextAtlasEffect effect_;
+  std::optional<Matrix> device_to_local_;
 };
 
 }  // namespace skity

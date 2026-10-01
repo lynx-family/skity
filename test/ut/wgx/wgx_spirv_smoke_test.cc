@@ -17,9 +17,9 @@
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_vertex_color.hpp"
-#include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
 #include "src/render/hw/draw/geometry/wgsl_coverage_aa_tile_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
+#include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/draw/hw_wgsl_shader_writer.hpp"
 
 namespace {
@@ -4335,11 +4335,14 @@ TEST(WgxSpirvSmokeTest, EmitsGradientLinear4OffsetFastTextWGSL) {
                           {1.0, 0.0, 0.0, 1.0},
                           {0.0, 1.0, 0.0, 1.0},
                           {0.0, 0.0, 1.0, 1.0}};
-  skity::WGSLGradientTextFragment gradient_fragment(
-      skity::WGSLGradientTextFragment::BatchedTexture{}, {}, gradient_info,
-      skity::Shader::GradientType::kLinear, 1.0f);
+  skity::WGSLGradientFragment gradient_fragment(
+      gradient_info, skity::Shader::GradientType::kLinear, 1.0f, {});
+  skity::WGSLTextGeometry geometry(
+      {}, {}, {}, skity::TextAtlasEffect::kA8Coverage, skity::Matrix{});
+  skity::HWWGSLShaderWriter shader_writer(&geometry, &gradient_fragment);
 
-  auto program = wgx::Program::Parse(gradient_fragment.GenSourceWGSL());
+  auto program = wgx::Program::Parse(shader_writer.GenFSSourceWGSL(
+      skity::HWBlendOutput::kSourceTimesCoverage));
 
   ASSERT_NE(program, nullptr);
   ASSERT_FALSE(program->GetDiagnosis().has_value());
