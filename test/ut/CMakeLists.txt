@@ -31,6 +31,7 @@ add_executable(skity_unit_test
     io/pixmap_test.cc
     render/canvas_state_test.cc
     render/sw_canvas_test.cc
+    render/sw_raster_test.cc
     render/hw/hw_buffer_layout_test.cc
     render/hw/coverage_aa_line_encoder_test.cc
     render/hw/coverage_aa_path_tiler_test.cc

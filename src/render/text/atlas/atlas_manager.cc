@@ -84,8 +84,8 @@ Atlas::Atlas(AtlasFormat format, GPUDevice* gpu_device,
 GlyphRegion Atlas::GetGlyphRegion(const Font& font,
                                   PackedGlyphID packed_glyph_id,
                                   const Paint& paint, bool load_sdf,
-                                  float context_scale,
-                                  const Matrix& transform) {
+                                  float context_scale, const Matrix& transform,
+                                  uint32_t native_raster_phase) {
   float font_size = font.GetSize();
   float sdf_scale = 1.0f;
   // TODO(jingle) consider transform for sdf text
@@ -122,6 +122,17 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font,
     scaler_context_desc.scaler_flags |=
         ScalerContextDesc::kGenerateRawA8MaskFlag;
     scaler_context_desc.foreground_color = Color_TRANSPARENT;
+  } else if (native_raster_phase <= 4) {
+    scaler_context_desc.native_raster_phase = native_raster_phase;
+    if (native_raster_phase != 0) {
+      const Color color = Color4fToColor(paint.GetFillColor());
+      const uint32_t luminance =
+          (77 * ColorGetR(color) + 150 * ColorGetG(color) +
+           29 * ColorGetB(color) + 128) >>
+          8;
+      scaler_context_desc.foreground_color =
+          ColorSetARGB(255, luminance, luminance, luminance);
+    }
   }
   GlyphKey key(
       load_sdf ? PackedGlyphID(packed_glyph_id.GetGlyphID()) : packed_glyph_id,

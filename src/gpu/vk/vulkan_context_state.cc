@@ -6,7 +6,9 @@
 
 #include <vk_mem_alloc.h>
 
+#include <algorithm>
 #include <cstdlib>
+#include <iterator>
 #include <set>
 #include <string_view>
 #include <vector>
@@ -702,6 +704,39 @@ void VulkanContextState::CollectPendingSubmissions(bool wait_all) const {
     }
   }
 
+  ReleaseCompletedSubmissions(std::move(completed_submissions));
+}
+
+void VulkanContextState::CollectPendingSubmissionsThroughFence(
+    VkFence completed_fence) const {
+  if (completed_fence == VK_NULL_HANDLE || logical_device_ == VK_NULL_HANDLE ||
+      functions_.device.vkDestroyFence == nullptr ||
+      functions_.device.vkDestroyCommandPool == nullptr) {
+    return;
+  }
+
+  const auto marker = std::find_if(
+      pending_submissions_.begin(), pending_submissions_.end(),
+      [completed_fence](const VulkanPendingSubmission& submission) {
+        return submission.fence == completed_fence;
+      });
+  if (marker == pending_submissions_.end()) {
+    return;
+  }
+
+  const auto completed_end = std::next(marker);
+  std::vector<VulkanPendingSubmission> completed_submissions;
+  completed_submissions.reserve(static_cast<size_t>(
+      std::distance(pending_submissions_.begin(), completed_end)));
+  for (auto it = pending_submissions_.begin(); it != completed_end; ++it) {
+    completed_submissions.emplace_back(std::move(*it));
+  }
+  pending_submissions_.erase(pending_submissions_.begin(), completed_end);
+  ReleaseCompletedSubmissions(std::move(completed_submissions));
+}
+
+void VulkanContextState::ReleaseCompletedSubmissions(
+    std::vector<VulkanPendingSubmission> completed_submissions) const {
   for (auto& submission : completed_submissions) {
     if (!IsDeviceLost() && submission.owns_fence &&
         submission.fence != VK_NULL_HANDLE) {

@@ -85,23 +85,28 @@ uint32_t CalcTableChecksum(uint32_t* data, size_t length) {
 
 class TypefaceCache {
  public:
-  // We need alter typeface with shared ownership so that we could remove
-  // them from cache here.
-  void Add(std::shared_ptr<TypefaceDarwin> typeface) {
-    typeface_set_.emplace_back(std::move(typeface));
+  void Add(const std::shared_ptr<TypefaceDarwin>& typeface) {
+    typeface_set_.emplace_back(typeface);
   }
 
   std::shared_ptr<TypefaceDarwin> Find(CTFontRef ct_font) {
-    for (auto& typeface : typeface_set_) {
-      if (CFEqual(ct_font, typeface->GetCTFont())) {
-        return typeface;
+    for (auto typeface = typeface_set_.begin();
+         typeface != typeface_set_.end();) {
+      std::shared_ptr<TypefaceDarwin> retained = typeface->lock();
+      if (!retained) {
+        typeface = typeface_set_.erase(typeface);
+        continue;
       }
+      if (CFEqual(ct_font, retained->GetCTFont())) {
+        return retained;
+      }
+      ++typeface;
     }
     return nullptr;
   }
 
  private:
-  std::vector<std::shared_ptr<TypefaceDarwin>> typeface_set_;
+  std::vector<std::weak_ptr<TypefaceDarwin>> typeface_set_;
 };
 
 std::shared_ptr<TypefaceDarwin> TypefaceDarwin::Make(const FontStyle& style,
@@ -121,7 +126,7 @@ std::shared_ptr<TypefaceDarwin> TypefaceDarwin::Make(const FontStyle& style,
         new TypefaceDarwin(style, std::move(ct_font), collection_index));
     if (typeface_darwin) {
       typeface = typeface_darwin;
-      cache->Add(std::move(typeface_darwin));
+      cache->Add(typeface_darwin);
     }
   }
   return typeface;

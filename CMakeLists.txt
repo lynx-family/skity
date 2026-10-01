@@ -149,6 +149,10 @@ if(${SKITY_LOG})
   endif()
 endif()
 
+if(ANDROID)
+  target_link_libraries(skity PRIVATE android)
+endif()
+
 if(${SKITY_VK_BACKEND})
   target_compile_definitions(skity PUBLIC -DSKITY_VULKAN)
   if(CMAKE_BUILD_TYPE STREQUAL "Debug")

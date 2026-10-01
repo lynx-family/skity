@@ -250,6 +250,22 @@ void GPUBlitPassVK::UploadBufferData(GPUBuffer* buffer, void* data,
       command_buffer_->GetCommandBuffer(), staging_buffer->GetBuffer(),
       destination_buffer->GetBuffer(), 1, &copy_region);
 
+  VkBufferMemoryBarrier barrier = {};
+  barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+  barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  barrier.dstAccessMask = VK_ACCESS_INDEX_READ_BIT |
+                          VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+                          VK_ACCESS_UNIFORM_READ_BIT;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.buffer = destination_buffer->GetBuffer();
+  barrier.offset = 0;
+  barrier.size = size;
+  state_->DeviceFns().vkCmdPipelineBarrier(
+      command_buffer_->GetCommandBuffer(), VK_PIPELINE_STAGE_TRANSFER_BIT,
+      VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, &barrier, 0,
+      nullptr);
+
   command_buffer_->RecordStageBuffer(std::move(staging_buffer));
 }
 
