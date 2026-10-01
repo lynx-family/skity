@@ -18,7 +18,8 @@
 
 namespace skity {
 
-class SKITY_API ParsePath {
+// skity-io is a static library: see the note in skity/io/stream.hpp.
+class ParsePath {
  public:
   static std::optional<Path> FromSVGString(const char str[]);
 

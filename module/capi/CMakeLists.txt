@@ -20,6 +20,11 @@ target_include_directories(skity-capi PRIVATE ${SKITY_ROOT}/include)
 
 target_link_libraries(skity-capi PUBLIC skity)
 
+# This wrapper is its own DLL: it exports the C entry points (SKITY_C_API)
+# while importing the skity C++ symbols it forwards to. "skity" publishes
+# SKITY_IMPORTS to its dependents, so the second half is already in place.
+target_compile_definitions(skity-capi PRIVATE SKITY_CAPI_EXPORTS)
+
 target_compile_features(skity-capi PRIVATE cxx_std_17)
 
 # Match the core library's flags. -fno-strict-aliasing is required because the

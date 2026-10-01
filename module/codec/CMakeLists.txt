@@ -10,6 +10,11 @@ set(CMAKE_CXX_EXTENSIONS ON)
 add_library(skity-codec SHARED)
 add_library(skity::codec ALIAS skity-codec)
 
+# This is a shared library of its own (SKITY_CODEC_API), while the skity
+# symbols it uses are imported from the core DLL ("skity" publishes
+# SKITY_IMPORTS to its dependents).
+target_compile_definitions(skity-codec PRIVATE SKITY_CODEC_EXPORTS)
+
 target_include_directories(skity-codec PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
 target_include_directories(skity-codec PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_include_directories(skity-codec PRIVATE ${SKITY_ROOT}/include)

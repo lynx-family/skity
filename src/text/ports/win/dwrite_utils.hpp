@@ -15,6 +15,9 @@
 #include "src/text/ports/win/dwrite_version.hpp"
 #include "src/base/platform/win/lean_windows.hpp"
 #include "src/base/platform/win/handle_result.hpp"
+// Must follow dwrite_version.hpp and precede <dwrite.h>: it supplies the GUID
+// comparison operators that guiddef.h skips under _SYS_GUID_OPERATOR_EQ_.
+#include "src/base/platform/win/guid_operators.hpp"
 #ifdef GetGlyphIndices
 #undef GetGlyphIndices
 #endif

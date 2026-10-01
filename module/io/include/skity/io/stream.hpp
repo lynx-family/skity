@@ -13,7 +13,10 @@
 
 namespace skity {
 
-class SKITY_API WriteStream {
+// skity-io is a static library: its consumers link these objects directly, so
+// no dllexport/dllimport annotation applies. Only the skity:: symbols reached
+// through these headers belong to the core shared library.
+class WriteStream {
  public:
   WriteStream() = default;
 
@@ -44,7 +47,7 @@ class SKITY_API WriteStream {
   static std::unique_ptr<WriteStream> CreateFileStream(const std::string& path);
 };
 
-class SKITY_API ReadStream {
+class ReadStream {
  public:
   ReadStream() = default;
   virtual ~ReadStream() = default;
