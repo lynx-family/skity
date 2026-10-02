@@ -8,11 +8,6 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-// Must precede every include: <windows.h> pulls in guiddef.h, and this macro
-// makes it skip the inline GUID operators whose COMDAT MSVC 14.4x names "==".
-// See src/base/platform/win/guid_operators.hpp.
-#define _SYS_GUID_OPERATOR_EQ_
-
 #include "src/text/ports/win/scaler_context_win.hpp"
 
 // clang-format off
@@ -230,7 +225,8 @@ class DWritePathSink final : public IDWriteGeometrySink {
       return E_POINTER;
     }
 
-    if (riid == __uuidof(IUnknown) || riid == __uuidof(IDWriteGeometrySink)) {
+    if (IsEqualIID(riid, __uuidof(IUnknown)) ||
+        IsEqualIID(riid, __uuidof(IDWriteGeometrySink))) {
       *object = static_cast<IDWriteGeometrySink*>(this);
       AddRef();
       return S_OK;

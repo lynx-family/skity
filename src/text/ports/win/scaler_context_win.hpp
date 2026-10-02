@@ -7,9 +7,6 @@
 
 // clang-format off
 #include "src/text/ports/win/dwrite_version.hpp"
-// Supplies the GUID comparison operators that guiddef.h skips under
-// _SYS_GUID_OPERATOR_EQ_; it must precede any header that pulls in guiddef.h.
-#include "src/base/platform/win/guid_operators.hpp"
 #include <dwrite.h>
 // clang-format on
 

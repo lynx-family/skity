@@ -8,11 +8,6 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-// Must precede every include: <windows.h> pulls in guiddef.h, and this macro
-// makes it skip the inline GUID operators whose COMDAT MSVC 14.4x names "==".
-// See src/base/platform/win/guid_operators.hpp.
-#define _SYS_GUID_OPERATOR_EQ_
-
 #include "src/text/ports/win/typeface_win.hpp"
 
 // clang-format off
@@ -486,7 +481,8 @@ class DataFontFileStream : public IDWriteFontFileStream {
       return E_POINTER;
     }
 
-    if (riid == IID_IUnknown || riid == __uuidof(IDWriteFontFileStream)) {
+    if (IsEqualIID(riid, IID_IUnknown) ||
+        IsEqualIID(riid, __uuidof(IDWriteFontFileStream))) {
       *object = this;
       AddRef();
       return S_OK;
@@ -566,7 +562,8 @@ class DataFontFileLoader : public IDWriteFontFileLoader {
       return E_POINTER;
     }
 
-    if (riid == IID_IUnknown || riid == __uuidof(IDWriteFontFileLoader)) {
+    if (IsEqualIID(riid, IID_IUnknown) ||
+        IsEqualIID(riid, __uuidof(IDWriteFontFileLoader))) {
       *object = this;
       AddRef();
       return S_OK;
@@ -620,7 +617,8 @@ class DataFontFileEnumerator : public IDWriteFontFileEnumerator {
       return E_POINTER;
     }
 
-    if (riid == IID_IUnknown || riid == __uuidof(IDWriteFontFileEnumerator)) {
+    if (IsEqualIID(riid, IID_IUnknown) ||
+        IsEqualIID(riid, __uuidof(IDWriteFontFileEnumerator))) {
       *object = this;
       AddRef();
       return S_OK;
@@ -695,7 +693,8 @@ class DataFontCollectionLoader : public IDWriteFontCollectionLoader {
       return E_POINTER;
     }
 
-    if (riid == IID_IUnknown || riid == __uuidof(IDWriteFontCollectionLoader)) {
+    if (IsEqualIID(riid, IID_IUnknown) ||
+        IsEqualIID(riid, __uuidof(IDWriteFontCollectionLoader))) {
       *object = this;
       AddRef();
       return S_OK;
