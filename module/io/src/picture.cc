@@ -183,7 +183,9 @@ std::unique_ptr<Picture> Picture::MakeFromDisplayList(DisplayList* dl) {
   }
 
   auto rect = dl->GetBounds();
-  auto playback = std::make_unique<RecordPlayback>(rect.Width(), rect.Height());
+  auto playback =
+      std::make_unique<RecordPlayback>(static_cast<uint32_t>(rect.Width()),
+                                       static_cast<uint32_t>(rect.Height()));
 
   dl->Draw(playback.get());
 
@@ -304,7 +306,8 @@ void SkipPictureInBuffer(ReadBuffer& buffer) {
     return;
   }
 
-  RecordPlayback playback(info->cull_rect.Width(), info->cull_rect.Height(),
+  RecordPlayback playback(static_cast<uint32_t>(info->cull_rect.Width()),
+                          static_cast<uint32_t>(info->cull_rect.Height()),
                           info->version);
 
   playback.ParseBuffer(buffer);

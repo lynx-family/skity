@@ -31,7 +31,9 @@ target_compile_features(skity-capi PRIVATE cxx_std_17)
 # wrapper reinterprets the binary-compatible POD structs (skity_rect/matrix/...)
 # as their skity:: C++ counterparts across the boundary.
 if (MSVC)
-  target_compile_options(skity-capi PRIVATE /EHs-c-)
+  # /wd4530: STL headers still throw, which warns when unwind semantics are
+  # disabled on purpose (same as the core library in cmake/Platform.cmake).
+  target_compile_options(skity-capi PRIVATE /EHs-c- /wd4530)
 else()
   target_compile_options(skity-capi PRIVATE
     -fno-exceptions

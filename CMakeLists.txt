@@ -15,6 +15,12 @@ if(POLICY CMP0079)
   cmake_policy(SET CMP0079 NEW)
 endif()
 
+if(POLICY CMP0127)
+  # cmake_dependent_option() accepts full Condition Syntax; required by CMake 4
+  # to stop the dev warning when Options.cmake declares dependent options.
+  cmake_policy(SET CMP0127 NEW)
+endif()
+
 set(SKITY_VERSION 0.1.0)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
@@ -38,9 +44,21 @@ set(CMAKE_CXX_EXTENSIONS OFF) # disable -std=gnu++11 by default
 # options should set before define skity library
 include(cmake/Options.cmake)
 
+if (MSVC)
+  # Repository sources are UTF-8 without BOM; without this flag MSVC decodes
+  # them with the system code page, producing C4819/C4566 warnings (and
+  # mojibake in comments) on non-English locales.
+  add_compile_options(/utf-8)
+endif()
+
 if (MSVC AND SKITY_TEST)
   # MSVC needs to set export all symbols for test since UT case needs to access private symbols
   set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON CACHE BOOL "Force MSVC export all symbols")
+
+  # Export-all symbols makes every object file export the vtables it emits, so
+  # link.exe reports LNK4197 (export specified multiple times) for each one.
+  # The duplicates are benign by construction; keep the build log readable.
+  add_link_options(/ignore:4197)
 endif()
 
 # define library

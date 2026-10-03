@@ -957,14 +957,14 @@ std::vector<Attribute> AstPrinter::GetAttributes(
       }
     } else if (attr->GetType() == ast::AttributeType::kGroup) {
       auto group_attr = static_cast<ast::GroupAttribute*>(attr);
-      group_index = group_attr->index;
+      group_index = static_cast<uint32_t>(group_attr->index);
     } else if (attr->GetType() == ast::AttributeType::kBinding) {
       if (target == AttrTarget::kParameter ||
           target == AttrTarget::kStructMember) {
         auto binding_attr = static_cast<ast::BindingAttribute*>(attr);
         auto name = GetAttributeName(type);
         auto index = GetIndex(type, binding_attr->index);
-        binding_index = binding_attr->index;
+        binding_index = static_cast<uint32_t>(binding_attr->index);
         actual_index = index;
         attrs.emplace_back(Attribute{name, index});
       }

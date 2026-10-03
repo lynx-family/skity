@@ -22,6 +22,9 @@ elseif(WIN32)
     PUBLIC
     PRIVATE
     /EHs-c- # disable exceptions
+    # STL headers still contain throw expressions, which trigger C4530 when
+    # unwind semantics are disabled on purpose.
+    /wd4530
   )
 
   # Skity builds a shared library, so the library itself must be compiled with
