@@ -10,6 +10,11 @@ set(CMAKE_CXX_EXTENSIONS ON)
 add_library(skity-codec SHARED)
 add_library(skity::codec ALIAS skity-codec)
 
+# This is a shared library of its own (SKITY_CODEC_API), while the skity
+# symbols it uses are imported from the core DLL ("skity" publishes
+# SKITY_IMPORTS to its dependents).
+target_compile_definitions(skity-codec PRIVATE SKITY_CODEC_EXPORTS)
+
 target_include_directories(skity-codec PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
 target_include_directories(skity-codec PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_include_directories(skity-codec PRIVATE ${SKITY_ROOT}/include)
@@ -102,6 +107,14 @@ set(SKITY_LIBJPEG_ARGS
   -DCMAKE_MESSAGE_LOG_LEVEL=ERROR
 )
 
+if (MSVC)
+  # libjpeg-turbo defaults to the static CRT (LIBCMT[D]) which conflicts with
+  # the DLL CRT used by skity (LNK4098); build it with the matching /MD[d].
+  list(APPEND SKITY_LIBJPEG_ARGS -DWITH_CRT_DLL=1)
+  # turbojpeg.h contains UTF-8 characters; keep its inner build free of C4819.
+  list(APPEND SKITY_LIBJPEG_ARGS "-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS} /utf-8")
+endif()
+
 if (ANDROID)
   list(APPEND SKITY_LIBJPEG_ARGS
     -DANDROID_ABI=${ANDROID_ABI}
@@ -170,9 +183,14 @@ if (SKITY_ENABLE_CODEC_WEBP)
     ${CMAKE_CURRENT_LIST_DIR}/src/codec/webp/webp_decoder.hpp
   )
 
-  if (WIN32)
-    # This link config may not work if using llvm clang under minGW or msys2
+  if (MSVC)
+    # Items with a file extension are passed to link.exe verbatim, so
+    # "libwebp.lib" avoids the name clash with the ExternalProject_Add(libwebp)
+    # target that a bare "libwebp" would trigger.
+    target_link_libraries(skity-codec PRIVATE libwebpmux libwebpdemux libwebpdecoder libwebp.lib libsharpyuv)
+  elseif(WIN32)
     # FIXME: use -llibwebp to solve name conflict with ExternalProject_Add(libwebp ...)
+    # This link config may not work if using llvm clang under minGW or msys2
     target_link_libraries(skity-codec PRIVATE libwebpmux libwebpdemux libwebpdecoder -llibwebp libsharpyuv)
   else()
     # Keep dependency providers after dependents because these are raw library

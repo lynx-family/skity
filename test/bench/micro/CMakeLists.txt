@@ -18,9 +18,13 @@ target_include_directories(skity_micro_bench
     ${CMAKE_SOURCE_DIR}/example
 )
 
-target_compile_options(skity_micro_bench PUBLIC -fno-rtti)
-target_compile_options(skity_micro_bench PUBLIC -std=c++17)
+if(MSVC)
+    target_compile_options(skity_micro_bench PUBLIC /GR-)
+else()
+    target_compile_options(skity_micro_bench PUBLIC -fno-rtti -std=c++17)
+endif()
 target_compile_definitions(skity_micro_bench PUBLIC -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
+set_property(TARGET skity_micro_bench PROPERTY CXX_STANDARD 17)
 
 target_link_libraries(skity_micro_bench
     PUBLIC

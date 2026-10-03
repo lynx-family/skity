@@ -12,10 +12,11 @@ namespace skity {
 
 inline static GLenum GetShaderType(GPUShaderStage shader_stage) {
   switch (shader_stage) {
-    case GPUShaderStage::kVertex:
-      return GL_VERTEX_SHADER;
     case GPUShaderStage::kFragment:
       return GL_FRAGMENT_SHADER;
+    case GPUShaderStage::kVertex:
+    default:
+      return GL_VERTEX_SHADER;
   }
 }
 

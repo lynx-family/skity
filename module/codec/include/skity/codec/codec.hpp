@@ -10,6 +10,7 @@
 #include <optional>
 #include <skity/graphic/alpha_type.hpp>
 #include <skity/macros.hpp>
+#include <skity/module_api.hpp>
 #include <utility>
 #include <vector>
 
@@ -23,7 +24,7 @@ class Pixmap;
  *
  * The rectangle is defined as {left, top, right, bottom}.
  */
-struct SKITY_API CodecRect {
+struct SKITY_CODEC_API CodecRect {
   int32_t left = 0;
   int32_t top = 0;
   int32_t right = 0;
@@ -184,7 +185,7 @@ struct CodecFrameInfo {
 /**
  * A frame in a multi-frame image.
  */
-class SKITY_API CodecFrame {
+class SKITY_CODEC_API CodecFrame {
  public:
   CodecFrame(int32_t id, CodecFrameInfo info)
       : id_(id), info_(std::move(info)) {}
@@ -271,7 +272,7 @@ class SKITY_API CodecFrame {
  * @note The is a experimental API. The API is unstable and may change in the
  * future.
  */
-class SKITY_EXPERIMENTAL_API MultiFrameDecoder {
+class SKITY_CODEC_API SKITY_EXPERIMENTAL MultiFrameDecoder {
  public:
   virtual ~MultiFrameDecoder() = default;
 
@@ -355,7 +356,7 @@ struct DecodeOptions {
  *
  * @note This is experimental the API is unstable.
  */
-class SKITY_EXPERIMENTAL_API Codec {
+class SKITY_CODEC_API SKITY_EXPERIMENTAL Codec {
  public:
   Codec() = default;
   virtual ~Codec() = default;

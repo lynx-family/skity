@@ -794,23 +794,25 @@ void ScalerContextFreetype::GenerateMetrics(GlyphData* glyph) {
 
 static FT_Stroker_LineCap ToFreetypeCap(Paint::Cap cap) {
   switch (cap) {
-    case Paint::Cap::kButt_Cap:
-      return FT_STROKER_LINECAP_BUTT;
     case Paint::Cap::kRound_Cap:
       return FT_STROKER_LINECAP_ROUND;
     case Paint::Cap::kSquare_Cap:
       return FT_STROKER_LINECAP_SQUARE;
+    case Paint::Cap::kButt_Cap:
+    default:
+      return FT_STROKER_LINECAP_BUTT;
   }
 }
 
 static FT_Stroker_LineJoin ToFreetypeJoin(Paint::Join join) {
   switch (join) {
-    case Paint::Join::kBevel_Join:
-      return FT_STROKER_LINEJOIN_BEVEL;
     case Paint::Join::kRound_Join:
       return FT_STROKER_LINEJOIN_ROUND;
     case Paint::Join::kMiter_Join:
       return FT_STROKER_LINEJOIN_MITER;
+    case Paint::Join::kBevel_Join:
+    default:
+      return FT_STROKER_LINEJOIN_BEVEL;
   }
 }
 

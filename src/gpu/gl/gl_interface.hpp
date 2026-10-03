@@ -183,6 +183,12 @@ struct GLInterface {
   bool LoadExtensions(GLADloadfunc loader);
 };
 
+// The process-wide GL function table. Explicitly exported because a data
+// symbol cannot be resolved from a DLL without a matching dllimport
+// declaration, and consumers (for example the Windows unit tests) need to
+// install a mock table.
+SKITY_API extern GLInterface* g_interface;
+
 #if defined(SKITY_LOG) && defined(GL_VALIDATION)
 
 template <class F, class Enable = void>

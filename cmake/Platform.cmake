@@ -22,7 +22,19 @@ elseif(WIN32)
     PUBLIC
     PRIVATE
     /EHs-c- # disable exceptions
+    # STL headers still contain throw expressions, which trigger C4530 when
+    # unwind semantics are disabled on purpose.
+    /wd4530
   )
+
+  # Skity builds a shared library, so the library itself must be compiled with
+  # __declspec(dllexport) while every consumer has to see __declspec(dllimport).
+  # Note: CMake's automatic "<target>_EXPORTS" uses the target name verbatim
+  # (skity_EXPORTS, not SKITY_EXPORTS), so the macro is set explicitly here to
+  # keep it independent of the target name.
+  # See the SKITY_API definition in include/skity/macros.hpp.
+  target_compile_definitions(skity PRIVATE SKITY_EXPORTS)
+  target_compile_definitions(skity INTERFACE SKITY_IMPORTS)
 
 else()
   target_compile_options(
