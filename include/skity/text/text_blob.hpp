@@ -5,6 +5,7 @@
 #ifndef INCLUDE_SKITY_TEXT_TEXT_BLOB_HPP
 #define INCLUDE_SKITY_TEXT_TEXT_BLOB_HPP
 
+#include <mutex>
 #include <skity/graphic/paint.hpp>
 #include <skity/macros.hpp>
 #include <skity/text/text_run.hpp>
@@ -37,7 +38,11 @@ class SKITY_API TextBlob final {
                             const Font& font, const Paint& paint);
 
  private:
+  Rect CalculateBoundsRect() const;
+
   std::vector<TextRun> text_run_ = {};
+  mutable std::once_flag bounds_once_;
+  mutable Rect bounds_;
 };
 
 class SKITY_API TypefaceDelegate {

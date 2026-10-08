@@ -18,6 +18,11 @@ Vec2 TextBlob::GetBoundSize() const {
 }
 
 Rect TextBlob::GetBoundsRect() const {
+  std::call_once(bounds_once_, [this] { bounds_ = CalculateBoundsRect(); });
+  return bounds_;
+}
+
+Rect TextBlob::CalculateBoundsRect() const {
   if (text_run_.empty()) {
     return Rect::MakeEmpty();
   }
