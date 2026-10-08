@@ -181,6 +181,23 @@ TEST(BitmapSampler, LinearSample) {
   EXPECT_EQ(ColorGetB(center_color), 63);
 }
 
+TEST(BitmapSampler, LinearDecalPreservesStraightAlphaColor) {
+  skity::Bitmap bmp(1, 1, skity::AlphaType::kUnpremul_AlphaType,
+                    skity::ColorType::kRGBA);
+  bmp.SetPixel(0, 0, skity::Color_RED);
+
+  skity::SamplingOptions sampling(skity::FilterMode::kLinear,
+                                  skity::MipmapMode::kNone);
+  skity::BitmapSampler sampler(bmp, sampling, skity::TileMode::kDecal,
+                               skity::TileMode::kDecal);
+
+  const skity::Color edge = sampler.GetColor({0.25f, 0.25f});
+  EXPECT_EQ(ColorGetA(edge), 143);
+  EXPECT_EQ(ColorGetR(edge), 255);
+  EXPECT_EQ(ColorGetG(edge), 0);
+  EXPECT_EQ(ColorGetB(edge), 0);
+}
+
 TEST(BitmapSampler, TileModeClamp) {
   skity::Bitmap bmp(1, 1);
   bmp.SetPixel(0, 0, skity::Color_MAGENTA);

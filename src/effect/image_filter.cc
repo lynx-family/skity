@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <cmath>
+#include <vector>
 /*
  * Copyright 2012 The Android Open Source Project
  *
@@ -185,12 +188,89 @@ void ImageFilterBase::BlurBitmapToCanvas(Canvas* canvas, Bitmap& bitmap,
                                          const Rect& filter_bounds,
                                          const Paint& paint, float radius_x,
                                          float radius_y) {
+  auto make_kernel = [](float support_radius) {
+    const int radius =
+        std::max(0, static_cast<int>(std::ceil(support_radius)));
+    std::vector<float> weights(static_cast<size_t>(radius * 2 + 1), 0.0f);
+    if (radius == 0 || support_radius <= 0.0f) {
+      weights[0] = 1.0f;
+      return weights;
+    }
+
+    const float sigma = support_radius / 3.0f;
+    const float denominator = 2.0f * sigma * sigma;
+    float total = 0.0f;
+    for (int offset = -radius; offset <= radius; ++offset) {
+      const float weight =
+          std::exp(-(offset * offset) / denominator);
+      weights[static_cast<size_t>(offset + radius)] = weight;
+      total += weight;
+    }
+    for (float& weight : weights) {
+      weight /= total;
+    }
+    return weights;
+  };
+
+  auto convolve = [](Bitmap& source, Bitmap* destination,
+                     const std::vector<float>& weights, bool horizontal) {
+    const int radius = static_cast<int>((weights.size() - 1) / 2);
+    for (uint32_t y = 0; y < source.Height(); ++y) {
+      for (uint32_t x = 0; x < source.Width(); ++x) {
+        float alpha = 0.0f;
+        float red = 0.0f;
+        float green = 0.0f;
+        float blue = 0.0f;
+        for (int offset = -radius; offset <= radius; ++offset) {
+          const int sample_x = static_cast<int>(x) +
+                               (horizontal ? offset : 0);
+          const int sample_y = static_cast<int>(y) +
+                               (horizontal ? 0 : offset);
+          if (sample_x < 0 || sample_y < 0 ||
+              sample_x >= static_cast<int>(source.Width()) ||
+              sample_y >= static_cast<int>(source.Height())) {
+            continue;
+          }
+          const Color color = source.GetPixel(
+              static_cast<uint32_t>(sample_x),
+              static_cast<uint32_t>(sample_y));
+          const float weight =
+              weights[static_cast<size_t>(offset + radius)];
+          alpha += ColorGetA(color) * weight;
+          red += ColorGetR(color) * weight;
+          green += ColorGetG(color) * weight;
+          blue += ColorGetB(color) * weight;
+        }
+        const uint32_t output_alpha = static_cast<uint32_t>(
+            std::clamp(std::lround(alpha), 0l, 255l));
+        const auto premultiplied_channel = [output_alpha](float channel) {
+          return std::min(
+              output_alpha,
+              static_cast<uint32_t>(
+                  std::clamp(std::lround(channel), 0l, 255l)));
+        };
+        destination->SetPixel(
+            x, y,
+            ColorSetARGB(output_alpha, premultiplied_channel(red),
+                         premultiplied_channel(green),
+                         premultiplied_channel(blue)));
+      }
+    }
+  };
+
+  const std::vector<float> horizontal_kernel = make_kernel(radius_x);
+  const std::vector<float> vertical_kernel = make_kernel(radius_y);
+  Bitmap horizontal_bitmap(bitmap.Width(), bitmap.Height(),
+                           kPremul_AlphaType);
   Bitmap filtered_bitmap(bitmap.Width(), bitmap.Height(), kPremul_AlphaType);
-  SWStackBlur(&bitmap, &filtered_bitmap,
-              std::round(std::max(radius_x, radius_y)))
-      .Blur();
+  convolve(bitmap, &horizontal_bitmap, horizontal_kernel, true);
+  convolve(horizontal_bitmap, &filtered_bitmap, vertical_kernel, false);
+  Paint composite_paint = paint;
+  // The offscreen bitmap already contains the source alpha and color filter.
+  composite_paint.SetAlphaF(1.0f);
+  composite_paint.SetColorFilter(nullptr);
   canvas->DrawImage(Image::MakeImage(filtered_bitmap.GetPixmap()),
-                    filter_bounds, &paint);
+                    filter_bounds, &composite_paint);
 }
 
 void ImageFilterBase::FlattenToBuffer(WriteBuffer& buffer) const {

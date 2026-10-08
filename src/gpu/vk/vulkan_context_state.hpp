@@ -134,6 +134,8 @@ class VulkanContextState {
 
   void CollectPendingSubmissions(bool wait_all) const;
 
+  void CollectPendingSubmissionsThroughFence(VkFence completed_fence) const;
+
   /**
    * Defers destruction of a buffer allocation until every command buffer that
    * was in flight when the call happens has completed.
@@ -174,6 +176,8 @@ class VulkanContextState {
   bool LoadAvailableInstanceLayers();
   bool LoadAvailableDeviceExtensions();
   bool LoadDeviceFns();
+  void ReleaseCompletedSubmissions(
+      std::vector<VulkanPendingSubmission> completed_submissions) const;
   void Reset();
 #if defined(SKITY_ANDROID)
   void LoadAndroidFns();

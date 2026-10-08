@@ -21,16 +21,20 @@ float RemapFloatTile(float t, TileMode tile_mode) {
   }
   return t;
 }
+Color ReadColorXY(Bitmap& bitmap, Vec2 xy) {
+  uint32_t w = bitmap.Width();
+  uint32_t h = bitmap.Height();
+
+  xy.x = glm::clamp(xy.x, 0.0f, static_cast<float>(w - 1));
+  xy.y = glm::clamp(xy.y, 0.0f, static_cast<float>(h - 1));
+
+  return bitmap.GetPixel(static_cast<uint32_t>(xy.x),
+                         static_cast<uint32_t>(xy.y));
+}
 }  // namespace
 
 Vec4 BitmapSampler::SampleXY(Vec2 xy) const {
-  uint32_t w = bitmap_.Width();
-  uint32_t h = bitmap_.Height();
-
-  xy.x = glm::clamp<uint32_t>(xy.x, 0, w - 1);
-  xy.y = glm::clamp<uint32_t>(xy.y, 0, h - 1);
-
-  return Color4fFromColor(bitmap_.GetPixel(xy.x, xy.y));
+  return Color4fFromColor(ReadColorXY(bitmap_, xy));
 }
 
 Vec4 BitmapSampler::SampleUnitNearest(Vec2 uv) const {
@@ -39,7 +43,7 @@ Vec4 BitmapSampler::SampleUnitNearest(Vec2 uv) const {
   return SampleXY({uv.x * w, uv.y * h});
 }
 
-Vec4 BitmapSampler::SampleUnitLinear(Vec2 uv) const {
+Color BitmapSampler::SampleUnitLinear(Vec2 uv) const {
   uint32_t w = bitmap_.Width();
   uint32_t h = bitmap_.Height();
 
@@ -71,20 +75,57 @@ Vec4 BitmapSampler::SampleUnitLinear(Vec2 uv) const {
   float a = glm::fract(x - 0.5f);
   float b = glm::fract(y - 0.5f);
 
-  Vec4 ti0j0 = SampleXY({i0, j0});
-  Vec4 ti1j0 = SampleXY({i1, j0});
-  Vec4 ti0j1 = SampleXY({i0, j1});
-  Vec4 ti1j1 = SampleXY({i1, j1});
-
-  return ((1 - a) * (1 - b) * ti0j0) +  //
-         (a * (1 - b) * ti1j0) +        //
-         ((1 - a) * b * ti0j1) +        //
-         (a * b * ti1j1);
+  // Decal filtering blends individual transparent taps at the image edge.
+  // Rejecting the whole sample loses the covered part of fractional pixels.
+  const auto read_linear = [&](float ix, float iy) {
+    if ((x_tile_mode_ == TileMode::kDecal && (ix < 0 || ix >= w)) ||
+        (y_tile_mode_ == TileMode::kDecal && (iy < 0 || iy >= h))) {
+      return Color_TRANSPARENT;
+    }
+    return ReadColorXY(bitmap_, {ix, iy});
+  };
+  const Color ci0j0 = read_linear(i0, j0);
+  const Color ci1j0 = read_linear(i1, j0);
+  const Color ci0j1 = read_linear(i0, j1);
+  const Color ci1j1 = read_linear(i1, j1);
+  // Only fully zero texels qualify. Alpha-only or equal-color shortcuts can
+  // change interpolation/premultiplication and are deliberately excluded.
+  if ((ci0j0 | ci1j0 | ci0j1 | ci1j1) == 0 &&
+      std::isfinite(a) && std::isfinite(b)) {
+    return Color_TRANSPARENT;
+  }
+  const auto sample = [this](Color color) {
+    return Color4fFromColor(bitmap_.GetAlphaType() == kUnpremul_AlphaType
+                                ? ColorToPMColor(color)
+                                : color);
+  };
+  const Vec4 ti0j0 = sample(ci0j0);
+  const Vec4 ti1j0 = sample(ci1j0);
+  const Vec4 ti0j1 = sample(ci0j1);
+  const Vec4 ti1j1 = sample(ci1j1);
+  const Color premultiplied = Color4fToColor(
+      ((1 - a) * (1 - b) * ti0j0) +  //
+      (a * (1 - b) * ti1j0) +        //
+      ((1 - a) * b * ti0j1) +        //
+      (a * b * ti1j1));
+  return bitmap_.GetAlphaType() == kUnpremul_AlphaType
+             ? PMColorToColor(premultiplied)
+             : premultiplied;
 }
 
 Color BitmapSampler::GetColor(Vec2 uv) const {
-  if ((x_tile_mode_ == TileMode::kDecal && (uv.x < 0.0 || uv.x >= 1.0)) ||
-      (y_tile_mode_ == TileMode::kDecal && (uv.y < 0.0 || uv.y >= 1.0))) {
+  if (!std::isfinite(uv.x) || !std::isfinite(uv.y) ||
+      bitmap_.Width() == 0 || bitmap_.Height() == 0) return Color_TRANSPARENT;
+  if (sampling_options_.filter == FilterMode::kLinear &&
+      ((x_tile_mode_ == TileMode::kDecal &&
+        (uv.x <= -0.5f / bitmap_.Width() || uv.x >= 1 + 0.5f / bitmap_.Width())) ||
+       (y_tile_mode_ == TileMode::kDecal &&
+        (uv.y <= -0.5f / bitmap_.Height() || uv.y >= 1 + 0.5f / bitmap_.Height())))) {
+    return Color_TRANSPARENT;
+  }
+  if (sampling_options_.filter != FilterMode::kLinear &&
+      ((x_tile_mode_ == TileMode::kDecal && (uv.x < 0.0 || uv.x >= 1.0)) ||
+       (y_tile_mode_ == TileMode::kDecal && (uv.y < 0.0 || uv.y >= 1.0)))) {
     return Color_TRANSPARENT;
   }
 
@@ -93,15 +134,14 @@ Color BitmapSampler::GetColor(Vec2 uv) const {
   Color color;
   // The SW backend does not implement cubic resampling; fall back to bilinear.
   if (sampling_options_.UseCubic()) {
-    color = Color4fToColor(SampleUnitLinear(uv));
-    return color;
+    return SampleUnitLinear(uv);
   }
   switch (sampling_options_.filter) {
     case FilterMode::kNearest:
       color = Color4fToColor(SampleUnitNearest(uv));
       break;
     case FilterMode::kLinear:
-      color = Color4fToColor(SampleUnitLinear(uv));
+      color = SampleUnitLinear(uv);
       break;
   }
   return color;

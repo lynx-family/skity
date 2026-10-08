@@ -149,6 +149,44 @@ void Font::LoadGlyphBitmap(const GlyphID* glyphs, uint32_t count,
   scaler_context_container->PrepareImages(glyphs, count, glyph_data, paint);
 }
 
+#if defined(__APPLE__)
+namespace {
+bool NativePhaseDescriptor(const Font& font, const Paint& paint,
+                           uint32_t phase, ScalerContextDesc* desc) {
+  const auto typeface = font.GetTypeface();
+  if (phase > 3 || !typeface || typeface->ContainsColorTable() ||
+      paint.GetStyle() != Paint::kFill_Style || font.GetScaleX() != 1.0f ||
+      font.GetSkewX() != 0.0f || font.IsEmbolden()) {
+    return false;
+  }
+  *desc = ScalerContextDesc::MakeTransformed(font, paint, 1.0f, Matrix22{});
+  desc->native_raster_phase = phase + 1;
+  const Color color = Color4fToColor(paint.GetFillColor());
+  const uint32_t luminance = (77 * ColorGetR(color) + 150 * ColorGetG(color) +
+                              29 * ColorGetB(color) + 128) >> 8;
+  desc->foreground_color = ColorSetARGB(255, luminance, luminance, luminance);
+  return true;
+}
+}  // namespace
+
+void Font::LoadGlyphBitmapAtPhase(const GlyphID* glyphs, uint32_t count,
+                                  const GlyphData* glyph_data[],
+                                  const Paint& paint,
+                                  uint32_t quarter_pixel_phase) const {
+  ScalerContextDesc desc;
+  if (count != 1 ||
+      !NativePhaseDescriptor(*this, paint, quarter_pixel_phase, &desc)) {
+    LoadGlyphBitmap(glyphs, count, glyph_data, paint, 1.0f, Matrix());
+    return;
+  }
+  auto container = ScalerContextCache::GlobalScalerContextCache()
+                       ->FindOrCreateScalerContext(desc, typeface_);
+  const PackedGlyphID packed_glyph_id(
+      glyphs[0], static_cast<uint8_t>(quarter_pixel_phase), 0);
+  container->PrepareImages(&packed_glyph_id, 1, glyph_data, paint);
+}
+#endif
+
 void Font::LoadGlyphBitmapInfo(const GlyphID* glyphs, uint32_t count,
                                const GlyphData* glyph_data[],
                                const Paint& paint, float context_scale,

@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <memory>
 #include <skity/gpu/gpu_context_vk.hpp>
@@ -1419,6 +1420,39 @@ TEST_F(VulkanSharedContextTest, CollectPendingSubmissionsRunsCleanupActions) {
   GetState()->CollectPendingSubmissions(true);
 
   EXPECT_TRUE(cleanup_ran);
+}
+
+TEST_F(VulkanSharedContextTest,
+       CollectPendingSubmissionsThroughFencePreservesNewerSubmissions) {
+  ASSERT_NE(GetState(), nullptr);
+
+  const auto& device_fns = GetState()->DeviceFns();
+  std::array<VkFence, 3> fences = {};
+  VkFenceCreateInfo fence_info = {};
+  fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+  for (VkFence& fence : fences) {
+    ASSERT_EQ(device_fns.vkCreateFence(GetState()->GetLogicalDevice(),
+                                       &fence_info, nullptr, &fence),
+              VK_SUCCESS);
+  }
+
+  std::array<bool, 3> cleanup_ran = {};
+  for (size_t i = 0; i < fences.size(); ++i) {
+    std::vector<std::function<void()>> cleanup_actions;
+    cleanup_actions.emplace_back(
+        [&cleanup_ran, i]() { cleanup_ran[i] = true; });
+    GetState()->EnqueuePendingSubmission(skity::VulkanPendingSubmission(
+        fences[i], VK_NULL_HANDLE, {}, std::move(cleanup_actions)));
+  }
+
+  GetState()->CollectPendingSubmissionsThroughFence(fences[1]);
+  EXPECT_TRUE(cleanup_ran[0]);
+  EXPECT_TRUE(cleanup_ran[1]);
+  EXPECT_FALSE(cleanup_ran[2]);
+
+  GetState()->CollectPendingSubmissionsThroughFence(fences[2]);
+  EXPECT_TRUE(cleanup_ran[2]);
 }
 
 TEST_F(VulkanSharedContextTest, CreateMultiUseTextureUsesGeneralLayout) {

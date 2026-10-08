@@ -40,6 +40,10 @@
 #include <memory>
 #include <skity/gpu/gpu_context_vk.hpp>
 
+#if defined(SKITY_ANDROID)
+#include <android/native_window.h>
+#endif
+
 #include "src/gpu/vk/gpu_context_impl_vk.hpp"
 #include "src/gpu/vk/gpu_presenter_vk.hpp"
 #include "src/gpu/vk/vulkan_context_state.hpp"
@@ -256,6 +260,11 @@ class GPUNativeWindowVKImpl final : public GPUNativeWindowVK {
   ~GPUNativeWindowVKImpl() override {
     presenter_.reset();
     DestroySurface();
+#if defined(SKITY_ANDROID)
+    if (android_window_ != nullptr) {
+      ANativeWindow_release(android_window_);
+    }
+#endif
   }
 
   bool Init() {
@@ -282,6 +291,18 @@ class GPUNativeWindowVKImpl final : public GPUNativeWindowVK {
       LOGE("Failed to load vkDestroySurfaceKHR");
       return false;
     }
+
+#if defined(SKITY_ANDROID)
+    if (info_.native_window.type == VKNativeWindowType::kAndroid) {
+      android_window_ =
+          static_cast<ANativeWindow*>(info_.native_window.handle);
+      if (android_window_ == nullptr) {
+        LOGE("Failed to initialize GPUNativeWindowVK: missing ANativeWindow");
+        return false;
+      }
+      ANativeWindow_acquire(android_window_);
+    }
+#endif
 
     if (!CreateVkSurfaceForWindow(state_, info_.native_window, &surface_)) {
       LOGE("Failed to initialize GPUNativeWindowVK: surface creation failed");
@@ -320,6 +341,30 @@ class GPUNativeWindowVKImpl final : public GPUNativeWindowVK {
     }
 
     return RecreatePresenter(width, height);
+  }
+
+  bool RetireWindow(
+      std::unique_ptr<GPUNativeWindowVK>&& window) override {
+    if (window == nullptr || window.get() == this ||
+        window->GetContext() != context_ || presenter_ == nullptr ||
+        window->GetPresenter() == nullptr) {
+      return false;
+    }
+
+    // The public contract limits this operation to windows returned by the
+    // factory, whose implementation and presenter are both Vulkan-specific.
+    auto* retired_window = static_cast<GPUNativeWindowVKImpl*>(window.get());
+    auto* replacement_presenter =
+        static_cast<GPUPresenterVK*>(presenter_.get());
+    std::unique_ptr<GPUPresenterVK> retired_presenter(
+        static_cast<GPUPresenterVK*>(retired_window->presenter_.release()));
+    std::shared_ptr<GPUNativeWindowVK> retained_window(std::move(window));
+    replacement_presenter->RetirePresenter(
+        std::move(retired_presenter),
+        [retained_window = std::move(retained_window)]() mutable {
+          retained_window.reset();
+        });
+    return true;
   }
 
  private:
@@ -367,6 +412,13 @@ class GPUNativeWindowVKImpl final : public GPUNativeWindowVK {
       return false;
     }
 
+    if (presenter_ != nullptr) {
+      auto* replacement = static_cast<GPUPresenterVK*>(presenter.get());
+      std::unique_ptr<GPUPresenterVK> retired(
+          static_cast<GPUPresenterVK*>(presenter_.release()));
+      replacement->RetirePresenter(std::move(retired));
+    }
+
     presenter_ = std::move(presenter);
     width_ = width;
     height_ = height;
@@ -405,6 +457,9 @@ class GPUNativeWindowVKImpl final : public GPUNativeWindowVK {
   VkSurfaceKHR surface_ = VK_NULL_HANDLE;
   uint32_t width_ = 0;
   uint32_t height_ = 0;
+#if defined(SKITY_ANDROID)
+  ANativeWindow* android_window_ = nullptr;
+#endif
 };
 
 }  // namespace
