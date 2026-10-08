@@ -135,6 +135,18 @@ class VulkanContextState {
   void CollectPendingSubmissions(bool wait_all) const;
 
   /**
+   * Defers destruction of a buffer allocation until every command buffer that
+   * was in flight when the call happens has completed.
+   *
+   * Buffer replacement (e.g. the persistent staging buffers growing during a
+   * frame while earlier frames still execute) must not destroy the old VkBuffer
+   * handle immediately: a submitted command buffer may still reference it and
+   * destroying it then is undefined behavior regardless of any barrier recorded
+   * later.
+   */
+  void RetireBufferAllocation(VkBuffer buffer, VmaAllocation allocation) const;
+
+  /**
    * Returns true once the logical device has been reported lost (e.g. by
    * vkQueueSubmit / vkQueuePresentKHR / fence query). After a device loss the
    * only useful recovery is to tear the whole context down and recreate it;
@@ -201,6 +213,17 @@ class VulkanContextState {
 #endif
   mutable std::vector<VulkanPendingSubmission> pending_submissions_ = {};
   mutable VulkanRenderPassCache render_pass_cache_ = {};
+
+  struct RetiredBufferAllocation {
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VmaAllocation allocation = nullptr;
+    // Fences of the submissions that were pending when the allocation was
+    // retired; the pair is destroyed once all of them have signaled.
+    std::vector<VkFence> wait_fences = {};
+  };
+  mutable std::vector<RetiredBufferAllocation> retired_buffer_allocations_ = {};
+
+  void CollectRetiredBufferAllocations() const;
 };
 
 }  // namespace skity
