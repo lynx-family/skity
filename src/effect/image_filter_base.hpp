@@ -5,6 +5,7 @@
 #ifndef SRC_EFFECT_IMAGE_FILTER_BASE_HPP
 #define SRC_EFFECT_IMAGE_FILTER_BASE_HPP
 
+#include <algorithm>
 #include <memory>
 #include <skity/effect/image_filter.hpp>
 #include <vector>
@@ -31,9 +32,15 @@ enum class ImageFilterType {
 
 constexpr static float kBlueSigmaScale = 0.57735f;
 
+// Minimal fractional radius kept for 0 < sigma <= 0.5 so the GPU blur kernel
+// still runs a minimal neighborhood sample instead of collapsing to identity.
+constexpr static float kMinBlurRadius = 0.05f;
+
 // Alternative -- skia SigmaRadius, but donot use with ConvertRadiusToSigma
 inline float ConvertSigmaToRadius(float sigma) {
-  return sigma > 0.5f ? (sigma - 0.5f) / kBlueSigmaScale : 0.0f;
+  return sigma > 0.f
+             ? std::max((sigma - 0.5f) / kBlueSigmaScale, kMinBlurRadius)
+             : 0.0f;
 }
 
 inline float ConvertRadiusToSigma(float radius) {
