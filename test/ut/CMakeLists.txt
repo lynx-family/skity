@@ -155,6 +155,7 @@ endif()
 # C API wrapper tests (CPU-only; replay targets are recording canvases).
 if (${SKITY_CAPI_MODULE})
     target_sources(skity_unit_test PRIVATE
+        capi/bridge_c_test.cc
         capi/recorder_c_test.cc
         capi/text_delegate_c_test.cc
     )
