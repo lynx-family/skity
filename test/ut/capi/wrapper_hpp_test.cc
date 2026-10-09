@@ -71,6 +71,15 @@ Paint RedStrokePaint() {
 
 }  // namespace
 
+TEST(WrapperHpp, VkHandleAdoptionBridges) {
+  // Raw-C handles (e.g. from skity_context_create_vk or a native-window
+  // acquire) adopt into the RAII layer; empty stays empty.
+  auto context = skity::raii::Context::Adopt(nullptr);
+  EXPECT_FALSE(context);
+  auto surface = skity::raii::Surface::Adopt(nullptr);
+  EXPECT_FALSE(surface);
+}
+
 TEST(WrapperHpp, SemaphoreNeutralApi) {
   // Compile + NULL-path gate; real semaphores need a GPU context (Vulkan).
   Semaphore semaphore = Semaphore::Adopt(nullptr);

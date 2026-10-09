@@ -412,8 +412,11 @@ Not wrapped (intentionally, for now): the Vulkan-specific domains
 (`skity_context_vk` / `skity_surface_vk` / `skity_texture_vk` /
 `skity_native_window_vk` — wrapping them would force `<vulkan/vulkan.h>`
 into every consumer; the semaphore and its surface wait are wrapped via the
-neutral pass-through), `skity_precompile`, and `skity_texture` (entered
-through `Image::MakeFromTexture` / promise callbacks instead).
+neutral pass-through). Vulkan consumers create / acquire through the raw C
+headers and adopt the handles into the RAII layer via `Context::Adopt` /
+`Surface::Adopt`. Also unwrapped by design: `skity_precompile`, and
+`skity_texture` (entered through `Image::MakeFromTexture` / promise
+callbacks instead).
 `skity_bridge.hpp` is the reverse direction (C++ objects lent INTO C
 handles) and is not part of the RAII layer.
 

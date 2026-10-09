@@ -42,6 +42,13 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
   }
 
   /**
+   * Adopt a surface handle created through the raw C API — e.g. one
+   * acquired from skity_native_window_acquire_next_surface_vk. The wrapper
+   * takes ownership; destroying it releases (invalidates) the surface.
+   */
+  static Surface Adopt(skity_surface handle) { return Surface(handle); }
+
+  /**
    * Lock the canvas for the current frame. The returned view (and the
    * underlying canvas) stays valid until the next LockCanvas call or
    * until the surface is destroyed. Call Canvas::Flush, then Flush().
@@ -75,6 +82,9 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
   void AddExternalWaitSemaphore(const Semaphore& semaphore) {
     skity_surface_add_external_wait_semaphore(get(), semaphore.get());
   }
+
+ private:
+  explicit Surface(skity_surface h) : OwnHandle(h) {}
 };
 
 }  // namespace raii

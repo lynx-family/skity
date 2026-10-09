@@ -20,6 +20,9 @@ namespace raii {
 /** GPU context wrapper: root of the GPU backend, owns surfaces. */
 class Context : public detail::OwnHandle<skity_context, skity_context_destroy> {
  public:
+  /** Empty context — placeholder for optional-context parameters. */
+  Context() = default;
+
   /**
    * Create an OpenGL / OpenGL ES context. @p get_proc loads GL symbol
    * addresses (glad GLADloadfunc contract); a live GL context is required.
@@ -33,6 +36,14 @@ class Context : public detail::OwnHandle<skity_context, skity_context_destroy> {
     }
     return result;
   }
+
+  /**
+   * Adopt a context created through the raw C API — the bridge for
+   * backends whose creation entry points stay unwrapped by design (e.g.
+   * skity_context_create_vk, whose signature carries Vulkan types). The
+   * wrapper takes ownership; destroying it releases the context.
+   */
+  static Context Adopt(skity_context handle) { return Context(handle); }
 
   /** Register a callback receiving engine error reports (NULL clears). */
   void SetErrorCallback(skity_gpu_error_callback callback, void* userdata) {
@@ -107,6 +118,9 @@ class Context : public detail::OwnHandle<skity_context, skity_context_destroy> {
   BackendType GetBackendType() const {
     return static_cast<BackendType>(skity_context_get_backend_type(get()));
   }
+
+ private:
+  explicit Context(skity_context h) : OwnHandle(h) {}
 };
 
 }  // namespace raii
