@@ -3,8 +3,10 @@
 // LICENSE file in the root directory of this source tree.
 
 // Objective-C++ side of the Metal C API glue (see mtl_glue.hpp). Only
-// compiled when SKITY_MTL_BACKEND is on. The TU is compiled without ARC
-// (matching the core skity .mm sources), so plain pointer casts suffice.
+// compiled when SKITY_MTL_BACKEND is on. All void* <-> Objective-C pointer
+// conversions use __bridge casts so the file compiles both under ARC (the
+// darwin framework builds it with Xcode's default) and without it (the
+// plain CMake build).
 
 #import <skity/gpu/gpu_context_mtl.h>
 
@@ -14,35 +16,34 @@ namespace skity {
 namespace capi {
 
 std::unique_ptr<GPUContext> MtlContextCreateGlue(void* device, void* queue) {
-  return MTLContextCreate((id<MTLDevice>)device, (id<MTLCommandQueue>)queue);
+  return MTLContextCreate((__bridge id<MTLDevice>)device, (__bridge id<MTLCommandQueue>)queue);
 }
 
 void* MtlContextGetDeviceGlue(GPUContext* context) {
-  return (void*)MTLContextGetDevice(context);
+  return (__bridge void*)MTLContextGetDevice(context);
 }
 
 void* MtlContextGetCommandQueueGlue(GPUContext* context) {
-  return (void*)MTLContextGetCommandQueue(context);
+  return (__bridge void*)MTLContextGetCommandQueue(context);
 }
 
-std::unique_ptr<GPUSurface> MtlSurfaceCreateGlue(
-    GPUContext* context, const skity_surface_create_info* info,
-    const skity_surface_create_info_mtl* extension) {
+std::unique_ptr<GPUSurface> MtlSurfaceCreateGlue(GPUContext* context,
+                                                 const skity_surface_create_info* info,
+                                                 const skity_surface_create_info_mtl* extension) {
   GPUSurfaceDescriptorMTL descriptor{};
   descriptor.backend = GPUBackendType::kMetal;
   descriptor.width = info->width;
   descriptor.height = info->height;
   descriptor.sample_count = info->sample_count ? info->sample_count : 1;
-  descriptor.content_scale =
-      info->content_scale != 0.f ? info->content_scale : 1.f;
+  descriptor.content_scale = info->content_scale != 0.f ? info->content_scale : 1.f;
   switch (extension->surface_type) {
     case SKITY_MTL_SURFACE_TYPE_TEXTURE:
       descriptor.surface_type = MTLSurfaceType::kTexture;
-      descriptor.texture = (id<MTLTexture>)extension->texture;
+      descriptor.texture = (__bridge id<MTLTexture>)extension->texture;
       break;
     case SKITY_MTL_SURFACE_TYPE_LAYER:
       descriptor.surface_type = MTLSurfaceType::kLayer;
-      descriptor.layer = (CAMetalLayer*)extension->layer;
+      descriptor.layer = (__bridge CAMetalLayer*)extension->layer;
       break;
     default:
       return nullptr;
@@ -50,17 +51,18 @@ std::unique_ptr<GPUSurface> MtlSurfaceCreateGlue(
   return context->CreateSurface(&descriptor);
 }
 
-std::shared_ptr<Texture> MtlWrapTextureGlue(
-    GPUContext* context, const skity_backend_texture_info* info,
-    const skity_backend_texture_info_mtl* extension,
-    skity_texture_release_callback release, void* userdata) {
+std::shared_ptr<Texture> MtlWrapTextureGlue(GPUContext* context,
+                                            const skity_backend_texture_info* info,
+                                            const skity_backend_texture_info_mtl* extension,
+                                            skity_texture_release_callback release,
+                                            void* userdata) {
   GPUBackendTextureInfoMTL bi{};
   bi.backend = GPUBackendType::kMetal;
   bi.width = info->width;
   bi.height = info->height;
   bi.format = static_cast<TextureFormat>(info->format);
   bi.alpha_type = static_cast<AlphaType>(info->alpha_type);
-  bi.texture = (id<MTLTexture>)extension->texture;
+  bi.texture = (__bridge id<MTLTexture>)extension->texture;
   return context->WrapTexture(&bi, release, userdata);
 }
 
