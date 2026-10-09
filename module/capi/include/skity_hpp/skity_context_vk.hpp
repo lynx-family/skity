@@ -23,10 +23,13 @@ namespace raii {
  */
 inline skity_result CreateVkContext(
     PFN_vkGetInstanceProcAddr get_instance_proc_addr, Context* out) {
+  if (out == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
   skity_context handle = nullptr;
   skity_result result =
       skity_context_create_vk(get_instance_proc_addr, &handle);
-  if (result == SKITY_SUCCESS && out != nullptr) {
+  if (result == SKITY_SUCCESS) {
     out->reset(handle);
   }
   return result;
@@ -39,9 +42,12 @@ inline skity_result CreateVkContext(
  */
 inline skity_result CreateVkContext(const skity_context_create_info_vk& info,
                                     Context* out) {
+  if (out == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
   skity_context handle = nullptr;
   skity_result result = skity_context_create_vk_ex(&info, &handle);
-  if (result == SKITY_SUCCESS && out != nullptr) {
+  if (result == SKITY_SUCCESS) {
     out->reset(handle);
   }
   return result;

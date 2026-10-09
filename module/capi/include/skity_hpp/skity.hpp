@@ -71,6 +71,7 @@
 #include <skity_hpp/skity_canvas.hpp>
 #include <skity_hpp/skity_color_filter.hpp>
 #include <skity_hpp/skity_context.hpp>
+#include <skity_hpp/skity_context_mtl.hpp>
 #include <skity_hpp/skity_data.hpp>
 #include <skity_hpp/skity_glyph.hpp>
 #include <skity_hpp/skity_image.hpp>
@@ -87,13 +88,17 @@
 #include <skity_hpp/skity_shader.hpp>
 #include <skity_hpp/skity_stroke.hpp>
 #include <skity_hpp/skity_surface.hpp>
+#include <skity_hpp/skity_surface_mtl.hpp>
 #include <skity_hpp/skity_text.hpp>
 #include <skity_hpp/skity_texture.hpp>
+#include <skity_hpp/skity_texture_mtl.hpp>
 #include <skity_hpp/skity_types.hpp>
 
 // Vulkan-only wrapper headers (context / surface / texture / native-window
 // / semaphore sync-fd import, aggregated by skity_vk.hpp) are deliberately
 // NOT included here: they pull in <vulkan/vulkan.h>. VK consumers include
-// <skity_hpp/skity_vk.hpp> instead.
+// <skity_hpp/skity_vk.hpp> instead. The Metal wrappers ARE included above:
+// their C headers carry Objective-C pointers as void*, so they stay
+// portable and force no Objective-C includes on other consumers.
 
 #endif  // MODULE_CAPI_INCLUDE_SKITY_HPP_SKITY_HPP

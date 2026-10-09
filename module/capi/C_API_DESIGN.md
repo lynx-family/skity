@@ -382,15 +382,16 @@ arithmetic, color packing) are implemented inline in `skity_types.hpp`.
 `test/ut/capi/wrapper_hpp_test.cc` is the compile + CPU smoke gate.
 
 Coverage (2026-10, counted mechanically over `SKITY_C_API` declarations):
-394 C functions across 28 domain headers plus 3 extension-struct-only
-headers (`skity_semaphore_vk.h` / `skity_surface_vk.h` /
-`skity_texture_vk.h`). The wrapper layer forwards 390 of them (98%): 383
-through the neutral `skity.hpp` umbrella, 9 through the VK opt-in headers
-(2 `context_vk` + 7 `native_window_vk`); the 4 precompile entry points are
-deliberately unwrapped (below). 20 of the 33 wrapper headers carry handle
-classes (28 `OwnHandle` classes in total); the rest are POD /
-free-function / view layers (types, stroke, path_op, quaternion, canvas
-view, bridge).
+397 C functions across the headers under `skity_c/`. The wrapper layer
+forwards 393 of them (98%) — everything except the 4 precompile entry
+points (below). 9 of those are VK-specific functions behind the opt-in
+`skity_vk.hpp` (2 `context_vk` + 7 `native_window_vk`); all the rest live
+in the neutral `skity.hpp` umbrella, including the 3 Metal context
+entries (`skity_context_mtl.h`) — the Metal C headers pass Objective-C
+pointers as `void*`, so unlike Vulkan they force no backend headers on
+other consumers. 20 of the 36 wrapper headers carry handle classes (27
+`OwnHandle` classes in total); the rest are POD / free-function / view
+layers.
 
 Value-type wrappers mirror their copyable C++ counterparts: `Paint`, `Path`
 and `Font` have copy construction / assignment that clones the underlying
@@ -422,6 +423,9 @@ wrappers own uniquely and remain move-only.
 | `skity_surface` | `skity_surface.hpp` | create / lock-canvas / flush / size / read-pixels (GL CreateInfo path), `AddExternalWaitSemaphore` |
 | `skity_context` | `skity_context.hpp` | `CreateGL`, error callback, all `set_enable_*` tuning knobs, resource cache limit |
 | `skity_texture` | `skity_texture.hpp` | `Texture` (create / create-with-descriptor / wrap-from-backend incl. p_next extension chaining, immediate + deferred upload, size queries) |
+| `skity_context_mtl` | `skity_context_mtl.hpp` | free functions `CreateMtlContext` (device / queue optional) + `GetMtlDevice` / `GetMtlCommandQueue` (Objective-C pointers as `void*`) |
+| `skity_surface_mtl` | `skity_surface_mtl.hpp` | `CreateMtlSurface` — chains the MTL CreateInfo extension (one-shot `id<MTLTexture>` or `CAMetalLayer` target) |
+| `skity_texture_mtl` | `skity_texture_mtl.hpp` | `WrapMtlTexture` — wraps an existing `id<MTLTexture>` as a `Texture` |
 | `skity_font` + `skity_text` | `skity_text.hpp` | `Typeface` (load / default / unichar→glyph / style / tables / variations / `MakeVariation`), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / bounds / make-with-size / `LoadGlyph*` family, copy semantics with shared typeface), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
 | `skity_glyph` | `skity_glyph.hpp` | `GlyphData` non-owning views over the global glyph cache (metrics / bearings / outline path / bitmap description), `GlyphFormat` / `BitmapFormat` enums, `GlyphBitmap` POD passthrough |
 | `skity_recorder` | `skity_recorder.hpp` | `PictureRecorder` (+ build options, last-op offset) and `DisplayList` (draw / cull-rect draw / bounds / op count / properties / rtree search / per-op paint mutation) |
@@ -513,6 +517,11 @@ These modules have complete (or near-complete) C coverage of their core:
   precompile, `create_texture`, `wrap_texture`, `set_resource_cache_limit`)
 - `GPUNativeWindowVK` / presenter lifecycle (create, resize,
   `acquire_next_surface`, `present` through `skity_native_window_vk`)
+- Metal backend (`skity_context_mtl.h` / `skity_surface_mtl.h` /
+  `skity_texture_mtl.h`): context create + device / queue getters, and the
+  surface / texture-wrap p_next extensions — Objective-C pointers cross as
+  `void*`, implemented by `mtl_glue.mm` when `SKITY_MTL_BACKEND` is on
+  (`SKITY_ERROR_NOT_SUPPORTED` otherwise)
 - `Bitmap` / `Pixmap` (pixel access, buffer wrapping via
   `data_make_with_proc` + `pixmap_create` + `bitmap_create_from_pixmap`,
   `set_color_info`), `image_read_pixels`

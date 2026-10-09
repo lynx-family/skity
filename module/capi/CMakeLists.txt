@@ -58,6 +58,17 @@ if (${SKITY_VK_BACKEND})
   )
 endif()
 
+# The Metal glue needs Objective-C++ (Metal / CAMetalLayer headers), so it is
+# only compiled when the Metal backend is enabled; context_mtl_c.cpp is
+# portable and returns SKITY_ERROR_NOT_SUPPORTED without it.
+set(SKITY_CAPI_METAL_SOURCES)
+if (${SKITY_MTL_BACKEND})
+  target_compile_definitions(skity-capi PRIVATE -DSKITY_METAL)
+  list(APPEND SKITY_CAPI_METAL_SOURCES
+    ${CMAKE_CURRENT_LIST_DIR}/src/mtl_glue.mm
+  )
+endif()
+
 # Match the core library's LTO setting (see the skity target in the root
 # CMakeLists.txt). On Android release builds skity objects are compiled with
 # -flto, so this wrapper must also link with -flto or strict linkers reject
@@ -89,8 +100,10 @@ target_sources(
   PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/src/handle.hpp
     ${CMAKE_CURRENT_LIST_DIR}/src/context_c.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/context_mtl_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/surface_c.cpp
     ${SKITY_CAPI_VULKAN_SOURCES}
+    ${SKITY_CAPI_METAL_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/src/canvas_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/paint_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/path_c.cpp

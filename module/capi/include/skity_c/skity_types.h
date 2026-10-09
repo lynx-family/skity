@@ -199,6 +199,10 @@ typedef enum {
                                                     descriptor */
   SKITY_STRUCTURE_TYPE_SEMAPHORE_IMPORT_INFO_VK, /**< Vulkan-specific
                                                     semaphore import info */
+  SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_MTL,  /**< Metal-specific surface
+                                                    creation info */
+  SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_MTL, /**< Metal-specific backend
+                                                    texture info */
 } skity_structure_type;
 
 /**

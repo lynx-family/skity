@@ -29,9 +29,12 @@ class Context : public detail::OwnHandle<skity_context, skity_context_destroy> {
    * On failure @p out is left empty and the result code is returned.
    */
   static skity_result CreateGL(skity_gl_get_proc get_proc, Context* out) {
+    if (out == nullptr) {
+      return SKITY_ERROR_INVALID_ARGUMENT;
+    }
     skity_context handle = nullptr;
     skity_result result = skity_context_create_gl(get_proc, &handle);
-    if (result == SKITY_SUCCESS && out != nullptr) {
+    if (result == SKITY_SUCCESS) {
       out->reset(handle);
     }
     return result;

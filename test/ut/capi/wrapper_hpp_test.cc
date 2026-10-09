@@ -88,6 +88,28 @@ TEST(WrapperHpp, SemaphoreNeutralApi) {
             skity::raii::Context::BackendType::kNone);
 }
 
+TEST(WrapperHpp, MetalApiValidation) {
+  // Deterministic without a Metal device: argument / null-handle paths hold
+  // on every backend (builds without SKITY_MTL_BACKEND return
+  // SKITY_ERROR_NOT_SUPPORTED from creation, the getters return NULL).
+  skity::raii::Context context;  // empty
+  EXPECT_EQ(skity::raii::CreateMtlContext(nullptr, nullptr, nullptr),
+            SKITY_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(skity::raii::GetMtlDevice(context), nullptr);
+  EXPECT_EQ(skity::raii::GetMtlCommandQueue(context), nullptr);
+
+  skity_surface_create_info base = {};
+  skity_surface_create_info_mtl ext = {};
+  skity::raii::Surface surface;
+  EXPECT_EQ(skity::raii::CreateMtlSurface(context, base, ext, &surface),
+            SKITY_ERROR_INVALID_HANDLE);
+  EXPECT_FALSE(surface);
+
+  skity_backend_texture_info tex_base = {};
+  skity_backend_texture_info_mtl tex_ext = {};
+  EXPECT_FALSE(skity::raii::WrapMtlTexture(context, tex_base, tex_ext));
+}
+
 TEST(WrapperHpp, ValueTypes) {
   Rect r = Rect::MakeXYWH(10.f, 20.f, 30.f, 40.f);
   EXPECT_FLOAT_EQ(r.Width(), 30.f);
