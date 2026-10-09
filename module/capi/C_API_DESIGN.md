@@ -381,6 +381,17 @@ entry points — helper methods that had no C counterpart (Rect / Matrix
 arithmetic, color packing) are implemented inline in `skity_types.hpp`.
 `test/ut/capi/wrapper_hpp_test.cc` is the compile + CPU smoke gate.
 
+Coverage (2026-10, counted mechanically over `SKITY_C_API` declarations):
+394 C functions across 28 domain headers plus 3 extension-struct-only
+headers (`skity_semaphore_vk.h` / `skity_surface_vk.h` /
+`skity_texture_vk.h`). The wrapper layer forwards 390 of them (98%): 383
+through the neutral `skity.hpp` umbrella, 9 through the VK opt-in headers
+(2 `context_vk` + 7 `native_window_vk`); the 4 precompile entry points are
+deliberately unwrapped (below). 20 of the 33 wrapper headers carry handle
+classes (28 `OwnHandle` classes in total); the rest are POD /
+free-function / view layers (types, stroke, path_op, quaternion, canvas
+view, bridge).
+
 Value-type wrappers mirror their copyable C++ counterparts: `Paint`, `Path`
 and `Font` have copy construction / assignment that clones the underlying
 object via the C `*_clone` entry points (parameters duplicated, refcounted
