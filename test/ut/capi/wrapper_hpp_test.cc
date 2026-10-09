@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <skity_hpp/skity.hpp>
 #include <vector>
@@ -28,6 +29,9 @@ using skity::raii::DisplayList;
 using skity::raii::DisplayListBuildOptions;
 using skity::raii::Font;
 using skity::raii::FontManager;
+using skity::raii::GlyphBitmap;
+using skity::raii::GlyphData;
+using skity::raii::GlyphFormat;
 using skity::raii::Image;
 using skity::raii::ImageFilter;
 using skity::raii::MaskFilter;
@@ -428,6 +432,29 @@ TEST(WrapperHpp, TextFontTypeface) {
   const uint32_t unique_id = typeface.GetUniqueId();
   EXPECT_NE(unique_id, 0u);
 
+  // Coverage / style / table introspection (Roboto-Regular: static, upright).
+  EXPECT_FALSE(typeface.IsBold());
+  EXPECT_FALSE(typeface.IsItalic());
+  EXPECT_TRUE(typeface.ContainGlyph('A'));
+  EXPECT_FALSE(typeface.ContainGlyph(0x10FFFF));
+  EXPECT_FALSE(typeface.ContainsColorTable());
+  const int32_t table_count = typeface.CountTables();
+  EXPECT_GT(table_count, 0);
+  std::vector<uint32_t> tags((size_t)table_count);
+  EXPECT_EQ(typeface.GetTableTags(tags.data(), table_count), table_count);
+  const uint32_t kHeadTag = 0x68656164;  // 'head'
+  EXPECT_NE(std::find(tags.begin(), tags.end(), kHeadTag), tags.end());
+  const size_t head_size = typeface.GetTableSize(kHeadTag);
+  EXPECT_EQ(head_size, 54u);  // TrueType head table is fixed-size.
+  std::vector<uint8_t> head_bytes(head_size);
+  EXPECT_EQ(typeface.GetTableData(kHeadTag, 0, head_size, head_bytes.data()),
+            head_size);
+  // unitsPerEm lives at offset 18 of head, big endian: 2048.
+  EXPECT_EQ((head_bytes[18] << 8) | head_bytes[19], 2048);
+  // Not instantiated at any coordinate, so the active position is empty
+  // (Robotos may still declare fvar axes — checked on RobotoFlex below).
+  EXPECT_TRUE(typeface.GetVariationPosition().empty());
+
   Font font(typeface.get(), 32.f);
   EXPECT_FLOAT_EQ(font.GetSize(), 32.f);
   font.SetScaleX(1.5f);
@@ -472,6 +499,73 @@ TEST(WrapperHpp, TextFontTypeface) {
   Rect run_bounds =
       TextBlob::ComputeRunBounds(2, ids, pos_x, pos_y, font, paint);
   EXPECT_GT(run_bounds.Width(), 0.f);
+}
+
+TEST(WrapperHpp, TypefaceVariationAndGlyphLoading) {
+  // Variable font: axes are readable and MakeVariation instantiates a face.
+  Typeface flex = Typeface::MakeFromFile(
+      SKITY_FONT_DIR "fonts/resources/RobotoFlex-Regular.ttf");
+  ASSERT_TRUE(flex);
+  auto axes = flex.GetVariationAxes();
+  ASSERT_FALSE(axes.empty());
+  const uint32_t kWght = 0x77676874;  // 'wght'
+  bool has_wght = false;
+  for (const auto& axis : axes) {
+    has_wght = has_wght || axis.tag == kWght;
+  }
+  EXPECT_TRUE(has_wght);
+  const skity_variation_coordinate wght700[] = {{kWght, 700.f}};
+  Typeface bold = flex.MakeVariation(wght700, 1);
+  EXPECT_TRUE(bold);
+  if (bold) {
+    EXPECT_TRUE(bold.IsBold());
+  }
+
+  // Glyph loading family on the static face.
+  Typeface typeface = Typeface::MakeFromFile(
+      SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf");
+  ASSERT_TRUE(typeface);
+  uint16_t glyph = typeface.UnicharToGlyph('A');
+  ASSERT_NE(glyph, 0);
+  Font font(typeface.get(), 32.f);
+
+  auto metrics = font.LoadGlyphMetrics(&glyph, 1);
+  ASSERT_EQ(metrics.size(), 1u);
+  ASSERT_TRUE(metrics[0]);
+  EXPECT_EQ(metrics[0].GetId(), glyph);
+  EXPECT_GT(metrics[0].GetAdvanceX(), 0.f);
+  EXPECT_GT(metrics[0].GetWidth(), 0.f);
+  // Note: FontSize stays 0 on FreeType metrics loads (only ScaleToFontSize
+  // sets it), so it is deliberately not asserted here.
+  EXPECT_GT(metrics[0].GetHoriBearingY(), 0.f);
+  EXPECT_LT(metrics[0].GetYMin(), 0.f);
+  EXPECT_FLOAT_EQ(metrics[0].GetAdvanceY(), 0.f);
+
+  auto paths = font.LoadGlyphPath(&glyph, 1);
+  ASSERT_EQ(paths.size(), 1u);
+  ASSERT_TRUE(paths[0]);
+  Path outline = paths[0].GetPath();
+  ASSERT_TRUE(outline);
+  EXPECT_FALSE(outline.IsEmpty());
+
+  Paint paint;  // default fill style
+  auto bitmaps = font.LoadGlyphBitmap(&glyph, 1, paint, 1.f);
+  ASSERT_EQ(bitmaps.size(), 1u);
+  ASSERT_TRUE(bitmaps[0]);
+  GlyphFormat format = GlyphFormat::kA8;
+  EXPECT_TRUE(bitmaps[0].GetFormat(&format));
+  EXPECT_EQ(format, GlyphFormat::kA8);
+  GlyphBitmap bitmap{};
+  EXPECT_TRUE(bitmaps[0].GetBitmap(&bitmap));
+  EXPECT_GT(bitmap.width, 0.f);
+  EXPECT_GT(bitmap.height, 0.f);
+  EXPECT_NE(bitmap.buffer, nullptr);
+  EXPECT_GE(bitmap.row_bytes, static_cast<size_t>(bitmap.width));
+  EXPECT_EQ(bitmap.format, SKITY_BITMAP_FORMAT_GRAY8);
+
+  auto infos = font.LoadGlyphBitmapInfo(&glyph, 1, paint, 1.f);
+  ASSERT_EQ(infos.size(), 1u);
+  ASSERT_TRUE(infos[0]);
 }
 
 TEST(WrapperHpp, FontManagerFamilies) {

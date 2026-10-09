@@ -267,6 +267,7 @@ class Path : public detail::OwnHandle<skity_path, skity_path_destroy> {
 
  private:
   explicit Path(skity_path h) : OwnHandle(h) {}
+  friend class GlyphData;
 };
 
 }  // namespace raii

@@ -17,7 +17,9 @@
 #include <cstdint>
 #include <skity_hpp/skity_base.hpp>
 #include <skity_hpp/skity_data.hpp>
+#include <skity_hpp/skity_glyph.hpp>
 #include <skity_hpp/skity_paint.hpp>
+#include <skity_hpp/skity_types.hpp>
 #include <string>
 #include <vector>
 
@@ -81,6 +83,74 @@ class Typeface
 
   /** Stable id; equal ids mean the same underlying typeface instance. */
   uint32_t GetUniqueId() const { return skity_typeface_get_unique_id(get()); }
+
+  /** Intrinsic weight >= semibold / non-upright slant. */
+  bool IsBold() const { return skity_typeface_is_bold(get()) != 0u; }
+  bool IsItalic() const { return skity_typeface_is_italic(get()) != 0u; }
+
+  /** Whether @p unichar has a glyph in this face. */
+  bool ContainGlyph(uint32_t unichar) const {
+    return skity_typeface_contain_glyph(get(), unichar) != 0u;
+  }
+
+  /** Whether the face carries a color bitmap / COLR table (emoji fonts). */
+  bool ContainsColorTable() const {
+    return skity_typeface_contains_color_table(get()) != 0u;
+  }
+
+  /** Number of font tables. */
+  int32_t CountTables() const { return skity_typeface_count_tables(get()); }
+
+  /** FourCC table tags (two-pass: pass NULL to query the count). */
+  int32_t GetTableTags(uint32_t* tags, int32_t count) const {
+    return skity_typeface_get_table_tags(get(), tags, count);
+  }
+
+  /** Size in bytes of table @p tag, 0 when absent. */
+  size_t GetTableSize(uint32_t tag) const {
+    return skity_typeface_get_table_size(get(), tag);
+  }
+
+  /** Copy a range of table @p tag into @p data; bytes actually copied. */
+  size_t GetTableData(uint32_t tag, size_t offset, size_t length,
+                      void* data) const {
+    return skity_typeface_get_table_data(get(), tag, offset, length, data);
+  }
+
+  /** Active variation coordinates (empty for static fonts). */
+  std::vector<skity_variation_coordinate> GetVariationPosition() const {
+    int32_t n = skity_typeface_get_variation_position(get(), nullptr, 0);
+    std::vector<skity_variation_coordinate> coords(
+        static_cast<size_t>(n > 0 ? n : 0));
+    if (n > 0) {
+      skity_typeface_get_variation_position(get(), coords.data(), n);
+    }
+    return coords;
+  }
+
+  /** Variation axes the font declares (empty for static fonts). */
+  std::vector<skity_variation_axis> GetVariationAxes() const {
+    int32_t n = skity_typeface_get_variation_axes(get(), nullptr, 0);
+    std::vector<skity_variation_axis> axes(static_cast<size_t>(n > 0 ? n : 0));
+    if (n > 0) {
+      skity_typeface_get_variation_axes(get(), axes.data(), n);
+    }
+    return axes;
+  }
+
+  /**
+   * Instantiate this variable font at @p coordinates (legacy MakeVariation);
+   * empty wrapper for non-variable faces or on failure.
+   */
+  Typeface MakeVariation(const skity_variation_coordinate* coordinates,
+                         uint32_t coordinate_count,
+                         int32_t collection_index = 0) const {
+    skity_font_arguments args{};
+    args.collection_index = collection_index;
+    args.variation_coordinates = coordinates;
+    args.variation_coordinate_count = coordinate_count;
+    return Typeface(skity_typeface_make_variation(get(), &args));
+  }
 
  private:
   explicit Typeface(skity_typeface h) : OwnHandle(h) {}
@@ -360,6 +430,46 @@ class Font : public detail::OwnHandle<skity_font, skity_font_destroy> {
   void GetBounds(const uint16_t glyphs[], int32_t count, Rect bounds[]) const {
     skity_font_get_bounds(get(), glyphs, count, bounds);
   }
+
+  /**
+   * Glyph-data loading family (custom shaping / atlas pipelines). Each
+   * returns non-owning GlyphData views into skity's global glyph cache —
+   * read what you need promptly; see skity_glyph.hpp for the eviction
+   * caveat.
+   */
+  ///@{
+  std::vector<GlyphData> LoadGlyphMetrics(const uint16_t glyphs[],
+                                          uint32_t count) const {
+    std::vector<skity_glyph_data> raw(count, nullptr);
+    skity_font_load_glyph_metrics(get(), glyphs, count, raw.data());
+    return detail::AdoptGlyphHandles(raw);
+  }
+
+  std::vector<GlyphData> LoadGlyphPath(const uint16_t glyphs[],
+                                       uint32_t count) const {
+    std::vector<skity_glyph_data> raw(count, nullptr);
+    skity_font_load_glyph_path(get(), glyphs, count, raw.data());
+    return detail::AdoptGlyphHandles(raw);
+  }
+
+  std::vector<GlyphData> LoadGlyphBitmap(
+      const uint16_t glyphs[], uint32_t count, const Paint& paint,
+      float context_scale, const Matrix* transform = nullptr) const {
+    std::vector<skity_glyph_data> raw(count, nullptr);
+    skity_font_load_glyph_bitmap(get(), glyphs, count, raw.data(), paint.get(),
+                                 context_scale, transform);
+    return detail::AdoptGlyphHandles(raw);
+  }
+
+  std::vector<GlyphData> LoadGlyphBitmapInfo(
+      const uint16_t glyphs[], uint32_t count, const Paint& paint,
+      float context_scale, const Matrix* transform = nullptr) const {
+    std::vector<skity_glyph_data> raw(count, nullptr);
+    skity_font_load_glyph_bitmap_info(get(), glyphs, count, raw.data(),
+                                      paint.get(), context_scale, transform);
+    return detail::AdoptGlyphHandles(raw);
+  }
+  ///@}
 
  private:
   explicit Font(skity_font h) : OwnHandle(h) {}

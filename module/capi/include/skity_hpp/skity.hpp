@@ -71,6 +71,7 @@
 #include <skity_hpp/skity_color_filter.hpp>
 #include <skity_hpp/skity_context.hpp>
 #include <skity_hpp/skity_data.hpp>
+#include <skity_hpp/skity_glyph.hpp>
 #include <skity_hpp/skity_image.hpp>
 #include <skity_hpp/skity_image_filter.hpp>
 #include <skity_hpp/skity_mask_filter.hpp>

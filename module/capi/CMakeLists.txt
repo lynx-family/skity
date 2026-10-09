@@ -104,6 +104,7 @@ target_sources(
     ${CMAKE_CURRENT_LIST_DIR}/src/texture_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/precompile_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/font_c.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glyph_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/bitmap_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/recorder_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/camera_c.cpp
