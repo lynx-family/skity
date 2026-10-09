@@ -118,6 +118,33 @@ class Image : public detail::OwnHandle<skity_image, skity_image_destroy> {
            0;
   }
 
+  /** How the image's alpha channel is interpreted. */
+  AlphaType GetAlphaType() const {
+    return static_cast<AlphaType>(skity_image_get_alpha_type(get()));
+  }
+
+  /** Whether the image is backed by a GPU texture. */
+  bool IsTextureBackend() const {
+    return skity_image_is_texture_backend(get()) != 0u;
+  }
+
+  /** Origin / backing classification, mirroring the legacy ImageType. */
+  enum class ImageType : uint32_t {
+    kUnknown = SKITY_IMAGE_TYPE_UNKNOWN,
+    kCustom = SKITY_IMAGE_TYPE_CUSTOM,
+    kPixmap = SKITY_IMAGE_TYPE_PIXMAP,
+    kTexture = SKITY_IMAGE_TYPE_TEXTURE,
+    kDeferredTexture = SKITY_IMAGE_TYPE_DEFERRED_TEXTURE,
+    kPromiseTexture = SKITY_IMAGE_TYPE_PROMISE_TEXTURE,
+  };
+
+  ImageType GetImageType() const {
+    return static_cast<ImageType>(skity_image_get_image_type(get()));
+  }
+
+  /** Whether the pixels are not yet available (promise / deferred). */
+  bool IsLazy() const { return skity_image_is_lazy(get()) != 0u; }
+
  private:
   explicit Image(skity_image h) : OwnHandle(h) {}
 };

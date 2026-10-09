@@ -152,6 +152,28 @@ class Typeface
     return Typeface(skity_typeface_make_variation(get(), &args));
   }
 
+  /**
+   * Identity summary (style / collection index / factory id) plus family
+   * name; useful as a cache key together with GetUniqueId.
+   */
+  skity_font_descriptor GetFontDescriptor(std::string* family_name) const {
+    skity_font_descriptor desc{};
+    if (family_name != nullptr) {
+      int32_t length =
+          skity_typeface_get_font_descriptor(get(), &desc, nullptr, 0);
+      if (length > 0) {
+        // The length includes the NUL terminator the C layer writes.
+        family_name->assign(static_cast<size_t>(length), '\0');
+        skity_typeface_get_font_descriptor(get(), &desc, &(*family_name)[0],
+                                           length);
+        family_name->resize(std::string(family_name->c_str()).size());
+      }
+    } else {
+      skity_typeface_get_font_descriptor(get(), &desc, nullptr, 0);
+    }
+    return desc;
+  }
+
  private:
   explicit Typeface(skity_typeface h) : OwnHandle(h) {}
   friend class FontManager;

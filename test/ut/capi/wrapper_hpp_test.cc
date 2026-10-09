@@ -139,6 +139,34 @@ TEST(WrapperHpp, PaintEffectsRoundTrip) {
   EXPECT_TRUE(filter);
 }
 
+TEST(WrapperHpp, PaintIntrospection) {
+  Paint paint;
+  paint.SetColor(ColorPackRGBA(0.25f, 0.5f, 0.75f, 1.f));
+  skity::raii::Color4f color = paint.GetColor4f();
+  // SetColor stores 8-bit; GetColor4f unpacks, so allow one 8-bit step.
+  EXPECT_NEAR(color.e[0], 0.25f, 1.f / 255.f);
+  EXPECT_NEAR(color.e[1], 0.5f, 1.f / 255.f);
+  EXPECT_NEAR(color.e[2], 0.75f, 1.f / 255.f);
+  EXPECT_NEAR(color.e[3], 1.f, 1.f / 255.f);
+
+  paint.SetAlphaF(0.5f);
+  EXPECT_FLOAT_EQ(paint.GetAlphaF(), 0.5f);
+
+  EXPECT_FLOAT_EQ(paint.GetFontThreshold(), 256.f);
+  paint.SetFontThreshold(18.f);
+  EXPECT_FLOAT_EQ(paint.GetFontThreshold(), 18.f);
+  EXPECT_FALSE(paint.IsSDFForSmallText());
+  paint.SetSDFForSmallText(true);
+  EXPECT_TRUE(paint.IsSDFForSmallText());
+
+  // GPU backend query compiles everywhere; the value is build-config
+  // dependent, so only exercise it.
+  (void)skity::raii::Context::IsGPUSupported(
+      skity::raii::Context::BackendType::kVulkan);
+  (void)skity::raii::Context::IsGPUSupported(
+      skity::raii::Context::BackendType::kMetal);
+}
+
 TEST(WrapperHpp, ShaderFactories) {
   const skity::raii::Color4f stops[] = {
       {0.f, 0.f, 1.f, 1.f},
@@ -162,6 +190,30 @@ TEST(WrapperHpp, ShaderFactories) {
   EXPECT_TRUE(Shader::MakeShader(
       image, skity::raii::SamplingOptions(skity::raii::FilterMode::kLinear,
                                           skity::raii::MipmapMode::kNone)));
+
+  // Gradient introspection: recover the linear gradient's stops / geometry.
+  Shader linear = Shader::MakeLinear(pts, stops, nullptr, 2);
+  ASSERT_TRUE(linear);
+  Shader::GradientInfo info{};
+  std::vector<skity::raii::Color4f> out_colors;
+  std::vector<float> out_offsets;
+  EXPECT_EQ(linear.AsGradient(&info, &out_colors, &out_offsets),
+            Shader::GradientType::kLinear);
+  ASSERT_EQ(out_colors.size(), 2u);
+  EXPECT_FLOAT_EQ(out_colors[0].e[1], 0.f);  // blue stop
+  EXPECT_FLOAT_EQ(out_colors[1].e[0], 1.f);  // red stop
+  ASSERT_EQ(out_offsets.size(), 2u);
+  EXPECT_EQ(info.color_count, 2);
+  EXPECT_FLOAT_EQ(info.point[0].e[0], 0.f);
+  EXPECT_FLOAT_EQ(info.point[1].e[0], 100.f);
+  // Both stops are fully opaque, so the gradient is opaque.
+  EXPECT_TRUE(linear.IsOpaque());
+
+  // Image introspection on the raster image above.
+  EXPECT_EQ(image.GetAlphaType(), skity::raii::AlphaType::kUnpremul_AlphaType);
+  EXPECT_FALSE(image.IsTextureBackend());
+  EXPECT_EQ(image.GetImageType(), Image::ImageType::kPixmap);
+  EXPECT_FALSE(image.IsLazy());
 }
 
 TEST(WrapperHpp, PathConstructionAndQueries) {
@@ -432,6 +484,12 @@ TEST(WrapperHpp, TextFontTypeface) {
   const uint32_t unique_id = typeface.GetUniqueId();
   EXPECT_NE(unique_id, 0u);
 
+  std::string family;
+  skity_font_descriptor descriptor = typeface.GetFontDescriptor(&family);
+  EXPECT_EQ(family, "Roboto");
+  EXPECT_EQ(descriptor.style.weight, 400);
+  EXPECT_EQ(descriptor.collection_index, 0);
+
   // Coverage / style / table introspection (Roboto-Regular: static, upright).
   EXPECT_FALSE(typeface.IsBold());
   EXPECT_FALSE(typeface.IsItalic());
@@ -642,4 +700,18 @@ TEST(WrapperHpp, SoftwareCanvasDraws) {
   canvas.RestoreToCount(1);
   EXPECT_EQ(canvas.GetSaveCount(), 1);
   canvas.Flush();
+
+  // Global clip bounds: an unclipped software canvas reports an (effectively)
+  // infinite device rect; clip to the device and re-check.
+  canvas.ClipRect(Rect::MakeWH(8.f, 8.f));
+  Rect device_clip = canvas.GetGlobalClipBounds();
+  EXPECT_FLOAT_EQ(device_clip.Width(), 8.f);
+  EXPECT_FLOAT_EQ(device_clip.Height(), 8.f);
+
+  // Per-corner-radii clip + drrect draw still render sanely after the
+  // pixel assertions above.
+  const Vec2 corner_radii[4] = {{1.f, 1.f}, {2.f, 2.f}, {1.f, 2.f}, {2.f, 1.f}};
+  canvas.ClipRRect(Rect::MakeWH(8.f, 8.f), corner_radii);
+  canvas.DrawDRRect(Rect::MakeWH(8.f, 8.f), corner_radii,
+                    Rect::MakeWH(4.f, 4.f), corner_radii, paint);
 }

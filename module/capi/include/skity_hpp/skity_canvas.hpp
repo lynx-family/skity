@@ -178,6 +178,30 @@ class Canvas {
                                  paint.get());
   }
 
+  /**
+   * Per-corner-radii ClipRRect: @p radii holds 4 Vec2 entries (corner order
+   * upper-left, upper-right, lower-right, lower-left).
+   */
+  void ClipRRect(const Rect& rect, const Vec2 radii[4],
+                 ClipOp op = ClipOp::kIntersect) {
+    skity_canvas_clip_rrect_radii(canvas_, &rect, radii, to_c(op));
+  }
+
+  /** Per-corner-radii DrawDRRect (4 Vec2 entries per radii array). */
+  void DrawDRRect(const Rect& outer, const Vec2 outer_radii[4],
+                  const Rect& inner, const Vec2 inner_radii[4],
+                  const Paint& paint) {
+    skity_canvas_draw_drrect_radii(canvas_, &outer, outer_radii, &inner,
+                                   inner_radii, paint.get());
+  }
+
+  /** Current clip bounds in device (post-transform) coordinates. */
+  Rect GetGlobalClipBounds() const {
+    Rect out;
+    skity_canvas_get_global_clip_bounds(canvas_, &out);
+    return out;
+  }
+
   Rect GetLocalClipBounds() const {
     Rect out;
     skity_canvas_get_local_clip_bounds(canvas_, &out);

@@ -190,13 +190,12 @@ void skity_image_destroy(skity_image image) {
 
 uint32_t skity_image_get_width(skity_image image) {
   auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
-  return w ? (uint32_t) static_cast<skity::Image*>(w->impl.get())->Width() : 0u;
+  return w ? (uint32_t)static_cast<skity::Image*>(w->impl.get())->Width() : 0u;
 }
 
 uint32_t skity_image_get_height(skity_image image) {
   auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
-  return w ? (uint32_t) static_cast<skity::Image*>(w->impl.get())->Height()
-           : 0u;
+  return w ? (uint32_t)static_cast<skity::Image*>(w->impl.get())->Height() : 0u;
 }
 
 skity_image skity_image_create_from_texture(skity_texture texture) {
@@ -338,6 +337,28 @@ uint32_t skity_image_scale_pixels(skity_image image, skity_pixmap dst,
     so.cubic.C = sampling->cubic_c;
   }
   return img->ScalePixels(pm, ctx.get(), so) ? 1u : 0u;
+}
+
+skity_alpha_type skity_image_get_alpha_type(skity_image image) {
+  auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
+  return w ? static_cast<skity_alpha_type>(w->impl->GetAlphaType())
+           : SKITY_ALPHA_TYPE_UNKNOWN;
+}
+
+uint32_t skity_image_is_texture_backend(skity_image image) {
+  auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
+  return w && w->impl->IsTextureBackend() ? 1u : 0u;
+}
+
+skity_image_type skity_image_get_image_type(skity_image image) {
+  auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
+  return w ? static_cast<skity_image_type>(w->impl->GetImageType())
+           : SKITY_IMAGE_TYPE_UNKNOWN;
+}
+
+uint32_t skity_image_is_lazy(skity_image image) {
+  auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
+  return w && w->impl->IsLazy() ? 1u : 0u;
 }
 
 }  // extern "C"

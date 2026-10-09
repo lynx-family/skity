@@ -15,6 +15,7 @@
 #include <skity_hpp/skity_base.hpp>
 #include <skity_hpp/skity_image.hpp>
 #include <skity_hpp/skity_types.hpp>
+#include <vector>
 
 namespace skity {
 namespace raii {
@@ -96,6 +97,43 @@ class Shader : public detail::OwnHandle<skity_shader, skity_shader_destroy> {
     Matrix out;
     skity_shader_get_local_matrix(get(), &out);
     return out;
+  }
+
+  /** Whether the shader is guaranteed opaque. */
+  bool IsOpaque() const { return skity_shader_is_opaque(get()) != 0u; }
+
+  /** Gradient classification, mirroring the legacy GradientType. */
+  enum class GradientType : uint32_t {
+    kNone = SKITY_GRADIENT_TYPE_NONE,
+    kColor = SKITY_GRADIENT_TYPE_COLOR,
+    kLinear = SKITY_GRADIENT_TYPE_LINEAR,
+    kRadial = SKITY_GRADIENT_TYPE_RADIAL,
+    kSweep = SKITY_GRADIENT_TYPE_SWEEP,
+    kConical = SKITY_GRADIENT_TYPE_CONICAL,
+  };
+
+  /** Gradient geometry passthrough (color stops fetched separately). */
+  using GradientInfo = skity_gradient_info;
+
+  /**
+   * Classify the shader and recover gradient parameters. On return @p info
+   * carries the stop count / geometry; when @p colors / @p offsets are
+   * non-NULL they are resized to the stop count and filled.
+   */
+  GradientType AsGradient(GradientInfo* info, std::vector<Color4f>* colors,
+                          std::vector<float>* offsets) const {
+    GradientInfo tmp{};
+    auto raw = skity_shader_as_gradient(get(), nullptr, nullptr, 0,
+                                        info != nullptr ? info : &tmp);
+    if (colors != nullptr && offsets != nullptr &&
+        (info != nullptr ? info->color_count : tmp.color_count) > 0) {
+      int32_t n = info != nullptr ? info->color_count : tmp.color_count;
+      colors->resize((size_t)n);
+      offsets->resize((size_t)n);
+      skity_shader_as_gradient(get(), colors->data(), offsets->data(), n,
+                               nullptr);
+    }
+    return static_cast<GradientType>(raw);
   }
 
  private:

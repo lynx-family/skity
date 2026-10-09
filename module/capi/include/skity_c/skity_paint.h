@@ -216,6 +216,37 @@ SKITY_C_API skity_path_effect skity_paint_get_path_effect(skity_paint paint);
  *         handle is owning; release it with @ref skity_typeface_destroy. */
 SKITY_C_API skity_typeface skity_paint_get_typeface(skity_paint paint);
 
+/** @brief Fetch the paint color as float RGBA (linear, unpremultiplied);
+ *         @p out is left untouched on an invalid handle. */
+SKITY_C_API void skity_paint_get_color4f(skity_paint paint, skity_color4f* out);
+
+/** @brief Return the paint's alpha as a float in [0, 1]. */
+SKITY_C_API float skity_paint_get_alpha_f(skity_paint paint);
+
+/**
+ * @brief Toggle signed-distance-field rasterization for small text.
+ *
+ * When enabled (and the paint's text size is below the font threshold),
+ * glyphs are rendered as SDF masks instead of coverage masks.
+ */
+SKITY_C_API void skity_paint_set_sdf_for_small_text(skity_paint paint,
+                                                    uint32_t enable);
+
+/** @brief Return 1 when SDF-for-small-text is enabled, 0 otherwise. */
+SKITY_C_API uint32_t skity_paint_is_sdf_for_small_text(skity_paint paint);
+
+/**
+ * @brief Set the text-size threshold controlling fill vs SDF rendering.
+ *
+ * Text at or above this size rasterizes as plain coverage masks when SDF
+ * for small text is on; below it, as SDF masks.
+ */
+SKITY_C_API void skity_paint_set_font_threshold(skity_paint paint,
+                                                float font_size);
+
+/** @brief Return the current font-size threshold (default 256). */
+SKITY_C_API float skity_paint_get_font_threshold(skity_paint paint);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

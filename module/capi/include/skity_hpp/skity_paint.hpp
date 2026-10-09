@@ -134,6 +134,32 @@ class Paint : public detail::OwnHandle<skity_paint, skity_paint_destroy> {
   void SetAlphaF(float alpha) { skity_paint_set_alpha_f(get(), alpha); }
   uint8_t GetAlpha() const { return skity_paint_get_alpha(get()); }
 
+  /** Color as float RGBA (linear, unpremultiplied). */
+  Color4f GetColor4f() const {
+    Color4f out{};
+    skity_paint_get_color4f(get(), &out);
+    return out;
+  }
+
+  /** Alpha as a float in [0, 1]. */
+  float GetAlphaF() const { return skity_paint_get_alpha_f(get()); }
+
+  /** SDF rasterization for text below the font threshold. */
+  void SetSDFForSmallText(bool enable) {
+    skity_paint_set_sdf_for_small_text(get(), enable ? 1u : 0u);
+  }
+  bool IsSDFForSmallText() const {
+    return skity_paint_is_sdf_for_small_text(get()) != 0u;
+  }
+
+  /** Text-size threshold for fill vs SDF rendering (default 256). */
+  void SetFontThreshold(float font_size) {
+    skity_paint_set_font_threshold(get(), font_size);
+  }
+  float GetFontThreshold() const {
+    return skity_paint_get_font_threshold(get());
+  }
+
   void SetBlendMode(BlendMode mode) {
     skity_paint_set_blend_mode(get(), to_c(mode));
   }

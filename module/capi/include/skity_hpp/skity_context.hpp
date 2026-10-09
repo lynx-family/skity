@@ -86,6 +86,27 @@ class Context : public detail::OwnHandle<skity_context, skity_context_destroy> {
   void SetResourceCacheLimit(size_t max_bytes) {
     skity_context_set_resource_cache_limit(get(), max_bytes);
   }
+
+  /** GPU backend classification, mirroring skity::GPUBackendType. */
+  enum class BackendType : uint32_t {
+    kNone = SKITY_GPU_BACKEND_TYPE_NONE,
+    kOpenGL = SKITY_GPU_BACKEND_TYPE_OPENGL,
+    kVulkan = SKITY_GPU_BACKEND_TYPE_VULKAN,
+    kWebGL2 = SKITY_GPU_BACKEND_TYPE_WEBGL2,
+    kWebGPU = SKITY_GPU_BACKEND_TYPE_WEBGPU,
+    kMetal = SKITY_GPU_BACKEND_TYPE_METAL,
+  };
+
+  /** Whether skity was compiled with support for @p type. */
+  static bool IsGPUSupported(BackendType type) {
+    return skity_is_gpu_backend_supported(
+               static_cast<skity_gpu_backend_type>(type)) != 0u;
+  }
+
+  /** The backend this context was created with. */
+  BackendType GetBackendType() const {
+    return static_cast<BackendType>(skity_context_get_backend_type(get()));
+  }
 };
 
 }  // namespace raii

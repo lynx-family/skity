@@ -464,7 +464,14 @@ These modules have complete (or near-complete) C coverage of their core:
 - `PictureRecorder` + `DisplayList` (record / replay / cull-rect replay /
   rtree search / properties / per-op paint lookup)
 - `PrecompileContext`
-- `Texture` (create / wrap-external / upload / deferred-upload)
+- `Texture` (create / create-with-descriptor incl. mipmap / wrap-external /
+  upload / deferred-upload)
+- `Paint` (all setters + getters incl. `get_color4f` / `get_alpha_f`,
+  fill/stroke split colors, effect/typeface attach, SDF-for-small-text and
+  font-threshold switches)
+- `GPUContext` backend queries (`skity_is_gpu_backend_supported`,
+  `skity_context_get_backend_type` over the shared `skity_gpu_backend_type`
+  enum)
 - `GPUContext` (create, `set_error_callback`, all `set_enable_*` tuning,
   precompile, `create_texture`, `wrap_texture`, `set_resource_cache_limit`)
 - `GPUNativeWindowVK` / presenter lifecycle (create, resize,
@@ -490,16 +497,15 @@ Priority tags: **P3** is deferred / low-value.
 
 | Module | Covered | Missing (priority) |
 |---|---|---|
-| `Paint` | all setters + getters, fill/stroke split colors, effect/typeface attach | **P3**: `get_color4f`, `get_alpha_f`, SDF / font-threshold |
-| `Shader` | gradient factories (linear/radial/sweep/conical) + image shader + `set/get_local_matrix` | **P3**: `is_opaque`, `as_gradient` introspection |
+| `Shader` | gradient factories (linear/radial/sweep/conical) + image shader + `set/get_local_matrix`, `is_opaque`, `as_gradient` (type + geometry + two-pass stops; even distribution synthesized for NULL-pos gradients) | — |
 | `GPUSurface` | create, `lock_canvas`, `flush`, `read_pixels`, size getters, GL `surface_mode` + `can_blit_from_target_fbo`, Vulkan image/swapchain-image wrapping, external wait semaphore | **P3**: per-surface CoverageAAMode |
 | `Path` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii), boolean ops, `PathMeasure`, `transform`, last-pt get/set, `copy_with_matrix/scale`, counts / `get_point` / `get_verb` / `get_conic_weight` / `is_rect` / `is_line` / `is_empty` / `is_finite`, convexity get/set, `get_segment_masks`, `add_path` append/extend modes, `clone`, `is_equal`, `get_last_move_pt` | `GetLastMovePt` has no failure signal on the C++ side (empty path result unspecified, mirrored here) |
-| `Image` | 5 factories (incl. the `GPUContext` variant) + `read_pixels` + `scale_pixels` + size getters | **P3**: alpha/type/backend introspection |
-| `Typeface` | `make_from_file`, `make_from_data`, `get_default`, `unichars_to_glyphs`/`unichar_to_glyph`, `get_data` (owning `skity_data`), `get_font_style`/`is_bold`/`is_italic`, `get_units_per_em`/`get_unique_id`, `contain_glyph`, `contains_color_table`, raw tables (`count_tables`, `get_table_tags`/`get_table_size`/`get_table_data`), variable fonts (`get_variation_position`/`get_variation_axes`/`make_variation` + `skity_font_arguments`) | **P3**: `get_font_descriptor` (cache-key projection) |
+| `Image` | 5 factories (incl. the `GPUContext` variant) + `read_pixels` + `scale_pixels` + size getters, `get_alpha_type` / `is_texture_backend` / `get_image_type` / `is_lazy` introspection | **P3**: backend handles (`get_texture`, `get_pixmap`, `get_texture_by_context`) |
+| `Typeface` | `make_from_file`, `make_from_data`, `get_default`, `unichars_to_glyphs`/`unichar_to_glyph`, `get_data` (owning `skity_data`), `get_font_style`/`is_bold`/`is_italic`, `get_units_per_em`/`get_unique_id`, `contain_glyph`, `contains_color_table`, raw tables (`count_tables`, `get_table_tags`/`get_table_size`/`get_table_data`), variable fonts (`get_variation_position`/`get_variation_axes`/`make_variation` + `skity_font_arguments`), `get_font_descriptor` (style / collection index / factory id + two-pass family name; the C++ full / PostScript name strings are not projected) | — |
 | `TextBlob` | build (UTF-8) + draw, pre-shaped glyph build (`create_from_glyphs`: caller-run shaping → glyph ids + positions), `get_bounds`, `compute_bounds`, `TypefaceDelegate` fallback (ordered-list + custom-fallback-callback) | **P3**: `get_text_run` (read-back — no caller demand found in the animax/clay reverse lookup; the proven need was the build side, now covered); fully custom `BreakTextRun` delegate (caller-driven segmentation) |
-| `Canvas` | full draw + state + clip + text/glyphs, `draw_image` sampling overloads, `draw_color4f`, per-corner-radii `draw_rrect`, uniform-radii `clip_rrect` / `draw_drrect`, `get_local_clip_bounds`, `make_software_canvas` | **P3**: per-corner (8-radii) RRect clip/drrect, `get_global_clip_bounds` |
+| `Canvas` | full draw + state + clip + text/glyphs, `draw_image` sampling overloads, `draw_color4f`, per-corner-radii `draw_rrect` / `clip_rrect_radii` / `draw_drrect_radii`, uniform-radii `clip_rrect` / `draw_drrect`, `get_local_clip_bounds` / `get_global_clip_bounds`, `make_software_canvas` | — |
 | `DisplayList` | draw / cull-rect draw / bounds / op_count / properties / rtree search (+ non-overlapping rects) / per-op paint lookup, `begin_recording` with build options | `RecordedOpOffset` is exposed as a plain `int32_t` (round-trips through the public `RecordedOpOffset::Make`) — no opaque set type |
-| `GPUContext` | (see Fully covered) | **P3**: `create_texture_with_desc` (mipmap), `is_gpu_backend_supported`, `get_backend_type` |
+| `GPUContext` | (see Fully covered) | — |
 
 The `skity_bridge.hpp` reverse direction (native C++ objects lent INTO C
 handles, e.g. `skity_typeface_from_native`) landed with #505.
@@ -524,26 +530,20 @@ The original **P0–P2** backlog (paint getters, shader local matrix, GL
 **TypefaceDelegate fallback**, the **DisplayList partial-redraw** increment,
 the **typeface metadata / table / variation** queries, and the
 **glyph-data loading family** (`LoadGlyph*` + `GlyphData`) have all landed.
-What remains is **P3** — deferred. Backlog by module:
+The **introspection batch** (paint `get_color4f` / `get_alpha_f` / SDF /
+font-threshold, shader `is_opaque` / `as_gradient`, image type / alpha /
+lazy / texture-backend queries, per-corner-radii canvas clip + drrect,
+`get_global_clip_bounds`, GPUContext backend queries and mipmap texture
+creation via `skity_texture_descriptor`, typeface `get_font_descriptor`)
+has landed. What remains is **P3** — deferred. Backlog by module:
 
-- **Paint**: `get_color4f`, `get_alpha_f`; SDF / font-threshold
-  (`set/is_sdf_for_small_text`, `get/set_font_threshold`).
-- **Shader**: `is_opaque` (opacity hint); `as_gradient` (recover gradient
-  params, needs `GradientInfo` / `GradientType`).
-- **Image**: property/type introspection (`get_alpha_type`, `is_texture_backend`,
-  `get_image_type`, `is_lazy`); backend handles (`get_texture`, `get_pixmap`,
+- **Image**: backend handles (`get_texture`, `get_pixmap`,
   `get_texture_by_context`).
-- **Typeface**: `get_font_descriptor` (needs a `FontDescriptor` projection
-  with string out-params).
 - **TextBlob**: `get_text_run` (+`TextRun` projection — read-back has no
   caller demand; the reverse lookup showed callers need to *inject* shaped
   glyphs, which `skity_text_blob_create_from_glyphs` now covers); a fully
   custom `BreakTextRun` delegate (caller-driven run segmentation — the current
   `skity_typeface_delegate_create_fallback` keeps the built-in policy and only
   overrides the typeface choice).
-- **Canvas**: per-corner (8-radii) RRect `clip_rrect` / `draw_drrect`;
-  `get_global_clip_bounds`.
-- **GPUContext**: `create_texture_with_desc` (mipmap, +`TextureDescriptor`
-  mirror); `is_gpu_backend_supported`; `get_backend_type`.
 
 > `MakeSnapshot` remains blocked on the `unique_ptr`-ownership constraint.
