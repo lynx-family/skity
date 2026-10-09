@@ -206,13 +206,6 @@ bool GLInterface::LoadExtensions(GLADloadfunc loader) {
     return false;
   }
 
-  // GL_EXT_discard_framebuffer
-  ext_discard_framebuffer = extensions.Contains("GL_EXT_discard_framebuffer");
-  if (ext_discard_framebuffer) {
-    fDiscardFramebufferEXT =
-        (PFNGLDISCARDFRAMEBUFFEREXTPROC)loader("glDiscardFramebufferEXT");
-  }
-
   // GL_EXT_multisampled_render_to_texture
   ext_multisampled_render_to_texture =
       extensions.Contains("GL_EXT_multisampled_render_to_texture");

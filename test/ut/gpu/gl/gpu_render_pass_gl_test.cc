@@ -152,6 +152,48 @@ TEST_P(GPURenderPassGLTest, TextureOnlyDrawClearsPreviousSampler) {
   EXPECT_EQ(draws_[2], draws_[0]);
 }
 
+TEST_F(GPURenderPassGLTest, InvalidatesDiscardedDepthStencilBeforeUnbinding) {
+  static GLuint bound_fbo;
+  static int invalidations;
+  bound_fbo = 0;
+  invalidations = 0;
+  gl_.fBindFramebuffer = [](GLenum, GLuint fbo) { bound_fbo = fbo; };
+  gl_.fInvalidateFramebuffer = [](GLenum target, GLsizei count,
+                                  const GLenum* attachments) {
+    EXPECT_EQ(bound_fbo, 7u);
+    EXPECT_EQ(target, GL_FRAMEBUFFER);
+    ASSERT_EQ(count, 2);
+    EXPECT_EQ(attachments[0], GL_STENCIL_ATTACHMENT);
+    EXPECT_EQ(attachments[1], GL_DEPTH_ATTACHMENT);
+    ++invalidations;
+  };
+
+  GPUDeviceGL device;
+  GPURenderPassDescriptor desc;
+  GPUTextureDescriptor texture_desc;
+  texture_desc.format = GPUTextureFormat::kDepth24Stencil8;
+  desc.stencil_attachment.texture =
+      std::make_shared<GPUTextureGL>(texture_desc);
+  desc.depth_attachment.texture = desc.stencil_attachment.texture;
+  desc.depth_attachment.store_op = GPUStoreOp::kDiscard;
+  desc.stencil_attachment.store_op = GPUStoreOp::kDiscard;
+  GPURenderPassGL(desc, 7, &device).EncodeCommands(std::nullopt, std::nullopt);
+  EXPECT_EQ(invalidations, 1);
+  EXPECT_EQ(bound_fbo, 0u);
+
+  GPURenderPassGL(desc, 0, &device).EncodeCommands(std::nullopt, std::nullopt);
+  desc.stencil_attachment.store_op = GPUStoreOp::kStore;
+  desc.depth_attachment.store_op = GPUStoreOp::kStore;
+  GPURenderPassGL(desc, 7, &device).EncodeCommands(std::nullopt, std::nullopt);
+  EXPECT_EQ(invalidations, 1);
+
+  desc.stencil_attachment.store_op = GPUStoreOp::kDiscard;
+  desc.depth_attachment.store_op = GPUStoreOp::kDiscard;
+  gl_.fInvalidateFramebuffer = nullptr;
+  GPURenderPassGL(desc, 7, &device).EncodeCommands(std::nullopt, std::nullopt);
+  EXPECT_EQ(bound_fbo, 0u);
+}
+
 INSTANTIATE_TEST_SUITE_P(SamplerBindings, GPURenderPassGLTest, testing::Bool());
 
 }  // namespace
