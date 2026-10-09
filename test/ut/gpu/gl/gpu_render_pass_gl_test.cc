@@ -159,7 +159,7 @@ TEST_F(GPURenderPassGLTest, InvalidatesDiscardedDepthStencilBeforeUnbinding) {
   invalidations = 0;
   gl_.fBindFramebuffer = [](GLenum, GLuint fbo) { bound_fbo = fbo; };
   gl_.fInvalidateFramebuffer = [](GLenum target, GLsizei count,
-                                 const GLenum* attachments) {
+                                  const GLenum* attachments) {
     EXPECT_EQ(bound_fbo, 7u);
     EXPECT_EQ(target, GL_FRAMEBUFFER);
     ASSERT_EQ(count, 2);
