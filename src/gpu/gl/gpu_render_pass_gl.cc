@@ -224,31 +224,12 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
   if (GetDescriptor().stencil_attachment.texture &&
       GetDescriptor().stencil_attachment.store_op == GPUStoreOp::kDiscard &&
       target_fbo_ != 0) {
-#if defined(SKITY_ANDROID)
-
-    // glInvalidateFramebuffer is available above GLES 3.0
-    // if GL_EXT_discard_framebuffer is not present
-    // fallback to use glInvalidateFramebuffer
-    if (GLInterface::GlobalInterface()->ext_discard_framebuffer) {
-      GLenum discard_ap = GL_DEPTH_STENCIL_ATTACHMENT;
-      GL_CALL(DiscardFramebufferEXT, GL_FRAMEBUFFER, 1, &discard_ap);
-    } else {
-      GLenum invalid_ap = GL_DEPTH_STENCIL_ATTACHMENT;
-      GL_CALL(InvalidateFramebuffer, GL_FRAMEBUFFER, 1, &invalid_ap);
-    }
-
-#else
-    // glInvalidateFramebuffer is available above GL 4.3
-    // need to check if the function is present before use
+    // Core in GLES 3.0; optional on desktop GL before 4.3.
     if (GLInterface::GlobalInterface()->fInvalidateFramebuffer != nullptr) {
-      // FIXME: iOS need to seperate discard depth and stencil attachment
-      // even if attached with GL_DEPTH_STENCIL_ATTACHMENT
-      // and it worked fine in desktop and Android
-      GLenum invalid_ap[2] = {GL_STENCIL_ATTACHMENT, GL_DEPTH_ATTACHMENT};
-      GL_CALL(InvalidateFramebuffer, GL_FRAMEBUFFER, 2, invalid_ap);
+      // Use separate attachments for compatibility with iOS drivers.
+      const GLenum attachments[] = {GL_STENCIL_ATTACHMENT, GL_DEPTH_ATTACHMENT};
+      GL_CALL(InvalidateFramebuffer, GL_FRAMEBUFFER, 2, attachments);
     }
-
-#endif
   }
 
   for (uint32_t unit = 0; unit < 8; ++unit) {

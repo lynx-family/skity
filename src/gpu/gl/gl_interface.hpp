@@ -166,12 +166,10 @@ struct GLInterface {
   fFramebufferTexture2DMultisampleEXT = nullptr;
   PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC
   fRenderbufferStorageMultisampleEXT = nullptr;
-  PFNGLDISCARDFRAMEBUFFEREXTPROC fDiscardFramebufferEXT = nullptr;
   PFNGLEGLIMAGETARGETTEXTURE2DOESPROC fEGLImageTargetTexture2DOES = nullptr;
 
   bool CanUseMSAA();
 
-  bool ext_discard_framebuffer = false;
   bool ext_multisampled_render_to_texture = false;
   bool oes_egl_image_external = false;
   bool ext_shader_framebuffer_fetch = false;
