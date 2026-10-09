@@ -402,7 +402,7 @@ arithmetic, color packing) are implemented inline in `skity_types.hpp`.
 | `skity_data` | `skity_data.hpp` | copy / with-proc / from-file / empty + accessors |
 | `skity_bitmap` | `skity_bitmap.hpp` | `Bitmap` + `Pixmap` (incl. zero-copy wrap via `Data`) |
 | `skity_image` | `skity_image.hpp` | raster / texture / deferred / promise factories, read / scale pixels |
-| `skity_surface` | `skity_surface.hpp` | create / lock-canvas / flush / size / read-pixels (GL CreateInfo path) |
+| `skity_surface` | `skity_surface.hpp` | create / lock-canvas / flush / size / read-pixels (GL CreateInfo path), `AddExternalWaitSemaphore` |
 | `skity_context` | `skity_context.hpp` | `CreateGL`, error callback, all `set_enable_*` tuning knobs, resource cache limit |
 | `skity_font` + `skity_text` | `skity_text.hpp` | `Typeface` (load / default / unichar→glyph / style / tables / variations / `MakeVariation`), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / bounds / make-with-size / `LoadGlyph*` family), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
 | `skity_glyph` | `skity_glyph.hpp` | `GlyphData` non-owning views over the global glyph cache (metrics / bearings / outline path / bitmap description), `GlyphFormat` / `BitmapFormat` enums, `GlyphBitmap` POD passthrough |
@@ -410,11 +410,10 @@ arithmetic, color packing) are implemented inline in `skity_types.hpp`.
 
 Not wrapped (intentionally, for now): the Vulkan-specific domains
 (`skity_context_vk` / `skity_surface_vk` / `skity_texture_vk` /
-`skity_native_window_vk`, plus `skity_surface_add_external_wait_semaphore_vk`
-— wrapping them would force `<vulkan/vulkan.h>` into every consumer;
-the semaphore itself is wrapped via the neutral import-info pass-through),
-`skity_precompile`, and `skity_texture` (entered through
-`Image::MakeFromTexture` / promise callbacks instead).
+`skity_native_window_vk` — wrapping them would force `<vulkan/vulkan.h>`
+into every consumer; the semaphore and its surface wait are wrapped via the
+neutral pass-through), `skity_precompile`, and `skity_texture` (entered
+through `Image::MakeFromTexture` / promise callbacks instead).
 `skity_bridge.hpp` is the reverse direction (C++ objects lent INTO C
 handles) and is not part of the RAII layer.
 

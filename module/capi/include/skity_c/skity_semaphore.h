@@ -20,7 +20,7 @@ extern "C" {
  * GPUContext::CreateSemaphore / ImportSemaphore pair: create it on a context,
  * optionally re-import a native sync handle (backend-specific extension
  * chained through skity_semaphore_import_info::p_next), then pass it to
- * skity_surface_add_external_wait_semaphore_vk before flushing. The
+ * skity_surface_add_external_wait_semaphore before flushing. The
  * semaphore is reusable across frames — each import re-binds a new handle.
  *
  * Note: only the Vulkan backend currently implements semaphores; on other

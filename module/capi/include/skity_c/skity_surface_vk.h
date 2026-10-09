@@ -54,13 +54,6 @@ typedef struct skity_surface_create_info_vk {
   const skity_surface_sync_info_vk* sync_info;
 } skity_surface_create_info_vk;
 
-/**
- * @brief Add an external wait semaphore to the next frame. Must be called
- *        between skity_surface_lock_canvas and skity_surface_flush.
- */
-SKITY_C_API void skity_surface_add_external_wait_semaphore_vk(
-    skity_surface surface, skity_semaphore semaphore);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif

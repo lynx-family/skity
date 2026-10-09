@@ -37,7 +37,7 @@ TEST(VulkanCAPITest, SemaphoreAndSurfaceValidateHandles) {
             SKITY_ERROR_INVALID_HANDLE);
   skity_surface surface = nullptr;
   skity_semaphore semaphore = nullptr;
-  skity_surface_add_external_wait_semaphore_vk(surface, semaphore);
+  skity_surface_add_external_wait_semaphore(surface, semaphore);
   EXPECT_EQ(
       skity_native_window_acquire_next_surface_vk(nullptr, 1, 1.f, &surface),
       SKITY_ERROR_INVALID_HANDLE);

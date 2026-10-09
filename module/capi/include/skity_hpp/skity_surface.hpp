@@ -16,6 +16,7 @@
 #include <skity_hpp/skity_bitmap.hpp>
 #include <skity_hpp/skity_canvas.hpp>
 #include <skity_hpp/skity_context.hpp>
+#include <skity_hpp/skity_semaphore.hpp>
 #include <skity_hpp/skity_types.hpp>
 
 namespace skity {
@@ -65,6 +66,14 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
   uint32_t GetHeight() const { return skity_surface_get_height(get()); }
   float GetContentScale() const {
     return skity_surface_get_content_scale(get());
+  }
+
+  /**
+   * Wait on @p semaphore during the next flush (external GPU work feeding
+   * this surface). Call between LockCanvas and Flush; consumed by the flush.
+   */
+  void AddExternalWaitSemaphore(const Semaphore& semaphore) {
+    skity_surface_add_external_wait_semaphore(get(), semaphore.get());
   }
 };
 
