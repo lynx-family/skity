@@ -36,6 +36,14 @@ void skity_paint_destroy(skity_paint paint) {
   skity::capi::destroy_handle<skity_paint_s>(paint, SKITY_OBJECT_TYPE_PAINT);
 }
 
+skity_paint skity_paint_clone(skity_paint paint) {
+  auto* p = paint_of(paint);
+  if (p == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_paint_s>(
+      SKITY_OBJECT_TYPE_PAINT, SKITY_HANDLE_OWNING,
+      std::make_shared<skity::Paint>(*p));
+}
+
 void skity_paint_reset(skity_paint paint) {
   if (auto* p = paint_of(paint)) p->Reset();
 }

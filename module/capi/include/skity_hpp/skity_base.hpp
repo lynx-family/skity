@@ -16,7 +16,9 @@ namespace detail {
 /**
  * Move-only owner of a C handle. Calls destroy_fn on destruction; copying
  * is disabled so ownership stays unique (matches the legacy API where
- * consumers held unique/shared_ptr to C++ objects).
+ * consumers held unique/shared_ptr to C++ objects). Wrappers of value-type
+ * C++ objects (Paint / Path / Font) opt into copy semantics by declaring
+ * copy members that clone the underlying object.
  */
 template <typename Handle, void (*destroy_fn)(Handle)>
 class OwnHandle {

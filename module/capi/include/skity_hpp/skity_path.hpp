@@ -62,7 +62,21 @@ class Path : public detail::OwnHandle<skity_path, skity_path_destroy> {
 
   Path() : OwnHandle(skity_path_create()) {}
 
-  /** Deep copy (the C++ Path was copyable; owning handles are not). */
+  /**
+   * Copy semantics of the value-type skity::Path: the geometry is
+   * duplicated (deep copy), like copying a skity::Path. Move stays cheap.
+   */
+  Path(const Path& other) : OwnHandle(skity_path_clone(other.get())) {}
+
+  Path& operator=(const Path& other) {
+    if (this != &other) reset(skity_path_clone(other.get()));
+    return *this;
+  }
+
+  Path(Path&&) = default;
+  Path& operator=(Path&&) = default;
+
+  /** Explicit deep copy; equivalent to copy construction. */
   Path Clone() const { return Path(skity_path_clone(get())); }
 
   void Reset() { skity_path_reset(get()); }

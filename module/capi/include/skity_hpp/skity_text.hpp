@@ -358,6 +358,21 @@ class Font : public detail::OwnHandle<skity_font, skity_font_destroy> {
       : OwnHandle(skity_font_create_with_typeface_scale(typeface, size, scale_x,
                                                         skew_x)) {}
 
+  /**
+   * Copy semantics of the value-type skity::Font: parameters are
+   * duplicated while the typeface is shared — identical to copying a
+   * skity::Font. Move stays cheap.
+   */
+  Font(const Font& other) : OwnHandle(skity_font_clone(other.get())) {}
+
+  Font& operator=(const Font& other) {
+    if (this != &other) reset(skity_font_clone(other.get()));
+    return *this;
+  }
+
+  Font(Font&&) = default;
+  Font& operator=(Font&&) = default;
+
   void SetTypeface(skity_typeface typeface) {
     skity_font_set_typeface(get(), typeface);
   }

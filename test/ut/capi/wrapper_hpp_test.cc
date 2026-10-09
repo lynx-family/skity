@@ -111,6 +111,70 @@ TEST(WrapperHpp, ValueTypes) {
   EXPECT_FLOAT_EQ(rrect.GetRadii()[0].e[0], 10.f);
 }
 
+TEST(WrapperHpp, ValueTypeCopySemantics) {
+  // Paint copy duplicates parameters and shares attached effects, matching
+  // the copy semantics of the value-type skity::Paint.
+  const skity::raii::Color4f stops[] = {
+      {0.f, 0.f, 0.f, 1.f},
+      {1.f, 1.f, 1.f, 1.f},
+  };
+  const float pos[] = {0.f, 1.f};
+  const skity::raii::Point pts[] = {
+      {0.f, 0.f, 0.f, 1.f},
+      {100.f, 0.f, 0.f, 1.f},
+  };
+  Paint original;
+  original.SetStyle(Paint::Style::kStroke);
+  original.SetStrokeWidth(3.f);
+  original.SetShader(Shader::MakeLinear(pts, stops, pos, 2));
+
+  Paint copied = original;  // copy constructor
+  EXPECT_EQ(copied.GetStyle(), Paint::Style::kStroke);
+  copied.SetStrokeWidth(7.f);
+  EXPECT_FLOAT_EQ(original.GetStrokeWidth(), 3.f);  // params are independent
+  EXPECT_FLOAT_EQ(copied.GetStrokeWidth(), 7.f);
+
+  // Attached effects are shared: mutating through one copy is visible via
+  // the other (same underlying shader object).
+  copied.GetShader().SetLocalMatrix(Matrix::Translate(5.f, 0.f));
+  EXPECT_FLOAT_EQ(original.GetShader().GetLocalMatrix().GetTranslateX(), 5.f);
+
+  Paint assigned;
+  assigned = original;  // copy assignment
+  EXPECT_FLOAT_EQ(assigned.GetStrokeWidth(), 3.f);
+
+  Paint moved = std::move(assigned);  // move stays cheap
+  EXPECT_FLOAT_EQ(moved.GetStrokeWidth(), 3.f);
+  EXPECT_FALSE(assigned);  // moved-out wrapper is empty
+
+  // Path copy is a deep geometry copy.
+  Path path;
+  path.MoveTo(0.f, 0.f).LineTo(10.f, 0.f);
+  Path path_copy = path;
+  path_copy.LineTo(10.f, 10.f);
+  EXPECT_EQ(path.CountPoints(), 2u);
+  EXPECT_EQ(path_copy.CountPoints(), 3u);
+  Path path_assigned;
+  path_assigned = path;
+  EXPECT_TRUE(path_assigned.IsEqual(path));
+
+  // Font copy duplicates parameters and shares the typeface.
+  Font font;
+  font.SetSize(12.f);
+  Font font_copy = font;
+  font_copy.SetSize(20.f);
+  EXPECT_FLOAT_EQ(font.GetSize(), 12.f);
+  EXPECT_FLOAT_EQ(font_copy.GetSize(), 20.f);
+
+  Typeface tf = font.GetTypeface();
+  if (tf) {  // default typeface is platform-dependent (may be absent)
+    Font with_tf(tf.get(), 12.f);
+    Font with_tf_copy = with_tf;
+    EXPECT_EQ(with_tf_copy.GetTypeface().GetUniqueId(),
+              with_tf.GetTypeface().GetUniqueId());
+  }
+}
+
 TEST(WrapperHpp, PaintEffectsRoundTrip) {
   Paint paint;
   paint.SetAntiAlias(true);

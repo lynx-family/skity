@@ -381,6 +381,12 @@ entry points — helper methods that had no C counterpart (Rect / Matrix
 arithmetic, color packing) are implemented inline in `skity_types.hpp`.
 `test/ut/capi/wrapper_hpp_test.cc` is the compile + CPU smoke gate.
 
+Value-type wrappers mirror their copyable C++ counterparts: `Paint`, `Path`
+and `Font` have copy construction / assignment that clones the underlying
+object via the C `*_clone` entry points (parameters duplicated, refcounted
+children — effects, typeface — shared), while moves stay cheap. All other
+wrappers own uniquely and remain move-only.
+
 | C domain | Wrapper | Notes |
 |---|---|---|
 | `skity_types` | `skity_types.hpp` | Rect / Matrix / RRect value types (binary-compatible with the C PODs), BlendMode / TileMode / AlphaType / ColorType / SamplingOptions / FilterMode / MipmapMode enums, color helpers |
@@ -389,8 +395,8 @@ arithmetic, color packing) are implemented inline in `skity_types.hpp`.
 | `skity_quaternion` | `skity_quaternion.hpp` | free functions `QuaternionEulerToMatrix` / `QuaternionAxisAngleToMatrix` |
 | `skity_semaphore` | `skity_semaphore.hpp` | `Semaphore` (Create on a Context, Import via the untyped base info + backend p_next extension, GetBackendType) — VK implementation only today |
 | `skity_canvas` | `skity_canvas.hpp` | full draw / state / clip / text / image surface; `SoftwareCanvas` inherits the non-owning `Canvas` view and owns its handle |
-| `skity_paint` | `skity_paint.hpp` | all setters + getters, effect attach (raw + wrapper overloads), effect getters via `Adopt` |
-| `skity_path` | `skity_path.hpp` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii + `AddMode`), point / verb / conic-weight access, `IsRect` / `IsLine` / `IsEqual`, convexity, segment masks, last-pt family, `CopyWith*` |
+| `skity_paint` | `skity_paint.hpp` | all setters + getters, effect attach (raw + wrapper overloads), effect getters via `Adopt`, copy semantics (deep-copy params, shared effects) |
+| `skity_path` | `skity_path.hpp` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii + `AddMode`), point / verb / conic-weight access, `IsRect` / `IsLine` / `IsEqual`, convexity, segment masks, last-pt family, `CopyWith*`, `Clone` + copy semantics (deep geometry copy) |
 | `skity_path_effect` | `skity_path_effect.hpp` | discrete + dash |
 | `skity_path_measure` | `skity_path_measure.hpp` | length / pos-tan / segment / contour advance |
 | `skity_path_op` | `skity_path_op.hpp` | free function `Op(one, two, PathOp, out)` |
@@ -404,7 +410,7 @@ arithmetic, color packing) are implemented inline in `skity_types.hpp`.
 | `skity_image` | `skity_image.hpp` | raster / texture / deferred / promise factories, read / scale pixels |
 | `skity_surface` | `skity_surface.hpp` | create / lock-canvas / flush / size / read-pixels (GL CreateInfo path), `AddExternalWaitSemaphore` |
 | `skity_context` | `skity_context.hpp` | `CreateGL`, error callback, all `set_enable_*` tuning knobs, resource cache limit |
-| `skity_font` + `skity_text` | `skity_text.hpp` | `Typeface` (load / default / unichar→glyph / style / tables / variations / `MakeVariation`), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / bounds / make-with-size / `LoadGlyph*` family), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
+| `skity_font` + `skity_text` | `skity_text.hpp` | `Typeface` (load / default / unichar→glyph / style / tables / variations / `MakeVariation`), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / bounds / make-with-size / `LoadGlyph*` family, copy semantics with shared typeface), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
 | `skity_glyph` | `skity_glyph.hpp` | `GlyphData` non-owning views over the global glyph cache (metrics / bearings / outline path / bitmap description), `GlyphFormat` / `BitmapFormat` enums, `GlyphBitmap` POD passthrough |
 | `skity_recorder` | `skity_recorder.hpp` | `PictureRecorder` (+ build options, last-op offset) and `DisplayList` (draw / cull-rect draw / bounds / op count / properties / rtree search / per-op paint mutation) |
 
@@ -465,7 +471,7 @@ These modules have complete (or near-complete) C coverage of their core:
 - Effects: `color_filter`, `mask_filter`, `path_effect`, `image_filter`
   (all factories)
 - `FontManager` + `FontStyleSet`
-- `Font`: create (incl. scale/skew ctor), typeface/size get/set, all
+- `Font`: create (incl. scale/skew ctor, `clone`), typeface/size get/set, all
   rendering-quality switches, `get_metrics`, `make_with_size`,
   `get_widths` + `get_bounds`, and the whole `LoadGlyph*` glyph-data family
   (metrics / path / bitmap / bitmap-info)
@@ -479,7 +485,7 @@ These modules have complete (or near-complete) C coverage of their core:
   upload / deferred-upload)
 - `Paint` (all setters + getters incl. `get_color4f` / `get_alpha_f`,
   fill/stroke split colors, effect/typeface attach, SDF-for-small-text and
-  font-threshold switches)
+  font-threshold switches, `clone`)
 - `GPUContext` backend queries (`skity_is_gpu_backend_supported`,
   `skity_context_get_backend_type` over the shared `skity_gpu_backend_type`
   enum)

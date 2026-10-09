@@ -67,6 +67,22 @@ class Paint : public detail::OwnHandle<skity_paint, skity_paint_destroy> {
   Paint() : OwnHandle(skity_paint_create()) {}
 
   /**
+   * Copy semantics of the value-type skity::Paint: parameters are
+   * duplicated while attached effects / typeface are shared (the same
+   * objects, referenced twice) — identical to copying a skity::Paint.
+   * Move stays cheap.
+   */
+  Paint(const Paint& other) : OwnHandle(skity_paint_clone(other.get())) {}
+
+  Paint& operator=(const Paint& other) {
+    if (this != &other) reset(skity_paint_clone(other.get()));
+    return *this;
+  }
+
+  Paint(Paint&&) = default;
+  Paint& operator=(Paint&&) = default;
+
+  /**
    * Wrap an existing handle. For handles owning a paint reference this
    * adopts it (destroy releases the paint); for non-owning handles borrowed
    * from a DisplayList's storage, skity_paint_destroy only reclaims the

@@ -58,6 +58,15 @@ void skity_font_destroy(skity_font font) {
   skity::capi::destroy_handle<skity_font_s>(font, SKITY_OBJECT_TYPE_FONT);
 }
 
+skity_font skity_font_clone(skity_font font) {
+  auto f = skity::capi::get_impl<skity_font_s, skity::Font>(
+      font, SKITY_OBJECT_TYPE_FONT);
+  if (f == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_font_s>(
+      SKITY_OBJECT_TYPE_FONT, SKITY_HANDLE_OWNING,
+      std::make_shared<skity::Font>(*f));
+}
+
 void skity_font_set_typeface(skity_font font, skity_typeface typeface) {
   auto* f = font_of(font);
   auto tf = skity::capi::get_impl<skity_typeface_s, skity::Typeface>(
