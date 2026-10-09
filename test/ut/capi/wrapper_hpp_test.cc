@@ -283,11 +283,12 @@ TEST(WrapperHpp, PathConstructionAndQueries) {
   skity::raii::Point line_pts[2]{};
   EXPECT_FALSE(line_path.IsLine(line_pts));
 
-  // Legacy operator== compares storage pointers, not contents: a deep clone
-  // is never "equal"; only identity compares true.
+  // operator== compares contents (verbs / points / conic weights / fill
+  // type): a deep clone is equal, a different path is not.
   Path copy = rect_path.Clone();
-  EXPECT_FALSE(copy.IsEqual(rect_path));
+  EXPECT_TRUE(copy.IsEqual(rect_path));
   EXPECT_TRUE(rect_path.IsEqual(rect_path));
+  EXPECT_FALSE(line_path.IsEqual(rect_path));
   copy.Reset();
   EXPECT_TRUE(copy.IsEmpty());
 
