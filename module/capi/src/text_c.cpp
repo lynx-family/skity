@@ -258,7 +258,10 @@ int32_t skity_typeface_get_variation_position(
   if (tf == nullptr) {
     return 0;
   }
-  const auto& coords = tf->GetVariationDesignPosition().GetCoordinates();
+  // GetVariationDesignPosition() returns by value; keep the temporary
+  // alive — binding a reference directly to its member would dangle.
+  auto position = tf->GetVariationDesignPosition();
+  const auto& coords = position.GetCoordinates();
   if (coordinates == nullptr || count <= 0) {
     return static_cast<int32_t>(coords.size());
   }

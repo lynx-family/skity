@@ -190,12 +190,13 @@ void skity_image_destroy(skity_image image) {
 
 uint32_t skity_image_get_width(skity_image image) {
   auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
-  return w ? (uint32_t)static_cast<skity::Image*>(w->impl.get())->Width() : 0u;
+  return w ? (uint32_t) static_cast<skity::Image*>(w->impl.get())->Width() : 0u;
 }
 
 uint32_t skity_image_get_height(skity_image image) {
   auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
-  return w ? (uint32_t)static_cast<skity::Image*>(w->impl.get())->Height() : 0u;
+  return w ? (uint32_t) static_cast<skity::Image*>(w->impl.get())->Height()
+           : 0u;
 }
 
 skity_image skity_image_create_from_texture(skity_texture texture) {

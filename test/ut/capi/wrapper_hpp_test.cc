@@ -598,9 +598,18 @@ TEST(WrapperHpp, TextFontTypeface) {
             head_size);
   // unitsPerEm lives at offset 18 of head, big endian: 2048.
   EXPECT_EQ((head_bytes[18] << 8) | head_bytes[19], 2048);
-  // Not instantiated at any coordinate, so the active position is empty
-  // (Robotos may still declare fvar axes — checked on RobotoFlex below).
-  EXPECT_TRUE(typeface.GetVariationPosition().empty());
+  // Roboto declares fvar axes, so a non-instantiated face still reports its
+  // default design coordinates: one coordinate per axis, in axis order,
+  // each at the axis default (FreeType initializes blend coords to the
+  // defaults when nothing is set).
+  const std::vector<skity_variation_coordinate> position =
+      typeface.GetVariationPosition();
+  const std::vector<skity_variation_axis> axes = typeface.GetVariationAxes();
+  EXPECT_EQ(position.size(), axes.size());
+  for (size_t i = 0; i < position.size(); i++) {
+    EXPECT_EQ(position[i].axis, axes[i].tag);
+    EXPECT_FLOAT_EQ(position[i].value, axes[i].def);
+  }
 
   Font font(typeface.get(), 32.f);
   EXPECT_FLOAT_EQ(font.GetSize(), 32.f);
