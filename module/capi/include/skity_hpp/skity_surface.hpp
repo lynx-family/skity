@@ -83,6 +83,9 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
     skity_surface_add_external_wait_semaphore(get(), semaphore.get());
   }
 
+  /** Empty surface; filled by Create / AcquireNextSurface out-params. */
+  Surface() = default;
+
  private:
   explicit Surface(skity_surface h) : OwnHandle(h) {}
 };

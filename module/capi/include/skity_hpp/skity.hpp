@@ -88,6 +88,12 @@
 #include <skity_hpp/skity_stroke.hpp>
 #include <skity_hpp/skity_surface.hpp>
 #include <skity_hpp/skity_text.hpp>
+#include <skity_hpp/skity_texture.hpp>
 #include <skity_hpp/skity_types.hpp>
+
+// Vulkan-only wrapper headers (context / surface / texture / native-window
+// / semaphore sync-fd import, aggregated by skity_vk.hpp) are deliberately
+// NOT included here: they pull in <vulkan/vulkan.h>. VK consumers include
+// <skity_hpp/skity_vk.hpp> instead.
 
 #endif  // MODULE_CAPI_INCLUDE_SKITY_HPP_SKITY_HPP
