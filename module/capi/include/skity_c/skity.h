@@ -32,6 +32,7 @@
 #include <skity_c/skity_precompile.h>
 #include <skity_c/skity_quaternion.h>
 #include <skity_c/skity_recorder.h>
+#include <skity_c/skity_semaphore.h>
 #include <skity_c/skity_shader.h>
 #include <skity_c/skity_stroke.h>
 #include <skity_c/skity_surface.h>

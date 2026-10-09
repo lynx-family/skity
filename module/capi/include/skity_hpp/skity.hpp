@@ -83,6 +83,7 @@
 #include <skity_hpp/skity_path_op.hpp>
 #include <skity_hpp/skity_quaternion.hpp>
 #include <skity_hpp/skity_recorder.hpp>
+#include <skity_hpp/skity_semaphore.hpp>
 #include <skity_hpp/skity_shader.hpp>
 #include <skity_hpp/skity_stroke.hpp>
 #include <skity_hpp/skity_surface.hpp>

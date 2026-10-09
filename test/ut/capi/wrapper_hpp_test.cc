@@ -50,6 +50,7 @@ using skity::raii::QuaternionAxisAngleToMatrix;
 using skity::raii::QuaternionEulerToMatrix;
 using skity::raii::Rect;
 using skity::raii::RRect;
+using skity::raii::Semaphore;
 using skity::raii::Shader;
 using skity::raii::StrokePath;
 using skity::raii::TextBlob;
@@ -69,6 +70,14 @@ Paint RedStrokePaint() {
 }
 
 }  // namespace
+
+TEST(WrapperHpp, SemaphoreNeutralApi) {
+  // Compile + NULL-path gate; real semaphores need a GPU context (Vulkan).
+  Semaphore semaphore = Semaphore::Adopt(nullptr);
+  EXPECT_FALSE(semaphore);
+  EXPECT_EQ(semaphore.GetBackendType(),
+            skity::raii::Context::BackendType::kNone);
+}
 
 TEST(WrapperHpp, ValueTypes) {
   Rect r = Rect::MakeXYWH(10.f, 20.f, 30.f, 40.f);

@@ -5,6 +5,7 @@
 #ifndef MODULE_CAPI_INCLUDE_SKITY_C_SKITY_SURFACE_VK_H
 #define MODULE_CAPI_INCLUDE_SKITY_C_SKITY_SURFACE_VK_H
 
+#include <skity_c/skity_semaphore.h>
 #include <skity_c/skity_surface.h>
 #include <vulkan/vulkan.h>
 
@@ -52,9 +53,6 @@ typedef struct skity_surface_create_info_vk {
   uint32_t owns_image_view;
   const skity_surface_sync_info_vk* sync_info;
 } skity_surface_create_info_vk;
-
-/** @brief Opaque handle to a skity::GPUSemaphore. */
-typedef struct skity_semaphore_s* skity_semaphore;
 
 /**
  * @brief Add an external wait semaphore to the next frame. Must be called
