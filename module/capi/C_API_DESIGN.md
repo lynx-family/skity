@@ -380,6 +380,8 @@ arithmetic, color packing) are implemented inline in `skity_types.hpp`.
 |---|---|---|
 | `skity_types` | `skity_types.hpp` | Rect / Matrix / RRect value types (binary-compatible with the C PODs), BlendMode / TileMode / AlphaType / ColorType / SamplingOptions / FilterMode / MipmapMode enums, color helpers |
 | `skity_base` | `skity_base.hpp` | `detail::OwnHandle` (move-only owner) |
+| `skity_camera` | `skity_camera.hpp` | `Camera` (viewport ctor, position / look-at / dist / rotation setters, `GetCamera` / `GetFixedCamera` view matrices) |
+| `skity_quaternion` | `skity_quaternion.hpp` | free functions `QuaternionEulerToMatrix` / `QuaternionAxisAngleToMatrix` |
 | `skity_canvas` | `skity_canvas.hpp` | full draw / state / clip / text / image surface; `SoftwareCanvas` inherits the non-owning `Canvas` view and owns its handle |
 | `skity_paint` | `skity_paint.hpp` | all setters + getters, effect attach (raw + wrapper overloads), effect getters via `Adopt` |
 | `skity_path` | `skity_path.hpp` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii + `AddMode`), point / verb / conic-weight access, `IsRect` / `IsLine` / `IsEqual`, convexity, segment masks, last-pt family, `CopyWith*` |
@@ -403,9 +405,9 @@ arithmetic, color packing) are implemented inline in `skity_types.hpp`.
 Not wrapped (intentionally, for now): the Vulkan-specific domains
 (`skity_context_vk` / `skity_surface_vk` / `skity_texture_vk` /
 `skity_semaphore_vk` / `skity_native_window_vk` — wrapping them would force
-`<vulkan/vulkan.h>` into every consumer), `skity_camera` /
-`skity_quaternion` (3D helpers), `skity_precompile`, and `skity_texture`
-(entered through `Image::MakeFromTexture` / promise callbacks instead).
+`<vulkan/vulkan.h>` into every consumer), `skity_precompile`, and
+`skity_texture` (entered through `Image::MakeFromTexture` / promise
+callbacks instead).
 `skity_bridge.hpp` is the reverse direction (C++ objects lent INTO C
 handles) and is not part of the RAII layer.
 

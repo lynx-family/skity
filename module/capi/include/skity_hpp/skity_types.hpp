@@ -23,6 +23,7 @@ using Color = skity_color;
 using Color4f = skity_color4f;
 using Point = skity_point;
 using Vec2 = skity_vec2;
+using Vec3 = skity_vec3;
 using Vec4 = skity_vec4;
 
 /** Blend modes, mirroring the legacy skity::BlendMode enumerators. */

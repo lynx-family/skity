@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <skity_hpp/skity.hpp>
 #include <vector>
@@ -19,6 +20,7 @@ namespace {
 using skity::raii::Bitmap;
 using skity::raii::BlendMode;
 using skity::raii::BlurStyle;
+using skity::raii::Camera;
 using skity::raii::Canvas;
 using skity::raii::Color_BLACK;
 using skity::raii::Color_WHITE;
@@ -44,6 +46,8 @@ using skity::raii::PathMeasure;
 using skity::raii::PathOp;
 using skity::raii::PictureRecorder;
 using skity::raii::Pixmap;
+using skity::raii::QuaternionAxisAngleToMatrix;
+using skity::raii::QuaternionEulerToMatrix;
 using skity::raii::Rect;
 using skity::raii::RRect;
 using skity::raii::Shader;
@@ -51,6 +55,8 @@ using skity::raii::StrokePath;
 using skity::raii::TextBlob;
 using skity::raii::Typeface;
 using skity::raii::Vec2;
+using skity::raii::Vec3;
+using skity::raii::Vec4;
 
 constexpr Rect kBounds = Rect::MakeWH(1000.f, 1000.f);
 
@@ -645,6 +651,39 @@ TEST(WrapperHpp, FontManagerFamilies) {
   ASSERT_TRUE(from_file);
 }
 #endif  // SKITY_FONT_DIR
+
+TEST(WrapperHpp, CameraAndQuaternion) {
+  Camera camera(100.f, 100.f);
+  ASSERT_TRUE(camera);
+  camera.SetPosition(Vec4{0.f, 0.f, -100.f, 1.f});
+  camera.LookAt(Vec4{0.f, 0.f, 0.f, 1.f});
+  camera.SetCameraDist(200.f);
+  camera.SetRotation(Matrix{});
+  Matrix view = camera.GetCamera();
+  EXPECT_TRUE(std::isfinite(view.m[0]) && std::isfinite(view.m[15]));
+  // The fixed camera shares the distance setting (it differs only in
+  // rotation / translation animation), so just sanity-check the projection
+  // diagonal.
+  Matrix fixed = camera.GetFixedCamera();
+  EXPECT_GT(fixed.m[0], 0.f);
+
+  // Quaternion helpers: zero Euler angles are the identity transform.
+  Matrix identity = QuaternionEulerToMatrix(0.f, 0.f, 0.f);
+  EXPECT_FLOAT_EQ(identity.m[0], 1.f);
+  EXPECT_FLOAT_EQ(identity.m[5], 1.f);
+  EXPECT_FLOAT_EQ(identity.m[10], 1.f);
+  EXPECT_FLOAT_EQ(identity.m[15], 1.f);
+  EXPECT_FLOAT_EQ(identity.m[1], 0.f);
+
+  // A quarter turn around +Z maps the X axis onto the Y axis (column-major:
+  // first column of m is the image of the X basis vector).
+  Vec3 z_axis{0.f, 0.f, 1.f};
+  Matrix quarter = QuaternionAxisAngleToMatrix(z_axis, 3.14159265f / 2.f);
+  EXPECT_NEAR(quarter.m[0], 0.f, 1e-5f);
+  EXPECT_NEAR(quarter.m[1], 1.f, 1e-5f);
+  EXPECT_NEAR(quarter.m[4], -1.f, 1e-5f);
+  EXPECT_NEAR(quarter.m[5], 0.f, 1e-5f);
+}
 
 TEST(WrapperHpp, SoftwareCanvasDraws) {
   Bitmap bitmap(8, 8, skity::raii::AlphaType::kPremul_AlphaType);
