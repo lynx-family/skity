@@ -2,8 +2,8 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef MODULE_CAPI_INCLUDE_SKITY_HPP_SKITY_BRIDGE_HPP
-#define MODULE_CAPI_INCLUDE_SKITY_HPP_SKITY_BRIDGE_HPP
+#ifndef MODULE_CAPI_INCLUDE_SKITY_HPP_BRIDGE_HPP
+#define MODULE_CAPI_INCLUDE_SKITY_HPP_BRIDGE_HPP
 
 /*
  * C++ <-> C ABI bridge for skity-capi.
@@ -45,13 +45,13 @@ extern "C" {
  *          removed in a future release. Do not build long-term abstractions on
  *          top of it.
  *
- * @p native MUST be the raw pointer value of a @c skity::Canvas* (for example
+ * native MUST be the raw pointer value of a @c skity::Canvas* (for example
  * one obtained from @c GPUSurface::LockCanvas). Because the parameter is a
  * type-erased @c void*, passing a pointer to any other type is undefined
  * behaviour — the capi layer cannot validate the type and will happily
  * reinterpret it.
  *
- * The capi layer does NOT take ownership of @p native; it only borrows it. The
+ * The capi layer does NOT take ownership of native; it only borrows it. The
  * caller is solely responsible for keeping the Canvas alive for the entire
  * lifetime of the returned handle (and any handle derived from it).
  *
@@ -65,8 +65,8 @@ extern "C" {
  *
  * @param native  raw pointer value of a skity::Canvas*, passed as @c void*;
  *                NULL returns NULL
- * @return a non-owning skity_canvas handle borrowing @p native, or NULL if
- *         @p native is NULL
+ * @return a non-owning skity_canvas handle borrowing native, or NULL if
+ *         native is NULL
  */
 SKITY_C_API skity_canvas skity_canvas_from_native(void* native);
 
@@ -76,7 +76,7 @@ SKITY_C_API skity_canvas skity_canvas_from_native(void* native);
  *
  * Same TEMPORARY-bridge warning as skity_canvas_from_native, but the
  * ownership differs because the underlying models do: unlike the borrowed
- * canvas, this handle takes a strong reference to @p native through
+ * canvas, this handle takes a strong reference to native through
  * Typeface's enable_shared_from_this, giving it exactly the semantics of
  * every other skity_typeface constructor (skity_typeface_make_from_file
  * etc.):
@@ -86,7 +86,7 @@ SKITY_C_API skity_canvas skity_canvas_from_native(void* native);
  *   - skity_typeface_destroy releases that reference in addition to
  *     reclaiming the wrapper struct.
  *
- * @p native MUST be the raw pointer value of a @c skity::Typeface* that is
+ * native MUST be the raw pointer value of a @c skity::Typeface* that is
  * currently owned by at least one shared_ptr. Every public skity API
  * surfaces Typeface as shared_ptr, so this holds for any legitimately
  * obtained pointer; bridging a pointer outside shared ownership (never
@@ -96,10 +96,10 @@ SKITY_C_API skity_canvas skity_canvas_from_native(void* native);
  * @param native  raw pointer value of a skity::Typeface*, passed as @c void*;
  *                NULL returns NULL
  * @return an owning skity_typeface handle holding a strong reference to
- *         @p native, or NULL if @p native is NULL
+ *         native, or NULL if native is NULL
  */
 SKITY_C_API skity_typeface skity_typeface_from_native(void* native);
 
 }  // extern "C"
 
-#endif  // MODULE_CAPI_INCLUDE_SKITY_HPP_SKITY_BRIDGE_HPP
+#endif  // MODULE_CAPI_INCLUDE_SKITY_HPP_BRIDGE_HPP
