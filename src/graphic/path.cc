@@ -4,6 +4,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <glm/gtc/matrix_transform.hpp>
@@ -1152,12 +1153,20 @@ bool Path::IsLine(Point* line) const {
 }
 
 bool Path::operator==(const Path& other) const {
+  // Content equality (verbs / points / conic weights / fill type), like
+  // SkPath::operator==. Lazily-computed caches (convexity_, is_finite_) are
+  // deliberately not compared: two identical paths can disagree on whether
+  // a cache has been computed yet.
   return (this == std::addressof(other)) ||
          (last_move_to_index_ == other.last_move_to_index_ &&
-          convexity_ == other.convexity_ && is_finite_ == other.is_finite_ &&
-          points_.data() == other.points_.data() &&
-          verbs_.data() == other.verbs_.data() &&
-          conic_weights_.data() == other.conic_weights_.data());
+          fill_type_ == other.fill_type_ &&
+          points_.size() == other.points_.size() &&
+          verbs_.size() == other.verbs_.size() &&
+          conic_weights_.size() == other.conic_weights_.size() &&
+          std::equal(verbs_.begin(), verbs_.end(), other.verbs_.begin()) &&
+          std::equal(points_.begin(), points_.end(), other.points_.begin()) &&
+          std::equal(conic_weights_.begin(), conic_weights_.end(),
+                     other.conic_weights_.begin()));
 }
 
 void Path::Swap(Path& that) {
