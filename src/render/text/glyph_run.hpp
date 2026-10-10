@@ -8,6 +8,7 @@
 #include <assert.h>
 
 #include <memory>
+#include <skity/geometry/rect.hpp>
 #include <skity/text/font.hpp>
 #include <vector>
 
@@ -25,6 +26,11 @@ class HWFontTexture;
 class HWFontTextureGroup;
 class HWStageBuffer;
 using GlyphRunList = ArrayList<GlyphRun*, 16>;
+struct GlyphDraw {
+  HWDraw* draw = nullptr;
+  Rect bounds = Rect::MakeEmpty();
+};
+using GlyphDrawList = ArrayList<GlyphDraw, 4>;
 using DrawPathFunc = std::function<void(const Path& path, const Paint& paint)>;
 
 class GlyphRun {
@@ -39,13 +45,14 @@ class GlyphRun {
 
   virtual ~GlyphRun();
 
-  virtual HWDraw* Draw(Matrix transform, const Matrix& glyph_to_layer,
-                       ArenaAllocator* arena_allocator, float canvas_scale,
-                       bool enable_text_linear_filter) = 0;
+  virtual GlyphDrawList Draw(Matrix transform, const Matrix& glyph_to_layer,
+                             ArenaAllocator* arena_allocator,
+                             float canvas_scale, bool enable_text_linear_filter,
+                             bool split_overlapping_glyphs) = 0;
 
-  virtual Rect GetBounds() = 0;
+  virtual bool HasCoverageMask() const = 0;
 
-  virtual bool IsStroke() = 0;
+  virtual bool IsSourceOpaque() const = 0;
 
  private:
   static GlyphRunList MakeInternal(const uint32_t count, const GlyphID* glyphs,

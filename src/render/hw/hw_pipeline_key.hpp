@@ -22,8 +22,7 @@ struct HWGeometryKeyType {
     kPathAA = 2,
     kTessFill = 3,
     kTessStroke = 4,
-    kColorText = 5,
-    kGradientText = 6,
+    kText = 5,
     kRRect = 7,
     kClip = 8,
     kFilter = 9,
@@ -43,7 +42,11 @@ struct HWGeometryFSKeyType {
     kRRect = HWGeometryKeyType::kRRect,
     kCoverageAA = HWGeometryKeyType::kCoverageAA,
     kCoverageAAConflationCorrection = kFragmentOnlyStart,
-    kLast = kCoverageAAConflationCorrection,
+    kTextA8 = kFragmentOnlyStart + 1,
+    kTextSDF = kFragmentOnlyStart + 2,
+    kTextColor = kFragmentOnlyStart + 3,
+    kTextColorSwizzleRB = kFragmentOnlyStart + 4,
+    kLast = kTextColorSwizzleRB,
   };
 };
 static_assert(HWGeometryKeyType::Value::kLast <
@@ -58,11 +61,6 @@ struct HWFragmentKeyType {
     kTexture = 4,
     kStencil = 5,
     kBlur = 6,
-    kColorText = 7,
-    kEmojiText = 8,
-    kGradientText = 9,
-    kSDFText = 10,
-    kTextureText = 11,
     kImageFilter = 12,
     kLast = kImageFilter,
   };
