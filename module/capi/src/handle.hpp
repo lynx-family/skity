@@ -39,6 +39,7 @@ class TextBlob;
 class Texture;
 class Typeface;
 class TypefaceDelegate;
+class GlyphData;
 
 }  // namespace skity
 
@@ -78,6 +79,7 @@ typedef enum {
   SKITY_OBJECT_TYPE_TYPEFACE_DELEGATE,
   SKITY_OBJECT_TYPE_SEMAPHORE,
   SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK,
+  SKITY_OBJECT_TYPE_GLYPH_DATA,
 } skity_object_type;
 
 /* When set, the wrapper owns the underlying object and releases it on destroy.
@@ -142,6 +144,7 @@ struct skity_data_s : skity_handle_base<skity::Data> {};
 struct skity_typeface_delegate_s : skity_handle_base<skity::TypefaceDelegate> {
 };
 struct skity_semaphore_s : skity_handle_base<skity::GPUSemaphore> {};
+struct skity_glyph_data_s : skity_handle_base<skity::GlyphData> {};
 struct skity_native_window_vk_s : skity_handle_base<skity::GPUNativeWindowVK> {
 };
 

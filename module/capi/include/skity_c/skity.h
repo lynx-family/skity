@@ -18,8 +18,10 @@
 #include <skity_c/skity_canvas.h>
 #include <skity_c/skity_color_filter.h>
 #include <skity_c/skity_context.h>
+#include <skity_c/skity_context_mtl.h>
 #include <skity_c/skity_data.h>
 #include <skity_c/skity_font.h>
+#include <skity_c/skity_glyph.h>
 #include <skity_c/skity_image.h>
 #include <skity_c/skity_image_filter.h>
 #include <skity_c/skity_mask_filter.h>
@@ -31,11 +33,14 @@
 #include <skity_c/skity_precompile.h>
 #include <skity_c/skity_quaternion.h>
 #include <skity_c/skity_recorder.h>
+#include <skity_c/skity_semaphore.h>
 #include <skity_c/skity_shader.h>
 #include <skity_c/skity_stroke.h>
 #include <skity_c/skity_surface.h>
+#include <skity_c/skity_surface_mtl.h>
 #include <skity_c/skity_text.h>
 #include <skity_c/skity_texture.h>
+#include <skity_c/skity_texture_mtl.h>
 #include <skity_c/skity_types.h>
 
 #endif  // MODULE_CAPI_INCLUDE_SKITY_C_SKITY_H

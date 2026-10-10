@@ -4,10 +4,13 @@
 
 #include <skity_c/skity_text.h>
 
+#include <algorithm>
 #include <cstring>
 #include <skity/graphic/paint.hpp>
 #include <skity/io/data.hpp>
 #include <skity/text/font.hpp>
+#include <skity/text/font_arguments.hpp>
+#include <skity/text/font_descriptor.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/font_style.hpp>
 #include <skity/text/glyph.hpp>
@@ -158,6 +161,165 @@ uint16_t skity_typeface_unichar_to_glyph(skity_typeface typeface,
                                          uint32_t unichar) {
   auto* tf = typeface_of(typeface);
   return tf ? tf->UnicharToGlyph(unichar) : 0;
+}
+
+skity_data skity_typeface_get_data(skity_typeface typeface) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr) {
+    return nullptr;
+  }
+  auto data = tf->GetData();
+  if (data == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_data_s>(
+      SKITY_OBJECT_TYPE_DATA, SKITY_HANDLE_OWNING, std::move(data));
+}
+
+uint32_t skity_typeface_get_units_per_em(skity_typeface typeface) {
+  auto* tf = typeface_of(typeface);
+  return tf ? tf->GetUnitsPerEm() : 0u;
+}
+
+void skity_typeface_get_font_style(skity_typeface typeface,
+                                   skity_font_style* out) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr || out == nullptr) {
+    return;
+  }
+  skity::FontStyle style = tf->GetFontStyle();
+  out->weight = style.weight();
+  out->width = style.width();
+  out->slant = static_cast<skity_font_slant>(style.slant());
+}
+
+uint32_t skity_typeface_get_unique_id(skity_typeface typeface) {
+  auto* tf = typeface_of(typeface);
+  return tf ? tf->TypefaceId() : 0u;
+}
+
+uint32_t skity_typeface_is_bold(skity_typeface typeface) {
+  auto* tf = typeface_of(typeface);
+  return tf && tf->IsBold() ? 1u : 0u;
+}
+
+uint32_t skity_typeface_is_italic(skity_typeface typeface) {
+  auto* tf = typeface_of(typeface);
+  return tf && tf->IsItalic() ? 1u : 0u;
+}
+
+uint32_t skity_typeface_contain_glyph(skity_typeface typeface,
+                                      uint32_t unichar) {
+  auto* tf = typeface_of(typeface);
+  return tf && tf->ContainGlyph(unichar) ? 1u : 0u;
+}
+
+uint32_t skity_typeface_contains_color_table(skity_typeface typeface) {
+  auto* tf = typeface_of(typeface);
+  return tf && tf->ContainsColorTable() ? 1u : 0u;
+}
+
+int32_t skity_typeface_count_tables(skity_typeface typeface) {
+  auto* tf = typeface_of(typeface);
+  return tf ? tf->CountTables() : 0;
+}
+
+int32_t skity_typeface_get_table_tags(skity_typeface typeface, uint32_t* tags,
+                                      int32_t count) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr) {
+    return 0;
+  }
+  if (tags == nullptr || count <= 0) {
+    return tf->CountTables();
+  }
+  return tf->GetTableTags(reinterpret_cast<skity::FontTableTag*>(tags));
+}
+
+size_t skity_typeface_get_table_size(skity_typeface typeface, uint32_t tag) {
+  auto* tf = typeface_of(typeface);
+  return tf ? tf->GetTableSize(static_cast<skity::FontTableTag>(tag)) : 0u;
+}
+
+size_t skity_typeface_get_table_data(skity_typeface typeface, uint32_t tag,
+                                     size_t offset, size_t length, void* data) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr || data == nullptr || length == 0) {
+    return 0;
+  }
+  return tf->GetTableData(static_cast<skity::FontTableTag>(tag), offset, length,
+                          data);
+}
+
+int32_t skity_typeface_get_variation_position(
+    skity_typeface typeface, skity_variation_coordinate* coordinates,
+    int32_t count) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr) {
+    return 0;
+  }
+  // GetVariationDesignPosition() returns by value; keep the temporary
+  // alive — binding a reference directly to its member would dangle.
+  auto position = tf->GetVariationDesignPosition();
+  const auto& coords = position.GetCoordinates();
+  if (coordinates == nullptr || count <= 0) {
+    return static_cast<int32_t>(coords.size());
+  }
+  int32_t n = static_cast<int32_t>(
+      std::min<size_t>(coords.size(), static_cast<size_t>(count)));
+  for (int32_t i = 0; i < n; i++) {
+    coordinates[i].axis = coords[i].axis;
+    coordinates[i].value = coords[i].value;
+  }
+  return n;
+}
+
+int32_t skity_typeface_get_variation_axes(skity_typeface typeface,
+                                          skity_variation_axis* axes,
+                                          int32_t count) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr) {
+    return 0;
+  }
+  auto params = tf->GetVariationDesignParameters();
+  if (axes == nullptr || count <= 0) {
+    return static_cast<int32_t>(params.size());
+  }
+  int32_t n = static_cast<int32_t>(
+      std::min<size_t>(params.size(), static_cast<size_t>(count)));
+  for (int32_t i = 0; i < n; i++) {
+    axes[i].tag = params[i].tag;
+    axes[i].min = params[i].min;
+    axes[i].def = params[i].def;
+    axes[i].max = params[i].max;
+    axes[i].hidden = params[i].hidden ? 1u : 0u;
+  }
+  return n;
+}
+
+skity_typeface skity_typeface_make_variation(skity_typeface typeface,
+                                             const skity_font_arguments* args) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr || args == nullptr) {
+    return nullptr;
+  }
+  skity::FontArguments font_args;
+  font_args.SetCollectionIndex(args->collection_index);
+  if (args->variation_coordinates != nullptr &&
+      args->variation_coordinate_count > 0) {
+    skity::VariationPosition position;
+    for (uint32_t i = 0; i < args->variation_coordinate_count; i++) {
+      position.AddCoordinate(args->variation_coordinates[i].axis,
+                             args->variation_coordinates[i].value);
+    }
+    font_args.SetVariationDesignPosition(position);
+  }
+  auto varied = tf->MakeVariation(font_args);
+  if (varied == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_typeface_s>(
+      SKITY_OBJECT_TYPE_TYPEFACE, SKITY_HANDLE_OWNING, std::move(varied));
 }
 
 skity_typeface_delegate skity_typeface_delegate_create_simple(
@@ -490,6 +652,32 @@ skity_typeface skity_font_style_set_match_style(skity_font_style_set set,
 void skity_font_style_set_destroy(skity_font_style_set set) {
   skity::capi::destroy_handle<skity_font_style_set_s>(
       set, SKITY_OBJECT_TYPE_FONT_STYLE_SET);
+}
+
+int32_t skity_typeface_get_font_descriptor(skity_typeface typeface,
+                                           skity_font_descriptor* out,
+                                           char* family_name,
+                                           int32_t family_name_size) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr) {
+    return 0;
+  }
+  skity::FontDescriptor desc = tf->GetFontDescriptor();
+  if (out != nullptr) {
+    out->style.weight = desc.style.weight();
+    out->style.width = desc.style.width();
+    out->style.slant = static_cast<skity_font_slant>(desc.style.slant());
+    out->collection_index = desc.collection_index;
+    out->factory_id = desc.factory_id;
+  }
+  int32_t length = static_cast<int32_t>(desc.family_name.size()) + 1;
+  if (family_name == nullptr || family_name_size <= 0) {
+    return length;
+  }
+  std::strncpy(family_name, desc.family_name.c_str(),
+               (size_t)family_name_size - 1);
+  family_name[family_name_size - 1] = '\0';
+  return length;
 }
 
 }  // extern "C"

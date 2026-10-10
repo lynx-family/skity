@@ -5,6 +5,7 @@
 #include <skity_c/skity_surface.h>
 
 #include <skity/gpu/gpu_context.hpp>
+#include <skity/gpu/gpu_semaphore.hpp>
 #include <skity/gpu/gpu_surface.hpp>
 #include <skity/render/canvas.hpp>
 #include <utility>
@@ -19,6 +20,12 @@
 #include <skity_c/skity_surface_vk.h>
 
 #include <skity/gpu/gpu_context_vk.hpp>
+#endif
+
+#if defined(SKITY_METAL)
+#include <skity_c/skity_surface_mtl.h>
+
+#include "mtl_glue.hpp"
 #endif
 
 namespace {
@@ -140,6 +147,15 @@ skity_result skity_surface_create(skity_context context,
         out_surface);
   }
 #endif
+#if defined(SKITY_METAL)
+  if (structure_type == SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_MTL) {
+    return CreateSurfaceHandle(
+        skity::capi::MtlSurfaceCreateGlue(
+            context_impl.get(), info,
+            static_cast<const skity_surface_create_info_mtl*>(info->p_next)),
+        out_surface);
+  }
+#endif
   return SKITY_ERROR_INVALID_ARGUMENT;
 }
 
@@ -212,9 +228,10 @@ float skity_surface_get_content_scale(skity_surface surface) {
   return surface_impl ? surface_impl->ContentScale() : 1.f;
 }
 
-#if defined(SKITY_VULKAN)
-void skity_surface_add_external_wait_semaphore_vk(skity_surface surface,
-                                                  skity_semaphore semaphore) {
+void skity_surface_add_external_wait_semaphore(skity_surface surface,
+                                               skity_semaphore semaphore) {
+  // Neutral C++ virtual — no Vulkan types involved; the guard the VK-named
+  // predecessor lived under was unnecessary.
   auto surface_impl = skity::capi::get_impl<skity_surface_s, skity::GPUSurface>(
       surface, SKITY_OBJECT_TYPE_SURFACE);
   auto semaphore_impl =
@@ -224,6 +241,5 @@ void skity_surface_add_external_wait_semaphore_vk(skity_surface surface,
     surface_impl->AddExternalWaitSemaphore(semaphore_impl);
   }
 }
-#endif
 
 }  // extern "C"

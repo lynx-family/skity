@@ -158,10 +158,12 @@ if (${SKITY_CAPI_MODULE})
         capi/bridge_c_test.cc
         capi/recorder_c_test.cc
         capi/text_delegate_c_test.cc
+        capi/wrapper_hpp_test.cc
     )
     if (${SKITY_VK_BACKEND})
         target_sources(skity_unit_test PRIVATE
             capi/vulkan_c_test.cc
+            capi/wrapper_vk_hpp_test.cc
         )
         target_include_directories(skity_unit_test PRIVATE
             ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include

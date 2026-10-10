@@ -327,6 +327,23 @@ SKITY_C_API void skity_canvas_clip_rrect(skity_canvas canvas,
                                          float ry, skity_clip_op op);
 
 /**
+ * @brief Per-corner-radius variant of skity_canvas_clip_rrect.
+ *
+ * @p radii holds 4 skity_vec2 entries, one per corner, in the order
+ * upper-left, upper-right, lower-right, lower-left (matching
+ * skity::RRect::SetRectRadii); each entry's two floats are the corner's
+ * x / y radii.
+ *
+ * @param rect   bounds of the rounded rectangle
+ * @param radii  per-corner radii, 4 skity_vec2 entries
+ * @param op     clip operation to apply
+ */
+SKITY_C_API void skity_canvas_clip_rrect_radii(skity_canvas canvas,
+                                               const skity_rect* rect,
+                                               const skity_vec2* radii,
+                                               skity_clip_op op);
+
+/**
  * @brief Save the current matrix and clip, and allocate a backend render
  *        target for subsequent drawing. A matching skity_canvas_restore
  *        discards the layer and composites it back into the current context,
@@ -381,6 +398,22 @@ SKITY_C_API void skity_canvas_draw_drrect(skity_canvas canvas,
                                           skity_paint paint);
 
 /**
+ * @brief Per-corner-radius variant of skity_canvas_draw_drrect.
+ *
+ * @p outer_radii / @p inner_radii each hold 4 skity_vec2 entries (corner
+ * order as in skity_canvas_clip_rrect_radii).
+ *
+ * @param outer        bounds of the outer rounded rectangle
+ * @param outer_radii  per-corner radii of @p outer, 4 skity_vec2 entries
+ * @param inner        bounds of the inner rounded rectangle (the hole)
+ * @param inner_radii  per-corner radii of @p inner, 4 skity_vec2 entries
+ * @param paint        stroke or fill, blend, color, and so on, used to draw
+ */
+SKITY_C_API void skity_canvas_draw_drrect_radii(
+    skity_canvas canvas, const skity_rect* outer, const skity_vec2* outer_radii,
+    const skity_rect* inner, const skity_vec2* inner_radii, skity_paint paint);
+
+/**
  * @brief Write the current total matrix (the accumulated transform applied
  *        to the canvas) to @p out.
  * @param out  receives the total matrix; must not be NULL
@@ -395,6 +428,14 @@ SKITY_C_API void skity_canvas_get_total_matrix(skity_canvas canvas,
  */
 SKITY_C_API void skity_canvas_get_local_clip_bounds(skity_canvas canvas,
                                                     skity_rect* out);
+
+/**
+ * @brief Write the current clip bounds in device (post-transform)
+ *        coordinates to @p out.
+ * @param out  receives the device clip bounds; must not be NULL
+ */
+SKITY_C_API void skity_canvas_get_global_clip_bounds(skity_canvas canvas,
+                                                     skity_rect* out);
 
 /**
  * @brief Test whether @p rect is entirely outside the current clip.

@@ -36,6 +36,14 @@ void skity_paint_destroy(skity_paint paint) {
   skity::capi::destroy_handle<skity_paint_s>(paint, SKITY_OBJECT_TYPE_PAINT);
 }
 
+skity_paint skity_paint_clone(skity_paint paint) {
+  auto* p = paint_of(paint);
+  if (p == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_paint_s>(
+      SKITY_OBJECT_TYPE_PAINT, SKITY_HANDLE_OWNING,
+      std::make_shared<skity::Paint>(*p));
+}
+
 void skity_paint_reset(skity_paint paint) {
   if (auto* p = paint_of(paint)) p->Reset();
 }
@@ -296,6 +304,38 @@ skity_typeface skity_paint_get_typeface(skity_paint paint) {
   if (sp == nullptr) return nullptr;
   return skity::capi::alloc_handle<skity_typeface_s>(
       SKITY_OBJECT_TYPE_TYPEFACE, SKITY_HANDLE_OWNING, std::move(sp));
+}
+
+void skity_paint_get_color4f(skity_paint paint, skity_color4f* out) {
+  auto* p = paint_of(paint);
+  if (p == nullptr || out == nullptr) {
+    return;
+  }
+  skity::Color4f color = p->GetColor4f();
+  *out = *reinterpret_cast<const skity_color4f*>(&color);
+}
+
+float skity_paint_get_alpha_f(skity_paint paint) {
+  auto* p = paint_of(paint);
+  return p ? p->GetAlphaF() : 0.f;
+}
+
+void skity_paint_set_sdf_for_small_text(skity_paint paint, uint32_t enable) {
+  if (auto* p = paint_of(paint)) p->SetSDFForSmallText(enable != 0u);
+}
+
+uint32_t skity_paint_is_sdf_for_small_text(skity_paint paint) {
+  auto* p = paint_of(paint);
+  return p && p->IsSDFForSmallText() ? 1u : 0u;
+}
+
+void skity_paint_set_font_threshold(skity_paint paint, float font_size) {
+  if (auto* p = paint_of(paint)) p->SetFontThreshold(font_size);
+}
+
+float skity_paint_get_font_threshold(skity_paint paint) {
+  auto* p = paint_of(paint);
+  return p ? p->GetFontThreshold() : 0.f;
 }
 
 }  // extern "C"

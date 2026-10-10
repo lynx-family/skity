@@ -189,12 +189,20 @@ typedef enum {
   SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_GL, /**< OpenGL-specific surface
                                                   creation info */
   SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO,   /**< base backend texture info */
-  SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_GL, /**< OpenGL-specific backend
-                                                   texture info */
-  SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_VK,  /**< Vulkan-specific surface
-                                                   creation info */
-  SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_VK, /**< Vulkan-specific backend
-                                                   texture info */
+  SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_GL,  /**< OpenGL-specific backend
+                                                    texture info */
+  SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_VK,   /**< Vulkan-specific surface
+                                                    creation info */
+  SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_VK,  /**< Vulkan-specific backend
+                                                    texture info */
+  SKITY_STRUCTURE_TYPE_SEMAPHORE_IMPORT_INFO,    /**< base semaphore import
+                                                    descriptor */
+  SKITY_STRUCTURE_TYPE_SEMAPHORE_IMPORT_INFO_VK, /**< Vulkan-specific
+                                                    semaphore import info */
+  SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_MTL,  /**< Metal-specific surface
+                                                    creation info */
+  SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_MTL, /**< Metal-specific backend
+                                                    texture info */
 } skity_structure_type;
 
 /**
@@ -214,6 +222,38 @@ typedef struct skity_font_style {
   int32_t width;          /**< 1..9 (5 = normal) */
   skity_font_slant slant; /**< glyph slant */
 } skity_font_style;
+
+/**
+ * @brief Font variation coordinate: a value applied to a named variation axis.
+ */
+typedef struct skity_variation_coordinate {
+  uint32_t axis; /**< FourCC axis tag, e.g. 'wght' (300) */
+  float value;   /**< value to apply, in the axis' [min, max] range */
+} skity_variation_coordinate;
+
+/**
+ * @brief Font variation axis descriptor (one fvar table entry).
+ */
+typedef struct skity_variation_axis {
+  uint32_t tag;    /**< FourCC axis tag, e.g. 'wght' */
+  float min;       /**< minimum value the axis accepts */
+  float def;       /**< default value when the axis is not set */
+  float max;       /**< maximum value the axis accepts */
+  uint32_t hidden; /**< 1 when the axis should be hidden from font UIs */
+} skity_variation_axis;
+
+/**
+ * @brief Arguments for instantiating a face out of a font (mirror of
+ *        skity::FontArguments): collection index plus an optional variation
+ *        coordinate list for variable fonts.
+ */
+typedef struct skity_font_arguments {
+  int32_t collection_index; /**< 0-based face index inside a .ttc */
+  const skity_variation_coordinate*
+      variation_coordinates;           /**< may be NULL for none */
+  uint32_t variation_coordinate_count; /**< entries in
+                                           variation_coordinates */
+} skity_font_arguments;
 
 /**
  * @brief Font metrics, in pixels. Values follow the standard baseline layout

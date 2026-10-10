@@ -5,31 +5,26 @@
 #ifndef MODULE_CAPI_INCLUDE_SKITY_C_SKITY_SEMAPHORE_VK_H
 #define MODULE_CAPI_INCLUDE_SKITY_C_SKITY_SEMAPHORE_VK_H
 
-#include <skity_c/skity_context.h>
-#include <skity_c/skity_surface_vk.h>
+#include <skity_c/skity_semaphore.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * @brief Create an engine-owned Vulkan semaphore for external synchronization.
- * @return new semaphore handle, or NULL on failure
+ * @brief Vulkan extension for importing a POSIX sync file descriptor into a
+ *        skity_semaphore. Chain it through
+ *        skity_semaphore_import_info::p_next with s_type =
+ *        SKITY_STRUCTURE_TYPE_SEMAPHORE_IMPORT_INFO_VK.
+ *
+ * The fd's ownership transfers to the Vulkan driver (consumed even on
+ * import failure, per the SYNC_FD external-semaphore spec).
  */
-SKITY_C_API skity_semaphore skity_semaphore_create_vk(skity_context context);
-
-/**
- * @brief Import a POSIX sync file descriptor into a Vulkan semaphore. The fd
- *        ownership is transferred to the Vulkan driver on success.
- * @return SKITY_SUCCESS on success, or a SKITY_ERROR_* code on failure
- */
-SKITY_C_API skity_result skity_semaphore_import_vk(skity_context context,
-                                                   skity_semaphore semaphore,
-                                                   int sync_fd);
-
-/** @brief Release a semaphore previously created by
- *         skity_semaphore_create_vk. Safe to call with NULL. */
-SKITY_C_API void skity_semaphore_destroy_vk(skity_semaphore semaphore);
+typedef struct skity_semaphore_import_info_vk {
+  skity_structure_type s_type;
+  const void* p_next;
+  int sync_fd; /**< POSIX sync file descriptor */
+} skity_semaphore_import_info_vk;
 
 #ifdef __cplusplus
 }  // extern "C"

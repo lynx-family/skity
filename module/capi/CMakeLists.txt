@@ -54,8 +54,18 @@ if (${SKITY_VK_BACKEND})
     ${SKITY_ROOT}/third_party/Vulkan-Headers/include
   )
   list(APPEND SKITY_CAPI_VULKAN_SOURCES
-    ${CMAKE_CURRENT_LIST_DIR}/src/semaphore_vk.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/native_window_vk.cpp
+  )
+endif()
+
+# The Metal glue needs Objective-C++ (Metal / CAMetalLayer headers), so it is
+# only compiled when the Metal backend is enabled; context_mtl_c.cpp is
+# portable and returns SKITY_ERROR_NOT_SUPPORTED without it.
+set(SKITY_CAPI_METAL_SOURCES)
+if (${SKITY_MTL_BACKEND})
+  target_compile_definitions(skity-capi PRIVATE -DSKITY_METAL)
+  list(APPEND SKITY_CAPI_METAL_SOURCES
+    ${CMAKE_CURRENT_LIST_DIR}/src/mtl_glue.mm
   )
 endif()
 
@@ -90,8 +100,10 @@ target_sources(
   PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/src/handle.hpp
     ${CMAKE_CURRENT_LIST_DIR}/src/context_c.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/context_mtl_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/surface_c.cpp
     ${SKITY_CAPI_VULKAN_SOURCES}
+    ${SKITY_CAPI_METAL_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/src/canvas_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/paint_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/path_c.cpp
@@ -104,6 +116,8 @@ target_sources(
     ${CMAKE_CURRENT_LIST_DIR}/src/texture_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/precompile_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/font_c.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glyph_c.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/semaphore_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/bitmap_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/recorder_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/camera_c.cpp
