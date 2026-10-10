@@ -21,6 +21,11 @@
 #include <skity/gpu/gpu_context_vk.hpp>
 #endif
 
+#if defined(SKITY_METAL)
+
+#include "mtl_glue.hpp"
+#endif
+
 #include "handle.hpp"
 
 namespace {
@@ -230,6 +235,12 @@ skity_texture skity_texture_create_from_backend(
     bi.owns_image = vk->owns_image != 0;
     bi.owns_image_view = vk->owns_image_view != 0;
     tex = ctx->WrapTexture(&bi, release, userdata);
+  }
+#endif
+
+#if defined(SKITY_METAL)
+  if (st == SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_MTL) {
+    tex = skity::capi::MtlWrapTextureGlue(ctx.get(), info, release, userdata);
   }
 #endif
 
