@@ -2,7 +2,9 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/quaternion.hpp>
 #include <skity/geometry/rect.hpp>
@@ -830,4 +832,74 @@ TEST(Matrix, Access) {
 
   m4[3][3] = 5;
   EXPECT_EQ(m4[3][3], 5);
+}
+
+TEST(Matrix, MapRectScaleTranslateAndFallback) {
+  using skity::Matrix;
+  using skity::Rect;
+  const float max = std::numeric_limits<float>::max();
+  const Rect rects[] = {
+      Rect::MakeLTRB(-2, 3, 5, 7),          Rect::MakeLTRB(5, 7, -2, 3),
+      Rect::MakeLTRB(0, 0, 0, 0),           Rect::MakeLTRB(0, 0, 0, 7),
+      Rect::MakeLTRB(-max, -max, max, max),
+      Rect::MakeLTRB(1.5f, 0, 2, 1)};
+
+  auto check = [&](const Matrix& matrix) {
+    for (const auto& src : rects) {
+      // The four-corner mapping remains the oracle for the fast path.
+      skity::Vec2 corners[] = {{src.Left(), src.Top()},
+                               {src.Right(), src.Top()},
+                               {src.Right(), src.Bottom()},
+                               {src.Left(), src.Bottom()}};
+      matrix.MapPoints(corners, corners, 4);
+      float expected[] = {corners[0].x, corners[0].y, corners[0].x,
+                          corners[0].y};
+      for (int i = 1; i < 4; ++i) {
+        expected[0] = std::min(corners[i].x, expected[0]);
+        expected[1] = std::min(corners[i].y, expected[1]);
+        expected[2] = std::max(corners[i].x, expected[2]);
+        expected[3] = std::max(corners[i].y, expected[3]);
+      }
+      Rect dst;
+      Rect in_place = src;
+      EXPECT_EQ(matrix.RectStaysRect(), matrix.MapRect(&dst, src));
+      EXPECT_EQ(matrix.RectStaysRect(), matrix.MapRect(&in_place, in_place));
+      for (const auto& result : {dst, in_place, matrix.MapRect(src)}) {
+        const float actual[] = {result.Left(), result.Top(), result.Right(),
+                                result.Bottom()};
+        for (int i = 0; i < 4; ++i) {
+          if (std::isnan(expected[i])) {
+            EXPECT_TRUE(std::isnan(actual[i]));
+          } else {
+            EXPECT_EQ(expected[i], actual[i]);
+          }
+        }
+      }
+    }
+  };
+
+  for (float sx : {0.f, -0.f, 1.f, -2.f, 1.f + 1e-7f, max}) {
+    for (float sy : {0.f, 1.f, -3.f, max}) {
+      Matrix matrix;
+      matrix[0][0] = sx;
+      matrix[1][1] = sy;
+      check(matrix);
+      matrix[3][0] = 7;
+      matrix[3][1] = -9;
+      check(matrix);
+      matrix[3][0] = -max;
+      check(matrix);
+    }
+  }
+  // Include skew, perspective and z terms.
+  for (int col = 0; col < 4; ++col) {
+    for (int row = 0; row < 4; ++row) {
+      for (float value : {0.f, 1e-8f, -2.f}) {
+        Matrix matrix;
+        matrix[col][row] = value;
+        check(matrix);
+      }
+    }
+  }
+  EXPECT_FALSE(Matrix().MapRect(nullptr, rects[0]));
 }
