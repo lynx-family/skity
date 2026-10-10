@@ -139,6 +139,52 @@ SKITY_C_API void skity_shader_get_local_matrix(skity_shader shader,
 /** @brief Release the shader handle and its underlying object. Safe on NULL. */
 SKITY_C_API void skity_shader_destroy(skity_shader shader);
 
+/** @brief Gradient classification. Values aligned with
+ *         skity::Shader::GradientType. */
+typedef enum {
+  SKITY_GRADIENT_TYPE_NONE = 0, /**< not a gradient shader */
+  SKITY_GRADIENT_TYPE_COLOR,    /**< single-color shader */
+  SKITY_GRADIENT_TYPE_LINEAR,   /**< linear gradient */
+  SKITY_GRADIENT_TYPE_RADIAL,   /**< radial gradient */
+  SKITY_GRADIENT_TYPE_SWEEP,    /**< sweep / angular gradient */
+  SKITY_GRADIENT_TYPE_CONICAL,  /**< two-point conical gradient */
+} skity_gradient_type;
+
+/**
+ * @brief Gradient geometry description (projection of
+ *        skity::Shader::GradientInfo minus the color-stop arrays).
+ */
+typedef struct skity_gradient_info {
+  int32_t color_count;       /**< stops in the gradient */
+  skity_point point[2];      /**< end points (linear / conical) */
+  float radius[2];           /**< radii (radial / conical) */
+  skity_matrix local_matrix; /**< shader-local transform */
+  skity_tile_mode tile_mode; /**< tiling behavior */
+  int32_t gradient_flags;    /**< interpolation flags (premul etc.) */
+} skity_gradient_info;
+
+/** @brief Return 1 when the shader is guaranteed opaque, 0 otherwise. */
+SKITY_C_API uint32_t skity_shader_is_opaque(skity_shader shader);
+
+/**
+ * @brief Classify the shader and, when it is a gradient, recover its
+ *        parameters (two-pass idiom for the color stops).
+ *
+ * When @p colors is NULL (or @p capacity is too small) the color stops are
+ * not written, but the classification, @p info (if given) and the stop count
+ * in info->color_count are still returned so the caller can size the arrays
+ * and call again.
+ *
+ * @param colors         destination for color_count stops, or NULL to query
+ * @param color_offsets  destination for the stops' positions, or NULL
+ * @param capacity       entries available in @p colors / @p color_offsets
+ * @param info           receives the geometry, or NULL to ignore
+ * @return the skity_gradient_type classification
+ */
+SKITY_C_API skity_gradient_type skity_shader_as_gradient(
+    skity_shader shader, skity_color4f* colors, float* color_offsets,
+    int32_t capacity, skity_gradient_info* info);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

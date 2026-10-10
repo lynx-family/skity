@@ -210,6 +210,37 @@ SKITY_C_API int32_t skity_typeface_get_variation_axes(
 SKITY_C_API skity_typeface skity_typeface_make_variation(
     skity_typeface typeface, const skity_font_arguments* args);
 
+/**
+ * @brief Font identity summary (projection of skity::FontDescriptor minus
+ *        the name strings). Useful as a cache key together with the
+ *        typeface's unique id.
+ */
+typedef struct skity_font_descriptor {
+  skity_font_style style;   /**< intrinsic weight / width / slant */
+  int32_t collection_index; /**< 0-based face index inside a .ttc */
+  uint32_t factory_id;      /**< port-specific creation discriminator */
+} skity_font_descriptor;
+
+/**
+ * @brief Fetch the face's identity summary and family name (two-pass).
+ *
+ * @p family_name follows the skity_font_manager_get_family_name idiom: when
+ * the buffer is NULL or too small nothing is written but the name length in
+ * bytes (including the NUL terminator) is still returned, so the caller can
+ * size the buffer and call again. The full / PostScript name strings of the
+ * C++ FontDescriptor are not projected (no caller demand so far).
+ *
+ * @param out              receives style / collection index / factory id, or
+ *                         NULL to ignore
+ * @param family_name      destination buffer, or NULL to query the length
+ * @param family_name_size capacity of @p family_name in bytes
+ * @return family-name length in bytes including the NUL terminator, or 0 on
+ *         an invalid handle
+ */
+SKITY_C_API int32_t skity_typeface_get_font_descriptor(
+    skity_typeface typeface, skity_font_descriptor* out, char* family_name,
+    int32_t family_name_size);
+
 /** @brief Text blob handles and constructors. */
 
 /** @brief Forward declaration; skity_paint is defined in skity_paint.h. */

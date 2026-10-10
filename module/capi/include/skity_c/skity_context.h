@@ -6,6 +6,7 @@
 #define MODULE_CAPI_INCLUDE_SKITY_C_SKITY_CONTEXT_H
 
 #include <skity_c/skity_base.h>
+#include <skity_c/skity_types.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -135,6 +136,20 @@ SKITY_C_API void skity_context_set_enable_simple_shape_pipeline(
  */
 SKITY_C_API void skity_context_set_resource_cache_limit(skity_context context,
                                                         size_t max_bytes);
+
+/**
+ * @brief Whether skity was compiled with support for @p type.
+ *
+ * Support here means the backend is linked in; runtime device capabilities
+ * may still make context creation fail.
+ */
+SKITY_C_API uint32_t
+skity_is_gpu_backend_supported(skity_gpu_backend_type type);
+
+/** @brief Return the backend this context was created with
+ *         (SKITY_GPU_BACKEND_TYPE_NONE on an invalid handle). */
+SKITY_C_API skity_gpu_backend_type
+skity_context_get_backend_type(skity_context context);
 
 #ifdef __cplusplus
 }  // extern "C"
