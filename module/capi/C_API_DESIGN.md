@@ -295,8 +295,12 @@ extension (`skity_semaphore_import_info_vk`, a plain sync-fd struct) lives in
 ### Metal (Stage 2)
 
 [`gpu_context_mtl.h`](../../include/skity/gpu/gpu_context_mtl.h) is an Objective-C++
-header. Its C wrapper will live in a `.mm` source and accept the native
-`id<MTLDevice>` / `id<MTLCommandQueue>` as opaque `void*`. Not in Stage 1.
+header. Its C wrapper lives in `skity_context_mtl.h` (+ `skity_surface_mtl.h` /
+`skity_texture_mtl.h`) and types the native `id<MTLDevice>` /
+`id<MTLCommandQueue>` / `id<MTLTexture>` / `CAMetalLayer*` handles through
+`skity_mtl_types.h`: the real Objective-C types under `__OBJC__`, `void*`
+otherwise, so the headers stay portable without a Metal SDK (identical
+pointer ABI either way).
 
 ## 8. Header-only C++ Wrapper
 
@@ -423,7 +427,7 @@ wrappers own uniquely and remain move-only.
 | `skity_surface` | `skity_surface.hpp` | create / lock-canvas / flush / size / read-pixels (GL CreateInfo path), `AddExternalWaitSemaphore` |
 | `skity_context` | `skity_context.hpp` | `CreateGL`, error callback, all `set_enable_*` tuning knobs, resource cache limit |
 | `skity_texture` | `skity_texture.hpp` | `Texture` (create / create-with-descriptor / wrap-from-backend incl. p_next extension chaining, immediate + deferred upload, size queries) |
-| `skity_context_mtl` | `skity_context_mtl.hpp` | free functions `CreateMtlContext` (device / queue optional) + `GetMtlDevice` / `GetMtlCommandQueue` (Objective-C pointers as `void*`) |
+| `skity_context_mtl` | `skity_context_mtl.hpp` | free functions `CreateMtlContext` (device / queue optional) + `GetMtlDevice` / `GetMtlCommandQueue` (handles are Objective-C types in Objective-C(++) code, `void*` otherwise) |
 | `skity_surface_mtl` | `skity_surface_mtl.hpp` | `CreateMtlSurface` — chains the MTL CreateInfo extension (one-shot `id<MTLTexture>` or `CAMetalLayer` target) |
 | `skity_texture_mtl` | `skity_texture_mtl.hpp` | `WrapMtlTexture` — wraps an existing `id<MTLTexture>` as a `Texture` |
 | `skity_font` + `skity_text` | `skity_text.hpp` | `Typeface` (load / default / unichar→glyph / style / tables / variations / `MakeVariation`), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / bounds / make-with-size / `LoadGlyph*` family, copy semantics with shared typeface), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
@@ -519,8 +523,9 @@ These modules have complete (or near-complete) C coverage of their core:
   `acquire_next_surface`, `present` through `skity_native_window_vk`)
 - Metal backend (`skity_context_mtl.h` / `skity_surface_mtl.h` /
   `skity_texture_mtl.h`): context create + device / queue getters, and the
-  surface / texture-wrap p_next extensions — Objective-C pointers cross as
-  `void*`, implemented by `mtl_glue.mm` when `SKITY_MTL_BACKEND` is on
+  surface / texture-wrap p_next extensions — handles are Objective-C types
+  under `__OBJC__` and `void*` otherwise (`skity_mtl_types.h`), implemented
+  by `mtl_glue.mm` when `SKITY_MTL_BACKEND` is on
   (`SKITY_ERROR_NOT_SUPPORTED` otherwise)
 - `Bitmap` / `Pixmap` (pixel access, buffer wrapping via
   `data_make_with_proc` + `pixmap_create` + `bitmap_create_from_pixmap`,

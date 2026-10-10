@@ -8,8 +8,11 @@
 // Bridge between the portable Metal C wrappers (context_mtl_c.cpp,
 // surface_c.cpp, texture_c.cpp) and the Objective-C++ Metal backend. The
 // glue is declared here in pure C++ and implemented in mtl_glue.mm, which
-// is only compiled when SKITY_MTL_BACKEND is on; Objective-C object
-// pointers cross as void*.
+// is only compiled when SKITY_MTL_BACKEND is on. The glue interface keeps
+// plain void* even though the public C headers type their handles as
+// Objective-C under __OBJC__: this header is included from both plain
+// C++ and Objective-C++ translation units, and id<MTLDevice> / void*
+// mangle to different C++ symbols, so a typed interface would not link.
 
 #include <skity_c/skity_surface.h>
 #include <skity_c/skity_surface_mtl.h>

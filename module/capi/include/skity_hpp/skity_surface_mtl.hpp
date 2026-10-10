@@ -6,8 +6,9 @@
 #define MODULE_CAPI_INCLUDE_SKITY_HPP_SKITY_SURFACE_MTL_HPP
 
 // Metal one-shot surface creation helper of the header-only RAII layer.
-// Portable like its C header (Objective-C pointers as void*), so it lives
-// in the neutral skity.hpp umbrella. See skity.hpp for the layer's design.
+// Portable like its C header (handles typed as Objective-C under __OBJC__,
+// void* otherwise), so it lives in the neutral skity.hpp umbrella. See
+// skity.hpp for the layer's design.
 
 #include <skity_c/skity_surface_mtl.h>
 

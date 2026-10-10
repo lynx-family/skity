@@ -5,10 +5,13 @@
 #ifndef MODULE_CAPI_INCLUDE_SKITY_C_SKITY_SURFACE_MTL_H
 #define MODULE_CAPI_INCLUDE_SKITY_C_SKITY_SURFACE_MTL_H
 
-// Metal backend extension for surface creation. Pure C / portable: the
-// Objective-C pointers cross the ABI as void* (see skity_context_mtl.h).
+// Metal backend extension for surface creation. The target handles use
+// skity_mtl_layer / skity_mtl_texture: real Objective-C types when this
+// header is compiled as Objective-C(++) (__OBJC__), void* otherwise (see
+// skity_mtl_types.h).
 
 #include <skity_c/skity_base.h>
+#include <skity_c/skity_mtl_types.h>
 #include <skity_c/skity_surface.h>
 
 #ifdef __cplusplus
@@ -34,8 +37,9 @@ typedef struct skity_surface_create_info_mtl {
   skity_structure_type s_type;
   const void* p_next;
   skity_mtl_surface_type surface_type;
-  void* layer;   /**< CAMetalLayer* (SKITY_MTL_SURFACE_TYPE_LAYER) */
-  void* texture; /**< id<MTLTexture> (SKITY_MTL_SURFACE_TYPE_TEXTURE) */
+  skity_mtl_layer layer; /**< CAMetalLayer* (SKITY_MTL_SURFACE_TYPE_LAYER) */
+  skity_mtl_texture
+      texture; /**< id<MTLTexture> (SKITY_MTL_SURFACE_TYPE_TEXTURE) */
 } skity_surface_create_info_mtl;
 
 #ifdef __cplusplus

@@ -6,8 +6,9 @@
 #define MODULE_CAPI_INCLUDE_SKITY_HPP_SKITY_TEXTURE_MTL_HPP
 
 // Metal texture wrap helper of the header-only RAII layer. Portable like
-// its C header (Objective-C pointers as void*), so it lives in the neutral
-// skity.hpp umbrella. See skity.hpp for the layer's design.
+// its C header (the handle is typed as Objective-C under __OBJC__, void*
+// otherwise), so it lives in the neutral skity.hpp umbrella. See skity.hpp
+// for the layer's design.
 
 #include <skity_c/skity_texture_mtl.h>
 

@@ -14,7 +14,8 @@
 
 extern "C" {
 
-skity_result skity_context_create_mtl(void* device, void* command_queue,
+skity_result skity_context_create_mtl(skity_mtl_device device,
+                                      skity_mtl_command_queue command_queue,
                                       skity_context* out_context) {
   if (out_context == nullptr) {
     return SKITY_ERROR_INVALID_ARGUMENT;
@@ -40,7 +41,7 @@ skity_result skity_context_create_mtl(void* device, void* command_queue,
 #endif
 }
 
-void* skity_context_mtl_get_device(skity_context context) {
+skity_mtl_device skity_context_mtl_get_device(skity_context context) {
 #if defined(SKITY_METAL)
   auto ctx = skity::capi::get_impl<skity_context_s, skity::GPUContext>(
       context, SKITY_OBJECT_TYPE_CONTEXT);
@@ -51,7 +52,8 @@ void* skity_context_mtl_get_device(skity_context context) {
 #endif
 }
 
-void* skity_context_mtl_get_command_queue(skity_context context) {
+skity_mtl_command_queue skity_context_mtl_get_command_queue(
+    skity_context context) {
 #if defined(SKITY_METAL)
   auto ctx = skity::capi::get_impl<skity_context_s, skity::GPUContext>(
       context, SKITY_OBJECT_TYPE_CONTEXT);

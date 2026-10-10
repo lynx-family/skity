@@ -6,10 +6,10 @@
 #define MODULE_CAPI_INCLUDE_SKITY_HPP_SKITY_CONTEXT_MTL_HPP
 
 // Metal context factories of the header-only RAII layer. The C Metal
-// headers carry Objective-C pointers as void* and stay portable, so unlike
-// the Vulkan wrappers these do NOT need an opt-in aggregate — they are
-// part of the neutral skity.hpp umbrella. See skity.hpp for the layer's
-// design.
+// headers type their handles as Objective-C when compiled as Objective-C
+// (++) and as void* otherwise (skity_mtl_types.h), so unlike the Vulkan
+// wrappers these do NOT need an opt-in aggregate — they are part of the
+// neutral skity.hpp umbrella. See skity.hpp for the layer's design.
 
 #include <skity_c/skity_context_mtl.h>
 
@@ -21,9 +21,12 @@ namespace raii {
 /**
  * Create a Metal GPUContext. Both @p device (id<MTLDevice>) and
  * @p command_queue (id<MTLCommandQueue>) may be null, letting the engine
- * pick / create them. Mirrors the shape of Context::CreateGL.
+ * pick / create them. Mirrors the shape of Context::CreateGL. The handles
+ * are the real Objective-C types in Objective-C(++) code and void*
+ * elsewhere.
  */
-inline skity_result CreateMtlContext(void* device, void* command_queue,
+inline skity_result CreateMtlContext(skity_mtl_device device,
+                                     skity_mtl_command_queue command_queue,
                                      Context* out) {
   if (out == nullptr) {
     return SKITY_ERROR_INVALID_ARGUMENT;
@@ -38,16 +41,16 @@ inline skity_result CreateMtlContext(void* device, void* command_queue,
 }
 
 /**
- * The id<MTLDevice> backing @p context, as void*; null for an invalid
- * handle or a non-Metal context. Cast back with
- * `(__bridge id<MTLDevice>)ptr` in Objective-C(++) code.
+ * The id<MTLDevice> backing @p context; null for an invalid handle or a
+ * non-Metal context. In plain C++ the value is void* — cast it back with
+ * `(__bridge id<MTLDevice>)ptr` from Objective-C(++) code.
  */
-inline void* GetMtlDevice(const Context& context) {
+inline skity_mtl_device GetMtlDevice(const Context& context) {
   return skity_context_mtl_get_device(context.get());
 }
 
-/** The id<MTLCommandQueue> backing @p context, as void* (see GetMtlDevice). */
-inline void* GetMtlCommandQueue(const Context& context) {
+/** The id<MTLCommandQueue> backing @p context (see GetMtlDevice). */
+inline skity_mtl_command_queue GetMtlCommandQueue(const Context& context) {
   return skity_context_mtl_get_command_queue(context.get());
 }
 

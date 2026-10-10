@@ -5,10 +5,12 @@
 #ifndef MODULE_CAPI_INCLUDE_SKITY_C_SKITY_TEXTURE_MTL_H
 #define MODULE_CAPI_INCLUDE_SKITY_C_SKITY_TEXTURE_MTL_H
 
-// Metal backend extension for wrapping an existing Metal texture. Pure C /
-// portable: the Objective-C pointer crosses the ABI as void* (see
-// skity_context_mtl.h).
+// Metal backend extension for wrapping an existing Metal texture. The
+// handle uses skity_mtl_texture: a real id<MTLTexture> when this header is
+// compiled as Objective-C(++) (__OBJC__), void* otherwise (see
+// skity_mtl_types.h).
 
+#include <skity_c/skity_mtl_types.h>
 #include <skity_c/skity_texture.h>
 
 #ifdef __cplusplus
@@ -23,7 +25,7 @@ extern "C" {
 typedef struct skity_backend_texture_info_mtl {
   skity_structure_type s_type;
   const void* p_next;
-  void* texture; /**< id<MTLTexture> to wrap */
+  skity_mtl_texture texture; /**< id<MTLTexture> to wrap */
 } skity_backend_texture_info_mtl;
 
 #ifdef __cplusplus

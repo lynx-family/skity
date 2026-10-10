@@ -6,14 +6,16 @@
 #define MODULE_CAPI_INCLUDE_SKITY_C_SKITY_CONTEXT_MTL_H
 
 // Metal backend entry points. Unlike the Vulkan headers, this header stays
-// pure C and portable: Objective-C object pointers (id<MTLDevice>,
-// id<MTLCommandQueue>, CAMetalLayer*, id<MTLTexture>) cross the ABI as
-// void*, so non-Apple platforms can still compile (and get
+// portable without a vendor SDK: the Objective-C handles use the
+// conditional types from skity_mtl_types.h — real Objective-C types
+// (id<MTLDevice>, id<MTLCommandQueue>) when compiled as Objective-C(++),
+// void* otherwise — so non-Apple platforms can still compile (and get
 // SKITY_ERROR_NOT_SUPPORTED at runtime when skity is built without
 // SKITY_MTL_BACKEND).
 
 #include <skity_c/skity_base.h>
 #include <skity_c/skity_context.h>
+#include <skity_c/skity_mtl_types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,21 +34,23 @@ extern "C" {
  * @return SKITY_SUCCESS on success, SKITY_ERROR_NOT_SUPPORTED when built
  *         without the Metal backend, or another SKITY_ERROR_* on failure
  */
-SKITY_C_API skity_result skity_context_create_mtl(void* device,
-                                                  void* command_queue,
-                                                  skity_context* out_context);
+SKITY_C_API skity_result skity_context_create_mtl(
+    skity_mtl_device device, skity_mtl_command_queue command_queue,
+    skity_context* out_context);
 
 /**
- * @brief Return the id<MTLDevice> backing this context, as void*.
+ * @brief Return the id<MTLDevice> backing this context.
  *         NULL for an invalid handle or a non-Metal context.
  */
-SKITY_C_API void* skity_context_mtl_get_device(skity_context context);
+SKITY_C_API skity_mtl_device
+skity_context_mtl_get_device(skity_context context);
 
 /**
- * @brief Return the id<MTLCommandQueue> backing this context, as void*.
+ * @brief Return the id<MTLCommandQueue> backing this context.
  *         NULL for an invalid handle or a non-Metal context.
  */
-SKITY_C_API void* skity_context_mtl_get_command_queue(skity_context context);
+SKITY_C_API skity_mtl_command_queue
+skity_context_mtl_get_command_queue(skity_context context);
 
 #ifdef __cplusplus
 }  // extern "C"

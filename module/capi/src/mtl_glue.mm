@@ -3,10 +3,11 @@
 // LICENSE file in the root directory of this source tree.
 
 // Objective-C++ side of the Metal C API glue (see mtl_glue.hpp). Only
-// compiled when SKITY_MTL_BACKEND is on. All void* <-> Objective-C pointer
-// conversions use __bridge casts so the file compiles both under ARC (the
-// darwin framework builds it with Xcode's default) and without it (the
-// plain CMake build).
+// compiled when SKITY_MTL_BACKEND is on. The glue interface passes devices
+// and queues as void*, so those conversions use __bridge casts; the create
+// / texture-info structs are already typed as Objective-C under __OBJC__.
+// __bridge keeps the file compiling both under ARC (the darwin framework
+// builds it with Xcode's default) and without it (the plain CMake build).
 
 #import <skity/gpu/gpu_context_mtl.h>
 
@@ -39,11 +40,11 @@ std::unique_ptr<GPUSurface> MtlSurfaceCreateGlue(GPUContext* context,
   switch (extension->surface_type) {
     case SKITY_MTL_SURFACE_TYPE_TEXTURE:
       descriptor.surface_type = MTLSurfaceType::kTexture;
-      descriptor.texture = (__bridge id<MTLTexture>)extension->texture;
+      descriptor.texture = extension->texture;
       break;
     case SKITY_MTL_SURFACE_TYPE_LAYER:
       descriptor.surface_type = MTLSurfaceType::kLayer;
-      descriptor.layer = (__bridge CAMetalLayer*)extension->layer;
+      descriptor.layer = extension->layer;
       break;
     default:
       return nullptr;
@@ -62,7 +63,7 @@ std::shared_ptr<Texture> MtlWrapTextureGlue(GPUContext* context,
   bi.height = info->height;
   bi.format = static_cast<TextureFormat>(info->format);
   bi.alpha_type = static_cast<AlphaType>(info->alpha_type);
-  bi.texture = (__bridge id<MTLTexture>)extension->texture;
+  bi.texture = extension->texture;
   return context->WrapTexture(&bi, release, userdata);
 }
 
