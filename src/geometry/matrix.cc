@@ -300,6 +300,21 @@ bool Matrix::MapRect(Rect* dst, const Rect& src) const {
     return false;
   }
 
+  // Use exact classification: IsIdentity() allows small non-identity terms.
+  if (OnlyScaleAndTranslate()) {
+    const Vec2 scale{e[0][0], e[1][1]};
+    const Vec2 translate{e[3][0], e[3][1]};
+    // Round the products before adding translation, as in the general path.
+    Vec2 p0 = scale * Vec2{src.Left(), src.Top()};
+    Vec2 p1 = scale * Vec2{src.Right(), src.Bottom()};
+    p0 += translate;
+    p1 += translate;
+    const Vec2 min = Vec2::Min(p0, p1);
+    const Vec2 max = Vec2::Max(p0, p1);
+    dst->SetLTRB(min.x, min.y, max.x, max.y);
+    return e[0][0] != 0.f && e[1][1] != 0.f;
+  }
+
   Vec4 src_quad[4] = {{src.Left(), src.Top(), 0.f, 1.f},
                       {src.Right(), src.Top(), 0.f, 1.f},
                       {src.Right(), src.Bottom(), 0.f, 1.f},
