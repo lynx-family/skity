@@ -8,6 +8,7 @@
 #include <skity_c/skity_base.h>
 #include <skity_c/skity_bitmap.h>
 #include <skity_c/skity_context.h>
+#include <skity_c/skity_semaphore.h>
 #include <skity_c/skity_types.h>
 #include <stdint.h>
 
@@ -139,6 +140,21 @@ SKITY_C_API uint32_t skity_surface_get_height(skity_surface surface);
 
 /** @brief Return the logical-to-physical pixel content scale. */
 SKITY_C_API float skity_surface_get_content_scale(skity_surface surface);
+
+/**
+ * @brief Add an external wait semaphore to the next frame.
+ *
+ * Mirrors GPUSurface::AddExternalWaitSemaphore: the surface's next flush
+ * waits on @p semaphore (created via skity_semaphore_create, optionally
+ * re-imported with a native sync handle through skity_semaphore_import)
+ * before submitting. Must be called between skity_surface_lock_canvas and
+ * skity_surface_flush; the wait is consumed by the flush.
+ *
+ * @param surface    the surface that will wait
+ * @param semaphore  semaphore handle; NULL is ignored
+ */
+SKITY_C_API void skity_surface_add_external_wait_semaphore(
+    skity_surface surface, skity_semaphore semaphore);
 
 #ifdef __cplusplus
 }  // extern "C"
