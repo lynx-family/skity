@@ -20,6 +20,7 @@
 #include <skity_c/skity_context.h>
 #include <skity_c/skity_data.h>
 #include <skity_c/skity_font.h>
+#include <skity_c/skity_glyph.h>
 #include <skity_c/skity_image.h>
 #include <skity_c/skity_image_filter.h>
 #include <skity_c/skity_mask_filter.h>

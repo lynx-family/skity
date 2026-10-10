@@ -85,6 +85,131 @@ SKITY_C_API void skity_typeface_unichars_to_glyphs(skity_typeface typeface,
 SKITY_C_API uint16_t skity_typeface_unichar_to_glyph(skity_typeface typeface,
                                                      uint32_t unichar);
 
+/**
+ * @brief Return the raw font file bytes backing the typeface.
+ *
+ * The returned handle holds a shared reference to the typeface's internal
+ * data, so the caller may release it immediately. NULL when the typeface
+ * has no accessible data (e.g. an empty placeholder typeface).
+ */
+SKITY_C_API skity_data skity_typeface_get_data(skity_typeface typeface);
+
+/** @brief Return the number of font design units per em square, or 0 on an
+ *         invalid handle. */
+SKITY_C_API uint32_t skity_typeface_get_units_per_em(skity_typeface typeface);
+
+/**
+ * @brief Fetch the typeface's intrinsic style (weight / width / slant).
+ * @param out  receives the style; left untouched on an invalid handle
+ */
+SKITY_C_API void skity_typeface_get_font_style(skity_typeface typeface,
+                                               skity_font_style* out);
+
+/**
+ * @brief Return a stable identifier unique to the underlying typeface.
+ *
+ * Two handles wrap the same typeface instance if and only if their ids are
+ * equal (cheaper than comparing data pointers).
+ */
+SKITY_C_API uint32_t skity_typeface_get_unique_id(skity_typeface typeface);
+
+/** @brief Return 1 when the face's intrinsic weight is at least semibold. */
+SKITY_C_API uint32_t skity_typeface_is_bold(skity_typeface typeface);
+
+/** @brief Return 1 when the face's intrinsic slant is not upright. */
+SKITY_C_API uint32_t skity_typeface_is_italic(skity_typeface typeface);
+
+/**
+ * @brief Check glyph coverage for a Unicode code point.
+ * @return 1 when @p unichar has a glyph in this face, 0 otherwise
+ */
+SKITY_C_API uint32_t skity_typeface_contain_glyph(skity_typeface typeface,
+                                                  uint32_t unichar);
+
+/**
+ * @brief Whether the face carries a color bitmap / COLR table (emoji fonts).
+ * @return 1 when a color table is present, 0 otherwise
+ */
+SKITY_C_API uint32_t
+skity_typeface_contains_color_table(skity_typeface typeface);
+
+/** @brief Return the number of font tables, or 0 on an invalid handle. */
+SKITY_C_API int32_t skity_typeface_count_tables(skity_typeface typeface);
+
+/**
+ * @brief Copy the font table tags (two-pass idiom).
+ *
+ * When @p tags is NULL or @p count is too small nothing is written, but the
+ * total table count is still returned so the caller can size the buffer and
+ * call again.
+ *
+ * @param tags   destination array receiving @p count FourCC tags, or NULL to
+ *               query the count
+ * @param count  capacity of @p tags
+ * @return the number of tags written, or the total count when querying
+ */
+SKITY_C_API int32_t skity_typeface_get_table_tags(skity_typeface typeface,
+                                                  uint32_t* tags,
+                                                  int32_t count);
+
+/**
+ * @brief Return the size in bytes of the table with FourCC tag @p tag, or 0
+ *        when the table is not present.
+ */
+SKITY_C_API size_t skity_typeface_get_table_size(skity_typeface typeface,
+                                                 uint32_t tag);
+
+/**
+ * @brief Copy a range of a font table into @p data (native endian order).
+ *
+ * @param tag     FourCC table tag
+ * @param offset  byte offset into the table contents
+ * @param length  number of bytes to copy
+ * @param data    destination buffer; must be at least @p length bytes
+ * @return the number of bytes actually copied (clamped to the table size;
+ *         0 when @p offset is past the table or the table is absent)
+ */
+SKITY_C_API size_t skity_typeface_get_table_data(skity_typeface typeface,
+                                                 uint32_t tag, size_t offset,
+                                                 size_t length, void* data);
+
+/**
+ * @brief Read the active variation coordinates (two-pass idiom).
+ *
+ * When @p coordinates is NULL or @p count is too small nothing is written but
+ * the total coordinate count is still returned.
+ *
+ * @param coordinates  destination array, or NULL to query the count
+ * @param count        capacity of @p coordinates
+ * @return entries written, or the total count when querying
+ */
+SKITY_C_API int32_t skity_typeface_get_variation_position(
+    skity_typeface typeface, skity_variation_coordinate* coordinates,
+    int32_t count);
+
+/**
+ * @brief Read the variation axes the font declares (two-pass idiom).
+ *
+ * @param axes   destination array of skity_variation_axis, or NULL to query
+ *               the count
+ * @param count  capacity of @p axes
+ * @return entries written, or the total count when querying
+ */
+SKITY_C_API int32_t skity_typeface_get_variation_axes(
+    skity_typeface typeface, skity_variation_axis* axes, int32_t count);
+
+/**
+ * @brief Instantiate a variable font at @p args' variation position.
+ *
+ * Mirrors skity::Typeface::MakeVariation. Non-variable faces return NULL
+ * (or a face ignoring the coordinates, depending on the port).
+ *
+ * @param args  collection index + variation coordinates to apply
+ * @return a new owning typeface handle, or NULL on failure
+ */
+SKITY_C_API skity_typeface skity_typeface_make_variation(
+    skity_typeface typeface, const skity_font_arguments* args);
+
 /** @brief Text blob handles and constructors. */
 
 /** @brief Forward declaration; skity_paint is defined in skity_paint.h. */

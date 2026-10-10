@@ -4,9 +4,11 @@
 
 #include <skity_c/skity_font.h>
 
+#include <skity/graphic/paint.hpp>
 #include <skity/text/font.hpp>
 #include <skity/text/font_metrics.hpp>
 #include <skity/text/typeface.hpp>
+#include <vector>
 
 #include "handle.hpp"
 
@@ -216,6 +218,121 @@ void skity_font_get_widths(skity_font font, const uint16_t* glyphs,
     return;
   }
   f->GetWidths(reinterpret_cast<const skity::GlyphID*>(glyphs), count, widths);
+}
+
+void skity_font_get_bounds(skity_font font, const uint16_t* glyphs,
+                           int32_t count, skity_rect* bounds) {
+  auto* f = font_of(font);
+  if (f == nullptr || glyphs == nullptr || bounds == nullptr || count <= 0) {
+    return;
+  }
+  // GetWidthsBounds fills skity::Rect entries; copy out field by field
+  // instead of relying on layout compatibility with skity_rect.
+  std::vector<skity::Rect> rects((size_t)count);
+  f->GetWidthsBounds(reinterpret_cast<const skity::GlyphID*>(glyphs), count,
+                     nullptr, rects.data(), skity::Paint());
+  for (int32_t i = 0; i < count; i++) {
+    bounds[i].left = rects[i].Left();
+    bounds[i].top = rects[i].Top();
+    bounds[i].right = rects[i].Right();
+    bounds[i].bottom = rects[i].Bottom();
+  }
+}
+
+namespace {
+
+// Wrap borrowed GlyphData pointers (owned by the global scaler-context
+// cache) as non-owning handles; a null entry stays null.
+skity_glyph_data borrow_glyph_data(const skity::GlyphData* glyph) {
+  if (glyph == nullptr) {
+    return nullptr;
+  }
+  std::shared_ptr<skity::GlyphData> impl(const_cast<skity::GlyphData*>(glyph),
+                                         [](skity::GlyphData*) {});
+  return skity::capi::alloc_handle<skity_glyph_data_s>(
+      SKITY_OBJECT_TYPE_GLYPH_DATA, 0u, std::move(impl));
+}
+
+}  // namespace
+
+void skity_font_load_glyph_metrics(skity_font font, const uint16_t* glyphs,
+                                   uint32_t count, skity_glyph_data out[]) {
+  auto* f = font_of(font);
+  if (f == nullptr || glyphs == nullptr || out == nullptr || count == 0) {
+    return;
+  }
+  std::vector<const skity::GlyphData*> results(count, nullptr);
+  f->LoadGlyphMetrics(reinterpret_cast<const skity::GlyphID*>(glyphs), count,
+                      results.data());
+  for (uint32_t i = 0; i < count; i++) {
+    out[i] = borrow_glyph_data(results[i]);
+  }
+}
+
+void skity_font_load_glyph_path(skity_font font, const uint16_t* glyphs,
+                                uint32_t count, skity_glyph_data out[]) {
+  auto* f = font_of(font);
+  if (f == nullptr || glyphs == nullptr || out == nullptr || count == 0) {
+    return;
+  }
+  std::vector<const skity::GlyphData*> results(count, nullptr);
+  f->LoadGlyphPath(reinterpret_cast<const skity::GlyphID*>(glyphs), count,
+                   results.data());
+  for (uint32_t i = 0; i < count; i++) {
+    out[i] = borrow_glyph_data(results[i]);
+  }
+}
+
+void skity_font_load_glyph_bitmap(skity_font font, const uint16_t* glyphs,
+                                  uint32_t count, skity_glyph_data out[],
+                                  skity_paint paint, float context_scale,
+                                  const skity_matrix* transform) {
+  auto* f = font_of(font);
+  if (f == nullptr || glyphs == nullptr || out == nullptr || count == 0) {
+    return;
+  }
+  auto p = skity::capi::get_impl<skity_paint_s, skity::Paint>(
+      paint, SKITY_OBJECT_TYPE_PAINT);
+  if (p == nullptr) {
+    p = std::make_shared<skity::Paint>();
+  }
+  // skity_matrix is layout-compatible with skity::Matrix (see
+  // skity_canvas_concat); a NULL transform means identity.
+  skity::Matrix matrix{};
+  const skity::Matrix* m =
+      transform != nullptr ? reinterpret_cast<const skity::Matrix*>(transform)
+                           : &matrix;
+  std::vector<const skity::GlyphData*> results(count, nullptr);
+  f->LoadGlyphBitmap(reinterpret_cast<const skity::GlyphID*>(glyphs), count,
+                     results.data(), *p, context_scale, *m);
+  for (uint32_t i = 0; i < count; i++) {
+    out[i] = borrow_glyph_data(results[i]);
+  }
+}
+
+void skity_font_load_glyph_bitmap_info(skity_font font, const uint16_t* glyphs,
+                                       uint32_t count, skity_glyph_data out[],
+                                       skity_paint paint, float context_scale,
+                                       const skity_matrix* transform) {
+  auto* f = font_of(font);
+  if (f == nullptr || glyphs == nullptr || out == nullptr || count == 0) {
+    return;
+  }
+  auto p = skity::capi::get_impl<skity_paint_s, skity::Paint>(
+      paint, SKITY_OBJECT_TYPE_PAINT);
+  if (p == nullptr) {
+    p = std::make_shared<skity::Paint>();
+  }
+  skity::Matrix matrix{};
+  const skity::Matrix* m =
+      transform != nullptr ? reinterpret_cast<const skity::Matrix*>(transform)
+                           : &matrix;
+  std::vector<const skity::GlyphData*> results(count, nullptr);
+  f->LoadGlyphBitmapInfo(reinterpret_cast<const skity::GlyphID*>(glyphs), count,
+                         results.data(), *p, context_scale, *m);
+  for (uint32_t i = 0; i < count; i++) {
+    out[i] = borrow_glyph_data(results[i]);
+  }
 }
 
 }  // extern "C"
