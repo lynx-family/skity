@@ -277,7 +277,8 @@ bool traverse_paint_bounds(BoundsContext context, FT_OpaquePaint opaque_paint) {
       return true;
     }
     case FT_COLR_PAINT_FORMAT_MAX:
-    case FT_COLR_PAINTFORMAT_UNSUPPORTED: {
+    case FT_COLR_PAINTFORMAT_UNSUPPORTED:
+    default: {
       return false;
     }
   }
@@ -388,7 +389,8 @@ bool traverse_paint(ColorContext context, FT_OpaquePaint opaque_paint) {
       return traverse_paint(context, paint.u.composite.source_paint);
     }
     case FT_COLR_PAINT_FORMAT_MAX:
-    case FT_COLR_PAINTFORMAT_UNSUPPORTED: {
+    case FT_COLR_PAINTFORMAT_UNSUPPORTED:
+    default: {
       return false;
     }
   }

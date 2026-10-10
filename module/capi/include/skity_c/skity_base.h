@@ -14,11 +14,19 @@ extern "C" {
  * -fvisibility=hidden, so every exported function must carry this attribute.
  * This mirrors the SKITY_API macro used by the C++ headers, but is defined here
  * independently so that the C headers do not depend on any C++ header.
+ *
+ * On Windows the two directions must be distinguished: the wrapper itself
+ * needs dllexport (SKITY_CAPI_EXPORTS, defined by CMake for the skity-capi
+ * SHARED target), consumers need dllimport.
  */
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64) || defined(_MSC_VER)
+#if defined(SKITY_CAPI_EXPORTS)
 #define SKITY_C_API __declspec(dllexport)
-#elif defined(_MSC_VER)
-#define SKITY_C_API __declspec(dllexport)
+#elif defined(SKITY_STATIC)
+#define SKITY_C_API
+#else
+#define SKITY_C_API __declspec(dllimport)
+#endif
 #else
 #define SKITY_C_API __attribute__((visibility("default")))
 #endif

@@ -35,6 +35,7 @@ constexpr ColorType ToColorType(BitmapFormat bitmap_format) {
     case BitmapFormat::kGray8:
       return ColorType::kA8;
     case BitmapFormat::kUnknown:
+    default:
       return ColorType::kUnknown;
   }
 }
@@ -597,7 +598,8 @@ void SWCanvas::FillGlyphs(uint32_t count, const GlyphID* glyphs,
           skity::Data::MakeWithCopy(
               glyph_bitmap.buffer,
               row_bytes * static_cast<size_t>(glyph_bitmap.height)),
-          row_bytes, glyph_bitmap.width, glyph_bitmap.height,
+          row_bytes, static_cast<uint32_t>(glyph_bitmap.width),
+          static_cast<uint32_t>(glyph_bitmap.height),
           AlphaType::kOpaque_AlphaType, ToColorType(glyph_bitmap.format));
       if (glyph_bitmap.need_free) {
         std::free(glyph_bitmap.buffer);

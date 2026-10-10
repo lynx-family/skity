@@ -109,6 +109,7 @@ class SKITY_API Texture {
       case ColorType::kA8:
         return TextureFormat::kR;
       case ColorType::kUnknown:
+      default:
         return TextureFormat::kRGBA;
     }
   }

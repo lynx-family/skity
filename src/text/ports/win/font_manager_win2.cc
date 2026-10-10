@@ -143,8 +143,8 @@ class FontFallbackSourceDWrite : public IDWriteTextAnalysisSource {
 
   // IUnknown methods
   SK_STDMETHODIMP QueryInterface(IID const& riid, void** ppvObject) override {
-    if (__uuidof(IUnknown) == riid ||
-        __uuidof(IDWriteTextAnalysisSource) == riid) {
+    if (IsEqualIID(riid, __uuidof(IUnknown)) ||
+        IsEqualIID(riid, __uuidof(IDWriteTextAnalysisSource))) {
       *ppvObject = this;
       this->AddRef();
       return S_OK;
@@ -383,8 +383,9 @@ class FontFallbackRendererDWrite : public IDWriteTextRenderer {
 
   // IUnknown methods
   SK_STDMETHODIMP QueryInterface(IID const& riid, void** ppvObject) override {
-    if (__uuidof(IUnknown) == riid || __uuidof(IDWritePixelSnapping) == riid ||
-        __uuidof(IDWriteTextRenderer) == riid) {
+    if (IsEqualIID(riid, __uuidof(IUnknown)) ||
+        IsEqualIID(riid, __uuidof(IDWritePixelSnapping)) ||
+        IsEqualIID(riid, __uuidof(IDWriteTextRenderer))) {
       *ppvObject = this;
       this->AddRef();
       return S_OK;

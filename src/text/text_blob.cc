@@ -52,11 +52,11 @@ Rect TextBlob::CalculateBoundsRect() const {
       pos_y.reserve(glyphs.size());
       for (auto const &glyph : glyphs) {
         pos_x.emplace_back(advance_x);
-        pos_y.emplace_back(0);
+        pos_y.emplace_back(0.f);
         advance_x += glyph->AdvanceX();
       }
     } else {
-      pos_y.resize(run.GetPosX().size(), 0);
+      pos_y.resize(run.GetPosX().size(), 0.f);
       for (size_t i = 0; i < pos_y.size(); ++i) {
         if (i < run.GetPosY().size()) {
           pos_y[i] += run.GetPosY()[i];

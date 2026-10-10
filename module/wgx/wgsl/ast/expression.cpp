@@ -76,6 +76,8 @@ std::string_view op_to_string(BinaryOp op) {
       return "/";
     case BinaryOp::kModulo:
       return "%";
+    default:
+      return "?";
   }
 }
 
