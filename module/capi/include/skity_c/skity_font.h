@@ -60,6 +60,14 @@ SKITY_C_API skity_font skity_font_create_with_typeface_scale(
 SKITY_C_API void skity_font_destroy(skity_font font);
 
 /**
+ * @brief Create a new font copying @p font 's parameters, matching the copy
+ *        semantics of the value-type skity::Font (the typeface is shared
+ *        with the source, not duplicated). Returns NULL on an invalid
+ *        handle.
+ */
+SKITY_C_API skity_font skity_font_clone(skity_font font);
+
+/**
  * @brief Replace the typeface. Pass NULL to revert to the default typeface.
  */
 SKITY_C_API void skity_font_set_typeface(skity_font font,
