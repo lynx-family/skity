@@ -134,4 +134,46 @@ void skity_shader_destroy(skity_shader shader) {
   skity::capi::destroy_handle<skity_shader_s>(shader, SKITY_OBJECT_TYPE_SHADER);
 }
 
+uint32_t skity_shader_is_opaque(skity_shader shader) {
+  auto* s = shader_of(shader);
+  return s && s->IsOpaque() ? 1u : 0u;
+}
+
+skity_gradient_type skity_shader_as_gradient(skity_shader shader,
+                                             skity_color4f* colors,
+                                             float* color_offsets,
+                                             int32_t capacity,
+                                             skity_gradient_info* info) {
+  auto* s = shader_of(shader);
+  if (s == nullptr) {
+    return SKITY_GRADIENT_TYPE_NONE;
+  }
+  skity::Shader::GradientInfo gi{};
+  auto type = s->AsGradient(&gi);
+  if (info != nullptr) {
+    info->color_count = gi.color_count;
+    for (size_t i = 0; i < 2; i++) {
+      info->point[i] = *reinterpret_cast<const skity_point*>(&gi.point[i]);
+      info->radius[i] = gi.radius[i];
+    }
+    info->local_matrix =
+        *reinterpret_cast<const skity_matrix*>(&gi.local_matrix);
+    info->tile_mode = static_cast<skity_tile_mode>(gi.tile_mode);
+    info->gradient_flags = gi.gradientFlags;
+  }
+  if (colors != nullptr && color_offsets != nullptr && capacity > 0) {
+    int32_t n = gi.color_count < capacity ? gi.color_count : capacity;
+    // Gradients created without explicit stops (NULL pos) carry an empty
+    // color_offsets array; report the implied even distribution instead of
+    // indexing into the empty vector.
+    bool even = gi.color_offsets.empty();
+    for (int32_t i = 0; i < n; i++) {
+      colors[i] = *reinterpret_cast<const skity_color4f*>(&gi.colors[i]);
+      color_offsets[i] = even && n > 1 ? (float)i / (float)(n - 1)
+                                       : (even ? 0.f : gi.color_offsets[i]);
+    }
+  }
+  return static_cast<skity_gradient_type>(type);
+}
+
 }  // extern "C"

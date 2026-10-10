@@ -10,6 +10,7 @@
 #include <skity/io/data.hpp>
 #include <skity/text/font.hpp>
 #include <skity/text/font_arguments.hpp>
+#include <skity/text/font_descriptor.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/font_style.hpp>
 #include <skity/text/glyph.hpp>
@@ -651,6 +652,32 @@ skity_typeface skity_font_style_set_match_style(skity_font_style_set set,
 void skity_font_style_set_destroy(skity_font_style_set set) {
   skity::capi::destroy_handle<skity_font_style_set_s>(
       set, SKITY_OBJECT_TYPE_FONT_STYLE_SET);
+}
+
+int32_t skity_typeface_get_font_descriptor(skity_typeface typeface,
+                                           skity_font_descriptor* out,
+                                           char* family_name,
+                                           int32_t family_name_size) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr) {
+    return 0;
+  }
+  skity::FontDescriptor desc = tf->GetFontDescriptor();
+  if (out != nullptr) {
+    out->style.weight = desc.style.weight();
+    out->style.width = desc.style.width();
+    out->style.slant = static_cast<skity_font_slant>(desc.style.slant());
+    out->collection_index = desc.collection_index;
+    out->factory_id = desc.factory_id;
+  }
+  int32_t length = static_cast<int32_t>(desc.family_name.size()) + 1;
+  if (family_name == nullptr || family_name_size <= 0) {
+    return length;
+  }
+  std::strncpy(family_name, desc.family_name.c_str(),
+               (size_t)family_name_size - 1);
+  family_name[family_name_size - 1] = '\0';
+  return length;
 }
 
 }  // extern "C"
