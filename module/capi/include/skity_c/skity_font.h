@@ -6,6 +6,7 @@
 #define MODULE_CAPI_INCLUDE_SKITY_C_SKITY_FONT_H
 
 #include <skity_c/skity_base.h>
+#include <skity_c/skity_glyph.h>
 #include <skity_c/skity_text.h>
 #include <skity_c/skity_types.h>
 
@@ -194,6 +195,70 @@ SKITY_C_API skity_font skity_font_make_with_size(skity_font font, float size);
  */
 SKITY_C_API void skity_font_get_widths(skity_font font, const uint16_t* glyphs,
                                        int32_t count, float* widths);
+
+/**
+ * @brief Load glyph metrics (advances, extents, bearings) for @p count glyphs.
+ *
+ * Entry @p i of @p out receives a non-owning skity_glyph_data handle for
+ * @p glyphs[i]; allocate @p count entries. Mirrors skity::Font::
+ * LoadGlyphMetrics with a default paint. Handles stay valid until the global
+ * glyph cache evicts their entries — see skity_glyph.h.
+ */
+SKITY_C_API void skity_font_load_glyph_metrics(skity_font font,
+                                               const uint16_t* glyphs,
+                                               uint32_t count,
+                                               skity_glyph_data out[]);
+
+/**
+ * @brief Load glyph outline paths (implies metrics).
+ *
+ * Use skity_glyph_data_get_path on the results. Mirrors skity::Font::
+ * LoadGlyphPath.
+ */
+SKITY_C_API void skity_font_load_glyph_path(skity_font font,
+                                            const uint16_t* glyphs,
+                                            uint32_t count,
+                                            skity_glyph_data out[]);
+
+/**
+ * @brief Rasterize glyphs into cached bitmaps.
+ *
+ * Use skity_glyph_data_get_bitmap on the results. Mirrors skity::Font::
+ * LoadGlyphBitmap: @p paint selects fill/stroke rasterization, @p
+ * context_scale the raster scale, and @p transform the 2x2 raster transform
+ * (may be NULL for identity).
+ */
+SKITY_C_API void skity_font_load_glyph_bitmap(
+    skity_font font, const uint16_t* glyphs, uint32_t count,
+    skity_glyph_data out[], skity_paint paint, float context_scale,
+    const skity_matrix* transform);
+
+/**
+ * @brief Like skity_font_load_glyph_bitmap but only populates the bitmap
+ *        description (size / format / origin), not the pixel bytes.
+ *
+ * Mirrors skity::Font::LoadGlyphBitmapInfo; useful for atlas packing before
+ * committing to rasterization.
+ */
+SKITY_C_API void skity_font_load_glyph_bitmap_info(
+    skity_font font, const uint16_t* glyphs, uint32_t count,
+    skity_glyph_data out[], skity_paint paint, float context_scale,
+    const skity_matrix* transform);
+
+/**
+ * @brief Fetch the axis-aligned bounds of each glyph.
+ *
+ * Mirrors skity::Font::GetWidthsBounds with a default paint: entry @p i
+ * receives the bounds of glyph @p glyphs[i] at the font's current size, in
+ * baseline-relative coordinates (y grows downwards). The caller must ensure
+ * @p bounds points to at least @p count entries.
+ *
+ * @param glyphs  array of @p count glyph ids
+ * @param count   number of glyphs in @p glyphs
+ * @param bounds  output array receiving @p count skity_rect bounds
+ */
+SKITY_C_API void skity_font_get_bounds(skity_font font, const uint16_t* glyphs,
+                                       int32_t count, skity_rect* bounds);
 
 #ifdef __cplusplus
 }  // extern "C"
