@@ -171,9 +171,8 @@ void ReplayRecordedOp(Canvas *canvas, const RecordedOp *op,
     } break;
     case RecordedOpType::kDrawTextBlob: {
       auto *draw_text_blob_op = static_cast<const DrawTextBlobOp *>(op);
-      canvas->DrawTextBlob(draw_text_blob_op->blob_ptr.get(),
-                           draw_text_blob_op->x, draw_text_blob_op->y,
-                           draw_text_blob_op->paint);
+      canvas->DrawTextBlob(draw_text_blob_op->blob_ptr, draw_text_blob_op->x,
+                           draw_text_blob_op->y, draw_text_blob_op->paint);
     } break;
     case RecordedOpType::kDrawImage: {
       auto *draw_image_op = static_cast<const DrawImageOp *>(op);

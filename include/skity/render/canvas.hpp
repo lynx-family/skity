@@ -324,9 +324,7 @@ class SKITY_API Canvas {
   void DrawTextBlob(const TextBlob* blob, float x, float y, Paint const& paint);
 
   void DrawTextBlob(std::shared_ptr<TextBlob> const& blob, float x, float y,
-                    Paint const& paint) {
-    DrawTextBlob(blob.get(), x, y, paint);
-  }
+                    Paint const& paint);
 
   void DrawImage(const std::shared_ptr<Image>& image, float x, float y);
 
@@ -393,6 +391,11 @@ class SKITY_API Canvas {
 
   virtual void OnDrawBlob(const TextBlob* blob, float x, float y,
                           Paint const& paint) = 0;
+
+  // Defaults to the raw-pointer overload; recording canvases can retain
+  // ownership.
+  virtual void OnDrawBlob(std::shared_ptr<TextBlob> const& blob, float x,
+                          float y, Paint const& paint);
 
   virtual void OnDrawImageRect(std::shared_ptr<Image> image, const Rect& src,
                                const Rect& dst, const SamplingOptions& sampling,

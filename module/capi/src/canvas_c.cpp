@@ -55,12 +55,6 @@ skity::SamplingOptions to_sampling_options(
   return so;
 }
 
-skity::TextBlob* text_blob_of(skity_text_blob handle) {
-  auto* w = skity::capi::resolve<skity_text_blob_s>(
-      handle, SKITY_OBJECT_TYPE_TEXT_BLOB);
-  return w ? static_cast<skity::TextBlob*>(w->impl.get()) : nullptr;
-}
-
 }  // namespace
 
 extern "C" {
@@ -293,7 +287,8 @@ void skity_canvas_draw_image_rect(skity_canvas canvas, skity_image image,
 void skity_canvas_draw_text_blob(skity_canvas canvas, skity_text_blob blob,
                                  float x, float y, skity_paint paint) {
   auto* c = canvas_of(canvas);
-  auto* b = text_blob_of(blob);
+  auto b = skity::capi::get_impl<skity_text_blob_s>(
+      blob, SKITY_OBJECT_TYPE_TEXT_BLOB);
   auto* p = paint_of(paint);
   if (c != nullptr && b != nullptr && p != nullptr) {
     c->DrawTextBlob(b, x, y, *p);
