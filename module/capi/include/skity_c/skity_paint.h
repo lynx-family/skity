@@ -57,6 +57,14 @@ SKITY_C_API skity_paint skity_paint_create(void);
 /** @brief Release the paint handle and its underlying object. Safe on NULL. */
 SKITY_C_API void skity_paint_destroy(skity_paint paint);
 
+/**
+ * @brief Create a new paint copying @p paint 's parameters, matching the
+ *        copy semantics of the value-type skity::Paint (attached effects and
+ *        typeface are shared with the source, not duplicated). Returns NULL
+ *        on an invalid handle.
+ */
+SKITY_C_API skity_paint skity_paint_clone(skity_paint paint);
+
 /** @brief Restore the paint to its default values. */
 SKITY_C_API void skity_paint_reset(skity_paint paint);
 
