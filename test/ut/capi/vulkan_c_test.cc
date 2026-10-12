@@ -27,12 +27,17 @@ TEST(VulkanCAPITest, ContextCreationValidatesArguments) {
 }
 
 TEST(VulkanCAPITest, SemaphoreAndSurfaceValidateHandles) {
-  EXPECT_EQ(skity_semaphore_create_vk(nullptr), nullptr);
-  EXPECT_EQ(skity_semaphore_import_vk(nullptr, nullptr, -1),
+  EXPECT_EQ(skity_semaphore_create(nullptr), nullptr);
+  EXPECT_EQ(skity_semaphore_import(nullptr, nullptr, nullptr),
+            SKITY_ERROR_INVALID_HANDLE);
+  // A base info without a backend extension is rejected as unsupported.
+  skity_semaphore_import_info info = {};
+  info.s_type = SKITY_STRUCTURE_TYPE_SEMAPHORE_IMPORT_INFO;
+  EXPECT_EQ(skity_semaphore_import(nullptr, nullptr, &info),
             SKITY_ERROR_INVALID_HANDLE);
   skity_surface surface = nullptr;
   skity_semaphore semaphore = nullptr;
-  skity_surface_add_external_wait_semaphore_vk(surface, semaphore);
+  skity_surface_add_external_wait_semaphore(surface, semaphore);
   EXPECT_EQ(
       skity_native_window_acquire_next_surface_vk(nullptr, 1, 1.f, &surface),
       SKITY_ERROR_INVALID_HANDLE);

@@ -54,7 +54,6 @@ if (${SKITY_VK_BACKEND})
     ${SKITY_ROOT}/third_party/Vulkan-Headers/include
   )
   list(APPEND SKITY_CAPI_VULKAN_SOURCES
-    ${CMAKE_CURRENT_LIST_DIR}/src/semaphore_vk.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/native_window_vk.cpp
   )
 endif()
@@ -105,6 +104,7 @@ target_sources(
     ${CMAKE_CURRENT_LIST_DIR}/src/precompile_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/font_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glyph_c.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/semaphore_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/bitmap_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/recorder_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/camera_c.cpp
