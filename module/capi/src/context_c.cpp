@@ -210,4 +210,16 @@ skity_result skity_context_create_vk_ex(
 }
 #endif  // defined(SKITY_VULKAN)
 
+uint32_t skity_is_gpu_backend_supported(skity_gpu_backend_type type) {
+  return skity::IsGPUBackendSupported(static_cast<skity::GPUBackendType>(type))
+             ? 1u
+             : 0u;
+}
+
+skity_gpu_backend_type skity_context_get_backend_type(skity_context context) {
+  auto* c = context_of(context);
+  return c ? static_cast<skity_gpu_backend_type>(c->GetBackendType())
+           : SKITY_GPU_BACKEND_TYPE_NONE;
+}
+
 }  // extern "C"

@@ -424,4 +424,46 @@ void skity_canvas_destroy(skity_canvas canvas) {
   skity::capi::destroy_handle<skity_canvas_s>(canvas, SKITY_OBJECT_TYPE_CANVAS);
 }
 
+void skity_canvas_clip_rrect_radii(skity_canvas canvas, const skity_rect* rect,
+                                   const skity_vec2* radii, skity_clip_op op) {
+  auto* c = canvas_of(canvas);
+  if (c == nullptr || rect == nullptr || radii == nullptr) {
+    return;
+  }
+  skity::RRect rr;
+  rr.SetRectRadii(*reinterpret_cast<const skity::Rect*>(rect),
+                  reinterpret_cast<const skity::Vec2*>(radii));
+  c->ClipRRect(rr, to_clip_op(op));
+}
+
+void skity_canvas_draw_drrect_radii(
+    skity_canvas canvas, const skity_rect* outer, const skity_vec2* outer_radii,
+    const skity_rect* inner, const skity_vec2* inner_radii, skity_paint paint) {
+  auto* c = canvas_of(canvas);
+  auto* p = paint_of(paint);
+  if (c == nullptr || p == nullptr || outer == nullptr ||
+      outer_radii == nullptr || inner == nullptr || inner_radii == nullptr) {
+    return;
+  }
+  skity::RRect o;
+  o.SetRectRadii(*reinterpret_cast<const skity::Rect*>(outer),
+                 reinterpret_cast<const skity::Vec2*>(outer_radii));
+  skity::RRect i;
+  i.SetRectRadii(*reinterpret_cast<const skity::Rect*>(inner),
+                 reinterpret_cast<const skity::Vec2*>(inner_radii));
+  c->DrawDRRect(o, i, *p);
+}
+
+void skity_canvas_get_global_clip_bounds(skity_canvas canvas, skity_rect* out) {
+  auto* c = canvas_of(canvas);
+  if (c == nullptr || out == nullptr) {
+    return;
+  }
+  const skity::Rect& r = c->GetGlobalClipBounds();
+  out->left = r.Left();
+  out->top = r.Top();
+  out->right = r.Right();
+  out->bottom = r.Bottom();
+}
+
 }  // extern "C"

@@ -202,6 +202,33 @@ SKITY_C_API uint32_t skity_image_scale_pixels(
     skity_image image, skity_pixmap dst, skity_context context,
     const skity_sampling_options* sampling);
 
+/** @brief Image origin / backing classification. Values aligned with
+ *         skity::ImageType. */
+typedef enum {
+  SKITY_IMAGE_TYPE_UNKNOWN = 0,      /**< cannot be determined */
+  SKITY_IMAGE_TYPE_CUSTOM,           /**< caller-defined image subclass */
+  SKITY_IMAGE_TYPE_PIXMAP,           /**< CPU raster pixels */
+  SKITY_IMAGE_TYPE_TEXTURE,          /**< live GPU texture */
+  SKITY_IMAGE_TYPE_DEFERRED_TEXTURE, /**< texture allocated on first use */
+  SKITY_IMAGE_TYPE_PROMISE_TEXTURE,  /**< promise callbacks, lazy texture */
+} skity_image_type;
+
+/** @brief Return how the image's alpha channel is interpreted
+ *         (SKITY_ALPHA_TYPE_UNKNOWN on an invalid handle). */
+SKITY_C_API skity_alpha_type skity_image_get_alpha_type(skity_image image);
+
+/** @brief Return 1 when the image is backed by a GPU texture, 0 otherwise. */
+SKITY_C_API uint32_t skity_image_is_texture_backend(skity_image image);
+
+/** @brief Return the image's origin / backing classification. */
+SKITY_C_API skity_image_type skity_image_get_image_type(skity_image image);
+
+/**
+ * @brief Return 1 when the image's pixels are not yet available
+ *        (promise / deferred textures), 0 otherwise.
+ */
+SKITY_C_API uint32_t skity_image_is_lazy(skity_image image);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

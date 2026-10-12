@@ -47,6 +47,32 @@ SKITY_C_API skity_texture skity_texture_create(skity_context context,
                                                uint32_t width, uint32_t height,
                                                skity_alpha_type alpha_type);
 
+/**
+ * @brief Extended texture creation attributes, mirroring
+ *        skity::TextureDescriptor. Adds mipmap control on top of the plain
+ *        skity_texture_create parameters.
+ */
+typedef struct skity_texture_descriptor {
+  skity_texture_format format; /**< pixel format of the allocation */
+  uint32_t width;              /**< texture width in pixels */
+  uint32_t height;             /**< texture height in pixels */
+  skity_alpha_type alpha_type; /**< alpha representation of the contents */
+  uint32_t mipmapped;          /**< non-zero to allocate mip levels */
+  uint32_t mipmap_level_count; /**< explicit level count; 0 = automatic
+                                    (only when mipmapped) */
+} skity_texture_descriptor;
+
+/**
+ * @brief Create a GPU texture from a full descriptor (mipmap configuration
+ *        etc.). Mirrors GPUContext::CreateTextureWithDesc.
+ *
+ * @param context  owning context
+ * @param desc     creation attributes
+ * @return new texture handle, or NULL on failure
+ */
+SKITY_C_API skity_texture skity_texture_create_with_desc(
+    skity_context context, const skity_texture_descriptor* desc);
+
 /** @brief Release the texture handle and its GPU resource. Safe on NULL. */
 SKITY_C_API void skity_texture_destroy(skity_texture texture);
 

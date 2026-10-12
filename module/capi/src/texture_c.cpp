@@ -114,6 +114,31 @@ void skity_texture_destroy(skity_texture texture) {
                                                SKITY_OBJECT_TYPE_TEXTURE);
 }
 
+skity_texture skity_texture_create_with_desc(
+    skity_context context, const skity_texture_descriptor* desc) {
+  if (desc == nullptr || desc->width == 0 || desc->height == 0) {
+    return nullptr;
+  }
+  auto ctx = skity::capi::get_impl<skity_context_s, skity::GPUContext>(
+      context, SKITY_OBJECT_TYPE_CONTEXT);
+  if (ctx == nullptr) {
+    return nullptr;
+  }
+  skity::TextureDescriptor native_desc{};
+  native_desc.format = static_cast<skity::TextureFormat>(desc->format);
+  native_desc.width = desc->width;
+  native_desc.height = desc->height;
+  native_desc.alpha_type = static_cast<skity::AlphaType>(desc->alpha_type);
+  native_desc.mipmapped = desc->mipmapped != 0u;
+  native_desc.mipmap_level_count = desc->mipmap_level_count;
+  auto tex = ctx->CreateTextureWithDesc(&native_desc);
+  if (tex == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_texture_s>(
+      SKITY_OBJECT_TYPE_TEXTURE, SKITY_HANDLE_OWNING, std::move(tex));
+}
+
 void skity_texture_upload(skity_texture texture, const void* pixels,
                           size_t row_bytes, skity_color_type color_type,
                           skity_alpha_type alpha_type) {
