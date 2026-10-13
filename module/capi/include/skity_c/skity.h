@@ -9,7 +9,10 @@
  * Aggregate header for the Skity C API. Include this for the full surface.
  * Vulkan context creation (skity_context_create_vk) is in skity_context_vk.h,
  * which is intentionally separate so that non-Vulkan consumers are not forced
- * to pull in <vulkan/vulkan.h>.
+ * to pull in <vulkan/vulkan.h>. The Metal headers (skity_context_mtl.h /
+ * skity_surface_mtl.h / skity_texture_mtl.h) are likewise separate: they are
+ * Objective-C-only (skity_mtl_types.h), so Objective-C(++) consumers include
+ * them directly.
  */
 
 #include <skity_c/skity_base.h>

@@ -222,4 +222,33 @@ skity_gpu_backend_type skity_context_get_backend_type(skity_context context) {
            : SKITY_GPU_BACKEND_TYPE_NONE;
 }
 
+#if !defined(SKITY_METAL)
+// Portable NOT_SUPPORTED stubs for the Metal context entry points; the
+// real, typed definitions live in mtl_glue.mm and are only compiled when
+// SKITY_MTL_BACKEND is on. The public declarations are Objective-C-only
+// (skity_mtl_types.h), so this plain-C++ TU cannot include them — the
+// stubs spell the handles as void*, which is pointer-ABI identical.
+SKITY_C_API skity_result skity_context_create_mtl(void* device,
+                                                  void* command_queue,
+                                                  skity_context* out_context) {
+  (void)device;
+  (void)command_queue;
+  if (out_context == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  *out_context = nullptr;
+  return SKITY_ERROR_NOT_SUPPORTED;
+}
+
+SKITY_C_API void* skity_context_mtl_get_device(skity_context context) {
+  (void)context;
+  return nullptr;
+}
+
+SKITY_C_API void* skity_context_mtl_get_command_queue(skity_context context) {
+  (void)context;
+  return nullptr;
+}
+#endif  // !defined(SKITY_METAL)
+
 }  // extern "C"

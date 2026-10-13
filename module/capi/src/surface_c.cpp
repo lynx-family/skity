@@ -22,6 +22,11 @@
 #include <skity/gpu/gpu_context_vk.hpp>
 #endif
 
+#if defined(SKITY_METAL)
+
+#include "mtl_glue.hpp"
+#endif
+
 namespace {
 
 skity_result CreateSurfaceHandle(std::unique_ptr<skity::GPUSurface> surface,
@@ -138,6 +143,13 @@ skity_result skity_surface_create(skity_context context,
     return CreateSurfaceVK(
         context_impl.get(), info,
         static_cast<const skity_surface_create_info_vk*>(info->p_next),
+        out_surface);
+  }
+#endif
+#if defined(SKITY_METAL)
+  if (structure_type == SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_MTL) {
+    return CreateSurfaceHandle(
+        skity::capi::MtlSurfaceCreateGlue(context_impl.get(), info),
         out_surface);
   }
 #endif
