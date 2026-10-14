@@ -24,7 +24,8 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments   "-DANDROID_STL=c++_shared",
+                // static STL: old NDK's libc++_shared.so is not 16KB aligned
+                arguments   "-DANDROID_STL=c++_static",
                             "-DSKITY_EXAMPLE=OFF",
                             "-DSKITY_TEST=OFF",
                             "-DSKITY_LOG=ON",
@@ -78,9 +79,5 @@ android {
             headers "../../module/capi/include/"
             name "skity-capi"
         }
-    }
-
-    packagingOptions {
-        exclude("**/libc++_shared.so")
     }
 }
