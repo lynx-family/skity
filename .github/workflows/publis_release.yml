@@ -88,8 +88,110 @@ jobs:
                 files: |
                     out/release/skity.framework-${{ github.event.release.tag_name }}.zip
                     out/skity.podspec
-          - name: Upload Podspec to Release
+          - name: Publish Podspec to CocoaPods Trunk
             working-directory: platform/darwin
             run: |
-              SKITY_PODSPEC_TOKEN=${{ secrets.REPO_SKITY_COCOAPODS_TRUNK_TOKEN }}
-              COCOAPODS_TRUNK_TOKEN=$SKITY_PODSPEC_TOKEN bundle exec pod trunk push $GITHUB_WORKSPACE/out/skity.podspec --allow-warnings --verbose
+              PODSPEC_PATH=$GITHUB_WORKSPACE/out/skity.podspec
+              POD_NAME=$(bundle exec ruby -rcocoapods-core -e 'puts Pod::Specification.from_file(ARGV[0]).name' "$PODSPEC_PATH")
+              POD_VERSION=$(bundle exec ruby -rcocoapods-core -e 'puts Pod::Specification.from_file(ARGV[0]).version' "$PODSPEC_PATH")
+              echo "publishing $POD_NAME $POD_VERSION to the CocoaPods trunk"
+
+              # trunk may accept the push server-side while the client times out
+              # polling the commit URL; verify against the trunk API instead of
+              # trusting the client exit code
+              version_on_trunk() {
+                curl -sf --max-time 30 "https://trunk.cocoapods.org/api/v1/pods/${POD_NAME}" \
+                  | jq -e --arg v "$POD_VERSION" '.versions[] | select(.name == $v)' > /dev/null
+              }
+
+              if version_on_trunk; then
+                echo "$POD_NAME $POD_VERSION already exists on trunk, skipping push"
+                exit 0
+              fi
+
+              for attempt in 1 2 3; do
+                echo "::group::pod trunk push attempt ${attempt}"
+                if COCOAPODS_TRUNK_TOKEN=${{ secrets.REPO_SKITY_COCOAPODS_TRUNK_TOKEN }} \
+                  bundle exec pod trunk push "$PODSPEC_PATH" --allow-warnings --verbose; then
+                  echo "::endgroup::"
+                  exit 0
+                fi
+                echo "::endgroup::"
+                sleep 60
+                if version_on_trunk; then
+                  echo "attempt ${attempt} timed out client-side but the version is on trunk; publish succeeded"
+                  exit 0
+                fi
+                echo "attempt ${attempt} failed and the version is not on trunk yet, retrying"
+              done
+
+              echo "::error::pod trunk push failed after 3 attempts"
+              exit 1
+
+    verify-release:
+        needs: [build-android-aar, build-xcframework]
+        if: ${{ !cancelled() }}
+        runs-on: ubuntu-latest
+        steps:
+          - name: Summarize release channel status
+            env:
+                GH_TOKEN: ${{ github.token }}
+                TAG_NAME: ${{ github.event.release.tag_name || github.ref_name }}
+                ANDROID_JOB_RESULT: ${{ needs.build-android-aar.result }}
+                XCFRAMEWORK_JOB_RESULT: ${{ needs.build-xcframework.result }}
+            run: |
+                SUMMARY=$GITHUB_STEP_SUMMARY
+
+                note() {
+                    echo "$1" >> "$SUMMARY"
+                }
+
+                if [ "${GITHUB_REF#refs/tags/}" = "$GITHUB_REF" ]; then
+                    note "## Release status: skipped"
+                    note ""
+                    note "not a tag release run (\`${TAG_NAME}\`); nothing to verify"
+                    exit 0
+                fi
+
+                VERSION=${TAG_NAME#v}
+                FAILED=0
+
+                note "## Release status: \`${TAG_NAME}\`"
+                note ""
+                note "| channel | state |"
+                note "| --- | --- |"
+                note "| build-xcframework → release assets + trunk | job ${XCFRAMEWORK_JOB_RESULT} |"
+                if [ "${ANDROID_JOB_RESULT}" = "success" ]; then
+                    note "| build-android-aar → maven publish | job success |"
+                else
+                    note "| build-android-aar → maven publish | job ${ANDROID_JOB_RESULT} |"
+                    FAILED=1
+                fi
+
+                ASSETS=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_NAME}" --jq '.assets[].name' 2>/dev/null || true)
+                for asset in "skity.framework-${TAG_NAME}.zip" "skity.podspec"; do
+                    if echo "$ASSETS" | grep -qx "$asset"; then
+                        note "| release asset \`${asset}\` | ✅ uploaded |"
+                    else
+                        note "| release asset \`${asset}\` | ❌ missing |"
+                        FAILED=1
+                    fi
+                done
+
+                if curl -sf --max-time 30 "https://trunk.cocoapods.org/api/v1/pods/skity" \
+                    | jq -e --arg v "$VERSION" '.versions[] | select(.name == $v)' > /dev/null; then
+                    note "| CocoaPods trunk: \`skity ${VERSION}\` | ✅ published |"
+                else
+                    note "| CocoaPods trunk: \`skity ${VERSION}\` | ❌ not found |"
+                    FAILED=1
+                fi
+
+                if [ "${FAILED}" -ne 0 ]; then
+                    note ""
+                    note "❌ release incomplete — see the ❌ rows above for the missing channels"
+                    echo "::error::release ${TAG_NAME} is incomplete, see the job summary for channel status"
+                    exit 1
+                fi
+
+                note ""
+                note "✅ all release channels verified"
