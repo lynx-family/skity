@@ -88,8 +88,42 @@ jobs:
                 files: |
                     out/release/skity.framework-${{ github.event.release.tag_name }}.zip
                     out/skity.podspec
-          - name: Upload Podspec to Release
+          - name: Publish Podspec to CocoaPods Trunk
             working-directory: platform/darwin
             run: |
-              SKITY_PODSPEC_TOKEN=${{ secrets.REPO_SKITY_COCOAPODS_TRUNK_TOKEN }}
-              COCOAPODS_TRUNK_TOKEN=$SKITY_PODSPEC_TOKEN bundle exec pod trunk push $GITHUB_WORKSPACE/out/skity.podspec --allow-warnings --verbose
+              PODSPEC_PATH=$GITHUB_WORKSPACE/out/skity.podspec
+              POD_NAME=$(bundle exec ruby -rcocoapods-core -e 'puts Pod::Specification.from_file(ARGV[0]).name' "$PODSPEC_PATH")
+              POD_VERSION=$(bundle exec ruby -rcocoapods-core -e 'puts Pod::Specification.from_file(ARGV[0]).version' "$PODSPEC_PATH")
+              echo "publishing $POD_NAME $POD_VERSION to the CocoaPods trunk"
+
+              # trunk may accept the push server-side while the client times out
+              # polling the commit URL; verify against the trunk API instead of
+              # trusting the client exit code
+              version_on_trunk() {
+                curl -sf --max-time 30 "https://trunk.cocoapods.org/api/v1/pods/${POD_NAME}" \
+                  | jq -e --arg v "$POD_VERSION" '.versions[] | select(.name == $v)' > /dev/null
+              }
+
+              if version_on_trunk; then
+                echo "$POD_NAME $POD_VERSION already exists on trunk, skipping push"
+                exit 0
+              fi
+
+              for attempt in 1 2 3; do
+                echo "::group::pod trunk push attempt ${attempt}"
+                if COCOAPODS_TRUNK_TOKEN=${{ secrets.REPO_SKITY_COCOAPODS_TRUNK_TOKEN }} \
+                  bundle exec pod trunk push "$PODSPEC_PATH" --allow-warnings --verbose; then
+                  echo "::endgroup::"
+                  exit 0
+                fi
+                echo "::endgroup::"
+                sleep 60
+                if version_on_trunk; then
+                  echo "attempt ${attempt} timed out client-side but the version is on trunk; publish succeeded"
+                  exit 0
+                fi
+                echo "attempt ${attempt} failed and the version is not on trunk yet, retrying"
+              done
+
+              echo "::error::pod trunk push failed after 3 attempts"
+              exit 1
