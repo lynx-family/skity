@@ -314,6 +314,17 @@ SKITY_C_API void skity_canvas_draw_text_blob(skity_canvas canvas,
                                              float y, skity_paint paint);
 
 /**
+ * @brief Measure a UTF-8 string laid out with @p paint (text size and
+ *        typeface taken from the paint); returns {width, height} in pixels.
+ * @param text   NUL-terminated UTF-8 string to measure
+ * @param paint  text size / typeface / settings used for the layout
+ * @return       {0, 0} when the text cannot be laid out
+ */
+SKITY_C_API skity_vec2 skity_canvas_simple_text_bounds(skity_canvas canvas,
+                                                       const char* text,
+                                                       skity_paint paint);
+
+/**
  * @brief Combine the rounded rectangle defined by @p rect and corner radii
  *        (@p rx, @p ry) with the current clip using @p op, replacing the
  *        clip with the result.

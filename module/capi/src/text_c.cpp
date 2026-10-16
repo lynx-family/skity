@@ -112,6 +112,17 @@ skity_font_manager skity_font_manager_ref_default(void) {
       SKITY_OBJECT_TYPE_FONT_MANAGER, SKITY_HANDLE_OWNING, std::move(sp));
 }
 
+void skity_font_manager_set_default_typeface(skity_font_manager manager,
+                                             skity_typeface typeface) {
+  auto* m = font_manager_of(manager);
+  if (m == nullptr) {
+    return;
+  }
+  auto tf = skity::capi::get_impl<skity_typeface_s, skity::Typeface>(
+      typeface, SKITY_OBJECT_TYPE_TYPEFACE);
+  m->SetDefaultTypeface(tf);
+}
+
 void skity_font_manager_destroy(skity_font_manager manager) {
   skity::capi::destroy_handle<skity_font_manager_s>(
       manager, SKITY_OBJECT_TYPE_FONT_MANAGER);

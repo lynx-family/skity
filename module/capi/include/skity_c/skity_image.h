@@ -79,6 +79,15 @@ SKITY_C_API uint32_t skity_image_get_height(skity_image image);
 SKITY_C_API skity_image skity_image_create_from_texture(skity_texture texture);
 
 /**
+ * @brief Wrap a CPU pixmap as a raster image (skity::Image::MakeImage).
+ *        The image shares the pixmap's pixel buffer; the pixmap handle may
+ *        be released right after this call.
+ * @param pixmap  source pixels
+ * @return        image handle, or NULL on failure
+ */
+SKITY_C_API skity_image skity_image_create_from_pixmap(skity_pixmap pixmap);
+
+/**
  * @brief Create a deferred-upload image: a placeholder that knows its format
  *        and size but has no GPU texture yet. Bind a texture later with
  *        skity_image_deferred_set_texture. Useful when the texture is uploaded

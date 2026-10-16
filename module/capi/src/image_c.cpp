@@ -190,13 +190,26 @@ void skity_image_destroy(skity_image image) {
 
 uint32_t skity_image_get_width(skity_image image) {
   auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
-  return w ? (uint32_t) static_cast<skity::Image*>(w->impl.get())->Width() : 0u;
+  return w ? (uint32_t)static_cast<skity::Image*>(w->impl.get())->Width() : 0u;
 }
 
 uint32_t skity_image_get_height(skity_image image) {
   auto* w = skity::capi::resolve<skity_image_s>(image, SKITY_OBJECT_TYPE_IMAGE);
-  return w ? (uint32_t) static_cast<skity::Image*>(w->impl.get())->Height()
-           : 0u;
+  return w ? (uint32_t)static_cast<skity::Image*>(w->impl.get())->Height() : 0u;
+}
+
+skity_image skity_image_create_from_pixmap(skity_pixmap pixmap) {
+  auto pm = skity::capi::get_impl<skity_pixmap_s, skity::Pixmap>(
+      pixmap, SKITY_OBJECT_TYPE_PIXMAP);
+  if (pm == nullptr) {
+    return nullptr;
+  }
+  auto image = skity::Image::MakeImage(pm);
+  if (image == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_image_s>(
+      SKITY_OBJECT_TYPE_IMAGE, SKITY_HANDLE_OWNING, std::move(image));
 }
 
 skity_image skity_image_create_from_texture(skity_texture texture) {

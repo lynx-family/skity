@@ -34,6 +34,15 @@ SKITY_C_DEFINE_HANDLE(skity_data);
  */
 SKITY_C_API skity_font_manager skity_font_manager_ref_default(void);
 
+/**
+ * @brief Override the typeface returned by skity_typeface_get_default
+ *        process-wide (skity::FontManager::SetDefaultTypeface).
+ * @param manager  the owning font manager
+ * @param typeface typeface to make default; NULL restores the system default
+ */
+SKITY_C_API void skity_font_manager_set_default_typeface(
+    skity_font_manager manager, skity_typeface typeface);
+
 /** @brief Release a font manager handle returned by the manager constructors.
  *         Safe on NULL. */
 SKITY_C_API void skity_font_manager_destroy(skity_font_manager manager);

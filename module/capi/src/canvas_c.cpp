@@ -295,6 +295,18 @@ void skity_canvas_draw_text_blob(skity_canvas canvas, skity_text_blob blob,
   }
 }
 
+skity_vec2 skity_canvas_simple_text_bounds(skity_canvas canvas,
+                                           const char* text,
+                                           skity_paint paint) {
+  auto* c = canvas_of(canvas);
+  auto* p = paint_of(paint);
+  if (c == nullptr || p == nullptr || text == nullptr) {
+    return skity_vec2{0.f, 0.f};
+  }
+  skity::Vec2 bounds = c->SimpleTextBounds(text, *p);
+  return skity_vec2{bounds.x, bounds.y};
+}
+
 void skity_canvas_clip_rrect(skity_canvas canvas, const skity_rect* rect,
                              float rx, float ry, skity_clip_op op) {
   auto* c = canvas_of(canvas);

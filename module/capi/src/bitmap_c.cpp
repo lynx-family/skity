@@ -66,6 +66,20 @@ void* skity_bitmap_get_pixels(skity_bitmap bitmap) {
   return b ? b->GetPixelAddr() : nullptr;
 }
 
+skity_color skity_bitmap_get_pixel(skity_bitmap bitmap, uint32_t x,
+                                   uint32_t y) {
+  auto* b = bitmap_of(bitmap);
+  return b ? b->GetPixel(x, y) : 0u;
+}
+
+void skity_bitmap_set_pixel(skity_bitmap bitmap, uint32_t x, uint32_t y,
+                            skity_color color) {
+  auto* b = bitmap_of(bitmap);
+  if (b) {
+    b->SetPixel(x, y, color);
+  }
+}
+
 void skity_pixmap_destroy(skity_pixmap pixmap) {
   skity::capi::destroy_handle<skity_pixmap_s>(pixmap, SKITY_OBJECT_TYPE_PIXMAP);
 }
@@ -88,6 +102,18 @@ size_t skity_pixmap_get_row_bytes(skity_pixmap pixmap) {
 const void* skity_pixmap_get_pixels(skity_pixmap pixmap) {
   auto* p = pixmap_of(pixmap);
   return p ? p->Addr() : nullptr;
+}
+
+skity_alpha_type skity_pixmap_get_alpha_type(skity_pixmap pixmap) {
+  auto* p = pixmap_of(pixmap);
+  return p ? static_cast<skity_alpha_type>(p->GetAlphaType())
+           : SKITY_ALPHA_TYPE_UNKNOWN;
+}
+
+skity_color_type skity_pixmap_get_color_type(skity_pixmap pixmap) {
+  auto* p = pixmap_of(pixmap);
+  return p ? static_cast<skity_color_type>(p->GetColorType())
+           : SKITY_COLOR_TYPE_UNKNOWN;
 }
 
 skity_pixmap skity_bitmap_get_pixmap(skity_bitmap bitmap) {
