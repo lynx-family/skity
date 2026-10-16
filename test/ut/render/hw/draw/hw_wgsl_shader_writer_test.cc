@@ -777,15 +777,15 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var frag_coord: vec2<f32> = input.f_frag_coord;
   var uv  : vec2<f32> = frag_coord;
 
+  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
+  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
+
   color = textureSample(uTexture, uSampler, uv);
 
-  if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) || (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0))
+  if (image_color_info.infos.y == 3 && (frag_coord.x < 0.0 || frag_coord.x >= 1.0)) || (image_color_info.infos.z == 3 && (frag_coord.y < 0.0 || frag_coord.y >= 1.0))
   {
     color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
-
-  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
-  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
 
   if image_color_info.infos.x == 3 {
     color = vec4<f32>(color.xyz * color.w, color.w);
@@ -834,15 +834,15 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   var frag_coord: vec2<f32> = input.f_frag_coord;
   var uv  : vec2<f32> = frag_coord;
 
+  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
+  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
+
   color = textureSample(uTexture, uSampler, uv);
 
-  if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) || (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0))
+  if (image_color_info.infos.y == 3 && (frag_coord.x < 0.0 || frag_coord.x >= 1.0)) || (image_color_info.infos.z == 3 && (frag_coord.y < 0.0 || frag_coord.y >= 1.0))
   {
     color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
-
-  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
-  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
 
   if image_color_info.infos.x == 3 {
     color = vec4<f32>(color.xyz * color.w, color.w);
@@ -1716,15 +1716,15 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
 
   var uv  : vec2<f32> = frag_coord;
 
+  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
+  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
+
   color = textureSample(uTexture, uSampler, uv);
 
-  if (image_color_info.infos.y == 3 && (uv.x < 0.0 || uv.x >= 1.0)) || (image_color_info.infos.z == 3 && (uv.y < 0.0 || uv.y >= 1.0))
+  if (image_color_info.infos.y == 3 && (frag_coord.x < 0.0 || frag_coord.x >= 1.0)) || (image_color_info.infos.z == 3 && (frag_coord.y < 0.0 || frag_coord.y >= 1.0))
   {
     color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
-
-  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
-  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
 
   if image_color_info.infos.x == 3 {
     color = vec4<f32>(color.xyz * color.w, color.w);

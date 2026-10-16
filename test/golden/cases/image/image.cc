@@ -72,3 +72,58 @@ TEST(ImageGolden, DrawImageRect_Cubic_Mitchell) {
   EXPECT_TRUE(
       skity::testing::CompareGoldenTexture(dl.get(), 200, 200, path.c_str()));
 }
+
+namespace {
+
+void DrawImageTileModes(skity::FilterMode filter, const char* filename) {
+  skity::Bitmap bitmap(8, 8, skity::AlphaType::kPremul_AlphaType,
+                       skity::ColorType::kRGBA);
+  const skity::Color colors[] = {skity::Color_RED, skity::Color_GREEN,
+                                 skity::Color_BLUE, skity::Color_YELLOW};
+  for (uint32_t y = 0; y < 8; ++y) {
+    for (uint32_t x = 0; x < 8; ++x) {
+      bitmap.SetPixel(x, y, colors[(y / 4) * 2 + x / 4]);
+    }
+  }
+  auto image = skity::Image::MakeImage(bitmap.GetPixmap());
+  const skity::TileMode modes[] = {
+      skity::TileMode::kClamp, skity::TileMode::kRepeat,
+      skity::TileMode::kMirror, skity::TileMode::kDecal};
+  skity::SamplingOptions sampling;
+  sampling.filter = filter;
+
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(400, 400));
+  auto canvas = recorder.GetRecordingCanvas();
+  skity::Paint paint;
+  paint.SetColor(skity::Color_WHITE);
+  canvas->DrawRect(skity::Rect::MakeWH(400, 400), paint);
+  // Columns select X mode; rows select Y mode. Each panel spans [-1, 2]
+  // on both texture axes, covering negative UVs and both image boundaries.
+  for (int y = 0; y < 4; ++y) {
+    for (int x = 0; x < 4; ++x) {
+      canvas->Save();
+      canvas->Translate(x * 100.f + 34.f, y * 100.f + 34.f);
+      canvas->Scale(4.f, 4.f);
+      paint.SetShader(
+          skity::Shader::MakeShader(image, sampling, modes[x], modes[y]));
+      canvas->DrawRect(skity::Rect::MakeXYWH(-8.f, -8.f, 24.f, 24.f), paint);
+      canvas->Restore();
+    }
+  }
+  auto dl = recorder.FinishRecording();
+  auto path = std::string(kGoldenTestDir) + filename;
+  EXPECT_TRUE(
+      skity::testing::CompareGoldenTexture(dl.get(), 400, 400, path.c_str()));
+}
+
+}  // namespace
+
+TEST(ImageGolden, ShaderTileModesNearest) {
+  DrawImageTileModes(skity::FilterMode::kNearest,
+                     "image_tile_modes_nearest.png");
+}
+
+TEST(ImageGolden, ShaderTileModesLinear) {
+  DrawImageTileModes(skity::FilterMode::kLinear, "image_tile_modes_linear.png");
+}
