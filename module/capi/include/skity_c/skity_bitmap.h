@@ -54,6 +54,14 @@ SKITY_C_API size_t skity_bitmap_get_row_bytes(skity_bitmap bitmap);
  */
 SKITY_C_API void* skity_bitmap_get_pixels(skity_bitmap bitmap);
 
+/** @brief Read a single pixel as a packed skity_color. */
+SKITY_C_API skity_color skity_bitmap_get_pixel(skity_bitmap bitmap, uint32_t x,
+                                               uint32_t y);
+
+/** @brief Write a single packed skity_color pixel. */
+SKITY_C_API void skity_bitmap_set_pixel(skity_bitmap bitmap, uint32_t x,
+                                        uint32_t y, skity_color color);
+
 /**
  * @brief Pixel view over a buffer, mirroring skity::Pixmap. Either created
  *        wrapping a skity_data buffer, or borrowed from an image read / a
@@ -100,6 +108,12 @@ SKITY_C_API size_t skity_pixmap_get_row_bytes(skity_pixmap pixmap);
  * @return pointer to the immutable pixels
  */
 SKITY_C_API const void* skity_pixmap_get_pixels(skity_pixmap pixmap);
+
+/** @brief Return the alpha interpretation of the pixels. */
+SKITY_C_API skity_alpha_type skity_pixmap_get_alpha_type(skity_pixmap pixmap);
+
+/** @brief Return the color packing of the pixels. */
+SKITY_C_API skity_color_type skity_pixmap_get_color_type(skity_pixmap pixmap);
 
 /**
  * @brief Update the alpha and color interpretation of the pixels.

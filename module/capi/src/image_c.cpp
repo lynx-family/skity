@@ -199,6 +199,20 @@ uint32_t skity_image_get_height(skity_image image) {
            : 0u;
 }
 
+skity_image skity_image_create_from_pixmap(skity_pixmap pixmap) {
+  auto pm = skity::capi::get_impl<skity_pixmap_s, skity::Pixmap>(
+      pixmap, SKITY_OBJECT_TYPE_PIXMAP);
+  if (pm == nullptr) {
+    return nullptr;
+  }
+  auto image = skity::Image::MakeImage(pm);
+  if (image == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_image_s>(
+      SKITY_OBJECT_TYPE_IMAGE, SKITY_HANDLE_OWNING, std::move(image));
+}
+
 skity_image skity_image_create_from_texture(skity_texture texture) {
   auto tex = skity::capi::get_impl<skity_texture_s, skity::Texture>(
       texture, SKITY_OBJECT_TYPE_TEXTURE);

@@ -13,6 +13,20 @@ extern "C" {
 #endif
 
 /**
+ * @brief Unit quaternion value (x, y, z, w), matching the legacy
+ *        skity::Quaternion layout. Pure value type: no entry points of its
+ *        own — the C++ wrapper layer (skity/geometry/quaternion.hpp) builds
+ *        the interpolation / conversion math on top of this struct, the
+ *        same way the matrix helpers treat skity_matrix.
+ */
+typedef struct skity_quaternion {
+  float x; /**< vector part */
+  float y;
+  float z;
+  float w; /**< scalar part */
+} skity_quaternion;
+
+/**
  * @brief Build a rotation matrix from XYZ exterior Euler angles, mirroring
  *        skity::Quaternion::EulerToMatrix.
  * @param alpha   rotation angle around the X axis (radians)

@@ -18,19 +18,39 @@ extern "C" {
  * they can be passed across the ABI boundary by pointer with no conversion.
  */
 
-/** @brief 2-component single-precision vector, matching skity::Vec2. */
+/** @brief 2-component single-precision vector, matching skity::Vec2. The
+ *         components are addressable as x/y or through the e[] array (the
+ *         legacy C++ Vec2 layout). */
 typedef struct skity_vec2 {
-  float e[2]; /**< vector components */
+  union {
+    struct {
+      float x, y;
+    };
+    float e[2]; /**< vector components */
+  };
 } skity_vec2;
 
-/** @brief 3-component single-precision vector, matching skity::Vec3. */
+/** @brief 3-component single-precision vector, matching skity::Vec3. The
+ *         components are addressable as x/y/z or through the e[] array. */
 typedef struct skity_vec3 {
-  float e[3]; /**< vector components */
+  union {
+    struct {
+      float x, y, z;
+    };
+    float e[3]; /**< vector components */
+  };
 } skity_vec3;
 
-/** @brief 4-component single-precision vector, matching skity::Vec4. */
+/** @brief 4-component single-precision vector, matching skity::Vec4. The
+ *         components are addressable as x/y/z/w or through the e[] array
+ *         (skity_point and skity_color4f alias this layout). */
 typedef struct skity_vec4 {
-  float e[4]; /**< vector components */
+  union {
+    struct {
+      float x, y, z, w;
+    };
+    float e[4]; /**< vector components */
+  };
 } skity_vec4;
 
 /** @brief Alias of skity_vec4; skity::Point and skity::Color4f are both

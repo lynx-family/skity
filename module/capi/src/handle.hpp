@@ -21,6 +21,7 @@ class Font;
 class FontManager;
 class FontStyleSet;
 class GPUContext;
+class GPURenderTarget;
 class GPUNativeWindowVK;
 class GPUSemaphore;
 class GPUSurface;
@@ -80,6 +81,7 @@ typedef enum {
   SKITY_OBJECT_TYPE_SEMAPHORE,
   SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK,
   SKITY_OBJECT_TYPE_GLYPH_DATA,
+  SKITY_OBJECT_TYPE_RENDER_TARGET,
 } skity_object_type;
 
 /* When set, the wrapper owns the underlying object and releases it on destroy.
@@ -145,6 +147,12 @@ struct skity_typeface_delegate_s : skity_handle_base<skity::TypefaceDelegate> {
 };
 struct skity_semaphore_s : skity_handle_base<skity::GPUSemaphore> {};
 struct skity_glyph_data_s : skity_handle_base<skity::GlyphData> {};
+struct skity_render_target_s : skity_handle_base<skity::GPURenderTarget> {
+  // Unique owner; impl is a non-owning view so get_impl keeps working.
+  // skity_context_make_snapshot transfers the object out of this member
+  // (consuming the handle).
+  std::unique_ptr<skity::GPURenderTarget> owned_target;
+};
 struct skity_native_window_vk_s : skity_handle_base<skity::GPUNativeWindowVK> {
 };
 
