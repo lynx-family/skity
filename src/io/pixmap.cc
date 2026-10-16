@@ -23,6 +23,7 @@ static size_t BytesPerPixel(ColorType color_type) {
     case ColorType::kA8:
       return 1;
     case ColorType::kUnknown:
+    default:
       return 0;
   }
 }
@@ -37,6 +38,7 @@ static bool IsAlphaMatchColorType(AlphaType alpha_type, ColorType color_type) {
       return alpha_type == kPremul_AlphaType ||
              alpha_type == kUnpremul_AlphaType;
     case ColorType::kRGB565:
+    default:
       return alpha_type == kOpaque_AlphaType;
   }
 }

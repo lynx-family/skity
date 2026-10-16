@@ -62,9 +62,13 @@ target_include_directories(skity_hw_render_bench
     ${CMAKE_SOURCE_DIR}
 )
 
-target_compile_options(skity_hw_render_bench PUBLIC -fno-rtti)
-target_compile_options(skity_hw_render_bench PUBLIC -std=c++17)
+if(MSVC)
+    target_compile_options(skity_hw_render_bench PUBLIC /GR-)
+else()
+    target_compile_options(skity_hw_render_bench PUBLIC -fno-rtti -std=c++17)
+endif()
 target_compile_definitions(skity_hw_render_bench PUBLIC -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
+set_property(TARGET skity_hw_render_bench PROPERTY CXX_STANDARD 17)
 target_compile_definitions(skity_hw_render_bench PRIVATE RESOURCES_DIR="${SKITY_ROOT}/resources")
 
 target_link_libraries(skity_hw_render_bench

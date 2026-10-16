@@ -21,7 +21,8 @@ class RecordPlayback;
 
 class ReadBuffer;
 
-struct SKITY_API TypefaceSet {
+// skity-io is a static library: see the note in skity/io/stream.hpp.
+struct TypefaceSet {
   std::vector<std::shared_ptr<Typeface>> typefaces;
 
   int32_t AddTypeface(const std::shared_ptr<Typeface>& typeface);
@@ -31,7 +32,7 @@ struct SKITY_API TypefaceSet {
  * skia use function pointer and name mapping to create Flattenable object.
  * For ourself only needs to register the factory name.
  */
-struct SKITY_API FactorySet {
+struct FactorySet {
   std::vector<std::string> factories;
 
   int32_t AddFactory(const std::string& factory);
@@ -41,7 +42,7 @@ struct SKITY_API FactorySet {
   size_t GetFactoryCount() const;
 };
 
-struct SKITY_API SerialProc {
+struct SerialProc {
   GPUContext* gpu_context = nullptr;
 
   std::function<std::shared_ptr<Pixmap>(const Image* image)> image_proc =
@@ -54,7 +55,7 @@ struct SKITY_API SerialProc {
  * This class is used to serialize the drawing commands to a stream.
  * Or deserialize the drawing commands from a stream.
  */
-class SKITY_API Picture final {
+class Picture final {
   friend class RecordPlayback;
 
  public:

@@ -31,6 +31,8 @@ std::string GetFillLabel(PathIndex index) {
       return "BigConic";
     case PathIndex::kBigCubic:
       return "BigCubic";
+    default:
+      return "Unknown";
   }
 }
 
@@ -122,6 +124,9 @@ static skity::Path GetPathByIndex(PathIndex index) {
       path.CubicTo(250, 0, 750, 1000, 1000, 500);
       path.LineTo(0, 500);
       return path;
+    }
+    default: {
+      return skity::Path{};
     }
   }
 }

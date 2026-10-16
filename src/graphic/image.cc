@@ -132,7 +132,8 @@ class TextureImage : public Image {
     }
 
     return std::make_shared<Pixmap>(
-        data, Width(), Height(), AlphaType::kPremul_AlphaType,
+        data, static_cast<uint32_t>(Width()), static_cast<uint32_t>(Height()),
+        AlphaType::kPremul_AlphaType,
         Texture::FormatToColorType(texture_image->GetFormat()));
   }
 

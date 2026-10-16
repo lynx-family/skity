@@ -15,7 +15,7 @@ inline static void DoVectorTest(uint32_t times) {
   for (uint32_t i = 0; i < times; i++) {
     paints.push_back(std::move(skity::Paint{}));
   }
-  uint32_t count;
+  uint32_t count = 0;
   for (auto paint : paints) {
     count++;
   }
@@ -32,7 +32,7 @@ inline static void DoArrayListTest(
   for (uint32_t i = 0; i < times; i++) {
     paints.push_back(std::move(skity::Paint{}));
   }
-  uint32_t count;
+  uint32_t count = 0;
   for (auto paint : paints) {
     count++;
   }

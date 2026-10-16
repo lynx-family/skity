@@ -43,26 +43,30 @@ constexpr GLVertexFormatInfo ToGLVertexFormatInfo(GPUVertexFormat format) {
       return {3, GL_INT, true};
     case GPUVertexFormat::kSint32x4:
       return {4, GL_INT, true};
+    default:
+      return {1, GL_FLOAT, false};
   }
 }
 
 constexpr GLint ToMinMagFilter(GPUFilterMode op) {
   switch (op) {
-    case GPUFilterMode::kNearest:
-      return GL_NEAREST;
     case GPUFilterMode::kLinear:
       return GL_LINEAR;
+    case GPUFilterMode::kNearest:
+    default:
+      return GL_NEAREST;
   }
 }
 
 constexpr GLint ToAddressMode(GPUAddressMode mode) {
   switch (mode) {
-    case GPUAddressMode::kClampToEdge:
-      return GL_CLAMP_TO_EDGE;
     case GPUAddressMode::kRepeat:
       return GL_REPEAT;
     case GPUAddressMode::kMirrorRepeat:
       return GL_MIRRORED_REPEAT;
+    case GPUAddressMode::kClampToEdge:
+    default:
+      return GL_CLAMP_TO_EDGE;
   }
 }
 
@@ -84,6 +88,8 @@ constexpr GLenum ToStencilOp(GPUStencilOperation op) {
       return GL_INCR_WRAP;
     case GPUStencilOperation::kDecrementWrap:
       return GL_DECR_WRAP;
+    default:
+      return GL_KEEP;
   }
 }
 
@@ -105,6 +111,8 @@ constexpr GLenum ToCompareFunction(GPUCompareFunction func) {
       return GL_NOTEQUAL;
     case GPUCompareFunction::kGreaterEqual:
       return GL_GEQUAL;
+    default:
+      return GL_ALWAYS;
   }
 }
 
@@ -140,6 +148,8 @@ constexpr GLenum ToBlendFactor(GPUBlendFactor factor) {
       return GL_SRC1_ALPHA;
     case GPUBlendFactor::kOneMinusSrc1Alpha:
       return GL_ONE_MINUS_SRC1_ALPHA;
+    default:
+      return GL_ONE;
   }
 }
 
@@ -179,6 +189,8 @@ constexpr GLenum ToGLBlendEquation(GPUBlendOperation op) {
       return GL_HSL_COLOR_KHR;
     case GPUBlendOperation::kHslLuminosity:
       return GL_HSL_LUMINOSITY_KHR;
+    default:
+      return GL_FUNC_ADD;
   }
 }
 
@@ -200,6 +212,7 @@ constexpr GLint ExternalFormatFrom(GPUTextureFormat format) {
     case GPUTextureFormat::kDepth24Stencil8:
       return GL_DEPTH_STENCIL;
     case GPUTextureFormat::kInvalid:
+    default:
       return GL_RGBA;
   }
 }
@@ -219,6 +232,8 @@ constexpr GLint ExternalTypeFrom(GPUTextureFormat format) {
       return GL_UNSIGNED_BYTE;
     case GPUTextureFormat::kRGBA16Uint:
       return GL_UNSIGNED_SHORT;
+    default:
+      return GL_UNSIGNED_BYTE;
   }
 }
 
@@ -239,6 +254,7 @@ constexpr GLint InternalFormatFrom(GPUTextureFormat format) {
     case GPUTextureFormat::kDepth24Stencil8:
       return GL_DEPTH24_STENCIL8;
     case GPUTextureFormat::kInvalid:
+    default:
       return GL_RGBA8;
   }
 }

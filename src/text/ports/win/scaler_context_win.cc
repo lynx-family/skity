@@ -225,7 +225,8 @@ class DWritePathSink final : public IDWriteGeometrySink {
       return E_POINTER;
     }
 
-    if (riid == __uuidof(IUnknown) || riid == __uuidof(IDWriteGeometrySink)) {
+    if (IsEqualIID(riid, __uuidof(IUnknown)) ||
+        IsEqualIID(riid, __uuidof(IDWriteGeometrySink))) {
       *object = static_cast<IDWriteGeometrySink*>(this);
       AddRef();
       return S_OK;

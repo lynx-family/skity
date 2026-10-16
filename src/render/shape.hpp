@@ -41,6 +41,7 @@ class Shape {
       case Type::kPath:
         return GetPath()->GetBounds();
       case Type::kRRect:
+      default:
         return GetRRect()->GetBounds();
     }
   }

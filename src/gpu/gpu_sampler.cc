@@ -11,30 +11,32 @@ GPUFilterMode ToGPUFilterMode(FilterMode filter_mode) {
     case FilterMode::kLinear:
       return GPUFilterMode::kLinear;
     case FilterMode::kNearest:
+    default:
       return GPUFilterMode::kNearest;
   }
 }
 
 GPUMipmapMode ToGPUMipmapMode(MipmapMode mipmap_mode) {
   switch (mipmap_mode) {
-    case MipmapMode::kNone:
-      return GPUMipmapMode::kNone;
     case MipmapMode::kLinear:
       return GPUMipmapMode::kLinear;
     case MipmapMode::kNearest:
       return GPUMipmapMode::kNearest;
+    case MipmapMode::kNone:
+    default:
+      return GPUMipmapMode::kNone;
   }
 }
 
 GPUAddressMode ToGPUAddressMode(TileMode tile_mode) {
   switch (tile_mode) {
-    case TileMode::kClamp:
-      return GPUAddressMode::kClampToEdge;
     case TileMode::kRepeat:
       return GPUAddressMode::kRepeat;
     case TileMode::kMirror:
       return GPUAddressMode::kMirrorRepeat;
+    case TileMode::kClamp:
     case TileMode::kDecal:
+    default:
       return GPUAddressMode::kClampToEdge;
   }
 }

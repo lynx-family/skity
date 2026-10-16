@@ -32,7 +32,7 @@ struct GLExtensions {
   }
 };
 
-GLInterface* g_interface = nullptr;
+SKITY_API GLInterface* g_interface = nullptr;
 
 #define GET_PROC(F) \
   g_interface->f##F = (decltype(g_interface->f##F))loader("gl" #F)

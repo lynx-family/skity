@@ -153,7 +153,8 @@ std::unique_ptr<RecordPlayback> RecordPlayback::CreateFromStream(
     const Rect& cull_rect, int32_t target_version, ReadStream& stream,
     TypefaceSet* typeface_set, int32_t recursion_limit) {
   auto playback = std::make_unique<RecordPlayback>(
-      cull_rect.Width(), cull_rect.Height(), target_version);
+      static_cast<uint32_t>(cull_rect.Width()),
+      static_cast<uint32_t>(cull_rect.Height()), target_version);
 
   if (typeface_set == nullptr) {
     typeface_set = &playback->playback_typeface_set_;

@@ -122,10 +122,11 @@ Clipper2Lib::PathsD ConvertPathToNoZeroRule(const Path &path);
 
 Clipper2Lib::FillRule FillTypeToClipper2(Path::PathFillType fill_type) {
   switch (fill_type) {
-    case Path::PathFillType::kWinding:
-      return Clipper2Lib::FillRule::NonZero;
     case Path::PathFillType::kEvenOdd:
       return Clipper2Lib::FillRule::EvenOdd;
+    case Path::PathFillType::kWinding:
+    default:
+      return Clipper2Lib::FillRule::NonZero;
   }
 }
 
@@ -138,6 +139,7 @@ Clipper2Lib::ClipType PathOpToClipper2(PathOp::Op op) {
     case PathOp::Op::kDifference:
       return Clipper2Lib::ClipType::Difference;
     case PathOp::Op::kXor:
+    default:
       return Clipper2Lib::ClipType::Xor;
   }
 }

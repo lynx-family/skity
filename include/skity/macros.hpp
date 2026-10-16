@@ -42,10 +42,28 @@
 
 #ifdef SKITY_DLL
 
-#if defined(SKITY_WIN)
+#if defined(SKITY_WIN) || defined(_MSC_VER)
+
+// Building a shared library requires dllexport, using one requires dllimport.
+// Both directions have to be distinguished, otherwise a consumer resolving a
+// public data symbol cannot link (MSVC matches the import library only against
+// the __imp_ form, for example "?g_interface@@3PEAUGLInterface@@EA" versus
+// "__imp_?g_interface@@3PEAUGLInterface@@EA"), and function calls lose the
+// import thunk.
+//
+//   SKITY_EXPORTS - compiling the shared library itself.
+//   SKITY_IMPORTS - linked against the shared library, the default here. The
+//                   skity CMake target publishes this as an INTERFACE
+//                   definition so every consumer gets it automatically.
+//   SKITY_STATIC  - linked against a static library.
+#if defined(SKITY_EXPORTS)
 #define SKITY_API __declspec(dllexport)
-#elif defined(_MSC_VER)
-#define SKITY_API __declspec(dllexport)
+#elif defined(SKITY_STATIC)
+#define SKITY_API
+#else
+#define SKITY_API __declspec(dllimport)
+#endif
+
 #else
 #define SKITY_API __attribute__((visibility("default")))
 #endif

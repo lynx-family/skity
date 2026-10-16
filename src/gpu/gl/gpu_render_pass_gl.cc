@@ -208,14 +208,16 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
     }
 
     // Draw elements
+    // The index offset is a byte offset passed through a pointer-typed GL
+    // parameter; widen through uintptr_t so 64-bit builds stay well-defined.
+    void* index_offset = reinterpret_cast<void*>(
+        static_cast<uintptr_t>(command->index_buffer.offset));
     if (command->IsInstanced()) {
       GL_CALL(DrawElementsInstanced, GL_TRIANGLES, command->index_count,
-              GL_UNSIGNED_INT,
-              reinterpret_cast<void*>(command->index_buffer.offset),
-              command->instance_count);
+              GL_UNSIGNED_INT, index_offset, command->instance_count);
     } else {
       GL_CALL(DrawElements, GL_TRIANGLES, command->index_count, GL_UNSIGNED_INT,
-              reinterpret_cast<void*>(command->index_buffer.offset));
+              index_offset);
     }
   }
 

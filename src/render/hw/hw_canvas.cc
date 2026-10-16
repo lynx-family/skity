@@ -346,13 +346,13 @@ void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
 
       for (auto const& glyph : glyph_data) {
         pos_x.emplace_back(advance_x);
-        pos_y.emplace_back(0);
+        pos_y.emplace_back(0.f);
 
         advance_x += glyph->AdvanceX();
       }
     } else {
       // Y in run is not necessary cause we can infer y from position of blob.
-      pos_y.resize(run.GetPosX().size(), 0);
+      pos_y.resize(run.GetPosX().size(), 0.f);
       for (size_t i = 0; i < pos_y.size(); ++i) {
         // Use default y value if posY is not provided.
         if (i < run.GetPosY().size()) {

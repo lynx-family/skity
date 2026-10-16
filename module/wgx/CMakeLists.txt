@@ -96,7 +96,11 @@ endif()
 
 target_include_directories(wgsl-cross PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
 target_include_directories(wgsl-cross PRIVATE ${CMAKE_CURRENT_LIST_DIR})
-target_compile_options(wgsl-cross PRIVATE -fno-rtti)
+if (MSVC)
+    target_compile_options(wgsl-cross PRIVATE /GR-)
+else()
+    target_compile_options(wgsl-cross PRIVATE -fno-rtti)
+endif()
 set_property(TARGET wgsl-cross PROPERTY CXX_STANDARD 17)
 
 if (ANDROID)
