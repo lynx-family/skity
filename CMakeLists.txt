@@ -170,6 +170,17 @@ endif()
 
 target_compile_definitions(skity PRIVATE -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
 
+# Shared C-ABI foundation for module-owned C surfaces: the handle
+# machinery (module/capi/src/handle.hpp) plus the base skity_c headers
+# (handle macro, result codes, shared value structs) that the codec / io
+# C headers build on. Defined here so it exists before any module
+# subdirectory is configured.
+add_library(skity-capi-internal INTERFACE)
+target_include_directories(skity-capi-internal
+  INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/module/capi/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/module/capi/include)
+
 if(${SKITY_CODEC_MODULE})
   add_subdirectory(module/codec)
 endif()
