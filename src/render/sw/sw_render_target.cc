@@ -42,7 +42,8 @@ void SWRenderTarget::BlendPixel(uint32_t x, uint32_t y, Color4f color,
 void SWRenderTarget::BlendPixelH(uint32_t x, uint32_t y, PMColor* pm_colors,
                                  uint32_t len, BlendMode blend) {
 #ifdef SKITY_ARM_NEON
-  if (bitmap_->GetAlphaType() == AlphaType::kPremul_AlphaType &&
+  if (bitmap_->GetColorType() == ColorType::kRGBA &&
+      bitmap_->GetAlphaType() == AlphaType::kPremul_AlphaType &&
       blend != BlendMode::kSoftLight) {
     BlendPixelNeon(x, y, pm_colors, len, blend);
     return;
@@ -57,7 +58,8 @@ void SWRenderTarget::BlendPixelH(uint32_t x, uint32_t y, PMColor* pm_colors,
 void SWRenderTarget::BlendPixelH(uint32_t x, uint32_t y, PMColor pm_color,
                                  uint32_t len, BlendMode blend) {
 #ifdef SKITY_ARM_NEON
-  if (bitmap_->GetAlphaType() == AlphaType::kPremul_AlphaType &&
+  if (bitmap_->GetColorType() == ColorType::kRGBA &&
+      bitmap_->GetAlphaType() == AlphaType::kPremul_AlphaType &&
       blend != BlendMode::kSoftLight) {
     BlendPixelNeon(x, y, pm_color, len, blend);
     return;
