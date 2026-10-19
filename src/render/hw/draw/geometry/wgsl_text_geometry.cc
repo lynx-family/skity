@@ -6,10 +6,31 @@
 
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
-#include "src/render/hw/hw_path_raster.hpp"
+#include "src/render/hw/hw_stage_buffer.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
+namespace {
+
+constexpr HWFunctionBaseKey kHasLayerToLocal = 1;
+
+struct Instance {
+  Vec4 vertex_coord;
+  Vec4 texture_coord;
+  Vec4 color;
+};
+
+static_assert(sizeof(Instance) == 48);
+
+}  // namespace
+
+WGSLTextGeometry::WGSLTextGeometry(const TextGeometryData& data)
+    : HWWGSLGeometry(Flags::kSnippet | Flags::kAffectsFragment |
+                     ((data.effect == TextAtlasEffect::kColor ||
+                       data.effect == TextAtlasEffect::kColorSwizzleRB)
+                          ? Flags::kAffectsFragmentColor
+                          : 0)),
+      data_(data) {}
 
 std::vector<GPUVertexBufferLayout> WGSLTextGeometry::GetBufferLayout() {
   return std::vector<GPUVertexBufferLayout>{
@@ -48,20 +69,177 @@ std::vector<GPUVertexBufferLayout> WGSLTextGeometry::GetBufferLayout() {
   };
 }
 
-struct Instance {
-  Vec4 vertex_coord;
-  Vec4 texture_coord;
-  Vec4 color;
-};
+HWFunctionBaseKey WGSLTextGeometry::GetMainKey() const {
+  return MakeMainKey(HWGeometryKeyType::kText,
+                     data_.layer_to_local.has_value() ? kHasLayerToLocal : 0);
+}
 
-static_assert(sizeof(Instance) == 48);
+HWFunctionBaseKey WGSLTextGeometry::GetFSSubKey() const {
+  switch (data_.effect) {
+    case TextAtlasEffect::kA8Coverage:
+      return HWGeometryFSKeyType::kTextA8;
+    case TextAtlasEffect::kSDFCoverage:
+      return HWGeometryFSKeyType::kTextSDF;
+    case TextAtlasEffect::kColor:
+      return HWGeometryFSKeyType::kTextColor;
+    case TextAtlasEffect::kColorSwizzleRB:
+      return HWGeometryFSKeyType::kTextColorSwizzleRB;
+  }
+  return HWGeometryFSKeyType::kNone;
+}
+
+void WGSLTextGeometry::WriteVSFunctionsAndStructs(std::stringstream& ss) const {
+  ss << CommonVertexWGSL();
+  ss << R"(
+fn get_texture_index(u: f32) -> i32 {
+  return i32(u) >> 14;
+}
+
+fn get_texture_uv(uv: vec2<f32>) -> vec2<f32> {
+  let u: i32 = i32(uv.x);
+  return vec2<f32>(f32(u & 0x3FFF), uv.y);
+}
+)";
+}
+
+void WGSLTextGeometry::WriteVSUniforms(std::stringstream& ss) const {
+  ss << "@group(0) @binding(0) var<uniform> common_slot: CommonSlot;\n";
+  if (data_.layer_to_local) {
+    // Bindings 0..4 hold the sampler and four atlas textures in the fragment
+    // stage.
+    ss << "@group(3) @binding(5) var<uniform> "
+          "uTextLayerToLocal: mat4x4<f32>;\n";
+  }
+}
+
+void WGSLTextGeometry::WriteVSInput(std::stringstream& ss) const {
+  ss << R"(
+struct VSInput {
+  @location(0) a_offset: vec4<f32>,
+  @location(1) a_pos: vec4<f32>,
+  @location(2) a_uv: vec4<f32>,
+  @location(3) color: vec4<f32>,
+};
+)";
+}
+
+void WGSLTextGeometry::WriteVSMain(std::stringstream& ss) const {
+  ss << R"(
+  let pos: vec2<f32> = vec2<f32>(
+      input.a_offset.x * input.a_pos.x + input.a_offset.z * input.a_pos.z,
+      input.a_offset.y * input.a_pos.y + input.a_offset.w * input.a_pos.w);
+  let uv: vec2<f32> = vec2<f32>(
+      input.a_offset.x * input.a_uv.x + input.a_offset.z * input.a_uv.z,
+      input.a_offset.y * input.a_uv.y + input.a_offset.w * input.a_uv.w);
+)";
+  if (data_.layer_to_local) {
+    ss << R"(
+  local_pos = (uTextLayerToLocal * common_slot.userTransform *
+               vec4<f32>(pos, 0.0, 1.0)).xy;
+)";
+  }
+  ss << R"(
+  output.pos = get_vertex_position(pos, common_slot);
+  output.v_txt_index = get_texture_index(uv.x);
+  output.v_uv = get_texture_uv(uv);
+)";
+}
+
+std::optional<std::vector<std::string>> WGSLTextGeometry::GetVarings() const {
+  return std::vector<std::string>{
+      "@interpolate(flat) v_txt_index: i32",
+      "v_uv: vec2<f32>",
+  };
+}
+
+void WGSLTextGeometry::WriteFSFunctionsAndStructs(std::stringstream& ss) const {
+  ss << R"(
+fn get_text_atlas_color(font_index: i32, uv: vec2<f32>) -> vec4<f32> {
+  var dimensions: vec2<u32> = vec2<u32>(textureDimensions(uTextAtlas0));
+  var texture_uv: vec2<f32> =
+      vec2<f32>(uv.x / f32(dimensions.x), uv.y / f32(dimensions.y));
+  var color0: vec4<f32> =
+      textureSample(uTextAtlas0, uTextSampler, texture_uv);
+  var color1: vec4<f32> =
+      textureSample(uTextAtlas1, uTextSampler, texture_uv);
+  var color2: vec4<f32> =
+      textureSample(uTextAtlas2, uTextSampler, texture_uv);
+  var color3: vec4<f32> =
+      textureSample(uTextAtlas3, uTextSampler, texture_uv);
+
+  if font_index == 0 {
+    return color0;
+  } else if font_index == 1 {
+    return color1;
+  } else if font_index == 2 {
+    return color2;
+  } else if font_index == 3 {
+    return color3;
+  } else {
+    return color0;
+  }
+}
+)";
+}
+
+void WGSLTextGeometry::WriteFSUniforms(std::stringstream& ss) const {
+  ss << R"(
+@group(3) @binding(0) var uTextSampler: sampler;
+@group(3) @binding(1) var uTextAtlas0: texture_2d<f32>;
+@group(3) @binding(2) var uTextAtlas1: texture_2d<f32>;
+@group(3) @binding(3) var uTextAtlas2: texture_2d<f32>;
+@group(3) @binding(4) var uTextAtlas3: texture_2d<f32>;
+)";
+}
+
+void WGSLTextGeometry::WriteFSColor(std::stringstream& ss) const {
+  if (data_.effect != TextAtlasEffect::kColor &&
+      data_.effect != TextAtlasEffect::kColorSwizzleRB) {
+    return;
+  }
+
+  ss << R"(
+  let text_paint_alpha: f32 = color.a;
+  color = get_text_atlas_color(input.v_txt_index, input.v_uv);
+)";
+  if (data_.effect == TextAtlasEffect::kColorSwizzleRB) {
+    ss << "  color = color.bgra;\n";
+  }
+  ss << "  color *= text_paint_alpha;\n";
+}
+
+void WGSLTextGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
+  if (data_.effect == TextAtlasEffect::kA8Coverage) {
+    ss << R"(
+  mask_alpha = get_text_atlas_color(input.v_txt_index, input.v_uv).r;
+)";
+  } else if (data_.effect == TextAtlasEffect::kSDFCoverage) {
+    ss << R"(
+  var distance: f32 = get_text_atlas_color(input.v_txt_index, input.v_uv).r;
+  distance = 7.96875 * (distance - 0.5019608);
+
+  var dist_grad:vec2<f32> = vec2<f32>(dFdx(distance), dFdy(distance));
+  let dg_len2: f32 = dot(dist_grad, dist_grad);
+  if(dg_len2 < 0.0001) {
+    dist_grad = vec2<f32>(0.7071);
+  } else {
+    dist_grad = dist_grad * inversesqrt(dg_len2);
+  }
+  let jacobian: mat2x2<f32> = mat2x2<f32>(dFdx(input.v_uv), dFdy(input.v_uv));
+  let grad: vec2<f32> = jacobian * dist_grad;
+  let afwidth: f32 = 0.65 * length(grad);
+
+  mask_alpha = smoothstep(-afwidth, afwidth, distance);
+)";
+  }
+}
 
 void WGSLTextGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
                                   const Matrix& transform, float clip_depth,
                                   Command* stencil_cmd) {
   SKITY_TRACE_EVENT(WGSLTextGeometry_PrepareCMD);
 
-  if (cmd->pipeline == nullptr) {
+  if (cmd == nullptr || cmd->pipeline == nullptr) {
     return;
   }
 
@@ -70,8 +248,8 @@ void WGSLTextGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
   cmd->index_count = cmd->index_buffer.range / sizeof(uint32_t);
 
   context->stageBuffer->BeginWritingInstance(
-      glyph_rects_.size() * sizeof(Instance), alignof(Instance));
-  for (auto& glyph_rect : glyph_rects_) {
+      data_.glyph_rects.size() * sizeof(Instance), alignof(Instance));
+  for (auto& glyph_rect : data_.glyph_rects) {
     context->stageBuffer->AppendInstance<Instance>(
         glyph_rect.item.vertex_coord,
         Vec4{glyph_rect.item.texture_coord_tl,
@@ -97,120 +275,47 @@ void WGSLTextGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
   }
 
   UploadBindGroup(group->group, common_slot, cmd, context);
-}
 
-bool WGSLTextGeometry::CanMerge(const HWWGSLGeometry* other) const {
-  return GetMainKey() == other->GetMainKey();
-}
-void WGSLTextGeometry::Merge(const HWWGSLGeometry* other) {
-  auto o = static_cast<const WGSLTextGeometry*>(other);
-  for (auto&& glyph_rect : o->glyph_rects_) {
-    glyph_rects_.emplace_back(std::move(glyph_rect));
+  auto geometry_group = pipeline->GetBindingGroup(3);
+  if (geometry_group == nullptr) {
+    return;
   }
-}
 
-std::string WGSLTextSolidColorGeometry::GenSourceWGSL() const {
-  std::string wgsl_code = CommonVertexWGSL();
-
-  wgsl_code += kTextCommonVertex;
-
-  wgsl_code += R"(
-    struct TextSolidColorVSOutput {
-        @builtin(position)              pos         : vec4<f32>,
-        @location(0) @interpolate(flat) txt_index   : i32,
-        @location(1)                    v_uv        : vec2<f32>,
-        @location(2)                    v_color     : vec4<f32>
-    };
-
-    @vertex
-    fn vs_main(text_in: TextVSInput) -> TextSolidColorVSOutput {
-        var output: TextSolidColorVSOutput;
-        var pos: vec2<f32> = vec2<f32>(text_in.a_offset.x * text_in.a_pos.x + text_in.a_offset.z * text_in.a_pos.z,
-                                       text_in.a_offset.y * text_in.a_pos.y + text_in.a_offset.w * text_in.a_pos.w);
-        var uv: vec2<f32> = vec2<f32>(text_in.a_offset.x * text_in.a_uv.x + text_in.a_offset.z * text_in.a_uv.z,
-                                       text_in.a_offset.y * text_in.a_uv.y + text_in.a_offset.w * text_in.a_uv.w);
-
-        output.pos          = get_vertex_position(pos, common_slot);
-        output.txt_index    = get_texture_index(uv.x);
-        output.v_uv         = get_texture_uv(uv);
-        output.v_color      = text_in.a_color;
-        return output;
+  if (data_.layer_to_local) {
+    auto entry = geometry_group->GetEntry(5);
+    if (entry == nullptr || entry->type_definition == nullptr ||
+        entry->type_definition->name != "mat4x4<f32>") {
+      return;
     }
-  )";
+    entry->type_definition->SetData(&*data_.layer_to_local, sizeof(Matrix));
+    UploadBindGroup(geometry_group->group, entry, cmd, context);
+  }
 
-  return wgsl_code;
-}
+  if (data_.textures[0] == nullptr) {
+    return;
+  }
+  auto sampler_entry = geometry_group->GetEntry(0);
+  if (sampler_entry == nullptr ||
+      sampler_entry->type != wgx::BindingType::kSampler) {
+    return;
+  }
+  UploadBindGroup(geometry_group->group, sampler_entry, cmd, data_.sampler);
 
-std::string WGSLTextGradientGeometry::GenSourceWGSL() const {
-  std::string wgsl_code = CommonVertexWGSL();
-
-  wgsl_code += kTextCommonVertex;
-
-  wgsl_code += R"(
-    struct TextGradientVSOutput {
-        @builtin(position)              pos         : vec4<f32>,
-        @location(0) @interpolate(flat) txt_index   : i32,
-        @location(1)                    v_uv        : vec2<f32>,
-        @location(2)                    v_pos       : vec2<f32>,
-    };
-
-    @group(0) @binding(1) var<uniform> inv_matrix   : mat4x4<f32>;
-
-    @vertex
-    fn vs_main(text_in: TextVSInput) -> TextGradientVSOutput {
-        var output: TextGradientVSOutput;
-
-        var pos: vec2<f32> = vec2<f32>(text_in.a_offset.x * text_in.a_pos.x + text_in.a_offset.z * text_in.a_pos.z,
-                                       text_in.a_offset.y * text_in.a_pos.y + text_in.a_offset.w * text_in.a_pos.w);
-        var uv: vec2<f32> = vec2<f32>(text_in.a_offset.x * text_in.a_uv.x + text_in.a_offset.z * text_in.a_uv.z,
-                                       text_in.a_offset.y * text_in.a_uv.y + text_in.a_offset.w * text_in.a_uv.w);
-
-        output.pos          = get_vertex_position(pos, common_slot);
-        output.txt_index    = get_texture_index(uv.x);
-        output.v_uv         = get_texture_uv(uv);
-        output.v_pos        = (inv_matrix * common_slot.userTransform * vec4<f32>(pos, 0.0, 1.0)).xy;
-
-        return output;
+  std::shared_ptr<GPUTexture> last_texture;
+  for (size_t i = 0; i < data_.textures.size(); ++i) {
+    auto texture_entry = geometry_group->GetEntry(i + 1);
+    if (texture_entry == nullptr ||
+        texture_entry->type != wgx::BindingType::kTexture) {
+      return;
     }
-  )";
-
-  return wgsl_code;
-}
-
-void WGSLTextGradientGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
-                                          const Matrix& transform,
-                                          float clip_depth,
-                                          Command* stencil_cmd) {
-  SKITY_TRACE_EVENT(WGSLTextGradientGeometry_PrepareCMD);
-  WGSLTextGeometry::PrepareCMD(cmd, context, transform, clip_depth,
-                               stencil_cmd);
-
-  auto pipeline = cmd->pipeline;
-
-  if (pipeline == nullptr) {
-    return;
+    if (data_.textures[i] != nullptr) {
+      last_texture = data_.textures[i];
+    }
+    if (last_texture == nullptr) {
+      return;
+    }
+    UploadBindGroup(geometry_group->group, texture_entry, cmd, last_texture);
   }
-
-  auto group = pipeline->GetBindingGroup(0);
-
-  if (group == nullptr) {
-    return;
-  }
-
-  auto entry = group->GetEntry(1);
-
-  if (entry == nullptr || entry->type_definition == nullptr ||
-      entry->type_definition->name != "mat4x4<f32>") {
-    return;
-  }
-
-  entry->type_definition->SetData(&inv_matrix_, sizeof(Matrix));
-
-  UploadBindGroup(group->group, entry, cmd, context);
-}
-
-bool WGSLTextGradientGeometry::CanMerge(const HWWGSLGeometry* other) const {
-  return false;
 }
 
 }  // namespace skity

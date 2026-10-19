@@ -5,4 +5,6 @@
 add_golden_test_text(
   NAME text
   SOURCES ${CMAKE_CURRENT_LIST_DIR}/text.cc
+  DEFINES -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/"
+          -DSKITY_TEST_CT_FONT=$<BOOL:${SKITY_CT_FONT}>
 )

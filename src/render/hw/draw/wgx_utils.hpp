@@ -68,8 +68,11 @@ bool SetupImageBoundsInfo(const wgx::BindGroupEntry* image_bounds_entry,
 // are conservatively treated as translucent.
 bool IsPaintSourceOpaque(const Paint& paint);
 
+// When supplied, shader_local_matrix uses a draw-time snapshot instead of the
+// shader's current local matrix.
 HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
-                                   bool is_stroke, bool has_color = true);
+                                   bool is_stroke, bool has_color = true,
+                                   const Matrix* shader_local_matrix = nullptr);
 
 void ConfigureShadingFragment(HWDrawContext* context, const Paint& paint,
                               const HWBlendPlan& blend_plan,

@@ -122,6 +122,10 @@ class HWDraw {
     layer_space_bounds_ = layer_space_bounds;
   }
 
+  void SetRequiresNonOverlappingDraws(bool requires_non_overlapping_draws) {
+    requires_non_overlapping_draws_ = requires_non_overlapping_draws;
+  }
+
   bool MergeIfPossible(HWDraw* draw) {
     if (GetDrawType() != draw->GetDrawType() ||
         GetDrawType() == HWDrawType::kUnknow) {
@@ -134,6 +138,13 @@ class HWDraw {
     }
 
     if (blend_plan_ != draw->blend_plan_) {
+      return false;
+    }
+
+    if (requires_non_overlapping_draws_ !=
+            draw->requires_non_overlapping_draws_ ||
+        (requires_non_overlapping_draws_ &&
+         Rect::Intersect(layer_space_bounds_, draw->layer_space_bounds_))) {
       return false;
     }
 
@@ -174,6 +185,7 @@ class HWDraw {
   bool anti_alias_ = false;
   bool prepared_ = false;
   bool generated_ = false;
+  bool requires_non_overlapping_draws_ = false;
   HWDrawState draw_state_ = HWDrawState::kDrawStateNone;
   Rect scissor_rect_ = {};
   Rect layer_space_bounds_ = Rect::MakeLTRB(-1E9F, -1E9F, 1E9F, 1E9F);

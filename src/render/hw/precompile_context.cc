@@ -24,7 +24,6 @@
 #include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_vertex_color.hpp"
 #include "src/render/hw/draw/fragment/wgsl_stencil_fragment.hpp"
-#include "src/render/hw/draw/fragment/wgsl_text_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 #include "src/render/hw/draw/geometry/wgsl_clip_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_path_geometry.hpp"
@@ -95,14 +94,11 @@ HWBlendPlan ResolvePrecompileBlendPlan(HWDrawContext* context,
   return *plan;
 }
 
-bool PrecompileStep(HWDrawStep* step, HWDrawStepContext* ctx,
-                    BlendMode blend_mode, bool has_fragment_mask = false,
-                    bool source_is_opaque = false) {
+bool PrecompileStepWithPlan(HWDrawStep* step, HWDrawStepContext* ctx,
+                            const HWBlendPlan& blend_plan) {
   DEBUG_CHECK(step != nullptr);
   DEBUG_CHECK(ctx != nullptr);
 
-  auto blend_plan = ResolvePrecompileBlendPlan(
-      ctx->context, blend_mode, has_fragment_mask, source_is_opaque);
   auto success =
       step->PrecompilePipeline(ctx->context, ctx->state, ctx->color_format,
                                ctx->sample_count, blend_plan);
@@ -112,6 +108,15 @@ bool PrecompileStep(HWDrawStep* step, HWDrawStepContext* ctx,
 
   ctx->context->pipelineLib->ResetCompileFailedPipelines();
   return success;
+}
+
+bool PrecompileStep(HWDrawStep* step, HWDrawStepContext* ctx,
+                    BlendMode blend_mode, bool has_fragment_mask = false,
+                    bool source_is_opaque = false) {
+  return PrecompileStepWithPlan(
+      step, ctx,
+      ResolvePrecompileBlendPlan(ctx->context, blend_mode, has_fragment_mask,
+                                 source_is_opaque));
 }
 
 HWWGSLFragment* ApplyPaintEffects(HWWGSLFragment* fragment, const Paint& paint,
@@ -270,65 +275,43 @@ void PrecompileImageStep(HWDrawStepContext* ctx, const Paint& paint,
                  IsPaintSourceOpaque(work_paint));
 }
 
-ArrayList<GlyphRect, 16> MakePrecompileGlyphRects(ArenaAllocator* arena) {
-  ArrayList<GlyphRect, 16> glyph_rects;
-  glyph_rects.SetArenaAllocator(arena);
-  glyph_rects.emplace_back(Vec4{0.f, 0.f, 16.f, 16.f}, Vec2{0.f, 0.f},
-                           Vec2{1.f, 1.f});
-  return glyph_rects;
-}
-
-HWWGSLFragment* MakeTextFragment(HWDrawStepContext* ctx, const Paint& paint,
-                                 WGSLTextFragment::BatchedTexture textures,
-                                 std::shared_ptr<GPUSampler> sampler, bool sdf,
-                                 bool emoji, bool swizzle_rb) {
-  auto* arena = ctx->context->arena_allocator;
-  HWWGSLFragment* fragment = nullptr;
-
-  if (emoji) {
-    fragment = arena->Make<WGSLColorEmojiFragment>(
-        std::move(textures), std::move(sampler), swizzle_rb, paint.GetAlphaF());
-  } else if (paint.GetShader() != nullptr && !sdf &&
-             paint.GetShader()->AsGradient(nullptr) !=
-                 Shader::GradientType::kNone) {
-    Shader::GradientInfo info = {};
-    auto type = paint.GetShader()->AsGradient(&info);
-    fragment = arena->Make<WGSLGradientTextFragment>(
-        std::move(textures), std::move(sampler), info, type, paint.GetAlphaF());
-  } else if (sdf) {
-    fragment = arena->Make<WGSLSdfColorTextFragment>(
-        std::move(textures), std::move(sampler), paint.GetFillColor());
-  } else {
-    fragment = arena->Make<WGSLColorTextFragment>(std::move(textures),
-                                                  std::move(sampler));
-  }
-
-  return ApplyPaintEffects(fragment, paint, ctx->context,
-                           /*has_fragment_mask=*/false);
-}
-
 void PrecompileTextStep(HWDrawStepContext* ctx, const Paint& paint, bool sdf,
                         bool emoji, bool swizzle_rb = false) {
   auto* arena = ctx->context->arena_allocator;
-  auto glyph_rects = MakePrecompileGlyphRects(arena);
-  WGSLTextFragment::BatchedTexture textures = {};
-  std::shared_ptr<GPUSampler> sampler;
+  const auto effect = emoji ? (swizzle_rb ? TextAtlasEffect::kColorSwizzleRB
+                                          : TextAtlasEffect::kColor)
+                            : (sdf ? TextAtlasEffect::kSDFCoverage
+                                   : TextAtlasEffect::kA8Coverage);
+  const bool has_fragment_mask = !emoji;
+  const bool source_is_opaque = !emoji && IsPaintSourceOpaque(paint);
 
-  HWWGSLGeometry* geometry = nullptr;
-  if (paint.GetShader() != nullptr && !sdf &&
-      paint.GetShader()->AsGradient(nullptr) != Shader::GradientType::kNone) {
-    geometry = arena->Make<WGSLTextGradientGeometry>(
-        Matrix{}, std::move(glyph_rects), paint.GetShader()->GetLocalMatrix(),
-        Matrix{});
-  } else {
-    geometry = arena->Make<WGSLTextSolidColorGeometry>(
-        Matrix{}, std::move(glyph_rects), paint);
+  const auto blend_plan = ResolvePrecompileBlendPlan(
+      ctx->context, paint.GetBlendMode(), has_fragment_mask, source_is_opaque);
+  auto* data = arena->Make<TextGeometryData>();
+  data->glyph_rects = {{
+      GlyphRect{Vec4{0.f, 0.f, 16.f, 16.f}, Vec2{0.f, 0.f}, Vec2{1.f, 1.f}},
+      paint,
+      Matrix{},
+  }};
+  data->effect = effect;
+  if (paint.GetShader() != nullptr && !emoji) {
+    data->layer_to_local = Matrix{};
   }
-
-  auto* fragment = MakeTextFragment(ctx, paint, std::move(textures),
-                                    std::move(sampler), sdf, emoji, swizzle_rb);
+  auto* geometry = arena->Make<WGSLTextGeometry>(*data);
+  HWWGSLFragment* fragment = nullptr;
+  if (paint.GetShader() != nullptr &&
+      paint.GetShader()->AsGradient(nullptr) == Shader::GradientType::kNone) {
+    auto shader = std::static_pointer_cast<PixmapShader>(paint.GetShader());
+    fragment =
+        arena->Make<WGSLTextureFragment>(std::move(shader), nullptr, nullptr,
+                                         paint.GetAlphaF(), Matrix{}, 1.f, 1.f);
+  } else {
+    fragment = GenShadingFragment(
+        ctx->context, paint, paint.GetStyle() == Paint::kStroke_Style, false);
+  }
+  ConfigureShadingFragment(ctx->context, paint, blend_plan, fragment);
   auto* step = arena->Make<ColorStep>(geometry, fragment, CoverageType::kNone);
-  PrecompileStep(step, ctx, paint.GetBlendMode());
+  PrecompileStepWithPlan(step, ctx, blend_plan);
 }
 
 }  // namespace
@@ -439,6 +422,8 @@ void PrecompileContextImpl::PrecompileDraw(PrecompileDrawType draw_type,
     bool is_emoji = draw_type == PrecompileDrawType::kDrawEmojiText;
     bool is_sdf = draw_type == PrecompileDrawType::kDrawSDFText;
     if (is_emoji) {
+      // Match runtime color glyphs, which ignore the paint shader.
+      work_paint.SetShader(nullptr);
       PrecompileTextStep(&step_context_, work_paint, false, true, false);
       PrecompileTextStep(&step_context_, work_paint, false, true, true);
     } else {

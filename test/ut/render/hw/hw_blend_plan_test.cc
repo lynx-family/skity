@@ -389,6 +389,25 @@ TEST(HWBlendPlan, CoverageFallbackPrefersFramebufferFetchThenTextureCopy) {
   EXPECT_FALSE(unsupported.has_value());
 }
 
+TEST(HWBlendPlan, LegacyCoverageFallbackFoldsRegularSourceOutput) {
+  GPUCaps caps = {};
+  auto src = skity::ResolveLegacyCoverageBlendPlan(
+      BlendMode::kSrc, caps, /*supports_texture_copy_dst_read=*/false);
+  ExpectFormula(src, HWBlendOutput::kSourceTimesCoverage, GPUBlendFactor::kOne,
+                GPUBlendFactor::kZero);
+
+  auto dst = skity::ResolveLegacyCoverageBlendPlan(
+      BlendMode::kDst, caps, /*supports_texture_copy_dst_read=*/false);
+  ExpectFormula(dst, HWBlendOutput::kNone, GPUBlendFactor::kZero,
+                GPUBlendFactor::kOne);
+
+  auto overlay = skity::ResolveLegacyCoverageBlendPlan(
+      BlendMode::kOverlay, caps, /*supports_texture_copy_dst_read=*/false);
+  EXPECT_EQ(overlay.dst_read_strategy, DstReadStrategy::kNonRequired);
+  ExpectFormula(overlay, HWBlendOutput::kSourceTimesCoverage,
+                GPUBlendFactor::kOne, GPUBlendFactor::kZero);
+}
+
 TEST(HWBlendPlan, PlusWithCoverageAlwaysUsesProgrammableBlending) {
   GPUCaps caps = {};
   caps.supports_dual_source_blending = true;
