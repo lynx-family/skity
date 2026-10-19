@@ -41,6 +41,10 @@ class Texture;
 class Typeface;
 class TypefaceDelegate;
 class GlyphData;
+class MultiFrameDecoder;
+class Picture;
+class ReadStream;
+class WriteStream;
 
 }  // namespace skity
 
@@ -82,6 +86,10 @@ typedef enum {
   SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK,
   SKITY_OBJECT_TYPE_GLYPH_DATA,
   SKITY_OBJECT_TYPE_RENDER_TARGET,
+  SKITY_OBJECT_TYPE_MULTI_FRAME_DECODER,
+  SKITY_OBJECT_TYPE_PICTURE,
+  SKITY_OBJECT_TYPE_READ_STREAM,
+  SKITY_OBJECT_TYPE_WRITE_STREAM,
 } skity_object_type;
 
 /* When set, the wrapper owns the underlying object and releases it on destroy.
@@ -153,6 +161,11 @@ struct skity_render_target_s : skity_handle_base<skity::GPURenderTarget> {
   // (consuming the handle).
   std::unique_ptr<skity::GPURenderTarget> owned_target;
 };
+struct skity_multi_frame_decoder_s
+    : skity_handle_base<skity::MultiFrameDecoder> {};
+struct skity_picture_s : skity_handle_base<skity::Picture> {};
+struct skity_read_stream_s : skity_handle_base<skity::ReadStream> {};
+struct skity_write_stream_s : skity_handle_base<skity::WriteStream> {};
 struct skity_native_window_vk_s : skity_handle_base<skity::GPUNativeWindowVK> {
 };
 

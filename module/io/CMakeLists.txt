@@ -61,11 +61,21 @@ target_include_directories(skity-io
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# C ABI surface (shipped with the module): streams + picture
+target_sources(skity-io PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_stream.h
+    ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_picture.h
+    ${CMAKE_CURRENT_LIST_DIR}/src/capi/io_c.cpp
+)
+
 target_link_libraries(skity-io
     PUBLIC
     skity::skity
     skity::codec
 )
+
+# the module's own C ABI surface shares the capi handle protocol
+target_link_libraries(skity-io PRIVATE skity-capi-internal)
 
 set_property(TARGET skity-io PROPERTY CXX_STANDARD 17)
 set_property(TARGET skity-io PROPERTY CXX_STANDARD_REQUIRED ON)
