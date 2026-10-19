@@ -84,6 +84,35 @@ skity_pixmap skity_codec_decode(const void* data, size_t size,
       SKITY_OBJECT_TYPE_PIXMAP, SKITY_HANDLE_OWNING, std::move(pixmap));
 }
 
+skity_data skity_codec_encode(skity_pixmap pixmap, skity_codec_type type) {
+  auto pm = skity::capi::get_impl<skity_pixmap_s, skity::Pixmap>(
+      pixmap, SKITY_OBJECT_TYPE_PIXMAP);
+  if (pm == nullptr) {
+    return nullptr;
+  }
+  // GIF / WebP expose no encoder through the public codec factories.
+  std::shared_ptr<skity::Codec> codec;
+  switch (type) {
+    case SKITY_CODEC_TYPE_PNG:
+      codec = skity::Codec::MakePngCodec();
+      break;
+    case SKITY_CODEC_TYPE_JPEG:
+      codec = skity::Codec::MakeJPEGCodec();
+      break;
+    default:
+      return nullptr;
+  }
+  if (codec == nullptr) {
+    return nullptr;
+  }
+  auto data = codec->Encode(pm.get());
+  if (data == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_data_s>(
+      SKITY_OBJECT_TYPE_DATA, SKITY_HANDLE_OWNING, std::move(data));
+}
+
 skity_multi_frame_decoder skity_codec_decode_multi_frame(const void* data,
                                                          size_t size) {
   if (data == nullptr || size == 0) {

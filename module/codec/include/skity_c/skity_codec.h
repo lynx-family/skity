@@ -5,17 +5,14 @@
 #ifndef MODULE_CAPI_INCLUDE_SKITY_C_SKITY_CODEC_H
 #define MODULE_CAPI_INCLUDE_SKITY_C_SKITY_CODEC_H
 
-// Image-codec entry points (decode / recognize) over the C ABI. Only
-// available when skity is built with SKITY_CODEC_MODULE=ON; otherwise
+// Image-codec entry points (decode / recognize / encode) over the C ABI.
+// Only available when skity is built with SKITY_CODEC_MODULE=ON; otherwise
 // skity_codec_decode returns NULL and skity_codec_recognize returns
 // SKITY_ERROR_NOT_SUPPORTED.
-//
-// Experiment stage: this mirrors the primary decode path of the C++
-// skity::Codec (MakeFromData + Decode); the multi-frame decoder and
-// encoding stay C++-only until the terminal C surface is designed.
 
 #include <skity_c/skity_base.h>
 #include <skity_c/skity_bitmap.h>
+#include <skity_c/skity_data.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -60,6 +57,21 @@ SKITY_C_API skity_result skity_codec_recognize(const uint8_t* header,
 SKITY_C_API skity_pixmap skity_codec_decode(const void* data, size_t size,
                                             int32_t target_width,
                                             int32_t target_height);
+
+/**
+ * @brief Encode a pixmap's pixels into an encoded image.
+ *
+ * PNG and JPEG carry public encoders; GIF and WebP decode only, so those
+ * types (and every other value) return NULL.
+ *
+ * @param pixmap  pixel source (RGBA / BGRA / RGB565 / A8 as produced by
+ *                skity_codec_decode)
+ * @param type    desired container type
+ * @return        an owning skity_data handle with the encoded bytes, or
+ *                NULL on an unsupported type or encoding failure
+ */
+SKITY_C_API skity_data skity_codec_encode(skity_pixmap pixmap,
+                                          skity_codec_type type);
 
 /** @brief Opaque multi-frame image decoder (skity::MultiFrameDecoder). */
 SKITY_C_DEFINE_HANDLE(skity_multi_frame_decoder);
