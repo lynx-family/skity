@@ -810,11 +810,9 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
 
       Color4f fallback_color;
       if (NeedsFallbackToSolidColor(type, info, fallback_color)) {
-        if (has_color) {
-          return arena_allocator->Make<WGSLSolidColor>(fallback_color);
-        } else {
-          return arena_allocator->Make<WGSLSolidVertexColor>();
-        }
+        // Vertex colors still contain the paint color, not the gradient color.
+        fallback_color.a *= paint.GetAlphaF();
+        return arena_allocator->Make<WGSLSolidColor>(fallback_color);
       }
 
       return arena_allocator->Make<WGSLGradientFragment>(

@@ -567,3 +567,73 @@ TEST(GradientGolden, RadialGradientFallbackTileMode) {
   EXPECT_TRUE(CompareGradientGolden(recorder, 500, 500,
                                     "gradient_fallback_tile_mode.png"));
 }
+
+TEST(GradientGolden, FallbackPathAndRRect) {
+  const skity::TileMode modes[] = {
+      skity::TileMode::kClamp, skity::TileMode::kRepeat,
+      skity::TileMode::kMirror, skity::TileMode::kDecal};
+  skity::testing::GoldenTestEnvConfig config;
+  config.enable_simple_shape_pipeline = true;
+  config.sample_count = 1;
+  config.require_exact_pixel_match = true;
+  std::filesystem::path golden_path = kGoldenTestImageDir;
+  golden_path.append("gradient_fallback_path_rrect.png");
+
+  // Generate/check the baseline with explicit solid colors first, independently
+  // of gradient fallback. Both renderings must match the same golden.
+  for (bool gradient : {false, true}) {
+    SCOPED_TRACE(gradient ? "degenerate gradient" : "solid reference");
+    EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+        640, 320, golden_path.c_str(), config, [&](skity::Canvas* canvas) {
+          canvas->Clear(skity::Color_WHITE);
+          // Rows: linear, radial, translucent linear, translucent radial.
+          // Columns: clamp, repeat, mirror, decal; last row also tests Src.
+          for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col) {
+              skity::Color4f colors[] = {skity::Colors::kRed,
+                                         skity::Colors::kBlue};
+              const float alpha = row < 2 ? 1.f : 0.5f;
+              colors[0].a = colors[1].a = row < 2 ? 1.f : 0.5f;
+              skity::Paint paint;
+              paint.SetAntiAlias(true);
+              paint.SetColor(skity::Color_GREEN);
+              paint.SetAlphaF(alpha);
+              if (row == 3) {
+                paint.SetBlendMode(skity::BlendMode::kSrc);
+              }
+              if (gradient) {
+                const skity::Point points[] = {{0.f, 0.f, 0.f, 1.f},
+                                               {0.f, 0.f, 0.f, 1.f}};
+                paint.SetShader(
+                    row % 2 == 0
+                        ? skity::Shader::MakeLinear(points, colors, nullptr, 2,
+                                                    modes[col])
+                        : skity::Shader::MakeRadial(points[0], 0.f, colors,
+                                                    nullptr, 2, modes[col]));
+              } else {
+                auto color =
+                    col == 0 ? colors[1] : (colors[0] + colors[1]) * 0.5f;
+                if (col == 3) {
+                  color = skity::Colors::kTransparent;
+                }
+                color.a *= alpha;
+                paint.SetFillColor(color);
+              }
+              const float x = col * 160.f;
+              const float y = row * 80.f;
+              skity::Path path;
+              path.MoveTo(x + 8.f, y + 56.f);
+              path.LineTo(x + 36.f, y + 8.f);
+              path.LineTo(x + 64.f, y + 56.f);
+              path.Close();
+              canvas->DrawPath(path, paint);
+              canvas->DrawRRect(
+                  skity::RRect::MakeRectXY(
+                      skity::Rect::MakeXYWH(x + 80.f, y + 8.f, 64.f, 48.f),
+                      12.f, 12.f),
+                  paint);
+            }
+          }
+        }));
+  }
+}
