@@ -5,14 +5,58 @@
 #ifndef SRC_TEXT_SCALER_CONTEXT_CONTAINER_HPP
 #define SRC_TEXT_SCALER_CONTEXT_CONTAINER_HPP
 
+#include <cstdlib>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
+#include <utility>
 
 #include "src/text/packed_glyph_id.hpp"
 #include "src/text/scaler_context.hpp"
 #include "src/utils/thread_annotations.hpp"
 
 namespace skity {
+
+// A request-local glyph and its pixels, independent of the scaler cache and
+// backend scratch storage. The bitmap view never transfers ownership to
+// callers.
+class OwnedGlyphImage {
+ public:
+  OwnedGlyphImage() = default;
+  OwnedGlyphImage(OwnedGlyphImage&& other) noexcept
+      : glyph_(std::move(other.glyph_)), pixels_(std::move(other.pixels_)) {
+    other.glyph_.reset();
+  }
+  OwnedGlyphImage& operator=(OwnedGlyphImage&& other) noexcept {
+    if (this != &other) {
+      // Reconstruct instead of assigning GlyphData: Path has a move
+      // constructor but its assignment operator copies the path vectors.
+      glyph_.reset();
+      if (other.glyph_) {
+        glyph_.emplace(std::move(*other.glyph_));
+        other.glyph_.reset();
+      }
+      pixels_ = std::move(other.pixels_);
+    }
+    return *this;
+  }
+
+  const GlyphData* Get() const { return glyph_ ? &*glyph_ : nullptr; }
+  const GlyphBitmapData& Image() const { return glyph_->Image(); }
+
+ private:
+  struct FreePixels {
+    void operator()(uint8_t* pixels) const { std::free(pixels); }
+  };
+
+  // Store the request-local metadata inline, avoiding one allocation per
+  // image request. Cached paths still need an independent snapshot.
+  std::optional<GlyphData> glyph_;
+  std::unique_ptr<uint8_t, FreePixels> pixels_;
+
+  friend class ScalerContextContainer;
+};
 
 // It's from scaler_cache and we need to check thread safety.
 class ScalerContextContainer {
@@ -27,6 +71,10 @@ class ScalerContextContainer {
                const GlyphData* results[]) SKITY_EXCLUDES(mutex_);
   void PreparePaths(const GlyphID* glyph_ids, uint32_t count,
                     const GlyphData* results[]) SKITY_EXCLUDES(mutex_);
+  OwnedGlyphImage PrepareOwnedImage(PackedGlyphID glyph_id, const Paint& paint)
+      SKITY_EXCLUDES(mutex_);
+  // Compatibility view, valid until the next PrepareImages call on this
+  // thread. Rendering code should retain an OwnedGlyphImage instead.
   void PrepareImages(const GlyphID* glyph_ids, uint32_t count,
                      const GlyphData* results[], const Paint& paint)
       SKITY_EXCLUDES(mutex_);

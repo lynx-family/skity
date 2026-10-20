@@ -24,13 +24,13 @@ bool valid_positive_float(float f) {
   return !(FloatIsNan(f) || !FloatIsFinite(f) || f < 0.f);
 }
 
-void LoadGlyphBitmap(const Font& font, PackedGlyphID packed_glyph_id,
-                     const GlyphData** glyph_data, const Paint& paint,
-                     const ScalerContextDesc& desc) {
+OwnedGlyphImage LoadGlyphBitmap(const Font& font, PackedGlyphID packed_glyph_id,
+                                const Paint& paint,
+                                const ScalerContextDesc& desc) {
   auto scaler_context =
       ScalerContextCache::GlobalScalerContextCache()->FindOrCreateScalerContext(
           desc, font.GetTypeface());
-  scaler_context->PrepareImages(&packed_glyph_id, 1, glyph_data, paint);
+  return scaler_context->PrepareOwnedImage(packed_glyph_id, paint);
 }
 
 }  // namespace
@@ -150,7 +150,6 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
   //  generate text bitmap from typeface
   Font resized_font(font);
   resized_font.SetSize(key.scaler_context_desc.text_size);
-  const GlyphData* glyph_data;
 
   Paint fill_paint = paint;
   if (load_sdf) {
@@ -158,38 +157,41 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
     fill_paint.SetStyle(Paint::kFill_Style);
   }
 
-  LoadGlyphBitmap(resized_font, key.packed_glyph_id, &glyph_data, fill_paint,
-                  key.scaler_context_desc);
-  const auto& bitmap_info = glyph_data->Image();
+  auto glyph_image = LoadGlyphBitmap(resized_font, key.packed_glyph_id,
+                                     fill_paint, key.scaler_context_desc);
+  auto bitmap_info = glyph_image.Image();
 
   if (fill_paint.GetStyle() == Paint::kStroke_Style &&
       fill_paint.IsAdjustStroke()) {
-    const GlyphData* glyph_data_fill;
     fill_paint.SetStyle(Paint::kFill_Style);
     ScalerContextDesc fill_desc = ScalerContextDesc::MakeTransformed(
         resized_font, fill_paint, key.scaler_context_desc.context_scale,
         key.scaler_context_desc.transform);
-    LoadGlyphBitmap(resized_font, key.packed_glyph_id, &glyph_data_fill,
-                    fill_paint, fill_desc);
+    auto fill_image = LoadGlyphBitmap(resized_font, key.packed_glyph_id,
+                                      fill_paint, fill_desc);
+    const auto& fill_bitmap = fill_image.Image();
     fill_paint.SetStyle(Paint::kStroke_Style);
 
-    if (valid_positive_float(bitmap_info.width) &&
+    if (bitmap_info.buffer && fill_bitmap.buffer &&
+        bitmap_info.format == BitmapFormat::kGray8 &&
+        fill_bitmap.format == BitmapFormat::kGray8 &&
+        valid_positive_float(bitmap_info.width) &&
         valid_positive_float(bitmap_info.height) &&
-        valid_positive_float(glyph_data_fill->Image().width) &&
-        valid_positive_float(glyph_data_fill->Image().height)) {
+        valid_positive_float(fill_bitmap.width) &&
+        valid_positive_float(fill_bitmap.height)) {
       size_t width = static_cast<size_t>(bitmap_info.width);
       size_t height = static_cast<size_t>(bitmap_info.height);
-      size_t width_fill = static_cast<size_t>(glyph_data_fill->Image().width);
-      size_t height_fill = static_cast<size_t>(glyph_data_fill->Image().height);
+      size_t width_fill = static_cast<size_t>(fill_bitmap.width);
+      size_t height_fill = static_cast<size_t>(fill_bitmap.height);
 
       // Presume size of stroked text be >= filled text
       if (width >= width_fill && height >= height_fill) {
         size_t width_offset = (width - width_fill) / 2;
         size_t height_offset = (height - height_fill) / 2;
 
-        auto bitmap_fill_buffer = glyph_data_fill->Image().buffer;
+        auto bitmap_fill_buffer = fill_bitmap.buffer;
         auto bitmap_stroke_buffer = bitmap_info.buffer;
-        const size_t fill_row_bytes = glyph_data_fill->Image().RowBytes();
+        const size_t fill_row_bytes = fill_bitmap.RowBytes();
         const size_t stroke_row_bytes = bitmap_info.RowBytes();
 
         for (size_t h = 0; h < height_fill; ++h) {
@@ -205,13 +207,10 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
         }
       }
     }
-    if (glyph_data_fill->NeedFree()) {
-      std::free(glyph_data_fill->Image().buffer);
-      const_cast<GlyphBitmapData&>(glyph_data_fill->Image()).need_free = false;
-    }
   }
 
-  if (load_sdf) {
+  if (load_sdf && bitmap_info.buffer && bitmap_info.width > 0.f &&
+      bitmap_info.height > 0.f) {
     size_t width = static_cast<size_t>(bitmap_info.width);
     size_t height = static_cast<size_t>(bitmap_info.height);
     sdf::Image<uint8_t> unfiltered_image(width, height);
@@ -225,19 +224,10 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
 
     sdf::Image<uint8_t> filtered_image =
         sdf::SdfGen::GenerateSdfImage(unfiltered_image);
-    const_cast<GlyphBitmapData&>(bitmap_info).width = filtered_image.GetWidth();
-    const_cast<GlyphBitmapData&>(bitmap_info).height =
-        filtered_image.GetHeight();
-    // The generated SDF owns a tightly packed image. Keep the fallback form of
-    // the row-bytes contract so a later backend regeneration cannot inherit a
-    // stale explicit stride from this temporary image.
-    const_cast<GlyphBitmapData&>(bitmap_info).row_bytes = 0;
-    if (bitmap_info.need_free) {
-      std::free(bitmap_info.buffer);
-      const_cast<GlyphBitmapData&>(bitmap_info).need_free = false;
-    }
-    const_cast<GlyphBitmapData&>(bitmap_info).buffer =
-        filtered_image.GetRawData();
+    bitmap_info.width = filtered_image.GetWidth();
+    bitmap_info.height = filtered_image.GetHeight();
+    bitmap_info.row_bytes = 0;
+    bitmap_info.buffer = filtered_image.GetRawData();
 
     return GenerateGlyphRegionInternal(key, bitmap_info);
   }
@@ -259,10 +249,6 @@ GlyphRegion Atlas::GenerateGlyphRegionInternal(
   AtlasBitmap* atlas_bitmap = atlas_bitmap_[current_bitmap_index_].get();
   auto region = atlas_bitmap->GenerateGlyphRegion(key, glyph_bitmap);
   if (region.loc != INVALID_LOC) {
-    if (glyph_bitmap.need_free) {
-      std::free(glyph_bitmap.buffer);
-      const_cast<GlyphBitmapData&>(glyph_bitmap).need_free = false;
-    }
     region.index_in_group = current_bitmap_index_;
     return region;
   } else {
