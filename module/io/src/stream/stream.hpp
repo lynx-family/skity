@@ -2,8 +2,13 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef MODULE_IO_INCLUDE_SKITY_IO_STREAM_HPP
-#define MODULE_IO_INCLUDE_SKITY_IO_STREAM_HPP
+// Internal implementation header of the io module (not on the public
+// include path). The consumable surface is the C ABI under
+// include/skity_c/; these classes remain the serialization engine the
+// C entries are built on.
+
+#ifndef MODULE_IO_SRC_STREAM_STREAM_HPP
+#define MODULE_IO_SRC_STREAM_STREAM_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -113,4 +118,4 @@ class SKITY_API ReadStream {
 
 }  // namespace skity
 
-#endif  // MODULE_IO_INCLUDE_SKITY_IO_STREAM_HPP
+#endif  // MODULE_IO_SRC_STREAM_STREAM_HPP

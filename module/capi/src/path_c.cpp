@@ -4,8 +4,10 @@
 
 #include <skity_c/skity_path.h>
 
+#include <cstring>
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/rect.hpp>
+#include <skity/geometry/rrect.hpp>
 #include <skity/graphic/path.hpp>
 
 #include "handle.hpp"
@@ -246,6 +248,49 @@ uint32_t skity_path_count_points(skity_path path) {
   return p ? (uint32_t)p->CountPoints() : 0u;
 }
 
+int32_t skity_path_get_verbs(skity_path path, skity_path_verb* out,
+                             int32_t count) {
+  auto* p = path_of(path);
+  if (p == nullptr) return 0;
+  int32_t total = static_cast<int32_t>(p->CountVerbs());
+  if (out == nullptr || count <= 0) return total;
+  int32_t n = count < total ? count : total;
+  // skity::Path::Verb and skity_path_verb are value-aligned enums sharing the
+  // int underlying type, so the storage can be cast element-wise.
+  const skity::Path::Verb* verbs = p->VerbsBegin();
+  for (int32_t i = 0; i < n; i++) {
+    out[i] = static_cast<skity_path_verb>(verbs[i]);
+  }
+  return n;
+}
+
+int32_t skity_path_get_points(skity_path path, skity_point* out,
+                              int32_t count) {
+  auto* p = path_of(path);
+  if (p == nullptr) return 0;
+  int32_t total = static_cast<int32_t>(p->CountPoints());
+  if (out == nullptr || count <= 0) return total;
+  int32_t n = count < total ? count : total;
+  // skity::Point has the Vec4 layout, binary-compatible with skity_point.
+  std::memcpy(out, p->Points(), sizeof(skity_point) * (size_t)n);
+  return n;
+}
+
+int32_t skity_path_get_conic_weights(skity_path path, float* out,
+                                     int32_t count) {
+  auto* p = path_of(path);
+  if (p == nullptr) return 0;
+  // One weight per conic verb; the verb array is the authoritative count.
+  int32_t total = 0;
+  for (auto it = p->VerbsBegin(); it != p->VerbsEnd(); ++it) {
+    if (*it == skity::Path::Verb::kConic) total++;
+  }
+  if (out == nullptr || count <= 0) return total;
+  int32_t n = count < total ? count : total;
+  std::memcpy(out, p->ConicWeights(), sizeof(float) * (size_t)n);
+  return n;
+}
+
 uint32_t skity_path_get_point(skity_path path, int32_t index, skity_vec4* out) {
   auto* p = path_of(path);
   if (p == nullptr || out == nullptr || index < 0) return 0u;
@@ -345,6 +390,21 @@ void skity_path_add_round_rect_radii(skity_path path, const skity_rect* rect,
     p->AddRoundRect(*reinterpret_cast<const skity::Rect*>(rect), radii,
                     to_dir(dir));
   }
+}
+
+void skity_path_add_round_rect_radii_start(skity_path path,
+                                           const skity_rect* rect,
+                                           const float* radii,
+                                           skity_path_direction dir,
+                                           int32_t start_index) {
+  auto* p = path_of(path);
+  if (p == nullptr || rect == nullptr || radii == nullptr || start_index < 0) {
+    return;
+  }
+  skity::RRect rr;
+  rr.SetRectRadii(*reinterpret_cast<const skity::Rect*>(rect),
+                  reinterpret_cast<const skity::Vec2*>(radii));
+  p->AddRRect(rr, to_dir(dir), static_cast<uint32_t>(start_index));
 }
 
 uint32_t skity_path_get_last_pt(skity_path path, skity_point* out) {

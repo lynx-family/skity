@@ -4,12 +4,13 @@
 
 #include <cmath>
 #include <skity/graphic/paint.hpp>
-#include <skity/io/picture.hpp>
 
+#include "src/io/core_bridge.hpp"
 #include "src/io/flat/blender_flat.hpp"
 #include "src/io/flat/local_matrix_flat.hpp"
 #include "src/io/memory_read.hpp"
 #include "src/io/memory_writer.hpp"
+#include "src/picture.hpp"
 #include "src/picture_priv.hpp"
 
 namespace skity {
@@ -46,24 +47,27 @@ uint32_t shift_bits(T value, unsigned shift, unsigned bits) {
 uint32_t pack_v68(const Paint& paint, uint8_t flat_flags) {
   uint32_t packed = 0;
 
-  auto bm = static_cast<uint32_t>(paint.GetBlendMode());
+  auto bm = static_cast<uint32_t>(core_bridge::GetPaintBlendMode(&paint));
 
   // ignore dither
   // we can ignore isAntiAlias as well, but this is meaningful for skia
-  packed = shift_bits(static_cast<uint32_t>(paint.IsAntiAlias()), 0, 8);
+  packed = shift_bits(core_bridge::IsPaintAntiAlias(&paint) ? 1u : 0u, 0, 8);
 
   packed |= shift_bits(bm, 8, 8);  // blend mode
-  packed |= shift_bits(paint.GetStrokeCap(), 16, 2);
-  packed |= shift_bits(paint.GetStrokeJoin(), 18, 2);
-  packed |= shift_bits(paint.GetStyle(), 20, 2);
+  packed |= shift_bits(
+      static_cast<uint32_t>(core_bridge::GetPaintStrokeCap(&paint)), 16, 2);
+  packed |= shift_bits(
+      static_cast<uint32_t>(core_bridge::GetPaintStrokeJoin(&paint)), 18, 2);
+  packed |= shift_bits(
+      static_cast<uint32_t>(core_bridge::GetPaintStyle(&paint)), 20, 2);
   packed |= shift_bits(0, 22, 2);
   packed |= shift_bits(flat_flags, 24, 8);
 
   return packed;
 }
 
-uint32_t unpack_v68(Paint& paint, uint32_t packed) {
-  paint.SetAntiAlias((packed & 1) != 0);
+uint32_t unpack_v68(const std::shared_ptr<Paint>& paint, uint32_t packed) {
+  core_bridge::SetPaintAntiAlias(paint, (packed & 1) != 0);
 
   // skip dither
 
@@ -72,17 +76,24 @@ uint32_t unpack_v68(Paint& paint, uint32_t packed) {
     uint32_t mode = packed & 0xFF;
 
     if (mode != CUSTOM_BLEND_MODE_SENTINEL) {
-      paint.SetBlendMode(static_cast<BlendMode>(
-          std::min(mode, static_cast<uint32_t>(BlendMode::kLastMode))));
+      skity_paint handle = skity::capi::alloc_handle<skity_paint_s>(
+          SKITY_OBJECT_TYPE_PAINT, SKITY_HANDLE_OWNING, paint);
+      if (handle != nullptr) {
+        skity_paint_set_blend_mode(
+            handle, static_cast<skity_blend_mode>(std::min(
+                        mode, static_cast<uint32_t>(BlendMode::kLastMode))));
+        skity_paint_destroy(handle);
+      }
     }
   }
 
   packed >>= 8;
-  paint.SetStrokeCap(static_cast<Paint::Cap>(packed & 0x3));
+  core_bridge::SetPaintStrokeCap(paint, static_cast<Paint::Cap>(packed & 0x3));
   packed >>= 2;
-  paint.SetStrokeJoin(static_cast<Paint::Join>(packed & 0x3));
+  core_bridge::SetPaintStrokeJoin(paint,
+                                  static_cast<Paint::Join>(packed & 0x3));
   packed >>= 2;
-  paint.SetStyle(static_cast<Paint::Style>(packed & 0x3));
+  core_bridge::SetPaintStyle(paint, static_cast<Paint::Style>(packed & 0x3));
   packed >>= 2;
   // skip the fiter quality bits
   packed >>= 2;
@@ -98,14 +109,14 @@ void FlatIntoMemory<Paint>(const Paint& paint, WriteBuffer& writer) {
 
   if (paint.GetPathEffect() || paint.GetShader() || paint.GetMaskFilter() ||
       paint.GetColorFilter() || paint.GetImageFilter() ||
-      paint.GetBlendMode() != BlendMode::kSrcOver) {
+      core_bridge::GetPaintBlendMode(&paint) != SKITY_BLEND_MODE_SRC_OVER) {
     flat_flags |= kHasEffects_FlatFlag;
   }
 
-  writer.WriteFloat(paint.GetStrokeWidth());
-  writer.WriteFloat(paint.GetStrokeMiter());
+  writer.WriteFloat(core_bridge::GetPaintStrokeWidth(&paint));
+  writer.WriteFloat(core_bridge::GetPaintStrokeMiter(&paint));
 
-  auto color = paint.GetColor4f();
+  auto color = core_bridge::GetPaintColor4f(&paint);
   writer.WriteColor4f(color);
 
   writer.WriteUint32(pack_v68(paint, flat_flags));
@@ -118,7 +129,7 @@ void FlatIntoMemory<Paint>(const Paint& paint, WriteBuffer& writer) {
       const auto& shader = paint.GetShader();
       auto matrix = shader->GetLocalMatrix();
 
-      if (matrix.IsIdentity()) {
+      if (core_bridge::MatrixIsIdentity(matrix)) {
         writer.WriteFlattenable(shader.get());
       } else {
         LocalMatrixFlat local_matrix_flat(matrix, shader.get());
@@ -144,15 +155,19 @@ void FlatIntoMemory<Paint>(const Paint& paint, WriteBuffer& writer) {
 }
 
 template <>
-std::optional<Paint> ReadFromMemory(ReadBuffer& buffer) {
-  Paint paint;
+std::shared_ptr<Paint> ReadFromMemory(ReadBuffer& buffer) {
+  auto paint = core_bridge::MakePaint();
 
-  paint.SetStrokeWidth(buffer.ReadFloat());
-  paint.SetStrokeMiter(buffer.ReadFloat());
+  if (!paint) {
+    return nullptr;
+  }
+
+  core_bridge::SetPaintStrokeWidth(paint, buffer.ReadFloat());
+  core_bridge::SetPaintStrokeMiter(paint, buffer.ReadFloat());
 
   {
     auto color4f = buffer.ReadColor4f();
-    paint.SetColor(Color4fToColor(color4f));
+    core_bridge::SetPaintColor(paint, core_bridge::Color4fToColor(color4f));
   }
 
   auto packed = buffer.ReadU32();
@@ -160,31 +175,31 @@ std::optional<Paint> ReadFromMemory(ReadBuffer& buffer) {
   auto flat_flags = unpack_v68(paint, packed);
 
   if (!(flat_flags & kHasEffects_FlatFlag)) {
-    paint.SetPathEffect(nullptr);
-    paint.SetShader(nullptr);
-    paint.SetMaskFilter(nullptr);
-    paint.SetColorFilter(nullptr);
-    paint.SetImageFilter(nullptr);
+    core_bridge::SetPaintPathEffect(paint, nullptr);
+    core_bridge::SetPaintShader(paint, nullptr);
+    core_bridge::SetPaintMaskFilter(paint, nullptr);
+    core_bridge::SetPaintColorFilter(paint, nullptr);
+    core_bridge::SetPaintImageFilter(paint, nullptr);
   } else if (buffer.IsVersionLT(kSkBlenderInSkPaint)) {
-    paint.SetPathEffect(buffer.ReadPathEffect());
-    paint.SetShader(buffer.ReadShader());
-    paint.SetMaskFilter(buffer.ReadMaskFilter());
-    paint.SetColorFilter(buffer.ReadColorFilter());
+    core_bridge::SetPaintPathEffect(paint, buffer.ReadPathEffect());
+    core_bridge::SetPaintShader(paint, buffer.ReadShader());
+    core_bridge::SetPaintMaskFilter(paint, buffer.ReadMaskFilter());
+    core_bridge::SetPaintColorFilter(paint, buffer.ReadColorFilter());
     (void)buffer.ReadU32();  // old version property deprecated
-    paint.SetImageFilter(buffer.ReadImageFilter());
+    core_bridge::SetPaintImageFilter(paint, buffer.ReadImageFilter());
   } else {
-    paint.SetPathEffect(buffer.ReadPathEffect());
-    paint.SetShader(buffer.ReadShader());
-    paint.SetMaskFilter(buffer.ReadMaskFilter());
-    paint.SetColorFilter(buffer.ReadColorFilter());
-    paint.SetImageFilter(buffer.ReadImageFilter());
+    core_bridge::SetPaintPathEffect(paint, buffer.ReadPathEffect());
+    core_bridge::SetPaintShader(paint, buffer.ReadShader());
+    core_bridge::SetPaintMaskFilter(paint, buffer.ReadMaskFilter());
+    core_bridge::SetPaintColorFilter(paint, buffer.ReadColorFilter());
+    core_bridge::SetPaintImageFilter(paint, buffer.ReadImageFilter());
 
     // BlenderModeFlattenable::SkipReadBlender(buffer);
     buffer.SkipBlender();
   }
 
   if (!buffer.IsValid()) {
-    return std::nullopt;
+    return nullptr;
   }
 
   return paint;

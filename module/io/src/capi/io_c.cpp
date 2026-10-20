@@ -2,22 +2,23 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-// C ABI for the io module (Picture serialization + streams). Compiled only
-// when SKITY_IO_MODULE is on: in the normal build it is part of skity-capi
-// (linking skity-io); in the unified-lib experiment the io module is folded
-// into libskity, so the entry points resolve inside the single .so.
+// C ABI for the io module (Picture serialization + streams + SVG path
+// parsing), compiled into libskity-io.
 
+#include <skity_c/skity_parse_path.h>
 #include <skity_c/skity_picture.h>
 #include <skity_c/skity_stream.h>
 
+#include <cstring>
 #include <memory>
 #include <skity/gpu/gpu_context.hpp>
-#include <skity/io/picture.hpp>
-#include <skity/io/stream.hpp>
 #include <skity/recorder/display_list.hpp>
 #include <skity/render/canvas.hpp>
 
 #include "handle.hpp"
+#include "src/picture.hpp"
+#include "src/stream/stream.hpp"
+#include "src/utils/parse_path.hpp"
 
 namespace {
 
@@ -162,10 +163,10 @@ skity_rect skity_picture_get_cull_rect(skity_picture picture) {
 
 void skity_picture_play_back(skity_picture picture, skity_canvas canvas) {
   auto* p = picture_of(picture);
-  auto c = skity::capi::get_impl<skity_canvas_s, skity::Canvas>(
+  auto canvas_impl = skity::capi::get_impl<skity_canvas_s, skity::Canvas>(
       canvas, SKITY_OBJECT_TYPE_CANVAS);
-  if (p != nullptr && c != nullptr) {
-    p->PlayBack(c.get());
+  if (p != nullptr && canvas_impl != nullptr) {
+    p->PlayBack(canvas_impl.get());
   }
 }
 
@@ -209,6 +210,36 @@ void skity_picture_serialize(skity_picture picture, skity_write_stream stream,
     }
   }
   p->Serialize(*w, proc != nullptr ? &legacy_proc : nullptr);
+}
+
+skity_path skity_parse_path_create_from_svg(const char* data) {
+  if (data == nullptr) {
+    return nullptr;
+  }
+  auto path = skity::ParsePath::FromSVGString(data);
+  if (!path.has_value()) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_path_s>(
+      SKITY_OBJECT_TYPE_PATH, SKITY_HANDLE_OWNING,
+      std::make_shared<skity::Path>(std::move(path.value())));
+}
+
+size_t skity_parse_path_to_svg(skity_path path, uint32_t relative, char* out,
+                               size_t out_size) {
+  auto sp = skity::capi::get_impl<skity_path_s, skity::Path>(
+      path, SKITY_OBJECT_TYPE_PATH);
+  if (sp == nullptr) {
+    return 0;
+  }
+  auto str = skity::ParsePath::ToSVGString(
+      *sp, relative ? skity::ParsePath::PathEncoding::Relative
+                    : skity::ParsePath::PathEncoding::Absolute);
+  size_t length = str.size() + 1;
+  if (out != nullptr && out_size >= length) {
+    std::memcpy(out, str.c_str(), length);
+  }
+  return length;
 }
 
 }  // extern "C"

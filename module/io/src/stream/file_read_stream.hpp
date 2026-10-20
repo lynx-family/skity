@@ -7,7 +7,8 @@
 
 #include <filesystem>
 #include <fstream>
-#include <skity/io/stream.hpp>
+
+#include "src/stream/stream.hpp"
 
 namespace skity {
 

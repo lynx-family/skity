@@ -5,8 +5,6 @@
 #ifndef TEST_BENCH_CASE_DRAW_SKP_HPP
 #define TEST_BENCH_CASE_DRAW_SKP_HPP
 
-#include <skity/io/picture.hpp>
-#include <skity/io/stream.hpp>
 #include <skity/skity.hpp>
 
 #include "test/bench/case/benchmark.hpp"

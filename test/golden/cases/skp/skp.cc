@@ -3,14 +3,16 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <gtest/gtest.h>
+#include <skity_c/skity_canvas.h>
+#include <skity_c/skity_picture.h>
+#include <skity_c/skity_stream.h>
 
 #include <filesystem>
-#include <skity/io/picture.hpp>
-#include <skity/io/stream.hpp>
 #include <skity/recorder/picture_recorder.hpp>
 #include <skity/skity.hpp>
 
 #include "common/golden_test_check.hpp"
+#include "handle.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
 static const char* kTigerSKP = RESOURCES_DIR "/skp/tiger.skp";
@@ -49,20 +51,29 @@ struct PathListContext {
 }  // namespace
 
 TEST(SKP_Golden, Tiger) {
-  auto stream = skity::ReadStream::CreateFromFile(kTigerSKP);
+  // Picture / stream go through the module's C ABI; the recorder stays on
+  // the core legacy C++ surface the rest of the golden suite uses.
+  skity_read_stream stream = skity_read_stream_create_from_file(kTigerSKP);
   ASSERT_NE(stream, nullptr) << "Failed to open SKP file: " << kTigerSKP;
 
-  auto picture = skity::Picture::MakeFromStream(*stream);
+  skity_picture picture = skity_picture_create_from_stream(stream);
   ASSERT_NE(picture, nullptr) << "Failed to parse SKP file: " << kTigerSKP;
 
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(1000.f, 1000.f));
   auto canvas = recorder.GetRecordingCanvas();
   canvas->Translate(-130, 20);
-  picture->PlayBack(canvas);
+  // PlayBack takes the C ABI canvas handle; wrap the recorder's canvas.
+  std::shared_ptr<skity::Canvas> canvas_view(canvas, [](skity::Canvas*) {});
+  skity_canvas canvas_handle = skity::capi::alloc_handle<skity_canvas_s>(
+      SKITY_OBJECT_TYPE_CANVAS, 0, std::move(canvas_view));
+  skity_picture_play_back(picture, canvas_handle);
 
   PathListContext context("tiger.png");
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 1000, 1000,
                                                    context.ToPathList()));
+
+  skity_picture_destroy(picture);
+  skity_read_stream_destroy(stream);
 }

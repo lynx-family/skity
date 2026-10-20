@@ -6,6 +6,8 @@
 
 #include <cmath>
 
+#include "src/io/core_bridge.hpp"
+
 namespace skity {
 
 namespace {
@@ -125,6 +127,141 @@ void SerializeFontDescriptor(WriteStream& stream, const FontDescriptor& desc) {
   write_uint(stream, desc.factory_id, kFactoryId);
 
   stream.WritePackedUint(kSentinel);
+}
+
+void SerializeFontDescriptorFields(WriteStream& stream,
+                                   const FontDescriptorFields& fields) {
+  // Same layout as SerializeFontDescriptor: the packed style word carries
+  // weight / width / slant exactly the way FontStyle stores them.
+  stream.WritePackedUint(fields.style_packed);
+
+  write_string(stream, fields.family_name, kFontFamilyName);
+  write_string(stream, fields.full_name, kFullName);
+  write_string(stream, fields.post_script_name, kPostscriptName);
+
+  uint32_t weight = (fields.style_packed >> 16) & 0xFFFF;
+  uint32_t width = (fields.style_packed >> 8) & 0xF;
+  uint32_t slant = fields.style_packed & 0xF;
+
+  write_scalar(stream, static_cast<float>(weight), kWeight);
+  write_scalar(stream, width_for_usWidth[width], kWidth);
+  write_scalar(stream, slant != 0 ? 14.f : 0.f, kSlant);
+  write_scalar(stream, slant == 1 ? 1.f : 0.f, kItalic);
+
+  if (fields.collection_index > 0) {
+    write_uint(stream, fields.collection_index, kFontIndex);
+  }
+
+  // we do not support palette for now
+
+  // write font variation
+  if (!fields.variations.empty()) {
+    auto count = fields.variations.size();
+
+    write_uint(stream, count, kFontVariation);
+
+    for (const auto& [axis, value] : fields.variations) {
+      stream.WriteU32(axis);
+      stream.WriteFloat(value);
+    }
+  }
+
+  write_uint(stream, fields.factory_id, kFactoryId);
+
+  stream.WritePackedUint(kSentinel);
+}
+
+bool SkipFontDescriptor(ReadStream& stream) {
+  // Same parse order as DeserializeFontDescriptor; every field is consumed
+  // and dropped.
+  size_t factory_id;
+  size_t coordnate_count;
+  size_t index;
+  size_t palette_index;
+  size_t palette_entry_override_count;
+  size_t palette_override_index;
+
+  size_t style_bits;
+
+  if (!stream.ReadPackedUint(&style_bits)) {
+    return false;
+  }
+
+  for (size_t id; (id = read_id(stream)) != kSentinel;) {
+    switch (id) {
+      case kFontFamilyName:
+      case kFullName:
+      case kPostscriptName: {
+        std::string ignored;
+        if (!read_string(stream, ignored)) {
+          return false;
+        }
+      } break;
+      case kWeight:
+      case kWidth:
+      case kSlant:
+      case kItalic: {
+        float ignored;
+        if (!stream.ReadFloat(&ignored)) {
+          return false;
+        }
+      } break;
+      case kFontVariation:
+        if (!stream.ReadPackedUint(&coordnate_count)) {
+          return false;
+        }
+
+        for (size_t i = 0; i < coordnate_count; i++) {
+          uint32_t axis;
+          float value;
+
+          if (!stream.ReadU32(&axis)) {
+            return false;
+          }
+
+          if (!stream.ReadFloat(&value)) {
+            return false;
+          }
+        }
+        break;
+      case kFontIndex:
+        if (!stream.ReadPackedUint(&index)) {
+          return false;
+        }
+        break;
+      case kPaletteIndex:
+        if (!stream.ReadPackedUint(&palette_index)) {
+          return false;
+        }
+        // we do not support palette for now so skip this value
+        break;
+      case kPaletteEntryOverrides:
+        if (!stream.ReadPackedUint(&palette_entry_override_count)) {
+          return false;
+        }
+
+        for (size_t i = 0; i < palette_entry_override_count; i++) {
+          if (!stream.ReadPackedUint(&palette_override_index)) {
+            return false;
+          }
+
+          uint32_t color;
+          if (!stream.ReadU32(&color)) {
+            return false;
+          }
+        }
+        break;
+      case kFactoryId:
+        if (!stream.ReadPackedUint(&factory_id)) {
+          return false;
+        }
+        break;
+      default:
+        return false;
+    }
+  }
+
+  return true;
 }
 
 bool DeserializeFontDescriptor(ReadStream& stream, FontDescriptor& desc) {
@@ -263,9 +400,10 @@ bool DeserializeFontDescriptor(ReadStream& stream, FontDescriptor& desc) {
     slant_enum = FontStyle::kItalic_Slant;
   }
 
-  FontStyle::Width width_enum = FontStyle::WidthFromAxisWidth(width);
+  FontStyle::Width width_enum = core_bridge::WidthFromAxisWidth(width);
 
-  desc.style = FontStyle(std::round(weight), width_enum, slant_enum);
+  core_bridge::StoreFontStyle(desc.style, static_cast<int>(std::round(weight)),
+                              static_cast<int>(width_enum), slant_enum);
 
   return true;
 }

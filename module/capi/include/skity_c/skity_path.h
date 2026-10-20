@@ -263,6 +263,49 @@ SKITY_C_API uint32_t skity_path_get_conic_weight(skity_path path, int32_t index,
                                                  float* out);
 
 /**
+ * @brief Copy the verb array in storage order (two-pass idiom).
+ *
+ * When @p out is NULL or @p count is too small nothing is written, but the
+ * total verb count is still returned, so the caller can size the buffer and
+ * call again. This bulk form (with skity_path_get_points and
+ * skity_path_get_conic_weights) is the serialization-friendly alternative to
+ * the per-index walk.
+ *
+ * @param out    destination array, or NULL to query the count
+ * @param count  capacity of @p out
+ * @return verbs written, or the total verb count when querying
+ */
+SKITY_C_API int32_t skity_path_get_verbs(skity_path path, skity_path_verb* out,
+                                         int32_t count);
+
+/**
+ * @brief Copy the control-point array in storage order (two-pass idiom).
+ *
+ * Each point is an skity_point (Vec4 layout); the number of points is
+ * skity_path_count_points, retrievable by passing NULL @p out.
+ *
+ * @param out    destination array, or NULL to query the count
+ * @param count  capacity of @p out
+ * @return points written, or the total point count when querying
+ */
+SKITY_C_API int32_t skity_path_get_points(skity_path path, skity_point* out,
+                                          int32_t count);
+
+/**
+ * @brief Copy the conic weights in storage order (two-pass idiom).
+ *
+ * The weight array holds one entry per conic verb (verbs of kind
+ * SKITY_PATH_VERB_CONIC), so its length is the number of conic segments, not
+ * the total verb count.
+ *
+ * @param out    destination array, or NULL to query the count
+ * @param count  capacity of @p out
+ * @return weights written, or the total weight count when querying
+ */
+SKITY_C_API int32_t skity_path_get_conic_weights(skity_path path, float* out,
+                                                 int32_t count);
+
+/**
  * @brief Test whether the path is equivalent to a single rect when filled.
  * @param out_rect      if non-NULL and the test passes, receives the rect
  * @param out_is_closed if non-NULL and the test passes, set to 1 when the
@@ -350,6 +393,25 @@ SKITY_C_API void skity_path_add_round_rect_radii(skity_path path,
                                                  const skity_rect* rect,
                                                  const float* radii,
                                                  skity_path_direction dir);
+
+/**
+ * @brief Append @p rect with per-corner radii as a new contour, starting the
+ *        contour at corner @p start_index.
+ *
+ * Same as skity_path_add_round_rect_radii but with an explicit starting
+ * corner (0..7 enumerating corners and axis directions the way
+ * skity::Path::AddRRect does), used when deserializing recorded paths.
+ *
+ * @param rect         bounds of the rounded rectangle
+ * @param radii        8 floats, (x, y) pairs per corner (tl, tr, br, bl)
+ * @param dir          winding direction of the new contour
+ * @param start_index  starting corner-and-axis index in [0, 7]
+ */
+SKITY_C_API void skity_path_add_round_rect_radii_start(skity_path path,
+                                                       const skity_rect* rect,
+                                                       const float* radii,
+                                                       skity_path_direction dir,
+                                                       int32_t start_index);
 
 /**
  * @brief Write the last point of the path into @p out.

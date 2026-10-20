@@ -6,8 +6,10 @@
 #include <skity/skity.hpp>
 
 // serialize module
-#include <skity/io/picture.hpp>
-#include <skity/io/stream.hpp>
+#include <skity_c/skity_picture.h>
+#include <skity_c/skity_stream.h>
+
+#include <skity_hpp/skity_bridge.hpp>
 
 #include "common/app.hpp"
 
@@ -21,15 +23,19 @@ class SKPLoaderExample : public example::WindowClient {
 
  protected:
   void OnStart(GPUContext* context) override {
-    auto stream = ReadStream::CreateFromFile(skp_file_path_);
+    // Picture / stream go through the module's C ABI; the recorder stays
+    // on the core C++ surface the example framework uses.
+    skity_read_stream stream =
+        skity_read_stream_create_from_file(skp_file_path_);
 
     if (stream == nullptr) {
       return;
     }
 
-    auto picture = Picture::MakeFromStream(*stream);
+    skity_picture picture = skity_picture_create_from_stream(stream);
 
     if (picture == nullptr) {
+      skity_read_stream_destroy(stream);
       return;
     }
 
@@ -39,19 +45,23 @@ class SKPLoaderExample : public example::WindowClient {
 
     auto canvas = recorder.GetRecordingCanvas();
 
-    picture->PlayBack(canvas);
+    // Public bridge: borrow the recorder's native canvas as a C handle.
+    skity_canvas canvas_handle = skity_canvas_from_native(canvas);
+    skity_picture_play_back(picture, canvas_handle);
 
     dl_ = recorder.FinishRecording();
 
-    auto bounds = picture->GetCullRect();
+    skity_rect cull = skity_picture_get_cull_rect(picture);
+    skity_picture_destroy(picture);
+    skity_read_stream_destroy(stream);
 
-    auto origin = std::max(bounds.Width(), bounds.Height());
+    auto origin = std::max(cull.right - cull.left, cull.bottom - cull.top);
 
     if (origin > 1100) {
       scale_x_ = scale_y_ = 1100 / origin;
     }
 
-    cull_rect_ = bounds;
+    cull_rect_ = Rect::MakeLTRB(cull.left, cull.top, cull.right, cull.bottom);
   }
 
   void OnDraw(GPUContext* context, Canvas* canvas) override {

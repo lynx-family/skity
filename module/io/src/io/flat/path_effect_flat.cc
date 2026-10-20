@@ -5,6 +5,7 @@
 #include <skity/effect/path_effect.hpp>
 #include <vector>
 
+#include "src/io/core_bridge.hpp"
 #include "src/io/memory_read.hpp"
 
 namespace skity {
@@ -18,7 +19,7 @@ std::shared_ptr<PathEffect> ReadDiscretePathEffect(ReadBuffer &buffer) {
   auto perterb = buffer.ReadFloat();
   auto seed = buffer.ReadU32();
 
-  return PathEffect::MakeDiscretePathEffect(seg_length, perterb, seed);
+  return core_bridge::MakePathEffectDiscrete(seg_length, perterb, seed);
 }
 
 std::shared_ptr<PathEffect> ReadDashPathEffect(ReadBuffer &buffer) {
@@ -36,7 +37,7 @@ std::shared_ptr<PathEffect> ReadDashPathEffect(ReadBuffer &buffer) {
     return {};
   }
 
-  return PathEffect::MakeDashPathEffect(intervals.data(), count, phase);
+  return core_bridge::MakePathEffectDash(intervals.data(), count, phase);
 }
 
 void SkipLine2DPathEffect(ReadBuffer &buffer) {

@@ -6,7 +6,9 @@
 
 #include <cstring>
 #include <skity/codec/codec.hpp>
-#include <skity/io/picture.hpp>
+
+#include "src/io/core_bridge.hpp"
+#include "src/picture.hpp"
 
 namespace skity {
 
@@ -42,13 +44,20 @@ std::shared_ptr<Data> image_to_data(const Image* image,
     return {};
   }
 
-  auto cocec = Codec::MakePngCodec();
-
-  if (!cocec) {
+  skity_pixmap pixmap_handle = skity::capi::alloc_handle<skity_pixmap_s>(
+      SKITY_OBJECT_TYPE_PIXMAP, 0, pixmap);
+  if (pixmap_handle == nullptr) {
     return {};
   }
-
-  return cocec->Encode(pixmap.get());
+  skity_data encoded = skity_codec_encode(pixmap_handle, SKITY_CODEC_TYPE_PNG);
+  skity_pixmap_destroy(pixmap_handle);
+  if (encoded == nullptr) {
+    return {};
+  }
+  auto out = skity::capi::get_impl<skity_data_s, Data>(encoded,
+                                                       SKITY_OBJECT_TYPE_DATA);
+  skity_data_destroy(encoded);
+  return out;
 }
 
 }  // namespace
@@ -113,7 +122,7 @@ void MemoryWriter32::WriteRect(const Rect& rect) {
   *reinterpret_cast<Rect*>(data) = rect;
 }
 
-void MemoryWriter32::WriteRRect(const RRect& rrect) {
+void MemoryWriter32::WriteRRect(const IORRect& rrect) {
   FlatIntoMemory(rrect, *this);
 }
 
@@ -188,7 +197,8 @@ void MemoryWriter32::WriteToStream(WriteStream& stream) {
 }
 
 std::shared_ptr<Data> MemoryWriter32::MakeSnapshot() {
-  return Data::MakeWithCopy(memory_data_.data(), memory_data_.size());
+  return core_bridge::MakeDataWithCopy(memory_data_.data(),
+                                       memory_data_.size());
 }
 
 void MemoryWriter32::GrowToAtLeast(size_t size) {
@@ -348,7 +358,7 @@ void BinaryWriteBuffer::WriteMatrix(const Matrix& m) { writer_.WriteMatrix(m); }
 
 void BinaryWriteBuffer::WriteRect(const Rect& rect) { writer_.WriteRect(rect); }
 
-void BinaryWriteBuffer::WriteRRect(const RRect& rrect) {
+void BinaryWriteBuffer::WriteRRect(const IORRect& rrect) {
   writer_.WriteRRect(rrect);
 }
 

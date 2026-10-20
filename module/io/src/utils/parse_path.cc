@@ -9,12 +9,17 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include "src/utils/parse_path.hpp"
+
+#include <skity_c/skity_stroke.h>
+
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
-#include <skity/io/parse_path.hpp>
 #include <skity/skity.hpp>
 #include <sstream>
+
+#include "src/io/core_bridge.hpp"
 
 namespace skity {
 
@@ -51,7 +56,7 @@ const char* FindScalar(const char str[], float* value) {
   str = skip_ws(str);
 
   char* stop;
-  float v = (float)strtod(str, &stop);
+  float v = static_cast<float>(strtod(str, &stop));
   if (str == stop) {
     return nullptr;
   }
@@ -127,7 +132,7 @@ static const char* find_flag(const char str[], bool* value) {
 std::optional<Path> ParsePath::FromSVGString(const char data[]) {
   // We will write all data to this local path and only write it
   // to result if the whole parsing succeeds.
-  Path path;
+  core_bridge::PathBuilder builder;
   Vec2 first = {0, 0};
   Vec2 c = {0, 0};
   Vec2 lastc = {0, 0};
@@ -160,7 +165,7 @@ std::optional<Path> ParsePath::FromSVGString(const char data[]) {
       op = ch;
       relative = false;
       if (is_lower(op)) {
-        op = (char)to_upper(op);
+        op = static_cast<char>(to_upper(op));
         relative = true;
       }
       data++;
@@ -172,14 +177,14 @@ std::optional<Path> ParsePath::FromSVGString(const char data[]) {
         // find_points might have failed, so this might be the
         // previous point. However, data will be set to nullptr
         // if it failed, so we will check this at the top of the loop.
-        path.MoveTo(Vec4{points[0], 0, 1});
+        builder.MoveTo(points[0].x, points[0].y);
         previousOp = '\0';
         op = 'L';
         c = points[0];
         break;
       case 'L':  // Line
         data = find_points(data, points, 1, relative, &c);
-        path.LineTo(Vec4{points[0], 0, 1});
+        builder.LineTo(points[0].x, points[0].y);
         c = points[0];
         break;
       case 'H':  // Horizontal Line
@@ -188,12 +193,12 @@ std::optional<Path> ParsePath::FromSVGString(const char data[]) {
         // be set to nullptr and this lineTo is bogus but will
         // be ultimately ignored when the next time through the loop
         // detects that and bails out.
-        path.LineTo(scratch, c.y);
+        builder.LineTo(scratch, c.y);
         c.x = scratch;
         break;
       case 'V':  // Vertical Line
         data = find_scalar(data, &scratch, relative, c.y);
-        path.LineTo(c.x, scratch);
+        builder.LineTo(c.x, scratch);
         c.y = scratch;
         break;
       case 'C':  // Cubic Bezier Curve
@@ -207,8 +212,8 @@ std::optional<Path> ParsePath::FromSVGString(const char data[]) {
           points[0].y -= lastc.y - c.y;
         }
       cubicCommon:
-        path.CubicTo(Vec4{points[0], 0, 1}, Vec4{points[1], 0, 1},
-                     Vec4{points[2], 0, 1});
+        builder.CubicTo(points[0].x, points[0].y, points[1].x, points[1].y,
+                        points[2].x, points[2].y);
         lastc = points[1];
         c = points[2];
         break;
@@ -223,7 +228,7 @@ std::optional<Path> ParsePath::FromSVGString(const char data[]) {
           points[0].y -= lastc.y - c.y;
         }
       quadraticCommon:
-        path.QuadTo(Vec4{points[0], 0, 1}, Vec4{points[1], 0, 1});
+        builder.QuadTo(points[0].x, points[0].y, points[1].x, points[1].y);
         lastc = points[0];
         c = points[1];
         break;
@@ -238,15 +243,21 @@ std::optional<Path> ParsePath::FromSVGString(const char data[]) {
             (data = skip_sep(data)) && (data = find_flag(data, &sweep)) &&
             (data = skip_sep(data)) &&
             (data = find_points(data, &points[0], 1, relative, &c))) {
-          path.ArcTo(radii.x, radii.y, angle, (Path::ArcSize)largeArc,
-                     (Path::Direction)!sweep, points[0].x, points[0].y);
-          Point last_pt;
-          path.GetLastPt(&last_pt);
-          c = last_pt.xy();
+          builder.ArcTo(
+              radii.x, radii.y, angle, static_cast<Path::ArcSize>(largeArc),
+              static_cast<Path::Direction>(!sweep), points[0].x, points[0].y);
+          // The next relative command continues from the arc's end point;
+          // re-read it through the C ABI (get_last_pt).
+          skity_path handle = skity::capi::alloc_handle<skity_path_s>(
+              SKITY_OBJECT_TYPE_PATH, 0, builder.Peek());
+          skity_point last_pt{};
+          skity_path_get_last_pt(handle, &last_pt);
+          skity_path_destroy(handle);
+          c = {last_pt.x, last_pt.y};
         }
       } break;
       case 'Z':  // Close Path
-        path.Close();
+        builder.Close();
         c = first;
         break;
       default:
@@ -258,7 +269,8 @@ std::optional<Path> ParsePath::FromSVGString(const char data[]) {
     previousOp = op;
   }
 
-  return path;
+  auto path = builder.Take();
+  return path ? std::optional<Path>{*path} : std::nullopt;
 }
 
 // ///////////////////////////////////////////////////////////////////////////////
@@ -290,26 +302,56 @@ std::string ParsePath::ToSVGString(const Path& path, PathEncoding encoding) {
     current_point = pts[count - 1] * rel_selector;
   };
 
-  Paint paint;
-  Stroke stroke{paint};
-  Path dst_path;
-  stroke.QuadPath(path, &dst_path, true);
+  // Stroke the path into its quad/cubic outline through the C ABI, then
+  // walk the outline via the flat bulk readers (each verb contributes its
+  // control points after the shared start point, matching Path::Iter).
+  auto paint = core_bridge::MakePaint();
 
-  Path::Iter iter(dst_path, false);
+  skity_path src = skity::capi::alloc_handle<skity_path_s>(
+      SKITY_OBJECT_TYPE_PATH, 0,
+      std::shared_ptr<Path>(const_cast<Path*>(&path), [](Path*) {}));
+  skity_path dst = skity_path_create();
+  if (paint != nullptr) {
+    skity_paint paint_handle_view = skity::capi::alloc_handle<skity_paint_s>(
+        SKITY_OBJECT_TYPE_PAINT, SKITY_HANDLE_OWNING, paint);
+    skity_stroke_quad_path(paint_handle_view, src, dst, 1u);
+    skity_paint_destroy(paint_handle_view);
+  }
+  skity_path_destroy(src);
+
+  std::vector<skity_path_verb> verbs(skity_path_get_verbs(dst, nullptr, 0));
+  std::vector<skity_point> points(skity_path_get_points(dst, nullptr, 0));
+  skity_path_get_verbs(dst, verbs.data(), static_cast<int32_t>(verbs.size()));
+  skity_path_get_points(dst, points.data(),
+                        static_cast<int32_t>(points.size()));
+  skity_path_destroy(dst);
+
   Point pts[4];
-  for (;;) {
-    auto verb = iter.Next(pts);
+  size_t pt = 0;
+  for (size_t vi = 0; vi < verbs.size(); vi++) {
+    auto verb = static_cast<Path::Verb>(verbs[vi]);
     switch (verb) {
       case Path::Verb::kMove:
+        pts[0] = {points[pt].x, points[pt].y, 0.f, 1.f};
+        pt += 1;
         append_command('M', &pts[0], 1);
         break;
       case Path::Verb::kLine:
+        pts[1] = {points[pt].x, points[pt].y, 0.f, 1.f};
+        pt += 1;
         append_command('L', &pts[1], 1);
         break;
       case Path::Verb::kQuad:
+        pts[1] = {points[pt].x, points[pt].y, 0.f, 1.f};
+        pts[2] = {points[pt + 1].x, points[pt + 1].y, 0.f, 1.f};
+        pt += 2;
         append_command('Q', &pts[1], 2);
         break;
       case Path::Verb::kCubic:
+        pts[1] = {points[pt].x, points[pt].y, 0.f, 1.f};
+        pts[2] = {points[pt + 1].x, points[pt + 1].y, 0.f, 1.f};
+        pts[3] = {points[pt + 2].x, points[pt + 2].y, 0.f, 1.f};
+        pt += 3;
         append_command('C', &pts[1], 3);
         break;
       case Path::Verb::kClose:
@@ -320,10 +362,6 @@ std::string ParsePath::ToSVGString(const Path& path, PathEncoding encoding) {
         break;
       default:
         break;
-    }
-
-    if (verb == Path::Verb::kDone) {
-      break;
     }
   }
 

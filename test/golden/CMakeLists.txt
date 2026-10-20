@@ -72,6 +72,7 @@ target_link_libraries(skity_golden_test
   skity::skity
   skity::codec
   skity::io
+  skity-capi-internal
   "-framework Metal"
   "-framework CoreGraphics"
   "-framework ImageIO"
@@ -185,7 +186,7 @@ function(add_golden_test TARGET_NAME GOLDEN_DIR_POSTFIX)
     )
   endif()
 
-  target_link_libraries(${ARG_NAME} PRIVATE gtest skity::skity skity::io)
+  target_link_libraries(${ARG_NAME} PRIVATE gtest skity::skity skity::io skity-capi-internal)
   target_include_directories(${ARG_NAME} PRIVATE ${SKITY_GOLDEN_TEST_DIR})
 
   if (ARG_LIBS)

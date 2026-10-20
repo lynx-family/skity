@@ -79,6 +79,8 @@ target_link_libraries(skity_hw_render_bench
             "-framework AppKit")
 
 target_link_libraries(skity_hw_render_bench PRIVATE glm::glm-header-only)
+# draw_skp bridges the recorder canvas into the C ABI picture playback.
+target_link_libraries(skity_hw_render_bench PRIVATE skity-capi-internal)
 
 if (SKITY_BENCH_ENABLE_PERFETTO)
     set(PERFETTO_SDK_DIR "${CMAKE_SOURCE_DIR}/third_party/perfetto")

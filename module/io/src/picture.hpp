@@ -2,17 +2,25 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef MODULE_IO_INCLUDE_SKITY_IO_PICTURE_HPP
-#define MODULE_IO_INCLUDE_SKITY_IO_PICTURE_HPP
+// Internal implementation header of the io module (not on the public
+// include path). The consumable surface is the C ABI under
+// include/skity_c/; these classes remain the serialization engine the
+// C entries are built on.
+
+#ifndef MODULE_IO_SRC_PICTURE_HPP
+#define MODULE_IO_SRC_PICTURE_HPP
+
+#include <skity_c/skity_canvas.h>
 
 #include <functional>
 #include <skity/geometry/rect.hpp>
 #include <skity/graphic/image.hpp>
-#include <skity/io/stream.hpp>
 #include <skity/macros.hpp>
 #include <skity/recorder/display_list.hpp>
 #include <skity/text/typeface.hpp>
 #include <string>
+
+#include "src/stream/stream.hpp"
 
 namespace skity {
 
@@ -81,8 +89,8 @@ class SKITY_API Picture final {
                                                  TypefaceSet* typeface_set,
                                                  int32_t recursion_limit);
 
-  void HandleOp(ReadBuffer& buffer, uint32_t type, size_t size, Canvas* canvas,
-                const Matrix& matrix);
+  void HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
+                skity_canvas canvas, const Matrix& matrix);
 
  private:
   std::unique_ptr<RecordPlayback> playback_;
@@ -93,4 +101,4 @@ class SKITY_API Picture final {
 
 }  // namespace skity
 
-#endif  // MODULE_IO_INCLUDE_SKITY_IO_PICTURE_HPP
+#endif  // MODULE_IO_SRC_PICTURE_HPP

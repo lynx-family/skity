@@ -7,4 +7,5 @@ add_executable(
     main.cc
 )
 
-target_link_libraries(skp-writer PUBLIC skity::example_common skity::io)
+# skity::capi is the public C API the example drives (headers + library).
+target_link_libraries(skp-writer PUBLIC skity::example_common skity::io skity::capi)

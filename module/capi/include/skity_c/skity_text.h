@@ -8,6 +8,7 @@
 #include <skity_c/skity_base.h>
 #include <skity_c/skity_types.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -250,6 +251,31 @@ SKITY_C_API int32_t skity_typeface_get_font_descriptor(
     skity_typeface typeface, skity_font_descriptor* out, char* family_name,
     int32_t family_name_size);
 
+/**
+ * @brief Copy the full name of the face (two-pass idiom).
+ *
+ * @param full_name       destination buffer, or NULL to query the length
+ * @param full_name_size  capacity of @p full_name in bytes
+ * @return name length in bytes including the NUL terminator, or 0 on an
+ *         invalid handle or when the face carries no full name
+ */
+SKITY_C_API int32_t skity_typeface_get_full_name(skity_typeface typeface,
+                                                 char* full_name,
+                                                 int32_t full_name_size);
+
+/**
+ * @brief Copy the PostScript name of the face (two-pass idiom).
+ *
+ * @param post_script_name       destination buffer, or NULL to query the
+ *                               length
+ * @param post_script_name_size  capacity of @p post_script_name in bytes
+ * @return name length in bytes including the NUL terminator, or 0 on an
+ *         invalid handle or when the face carries no PostScript name
+ */
+SKITY_C_API int32_t skity_typeface_get_post_script_name(
+    skity_typeface typeface, char* post_script_name,
+    int32_t post_script_name_size);
+
 /** @brief Text blob handles and constructors. */
 
 /** @brief Forward declaration; skity_paint is defined in skity_paint.h. */
@@ -376,6 +402,34 @@ SKITY_C_API skity_text_blob skity_text_blob_create_from_glyphs(
     skity_font font, const uint16_t* glyph_ids, const float* pos_x,
     const float* pos_y, size_t count);
 
+/**
+ * @brief Descriptor of one run for skity_text_blob_create_from_runs.
+ *
+ * Mirrors one TextRun: @p glyphs / @p pos_x / @p pos_y hold @p count entries;
+ * NULL @p pos_y selects horizontal positioning, NULL for both selects
+ * natural advances (same rules as skity_text_blob_create_from_glyphs).
+ */
+typedef struct skity_text_run_desc {
+  skity_font font;        /**< font rasterizing the run */
+  const uint16_t* glyphs; /**< glyph ids, @p count entries */
+  const float* pos_x;     /**< x positions, or NULL */
+  const float* pos_y;     /**< y positions, or NULL (requires @p pos_x) */
+  size_t count;           /**< number of glyphs in the run */
+} skity_text_run_desc;
+
+/**
+ * @brief Build a text blob from multiple pre-shaped runs.
+ *
+ * The multi-run form of skity_text_blob_create_from_glyphs, used when
+ * deserializing recorded text: each run keeps its own font.
+ *
+ * @param runs       array of run descriptors
+ * @param run_count  number of entries in @p runs; must be >= 1
+ * @return           the new text blob, or NULL on invalid arguments
+ */
+SKITY_C_API skity_text_blob skity_text_blob_create_from_runs(
+    const skity_text_run_desc* runs, size_t run_count);
+
 /** @brief Release a text blob handle. Safe on NULL. */
 SKITY_C_API void skity_text_blob_destroy(skity_text_blob blob);
 
@@ -387,6 +441,81 @@ SKITY_C_API void skity_text_blob_destroy(skity_text_blob blob);
  */
 SKITY_C_API void skity_text_blob_get_bounds(skity_text_blob blob,
                                             skity_rect* out);
+
+/**
+ * @brief Return the number of laid-out runs in the blob.
+ *
+ * A run is a sequence of glyphs sharing one font; blobs built from a plain
+ * string have exactly one run, delegate-built blobs may have more.
+ */
+SKITY_C_API int32_t skity_text_blob_get_run_count(skity_text_blob blob);
+
+/**
+ * @brief Return the glyph count of the run at @p run_index.
+ * @return the glyph count, or 0 on an invalid handle or out-of-range index
+ */
+SKITY_C_API int32_t skity_text_blob_get_run_glyph_count(skity_text_blob blob,
+                                                        int32_t run_index);
+
+/**
+ * @brief Copy the glyph ids of a run (two-pass idiom).
+ *
+ * When @p out is NULL or @p count is too small nothing is written, but the
+ * run's glyph count is still returned, so the caller can size the buffer and
+ * call again.
+ *
+ * @param run_index  run index in [0, skity_text_blob_get_run_count)
+ * @param out        destination array, or NULL to query the count
+ * @param count      capacity of @p out
+ * @return glyphs written, or the run's glyph count when querying
+ */
+SKITY_C_API int32_t skity_text_blob_get_run_glyphs(skity_text_blob blob,
+                                                   int32_t run_index,
+                                                   uint16_t* out,
+                                                   int32_t count);
+
+/**
+ * @brief Copy the horizontal glyph positions of a run (two-pass idiom).
+ *
+ * Runs laid out with natural advances carry no x positions; the total is 0
+ * then, and a copy call writes nothing.
+ *
+ * @param run_index  run index in [0, skity_text_blob_get_run_count)
+ * @param out        destination array, or NULL to query the count
+ * @param count      capacity of @p out
+ * @return values written, or the run's x-position count when querying
+ */
+SKITY_C_API int32_t skity_text_blob_get_run_pos_x(skity_text_blob blob,
+                                                  int32_t run_index, float* out,
+                                                  int32_t count);
+
+/**
+ * @brief Copy the vertical glyph positions of a run (two-pass idiom).
+ *
+ * Runs laid out with horizontal-only positioning carry no y positions; the
+ * total is 0 then, and a copy call writes nothing.
+ *
+ * @param run_index  run index in [0, skity_text_blob_get_run_count)
+ * @param out        destination array, or NULL to query the count
+ * @param count      capacity of @p out
+ * @return values written, or the run's y-position count when querying
+ */
+SKITY_C_API int32_t skity_text_blob_get_run_pos_y(skity_text_blob blob,
+                                                  int32_t run_index, float* out,
+                                                  int32_t count);
+
+/**
+ * @brief Return an owning copy of the font the run rasterizes with.
+ *
+ * The copy duplicates the run's font parameters and shares its typeface,
+ * identical to copying a skity::Font. Release it with skity_font_destroy.
+ *
+ * @param run_index  run index in [0, skity_text_blob_get_run_count)
+ * @return a new font handle, or NULL on an invalid handle or out-of-range
+ *         index
+ */
+SKITY_C_API skity_font skity_text_blob_get_run_font(skity_text_blob blob,
+                                                    int32_t run_index);
 
 /**
  * @brief Compute the bounding box of a raw glyph run without building a blob.

@@ -24,6 +24,14 @@ namespace skity {
 struct FactorySet;
 struct TypefaceSet;
 
+// RRect value used across the io module: the same 12-float wire layout as
+// skity::RRect (bounds + 4 corner radii pairs) but free of core linkage.
+// Corner order matches skity::RRect::Corner (tl, tr, br, bl).
+struct IORRect {
+  Rect rect;
+  Vec2 radii[4];
+};
+
 class ReadBuffer {
  public:
   ReadBuffer() = default;
@@ -97,10 +105,10 @@ class ReadBuffer {
 
   bool Validate(bool is_valid);
 
-  std::optional<Paint> ReadPaint();
+  std::shared_ptr<Paint> ReadPaint();
   std::optional<Matrix> ReadMatrix();
   std::optional<Path> ReadPath();
-  std::optional<RRect> ReadRRect();
+  std::optional<IORRect> ReadRRect();
   std::optional<Rect> ReadRect();
 
   std::optional<Path> ReadRegionAsPath();

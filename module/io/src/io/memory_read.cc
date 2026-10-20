@@ -6,10 +6,11 @@
 
 #include <cstring>
 #include <skity/codec/codec.hpp>
-#include <skity/io/picture.hpp>
 
+#include "src/io/core_bridge.hpp"
 #include "src/io/flat/blender_flat.hpp"
 #include "src/io/memory_writer.hpp"
+#include "src/picture.hpp"
 #include "src/picture_priv.hpp"
 
 namespace skity {
@@ -241,7 +242,8 @@ std::shared_ptr<Data> ReadBuffer::ReadByteArrayAsData() {
     return {};
   }
 
-  auto data = Data::MakeFromMalloc(std::malloc(num_bytes), num_bytes);
+  auto data =
+      core_bridge::MakeDataFromMalloc(std::malloc(num_bytes), num_bytes);
 
   if (!ReadArrayN<uint8_t>(const_cast<void*>(data->RawData()), num_bytes)) {
     return {};
@@ -315,8 +317,8 @@ void ReadBuffer::SetInvalid() {
   }
 }
 
-std::optional<Paint> ReadBuffer::ReadPaint() {
-  return ReadFromMemory<std::optional<Paint>>(*this);
+std::shared_ptr<Paint> ReadBuffer::ReadPaint() {
+  return ReadFromMemory<std::shared_ptr<Paint>>(*this);
 }
 
 std::optional<Matrix> ReadBuffer::ReadMatrix() {
@@ -327,8 +329,8 @@ std::optional<Path> ReadBuffer::ReadPath() {
   return ReadFromMemory<std::optional<Path>>(*this);
 }
 
-std::optional<RRect> ReadBuffer::ReadRRect() {
-  return ReadFromMemory<std::optional<RRect>>(*this);
+std::optional<IORRect> ReadBuffer::ReadRRect() {
+  return ReadFromMemory<std::optional<IORRect>>(*this);
 }
 
 std::optional<Rect> ReadBuffer::ReadRect() {
@@ -391,18 +393,10 @@ std::shared_ptr<Image> ReadBuffer::ReadImage() {
 
   Validate(data != nullptr);
 
-  auto codec = Codec::MakeFromData(data);
-
   std::shared_ptr<Image> image;
 
-  if (codec) {
-    codec->SetData(data);
-
-    auto pixmap = codec->Decode();
-
-    if (pixmap) {
-      image = Image::MakeImage(std::move(pixmap));
-    }
+  if (data) {
+    image = core_bridge::DecodeDataToImage(data->Bytes(), data->Size());
   }
 
   // keep going and skip rest of image data
@@ -463,11 +457,7 @@ std::shared_ptr<Typeface> ReadBuffer::ReadTypeface() {
       return {};
     }
 
-    auto tf_data = Data::MakeWithCopy(data, size);
-
-    auto fm = FontManager::RefDefault();
-
-    auto typeface = fm->MakeFromData(tf_data);
+    auto typeface = core_bridge::MakeTypefaceFromBytes(data, size);
 
     if (!Validate(typeface != nullptr)) {
       return {};

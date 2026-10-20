@@ -6,15 +6,17 @@
 #define MODULE_IO_SRC_IO_MEMORY_WRITER_HPP
 
 #include <skity/io/flattenable.hpp>
-#include <skity/io/stream.hpp>
 #include <skity/skity.hpp>
 #include <string_view>
 #include <vector>
+
+#include "src/stream/stream.hpp"
 
 namespace skity {
 
 class MemoryWriter32;
 struct SerialProc;
+struct IORRect;
 
 template <typename T>
 static constexpr T Align4(T x) {
@@ -55,7 +57,7 @@ class MemoryWriter32 final {
 
   void WriteVec2(const Vec2& v);
   void WriteRect(const Rect& rect);
-  void WriteRRect(const RRect& rrect);
+  void WriteRRect(const IORRect& rrect);
   void WritePath(const Path& path);
 
   void WriteMatrix(const Matrix& m);
@@ -178,7 +180,7 @@ class BinaryWriteBuffer : public WriteBuffer {
 
   void WriteRect(const Rect& rect) override;
 
-  void WriteRRect(const RRect& rrect);
+  void WriteRRect(const IORRect& rrect);
 
   void WriteSampling(const SamplingOptions& sampling) override;
 
