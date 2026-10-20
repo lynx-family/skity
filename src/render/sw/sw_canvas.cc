@@ -22,6 +22,7 @@
 #include "src/render/sw/sw_raster.hpp"
 #include "src/render/sw/sw_span_brush.hpp"
 #include "src/render/sw/sw_stack_blur.hpp"
+#include "src/text/scaler_context_cache.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -587,9 +588,18 @@ void SWCanvas::FillGlyphs(uint32_t count, const GlyphID* glyphs,
       float w = glyphs_data[k]->GetWidth();
 
       const GlyphID id = glyphs_data[k]->Id();
-      font.LoadGlyphBitmap(&id, 1, &glyphs_data[k], Paint(), 1.f,
-                           CurrentTransform());
-      auto glyph_bitmap = glyphs_data[k]->Image();
+      const auto& transform = CurrentTransform();
+      const Matrix22 transform22{transform.GetScaleX(), transform.GetSkewX(),
+                                 transform.GetSkewY(), transform.GetScaleY()};
+      const auto desc =
+          ScalerContextDesc::MakeTransformed(font, Paint(), 1.f, transform22);
+      auto context = ScalerContextCache::GlobalScalerContextCache()
+                         ->FindOrCreateScalerContext(desc, font.GetTypeface());
+      auto glyph_image = context->PrepareOwnedImage(PackedGlyphID(id), Paint());
+      const auto& glyph_bitmap = glyph_image.Image();
+      if (!glyph_bitmap.buffer) {
+        continue;
+      }
 
       const size_t row_bytes = glyph_bitmap.RowBytes();
 
@@ -599,9 +609,6 @@ void SWCanvas::FillGlyphs(uint32_t count, const GlyphID* glyphs,
               row_bytes * static_cast<size_t>(glyph_bitmap.height)),
           row_bytes, glyph_bitmap.width, glyph_bitmap.height,
           AlphaType::kOpaque_AlphaType, ToColorType(glyph_bitmap.format));
-      if (glyph_bitmap.need_free) {
-        std::free(glyph_bitmap.buffer);
-      }
 
       this->DrawImage(Image::MakeImage(pixmap),
                       skity::Rect::MakeXYWH(x, y, w, h), SamplingOptions{},

@@ -97,10 +97,10 @@ TEST(ScalerContextContainerTest, KeepsPhaseVariantsAsDistinctGlyphs) {
 
   const PackedGlyphID first_id(7, 1, 0);
   const PackedGlyphID second_id(7, 2, 0);
-  const GlyphData* first = nullptr;
-  const GlyphData* second = nullptr;
-  container.PrepareImages(&first_id, 1, &first, paint);
-  container.PrepareImages(&second_id, 1, &second, paint);
+  auto first_image = container.PrepareOwnedImage(first_id, paint);
+  auto second_image = container.PrepareOwnedImage(second_id, paint);
+  const GlyphData* first = first_image.Get();
+  const GlyphData* second = second_image.Get();
 
   ASSERT_NE(first, nullptr);
   ASSERT_NE(second, nullptr);

@@ -4,6 +4,9 @@
 
 #include "src/text/scaler_context_container.hpp"
 
+#include <cmath>
+#include <cstring>
+#include <limits>
 #include <skity/geometry/stroke.hpp>
 #include <skity/text/glyph.hpp>
 
@@ -63,25 +66,105 @@ void ScalerContextContainer::PrepareImages(const PackedGlyphID *glyph_ids,
                                            const GlyphData *results[],
                                            const Paint &paint)
     SKITY_EXCLUDES(mutex_) {
-  std::lock_guard<std::mutex> lock(mutex_);
   if (count == 0) {
     return;
   }
 
-  // Platform scaler contexts rasterize and expose one glyph at a time. The
-  // caller must consume or copy the returned bitmap before the next request.
   DEBUG_CHECK(count == 1);
   if (count != 1) {
     return;
   }
 
-  StrokeDesc stroke_desc{paint.GetStyle() != Paint::kFill_Style,
-                         paint.GetStrokeWidth(), paint.GetStrokeCap(),
-                         paint.GetStrokeJoin(), paint.GetStrokeMiter()};
-  const PackedGlyphID packed_id = glyph_ids[0];
-  auto *glyph_data = this->Glyph(packed_id);
-  this->PrepareImage(packed_id, glyph_data, stroke_desc);
-  results[0] = glyph_data;
+  // The legacy API cannot return an owner. Keep its single-glyph view on the
+  // requesting thread so another raster thread cannot replace or free it.
+  thread_local OwnedGlyphImage image;
+  image = PrepareOwnedImage(glyph_ids[0], paint);
+  results[0] = image.Get();
+}
+
+OwnedGlyphImage ScalerContextContainer::PrepareOwnedImage(
+    PackedGlyphID glyph_id, const Paint &paint) SKITY_EXCLUDES(mutex_) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  OwnedGlyphImage result;
+  result.glyph_.emplace(*Glyph(glyph_id));
+  auto &image = result.glyph_->image_;
+  // Metrics and paths may be cached, but a generated image must never be
+  // published through the shared GlyphData (including on backend failure).
+  image = {};
+  const StrokeDesc stroke_desc{paint.GetStyle() != Paint::kFill_Style,
+                               paint.GetStrokeWidth(), paint.GetStrokeCap(),
+                               paint.GetStrokeJoin(), paint.GetStrokeMiter()};
+  PrepareImage(glyph_id, &*result.glyph_, stroke_desc);
+  if (image.need_free) {
+    result.pixels_.reset(image.buffer);
+  }
+  image.need_free = false;
+
+  // Validate before float-to-integer conversion or copying borrowed pixels.
+  // Empty glyphs may still carry a malloc(0) allocation; the owner releases it.
+  if (!std::isfinite(image.width) || !std::isfinite(image.height) ||
+      image.width < 0.f || image.height < 0.f ||
+      std::floor(image.width) != image.width ||
+      std::floor(image.height) != image.height ||
+      static_cast<double>(image.width) > std::numeric_limits<uint32_t>::max() ||
+      static_cast<double>(image.height) >
+          std::numeric_limits<uint32_t>::max()) {
+    image = {};
+    return result;
+  }
+  if (!image.buffer || image.width == 0.f || image.height == 0.f) {
+    image.buffer = nullptr;
+    return result;
+  }
+  const size_t width = static_cast<size_t>(image.width);
+  const size_t height = static_cast<size_t>(image.height);
+  size_t bytes_per_pixel = 0;
+  switch (image.format) {
+    case BitmapFormat::kGray8:
+      bytes_per_pixel = 1;
+      break;
+    case BitmapFormat::kBGRA8:
+    case BitmapFormat::kRGBA8:
+      bytes_per_pixel = 4;
+      break;
+    case BitmapFormat::kUnknown:
+      break;
+  }
+  if (bytes_per_pixel == 0 ||
+      width > std::numeric_limits<size_t>::max() / bytes_per_pixel) {
+    image = {};
+    return result;
+  }
+  const size_t row_bytes = image.RowBytes();
+  if (row_bytes < width * bytes_per_pixel ||
+      row_bytes > std::numeric_limits<size_t>::max() / height) {
+    image = {};
+    return result;
+  }
+  if (!result.pixels_) {
+    // CoreText and FreeType color rendering can return reusable backend
+    // storage. Copy it while the same lock still protects its contents.
+    result.pixels_.reset(
+        static_cast<uint8_t *>(std::malloc(height * row_bytes)));
+    if (!result.pixels_) {
+      image = {};
+      return result;
+    }
+    const size_t pixel_row_bytes = width * bytes_per_pixel;
+    if (row_bytes == pixel_row_bytes) {
+      std::memcpy(result.pixels_.get(), image.buffer, height * row_bytes);
+    } else {
+      // A source view need not include padding after its last row. Initialize
+      // only destination padding, avoiding a second write over every pixel.
+      for (size_t y = 0; y < height; ++y) {
+        auto *dst = result.pixels_.get() + y * row_bytes;
+        std::memcpy(dst, image.buffer + y * row_bytes, pixel_row_bytes);
+        std::memset(dst + pixel_row_bytes, 0, row_bytes - pixel_row_bytes);
+      }
+    }
+    image.buffer = result.pixels_.get();
+  }
+  return result;
 }
 
 void ScalerContextContainer::PrepareImageInfos(const GlyphID *glyph_ids,
@@ -126,8 +209,7 @@ GlyphData *ScalerContextContainer::AddGlyph(PackedGlyphID id,
 void ScalerContextContainer::PrepareImage(PackedGlyphID id, GlyphData *glyph,
                                           const StrokeDesc &stroke_desc)
     SKITY_REQUIRES(mutex_) {
-  // A backend may return caller-owned pixels or borrowed scratch storage. The
-  // single-glyph caller consumes the result before requesting another image.
+  // PrepareOwnedImage adopts or copies the result before releasing mutex_.
   scaler_context_->GetImage(id, glyph, stroke_desc);
 }
 

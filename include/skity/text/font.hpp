@@ -116,6 +116,9 @@ class SKITY_API Font {
                         const Paint& paint = Paint()) const;
   void LoadGlyphPath(const GlyphID* glyphs, uint32_t count,
                      const GlyphData* glyph_data[]) const;
+  // Loads one glyph into a thread-local snapshot. The returned glyph and pixels
+  // remain valid until the next LoadGlyphBitmap call on the same thread. They
+  // must not be freed by the caller (Image().need_free is false).
   void LoadGlyphBitmap(const GlyphID* glyphs, uint32_t count,
                        const GlyphData* glyph_data[], const Paint& paint,
                        float context_scale, const Matrix& transform) const;

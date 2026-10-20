@@ -594,7 +594,8 @@ TEST(CoreTextScalerContextTest,
   ASSERT_FALSE(second_image.need_free);
   ASSERT_EQ(second_image.width, first_image.width);
   ASSERT_EQ(second_image.height, first_image.height);
-  EXPECT_EQ(second_image.buffer, first_image.buffer);
+  // Font returns independent snapshots; backend scratch reuse must not be
+  // exposed as shared pixel ownership to the caller.
   EXPECT_EQ(second_image.RowBytes(), first_image.RowBytes());
   std::vector<uint8_t> second_pixels(tight_row_bytes * image_height);
   for (size_t y = 0; y < image_height; ++y) {
