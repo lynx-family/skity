@@ -101,6 +101,24 @@ skity::FontStyle to_font_style(skity_font_style s) {
                           static_cast<skity::FontStyle::Slant>(s.slant));
 }
 
+const skity::TextRun* run_at(skity_text_blob handle, int32_t run_index) {
+  auto* b = text_blob_of(handle);
+  if (b == nullptr || run_index < 0) return nullptr;
+  const auto& runs = b->GetTextRun();
+  if (run_index >= static_cast<int32_t>(runs.size())) return nullptr;
+  return &runs[run_index];
+}
+
+// Shared two-pass copy for the flat per-run arrays (glyphs / pos_x / pos_y).
+template <typename T>
+int32_t copy_run_array(const std::vector<T>& src, T* out, int32_t count) {
+  int32_t total = static_cast<int32_t>(src.size());
+  if (out == nullptr || count <= 0) return total;
+  int32_t n = count < total ? count : total;
+  std::memcpy(out, src.data(), sizeof(T) * (size_t)n);
+  return n;
+}
+
 }  // namespace
 
 extern "C" {
@@ -443,6 +461,39 @@ skity_text_blob skity_text_blob_create_from_glyphs(skity_font font,
       SKITY_OBJECT_TYPE_TEXT_BLOB, SKITY_HANDLE_OWNING, std::move(blob));
 }
 
+skity_text_blob skity_text_blob_create_from_runs(
+    const skity_text_run_desc* runs, size_t run_count) {
+  if (runs == nullptr || run_count == 0) {
+    return nullptr;
+  }
+  std::vector<skity::TextRun> impl;
+  impl.reserve(run_count);
+  for (size_t i = 0; i < run_count; i++) {
+    const skity_text_run_desc& run = runs[i];
+    auto* f = font_of(run.font);
+    if (f == nullptr || (run.glyphs == nullptr && run.count > 0)) {
+      return nullptr;
+    }
+    if (run.pos_y != nullptr && run.pos_x == nullptr) {
+      return nullptr;
+    }
+    std::vector<skity::GlyphID> glyphs(run.glyphs, run.glyphs + run.count);
+    if (run.pos_y != nullptr) {
+      impl.emplace_back(*f, std::move(glyphs),
+                        std::vector<float>(run.pos_x, run.pos_x + run.count),
+                        std::vector<float>(run.pos_y, run.pos_y + run.count));
+    } else if (run.pos_x != nullptr) {
+      impl.emplace_back(*f, std::move(glyphs),
+                        std::vector<float>(run.pos_x, run.pos_x + run.count));
+    } else {
+      impl.emplace_back(*f, std::move(glyphs));
+    }
+  }
+  auto blob = std::make_shared<skity::TextBlob>(std::move(impl));
+  return skity::capi::alloc_handle<skity_text_blob_s>(
+      SKITY_OBJECT_TYPE_TEXT_BLOB, SKITY_HANDLE_OWNING, std::move(blob));
+}
+
 void skity_text_blob_destroy(skity_text_blob blob) {
   skity::capi::destroy_handle<skity_text_blob_s>(blob,
                                                  SKITY_OBJECT_TYPE_TEXT_BLOB);
@@ -457,6 +508,50 @@ void skity_text_blob_get_bounds(skity_text_blob blob, skity_rect* out) {
   out->top = r.Top();
   out->right = r.Right();
   out->bottom = r.Bottom();
+}
+
+int32_t skity_text_blob_get_run_count(skity_text_blob blob) {
+  auto* b = text_blob_of(blob);
+  return b ? static_cast<int32_t>(b->GetTextRun().size()) : 0;
+}
+
+int32_t skity_text_blob_get_run_glyph_count(skity_text_blob blob,
+                                            int32_t run_index) {
+  auto* run = run_at(blob, run_index);
+  return run ? static_cast<int32_t>(run->GetGlyphInfo().size()) : 0;
+}
+
+int32_t skity_text_blob_get_run_glyphs(skity_text_blob blob, int32_t run_index,
+                                       uint16_t* out, int32_t count) {
+  auto* run = run_at(blob, run_index);
+  if (run == nullptr) return 0;
+  // skity::GlyphID is uint16_t, layout-compatible with the C element type.
+  return copy_run_array(run->GetGlyphInfo(), out, count);
+}
+
+int32_t skity_text_blob_get_run_pos_x(skity_text_blob blob, int32_t run_index,
+                                      float* out, int32_t count) {
+  auto* run = run_at(blob, run_index);
+  if (run == nullptr) return 0;
+  return copy_run_array(run->GetPosX(), out, count);
+}
+
+int32_t skity_text_blob_get_run_pos_y(skity_text_blob blob, int32_t run_index,
+                                      float* out, int32_t count) {
+  auto* run = run_at(blob, run_index);
+  if (run == nullptr) return 0;
+  return copy_run_array(run->GetPosY(), out, count);
+}
+
+skity_font skity_text_blob_get_run_font(skity_text_blob blob,
+                                        int32_t run_index) {
+  auto* run = run_at(blob, run_index);
+  if (run == nullptr) return nullptr;
+  // Font is a value type; the copy shares the run's typeface, matching the
+  // legacy TextRun copy semantics.
+  return skity::capi::alloc_handle<skity_font_s>(
+      SKITY_OBJECT_TYPE_FONT, SKITY_HANDLE_OWNING,
+      std::make_shared<skity::Font>(run->GetFont()));
 }
 
 void skity_text_blob_compute_bounds(int32_t count, const uint16_t* glyphs,
@@ -689,6 +784,40 @@ int32_t skity_typeface_get_font_descriptor(skity_typeface typeface,
                (size_t)family_name_size - 1);
   family_name[family_name_size - 1] = '\0';
   return length;
+}
+
+namespace {
+
+// Shared two-pass string copy for the descriptor name entries.
+int32_t copy_name(const std::string& name, char* buffer, int32_t buffer_size) {
+  int32_t length = static_cast<int32_t>(name.size()) + 1;
+  if (buffer != nullptr && buffer_size >= length) {
+    std::memcpy(buffer, name.c_str(), static_cast<size_t>(length));
+  }
+  return length;
+}
+
+}  // namespace
+
+int32_t skity_typeface_get_full_name(skity_typeface typeface, char* full_name,
+                                     int32_t full_name_size) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr) {
+    return 0;
+  }
+  return copy_name(tf->GetFontDescriptor().full_name, full_name,
+                   full_name_size);
+}
+
+int32_t skity_typeface_get_post_script_name(skity_typeface typeface,
+                                            char* post_script_name,
+                                            int32_t post_script_name_size) {
+  auto* tf = typeface_of(typeface);
+  if (tf == nullptr) {
+    return 0;
+  }
+  return copy_name(tf->GetFontDescriptor().post_script_name, post_script_name,
+                   post_script_name_size);
 }
 
 }  // extern "C"

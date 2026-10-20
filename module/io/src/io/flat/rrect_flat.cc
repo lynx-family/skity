@@ -3,7 +3,6 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <cstring>
-#include <skity/geometry/rrect.hpp>
 
 #include "src/io/memory_read.hpp"
 #include "src/io/memory_writer.hpp"
@@ -13,27 +12,25 @@ namespace skity {
 static constexpr size_t kRRectSize = 12 * sizeof(float);
 
 template <>
-void FlatIntoMemory(const RRect& value, MemoryWriter32& writer) {
+void FlatIntoMemory(const IORRect& value, MemoryWriter32& writer) {
   auto ptr = writer.Reserve(kRRectSize);
 
   std::memcpy(ptr, &value, kRRectSize);
 }
 
 template <>
-std::optional<RRect> ReadFromMemory(ReadBuffer& buffer) {
+std::optional<IORRect> ReadFromMemory(ReadBuffer& buffer) {
   if (!buffer.Validate(buffer.Available() >= kRRectSize)) {
     return std::nullopt;
   }
 
-  RRect tmp;
+  IORRect rrect;
 
-  if (!buffer.ReadPad32(&tmp, kRRectSize)) {
+  // The 12 floats land in bounds + radii order; corner radii normalization
+  // happens inside the core when the value is turned into geometry.
+  if (!buffer.ReadPad32(&rrect, kRRectSize)) {
     return std::nullopt;
   }
-
-  RRect rrect;
-
-  rrect.SetRectRadii(tmp.GetRect(), tmp.Radii());
 
   return {rrect};
 }

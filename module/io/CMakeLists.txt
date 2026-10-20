@@ -3,10 +3,11 @@
 # LICENSE file in the root directory of this source tree.
 
 add_library(skity-io STATIC
-    # header files
-    include/skity/io/picture.hpp
-    include/skity/io/stream.hpp
-    include/skity/io/parse_path.hpp
+    # internal engine headers (the public C++ surface is gone; the
+    # consumable surface is the C ABI under include/skity_c/)
+    src/picture.hpp
+    src/stream/stream.hpp
+    src/utils/parse_path.hpp
 
     # source files
     src/io/flat/blender_flat.cc
@@ -59,12 +60,17 @@ target_include_directories(skity-io
 target_include_directories(skity-io
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    # resolves "src/handle.hpp" (module/capi/src/handle.hpp) for
+    # core_bridge.hpp; comes after the module root on purpose so io's own
+    # "src/..." includes keep resolving against module/io first
+    ${SKITY_ROOT}/module/capi
 )
 
 # C ABI surface (shipped with the module): streams + picture
 target_sources(skity-io PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_stream.h
     ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_picture.h
+    ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_parse_path.h
     ${CMAKE_CURRENT_LIST_DIR}/src/capi/io_c.cpp
 )
 
@@ -76,6 +82,12 @@ target_link_libraries(skity-io
 
 # the module's own C ABI surface shares the capi handle protocol
 target_link_libraries(skity-io PRIVATE skity-capi-internal)
+# The module internals call the core C ABI (see src/io/core_bridge.hpp);
+# those entry points live in the standalone skity-capi library.
+target_link_libraries(skity-io PRIVATE skity::capi)
+# core_bridge.hpp computes rotation matrices with the same glm the core
+# uses, keeping the serialized bytes bit-identical.
+target_include_directories(skity-io PRIVATE ${SKITY_ROOT}/third_party/glm)
 
 set_property(TARGET skity-io PROPERTY CXX_STANDARD 17)
 set_property(TARGET skity-io PROPERTY CXX_STANDARD_REQUIRED ON)

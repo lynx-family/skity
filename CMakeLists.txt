@@ -181,16 +181,19 @@ target_include_directories(skity-capi-internal
     ${CMAKE_CURRENT_SOURCE_DIR}/module/capi/src
     ${CMAKE_CURRENT_SOURCE_DIR}/module/capi/include)
 
+# The C ABI library must be configured before codec / io: their internals
+# call the skity_* entry points, which live in the standalone skity-capi
+# library the modules link against.
+if(${SKITY_CAPI_MODULE})
+  add_subdirectory(module/capi)
+endif()
+
 if(${SKITY_CODEC_MODULE})
   add_subdirectory(module/codec)
 endif()
 
 if(${SKITY_IO_MODULE})
   add_subdirectory(module/io)
-endif()
-
-if(${SKITY_CAPI_MODULE})
-  add_subdirectory(module/capi)
 endif()
 
 

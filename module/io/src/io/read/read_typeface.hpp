@@ -4,9 +4,10 @@
 #ifndef MODULE_IO_SRC_IO_READ_READ_TYPEFACE_HPP
 #define MODULE_IO_SRC_IO_READ_READ_TYPEFACE_HPP
 
-#include <skity/io/stream.hpp>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/typeface.hpp>
+
+#include "src/stream/stream.hpp"
 
 namespace skity {
 namespace io {

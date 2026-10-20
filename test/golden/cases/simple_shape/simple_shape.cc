@@ -3,18 +3,19 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <gtest/gtest.h>
+#include <skity_c/skity_parse_path.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <filesystem>
-#include <skity/io/parse_path.hpp>
 #include <skity/recorder/picture_recorder.hpp>
 #include <skity/skity.hpp>
 #include <string>
 
 #include "common/golden_test_check.hpp"
 #include "common/golden_test_env.hpp"
+#include "handle.hpp"
 
 static const char* kGoldenTestImageSimpleDir = CASE_DIR;
 static const char* kGoldenTestImageCPUTessDir = CASE_DIR "cpu_tess_images/";
@@ -555,16 +556,32 @@ TEST(SimpleShapeGolden, DrawYinAndYang) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(400.f, 200.f));
   auto canvas = recorder.GetRecordingCanvas();
-  auto path_opt = skity::ParsePath::FromSVGString(
+  // The SVG string roundtrip goes through the module's C ABI.
+  skity_path svg_path = skity_parse_path_create_from_svg(
       "M50,2a48,48 0 1 1 0,96a24 24 0 1 1 0-48a24 24 0 1 0 0-48");
-  ASSERT_TRUE(path_opt.has_value());
+  ASSERT_NE(svg_path, nullptr);
+  auto svg_path_sp = skity::capi::get_impl<skity_path_s, skity::Path>(
+      svg_path, SKITY_OBJECT_TYPE_PATH);
 
   skity::Path temp;
-  temp.AddPath(path_opt.value());
+  temp.AddPath(*svg_path_sp);
   temp.AddCircle(50, 26, 6);
-  auto str = skity::ParsePath::ToSVGString(temp);
-  auto dst = skity::ParsePath::FromSVGString(str.c_str());
-  ASSERT_TRUE(dst.has_value());
+
+  std::shared_ptr<skity::Path> temp_view(&temp, [](skity::Path*) {});
+  skity_path temp_handle = skity::capi::alloc_handle<skity_path_s>(
+      SKITY_OBJECT_TYPE_PATH, 0, std::move(temp_view));
+  size_t str_len = skity_parse_path_to_svg(temp_handle, 0, nullptr, 0);
+  ASSERT_GT(str_len, 1u);
+  std::string str(str_len - 1, '\0');
+  ASSERT_EQ(skity_parse_path_to_svg(temp_handle, 0, str.data(), str_len),
+            str_len);
+  skity_path_destroy(temp_handle);
+
+  skity_path dst_path = skity_parse_path_create_from_svg(str.c_str());
+  ASSERT_NE(dst_path, nullptr);
+  auto dst = skity::capi::get_impl<skity_path_s, skity::Path>(
+      dst_path, SKITY_OBJECT_TYPE_PATH);
+  ASSERT_NE(dst, nullptr);
 
   skity::Paint paint;
   paint.SetAntiAlias(true);
@@ -574,13 +591,16 @@ TEST(SimpleShapeGolden, DrawYinAndYang) {
   paint.SetStyle(skity::Paint::Style::kStroke_Style);
   canvas->DrawCircle(50, 50, 48, paint);
   paint.SetStyle(skity::Paint::Style::kFill_Style);
-  canvas->DrawPath(dst.value(), paint);
+  canvas->DrawPath(*dst, paint);
   paint.SetColor(skity::Color_WHITE);
   canvas->DrawCircle(50, 74, 6, paint);
   auto dl = recorder.FinishRecording();
   PathListContext context("draw_yin_and_yang.png");
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 400, 400,
                                                    context.ToPathList()));
+
+  skity_path_destroy(svg_path);
+  skity_path_destroy(dst_path);
 }
 
 TEST(SimpleShapeGolden, DrawDRRect) {

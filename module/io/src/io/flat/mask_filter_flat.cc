@@ -4,6 +4,7 @@
 
 #include <skity/effect/mask_filter.hpp>
 
+#include "src/io/core_bridge.hpp"
 #include "src/io/memory_read.hpp"
 
 namespace skity {
@@ -33,7 +34,7 @@ std::shared_ptr<MaskFilter> ReadBlurMaskFilterImpl(ReadBuffer& buffer) {
 
   uint32_t flags = buffer.ReadU32() & 0x3;
 
-  return MaskFilter::MakeBlur(style, sigma_to_radius(sigma));
+  return core_bridge::MakeMaskFilterBlur(style, sigma_to_radius(sigma));
 }
 
 void SkipShaderMaskFilter(ReadBuffer& buffer) { (void)buffer.ReadShader(); }

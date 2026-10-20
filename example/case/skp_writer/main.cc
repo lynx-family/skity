@@ -2,52 +2,55 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <array>
-#include <skity/skity.hpp>
-// serialize module
-#include <skity/io/picture.hpp>
-#include <skity/io/stream.hpp>
+// A pure-C demo of the serialization surface: record with the C recorder,
+// capture a display list, wrap it into a picture, write it out as .skp.
 
-using namespace skity;
+#include <skity_c/skity_canvas.h>
+#include <skity_c/skity_paint.h>
+#include <skity_c/skity_picture.h>
+#include <skity_c/skity_recorder.h>
+#include <skity_c/skity_shader.h>
+#include <skity_c/skity_stream.h>
 
-int main(int argc, char const *argv[]) {
-  PictureRecorder recorder;
+int main(void) {
+  skity_picture_recorder recorder = skity_picture_recorder_create();
+  skity_picture_recorder_begin(recorder, nullptr);
 
-  recorder.BeginRecording();
+  skity_canvas canvas = skity_picture_recorder_get_canvas(recorder);
 
-  auto canvas = recorder.GetRecordingCanvas();
+  skity_paint paint = skity_paint_create();
 
-  Paint paint;
-  std::array<Point, 2> points = {
-      Point{0.f, 0.f, 0.f, 1.f},
-      {100.f, 100.f, 0.f, 1.f},
+  skity_color4f colors[3] = {
+      {{1.f, 0.f, 0.f, 1.f}},
+      {{0.f, 1.f, 0.f, 1.f}},
+      {{0.f, 0.f, 1.f, 1.f}},
   };
+  float offset[3] = {0.f, 0.5f, 1.f};
+  skity_point center = {{50.f, 50.f, 0.f, 1.f}};
 
-  std::array<Vec4, 3> colors = {
-      Vec4{1.f, 0.f, 0.f, 1.f},
-      Vec4{0.f, 1.f, 0.f, 1.f},
-      Vec4{0.f, 0.f, 1.f, 1.f},
-  };
+  skity_shader shader = skity_shader_create_radial(center, 50.f, colors, offset,
+                                                   3, SKITY_TILE_MODE_CLAMP, 0);
+  skity_paint_set_shader(paint, shader);
+  skity_shader_destroy(shader);
 
-  std::array<float, 3> offset{0.f, 0.5f, 1.f};
+  skity_rect rect = {0.f, 0.f, 100.f, 100.f};
+  skity_canvas_draw_rect(canvas, &rect, paint);
+  skity_paint_destroy(paint);
 
-  auto shader = Shader::MakeRadial(Point{50.f, 50.f, 0.f, 1.f}, 50.f,
-                                   colors.data(), offset.data(), colors.size(),
-                                   TileMode::kClamp);
+  skity_display_list display_list = nullptr;
+  skity_picture_recorder_finish(recorder, &display_list);
+  skity_picture_recorder_destroy(recorder);
 
-  paint.SetShader(shader);
+  skity_picture picture = skity_picture_create_from_display_list(display_list);
+  skity_display_list_destroy(display_list);
 
-  canvas->DrawRect(Rect::MakeLTRB(0.f, 0.f, 100.f, 100.f), paint);
+  skity_write_stream stream =
+      skity_write_stream_create_from_file("linear-gradient.skp");
+  skity_picture_serialize(picture, stream, nullptr);
+  skity_write_stream_flush(stream);
 
-  auto dl = recorder.FinishRecording();
-
-  auto picture = Picture::MakeFromDisplayList(dl.get());
-
-  auto stream = WriteStream::CreateFileStream("linear-gradient.skp");
-
-  picture->Serialize(*stream, nullptr);
-
-  stream->Flush();
+  skity_write_stream_destroy(stream);
+  skity_picture_destroy(picture);
 
   return 0;
 }

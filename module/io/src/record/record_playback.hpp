@@ -5,14 +5,15 @@
 #ifndef MODULE_IO_SRC_RECORD_RECORD_PLAYBACK_HPP
 #define MODULE_IO_SRC_RECORD_RECORD_PLAYBACK_HPP
 
+#include <skity_c/skity_canvas.h>
+
 #include <skity/io/data.hpp>
-#include <skity/io/picture.hpp>
-#include <skity/io/stream.hpp>
-#include <skity/render/canvas.hpp>
 #include <vector>
 
 #include "src/io/memory_writer.hpp"
+#include "src/picture.hpp"
 #include "src/record/draw_type.hpp"
+#include "src/stream/stream.hpp"
 
 namespace skity {
 
@@ -27,14 +28,26 @@ struct Vertices;
 
 class ReadBuffer;
 
-class RecordPlayback : public Canvas {
+/*
+ * Records a display-list op stream into the serialized picture format and
+ * plays the recorded ops back onto a C-ABI canvas.
+ *
+ * Recording input arrives through the delegate canvas returned by
+ * GetDelegateCanvas(): pass it to skity_display_list_draw (or call the
+ * skity_canvas drawing entries on it) and the ops re-enter the On* members
+ * below through the C callback table. Ops the table does not carry (lines,
+ * circles, ovals, arcs, rounded rects) are converted to paths by the core
+ * delegate before delivery — the same op granularity this recorder serializes.
+ */
+class RecordPlayback {
  public:
   RecordPlayback(uint32_t width, uint32_t height);
   RecordPlayback(uint32_t width, uint32_t height, int32_t target_version);
 
-  ~RecordPlayback() override = default;
+  ~RecordPlayback();
 
   void BeginRecording();
+
   void EndRecording();
 
   void Serialize(WriteStream& stream, const SerialProc* proc,
@@ -50,42 +63,47 @@ class RecordPlayback : public Canvas {
 
   int32_t GetTargetVersion() const { return target_version_; }
 
+  // Delegate canvas receiving the recorded op stream. The handle stays owned
+  // by this RecordPlayback and is destroyed with it; it is created lazily on
+  // first call.
+  skity_canvas GetDelegateCanvas();
+
+  // Op entry points invoked by the delegate callback table. Types follow the
+  // C callback surface (skity_clip_op carries the Canvas::ClipOp values).
+  // Paints arrive as shared_ptr (borrowed from the delegate's wrapper) so the
+  // recorder can retain them without cloning — Paint construction /
+  // destruction stays on the C ABI side.
+  void OnClipRect(Rect const& rect, skity_clip_op op);
+  void OnClipPath(Path const& path, skity_clip_op op);
+  void OnDrawRect(Rect const& rect, std::shared_ptr<Paint> paint);
+  void OnDrawPath(Path const& path, std::shared_ptr<Paint> paint);
+  void OnSaveLayer(const Rect& bounds, std::shared_ptr<Paint> paint);
+  void OnDrawBlob(std::shared_ptr<TextBlob> blob, float x, float y,
+                  std::shared_ptr<Paint> paint);
+  void OnDrawImageRect(std::shared_ptr<Image> image, const Rect& src,
+                       const Rect& dst, const SamplingOptions& sampling,
+                       std::shared_ptr<Paint> paint);
+  void OnDrawGlyphs(uint32_t count, const GlyphID glyphs[],
+                    const float position_x[], const float position_y[],
+                    std::shared_ptr<Font> font, std::shared_ptr<Paint> paint);
+  void OnDrawPaint(std::shared_ptr<Paint> paint);
+  void OnSave();
+  void OnRestore();
+  void OnTranslate(float dx, float dy);
+  void OnScale(float sx, float sy);
+  void OnRotate(float degree);
+  void OnRotate(float degree, float px, float py);
+  void OnSkew(float sx, float sy);
+  void OnConcat(Matrix const& matrix);
+  void OnSetMatrix(Matrix const& matrix);
+  void OnResetMatrix();
+
   const Path& GetPath(ReadBuffer& buffer) const;
-  const Paint& RequiredPaint(ReadBuffer& buffer) const;
+  const Paint* RequiredPaint(ReadBuffer& buffer) const;
   const Paint* OptionalPaint(ReadBuffer& buffer) const;
 
   const std::shared_ptr<Image>& GetImage(ReadBuffer& buffer) const;
   const std::shared_ptr<TextBlob>& GetTextBlob(ReadBuffer& buffer) const;
-
- protected:
-  void OnClipRect(Rect const& rect, ClipOp op) override;
-  void OnClipPath(Path const& path, ClipOp op) override;
-  void OnDrawRect(Rect const& rect, Paint const& paint) override;
-  void OnDrawPath(Path const& path, Paint const& paint) override;
-  void OnSaveLayer(const Rect& bounds, const Paint& paint) override;
-  void OnDrawBlob(const TextBlob* blob, float x, float y,
-                  Paint const& paint) override;
-  void OnDrawImageRect(std::shared_ptr<Image> image, const Rect& src,
-                       const Rect& dst, const SamplingOptions& sampling,
-                       Paint const* paint) override;
-  void OnDrawGlyphs(uint32_t count, const GlyphID glyphs[],
-                    const float position_x[], const float position_y[],
-                    const Font& font, const Paint& paint) override;
-  void OnDrawPaint(Paint const& paint) override;
-  void OnSave() override;
-  void OnRestore() override;
-  void OnRestoreToCount(int saveCount) override {}
-  void OnTranslate(float dx, float dy) override;
-  void OnScale(float sx, float sy) override;
-  void OnRotate(float degree) override;
-  void OnRotate(float degree, float px, float py) override;
-  void OnSkew(float sx, float sy) override;
-  void OnConcat(Matrix const& matrix) override;
-  void OnSetMatrix(Matrix const& matrix) override;
-  void OnResetMatrix() override;
-  void OnFlush() override {}
-  uint32_t OnGetWidth() const override { return width_; }
-  uint32_t OnGetHeight() const override { return height_; }
 
  private:
   bool ParseStream(ReadStream& stream, TypefaceSet* typeface_set,
@@ -107,8 +125,8 @@ class RecordPlayback : public Canvas {
 
   void AddRect(const Rect& rect);
 
-  void AddPaint(const Paint& paint) { AddPaintPtr(&paint); }
-  void AddPaintPtr(const Paint* paint);
+  void AddPaint(std::shared_ptr<Paint> paint);
+  void AddPaintPtr(std::shared_ptr<Paint> paint);
   int32_t AddPath(const Path& path);
 
   void AddImage(const std::shared_ptr<Image>& image);
@@ -127,11 +145,13 @@ class RecordPlayback : public Canvas {
   uint32_t height_ = 0;
   MemoryWriter32 writer32_;
 
+  skity_canvas delegate_ = nullptr;
+
   std::vector<int32_t> restore_offset_stack_ = {};
 
   int32_t init_save_count = 0;
 
-  std::vector<Paint> paints_ = {};
+  std::vector<std::shared_ptr<Paint>> paints_ = {};
   std::vector<Path> paths_ = {};
   std::vector<std::shared_ptr<Image>> images_;
   std::vector<std::shared_ptr<TextBlob>> text_blobs_;

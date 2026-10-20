@@ -6,6 +6,7 @@
 #include <cstring>
 #include <skity/effect/color_filter.hpp>
 
+#include "src/io/core_bridge.hpp"
 #include "src/io/memory_read.hpp"
 #include "src/picture_priv.hpp"
 
@@ -25,14 +26,14 @@ std::shared_ptr<ColorFilter> ReadMatrixColorFilter(ReadBuffer& buffer) {
     (void)buffer.ReadBool();  // clamp
   }
 
-  return ColorFilters::Matrix(matrix.data());
+  return core_bridge::MakeColorFilterMatrix(matrix.data());
 }
 
 std::shared_ptr<ColorFilter> ReadComposeColorFilter(ReadBuffer& buffer) {
   auto outer = buffer.ReadColorFilter();
   auto inner = buffer.ReadColorFilter();
 
-  return outer ? ColorFilters::Compose(outer, inner) : inner;
+  return outer ? core_bridge::MakeColorFilterCompose(outer, inner) : inner;
 }
 
 std::shared_ptr<ColorFilter> ReadBlendModeColorFilter(ReadBuffer& buffer) {
@@ -41,13 +42,14 @@ std::shared_ptr<ColorFilter> ReadBlendModeColorFilter(ReadBuffer& buffer) {
 
     auto mode = static_cast<BlendMode>(buffer.ReadU32());
 
-    return ColorFilters::Blend(color, mode);
+    return core_bridge::MakeColorFilterBlend(color, mode);
   } else {
     auto color = buffer.ReadColor4f();
 
     auto mode = static_cast<BlendMode>(buffer.ReadU32());
 
-    return ColorFilters::Blend(Color4fToColor(color), mode);
+    return core_bridge::MakeColorFilterBlend(core_bridge::Color4fToColor(color),
+                                             mode);
   }
 }
 
@@ -132,9 +134,9 @@ std::shared_ptr<ColorFilter> ReadColorSpaceXformColorFilter(
   }
 
   if (src_transfn == kTransferLINEAR && dst_transfn == kTransferSRGB) {
-    return ColorFilters::LinearToSRGBGamma();
+    return core_bridge::MakeColorFilterLinearToSRGB();
   } else if (src_transfn == kTransferSRGB && dst_transfn == kTransferLINEAR) {
-    return ColorFilters::SRGBToLinearGamma();
+    return core_bridge::MakeColorFilterSRGBToLinear();
   }
 
   // other transfer function is not supported
@@ -149,8 +151,8 @@ std::shared_ptr<ColorFilter> ReadLegacyGammaColorFilter(ReadBuffer& buffer) {
     return {};
   }
 
-  return dir == 0 ? ColorFilters::LinearToSRGBGamma()
-                  : ColorFilters::SRGBToLinearGamma();
+  return dir == 0 ? core_bridge::MakeColorFilterLinearToSRGB()
+                  : core_bridge::MakeColorFilterSRGBToLinear();
 }
 
 void SkipWorkingFormatColorFilter(ReadBuffer& buffer) {

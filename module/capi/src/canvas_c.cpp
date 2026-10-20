@@ -55,6 +55,176 @@ skity::SamplingOptions to_sampling_options(
   return so;
 }
 
+skity_clip_op from_clip_op(skity::Canvas::ClipOp op) {
+  return op == skity::Canvas::ClipOp::kDifference ? SKITY_CLIP_OP_DIFFERENCE
+                                                  : SKITY_CLIP_OP_INTERSECT;
+}
+
+/*
+ * Borrowed-handle constructors for the objects a delegate callback receives.
+ * Each wrapper holds a non-owning view (empty deleter), so the handle is
+ * valid only while the callback runs — the documented delegate contract.
+ */
+skity_paint borrow_paint(const skity::Paint& paint) {
+  std::shared_ptr<skity::Paint> impl(const_cast<skity::Paint*>(&paint),
+                                     [](skity::Paint*) {});
+  return skity::capi::alloc_handle<skity_paint_s>(SKITY_OBJECT_TYPE_PAINT, 0,
+                                                  std::move(impl));
+}
+
+skity_path borrow_path(const skity::Path& path) {
+  std::shared_ptr<skity::Path> impl(const_cast<skity::Path*>(&path),
+                                    [](skity::Path*) {});
+  return skity::capi::alloc_handle<skity_path_s>(SKITY_OBJECT_TYPE_PATH, 0,
+                                                 std::move(impl));
+}
+
+skity_text_blob borrow_blob(const skity::TextBlob* blob) {
+  std::shared_ptr<skity::TextBlob> impl(const_cast<skity::TextBlob*>(blob),
+                                        [](skity::TextBlob*) {});
+  return skity::capi::alloc_handle<skity_text_blob_s>(
+      SKITY_OBJECT_TYPE_TEXT_BLOB, 0, std::move(impl));
+}
+
+skity_font borrow_font(const skity::Font& font) {
+  std::shared_ptr<skity::Font> impl(const_cast<skity::Font*>(&font),
+                                    [](skity::Font*) {});
+  return skity::capi::alloc_handle<skity_font_s>(SKITY_OBJECT_TYPE_FONT, 0,
+                                                 std::move(impl));
+}
+
+/*
+ * Canvas that forwards the recording-relevant On* virtuals to a C callback
+ * table. Ops the table does not model (rounded-rect / line / circle / oval /
+ * arc drawing, rounded-rect clipping) keep the Canvas base implementations,
+ * which convert them to paths and re-enter through OnDrawPath / OnClipPath —
+ * the same op granularity a serialized recording captures.
+ */
+class DelegateCanvas final : public skity::Canvas {
+ public:
+  DelegateCanvas(const skity_canvas_delegate_callbacks& callbacks,
+                 void* userdata)
+      : Canvas(), callbacks_(callbacks), userdata_(userdata) {}
+
+  ~DelegateCanvas() override {
+    if (callbacks_.on_destroy != nullptr) {
+      callbacks_.on_destroy(userdata_);
+    }
+  }
+
+ protected:
+  void OnSave() override { Call(callbacks_.on_save); }
+
+  void OnRestore() override { Call(callbacks_.on_restore); }
+
+  // The base RestoreToCount already loops Restore() (each firing on_restore),
+  // so no separate callback exists; the override only satisfies the vtable.
+  void OnRestoreToCount(int) override {}
+
+  void OnSaveLayer(const skity::Rect& bounds,
+                   const skity::Paint& paint) override {
+    Call(callbacks_.on_save_layer, reinterpret_cast<const skity_rect*>(&bounds),
+         borrow_paint(paint));
+  }
+
+  void OnTranslate(float dx, float dy) override {
+    Call(callbacks_.on_translate, dx, dy);
+  }
+
+  void OnScale(float sx, float sy) override {
+    Call(callbacks_.on_scale, sx, sy);
+  }
+
+  void OnRotate(float degrees) override { Call(callbacks_.on_rotate, degrees); }
+
+  void OnRotate(float degrees, float px, float py) override {
+    Call(callbacks_.on_rotate_point, degrees, px, py);
+  }
+
+  void OnSkew(float sx, float sy) override { Call(callbacks_.on_skew, sx, sy); }
+
+  void OnConcat(const skity::Matrix& matrix) override {
+    Call(callbacks_.on_concat, reinterpret_cast<const skity_matrix*>(&matrix));
+  }
+
+  void OnSetMatrix(const skity::Matrix& matrix) override {
+    Call(callbacks_.on_set_matrix,
+         reinterpret_cast<const skity_matrix*>(&matrix));
+  }
+
+  void OnResetMatrix() override { Call(callbacks_.on_reset_matrix); }
+
+  void OnClipRect(const skity::Rect& rect, skity::Canvas::ClipOp op) override {
+    Call(callbacks_.on_clip_rect, reinterpret_cast<const skity_rect*>(&rect),
+         from_clip_op(op));
+  }
+
+  void OnClipPath(const skity::Path& path, skity::Canvas::ClipOp op) override {
+    Call(callbacks_.on_clip_path, borrow_path(path), from_clip_op(op));
+  }
+
+  void OnDrawPaint(const skity::Paint& paint) override {
+    Call(callbacks_.on_draw_paint, borrow_paint(paint));
+  }
+
+  void OnDrawRect(const skity::Rect& rect, const skity::Paint& paint) override {
+    Call(callbacks_.on_draw_rect, reinterpret_cast<const skity_rect*>(&rect),
+         borrow_paint(paint));
+  }
+
+  void OnDrawPath(const skity::Path& path, const skity::Paint& paint) override {
+    Call(callbacks_.on_draw_path, borrow_path(path), borrow_paint(paint));
+  }
+
+  void OnDrawBlob(const skity::TextBlob* blob, float x, float y,
+                  const skity::Paint& paint) override {
+    Call(callbacks_.on_draw_blob, borrow_blob(blob), x, y, borrow_paint(paint));
+  }
+
+  void OnDrawImageRect(std::shared_ptr<skity::Image> image,
+                       const skity::Rect& src, const skity::Rect& dst,
+                       const skity::SamplingOptions& sampling,
+                       const skity::Paint* paint) override {
+    // The image arrives as a real reference; the wrapper owns it for the
+    // callback duration and drops the reference on handle release.
+    skity_image image_handle = skity::capi::alloc_handle<skity_image_s>(
+        SKITY_OBJECT_TYPE_IMAGE, SKITY_HANDLE_OWNING, std::move(image));
+    Call(callbacks_.on_draw_image_rect, image_handle,
+         reinterpret_cast<const skity_rect*>(&src),
+         reinterpret_cast<const skity_rect*>(&dst),
+         reinterpret_cast<const skity_sampling_options*>(&sampling),
+         paint != nullptr ? borrow_paint(*paint) : nullptr);
+  }
+
+  void OnDrawGlyphs(uint32_t count, const skity::GlyphID glyphs[],
+                    const float position_x[], const float position_y[],
+                    const skity::Font& font,
+                    const skity::Paint& paint) override {
+    Call(callbacks_.on_draw_glyphs, count,
+         reinterpret_cast<const uint16_t*>(glyphs), position_x, position_y,
+         borrow_font(font), borrow_paint(paint));
+  }
+
+  // Nothing rasterizes through a delegate canvas; flush is a no-op, matching
+  // the recording canvases this delegates for.
+  void OnFlush() override {}
+
+  uint32_t OnGetWidth() const override { return 0u; }
+
+  uint32_t OnGetHeight() const override { return 0u; }
+
+ private:
+  template <typename Fn, typename... Args>
+  void Call(Fn fn, Args&&... args) {
+    if (fn != nullptr) {
+      fn(userdata_, std::forward<Args>(args)...);
+    }
+  }
+
+  skity_canvas_delegate_callbacks callbacks_;
+  void* userdata_;
+};
+
 }  // namespace
 
 extern "C" {
@@ -430,6 +600,16 @@ skity_canvas skity_canvas_make_software_canvas(skity_bitmap bitmap) {
   std::shared_ptr<skity::Canvas> impl(canvas.release());
   return skity::capi::alloc_handle<skity_canvas_s>(
       SKITY_OBJECT_TYPE_CANVAS, SKITY_HANDLE_OWNING, std::move(impl));
+}
+
+skity_canvas skity_canvas_create_delegate(
+    const skity_canvas_delegate_callbacks* callbacks, void* userdata) {
+  if (callbacks == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_canvas_s>(
+      SKITY_OBJECT_TYPE_CANVAS, SKITY_HANDLE_OWNING,
+      std::make_shared<DelegateCanvas>(*callbacks, userdata));
 }
 
 void skity_canvas_destroy(skity_canvas canvas) {

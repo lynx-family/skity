@@ -3,13 +3,14 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <gtest/gtest.h>
+#include <skity_c/skity_parse_path.h>
 
 #include <filesystem>
-#include <skity/io/parse_path.hpp>
 #include <skity/recorder/picture_recorder.hpp>
 #include <skity/skity.hpp>
 
 #include "common/golden_test_check.hpp"
+#include "handle.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
 static const char* kGoldenTestCoverageAAImageDir =
@@ -484,19 +485,40 @@ TEST(ShapeGolden, DrawEmptyPath) {
 }
 
 // https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/check.svg
+namespace {
+
+// Parses an SVG path data string through the io module's C ABI; the handle
+// is released before returning, leaving only the path value behind.
+bool PathFromSVG(const char* data, skity::Path* out) {
+  skity_path handle = skity_parse_path_create_from_svg(data);
+  if (handle == nullptr) {
+    return false;
+  }
+  auto sp = skity::capi::get_impl<skity_path_s, skity::Path>(
+      handle, SKITY_OBJECT_TYPE_PATH);
+  if (sp != nullptr) {
+    *out = *sp;
+  }
+  skity_path_destroy(handle);
+  return sp != nullptr;
+}
+
+}  // namespace
+
 TEST(ShapeGolden, DrawCheck) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(400.f, 400.f));
   auto canvas = recorder.GetRecordingCanvas();
-  auto path_opt = skity::ParsePath::FromSVGString(
-      R"(M30,76q6-14,13-26q6-12,14-23q8-12,13-17q3-4,6-6q1-1,5-2q8-1,12-1q1,0,1,1q0,1-1,2q-13,11-27,33q-14,21-24,44q-4,9-5,11q-1,2-9,2q-5,0-6-1q-1-1-5-6q-5-8-12-15q-3-4-3-6q0-2,4-5q3-2,6-2q3,0,8,3q5,4,10,14z)");
-  ASSERT_TRUE(path_opt.has_value());
+  skity::Path path;
+  ASSERT_TRUE(PathFromSVG(
+      R"(M30,76q6-14,13-26q6-12,14-23q8-12,13-17q3-4,6-6q1-1,5-2q8-1,12-1q1,0,1,1q0,1-1,2q-13,11-27,33q-14,21-24,44q-4,9-5,11q-1,2-9,2q-5,0-6-1q-1-1-5-6q-5-8-12-15q-3-4-3-6q0-2,4-5q3-2,6-2q3,0,8,3q5,4,10,14z)",
+      &path));
   skity::Paint paint;
   paint.SetAntiAlias(true);
   paint.SetColor(skity::Color_GREEN);
   canvas->Scale(4, 4);
   canvas->DrawColor(skity::Color_WHITE);
-  canvas->DrawPath(path_opt.value(), paint);
+  canvas->DrawPath(path, paint);
 
   std::filesystem::path expected_image_path(kGoldenTestImageDir);
   expected_image_path.append("draw_check.png");
@@ -515,8 +537,8 @@ TEST(ShapeGolden, DrawCheck2) {
   recorder.BeginRecording(skity::Rect::MakeWH(400.f, 400.f));
   auto canvas = recorder.GetRecordingCanvas();
 
-  auto path_opt = skity::ParsePath::FromSVGString(R"(M6 12.5L10.4 17L18 6)");
-  ASSERT_TRUE(path_opt.has_value());
+  skity::Path path;
+  ASSERT_TRUE(PathFromSVG(R"(M6 12.5L10.4 17L18 6)", &path));
   skity::Paint paint;
   paint.SetAntiAlias(true);
   paint.SetColor(0xFFFFFFFF);
@@ -525,7 +547,7 @@ TEST(ShapeGolden, DrawCheck2) {
   paint.SetStrokeWidth(2.f);
   paint.SetStrokeCap(skity::Paint::kRound_Cap);
   paint.SetStrokeJoin(skity::Paint::kRound_Join);
-  canvas->DrawPath(path_opt.value(), paint);
+  canvas->DrawPath(path, paint);
 
   std::filesystem::path expected_image_path(kGoldenTestImageDir);
   expected_image_path.append("draw_check2.png");

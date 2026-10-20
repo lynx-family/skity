@@ -6,11 +6,12 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <skity/io/picture.hpp>
 
+#include "src/io/core_bridge.hpp"
 #include "src/io/flat/font_desc_flat.hpp"
 #include "src/io/memory_read.hpp"
 #include "src/io/read/read_typeface.hpp"
+#include "src/picture.hpp"
 #include "src/picture_priv.hpp"
 
 namespace skity {
@@ -18,6 +19,142 @@ namespace skity {
 namespace {
 
 static constexpr int32_t kUInt32Size = 4;
+
+RecordPlayback* self_of(void* userdata) {
+  return static_cast<RecordPlayback*>(userdata);
+}
+
+// Delegate-canvas trampolines: unwrap the borrowed C handles back into the
+// legacy object references the On* members record from. Every handle passed
+// by the core delegate is valid for the duration of the callback only.
+std::shared_ptr<Paint> paint_of(skity_paint handle) {
+  return skity::capi::get_impl<skity_paint_s, Paint>(handle,
+                                                     SKITY_OBJECT_TYPE_PAINT);
+}
+
+Path path_of(skity_path handle) {
+  auto sp =
+      skity::capi::get_impl<skity_path_s, Path>(handle, SKITY_OBJECT_TYPE_PATH);
+  return sp ? *sp : Path{};
+}
+
+std::shared_ptr<TextBlob> blob_of(skity_text_blob handle) {
+  return skity::capi::get_impl<skity_text_blob_s, TextBlob>(
+      handle, SKITY_OBJECT_TYPE_TEXT_BLOB);
+}
+
+std::shared_ptr<Image> image_of(skity_image handle) {
+  return skity::capi::get_impl<skity_image_s, Image>(handle,
+                                                     SKITY_OBJECT_TYPE_IMAGE);
+}
+
+void tp_save(void* ud) { self_of(ud)->OnSave(); }
+
+void tp_restore(void* ud) { self_of(ud)->OnRestore(); }
+
+void tp_save_layer(void* ud, const skity_rect* bounds, skity_paint paint) {
+  self_of(ud)->OnSaveLayer(*reinterpret_cast<const Rect*>(bounds),
+                           paint_of(paint));
+}
+
+void tp_translate(void* ud, float dx, float dy) {
+  self_of(ud)->OnTranslate(dx, dy);
+}
+
+void tp_scale(void* ud, float sx, float sy) { self_of(ud)->OnScale(sx, sy); }
+
+void tp_rotate(void* ud, float degrees) { self_of(ud)->OnRotate(degrees); }
+
+void tp_rotate_point(void* ud, float degrees, float px, float py) {
+  self_of(ud)->OnRotate(degrees, px, py);
+}
+
+void tp_skew(void* ud, float sx, float sy) { self_of(ud)->OnSkew(sx, sy); }
+
+void tp_concat(void* ud, const skity_matrix* matrix) {
+  self_of(ud)->OnConcat(*reinterpret_cast<const Matrix*>(matrix));
+}
+
+void tp_set_matrix(void* ud, const skity_matrix* matrix) {
+  self_of(ud)->OnSetMatrix(*reinterpret_cast<const Matrix*>(matrix));
+}
+
+void tp_reset_matrix(void* ud) { self_of(ud)->OnResetMatrix(); }
+
+void tp_clip_rect(void* ud, const skity_rect* rect, skity_clip_op op) {
+  self_of(ud)->OnClipRect(*reinterpret_cast<const Rect*>(rect), op);
+}
+
+void tp_clip_path(void* ud, skity_path path, skity_clip_op op) {
+  self_of(ud)->OnClipPath(path_of(path), op);
+}
+
+void tp_draw_paint(void* ud, skity_paint paint) {
+  self_of(ud)->OnDrawPaint(paint_of(paint));
+}
+
+void tp_draw_rect(void* ud, const skity_rect* rect, skity_paint paint) {
+  self_of(ud)->OnDrawRect(*reinterpret_cast<const Rect*>(rect),
+                          paint_of(paint));
+}
+
+void tp_draw_path(void* ud, skity_path path, skity_paint paint) {
+  self_of(ud)->OnDrawPath(path_of(path), paint_of(paint));
+}
+
+void tp_draw_blob(void* ud, skity_text_blob blob, float x, float y,
+                  skity_paint paint) {
+  self_of(ud)->OnDrawBlob(blob_of(blob), x, y, paint_of(paint));
+}
+
+void tp_draw_image_rect(void* ud, skity_image image, const skity_rect* src,
+                        const skity_rect* dst,
+                        const skity_sampling_options* sampling,
+                        skity_paint paint) {
+  SamplingOptions so{};
+  if (sampling != nullptr) {
+    so.filter = static_cast<FilterMode>(sampling->filter);
+    so.mipmap = static_cast<MipmapMode>(sampling->mipmap);
+    so.cubic.B = sampling->cubic_b;
+    so.cubic.C = sampling->cubic_c;
+  }
+  self_of(ud)->OnDrawImageRect(
+      image_of(image), *reinterpret_cast<const Rect*>(src),
+      *reinterpret_cast<const Rect*>(dst), so, paint_of(paint));
+}
+
+void tp_draw_glyphs(void* ud, uint32_t count, const uint16_t* glyphs,
+                    const float* positions_x, const float* positions_y,
+                    skity_font font, skity_paint paint) {
+  self_of(ud)->OnDrawGlyphs(
+      count, reinterpret_cast<const GlyphID*>(glyphs), positions_x, positions_y,
+      skity::capi::get_impl<skity_font_s, Font>(font, SKITY_OBJECT_TYPE_FONT),
+      paint_of(paint));
+}
+
+skity_canvas_delegate_callbacks delegate_callbacks() {
+  skity_canvas_delegate_callbacks cb{};
+  cb.on_save = &tp_save;
+  cb.on_restore = &tp_restore;
+  cb.on_save_layer = &tp_save_layer;
+  cb.on_translate = &tp_translate;
+  cb.on_scale = &tp_scale;
+  cb.on_rotate = &tp_rotate;
+  cb.on_rotate_point = &tp_rotate_point;
+  cb.on_skew = &tp_skew;
+  cb.on_concat = &tp_concat;
+  cb.on_set_matrix = &tp_set_matrix;
+  cb.on_reset_matrix = &tp_reset_matrix;
+  cb.on_clip_rect = &tp_clip_rect;
+  cb.on_clip_path = &tp_clip_path;
+  cb.on_draw_paint = &tp_draw_paint;
+  cb.on_draw_rect = &tp_draw_rect;
+  cb.on_draw_path = &tp_draw_path;
+  cb.on_draw_blob = &tp_draw_blob;
+  cb.on_draw_image_rect = &tp_draw_image_rect;
+  cb.on_draw_glyphs = &tp_draw_glyphs;
+  return cb;
+}
 
 void write_tag_size(WriteStream& stream, uint32_t tag, size_t size) {
   stream.WriteU32(tag);
@@ -107,9 +244,27 @@ RecordPlayback::RecordPlayback(uint32_t width, uint32_t height,
                                int32_t target_version)
     : width_(width), height_(height), target_version_(target_version) {}
 
-void RecordPlayback::BeginRecording() { init_save_count = Save(); }
+RecordPlayback::~RecordPlayback() {
+  if (delegate_ != nullptr) {
+    skity_canvas_destroy(delegate_);
+    delegate_ = nullptr;
+  }
+}
 
-void RecordPlayback::EndRecording() { RestoreToCount(init_save_count); }
+// The save / restore depth bookkeeping the Canvas base used to perform lives
+// inside the core delegate now; the serialized bytes come solely from the
+// On* recorders, so driving them directly keeps the format identical.
+void RecordPlayback::BeginRecording() { OnSave(); }
+
+void RecordPlayback::EndRecording() { OnRestore(); }
+
+skity_canvas RecordPlayback::GetDelegateCanvas() {
+  if (delegate_ == nullptr) {
+    auto cb = delegate_callbacks();
+    delegate_ = skity_canvas_create_delegate(&cb, this);
+  }
+  return delegate_;
+}
 
 void RecordPlayback::Serialize(WriteStream& stream, const SerialProc* proc,
                                TypefaceSet* top_typeface_set) {
@@ -166,7 +321,7 @@ std::unique_ptr<RecordPlayback> RecordPlayback::CreateFromStream(
   return playback;
 }
 
-void RecordPlayback::OnClipRect(Rect const& rect, ClipOp op) {
+void RecordPlayback::OnClipRect(Rect const& rect, skity_clip_op op) {
   size_t size = 1 * kUInt32Size + sizeof(rect) + 1 * kUInt32Size;
 
   if (!restore_offset_stack_.empty()) {
@@ -184,7 +339,7 @@ void RecordPlayback::OnClipRect(Rect const& rect, ClipOp op) {
   Validate(init_offset, size);
 }
 
-void RecordPlayback::OnClipPath(Path const& path, ClipOp op) {
+void RecordPlayback::OnClipPath(Path const& path, skity_clip_op op) {
   // add path to path list
   auto path_id = AddPath(path);
 
@@ -205,7 +360,8 @@ void RecordPlayback::OnClipPath(Path const& path, ClipOp op) {
   Validate(offset, size);
 }
 
-void RecordPlayback::OnDrawRect(const Rect& rect, const Paint& paint) {
+void RecordPlayback::OnDrawRect(const Rect& rect,
+                                std::shared_ptr<Paint> paint) {
   // op + paint index + rect
   size_t size = 2 * kUInt32Size + sizeof(rect);
 
@@ -217,7 +373,8 @@ void RecordPlayback::OnDrawRect(const Rect& rect, const Paint& paint) {
   Validate(offset, size);
 }
 
-void RecordPlayback::OnDrawPath(const Path& path, const Paint& paint) {
+void RecordPlayback::OnDrawPath(const Path& path,
+                                std::shared_ptr<Paint> paint) {
   // op + paint index + path index
   size_t size = 3 * kUInt32Size;
 
@@ -231,7 +388,8 @@ void RecordPlayback::OnDrawPath(const Path& path, const Paint& paint) {
   Validate(offset, size);
 }
 
-void RecordPlayback::OnSaveLayer(const Rect& bounds, const Paint& paint) {
+void RecordPlayback::OnSaveLayer(const Rect& bounds,
+                                 std::shared_ptr<Paint> paint) {
   restore_offset_stack_.emplace_back(
       -static_cast<int32_t>(writer32_.BytesWritten()));
 
@@ -257,17 +415,50 @@ void RecordPlayback::OnSaveLayer(const Rect& bounds, const Paint& paint) {
   Validate(offset, size);
 }
 
-void RecordPlayback::OnDrawBlob(const TextBlob* blob, float x, float y,
-                                Paint const& paint) {
+void RecordPlayback::OnDrawBlob(std::shared_ptr<TextBlob> blob, float x,
+                                float y, std::shared_ptr<Paint> paint) {
   // op + paint index + blob index + x/y
   size_t size = 3 * kUInt32Size + sizeof(float) * 2;
 
   auto offset = AddDraw(DrawType::DRAW_TEXT_BLOB, size);
 
-  auto copyed_blob = std::make_shared<TextBlob>(blob->GetTextRun());
+  // Retain the blob by re-creating it through the C ABI (multi-run form),
+  // keeping TextRun construction on the core side.
+  std::vector<core_bridge::TextRunData> runs;
+  core_bridge::WithTextBlobHandle(blob.get(), [&](skity_text_blob handle) {
+    int32_t run_count =
+        handle != nullptr ? skity_text_blob_get_run_count(handle) : 0;
+    for (int32_t i = 0; i < run_count; i++) {
+      core_bridge::TextRunData data;
+      skity_font font_handle = skity_text_blob_get_run_font(handle, i);
+      data.font = skity::capi::get_impl<skity_font_s, Font>(
+          font_handle, SKITY_OBJECT_TYPE_FONT);
+      skity_font_destroy(font_handle);
 
-  AddPaint(paint);
-  AddTextBlob(copyed_blob);
+      int32_t glyph_count = skity_text_blob_get_run_glyph_count(handle, i);
+      data.glyphs.resize(glyph_count > 0 ? glyph_count : 0);
+      if (!data.glyphs.empty()) {
+        skity_text_blob_get_run_glyphs(handle, i, data.glyphs.data(),
+                                       glyph_count);
+      }
+      int32_t px = skity_text_blob_get_run_pos_x(handle, i, nullptr, 0);
+      int32_t py = skity_text_blob_get_run_pos_y(handle, i, nullptr, 0);
+      data.pos_x.resize(px > 0 ? px : 0);
+      data.pos_y.resize(py > 0 ? py : 0);
+      if (!data.pos_x.empty()) {
+        skity_text_blob_get_run_pos_x(handle, i, data.pos_x.data(), px);
+      }
+      if (!data.pos_y.empty()) {
+        skity_text_blob_get_run_pos_y(handle, i, data.pos_y.data(), py);
+      }
+      runs.emplace_back(std::move(data));
+    }
+    return 0;
+  });
+  auto retained = core_bridge::MakeTextBlobFromRuns(runs);
+
+  AddPaint(std::move(paint));
+  AddTextBlob(retained);
   AddFloat(x);
   AddFloat(y);
 
@@ -277,7 +468,7 @@ void RecordPlayback::OnDrawBlob(const TextBlob* blob, float x, float y,
 void RecordPlayback::OnDrawImageRect(std::shared_ptr<Image> image,
                                      const Rect& src, const Rect& dst,
                                      const SamplingOptions& sampling,
-                                     Paint const* paint) {
+                                     std::shared_ptr<Paint> paint) {
   size_t size = 3 * kUInt32Size + 2 * sizeof(Rect) +
                 (sizeof(uint32_t)        // maxAniso
                  + 3 * sizeof(uint32_t)  // bool32 + [2 floats | 2 ints]
@@ -300,12 +491,13 @@ void RecordPlayback::OnDrawImageRect(std::shared_ptr<Image> image,
 
 void RecordPlayback::OnDrawGlyphs(uint32_t count, const GlyphID glyphs[],
                                   const float position_x[],
-                                  const float position_y[], const Font& font,
-                                  const Paint& paint) {
+                                  const float position_y[],
+                                  std::shared_ptr<Font> font,
+                                  std::shared_ptr<Paint> paint) {
   // not support
 }
 
-void RecordPlayback::OnDrawPaint(Paint const& paint) {
+void RecordPlayback::OnDrawPaint(std::shared_ptr<Paint> paint) {
   // op + paint index
   size_t size = 2 * kUInt32Size;
 
@@ -370,13 +562,13 @@ void RecordPlayback::OnScale(float sx, float sy) {
 }
 
 void RecordPlayback::OnRotate(float degrees) {
-  auto m = Matrix::RotateDeg(degrees);
+  auto m = core_bridge::RotateDegMatrix(degrees);
 
   OnConcat(m);
 }
 
 void RecordPlayback::OnRotate(float degree, float px, float py) {
-  auto m = Matrix::RotateDeg(degree, {px, py});
+  auto m = core_bridge::RotateDegMatrix(degree, Vec2{px, py});
 
   OnConcat(m);
 }
@@ -446,7 +638,7 @@ void RecordPlayback::FlattenToBuffer(BinaryWriteBuffer& buffer) {
     write_tag_size(buffer, SK_PICT_PAINT_BUFFER_TAG, num_paints);
 
     for (const auto& paint : paints_) {
-      buffer.WritePaint(paint);
+      buffer.WritePaint(*paint);
     }
   }
 
@@ -522,9 +714,56 @@ void RecordPlayback::WriteTypefaces(WriteStream& stream,
   for (int32_t i = 0; i < count; i++) {
     const auto& typeface = typeface_set.typefaces[i];
 
-    auto desc = typeface->GetFontDescriptor();
+    // Descriptor fields read through the C ABI; the legacy FontDescriptor
+    // is never materialized on this side.
+    FontDescriptorFields fields;
 
-    SerializeFontDescriptor(stream, desc);
+    {
+      std::shared_ptr<Typeface> view(typeface.get(), [](Typeface*) {});
+      skity_typeface handle = skity::capi::alloc_handle<skity_typeface_s>(
+          SKITY_OBJECT_TYPE_TYPEFACE, 0, std::move(view));
+
+      skity_font_descriptor fd{};
+      int32_t family_len =
+          skity_typeface_get_font_descriptor(handle, &fd, nullptr, 0);
+      fields.family_name.resize(family_len > 0 ? family_len - 1 : 0);
+      skity_typeface_get_font_descriptor(handle, &fd, fields.family_name.data(),
+                                         family_len);
+
+      int32_t full_len = skity_typeface_get_full_name(handle, nullptr, 0);
+      fields.full_name.resize(full_len > 0 ? full_len - 1 : 0);
+      skity_typeface_get_full_name(handle, fields.full_name.data(), full_len);
+
+      int32_t post_len =
+          skity_typeface_get_post_script_name(handle, nullptr, 0);
+      fields.post_script_name.resize(post_len > 0 ? post_len - 1 : 0);
+      skity_typeface_get_post_script_name(
+          handle, fields.post_script_name.data(), post_len);
+
+      int32_t coord_count =
+          skity_typeface_get_variation_position(handle, nullptr, 0);
+      std::vector<skity_variation_coordinate> coords(
+          coord_count > 0 ? coord_count : 0);
+      if (!coords.empty()) {
+        skity_typeface_get_variation_position(
+            handle, coords.data(), static_cast<int32_t>(coords.size()));
+      }
+      for (const auto& coord : coords) {
+        fields.variations.emplace_back(coord.axis, coord.value);
+      }
+
+      fields.collection_index = fd.collection_index;
+      fields.factory_id = fd.factory_id;
+      // The style components come back through the same packing the legacy
+      // FontStyle word uses.
+      fields.style_packed = (static_cast<uint32_t>(fd.style.weight) << 16) |
+                            (static_cast<uint32_t>(fd.style.width) << 8) |
+                            static_cast<uint32_t>(fd.style.slant);
+
+      skity_typeface_destroy(handle);
+    }
+
+    SerializeFontDescriptorFields(stream, fields);
 
     if (typeface) {
       auto data = typeface->GetData();
@@ -590,10 +829,14 @@ void RecordPlayback::AddMatrix(const Matrix& matrix) {
 
 void RecordPlayback::AddRect(const Rect& rect) { writer32_.WriteRect(rect); }
 
-void RecordPlayback::AddPaintPtr(const Paint* paint) {
+void RecordPlayback::AddPaint(std::shared_ptr<Paint> paint) {
+  AddPaintPtr(std::move(paint));
+}
+
+void RecordPlayback::AddPaintPtr(std::shared_ptr<Paint> paint) {
   if (paint) {
-    paints_.push_back(*paint);
-    AddInt(paints_.size());
+    paints_.push_back(std::move(paint));
+    AddInt(static_cast<int32_t>(paints_.size()));
   } else {
     AddInt(0);
   }
@@ -642,7 +885,7 @@ bool RecordPlayback::ParseStreamTag(ReadStream& stream, uint32_t tag,
         return false;
       }
 
-      op_data_ = Data::MakeFromMalloc(std::malloc(size), size);
+      op_data_ = core_bridge::MakeDataFromMalloc(std::malloc(size), size);
 
       auto ptr = op_data_->RawData();
 
@@ -682,9 +925,16 @@ bool RecordPlayback::ParseStreamTag(ReadStream& stream, uint32_t tag,
         auto typeface = io::TypefaceMakeFromStream(stream);
 
         if (!typeface) {
-          auto fm = FontManager::RefDefault();
-
-          typeface = fm->GetDefaultTypeface(FontStyle::Normal());
+          // FontStyle::Normal() == weight 400 / width 5 / upright.
+          skity_font_style style = {400, 5, SKITY_FONT_SLANT_UPRIGHT};
+          skity_font_manager fm = skity_font_manager_ref_default();
+          skity_typeface tf =
+              fm != nullptr ? skity_font_manager_get_default_typeface(fm, style)
+                            : nullptr;
+          skity_font_manager_destroy(fm);
+          typeface = skity::capi::get_impl<skity_typeface_s, Typeface>(
+              tf, SKITY_OBJECT_TYPE_TYPEFACE);
+          skity_typeface_destroy(tf);
         }
 
         if (!typeface) {
@@ -708,7 +958,8 @@ bool RecordPlayback::ParseStreamTag(ReadStream& stream, uint32_t tag,
     } break;
 
     case SK_PICT_BUFFER_SIZE_TAG: {
-      auto buffer_data = Data::MakeFromMalloc(std::malloc(size), size);
+      auto buffer_data =
+          core_bridge::MakeDataFromMalloc(std::malloc(size), size);
 
       if (stream.Read(const_cast<void*>(buffer_data->RawData()), size) !=
           size) {
@@ -747,11 +998,11 @@ bool RecordPlayback::ParseBufferTag(ReadBuffer& read_buffer, uint32_t tag,
       for (uint32_t i = 0; i < count; i++) {
         auto paint = read_buffer.ReadPaint();
 
-        if (!read_buffer.Validate(paint.has_value())) {
+        if (!read_buffer.Validate(paint != nullptr)) {
           return false;
         }
 
-        paints_.emplace_back(paint.value());
+        paints_.emplace_back(std::move(paint));
       }
     } break;
     case SK_PICT_PATH_BUFFER_TAG: {
@@ -795,7 +1046,8 @@ bool RecordPlayback::ParseBufferTag(ReadBuffer& read_buffer, uint32_t tag,
         return false;
       }
 
-      auto reader_data = Data::MakeFromMalloc(std::malloc(size), size);
+      auto reader_data =
+          core_bridge::MakeDataFromMalloc(std::malloc(size), size);
       if (!read_buffer.ReadArrayN<uint8_t>(
               const_cast<void*>(reader_data->RawData()), size)) {
         return false;
@@ -851,16 +1103,9 @@ const Path& RecordPlayback::GetPath(ReadBuffer& buffer) const {
              : kEmptyPath;
 }
 
-const Paint& RecordPlayback::RequiredPaint(ReadBuffer& buffer) const {
-  static Paint kEmptyPaint;
-
-  auto paint = OptionalPaint(buffer);
-
-  if (buffer.Validate(paint != nullptr)) {
-    return *paint;
-  }
-
-  return kEmptyPaint;
+const Paint* RecordPlayback::RequiredPaint(ReadBuffer& buffer) const {
+  auto* paint = OptionalPaint(buffer);
+  return buffer.Validate(paint != nullptr) ? paint : nullptr;
 }
 
 const Paint* RecordPlayback::OptionalPaint(ReadBuffer& buffer) const {
@@ -871,7 +1116,7 @@ const Paint* RecordPlayback::OptionalPaint(ReadBuffer& buffer) const {
   }
 
   return buffer.Validate(index > 0 && index <= paints_.size())
-             ? &paints_[index - 1]
+             ? paints_[index - 1].get()
              : nullptr;
 }
 

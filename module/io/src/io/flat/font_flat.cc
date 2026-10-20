@@ -5,6 +5,7 @@
 #include <skity/text/font.hpp>
 #include <skity/text/typeface.hpp>
 
+#include "src/io/core_bridge.hpp"
 #include "src/io/memory_read.hpp"
 #include "src/io/memory_writer.hpp"
 
@@ -87,25 +88,29 @@ template <>
 std::optional<Font> ReadFromMemory(ReadBuffer& buffer) {
   auto packed = buffer.ReadU32();
 
-  Font font;
+  auto font = core_bridge::MakeFont();
+
+  if (!font) {
+    return std::nullopt;
+  }
 
   if (packed & kSize_Is_Byte_Bit) {
-    font.SetSize(
-        static_cast<float>((packed >> kShift_for_Size) & kMask_For_Size));
+    core_bridge::SetFontSize(
+        font, static_cast<float>((packed >> kShift_for_Size) & kMask_For_Size));
   } else {
-    font.SetSize(buffer.ReadFloat());
+    core_bridge::SetFontSize(font, buffer.ReadFloat());
   }
 
   if (packed & kHas_ScaleX_Bit) {
-    font.SetScaleX(buffer.ReadFloat());
+    font->SetScaleX(buffer.ReadFloat());
   }
 
   if (packed & kHas_SkewX_Bit) {
-    font.SetSkewX(buffer.ReadFloat());
+    font->SetSkewX(buffer.ReadFloat());
   }
 
   if (packed & kHas_Typeface_Bit) {
-    font.SetTypeface(buffer.ReadTypeface());
+    font->SetTypeface(buffer.ReadTypeface());
   }
 
   auto edging = (packed >> kShift_For_Edging) & kMask_For_Edging;
@@ -114,16 +119,16 @@ std::optional<Font> ReadFromMemory(ReadBuffer& buffer) {
     edging = 0;
   }
 
-  font.SetEdging(static_cast<Font::Edging>(edging));
+  font->SetEdging(static_cast<Font::Edging>(edging));
 
   auto hinting = (packed >> kShift_For_Hinting) & kMask_For_Hinting;
   if (hinting > static_cast<uint32_t>(Font::FontHinting::kFull)) {
     hinting = 0;
   }
-  font.SetHinting(static_cast<Font::FontHinting>(hinting));
+  font->SetHinting(static_cast<Font::FontHinting>(hinting));
 
   if (buffer.IsValid()) {
-    return {font};
+    return Font{*font};
   } else {
     return std::nullopt;
   }

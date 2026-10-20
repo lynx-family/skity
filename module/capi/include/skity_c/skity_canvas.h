@@ -502,6 +502,155 @@ SKITY_C_API uint32_t skity_canvas_get_height(skity_canvas canvas);
 SKITY_C_API skity_canvas skity_canvas_make_software_canvas(skity_bitmap bitmap);
 
 /**
+ * @brief Callback set invoked by a delegate canvas.
+ *
+ * A delegate canvas is a Canvas whose recording-relevant operations are
+ * forwarded to these C callbacks. It exists so a C consumer can observe /
+ * record the op stream a DisplayList replay produces: pass the delegate
+ * handle to skity_display_list_draw and implement the subset of callbacks
+ * the replay triggers.
+ *
+ * Contract:
+ *  - Every callback may be NULL; the corresponding op is then dropped.
+ *  - Object handles passed to callbacks (skity_paint / skity_path /
+ *    skity_text_blob / skity_font / skity_image) are borrowed: they are valid
+ *    only for the duration of the callback. Copy out whatever must survive
+ *    (e.g. via the skity_path / skity_paint accessors); do not store the
+ *    handles.
+ *  - @p paint in on_draw_image_rect is NULL when the op carries no paint.
+ *  - Ops without a callback in this struct (drawing lines, circles, ovals,
+ *    arcs, rounded rects; clipping rounded rects) are converted by the core
+ *    to paths and re-delivered through on_draw_path / on_clip_path — the same
+ *    op granularity a serialized recording captures.
+ */
+typedef struct skity_canvas_delegate_callbacks {
+  /** @brief Matrix and clip state was pushed on the save stack. */
+  void (*on_save)(void* userdata);
+
+  /** @brief Matrix and clip state was popped from the save stack. */
+  void (*on_restore)(void* userdata);
+
+  /**
+   * @brief A save-layer block started; a matching on_restore composites it.
+   * @param bounds  location and size of the layer's backing store
+   * @param paint   alpha, blend mode, and mask filter of the composite
+   */
+  void (*on_save_layer)(void* userdata, const skity_rect* bounds,
+                        skity_paint paint);
+
+  /** @brief Translate the current matrix by (dx, dy). */
+  void (*on_translate)(void* userdata, float dx, float dy);
+
+  /** @brief Scale the current matrix by (sx, sy). */
+  void (*on_scale)(void* userdata, float sx, float sy);
+
+  /** @brief Rotate the current matrix by @p degrees (clockwise). */
+  void (*on_rotate)(void* userdata, float degrees);
+
+  /** @brief Rotate the current matrix by @p degrees about (px, py). */
+  void (*on_rotate_point)(void* userdata, float degrees, float px, float py);
+
+  /** @brief Skew the current matrix by (sx, sy). */
+  void (*on_skew)(void* userdata, float sx, float sy);
+
+  /** @brief Premultiply @p matrix into the current matrix. */
+  void (*on_concat)(void* userdata, const skity_matrix* matrix);
+
+  /** @brief Replace the current matrix with @p matrix. */
+  void (*on_set_matrix)(void* userdata, const skity_matrix* matrix);
+
+  /** @brief Reset the current matrix to the identity matrix. */
+  void (*on_reset_matrix)(void* userdata);
+
+  /**
+   * @brief Combine @p rect with the clip using @p op.
+   * @param op  clip operation applied to the rect
+   */
+  void (*on_clip_rect)(void* userdata, const skity_rect* rect,
+                       skity_clip_op op);
+
+  /**
+   * @brief Combine @p path with the clip using @p op.
+   * @param op  clip operation applied to the path
+   */
+  void (*on_clip_path)(void* userdata, skity_path path, skity_clip_op op);
+
+  /** @brief Fill the current clip with @p paint. */
+  void (*on_draw_paint)(void* userdata, skity_paint paint);
+
+  /**
+   * @brief Draw @p rect with @p paint.
+   * @param paint  stroke or fill, blend, color, and so on, used to draw
+   */
+  void (*on_draw_rect)(void* userdata, const skity_rect* rect,
+                       skity_paint paint);
+
+  /**
+   * @brief Draw @p path with @p paint.
+   * @param paint  stroke or fill, blend, color, and so on, used to draw
+   */
+  void (*on_draw_path)(void* userdata, skity_path path, skity_paint paint);
+
+  /**
+   * @brief Draw @p blob with its origin at (x, y) using @p paint.
+   * @param blob   text blob to draw
+   * @param x      origin of the text blob on the x-axis
+   * @param y      baseline of the text blob on the y-axis
+   * @param paint  color, blend, and so on, used to draw
+   */
+  void (*on_draw_blob)(void* userdata, skity_text_blob blob, float x, float y,
+                       skity_paint paint);
+
+  /**
+   * @brief Draw the sub-rectangle @p src of @p image into @p dst.
+   * @param image     image to draw
+   * @param src       sub-rectangle of the image to draw
+   * @param dst       destination rectangle to draw into
+   * @param sampling  sampling options used to filter the image
+   * @param paint     paint modulating the image, or NULL for none
+   */
+  void (*on_draw_image_rect)(void* userdata, skity_image image,
+                             const skity_rect* src, const skity_rect* dst,
+                             const skity_sampling_options* sampling,
+                             skity_paint paint);
+
+  /**
+   * @brief Draw a run of @p count glyphs with @p font and @p paint.
+   * @param count        number of glyphs to draw
+   * @param glyphs       array of glyph IDs, length @p count
+   * @param positions_x  x position of each glyph, length @p count
+   * @param positions_y  y position of each glyph, length @p count
+   * @param font         font used to render the glyphs
+   * @param paint        color, blend, and so on, used to draw
+   */
+  void (*on_draw_glyphs)(void* userdata, uint32_t count, const uint16_t* glyphs,
+                         const float* positions_x, const float* positions_y,
+                         skity_font font, skity_paint paint);
+
+  /**
+   * @brief The delegate canvas is being destroyed. Release @p userdata and
+   *        any resources the callbacks hold. May be NULL.
+   */
+  void (*on_destroy)(void* userdata);
+} skity_canvas_delegate_callbacks;
+
+/**
+ * @brief Create a canvas that forwards its operation stream to @p callbacks.
+ *
+ * The returned canvas is owning: release it with skity_canvas_destroy, which
+ * deletes the underlying canvas and then invokes on_destroy (when set). It is
+ * a pure op observer — nothing is rasterized; feed it to
+ * skity_display_list_draw (or call the skity_canvas drawing entries on it) to
+ * drive the callbacks.
+ *
+ * @param callbacks  callback table; copied by the canvas, must not be NULL
+ * @param userdata   caller-supplied pointer passed back to every callback
+ * @return a canvas handle, or NULL when @p callbacks is NULL
+ */
+SKITY_C_API skity_canvas skity_canvas_create_delegate(
+    const skity_canvas_delegate_callbacks* callbacks, void* userdata);
+
+/**
  * @brief Release the canvas wrapper. For a canvas obtained from a surface or
  *        recorder the underlying Canvas object is not deleted here; for a
  *        canvas created with skity_canvas_make_software_canvas the underlying

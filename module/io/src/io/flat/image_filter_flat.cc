@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "src/io/core_bridge.hpp"
 #include "src/io/flat/blender_flat.hpp"
 #include "src/io/memory_read.hpp"
 #include "src/picture_priv.hpp"
@@ -124,7 +125,7 @@ std::shared_ptr<ImageFilter> ReadBlurImageFilter(ReadBuffer& buffer) {
   auto tile_mode = static_cast<TileMode>(buffer.ReadU32());
   (void)tile_mode;  // skip tile_mode
 
-  return ImageFilters::Blur(sigma_x, sigma_y);
+  return core_bridge::MakeImageFilterBlur(sigma_x, sigma_y);
 }
 
 std::shared_ptr<ImageFilter> ReadColorFilterImageFilter(ReadBuffer& buffer) {
@@ -135,12 +136,12 @@ std::shared_ptr<ImageFilter> ReadColorFilterImageFilter(ReadBuffer& buffer) {
 
   auto color_filter = buffer.ReadColorFilter();
 
-  auto outer = ImageFilters::ColorFilter(color_filter);
+  auto outer = core_bridge::MakeImageFilterColorFilter(color_filter);
 
   if (common.inputs[0] != nullptr) {
     // compose color filter with input
 
-    return ImageFilters::Compose(outer, common.inputs[0]);
+    return core_bridge::MakeImageFilterCompose(outer, common.inputs[0]);
   }
 
   return outer;
@@ -159,7 +160,7 @@ std::shared_ptr<ImageFilter> ReadComposeImageFilter(ReadBuffer& buffer) {
   auto outer = common.inputs[0];
   auto inner = common.inputs[1];
 
-  return ImageFilters::Compose(outer, inner);
+  return core_bridge::MakeImageFilterCompose(outer, inner);
 }
 
 void SkipCropImageFilter(ReadBuffer& buffer) {
@@ -367,10 +368,10 @@ std::shared_ptr<ImageFilter> ReadMatrixTransformImageFilter(
     sampling = buffer.ReadSamplingOptions();
   }
 
-  auto filter = ImageFilters::MatrixTransform(matrix.value());
+  auto filter = core_bridge::MakeImageFilterMatrixTransform(matrix.value());
 
   if (common.inputs[0] != nullptr) {
-    return ImageFilters::Compose(filter, common.inputs[0]);
+    return core_bridge::MakeImageFilterCompose(filter, common.inputs[0]);
   }
 
   return filter;
@@ -387,10 +388,10 @@ std::shared_ptr<ImageFilter> ReadOffsetImageFilter(ReadBuffer& buffer) {
 
   Matrix matrix = Matrix::Translate(offset.x, offset.y);
 
-  auto filter = ImageFilters::MatrixTransform(matrix);
+  auto filter = core_bridge::MakeImageFilterMatrixTransform(matrix);
 
   if (common.inputs[0] != nullptr) {
-    return ImageFilters::Compose(filter, common.inputs[0]);
+    return core_bridge::MakeImageFilterCompose(filter, common.inputs[0]);
   }
 
   return filter;
@@ -415,13 +416,13 @@ std::shared_ptr<ImageFilter> ReadMorphologyImageFilter(ReadBuffer& buffer) {
   std::shared_ptr<ImageFilter> filter;
 
   if (type == 1) {  // Dilate
-    filter = ImageFilters::Dilate(width, height);
+    filter = core_bridge::MakeImageFilterDilate(width, height);
   } else if (type == 0) {  // Erode
-    filter = ImageFilters::Erode(width, height);
+    filter = core_bridge::MakeImageFilterErode(width, height);
   }
 
   if (common.inputs[0] != nullptr) {
-    return ImageFilters::Compose(filter, common.inputs[0]);
+    return core_bridge::MakeImageFilterCompose(filter, common.inputs[0]);
   }
 
   return filter;
@@ -468,7 +469,8 @@ std::shared_ptr<ImageFilter> ReadLocalMatrixImageFilter(ReadBuffer& buffer) {
     return {};
   }
 
-  return ImageFilters::LocalMatrix(common.inputs[0], matrix.value());
+  return core_bridge::MakeImageFilterLocalMatrix(common.inputs[0],
+                                                 matrix.value());
 }
 
 std::shared_ptr<ImageFilter> ReadDropShadowImageFilter(ReadBuffer& buffer) {
@@ -488,8 +490,8 @@ std::shared_ptr<ImageFilter> ReadDropShadowImageFilter(ReadBuffer& buffer) {
 
   auto shadow_only = buffer.ReadU32();
 
-  return ImageFilters::DropShadow(dx, dy, sigma_x, sigma_y, color,
-                                  common.inputs[0]);
+  return core_bridge::MakeImageFilterDropShadow(dx, dy, sigma_x, sigma_y, color,
+                                                common.inputs[0], nullptr);
 }
 
 }  // namespace

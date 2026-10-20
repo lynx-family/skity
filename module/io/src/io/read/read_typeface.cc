@@ -4,14 +4,14 @@
 
 #include "src/io/read/read_typeface.hpp"
 
+#include "src/io/core_bridge.hpp"
 #include "src/io/flat/font_desc_flat.hpp"
 
 namespace skity {
 namespace io {
 
 std::shared_ptr<Typeface> TypefaceMakeFromStream(ReadStream& stream) {
-  FontDescriptor desc;
-  if (!DeserializeFontDescriptor(stream, desc)) {
+  if (!SkipFontDescriptor(stream)) {
     return {};
   }
 
@@ -21,15 +21,14 @@ std::shared_ptr<Typeface> TypefaceMakeFromStream(ReadStream& stream) {
     return {};
   }
 
-  auto data = Data::MakeFromMalloc(std::malloc(length), length);
+  auto data = core_bridge::MakeDataFromMalloc(std::malloc(length), length);
 
-  if (stream.Read(const_cast<void*>(data->RawData()), length) != length) {
+  if (!data ||
+      stream.Read(const_cast<void*>(data->RawData()), length) != length) {
     return {};
   }
 
-  auto fm = FontManager::RefDefault();
-
-  return fm->MakeFromData(data);
+  return core_bridge::MakeTypefaceFromBytes(data->Bytes(), data->Size());
 }
 
 }  // namespace io

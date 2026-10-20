@@ -2,10 +2,14 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include "src/picture.hpp"
+
+#include <skity_c/skity_recorder.h>
+
 #include <array>
 #include <cstring>
-#include <skity/io/picture.hpp>
 
+#include "src/io/core_bridge.hpp"
 #include "src/io/memory_read.hpp"
 #include "src/io/memory_writer.hpp"
 #include "src/picture_priv.hpp"
@@ -18,6 +22,49 @@ namespace {
 template <typename T>
 static constexpr bool IsAlign4(T x) {
   return 0 == (x & 3);
+}
+
+// Borrowed-handle constructors for replaying recorded objects through the
+// canvas C ABI. Each wrapper views the referenced object without owning it;
+// the C entry point only reads it synchronously.
+skity_path wrap_path(const Path& path) {
+  std::shared_ptr<Path> impl(const_cast<Path*>(&path), [](Path*) {});
+  return skity::capi::alloc_handle<skity_path_s>(SKITY_OBJECT_TYPE_PATH, 0,
+                                                 std::move(impl));
+}
+
+skity_paint wrap_paint(const Paint* paint) {
+  if (paint == nullptr) {
+    return nullptr;
+  }
+  std::shared_ptr<Paint> impl(const_cast<Paint*>(paint), [](Paint*) {});
+  return skity::capi::alloc_handle<skity_paint_s>(SKITY_OBJECT_TYPE_PAINT, 0,
+                                                  std::move(impl));
+}
+
+skity_text_blob wrap_blob(const std::shared_ptr<TextBlob>& blob) {
+  if (blob == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_text_blob_s>(
+      SKITY_OBJECT_TYPE_TEXT_BLOB, SKITY_HANDLE_OWNING, blob);
+}
+
+skity_image wrap_image(const std::shared_ptr<Image>& image) {
+  if (image == nullptr) {
+    return nullptr;
+  }
+  return skity::capi::alloc_handle<skity_image_s>(SKITY_OBJECT_TYPE_IMAGE,
+                                                  SKITY_HANDLE_OWNING, image);
+}
+
+skity_sampling_options to_sampling(const SamplingOptions& so) {
+  skity_sampling_options out{};
+  out.filter = static_cast<skity_filter_mode>(so.filter);
+  out.mipmap = static_cast<skity_mipmap_mode>(so.mipmap);
+  out.cubic_b = so.cubic.B;
+  out.cubic_c = so.cubic.C;
+  return out;
 }
 
 struct PictureInfo {
@@ -101,9 +148,10 @@ bool get_spot_shadow_transform(const Vec3& light_pos, float light_radius,
     return z_plane.x * x + z_plane.y * y + z_plane.z;
   };
 
-  auto occluder_height = height_func(bounds.CenterX(), bounds.CenterY());
+  auto occluder_height = height_func(core_bridge::RectCenterX(bounds),
+                                     core_bridge::RectCenterY(bounds));
 
-  if (ctm.HasPersp()) {  // dose not support it for now
+  if (core_bridge::MatrixHasPersp(ctm)) {  // dose not support it for now
     return false;
   }
 
@@ -185,7 +233,15 @@ std::unique_ptr<Picture> Picture::MakeFromDisplayList(DisplayList* dl) {
   auto rect = dl->GetBounds();
   auto playback = std::make_unique<RecordPlayback>(rect.Width(), rect.Height());
 
-  dl->Draw(playback.get());
+  // Replay the display list through the C ABI onto the recorder's delegate
+  // canvas; the op stream re-enters RecordPlayback through its callbacks.
+  std::shared_ptr<DisplayList> borrowed(dl, [](DisplayList*) {});
+  skity_display_list list = skity::capi::alloc_handle<skity_display_list_s>(
+      SKITY_OBJECT_TYPE_DISPLAY_LIST, 0, std::move(borrowed));
+  if (list != nullptr) {
+    skity_display_list_draw(list, playback->GetDelegateCanvas());
+    skity_display_list_destroy(list);
+  }
 
   std::unique_ptr<Picture> picture(new Picture(std::move(playback)));
   picture->cull_rect_ = rect;
@@ -214,14 +270,25 @@ void Picture::Serialize(WriteStream& stream, const SerialProc* proc,
 }
 
 void Picture::PlayBack(Canvas* canvas) {
+  if (canvas == nullptr) {
+    return;
+  }
+  // The C-ABI playback path takes a handle; wrap the caller's canvas
+  // (non-owning) for the duration of the replay.
+  std::shared_ptr<Canvas> canvas_view(canvas, [](Canvas*) {});
+  skity_canvas canvas_handle = skity::capi::alloc_handle<skity_canvas_s>(
+      SKITY_OBJECT_TYPE_CANVAS, 0, std::move(canvas_view));
+
   ReadBuffer buffer(playback_->GetOpData()->RawData(),
                     playback_->GetOpData()->Size());
 
   buffer.SetVersion(playback_->GetTargetVersion());
 
-  auto matrix = canvas->GetTotalMatrix();
+  Matrix matrix{};
+  skity_canvas_get_total_matrix(canvas_handle,
+                                reinterpret_cast<skity_matrix*>(&matrix));
 
-  auto restore = canvas->Save();
+  auto restore = skity_canvas_save(canvas_handle);
 
   size_t offset = 0;
   while (!buffer.IsEOF() && buffer.IsValid()) {
@@ -237,14 +304,16 @@ void Picture::PlayBack(Canvas* canvas) {
     }
 
     if (!buffer.Validate(size > 0 && op > UNUSED && op <= LAST_DRAWTYPE_ENUM)) {
-      canvas->RestoreToCount(restore);
+      skity_canvas_restore_to_count(canvas_handle, restore);
+      skity_canvas_destroy(canvas_handle);
       return;
     }
 
-    HandleOp(buffer, static_cast<DrawType>(op), size, canvas, matrix);
+    HandleOp(buffer, static_cast<DrawType>(op), size, canvas_handle, matrix);
   }
 
-  canvas->RestoreToCount(restore);
+  skity_canvas_restore_to_count(canvas_handle, restore);
+  skity_canvas_destroy(canvas_handle);
 }
 
 std::unique_ptr<Picture> Picture::MakeFromStream(ReadStream& stream,
@@ -311,7 +380,7 @@ void SkipPictureInBuffer(ReadBuffer& buffer) {
 }
 
 void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
-                       Canvas* canvas, const Matrix& current_matrix) {
+                       skity_canvas canvas, const Matrix& current_matrix) {
   auto op = static_cast<DrawType>(type);
 
   auto validate_offset = [&buffer](size_t offset) {
@@ -339,13 +408,13 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       validate_offset(offset_to_restore);
       BREAK_IF_ERROR(buffer);
 
-      Canvas::ClipOp clip_op = Canvas::ClipOp::kIntersect;
+      skity_clip_op clip_op = SKITY_CLIP_OP_INTERSECT;
 
       if (un_packed_clip_op == 0) {
-        clip_op = Canvas::ClipOp::kDifference;
+        clip_op = SKITY_CLIP_OP_DIFFERENCE;
       }
 
-      canvas->ClipPath(path, clip_op);
+      skity_canvas_clip_path(canvas, wrap_path(path), clip_op);
     } break;
     case DrawType::CLIP_REGION: {
       // we do not support region struct and don't know how to handle it
@@ -367,13 +436,14 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       validate_offset(offset_to_restore);
       BREAK_IF_ERROR(buffer);
 
-      Canvas::ClipOp clip_op = Canvas::ClipOp::kIntersect;
+      skity_clip_op clip_op = SKITY_CLIP_OP_INTERSECT;
 
       if (un_packed_clip_op == 0) {
-        clip_op = Canvas::ClipOp::kDifference;
+        clip_op = SKITY_CLIP_OP_DIFFERENCE;
       }
 
-      canvas->ClipRect(rect.value(), clip_op);
+      skity_canvas_clip_rect(
+          canvas, reinterpret_cast<const skity_rect*>(&rect.value()), clip_op);
     } break;
 
     case DrawType::CLIP_RRECT: {
@@ -390,20 +460,22 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       validate_offset(offset_to_restore);
       BREAK_IF_ERROR(buffer);
 
-      Canvas::ClipOp clip_op = Canvas::ClipOp::kIntersect;
+      skity_clip_op clip_op = SKITY_CLIP_OP_INTERSECT;
 
       if (un_packed_clip_op == 0) {
-        clip_op = Canvas::ClipOp::kDifference;
+        clip_op = SKITY_CLIP_OP_DIFFERENCE;
       }
 
-      Path path;
-      path.AddRRect(rrect.value());
+      core_bridge::PathBuilder builder;
+      builder.AddRRect(rrect->rect, rrect->radii, Path::Direction::kCW);
+      auto path = builder.Take();
 
-      canvas->ClipPath(path, clip_op);
+      skity_canvas_clip_path(canvas, path ? wrap_path(*path) : nullptr,
+                             clip_op);
     } break;
 
     case DrawType::CLIP_SHADER_IN_PAINT: {
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
 
       auto clip_op = buffer.ReadInt();
 
@@ -426,7 +498,8 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       buffer.Validate(matrix.has_value());
       BREAK_IF_ERROR(buffer);
 
-      canvas->Concat(matrix.value());
+      skity_canvas_concat(
+          canvas, reinterpret_cast<const skity_matrix*>(&matrix.value()));
     } break;
 
     case DrawType::CONCAT44: {
@@ -439,24 +512,18 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
         std::memcpy(column_major_matrix.data(), ptr, 16 * sizeof(float));
       }
 
-      canvas->Concat(Matrix{
-          column_major_matrix[0],
-          column_major_matrix[1],
-          column_major_matrix[2],
-          column_major_matrix[3],
-          column_major_matrix[4],
-          column_major_matrix[5],
-          column_major_matrix[6],
-          column_major_matrix[7],
-          column_major_matrix[8],
-          column_major_matrix[9],
-          column_major_matrix[10],
-          column_major_matrix[11],
-          column_major_matrix[12],
-          column_major_matrix[13],
-          column_major_matrix[14],
-          column_major_matrix[15],
-      });
+      Matrix concat44{
+          column_major_matrix[0],  column_major_matrix[1],
+          column_major_matrix[2],  column_major_matrix[3],
+          column_major_matrix[4],  column_major_matrix[5],
+          column_major_matrix[6],  column_major_matrix[7],
+          column_major_matrix[8],  column_major_matrix[9],
+          column_major_matrix[10], column_major_matrix[11],
+          column_major_matrix[12], column_major_matrix[13],
+          column_major_matrix[14], column_major_matrix[15],
+      };
+      skity_canvas_concat(canvas,
+                          reinterpret_cast<const skity_matrix*>(&concat44));
     } break;
 
     case DrawType::DRAW_ANNOTATION: {
@@ -475,7 +542,7 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
     } break;
 
     case DrawType::DRAW_ARC: {
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
       auto rect = buffer.ReadRect();
 
       buffer.Validate(rect.has_value());
@@ -487,8 +554,9 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
 
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawArc(rect.value(), start_angle, sweep_angle, use_center,
-                      paint);
+      skity_canvas_draw_arc(
+          canvas, reinterpret_cast<const skity_rect*>(&rect.value()),
+          start_angle, sweep_angle, use_center ? 1u : 0u, wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_ATLAS: {
@@ -540,7 +608,7 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
 
       BREAK_IF_ERROR(buffer);
 
-      canvas->Clear(color);
+      skity_canvas_draw_color(canvas, color, SKITY_BLEND_MODE_SRC);
     } break;
 
     case DRAW_DATA: {
@@ -564,7 +632,7 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       break;
 
     case DrawType::DRAW_DRRECT: {
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
 
       auto outer = buffer.ReadRRect();
       auto inner = buffer.ReadRRect();
@@ -572,13 +640,14 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       buffer.Validate(outer.has_value() && inner.has_value());
       BREAK_IF_ERROR(buffer);
 
-      Path path;
-      path.AddRRect(inner.value());
-      path.AddRRect(outer.value());
+      core_bridge::PathBuilder builder;
+      builder.AddRRect(inner->rect, inner->radii, Path::Direction::kCW);
+      builder.AddRRect(outer->rect, outer->radii, Path::Direction::kCW);
+      builder.SetFillType(Path::PathFillType::kEvenOdd);
+      auto path = builder.Take();
 
-      path.SetFillType(Path::PathFillType::kEvenOdd);
-
-      canvas->DrawPath(path, paint);
+      skity_canvas_draw_path(canvas, path ? wrap_path(*path) : nullptr,
+                             wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_EDGEAA_QUAD:
@@ -606,7 +675,9 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
 
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawImage(image, loc.x, loc.y, sampling, paint);
+      skity_sampling_options so = to_sampling(sampling);
+      skity_canvas_draw_image_with_sampling(canvas, wrap_image(image), loc.x,
+                                            loc.y, &so, wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_IMAGE_LATTICE: {
@@ -635,8 +706,11 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       buffer.Validate(center.has_value() && dst.has_value());
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawImageRect(image, center.value(), dst.value(),
-                            SamplingOptions{}, paint);
+      skity_canvas_draw_image_rect(
+          canvas, wrap_image(image),
+          reinterpret_cast<const skity_rect*>(&center.value()),
+          reinterpret_cast<const skity_rect*>(&dst.value()), nullptr,
+          wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_IMAGE_RECT: {
@@ -669,10 +743,14 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
 
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawImageRect(
-          image,
-          src != nullptr ? *src : Rect::MakeWH(image->Width(), image->Height()),
-          dst.value(), sampling, paint);
+      Rect full = Rect::MakeWH(image->Width(), image->Height());
+      const Rect& src_rect = src != nullptr ? *src : full;
+      skity_sampling_options so = to_sampling(sampling);
+      skity_canvas_draw_image_rect(
+          canvas, wrap_image(image),
+          reinterpret_cast<const skity_rect*>(&src_rect),
+          reinterpret_cast<const skity_rect*>(&dst.value()), &so,
+          wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_IMAGE_RECT2: {
@@ -693,36 +771,43 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       // skip the constraint
       (void)buffer.ReadU32();
 
-      canvas->DrawImageRect(image, src.value(), dst.value(), sampling, paint);
+      skity_sampling_options so = to_sampling(sampling);
+      skity_canvas_draw_image_rect(
+          canvas, wrap_image(image),
+          reinterpret_cast<const skity_rect*>(&src.value()),
+          reinterpret_cast<const skity_rect*>(&dst.value()), &so,
+          wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_OVAL: {
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
 
       auto oval = buffer.ReadRect();
 
       buffer.Validate(oval.has_value());
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawOval(oval.value(), paint);
+      skity_canvas_draw_oval(canvas,
+                             reinterpret_cast<const skity_rect*>(&oval.value()),
+                             wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_PAINT: {
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
 
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawPaint(paint);
+      skity_canvas_draw_paint(canvas, wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_BEHIND_PAINT: {
       // not support draw behind paint
       // fallback to draw paint
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
 
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawPaint(paint);
+      skity_canvas_draw_paint(canvas, wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_PATCH: {
@@ -732,13 +817,13 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
     } break;
 
     case DrawType::DRAW_PATH: {
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
 
       const auto& path = playback_->GetPath(buffer);
 
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawPath(path, paint);
+      skity_canvas_draw_path(canvas, wrap_path(path), wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_PICTURE: {
@@ -754,7 +839,7 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
     } break;
 
     case DrawType::DRAW_POINTS: {
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
 
       buffer.ReadU32();  // skip mode
 
@@ -768,14 +853,16 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
     } break;
 
     case DrawType::DRAW_RECT: {
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
 
       auto rect = buffer.ReadRect();
 
       buffer.Validate(rect.has_value());
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawRect(rect.value(), paint);
+      skity_canvas_draw_rect(canvas,
+                             reinterpret_cast<const skity_rect*>(&rect.value()),
+                             wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_REGION: {
@@ -785,14 +872,21 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
     } break;
 
     case DrawType::DRAW_RRECT: {
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
 
       auto rrect = buffer.ReadRRect();
 
       buffer.Validate(rrect.has_value());
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawRRect(rrect.value(), paint);
+      // Same dispatch Canvas::DrawRRect performs: convert to a path and
+      // draw that.
+      core_bridge::PathBuilder builder;
+      builder.AddRRect(rrect->rect, rrect->radii, Path::Direction::kCW);
+      auto rrect_path = builder.Take();
+      skity_canvas_draw_path(canvas,
+                             rrect_path ? wrap_path(*rrect_path) : nullptr,
+                             wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_SHADOW_REC: {
@@ -818,18 +912,24 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
         auto blur_radius = 0.5f * dev_space_outset * one_over_a;
         auto stroke_width = 0.5f * (dev_space_outset - blur_radius);
 
-        auto scale = canvas->GetTotalMatrix().GetScaleY();
+        Matrix ctm{};
+        skity_canvas_get_total_matrix(canvas,
+                                      reinterpret_cast<skity_matrix*>(&ctm));
+        auto scale = ctm.GetScaleY();
 
-        Paint paint;
-        paint.SetColor(ambient_color);
-        paint.SetStrokeWidth(stroke_width /
-                             scale);  // prevent stroke width be scaled
-        paint.SetStyle(Paint::kStrokeAndFill_Style);
+        auto paint = core_bridge::MakePaint();
+        if (paint) {
+          core_bridge::SetPaintColor(paint, ambient_color);
+          // prevent stroke width being scaled
+          core_bridge::SetPaintStrokeWidth(paint, stroke_width / scale);
+          core_bridge::SetPaintStyle(paint, Paint::kStrokeAndFill_Style);
+          core_bridge::SetPaintMaskFilter(
+              paint,
+              core_bridge::MakeMaskFilterBlur(BlurStyle::kNormal, blur_radius));
+        }
 
-        paint.SetMaskFilter(
-            MaskFilter::MakeBlur(BlurStyle::kNormal, blur_radius));
-
-        canvas->DrawPath(path, paint);
+        skity_canvas_draw_path(canvas, wrap_path(path),
+                               paint ? wrap_paint(paint.get()) : nullptr);
       }
 
       if (spot_color > 0) {
@@ -838,27 +938,34 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
         Matrix m{};
         float radius;
 
-        if (!get_spot_shadow_transform(
-                light_post, light_radius, canvas->GetTotalMatrix(), z_panel,
-                path.GetBounds(), diractional, m, radius)) {
+        Matrix ctm{};
+        skity_canvas_get_total_matrix(canvas,
+                                      reinterpret_cast<skity_matrix*>(&ctm));
+        if (!get_spot_shadow_transform(light_post, light_radius, ctm, z_panel,
+                                       core_bridge::GetPathBounds(&path),
+                                       diractional, m, radius)) {
           break;
         }
 
-        Paint paint;
-        paint.SetColor(spot_color);
+        auto paint = core_bridge::MakePaint();
+        if (paint) {
+          core_bridge::SetPaintColor(paint, spot_color);
+          core_bridge::SetPaintMaskFilter(
+              paint,
+              core_bridge::MakeMaskFilterBlur(BlurStyle::kNormal, radius));
+        }
 
-        paint.SetMaskFilter(MaskFilter::MakeBlur(BlurStyle::kNormal, radius));
+        skity_canvas_save(canvas);
+        skity_canvas_concat(canvas, reinterpret_cast<const skity_matrix*>(&m));
+        skity_canvas_draw_path(canvas, wrap_path(path),
+                               paint ? wrap_paint(paint.get()) : nullptr);
 
-        canvas->Save();
-        canvas->Concat(m);
-        canvas->DrawPath(path, paint);
-
-        canvas->Restore();
+        skity_canvas_restore(canvas);
       }
     } break;
 
     case DrawType::DRAW_TEXT_BLOB: {
-      const auto& paint = playback_->RequiredPaint(buffer);
+      const auto* paint = playback_->RequiredPaint(buffer);
 
       const auto& blob = playback_->GetTextBlob(buffer);
 
@@ -867,7 +974,8 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
 
       BREAK_IF_ERROR(buffer);
 
-      canvas->DrawTextBlob(blob, x, y, paint);
+      skity_canvas_draw_text_blob(canvas, wrap_blob(blob), x, y,
+                                  wrap_paint(paint));
     } break;
 
     case DrawType::DRAW_SLUG: {
@@ -883,17 +991,17 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
     } break;
 
     case DrawType::RESTORE:
-      canvas->Restore();
+      skity_canvas_restore(canvas);
       break;
 
     case DrawType::ROTATE: {
       auto deg = buffer.ReadFloat();
 
-      canvas->Rotate(deg);
+      skity_canvas_rotate(canvas, deg);
     } break;
 
     case DrawType::SAVE:
-      canvas->Save();
+      skity_canvas_save(canvas);
       break;
 
     case DrawType::SAVE_BEHIND: {
@@ -906,14 +1014,14 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       }
 
       BREAK_IF_ERROR(buffer);
-      canvas->Save();
+      skity_canvas_save(canvas);
     } break;
 
     case DrawType::SAVE_LAYER_SAVELAYERREC: {
       auto flat_flags = buffer.ReadU32();
 
       std::optional<Rect> bounds;
-      std::optional<Paint> paint;
+      const Paint* paint = nullptr;
 
       std::shared_ptr<ImageFilter> back_drop;
       uint32_t layer_flag = 0;
@@ -929,9 +1037,10 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       }
 
       if (flat_flags & SAVELAYERREC_HAS_BACKDROP) {
-        const auto& paint = playback_->RequiredPaint(buffer);
+        const auto* backdrop_paint = playback_->RequiredPaint(buffer);
 
-        back_drop = paint.GetImageFilter();
+        back_drop = backdrop_paint != nullptr ? backdrop_paint->GetImageFilter()
+                                              : nullptr;
       }
 
       if (flat_flags & SAVELAYERREC_HAS_FLAGS) {
@@ -972,21 +1081,22 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
       BREAK_IF_ERROR(buffer);
 
       if (!bounds.has_value()) {
-        bounds = canvas->GetGlobalClipBounds();
+        Rect clip_bounds{};
+        skity_canvas_get_global_clip_bounds(
+            canvas, reinterpret_cast<skity_rect*>(&clip_bounds));
+        bounds = clip_bounds;
       }
 
-      if (!paint.has_value()) {
-        paint = Paint{};
-      }
-
-      canvas->SaveLayer(bounds.value(), paint.value());
+      skity_canvas_save_layer(
+          canvas, reinterpret_cast<const skity_rect*>(&bounds.value()),
+          wrap_paint(paint));
     } break;
 
     case DrawType::SCALE: {
       auto sx = buffer.ReadFloat();
       auto sy = buffer.ReadFloat();
 
-      canvas->Scale(sx, sy);
+      skity_canvas_scale(canvas, sx, sy);
     } break;
 
     case DrawType::SET_M44: {
@@ -1008,7 +1118,8 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
           matrix_data[12], matrix_data[13], matrix_data[14], matrix_data[15],
       };
 
-      canvas->SetMatrix(m);
+      skity_canvas_set_matrix(canvas,
+                              reinterpret_cast<const skity_matrix*>(&m));
     } break;
 
     case DrawType::SET_MATRIX: {
@@ -1018,21 +1129,22 @@ void Picture::HandleOp(ReadBuffer& buffer, uint32_t type, size_t size,
 
       BREAK_IF_ERROR(buffer);
 
-      canvas->SetMatrix(m.value());
+      skity_canvas_set_matrix(
+          canvas, reinterpret_cast<const skity_matrix*>(&m.value()));
     } break;
 
     case DrawType::SKEW: {
       auto sx = buffer.ReadFloat();
       auto sy = buffer.ReadFloat();
 
-      canvas->Skew(sx, sy);
+      skity_canvas_skew(canvas, sx, sy);
     } break;
 
     case DrawType::TRANSLATE: {
       auto dx = buffer.ReadFloat();
       auto dy = buffer.ReadFloat();
 
-      canvas->Translate(dx, dy);
+      skity_canvas_translate(canvas, dx, dy);
     } break;
 
     default:
