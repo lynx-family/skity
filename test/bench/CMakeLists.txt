@@ -13,6 +13,8 @@ endif()
 
 add_executable(skity_hw_render_bench
     hw_benchmarks.cc
+    case/draw_canvasmark.cc
+    case/draw_canvasmark.hpp
     case/draw_circle.cc
     case/draw_circle.hpp
     case/draw_skp.cc
