@@ -81,6 +81,12 @@ target_compile_definitions(skity-codec PRIVATE -DDISABLE_SKITY_EXPERIMENTAL_WARN
 target_link_libraries(skity-codec PUBLIC skity)
 # the module's own C ABI surface shares the capi handle protocol
 target_link_libraries(skity-codec PRIVATE skity-capi-internal)
+# capi paths must also be listed here directly: INTERFACE-library usage
+# requirements do not survive cmake_to_gn, so "handle.hpp" and the shared
+# skity_c headers would be unresolvable in the GN build
+target_include_directories(skity-codec PRIVATE
+  ${SKITY_ROOT}/module/capi/src
+  ${SKITY_ROOT}/module/capi/include)
 
 if (SKITY_ENABLE_CODEC_GIF)
 
