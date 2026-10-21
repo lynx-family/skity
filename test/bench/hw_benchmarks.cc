@@ -137,6 +137,7 @@ static void StopPerfettoSession(perfetto::TracingSession* session,
 #define SKITY_TRACE_EVENT(name)
 #endif
 
+#include "test/bench/case/draw_canvasmark.hpp"
 #include "test/bench/case/draw_circle.hpp"
 #include "test/bench/case/draw_skp.hpp"
 #include "test/bench/common/bench_context.hpp"
@@ -530,7 +531,19 @@ static void RegisterGUIBenchmark() {
   }
 }
 
+static void RegisterCanvasMarkBenchmarks() {
+  for (auto backend : GetGPUBackendTypes()) {
+    for (auto aa : GetAATypes()) {
+      RegisterBenchmark(skity::MakeCanvasMarkPathsBenchmark(),
+                        GetGPUBackendType(backend), GetAAType(aa));
+      RegisterBenchmark(skity::MakeCanvasMarkSuitsBenchmark(),
+                        GetGPUBackendType(backend), GetAAType(aa));
+    }
+  }
+}
+
 static void RegisterAllBenchmarks() {
+  RegisterCanvasMarkBenchmarks();
   RegisterTigerSKPBenchmark();
   RegisterGUIBenchmark();
   RegisterFillCircleBenchmark();
