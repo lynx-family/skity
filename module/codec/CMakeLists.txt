@@ -190,13 +190,8 @@ if (SKITY_ENABLE_CODEC_WEBP)
 endif()
 
 # codec backends
-# C ABI surface (shipped with the module, exported from libskity-codec)
 target_sources(
   skity-codec
-  PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_codec.h
-    ${CMAKE_CURRENT_LIST_DIR}/src/capi/codec_c.cpp
-
   PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/png_codec.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/png_codec.hpp
@@ -217,13 +212,8 @@ else()
   target_link_libraries(skity-codec PRIVATE ${SKITY_ZLIB_NAME})
 endif()
 
-# C ABI surface (shipped with the module, exported from libskity-codec)
 target_sources(
   skity-codec
-  PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_codec.h
-    ${CMAKE_CURRENT_LIST_DIR}/src/capi/codec_c.cpp
-
   PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/jpeg_codec.cc
   ${CMAKE_CURRENT_LIST_DIR}/src/codec/jpeg_codec.hpp
