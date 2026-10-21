@@ -3,9 +3,9 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <gtest/gtest.h>
-#include <skity_c/skity_canvas.h>
-#include <skity_c/skity_picture.h>
-#include <skity_c/skity_stream.h>
+#include <skity/c/skity_canvas.h>
+#include <skity/c/skity_picture.h>
+#include <skity/c/skity_stream.h>
 
 #include <filesystem>
 #include <skity/recorder/picture_recorder.hpp>

@@ -15,8 +15,8 @@
 // structs are Objective-C-only (skity_mtl_types.h), so mtl_glue.mm
 // walks the info->p_next chain and interprets the extension on its side.
 
-#include <skity_c/skity_surface.h>
-#include <skity_c/skity_texture.h>
+#include <skity/c/skity_surface.h>
+#include <skity/c/skity_texture.h>
 
 #include <memory>
 #include <skity/gpu/gpu_context.hpp>

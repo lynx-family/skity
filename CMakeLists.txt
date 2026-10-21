@@ -171,7 +171,7 @@ endif()
 target_compile_definitions(skity PRIVATE -DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
 
 # Shared C-ABI foundation for module-owned C surfaces: the handle
-# machinery (module/capi/src/handle.hpp) plus the base skity_c headers
+# machinery (module/capi/src/handle.hpp) plus the base skity/c headers
 # (handle macro, result codes, shared value structs) that the codec / io
 # C headers build on. Defined here so it exists before any module
 # subdirectory is configured.

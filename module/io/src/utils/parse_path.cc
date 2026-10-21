@@ -11,7 +11,7 @@
 
 #include "src/utils/parse_path.hpp"
 
-#include <skity_c/skity_stroke.h>
+#include <skity/c/skity_stroke.h>
 
 #include <cassert>
 #include <cstdio>

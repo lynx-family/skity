@@ -4,8 +4,8 @@
 
 #include "test/bench/case/draw_skp.hpp"
 
-#include <skity_c/skity_picture.h>
-#include <skity_c/skity_stream.h>
+#include <skity/c/skity_picture.h>
+#include <skity/c/skity_stream.h>
 
 #include <cassert>
 

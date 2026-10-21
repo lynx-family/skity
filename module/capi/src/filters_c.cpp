@@ -2,10 +2,10 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <skity_c/skity_color_filter.h>
-#include <skity_c/skity_image_filter.h>
-#include <skity_c/skity_mask_filter.h>
-#include <skity_c/skity_path_effect.h>
+#include <skity/c/skity_color_filter.h>
+#include <skity/c/skity_image_filter.h>
+#include <skity/c/skity_mask_filter.h>
+#include <skity/c/skity_path_effect.h>
 
 #include <skity/effect/color_filter.hpp>
 #include <skity/effect/image_filter.hpp>

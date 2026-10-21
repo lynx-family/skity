@@ -4,7 +4,7 @@
 
 #include "src/picture.hpp"
 
-#include <skity_c/skity_recorder.h>
+#include <skity/c/skity_recorder.h>
 
 #include <array>
 #include <cstring>

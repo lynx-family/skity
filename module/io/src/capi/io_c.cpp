@@ -5,9 +5,9 @@
 // C ABI for the io module (Picture serialization + streams + SVG path
 // parsing), compiled into libskity-io.
 
-#include <skity_c/skity_parse_path.h>
-#include <skity_c/skity_picture.h>
-#include <skity_c/skity_stream.h>
+#include <skity/c/skity_parse_path.h>
+#include <skity/c/skity_picture.h>
+#include <skity/c/skity_stream.h>
 
 #include <cstring>
 #include <memory>

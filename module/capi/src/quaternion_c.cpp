@@ -2,7 +2,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <skity_c/skity_quaternion.h>
+#include <skity/c/skity_quaternion.h>
 
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/quaternion.hpp>

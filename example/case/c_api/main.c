@@ -12,7 +12,7 @@
 
 #include <GLFW/glfw3.h>
 #include <math.h>
-#include <skity_c/skity.h>
+#include <skity/c/skity.h>
 #include <stdint.h>
 #include <stdio.h>
 
