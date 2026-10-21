@@ -64,6 +64,11 @@ target_include_directories(skity-io
     # core_bridge.hpp; comes after the module root on purpose so io's own
     # "src/..." includes keep resolving against module/io first
     ${SKITY_ROOT}/module/capi
+    # capi paths must also be listed here directly: INTERFACE-library usage
+    # requirements do not survive cmake_to_gn, so "handle.hpp" and the shared
+    # skity_c headers would be unresolvable in the GN build
+    ${SKITY_ROOT}/module/capi/src
+    ${SKITY_ROOT}/module/capi/include
 )
 
 # C ABI surface (shipped with the module): streams + picture
