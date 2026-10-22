@@ -258,6 +258,15 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Windows")
   )
 elseif(SKITY_FONTCONFIG)
   find_package(Fontconfig 2.13.1 REQUIRED)
+  set(SKITY_FONTCONFIG_CJK_RULES_FILE
+    "${CMAKE_CURRENT_LIST_DIR}/text/ports/linux/fontconfig_cjk_rules.conf")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${SKITY_FONTCONFIG_CJK_RULES_FILE}")
+  file(READ "${SKITY_FONTCONFIG_CJK_RULES_FILE}" SKITY_FONTCONFIG_CJK_RULES)
+  configure_file(
+    text/ports/linux/fontconfig_cjk_rules.hpp.in
+    text/ports/linux/fontconfig_cjk_rules.hpp
+    @ONLY)
   target_sources(skity PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/linux/font_manager_fontconfig.cc
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/linux/font_manager_fontconfig.hpp)

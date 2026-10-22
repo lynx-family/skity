@@ -13,8 +13,9 @@
 namespace skity {
 
 // Internal factory. A null path uses FONTCONFIG_FILE or system configuration.
-// An explicitly selected configuration must load successfully; otherwise null
-// is returned. No process-global Fontconfig configuration is modified.
+// Built-in CJK preferences precede the selected configuration's rules. Loading
+// must succeed; otherwise null is returned. Each manager owns a private config;
+// no process-global Fontconfig configuration is modified.
 std::shared_ptr<FontManager> MakeFontManagerFontConfig(
     const char* config_file = nullptr);
 
