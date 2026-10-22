@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "src/logging.hpp"
+#include "src/text/ports/linux/fontconfig_cjk_rules.hpp"
 #include "src/text/ports/typeface_freetype.hpp"
 #include "src/text/scaler_context.hpp"
 #include "src/text/scaler_context_desc.hpp"
@@ -571,7 +572,10 @@ class FontManagerFontConfig final : public FontManager {
           return nullptr;
         }
       }
-      if (!FcPatternAddLangSet(request.get(), FC_LANG, langs.get())) {
+      // The first embedded rule retains this language set before system rules
+      // can match the environment languages appended by FcConfigSubstitute.
+      if (!FcPatternAddLangSet(request.get(), FC_LANG, langs.get()) ||
+          !FcPatternAddBool(request.get(), "skity_explicit_language", FcTrue)) {
         return nullptr;
       }
     }
@@ -628,19 +632,16 @@ std::shared_ptr<FontManager> MakeFontManagerFontConfig(
   if (!config_file) {
     config_file = std::getenv("FONTCONFIG_FILE");
   }
-  Config config;
-  if (config_file) {
-    config.reset(FcConfigCreate());
-    if (!config || !*config_file ||
-        !FcConfigParseAndLoad(config.get(), FCString(config_file), FcTrue) ||
-        !FcConfigBuildFonts(config.get())) {
-      return nullptr;
-    }
-  } else {
-    config.reset(FcInitLoadConfigAndFonts());
-    if (!config) {
-      return nullptr;
-    }
+  // Keep all rules and font discovery local to this manager. Load the built-in
+  // weak preferences before system aliases expand the generic family list.
+  // A null filename resolves the normal system configuration and its includes.
+  Config config(FcConfigCreate());
+  if (!config || (config_file && !*config_file) ||
+      !FcConfigParseAndLoadFromMemory(config.get(),
+                                      FCString(kFontConfigCjkRules), FcTrue) ||
+      !FcConfigParseAndLoad(config.get(), FCString(config_file), FcTrue) ||
+      !FcConfigBuildFonts(config.get())) {
+    return nullptr;
   }
   return std::make_shared<FontManagerFontConfig>(std::move(config));
 }

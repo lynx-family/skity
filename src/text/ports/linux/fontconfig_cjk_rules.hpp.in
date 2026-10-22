@@ -1,0 +1,18 @@
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
+
+#ifndef SRC_TEXT_PORTS_LINUX_FONTCONFIG_CJK_RULES_HPP
+#define SRC_TEXT_PORTS_LINUX_FONTCONFIG_CJK_RULES_HPP
+
+namespace skity {
+
+// Generated from fontconfig_cjk_rules.conf in this source directory.
+// The library loads these embedded rules from memory; no runtime file is
+// needed.
+constexpr char kFontConfigCjkRules[] =
+    R"skity_fc(@SKITY_FONTCONFIG_CJK_RULES@)skity_fc";
+
+}  // namespace skity
+
+#endif  // SRC_TEXT_PORTS_LINUX_FONTCONFIG_CJK_RULES_HPP
