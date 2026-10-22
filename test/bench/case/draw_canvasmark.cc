@@ -14,8 +14,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
-#include <stdexcept>
 #include <vector>
 
 namespace skity {
@@ -180,7 +180,7 @@ class SuitsSimulation {
     color_offset = Integer(0, 359);
   }
   void Advance(int count) {
-    if (count < 0) throw std::invalid_argument("negative Suits complexity");
+    assert(count >= 0);
     const double time = frame_ * 1000. / 60;
     if (count < int(particles.size()))
       particles.erase(particles.begin(),
