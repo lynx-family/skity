@@ -7,12 +7,12 @@
 // delegate canvas that observes a display-list op stream through callbacks.
 
 #include <gtest/gtest.h>
-#include <skity_c/skity_canvas.h>
-#include <skity_c/skity_font.h>
-#include <skity_c/skity_paint.h>
-#include <skity_c/skity_path.h>
-#include <skity_c/skity_recorder.h>
-#include <skity_c/skity_text.h>
+#include <skity/c/skity_canvas.h>
+#include <skity/c/skity_font.h>
+#include <skity/c/skity_paint.h>
+#include <skity/c/skity_path.h>
+#include <skity/c/skity_recorder.h>
+#include <skity/c/skity_text.h>
 
 #include <cstring>
 #include <string>

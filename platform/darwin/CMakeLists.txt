@@ -301,10 +301,34 @@ if(${SKITY_IO_MODULE})
   )
 endif()
 
-# capi headers (pure-C ABI surface; consumers #include <skity_c/skity.h>)
+# capi headers (pure-C ABI surface; consumers #include <skity/c/skity.h>).
+# The io / codec C headers join the same Headers/c/ namespace so the whole
+# C ABI surface reads uniformly as <skity/c/...> in framework mode; the C++
+# bridge header ships beside it as Headers/hpp/ (<skity/hpp/...>).
 if(${SKITY_CAPI_MODULE})
   install(
-      DIRECTORY "${CMAKE_SOURCE_DIR}/module/capi/include/skity_c"
+      DIRECTORY "${CMAKE_SOURCE_DIR}/module/capi/include/skity/c"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
+      COMPONENT Runtime
+  )
+  install(
+      DIRECTORY "${CMAKE_SOURCE_DIR}/module/capi/include/skity/hpp"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
+      COMPONENT Runtime
+  )
+endif()
+
+if(${SKITY_IO_MODULE})
+  install(
+      DIRECTORY "${CMAKE_SOURCE_DIR}/module/io/include/skity/c"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
+      COMPONENT Runtime
+  )
+endif()
+
+if(${SKITY_CODEC_MODULE})
+  install(
+      DIRECTORY "${CMAKE_SOURCE_DIR}/module/codec/include/skity/c"
       DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
       COMPONENT Runtime
   )

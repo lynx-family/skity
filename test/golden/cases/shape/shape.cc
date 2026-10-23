@@ -3,7 +3,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <gtest/gtest.h>
-#include <skity_c/skity_parse_path.h>
+#include <skity/c/skity_parse_path.h>
 
 #include <filesystem>
 #include <skity/recorder/picture_recorder.hpp>

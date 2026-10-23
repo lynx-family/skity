@@ -2,8 +2,8 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <skity_c/skity_context.h>
-#include <skity_c/skity_precompile.h>
+#include <skity/c/skity_context.h>
+#include <skity/c/skity_precompile.h>
 
 #include <skity/gpu/gpu_context.hpp>
 #include <skity/render/precompile_context.hpp>
@@ -16,7 +16,7 @@
 #endif
 
 #if defined(SKITY_VULKAN)
-#include <skity_c/skity_context_vk.h>
+#include <skity/c/skity_context_vk.h>
 #include <vulkan/vulkan.h>
 
 #include <skity/gpu/gpu_context_vk.hpp>

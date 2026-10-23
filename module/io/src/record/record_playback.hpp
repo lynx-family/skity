@@ -5,7 +5,7 @@
 #ifndef MODULE_IO_SRC_RECORD_RECORD_PLAYBACK_HPP
 #define MODULE_IO_SRC_RECORD_RECORD_PLAYBACK_HPP
 
-#include <skity_c/skity_canvas.h>
+#include <skity/c/skity_canvas.h>
 
 #include <skity/io/data.hpp>
 #include <vector>

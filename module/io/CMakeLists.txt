@@ -4,7 +4,7 @@
 
 add_library(skity-io STATIC
     # internal engine headers (the public C++ surface is gone; the
-    # consumable surface is the C ABI under include/skity_c/)
+    # consumable surface is the C ABI under include/skity/c/)
     src/picture.hpp
     src/stream/stream.hpp
     src/utils/parse_path.hpp
@@ -66,16 +66,16 @@ target_include_directories(skity-io
     ${SKITY_ROOT}/module/capi
     # capi paths must also be listed here directly: INTERFACE-library usage
     # requirements do not survive cmake_to_gn, so "handle.hpp" and the shared
-    # skity_c headers would be unresolvable in the GN build
+    # skity/c headers would be unresolvable in the GN build
     ${SKITY_ROOT}/module/capi/src
     ${SKITY_ROOT}/module/capi/include
 )
 
 # C ABI surface (shipped with the module): streams + picture
 target_sources(skity-io PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_stream.h
-    ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_picture.h
-    ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_parse_path.h
+    ${CMAKE_CURRENT_LIST_DIR}/include/skity/c/skity_stream.h
+    ${CMAKE_CURRENT_LIST_DIR}/include/skity/c/skity_picture.h
+    ${CMAKE_CURRENT_LIST_DIR}/include/skity/c/skity_parse_path.h
     ${CMAKE_CURRENT_LIST_DIR}/src/capi/io_c.cpp
 )
 

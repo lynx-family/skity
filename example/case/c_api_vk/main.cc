@@ -7,9 +7,9 @@
 #endif
 
 #include <GLFW/glfw3.h>
-#include <skity_c/skity.h>
-#include <skity_c/skity_context_vk.h>
-#include <skity_c/skity_native_window_vk.h>
+#include <skity/c/skity.h>
+#include <skity/c/skity_context_vk.h>
+#include <skity/c/skity_native_window_vk.h>
 #include <volk.h>
 #include <vulkan/vulkan.h>
 

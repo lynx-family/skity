@@ -11,18 +11,18 @@
 // C ABI call unwrapped back into the shared_ptr surface, so the module keeps
 // its internal types while importing no core legacy symbols.
 
-#include <skity_c/skity_codec.h>
-#include <skity_c/skity_color_filter.h>
-#include <skity_c/skity_data.h>
-#include <skity_c/skity_font.h>
-#include <skity_c/skity_image.h>
-#include <skity_c/skity_image_filter.h>
-#include <skity_c/skity_mask_filter.h>
-#include <skity_c/skity_paint.h>
-#include <skity_c/skity_path.h>
-#include <skity_c/skity_path_effect.h>
-#include <skity_c/skity_shader.h>
-#include <skity_c/skity_text.h>
+#include <skity/c/skity_codec.h>
+#include <skity/c/skity_color_filter.h>
+#include <skity/c/skity_data.h>
+#include <skity/c/skity_font.h>
+#include <skity/c/skity_image.h>
+#include <skity/c/skity_image_filter.h>
+#include <skity/c/skity_mask_filter.h>
+#include <skity/c/skity_paint.h>
+#include <skity/c/skity_path.h>
+#include <skity/c/skity_path_effect.h>
+#include <skity/c/skity_shader.h>
+#include <skity/c/skity_text.h>
 
 #include <cmath>
 #include <cstddef>

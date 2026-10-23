@@ -7,11 +7,11 @@
 // another PictureRecorder's canvas and inspected via op counts / offsets.
 
 #include <gtest/gtest.h>
-#include <skity_c/skity_canvas.h>
-#include <skity_c/skity_paint.h>
-#include <skity_c/skity_recorder.h>
-#include <skity_c/skity_shader.h>
-#include <skity_c/skity_text.h>
+#include <skity/c/skity_canvas.h>
+#include <skity/c/skity_paint.h>
+#include <skity/c/skity_recorder.h>
+#include <skity/c/skity_shader.h>
+#include <skity/c/skity_text.h>
 
 #include <memory>
 #include <skity/text/text_blob.hpp>

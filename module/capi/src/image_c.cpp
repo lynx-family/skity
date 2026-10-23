@@ -2,7 +2,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <skity_c/skity_image.h>
+#include <skity/c/skity_image.h>
 
 #include <cstring>
 #include <skity/gpu/gpu_context.hpp>

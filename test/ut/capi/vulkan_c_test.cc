@@ -2,11 +2,11 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <skity_c/skity_context_vk.h>
-#include <skity_c/skity_native_window_vk.h>
-#include <skity_c/skity_semaphore_vk.h>
-#include <skity_c/skity_surface_vk.h>
-#include <skity_c/skity_texture_vk.h>
+#include <skity/c/skity_context_vk.h>
+#include <skity/c/skity_native_window_vk.h>
+#include <skity/c/skity_semaphore_vk.h>
+#include <skity/c/skity_surface_vk.h>
+#include <skity/c/skity_texture_vk.h>
 #include <vulkan/vulkan.h>
 
 #include "gtest/gtest.h"

@@ -30,7 +30,7 @@ target_include_directories(
 target_sources(
   skity-codec
   PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/include/skity_c/skity_codec.h
+    ${CMAKE_CURRENT_LIST_DIR}/include/skity/c/skity_codec.h
     ${CMAKE_CURRENT_LIST_DIR}/src/capi/codec_c.cpp
 
   PRIVATE
@@ -83,7 +83,7 @@ target_link_libraries(skity-codec PUBLIC skity)
 target_link_libraries(skity-codec PRIVATE skity-capi-internal)
 # capi paths must also be listed here directly: INTERFACE-library usage
 # requirements do not survive cmake_to_gn, so "handle.hpp" and the shared
-# skity_c headers would be unresolvable in the GN build
+# skity/c headers would be unresolvable in the GN build
 target_include_directories(skity-codec PRIVATE
   ${SKITY_ROOT}/module/capi/src
   ${SKITY_ROOT}/module/capi/include)
@@ -249,7 +249,7 @@ if (${SKITY_BUILD_INSTALL})
 
   install(
     DIRECTORY
-    "${CMAKE_CURRENT_LIST_DIR}/include/skity_c"
+    "${CMAKE_CURRENT_LIST_DIR}/include/skity"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.h"
   )
