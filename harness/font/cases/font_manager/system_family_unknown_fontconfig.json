@@ -39,8 +39,6 @@
       "epsilon": 0.001
     }
   },
-  "font_manager_expectation": {
-    "matched": false
-  },
-  "fontconfig_profile": "system"
+  "fontconfig_profile": "system",
+  "notes": "System Fontconfig aliases may resolve this family request. Compare availability and the selected face with Skia instead of requiring an unavailable result. Strict absence is checked by the controlled-config cases."
 }

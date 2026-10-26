@@ -241,6 +241,23 @@ class OracleContractTest(unittest.TestCase):
             with self.subTest(items=items):
                 self.assertGreater(self.run_native_summary(items)["summary"]["failed"], 0)
 
+    def test_native_expected_diff_is_counted_separately(self):
+        items = [{"case_id": "font.synthetic." + str(i), "passed": True,
+                  "probe_exit_code": 0, "compare_exit_code": 0, "artifacts": {},
+                  "expected_diff": i == 0,
+                  "reason_code": "expected_diff" if i == 0 else "pass"}
+                 for i in range(2)]
+        report = self.run_native_summary(items)
+        self.assertEqual(report["summary"]["failed"], 0)
+        self.assertEqual(report["summary"]["passed"], 2)
+        self.assertEqual(report["summary"]["expected_diff"], 1)
+        self.assertEqual([r["status"] for r in report["results"]],
+                         ["EXPECTED_DIFF", "PASS"])
+        items[0].update(passed=False, compare_exit_code=1)
+        report = self.run_native_summary(items, 1)
+        self.assertEqual(report["summary"]["failed"], 1)
+        self.assertEqual(report["summary"]["expected_diff"], 0)
+
     def test_native_mismatch_and_probe_failure_remain_failures(self):
         items = [
             {"case_id": "font.synthetic.0", "passed": False, "compare_exit_code": 1,

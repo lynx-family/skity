@@ -66,7 +66,9 @@ def run_suite(runner, args):
         return result.returncode, data
 
     def record(name, code, data, artifacts, kind="engine_comparison"):
-        records.append({"suite": "font-harness", "case_name": name, "status": "FAIL" if code else "PASS",
+        expected_diff = not code and data.get("expected_diff") is True
+        status = "FAIL" if code else ("EXPECTED_DIFF" if expected_diff else "PASS")
+        records.append({"suite": "font-harness", "case_name": name, "status": status,
                         "exit_code": 0 if not code else (1 if code in (1, 7) else 2),
                         "child_exit_code": code, "reason_code": data.get("reason_code", "pass" if not code else "command_failed"),
                         "error": data.get("message", data.get("reason_code", "")) if code else "",
@@ -175,7 +177,9 @@ def run_suite(runner, args):
 
     failures = [item for item in records if item["status"] == "FAIL"]
     report = {"summary": {"total": len(records), "passed": len(records) - len(failures),
-                          "failed": len(failures), "duration_ms": int((time.time() - runner.started) * 1000)},
+                          "failed": len(failures),
+                          "expected_diff": sum(item["status"] == "EXPECTED_DIFF" for item in records),
+                          "duration_ms": int((time.time() - runner.started) * 1000)},
               "failures": failures, "results": records, "artifact_root": str(output)}
     write_json(output / "agent_test_report.json", report)
     return report

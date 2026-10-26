@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "font.font_manager.fontconfig.system_fallback_cjk_ja",
   "category": "font_manager",
-  "status": "active",
+  "status": "expected_diff",
   "backend": "fontconfig",
   "platforms": [
     "linux-fontconfig"
@@ -44,5 +44,30 @@
     }
   },
   "fontconfig_profile": "system",
-  "notes": "Installed coverage is environment-dependent; compare match availability and full identity against a fresh Skia oracle with the same system Fontconfig fingerprint."
+  "notes": "Installed coverage is environment-dependent; compare match availability and full identity against a fresh Skia oracle with the same system Fontconfig fingerprint.",
+  "expected_diff": {
+    "reason": "Skity preserves explicit ja before system aliases add the zh_CN environment language, selecting JP; native Skia selects SC with this system config. This follows FontConfigCjkTest.DistroAliasesHonorExplicitLanguage. Equal results for the declared Skity selection remain a normal pass.",
+    "skia": {
+      "available": true,
+      "family_name": "Noto Sans CJK SC",
+      "post_script_name": "NotoSansCJKSC-Regular",
+      "collection_index": 2,
+      "style": {
+        "slant": "upright",
+        "weight": 400,
+        "width": 5
+      }
+    },
+    "skity": {
+      "available": true,
+      "family_name": "Noto Sans CJK JP",
+      "post_script_name": "NotoSansCJKJP-Regular",
+      "collection_index": 0,
+      "style": {
+        "slant": "upright",
+        "weight": 400,
+        "width": 5
+      }
+    }
+  }
 }

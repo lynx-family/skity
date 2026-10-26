@@ -146,6 +146,21 @@ bool AddStyle(FcPattern* pattern, const FontStyle& style) {
          FcPatternAddInteger(pattern, FC_SLANT, slant);
 }
 
+// Supply the generic only for default and character-fallback requests. Named
+// family lookups must let system aliases choose their own generic first.
+bool AddSansSerifFallback(FcPattern* request, const char* family) {
+  for (const char* generic : {"sans-serif", "serif", "monospace"}) {
+    if (family &&
+        FcStrCmpIgnoreCase(FCString(family), FCString(generic)) == 0) {
+      return true;
+    }
+  }
+  FcValue value;
+  value.type = FcTypeString;
+  value.u.s = FCString("sans-serif");
+  return FcPatternAddWeak(request, FC_FAMILY, value, FcTrue);
+}
+
 // Retain weak aliases before the final strong family; remove weak defaults
 // after it. Leave an entirely weak family list unchanged.
 Pattern FamilyConstraint(FcPattern* request) {
@@ -516,6 +531,7 @@ class FontManagerFontConfig final : public FontManager {
     if (!request ||
         (name &&
          !FcPatternAddString(request.get(), FC_FAMILY, FCString(name))) ||
+        (!name && !AddSansSerifFallback(request.get(), nullptr)) ||
         !AddStyle(request.get(), style) ||
         !FcConfigSubstitute(state_->config.get(), request.get(),
                             FcMatchPattern)) {
@@ -556,7 +572,8 @@ class FontManagerFontConfig final : public FontManager {
         return nullptr;
       }
     }
-    if (!AddStyle(request.get(), style) ||
+    if (!AddSansSerifFallback(request.get(), name) ||
+        !AddStyle(request.get(), style) ||
         !FcCharSetAddChar(characters.get(), character) ||
         !FcPatternAddCharSet(request.get(), FC_CHARSET, characters.get())) {
       return nullptr;

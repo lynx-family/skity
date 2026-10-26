@@ -90,6 +90,7 @@ struct ManifestRunPaths {
 
 struct ManifestRunCounts {
   int pass_count = 0;
+  int expected_diff_count = 0;
   int mismatch_count = 0;
   int input_failure_count = 0;
   int probe_failure_count = 0;
@@ -730,10 +731,10 @@ Json::Value RunManifestCase(Json::ArrayIndex index,
     counts->schema_failure_count += 1;
     return item;
   }
-  if (status != "active") {
+  if (status != "active" && status != "expected_diff") {
     item["status"] = "schema_validation_failed";
     item["reason_code"] = "non_active_case_in_smoke";
-    item["message"] = "smoke manifest entries must be active cases";
+    item["message"] = "manifest entries must be active or expected_diff cases";
     counts->schema_failure_count += 1;
     return item;
   }
@@ -852,10 +853,14 @@ Json::Value RunManifestCase(Json::ArrayIndex index,
                            : 0;
 
   if (compare_invocation.exit_code == kExitSuccess) {
-    item["status"] = "pass";
-    item["reason_code"] = "pass";
+    const bool expected_diff =
+        compare_invocation.report.get("expected_diff", false).asBool();
+    item["status"] = expected_diff ? "expected_diff" : "pass";
+    item["reason_code"] = item["status"];
+    item["expected_diff"] = expected_diff;
     item["passed"] = true;
     counts->pass_count += 1;
+    counts->expected_diff_count += expected_diff ? 1 : 0;
   } else if (compare_invocation.exit_code == kExitCompareMismatch) {
     item["status"] = "mismatch";
     item["reason_code"] =
@@ -879,6 +884,7 @@ Json::Value RunManifestCase(Json::ArrayIndex index,
 int FinalizeManifestRunReport(Json::Value* report,
                               const ManifestRunCounts& counts) {
   (*report)["pass_count"] = counts.pass_count;
+  (*report)["expected_diff_count"] = counts.expected_diff_count;
   (*report)["mismatch_count"] = counts.mismatch_count;
   (*report)["input_failure_count"] = counts.input_failure_count;
   (*report)["probe_failure_count"] = counts.probe_failure_count;

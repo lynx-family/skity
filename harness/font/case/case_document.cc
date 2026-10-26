@@ -34,6 +34,77 @@ const std::vector<std::string>& AllowedStatuses() {
   return values;
 }
 
+// Expected differences currently describe a single font-manager selection.
+// Requiring both selections prevents a status flag from waiving any mismatch.
+void ValidateExpectedDiff(const Json::Value& root, ValidationContext* errors) {
+  if (root["status"] != "expected_diff") {
+    if (root.isMember("expected_diff")) {
+      errors->AddError("$.expected_diff", "requires expected_diff status");
+    }
+    return;
+  }
+  const auto& request = root["font_manager_request"];
+  const std::string entry = request.isObject() && request["entry"].isString()
+                                ? request["entry"].asString()
+                                : "";
+  if (root["category"] != "font_manager" ||
+      !IsOneOf(entry, {"GetDefaultTypeface", "MatchFamilyStyle",
+                       "MatchFamilyStyleCharacter"})) {
+    errors->AddError("$.expected_diff", "requires a single font-manager match");
+  }
+  const Json::Value* expectation = nullptr;
+  if (!RequireObjectField(root, "expected_diff", "$", errors, &expectation)) {
+    return;
+  }
+  std::string reason;
+  if (RequireStringField(*expectation, "reason", "$.expected_diff", errors,
+                         &reason)) {
+    ValidateNonEmptyString(reason, "$.expected_diff.reason", errors);
+  }
+  if ((*expectation)["skia"] == (*expectation)["skity"]) {
+    errors->AddError("$.expected_diff", "engine selections must differ");
+  }
+  for (const char* engine : {"skia", "skity"}) {
+    const Json::Value* selection = nullptr;
+    if (!RequireObjectField(*expectation, engine, "$.expected_diff", errors,
+                            &selection)) {
+      continue;
+    }
+    const std::string path = std::string("$.expected_diff.") + engine;
+    if (!(*selection)["available"].isBool()) {
+      errors->AddError(path + ".available", "expected boolean");
+      continue;
+    }
+    if (!(*selection)["available"].asBool()) {
+      if (selection->size() != 1) {
+        errors->AddError(path, "unavailable selection must only set available");
+      }
+      continue;
+    }
+    for (const char* field : {"family_name", "post_script_name"}) {
+      std::string value;
+      if (RequireStringField(*selection, field, path, errors, &value)) {
+        ValidateNonEmptyString(value, path + "." + field, errors);
+      }
+    }
+    int index = 0;
+    if (RequireIntField(*selection, "collection_index", path, errors, &index)) {
+      ValidateNonNegativeInt(index, path + ".collection_index", errors);
+    }
+    const Json::Value* style = nullptr;
+    if (RequireObjectField(*selection, "style", path, errors, &style)) {
+      RequireIntField(*style, "weight", path + ".style", errors);
+      RequireIntField(*style, "width", path + ".style", errors);
+      std::string slant;
+      if (RequireStringField(*style, "slant", path + ".style", errors,
+                             &slant)) {
+        ValidateStringEnum(slant, path + ".style.slant",
+                           {"upright", "italic", "oblique"}, errors);
+      }
+    }
+  }
+}
+
 const std::vector<std::string>& AllowedTypefaceEntries() {
   static const std::vector<std::string> values = {
       "MakeFromFile", "MakeFromData", "MakeVariation",
@@ -442,6 +513,7 @@ CaseValidationResult ValidateCaseDocument(const Json::Value& root,
   const auto font_files = ValidateFontFiles(root, resolver, &result);
   ValidateTypefaceRequest(root, category, font_files, &result.errors);
   ValidateFontManagerCase(root, &result.errors);
+  ValidateExpectedDiff(root, &result.errors);
   ValidateFontRequest(root, &result.errors);
   ValidatePaintRequest(root, &result.errors);
   ValidateGlyphs(root, &result.errors);

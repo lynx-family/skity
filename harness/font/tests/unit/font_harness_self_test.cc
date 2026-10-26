@@ -390,6 +390,30 @@ Json::Value MakeFontManagerArtifact(bool available,
   return root;
 }
 
+Json::Value MakeExpectedDiffCase(const Json::Value& expected,
+                                 const Json::Value& actual) {
+  auto root = MakeFontManagerCase();
+  root["status"] = "expected_diff";
+  auto& contract = root["expected_diff"];
+  contract["reason"] = "The engines intentionally use different fallbacks.";
+  auto selection = [](const Json::Value& artifact) {
+    const auto& face = artifact["font_manager_probe"]["matched_typefaces"][0];
+    Json::Value result(Json::objectValue);
+    result["available"] = face["available"];
+    if (face["available"].asBool()) {
+      for (const char* field :
+           {"family_name", "post_script_name", "collection_index"}) {
+        result[field] = face["identity"][field];
+      }
+      result["style"] = face["font_style"];
+    }
+    return result;
+  };
+  contract["skia"] = selection(expected);
+  contract["skity"] = selection(actual);
+  return root;
+}
+
 void AddMatchedTypefaceTables(Json::Value* root, int head_table_size) {
   Json::Value table(Json::objectValue);
   table["tag"] = "head";
@@ -687,6 +711,157 @@ TEST(FontHarnessCompareEngineTest,
   ExpectSingleDiff(
       result, "selection_mismatch",
       "font_manager_probe.matched_typefaces[0].identity.post_script_name");
+}
+
+TEST(FontHarnessCompareEngineTest, AcceptsDeclaredSelectionDifferences) {
+  TempDir temp("expected_selection_diff");
+  for (bool available : {false, true}) {
+    auto expected =
+        MakeFontManagerArtifact(available, "Synthetic-Regular", 1, 10, 10);
+    auto actual = MakeFontManagerArtifact(true, "Synthetic-Bold", 2, 12, 12);
+    auto root = MakeExpectedDiffCase(expected, actual);
+    root["font_manager_expectation"]["inventory_count"] = 1;
+    for (auto* artifact : {&expected, &actual}) {
+      auto& inventory = (*artifact)["font_manager_probe"]["font_manager"];
+      inventory["family_count"] = 1;
+      inventory["family_names"].append("Synthetic");
+    }
+    CompareResult result;
+    RunFontManagerCompare(&temp, expected, actual, &result, &root);
+    EXPECT_EQ(CompareStatus::kPass, result.status)
+        << WriteJsonString(result.report);
+    EXPECT_TRUE(result.report["expected_diff"].asBool());
+    EXPECT_EQ("expected_diff", result.report["reason_code"].asString());
+    EXPECT_EQ(1u, result.report["diffs"].size());
+    EXPECT_EQ(root["expected_diff"], result.report["expected_diff_contract"]);
+  }
+}
+
+TEST(FontHarnessCompareEngineTest, ExpectedDiffRejectsChangedSelections) {
+  TempDir temp("unexpected_selection");
+  const auto expected =
+      MakeFontManagerArtifact(true, "Synthetic-Regular", 1, 10, 10);
+  const auto actual =
+      MakeFontManagerArtifact(true, "Synthetic-Bold", 2, 12, 12);
+  const auto root = MakeExpectedDiffCase(expected, actual);
+  for (bool change_oracle : {false, true}) {
+    auto oracle = expected;
+    auto probe = actual;
+    auto& changed = change_oracle ? oracle : probe;
+    changed["font_manager_probe"]["matched_typefaces"][0]["identity"]
+           ["post_script_name"] = "Unexpected-Face";
+    CompareResult result;
+    RunFontManagerCompare(&temp, oracle, probe, &result, &root);
+    EXPECT_EQ(CompareStatus::kMismatch, result.status);
+    EXPECT_FALSE(result.report["expected_diff"].asBool());
+  }
+  // Even an availability difference must pin the face that Skity returns.
+  const auto absent = MakeFontManagerArtifact(false, "", 0, 0, 0);
+  const auto default_case = MakeExpectedDiffCase(absent, actual);
+  CompareResult result;
+  RunFontManagerCompare(&temp, absent, expected, &result, &default_case);
+  EXPECT_EQ(CompareStatus::kMismatch, result.status);
+  // Both engines returning no face must not hide a lost Skity default.
+  RunFontManagerCompare(&temp, absent, absent, &result, &default_case);
+  EXPECT_EQ(CompareStatus::kMismatch, result.status);
+  EXPECT_FALSE(result.report["expected_diff"].asBool());
+}
+
+TEST(FontHarnessCompareEngineTest, ExpectedDiffDoesNotHideInventoryMismatch) {
+  TempDir temp("expected_diff_inventory");
+  auto expected = MakeFontManagerArtifact(true, "Synthetic-Regular", 1, 10, 10);
+  auto actual = MakeFontManagerArtifact(true, "Synthetic-Bold", 2, 12, 12);
+  auto root = MakeExpectedDiffCase(expected, actual);
+  root["font_manager_expectation"]["inventory_count"] = 1;
+  for (auto* artifact : {&expected, &actual}) {
+    auto& inventory = (*artifact)["font_manager_probe"]["font_manager"];
+    inventory["family_count"] = 1;
+    inventory["family_names"].append(artifact == &expected ? "One" : "Two");
+  }
+  CompareResult result;
+  RunFontManagerCompare(&temp, expected, actual, &result, &root);
+  EXPECT_EQ(CompareStatus::kMismatch, result.status);
+  EXPECT_FALSE(result.report["expected_diff"].asBool());
+  EXPECT_EQ(2u, result.report["diffs"].size());
+}
+
+TEST(FontHarnessCompareEngineTest, ExpectedDiffStillValidatesArtifacts) {
+  TempDir temp("expected_diff_invalid_artifact");
+  auto expected = MakeFontManagerArtifact(false, "", 0, 0, 0);
+  auto actual = MakeFontManagerArtifact(true, "Synthetic-Regular", 1, 10, 10);
+  const auto root = MakeExpectedDiffCase(expected, actual);
+  actual["font_manager_probe"]["matched_typefaces"][0]["probe_summary"]
+        ["glyphs"]
+            .clear();
+  CompareResult result;
+  RunFontManagerCompare(&temp, expected, actual, &result, &root);
+  EXPECT_EQ(CompareStatus::kInputFailed, result.status);
+  EXPECT_EQ("schema_mismatch", result.report["reason_code"].asString());
+
+  actual = MakeFontManagerArtifact(true, "Synthetic-Regular", 1, 10, 10);
+  RunFontManagerCompare(&temp, expected, actual, &result, &root);
+  ASSERT_EQ(CompareStatus::kPass, result.status);
+  WriteTextFile(temp.root() / "artifacts/capture.txt", "changed capture");
+  CompareRequest request;
+  request.repo_root = temp.root();
+  request.case_path = temp.root() / "cases/font_manager.json";
+  request.expected_path = temp.root() / "artifacts/expected.json";
+  request.actual_path = temp.root() / "artifacts/actual.json";
+  request.environment_path = temp.root() / "environment.json";
+  result = RunCompare(request);
+  EXPECT_EQ(CompareStatus::kInputFailed, result.status);
+  EXPECT_EQ("stale_or_invalid_artifact",
+            result.report["reason_code"].asString());
+}
+
+TEST(FontHarnessCompareEngineTest,
+     ExpectedDiffCanConvergeWithoutHidingMetrics) {
+  TempDir temp("expected_diff_converged");
+  const auto expected =
+      MakeFontManagerArtifact(true, "Synthetic-Regular", 1, 10, 10);
+  const auto actual =
+      MakeFontManagerArtifact(true, "Synthetic-Bold", 2, 12, 12);
+  const auto root = MakeExpectedDiffCase(expected, actual);
+  CompareResult result;
+  RunFontManagerCompare(&temp, actual, actual, &result, &root);
+  EXPECT_EQ(CompareStatus::kPass, result.status);
+  EXPECT_FALSE(result.report["expected_diff"].asBool());
+  EXPECT_EQ("pass", result.report["reason_code"].asString());
+  const auto different_metrics =
+      MakeFontManagerArtifact(true, "Synthetic-Bold", 2, 15, 12);
+  RunFontManagerCompare(&temp, actual, different_metrics, &result, &root);
+  EXPECT_EQ(CompareStatus::kMismatch, result.status);
+  EXPECT_EQ("metrics_mismatch", result.report["reason_code"].asString());
+}
+
+TEST(FontHarnessCaseDocumentTest, ExpectedDiffRequiresExplicitSelections) {
+  TempDir temp("expected_diff_schema");
+  const auto expected = MakeFontManagerArtifact(false, "", 0, 0, 0);
+  const auto actual =
+      MakeFontManagerArtifact(true, "Synthetic-Regular", 1, 10, 10);
+  const auto root = MakeExpectedDiffCase(expected, actual);
+  const RepoUriResolver resolver(temp.root());
+  ASSERT_TRUE(ValidateCaseDocument(root, resolver).valid);
+  for (const char* field : {"reason", "skia", "skity"}) {
+    auto missing = root;
+    missing["expected_diff"].removeMember(field);
+    EXPECT_FALSE(ValidateCaseDocument(missing, resolver).valid) << field;
+  }
+  for (const char* field : {"available", "family_name", "post_script_name",
+                            "collection_index", "style"}) {
+    auto missing = root;
+    missing["expected_diff"]["skity"].removeMember(field);
+    EXPECT_FALSE(ValidateCaseDocument(missing, resolver).valid) << field;
+  }
+  auto invalid = root;
+  invalid["status"] = "active";
+  EXPECT_FALSE(ValidateCaseDocument(invalid, resolver).valid);
+  invalid = root;
+  invalid["expected_diff"]["skia"] = invalid["expected_diff"]["skity"];
+  EXPECT_FALSE(ValidateCaseDocument(invalid, resolver).valid);
+  invalid = root;
+  invalid["font_manager_request"]["entry"] = "MatchFamily";
+  EXPECT_FALSE(ValidateCaseDocument(invalid, resolver).valid);
 }
 
 TEST(FontHarnessCompareEngineTest,

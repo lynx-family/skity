@@ -192,12 +192,15 @@ void ValidateFontManagerResult(const Json::Value& root,
     }
   } else {
     const auto& matches = probe["matched_typefaces"];
-    // Cases without expectations compare availability between captures.
+    // Ordinary expectations imply matched=true. Expected-diff cases instead
+    // check availability against each engine's declared selection in compare.
+    const bool check_match = expectation.isMember("matched") ||
+                             (root.isMember("font_manager_expectation") &&
+                              root["status"] != "expected_diff");
     if (!matches.isArray() || matches.size() != 1 || !matches[0].isObject() ||
         !matches[0]["available"].isBool() ||
-        (root.isMember("font_manager_expectation") &&
-         matches[0]["available"].asBool() !=
-             expectation.get("matched", true).asBool())) {
+        (check_match && matches[0]["available"].asBool() !=
+                            expectation.get("matched", true).asBool())) {
       errors->AddError("$.font_manager_probe.matched_typefaces",
                        "match violates expectation");
     }
