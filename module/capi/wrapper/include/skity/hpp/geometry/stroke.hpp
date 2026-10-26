@@ -1,0 +1,35 @@
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
+
+#ifndef MODULE_CAPI_WRAPPER_INCLUDE_SKITY_HPP_GEOMETRY_STROKE_HPP
+#define MODULE_CAPI_WRAPPER_INCLUDE_SKITY_HPP_GEOMETRY_STROKE_HPP
+
+#include <skity/c/skity_stroke.h>
+
+#include <skity/hpp/graphic/paint.hpp>
+#include <skity/hpp/graphic/path.hpp>
+
+namespace skity {
+
+/**
+ * Append the stroke outline of src (per paint's width / cap / join /
+ * miter; paint should be set to a stroke style) to dst.
+ */
+inline void StrokePath(const Paint& paint, const Path& src, Path* dst) {
+  skity_stroke_stroke_path(paint.get(), src.get(), dst ? dst->get() : nullptr);
+}
+
+/**
+ * Append the quadratic / cubic stroke outline of src to dst;
+ * keep_cubic preserves cubic segments instead of flattening them.
+ */
+inline void QuadPath(const Paint& paint, const Path& src, Path* dst,
+                     bool keep_cubic = true) {
+  skity_stroke_quad_path(paint.get(), src.get(), dst ? dst->get() : nullptr,
+                         keep_cubic ? 1u : 0u);
+}
+
+}  // namespace skity
+
+#endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_HPP_GEOMETRY_STROKE_HPP

@@ -10,8 +10,15 @@
 # - OFF (default): the standalone skity-capi shared library below.
 # - ON: the sources compile straight into libskity, which hides the legacy
 #   C++ API and exports only the skity_* C ABI; the header-only C++ wrapper
-#   under include/skity/hpp/ becomes the C++ surface and skity::capi is an
-#   alias of skity so consumers keep their link lines.
+#   under wrapper/include/skity/hpp/ becomes the C++ surface and skity::capi
+#   is an alias of skity so consumers keep their link lines.
+#
+# Two include roots, one per surface: include/ carries the C ABI (skity/c)
+# plus the C++ bridge header (skity/hpp/bridge.hpp) — everything valid in
+# BOTH shapes — while wrapper/include/ carries the SKITY_UNIFIED_LIB-only
+# RAII layer (skity/hpp/**). Keeping them apart lets every consumer of the
+# include root (make install rules, the iOS framework, the Android prefab)
+# pick up the normal-shape surface without per-file filtering.
 
 # Vulkan-only wrapper sources depend on the vendored Vulkan headers, so they
 # are only compiled when the Vulkan backend is enabled.
@@ -72,10 +79,12 @@ if (${SKITY_UNIFIED_LIB})
   # way the standalone skity-capi does
   target_include_directories(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/common)
 
-  # the skity/c headers become part of skity's public interface
+  # the skity/c headers and the wrapper root become part of skity's public
+  # interface (both roots install into <includedir>/skity/...)
   target_include_directories(skity
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/wrapper/include>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
 
@@ -186,30 +195,23 @@ else()
 endif()
 
 if (${SKITY_BUILD_INSTALL})
-  # installs the headers as <includedir>/skity/{c,hpp}/ so the C ABI is
-  # spelled <skity/c/...> like every other public header
+  # include/ holds exactly the both-shapes surface — the skity/c C ABI plus
+  # the skity/hpp bridge header — so one rule covers the normal shape
+  install(
+    DIRECTORY
+    "${CMAKE_CURRENT_LIST_DIR}/include/skity"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+  )
+
+  # unified: the header-only wrapper joins as the C++ surface (its plain
+  # skity:: classes are only sound against the C-ABI-only library)
   if (${SKITY_UNIFIED_LIB})
-    # unified: the whole capi surface ships — the C ABI plus the header-only
-    # C++ wrapper, the only C++ API this shape has
     install(
       DIRECTORY
-      "${CMAKE_CURRENT_LIST_DIR}/include/skity"
+      "${CMAKE_CURRENT_LIST_DIR}/wrapper/include/skity"
       DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-      FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
-    )
-  else()
-    # normal: the C ABI plus the C++ bridge header; the header-only wrapper
-    # is not part of this shape (its plain skity:: classes would collide with
-    # the exported legacy C++ symbols at link time)
-    install(
-      DIRECTORY
-      "${CMAKE_CURRENT_LIST_DIR}/include/skity"
-      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-      FILES_MATCHING PATTERN "*.h"
-    )
-    install(
-      FILES "${CMAKE_CURRENT_LIST_DIR}/include/skity/hpp/skity_bridge.hpp"
-      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/skity/hpp
+      FILES_MATCHING PATTERN "*.hpp"
     )
   endif()
 

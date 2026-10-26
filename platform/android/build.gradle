@@ -76,6 +76,10 @@ android {
         }
 
         capi {
+            // The include root carries exactly this (normal, legacy-C++)
+            // build's surface: the skity/c C ABI plus the skity/hpp/bridge.hpp
+            // header. The header-only wrapper lives in a separate include root
+            // (module/capi/wrapper/include) and is SKITY_UNIFIED_LIB-only.
             headers "../../module/capi/include/"
             name "skity-capi"
         }

@@ -306,20 +306,21 @@ endif()
 
 # capi headers (pure-C ABI surface; consumers #include <skity/c/skity.h>).
 # The io / codec C headers join the same Headers/c/ namespace so the whole
-# C ABI surface reads uniformly as <skity/c/...> in framework mode; the C++
-# bridge header ships beside it as Headers/hpp/ (<skity/hpp/...>).
+# C ABI surface reads uniformly as <skity/c/...> in framework mode. The capi
+# include root also carries skity/hpp/bridge.hpp, which ships beside it as
+# Headers/hpp/ (<skity/hpp/...>). The header-only wrapper lives in a separate
+# include root (module/capi/wrapper/include) and never ships here: the static
+# framework keeps the legacy C++ symbols reachable, which the
+# SKITY_UNIFIED_LIB-only wrapper must not be compiled against.
 if(${SKITY_CAPI_MODULE})
   install(
       DIRECTORY "${CMAKE_SOURCE_DIR}/module/capi/include/skity/c"
       DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
       COMPONENT Runtime
   )
-  # Only the C++ bridge header ships here: the framework is a static library
-  # that keeps the legacy C++ symbols reachable, and the header-only wrapper
-  # (skity/hpp/, SKITY_UNIFIED_LIB-only) must not be compiled against them.
   install(
-      FILES "${CMAKE_SOURCE_DIR}/module/capi/include/skity/hpp/skity_bridge.hpp"
-      DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers/hpp"
+      DIRECTORY "${CMAKE_SOURCE_DIR}/module/capi/include/skity/hpp"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
       COMPONENT Runtime
   )
 endif()

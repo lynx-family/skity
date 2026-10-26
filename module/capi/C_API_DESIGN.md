@@ -4,9 +4,11 @@ This document describes the design of Skity's C API — a stable, Vulkan-style
 ABI surface exposed by `libskity-capi.so`, intended to eventually replace the
 direct C++ symbol export of `libskity.so`.
 
-> Status: **Stage 1 — independent `libskity-capi.so`, GL + Vulkan core path.**
-> The existing C++ API under [`include/skity/`](../../include/skity/skity.hpp) is
-> untouched and remains the primary interface for current consumers.
+> Status: **normal shape — independent `libskity-capi.so` alongside the C++
+> API; the unified shape (`SKITY_UNIFIED_LIB`) ships the C ABI inside
+> `libskity` with the legacy C++ exports hidden.** The existing C++ API under
+> [`include/skity/`](../../include/skity/skity.hpp) is untouched in the
+> normal shape and remains the primary interface for current consumers.
 
 ## 1. Motivation & Goals
 
@@ -40,23 +42,34 @@ a non-C++ language (Swift, Rust, Go, C#) is unsafe.
 ### Non-goals
 
 - Reducing `libskity.so`'s own binary size. The C wrapper is a thin forwarding
-  layer; the core library still ships in full. (See Stage 3 below for the
-  eventual size story.)
-- Replacing the C++ API in one step. Existing consumers must keep working
-  throughout the migration.
+  layer; the core library still ships in full. (The unified shape hides the
+  C++ exports but does not shrink the core — see §2.)
+- Replacing the C++ API in one step. Existing consumers keep the normal
+  shape throughout the migration.
 
 ## 2. Terminal Architecture
 
+Two mutually exclusive build shapes (`SKITY_UNIFIED_LIB`, default OFF):
+
 ```
-libskity.so              exports only extern "C" symbols (C API + render core)
+normal (default)
+libskity.so              exports the C++ API (+ render core)
+libskity-capi.so         exports the skity_* C ABI
+include/skity/           legacy C++ headers (installed)
+
+unified (-DSKITY_UNIFIED_LIB=ON)
+libskity.so              exports ONLY the skity_* C ABI (C++ symbols hidden)
+libskity-codec.so        exports ONLY its skity_codec_* C ABI
 include/skity/c/*.h      pure C headers: handles + CreateInfo + POD types
-include/skity.hpp        header-only: RAII wrappers over C handles (a la vulkan.hpp)
+include/skity/hpp/       header-only: RAII wrappers over C handles (a la vulkan.hpp;
+                         source root: module/capi/wrapper/include)
 ```
 
-The ABI is stable because only **C handles + POD structs** flow across the
-`.so` boundary. Every C++ type (smart pointers, containers, vtables) lives in
-the header-only `skity.hpp`, compiled into the *consumer's* translation unit
-with the consumer's own toolchain — so it never crosses the boundary at all.
+In both shapes the ABI is stable because only **C handles + POD structs** flow
+across the `.so` boundary. Every C++ type (smart pointers, containers, vtables)
+lives in the consumer's translation unit — in the unified shape through the
+header-only `skity/hpp/` layer, compiled with the consumer's own toolchain —
+so it never crosses the boundary at all.
 
 This is the same split Khronos uses between `vulkan.h` (C) and `vulkan.hpp`
 (C++ wrapper).
@@ -283,23 +296,36 @@ skity_result skity_context_create_vk(PFN_vkGetInstanceProcAddr get_proc,
 For applications that need to share their Vulkan instance, device, queues, and
 extension sets with skity, `skity_context_vk.h` also declares
 `skity_context_create_vk_ex` and `skity_context_create_info_vk`. Vulkan-only
-surface, texture, and semaphore wrappers are declared in `skity_surface_vk.h`,
-`skity_texture_vk.h`, and `skity_semaphore_vk.h` so non-Vulkan consumers do not
-need to include `<vulkan/vulkan.h>`.
+surface and texture wrappers are declared in `skity_surface_vk.h` and
+`skity_texture_vk.h` so non-Vulkan consumers do not include
+`<vulkan/vulkan.h>`. Semaphores are backend-neutral
+(`skity_semaphore.h`: `skity_semaphore_create` / `skity_semaphore_import` /
+`skity_semaphore_destroy` / `skity_semaphore_get_backend_type`, mirroring
+`GPUContext::CreateSemaphore` / `ImportSemaphore`); only the import-info
+extension (`skity_semaphore_import_info_vk`, a plain sync-fd struct) lives in
+`skity_semaphore_vk.h` and pulls in no Vulkan types.
 
 ### Metal (Stage 2)
 
 [`gpu_context_mtl.h`](../../include/skity/gpu/gpu_context_mtl.h) is an Objective-C++
-header. Its C wrapper will live in a `.mm` source and accept the native
-`id<MTLDevice>` / `id<MTLCommandQueue>` as opaque `void*`. Not in Stage 1.
+header. Its C wrapper lives in `skity_context_mtl.h` (+ `skity_surface_mtl.h` /
+`skity_texture_mtl.h`) and types the native `id<MTLDevice>` /
+`id<MTLCommandQueue>` / `id<MTLTexture>` / `CAMetalLayer*` handles through
+`skity_mtl_types.h`: the real Objective-C types, always — the Metal C API
+is Objective-C-only with no plain-C / C++ `void*` fallback. Like the Vulkan
+headers, the Metal headers are not part of the `skity.h` umbrella —
+Objective-C(++) consumers include them directly, and including one from a
+non-ObjC TU is a compile `#error`. The typed entry points therefore live in
+`mtl_glue.mm`, while portable stubs in `context_c.cpp` return
+`SKITY_ERROR_NOT_SUPPORTED` on builds without `SKITY_MTL_BACKEND`.
 
 ## 8. Header-only C++ Wrapper
 
-For C++ consumers, the eventual `skity.hpp` wraps the C handles in RAII types
-that are binary-identical in usage to today's classes. Because it is
-header-only, it is compiled with the consumer's own toolchain and may freely
-use `std::shared_ptr` / `std::vector` without introducing any ABI coupling —
-those types never enter `libskity.so`.
+For C++ consumers, the unified shape's `skity/hpp/` layer wraps the C
+handles in RAII types that are binary-identical in usage to today's classes.
+Because it is header-only, it is compiled with the consumer's own toolchain
+and may freely use `std::shared_ptr` / `std::vector` without introducing any
+ABI coupling — those types never enter `libskity.so`.
 
 ```cpp
 /* skity.hpp — header-only, compiled in the consumer's TU */
@@ -324,23 +350,153 @@ class Paint {  /* owning, destructor calls skity_paint_destroy */
 }  // namespace skity
 ```
 
+### 8.1 Why the wrapper is unified-build-only
+
+The wrapper defines **plain `namespace skity`** classes with the legacy
+names and signatures (see the sample above) — which is only sound because
+the unified library exports nothing but the C ABI. Against a normal
+`libskity.so`, which still exports the legacy C++ API (the `SKITY_DLL`
+visibility leak — hundreds of symbols), a wrapper member call that is not
+inlined mangles to the same symbol as the legacy C++ class method; the
+dynamic linker binds the call to the legacy implementation, which then runs
+with the wrapper object as `this` and silently corrupts it (verified with a
+watchpoint: `Paint::SetStrokeWidth(2.f)` wrote the 2.0f bit pattern into
+the high half of `handle_`, at `-O0` only — `-O2` inlined everything and
+appeared fine).
+
+So instead of a staging namespace, the wrapper ships **only** with the
+unified shape (`SKITY_UNIFIED_LIB=ON`): not installed in the normal build,
+guarded by `#error` in `base.hpp` unless `SKITY_UNIFIED_LIB` is defined,
+and its tests live in the unified-only `skity_wrapper_unit_test` binary
+rather than in `skity_unit_test`. A TU can never include both the wrapper
+and the legacy headers — that is a redefinition, and in the unified shape
+the legacy surface does not link anyway.
+
+### 8.2 Why vulkan.hpp does not need this guard
+
+vulkan.hpp has no such problem, because its world already satisfies our
+unified end state:
+
+- `libvulkan` (loader, layers, drivers) exports **C symbols only** — there
+  has never been an official C++ ABI to collide with. An uninlined
+  `vk::`-wrapper call emits a weak inline symbol that the *static* linker
+  merges across TUs; the dynamic linker has no exported surface to bind to.
+- `vk::raii` exists for a different reason: three ownership models coexist
+  long-term — plain `vk::` handle wrappers (destructor does not destroy, like
+  our `Canvas` view), the legacy `vk::UniqueHandle` (deleter storage per
+  object), and `vk::raii` (move-only, created from a dispatcher-owning
+  context, zero deleter overhead). That layering is permanent.
+
+We adopt the *precondition* rather than borrowing a namespace: the
+vulkan.hpp naming is only sound once the library exports nothing but C —
+hiding the legacy C++ symbols is not optional polish, it is what makes the
+wrapper's naming safe, which is exactly what `SKITY_UNIFIED_LIB` enforces.
+
+Engineering conventions worth keeping from vulkan.hpp: a single configurable
+`VULKAN_HPP_INLINE`-style knob if we ever need to control inline fallback, a
+`detail` namespace for non-API entities (we have
+`skity::detail::OwnHandle`), and the discipline of **zero out-of-line
+symbols** in the header-only layer — the few vulkan.hpp needs are gated by
+`VULKAN_HPP_STORAGE_API`; our wrapper is pure forwarding and should stay
+that way.
+
+### 8.3 Wrapper coverage
+
+One wrapper header per C domain header (`skity/c/skity_paint.h` →
+`skity/hpp/graphic/paint.hpp`), aggregated by `skity/hpp/skity.hpp`. Following
+the coverage discipline of the C layer, the wrapper only forwards existing
+entry points — helper methods that had no C counterpart (Rect / Matrix
+arithmetic, color packing) are implemented inline in `types.hpp`.
+`test/ut/capi/wrapper_hpp_test.cc` is the compile + CPU smoke gate.
+
+Coverage (2026-10, counted mechanically over `SKITY_C_API` declarations):
+397 C functions across the headers under `skity/c/`. The wrapper layer
+forwards 393 of them (98%) — everything except the 4 precompile entry
+points (below). 9 of those are VK-specific functions behind the opt-in
+`skity_vk.hpp` (2 `context_vk` + 7 `native_window_vk`); all the rest live
+in the neutral `skity.hpp` umbrella, including the 3 Metal context
+entries (`skity_context_mtl.h`) — the Metal C headers pass Objective-C
+pointers as `void*`, so unlike Vulkan they force no backend headers on
+other consumers. 20 of the 36 wrapper headers carry handle classes (27
+`OwnHandle` classes in total); the rest are POD / free-function / view
+layers.
+
+Value-type wrappers mirror their copyable C++ counterparts: `Paint`, `Path`
+and `Font` have copy construction / assignment that clones the underlying
+object via the C `*_clone` entry points (parameters duplicated, refcounted
+children — effects, typeface — shared), while moves stay cheap. All other
+wrappers own uniquely and remain move-only.
+
+| C domain | Wrapper | Notes |
+|---|---|---|
+| `skity_types` | `types.hpp` | Rect / Matrix / RRect value types (binary-compatible with the C PODs), BlendMode / TileMode / AlphaType / ColorType / SamplingOptions / FilterMode / MipmapMode enums, color helpers |
+| `skity_base` | `base.hpp` | `detail::OwnHandle` (move-only owner) |
+| `skity_camera` | `geometry/camera.hpp` | `Camera` (viewport ctor, position / look-at / dist / rotation setters, `GetCamera` / `GetFixedCamera` view matrices) |
+| `skity_quaternion` | `geometry/quaternion.hpp` | free functions `QuaternionEulerToMatrix` / `QuaternionAxisAngleToMatrix` |
+| `skity_semaphore` | `gpu/semaphore.hpp` | `Semaphore` (Create on a Context, Import via the untyped base info + backend p_next extension, GetBackendType) — VK implementation only today |
+| `skity_canvas` | `render/canvas.hpp` | full draw / state / clip / text / image surface; `SoftwareCanvas` inherits the non-owning `Canvas` view and owns its handle |
+| `skity_paint` | `graphic/paint.hpp` | all setters + getters, effect attach (raw + wrapper overloads), effect getters via `Adopt`, copy semantics (deep-copy params, shared effects) |
+| `skity_path` | `graphic/path.hpp` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii + `AddMode`), point / verb / conic-weight access, `IsRect` / `IsLine` / `IsEqual`, convexity, segment masks, last-pt family, `CopyWith*`, `Clone` + copy semantics (deep geometry copy) |
+| `skity_path_effect` | `effect/path_effect.hpp` | discrete + dash |
+| `skity_path_measure` | `graphic/path_measure.hpp` | length / pos-tan / segment / contour advance |
+| `skity_path_op` | `graphic/path_op.hpp` | free function `Op(one, two, PathOp, out)` |
+| `skity_stroke` | `geometry/stroke.hpp` | free functions `StrokePath` / `QuadPath` |
+| `skity_shader` | `effect/shader.hpp` | linear / radial / sweep / two-point conical gradients, image shader, local matrix |
+| `skity_color_filter` | `effect/color_filter.hpp` | all factories |
+| `skity_mask_filter` | `effect/mask_filter.hpp` | blur (+ `BlurStyle`) |
+| `skity_image_filter` | `effect/image_filter.hpp` | all factories |
+| `skity_data` | `io/data.hpp` | copy / with-proc / from-file / empty + accessors |
+| `skity_bitmap` | `graphic/bitmap.hpp` | `Bitmap` + `Pixmap` (incl. zero-copy wrap via `Data`) |
+| `skity_image` | `graphic/image.hpp` | raster / texture / deferred / promise factories, read / scale pixels |
+| `skity_surface` | `gpu/surface.hpp` | create / lock-canvas / flush / size / read-pixels (GL CreateInfo path), `AddExternalWaitSemaphore` |
+| `skity_context` | `gpu/context.hpp` | `CreateGL`, error callback, all `set_enable_*` tuning knobs, resource cache limit |
+| `skity_texture` | `gpu/texture.hpp` | `Texture` (create / create-with-descriptor / wrap-from-backend incl. p_next extension chaining, immediate + deferred upload, size queries) |
+| `skity_context_mtl` | `gpu/context_mtl.hpp` | free functions `CreateMtlContext` (device / queue optional) + `GetMtlDevice` / `GetMtlCommandQueue` (Objective-C-only wrappers, guarded under `__OBJC__` in the umbrella) |
+| `skity_surface_mtl` | `gpu/surface_mtl.hpp` | `CreateMtlSurface` — chains the MTL CreateInfo extension (one-shot `id<MTLTexture>` or `CAMetalLayer` target) |
+| `skity_texture_mtl` | `gpu/texture_mtl.hpp` | `WrapMtlTexture` — wraps an existing `id<MTLTexture>` as a `Texture` |
+| `skity_font` + `skity_text` | `text/text.hpp` | `Typeface` (load / default / unichar→glyph / style / tables / variations / `MakeVariation`), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / bounds / make-with-size / `LoadGlyph*` family, copy semantics with shared typeface), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
+| `skity_glyph` | `text/glyph.hpp` | `GlyphData` non-owning views over the global glyph cache (metrics / bearings / outline path / bitmap description), `GlyphFormat` / `BitmapFormat` enums, `GlyphBitmap` POD passthrough |
+| `skity_recorder` | `recorder/recorder.hpp` | `PictureRecorder` (+ build options, last-op offset) and `DisplayList` (draw / cull-rect draw / bounds / op count / properties / rtree search / per-op paint mutation) |
+
+Vulkan-only domains have their own opt-in wrapper headers, aggregated by
+`skity_vk.hpp` and deliberately kept OUT of `skity.hpp` so GL / CPU
+consumers never see `<vulkan/vulkan.h>`:
+
+| C domain | Wrapper | Notes |
+|---|---|---|
+| `skity_context_vk` | `skity_context_vk.hpp` | free functions `CreateVkContext` ×2 (own instance/device, or caller-provided state via `skity_context_create_info_vk`) |
+| `skity_surface_vk` | `skity_surface_vk.hpp` | `CreateVkSurface` — chains the VK CreateInfo extension into the neutral base info (s_type set automatically) |
+| `skity_texture_vk` | `skity_texture_vk.hpp` | `WrapVkTexture` — wraps an existing VkImage (+ view) as a `Texture` |
+| `skity_native_window_vk` | `skity_native_window_vk.hpp` | `NativeWindowVk` presenter lifecycle (create / resize / size queries / `AcquireNextSurface` / `Present` with handle-consumption semantics) |
+| `skity_semaphore_vk` | `skity_semaphore_vk.hpp` | `ImportVkSyncFd` — sync-fd import chaining the VK extension into the neutral import |
+
+A VK consumer includes `<skity/hpp/skity_vk.hpp>` (which also pulls in the
+whole neutral layer). Raw C handles acquired outside the RAII layer can
+still be adopted via `Context::Adopt` / `Surface::Adopt`.
+
+Still unwrapped by design: `skity_precompile` only.
+`bridge.hpp` is the reverse direction (C++ objects lent INTO C
+handles) and is not part of the RAII layer.
+
 ## 9. Gradual Migration
 
-| Stage | `libskity.so` | C API | header-only `skity.hpp` | old `include/skity/` C++ headers | Risk |
-|---|---|---|---|---|---|
-| 0 (current) | exports C++ | — | — | primary | — |
-| **1 (this work)** | **unchanged** | **`libskity-capi.so`, GL+VK core path** | — | kept | none — C consumers benefit first |
-| 2 | unchanged | feature parity with old C++ headers + MTL | new `skity.hpp` shipped | kept / deprecated | old + new C++ entry points coexist |
-| 3 (major bump) | C++ symbols hidden, only C exported | complete | primary | removed | requires all downstream migrated |
+The migration is no longer a stage sequence on one library but a build-mode
+choice: both shapes below ship side by side and are selected at configure
+time (`SKITY_UNIFIED_LIB`, default OFF).
 
-Each stage is independently shippable and never breaks existing C++ consumers.
-Only Stage 3 — hiding the C++ symbols in `libskity.so` — is a breaking change,
-and it is gated on downstream migration completion.
+| Shape | `libskity.so` | C API | header-only `skity/hpp/` | old `include/skity/` C++ headers | Risk |
+|---|---|---|---|---|---|
+| normal (default) | exports C++ | `libskity-capi.so` | not installed (guarded by `#error`) | primary, installed | — existing C++ consumers unchanged |
+| unified (`SKITY_UNIFIED_LIB=ON`) | C++ symbols hidden, only `skity_*` exported; capi compiled in | inside `libskity.so` | installed, plain `skity::` | not installed | C++ consumers must move to the wrapper (or stay on the normal shape) |
+
+The normal shape never breaks existing C++ consumers; the unified shape is
+the terminal architecture of §2, available today for consumers that want a
+C-ABI-only library with the RAII wrapper as their C++ surface.
 
 ## 10. Build
 
-The wrapper is a standalone shared library that links `libskity.so`, mirroring
-[`module/codec`](../codec/CMakeLists.txt):
+Normal shape — the C API is a standalone shared library that links
+`libskity.so`, mirroring [`module/codec`](../codec/CMakeLists.txt):
 
 ```bash
 cmake -DSKITY_CAPI_MODULE=ON -DSKITY_GL_BACKEND=ON -DSKITY_VK_BACKEND=ON ...
@@ -353,8 +509,19 @@ Symbol check — only `skity_*` C symbols should be exported:
 nm -D --defined-only libskity-capi.so | grep ' T '
 ```
 
+Unified shape — the C ABI compiles into `libskity` itself, the legacy C++
+API is hidden, and the header-only wrapper becomes the C++ surface (see
+[README.md](README.md#unified-build-skity_unified_lib)):
+
+```bash
+cmake -DSKITY_UNIFIED_LIB=ON -DSKITY_TEST=ON -DSKITY_VK_BACKEND=ON ...
+cmake --build .            # libskity.so exports only skity_*; no libskity-capi
+
+nm -gU libskity.dylib | grep -v ' _skity_'   # (macOS) must print nothing
+```
+
 With `-DSKITY_CAPI_MODULE=OFF` (the default is ON) the build is identical to
-today; `libskity.so` is never modified by this work.
+today; `libskity.so` is never modified by the normal shape.
 
 ## 11. API Coverage & Known Gaps
 
@@ -369,12 +536,34 @@ These modules have complete (or near-complete) C coverage of their core:
 - Effects: `color_filter`, `mask_filter`, `path_effect`, `image_filter`
   (all factories)
 - `FontManager` + `FontStyleSet`
+- `Font`: create (incl. scale/skew ctor, `clone`), typeface/size get/set, all
+  rendering-quality switches, `get_metrics`, `make_with_size`,
+  `get_widths` + `get_bounds`, and the whole `LoadGlyph*` glyph-data family
+  (metrics / path / bitmap / bitmap-info)
+- `GlyphData`: non-owning handles over the global glyph cache — metrics /
+  bearings / extents getters, outline path borrow, bitmap description
+  (buffer / stride / format) via `skity_glyph.h`
 - `PictureRecorder` + `DisplayList` (record / replay / cull-rect replay /
   rtree search / properties / per-op paint lookup)
 - `PrecompileContext`
-- `Texture` (create / wrap-external / upload / deferred-upload)
+- `Texture` (create / create-with-descriptor incl. mipmap / wrap-external /
+  upload / deferred-upload)
+- `Paint` (all setters + getters incl. `get_color4f` / `get_alpha_f`,
+  fill/stroke split colors, effect/typeface attach, SDF-for-small-text and
+  font-threshold switches, `clone`)
+- `GPUContext` backend queries (`skity_is_gpu_backend_supported`,
+  `skity_context_get_backend_type` over the shared `skity_gpu_backend_type`
+  enum)
 - `GPUContext` (create, `set_error_callback`, all `set_enable_*` tuning,
   precompile, `create_texture`, `wrap_texture`, `set_resource_cache_limit`)
+- `GPUNativeWindowVK` / presenter lifecycle (create, resize,
+  `acquire_next_surface`, `present` through `skity_native_window_vk`)
+- Metal backend (`skity_context_mtl.h` / `skity_surface_mtl.h` /
+  `skity_texture_mtl.h`): context create + device / queue getters, and the
+  surface / texture-wrap p_next extensions — Objective-C-only handles via
+  `skity_mtl_types.h` (no `void*` fallback; not part of the skity.h
+  umbrella), implemented by `mtl_glue.mm` when `SKITY_MTL_BACKEND` is on
+  (portable stubs in context_c.cpp otherwise)
 - `Bitmap` / `Pixmap` (pixel access, buffer wrapping via
   `data_make_with_proc` + `pixmap_create` + `bitmap_create_from_pixmap`,
   `set_color_info`), `image_read_pixels`
@@ -383,11 +572,12 @@ These modules have complete (or near-complete) C coverage of their core:
   [`Stroke`](./include/skity/c/skity_stroke.h),
   [`Data`](./include/skity/c/skity_data.h)
 - POD types: `color`, `blend_mode`, `tile_mode`, `sampling_options`,
-  `alpha_type`, `color_type`, `font_style`, `font_metrics`
+  `alpha_type`, `color_type`, `font_style`, `font_metrics`,
+  `variation_coordinate`, `variation_axis`, `font_arguments`
 
-`Paint`, `Path`, `Shader`, `Font`, `Typeface`, `TextBlob`, `Image`,
-`GPUSurface`, `Canvas` all have working core coverage but carry functional
-gaps — they are listed in the next table.
+`Paint`, `Path`, `Shader`, `Typeface`, `TextBlob`, `Image`, `GPUSurface`,
+`Canvas` all have working core coverage but carry functional gaps — they are
+listed in the next table.
 
 ### Partially covered (gaps remain)
 
@@ -395,74 +585,53 @@ Priority tags: **P3** is deferred / low-value.
 
 | Module | Covered | Missing (priority) |
 |---|---|---|
-| `Paint` | all setters + getters, fill/stroke split colors, effect/typeface attach | **P3**: `get_color4f`, `get_alpha_f`, SDF / font-threshold |
-| `Shader` | gradient factories (linear/radial/sweep/conical) + image shader + `set/get_local_matrix` | **P3**: `is_opaque`, `as_gradient` introspection |
+| `Shader` | gradient factories (linear/radial/sweep/conical) + image shader + `set/get_local_matrix`, `is_opaque`, `as_gradient` (type + geometry + two-pass stops; even distribution synthesized for NULL-pos gradients) | — |
 | `GPUSurface` | create, `lock_canvas`, `flush`, `read_pixels`, size getters, GL `surface_mode` + `can_blit_from_target_fbo`, Vulkan image/swapchain-image wrapping, external wait semaphore | **P3**: per-surface CoverageAAMode |
 | `Path` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii), boolean ops, `PathMeasure`, `transform`, last-pt get/set, `copy_with_matrix/scale`, counts / `get_point` / `get_verb` / `get_conic_weight` / `is_rect` / `is_line` / `is_empty` / `is_finite`, convexity get/set, `get_segment_masks`, `add_path` append/extend modes, `clone`, `is_equal`, `get_last_move_pt` | `GetLastMovePt` has no failure signal on the C++ side (empty path result unspecified, mirrored here) |
-| `Image` | 5 factories (incl. the `GPUContext` variant) + `read_pixels` + `scale_pixels` + size getters | **P3**: alpha/type/backend introspection |
-| `Font` | create (incl. scale/skew ctor), typeface/size get/set, rendering-quality switch get/set, `get_metrics`, `make_with_size`, `get_widths` | **P3**: `get_widths` bounds overload, `LoadGlyph*` (needs GlyphData) |
-| `Typeface` | `make_from_file`, `make_from_data`, `get_default`, `unichars_to_glyphs`/`unichar_to_glyph` | **P3**: `get_font_style`/`is_bold`/`is_italic`, `contain_glyph`, `units_per_em`/`contains_color_table`, table / variation / descriptor |
+| `Image` | 5 factories (incl. the `GPUContext` variant) + `read_pixels` + `scale_pixels` + size getters, `get_alpha_type` / `is_texture_backend` / `get_image_type` / `is_lazy` introspection | **P3**: backend handles (`get_texture`, `get_pixmap`, `get_texture_by_context`) |
+| `Typeface` | `make_from_file`, `make_from_data`, `get_default`, `unichars_to_glyphs`/`unichar_to_glyph`, `get_data` (owning `skity_data`), `get_font_style`/`is_bold`/`is_italic`, `get_units_per_em`/`get_unique_id`, `contain_glyph`, `contains_color_table`, raw tables (`count_tables`, `get_table_tags`/`get_table_size`/`get_table_data`), variable fonts (`get_variation_position`/`get_variation_axes`/`make_variation` + `skity_font_arguments`), `get_font_descriptor` (style / collection index / factory id + two-pass family name; the C++ full / PostScript name strings are not projected) | — |
 | `TextBlob` | build (UTF-8) + draw, pre-shaped glyph build (`create_from_glyphs`: caller-run shaping → glyph ids + positions), `get_bounds`, `compute_bounds`, `TypefaceDelegate` fallback (ordered-list + custom-fallback-callback) | **P3**: `get_text_run` (read-back — no caller demand found in the animax/clay reverse lookup; the proven need was the build side, now covered); fully custom `BreakTextRun` delegate (caller-driven segmentation) |
-| `Canvas` | full draw + state + clip + text/glyphs, `draw_image` sampling overloads, `draw_color4f`, per-corner-radii `draw_rrect`, `make_software_canvas` | **P3**: per-corner RRect clip/drrect, `get_global_clip_bounds` |
+| `Canvas` | full draw + state + clip + text/glyphs, `draw_image` sampling overloads, `draw_color4f`, per-corner-radii `draw_rrect` / `clip_rrect_radii` / `draw_drrect_radii`, uniform-radii `clip_rrect` / `draw_drrect`, `get_local_clip_bounds` / `get_global_clip_bounds`, `make_software_canvas` | — |
 | `DisplayList` | draw / cull-rect draw / bounds / op_count / properties / rtree search (+ non-overlapping rects) / per-op paint lookup, `begin_recording` with build options | `RecordedOpOffset` is exposed as a plain `int32_t` (round-trips through the public `RecordedOpOffset::Make`) — no opaque set type |
-| `GPUContext` | (see Fully covered) | **P3**: `create_texture_with_desc` (mipmap), `is_gpu_backend_supported`, `get_backend_type` |
-| `GPUNativeWindowVK` / `GPUPresenter` | Vulkan native-window creation, swapchain resize, surface acquire/present | complete |
+| `GPUContext` | (see Fully covered) | — |
+
+The `bridge.hpp` reverse direction (native C++ objects lent INTO C
+handles, e.g. `skity_typeface_from_native`) landed with #505.
 
 ### Not yet covered (whole module missing)
 
 | Module | Purpose | Why deferred |
 |---|---|---|
-| `GPUPresenter` | Vulkan swapchain present (`acquire_next_surface` / `present` / `resize`) through `skity_native_window_vk` | C wrappers consume the acquired `unique_ptr` and explicitly invalidate the surface handle. |
-| `GlyphData` | glyph bitmap / path query (used by `Font::LoadGlyph*`) | exposing it cleanly needs a richer query surface |
 | `gpu_context_mtl` / `gpu_context_web` | Metal / WebGPU context | platform backends (Stage 2) |
 | `utils` (settings / trace) | config / tracing | minor |
 
 > `GPUContext::create_render_target` / `make_snapshot` are intentionally
 > skipped — `MakeSnapshot` consumes a `unique_ptr`, incompatible with the
-> shared_ptr handle model.
+> shared_ptr handle model. Render-to-texture is served by TEXTURE-type
+> surfaces instead.
 
 ### Suggested priorities
 
 The original **P0–P2** backlog (paint getters, shader local matrix, GL
 `surface_mode`, path arc family, image `scale_pixels`, typeface
-`make_from_data`, font `scale_x/skew_x`, text-blob bounds) plus the
-**TypefaceDelegate fallback** and **DisplayList partial-redraw** increments
-have all landed. What remains is **P3** — deferred. Detailed backlog by
-module:
+`make_from_data`, font `scale_x/skew_x`, text-blob bounds), the
+**TypefaceDelegate fallback**, the **DisplayList partial-redraw** increment,
+the **typeface metadata / table / variation** queries, and the
+**glyph-data loading family** (`LoadGlyph*` + `GlyphData`) have all landed.
+The **introspection batch** (paint `get_color4f` / `get_alpha_f` / SDF /
+font-threshold, shader `is_opaque` / `as_gradient`, image type / alpha /
+lazy / texture-backend queries, per-corner-radii canvas clip + drrect,
+`get_global_clip_bounds`, GPUContext backend queries and mipmap texture
+creation via `skity_texture_descriptor`, typeface `get_font_descriptor`)
+has landed. What remains is **P3** — deferred. Backlog by module:
 
-- **Paint**: `get_color4f`, `get_alpha_f`; SDF / font-threshold
-  (`set/is_sdf_for_small_text`, `get/set_font_threshold`).
-- **Shader**: `is_opaque` (opacity hint); `as_gradient` (recover gradient
-  params, needs `GradientInfo` / `GradientType`).
-- **Path**: convexity (`get/is_convex`, +`ConvexityType`); `get_segment_masks`;
-  `get_verb` (+`Verb` enum); `get_last_move_pt`; type queries (`is_line`,
-  `is_simple_rrect`, `get_is_a_type`, +`IsAType`); `is_finite`; `reverse_path_to`;
-  `add_path` extend mode (+`AddMode`).
-- **Image**: property/type introspection (`get_alpha_type`, `is_texture_backend`,
-  `get_image_type`, `is_lazy`); backend handles (`get_texture`, `get_pixmap`,
+- **Image**: backend handles (`get_texture`, `get_pixmap`,
   `get_texture_by_context`).
-- **Font**: `get_widths` bounds overload; `LoadGlyph*` family
-  (`load_glyph_metrics` / `path` / `bitmap` / `bitmap_info`) — depends on
-  `GlyphData`.
-- **Typeface**: style (`get_font_style`, `is_bold`, `is_italic`);
-  `contain_glyph`; emoji/COLR (`get_units_per_em`, `contains_color_table`);
-  raw tables (`count_tables`, `get_table_tags` / `size` / `data`, `get_data`);
-  variable fonts (`get_variation_design_position` / `parameters`,
-  `make_variation`, +`FontArguments`); cache keys (`typeface_id`,
-  `get_font_descriptor`).
 - **TextBlob**: `get_text_run` (+`TextRun` projection — read-back has no
   caller demand; the reverse lookup showed callers need to *inject* shaped
   glyphs, which `skity_text_blob_create_from_glyphs` now covers); a fully
   custom `BreakTextRun` delegate (caller-driven run segmentation — the current
   `skity_typeface_delegate_create_fallback` keeps the built-in policy and only
   overrides the typeface choice).
-- **Canvas**: per-corner RRect `clip_rrect` / `draw_drrect`
-  (+RRect projection or 8-radii); `get_global_clip_bounds`. (`draw_rrect`
-  with per-corner radii, the `draw_image` sampling/paint overloads, and
-  `draw_color(color4f, blend)` are covered since the Canvas gap fill.)
-- **GPUContext**: `create_texture_with_desc` (mipmap, +`TextureDescriptor`
-  mirror); `is_gpu_backend_supported`; `get_backend_type`.
 
 > `MakeSnapshot` remains blocked on the `unique_ptr`-ownership constraint.
-> The CPU raster backend (`Canvas::MakeSoftwareCanvas`) is intentionally
-> deferred — GPU paths are the current priority.
