@@ -9,9 +9,10 @@ enable_testing()
 if (${SKITY_UNIFIED_LIB})
     # Unified-lib builds replace skity_unit_test — its legacy-API test sources
     # cannot link against a library that exports only the C ABI — with this
-    # dedicated binary: the C ABI tests that need no legacy surface (the
-    # header-only wrapper tests join here once they land).
+    # dedicated binary: the C ABI tests that need no legacy surface plus the
+    # header-only wrapper tests.
     add_executable(skity_wrapper_unit_test
+        capi/wrapper_hpp_test.cc
         capi/text_delegate_c_test.cc
         capi/serialization_c_test.cc
         capi/path_2d_c_test.cc
@@ -19,10 +20,12 @@ if (${SKITY_UNIFIED_LIB})
     )
 
     target_include_directories(skity_wrapper_unit_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/module/capi/include)
+        ${CMAKE_SOURCE_DIR}/module/capi/include
+        ${CMAKE_SOURCE_DIR}/module/capi/wrapper/include)
 
     if (${SKITY_VK_BACKEND})
         target_sources(skity_wrapper_unit_test PRIVATE
+            capi/wrapper_vk_hpp_test.cc
             capi/vulkan_c_test.cc
         )
         target_include_directories(skity_wrapper_unit_test PRIVATE
@@ -204,7 +207,11 @@ if (${SKITY_CODEC_MODULE})
     target_link_libraries(skity_unit_test PUBLIC skity::codec)
 endif()
 
-# C API wrapper tests (CPU-only; replay targets are recording canvases).
+# C API wrapper tests (CPU-only; replay targets are recording canvases). The
+# header-only wrapper tests (wrapper_hpp_test.cc / wrapper_vk_hpp_test.cc)
+# live in skity_wrapper_unit_test above instead: they define plain skity::
+# classes and must not be linked into a binary that also links the legacy
+# C++ API.
 if (${SKITY_CAPI_MODULE})
     target_sources(skity_unit_test PRIVATE
         capi/bridge_c_test.cc
