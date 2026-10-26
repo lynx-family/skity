@@ -6,10 +6,10 @@
 #include <skity/skity.hpp>
 
 // serialize module
-#include <skity_c/skity_picture.h>
-#include <skity_c/skity_stream.h>
+#include <skity/c/skity_picture.h>
+#include <skity/c/skity_stream.h>
 
-#include <skity_hpp/skity_bridge.hpp>
+#include <skity/hpp/skity_bridge.hpp>
 
 #include "common/app.hpp"
 

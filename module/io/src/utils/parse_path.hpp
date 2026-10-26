@@ -11,7 +11,7 @@
 
 // Internal implementation header of the io module (not on the public
 // include path). The consumable surface is the C ABI under
-// include/skity_c/; these classes remain the serialization engine the
+// include/skity/c/; these classes remain the serialization engine the
 // C entries are built on.
 
 #ifndef MODULE_IO_SRC_UTILS_PARSE_PATH_HPP

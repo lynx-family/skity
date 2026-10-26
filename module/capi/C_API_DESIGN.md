@@ -49,7 +49,7 @@ a non-C++ language (Swift, Rust, Go, C#) is unsafe.
 
 ```
 libskity.so              exports only extern "C" symbols (C API + render core)
-include/skity_c/*.h      pure C headers: handles + CreateInfo + POD types
+include/skity/c/*.h      pure C headers: handles + CreateInfo + POD types
 include/skity.hpp        header-only: RAII wrappers over C handles (a la vulkan.hpp)
 ```
 
@@ -69,7 +69,7 @@ class gains a member. Instead, the wrapper layer wraps each object in a small
 struct whose **first member is a shared header**:
 
 ```c
-/* skity_c/skity_base.h */
+/* skity/c/skity_base.h */
 typedef enum {
     SKITY_OBJECT_TYPE_CONTEXT = 1,
     SKITY_OBJECT_TYPE_SURFACE,
@@ -207,7 +207,7 @@ conversion.
 
 ## 6. Core API Surface
 
-All functions return [`skity_result`](./include/skity_c/skity_base.h)
+All functions return [`skity_result`](./include/skity/c/skity_base.h)
 (`SKITY_SUCCESS = 0`, `SKITY_ERROR_INVALID_HANDLE`,
 `SKITY_ERROR_INITIALIZATION_FAILED`, …). Every `extern "C"` function is
 `noexcept`; the wrapper catches C++ exceptions and converts them to a result.
@@ -378,10 +378,10 @@ These modules have complete (or near-complete) C coverage of their core:
 - `Bitmap` / `Pixmap` (pixel access, buffer wrapping via
   `data_make_with_proc` + `pixmap_create` + `bitmap_create_from_pixmap`,
   `set_color_info`), `image_read_pixels`
-- 3D / misc: [`Camera`](./include/skity_c/skity_camera.h),
-  [`Quaternion`](./include/skity_c/skity_quaternion.h),
-  [`Stroke`](./include/skity_c/skity_stroke.h),
-  [`Data`](./include/skity_c/skity_data.h)
+- 3D / misc: [`Camera`](./include/skity/c/skity_camera.h),
+  [`Quaternion`](./include/skity/c/skity_quaternion.h),
+  [`Stroke`](./include/skity/c/skity_stroke.h),
+  [`Data`](./include/skity/c/skity_data.h)
 - POD types: `color`, `blend_mode`, `tile_mode`, `sampling_options`,
   `alpha_type`, `color_type`, `font_style`, `font_metrics`
 

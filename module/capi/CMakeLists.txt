@@ -129,18 +129,14 @@ target_sources(
 )
 
 if (${SKITY_BUILD_INSTALL})
+  # installs include/skity/{c,hpp}/ as <includedir>/skity/{c,hpp}/ so the C
+  # ABI and the C++ bridge are spelled <skity/c/...> / <skity/hpp/...> like
+  # every other public header
   install(
     DIRECTORY
-    "${CMAKE_CURRENT_LIST_DIR}/include/skity_c"
+    "${CMAKE_CURRENT_LIST_DIR}/include/skity"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.h"
-  )
-
-  install(
-    DIRECTORY
-    "${CMAKE_CURRENT_LIST_DIR}/include/skity_hpp"
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.hpp"
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
   )
 
   install(

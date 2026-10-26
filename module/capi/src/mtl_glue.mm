@@ -14,9 +14,9 @@
 
 #import <skity/gpu/gpu_context_mtl.h>
 
-#include <skity_c/skity_context_mtl.h>
-#include <skity_c/skity_surface_mtl.h>
-#include <skity_c/skity_texture_mtl.h>
+#include <skity/c/skity_context_mtl.h>
+#include <skity/c/skity_surface_mtl.h>
+#include <skity/c/skity_texture_mtl.h>
 
 #include "handle.hpp"
 #include "mtl_glue.hpp"

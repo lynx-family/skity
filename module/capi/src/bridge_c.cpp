@@ -2,8 +2,8 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <skity_c/skity_canvas.h>
-#include <skity_c/skity_text.h>
+#include <skity/c/skity_canvas.h>
+#include <skity/c/skity_text.h>
 
 #include <memory>
 #include <skity/text/typeface.hpp>
@@ -12,9 +12,9 @@
 #include "handle.hpp"
 
 /*
- * Bridge entry points (declared in include/skity_hpp/skity_bridge.hpp). They
+ * Bridge entry points (declared in include/skity/hpp/skity_bridge.hpp). They
  * wrap existing native C++ objects as C handles and are declared in the
- * bridge header rather than the public skity_c/ headers because they are
+ * bridge header rather than the public skity/c/ headers because they are
  * meaningful only to C++ callers. Ownership follows the native object's
  * model: the canvas bridge borrows (mirroring skity_surface_lock_canvas's
  * no-op deleter), while the typeface bridge takes a strong reference via
@@ -24,7 +24,7 @@
 extern "C" {
 
 // SKITY_C_API (visibility default) is applied at the definitions because these
-// functions have no public skity_c/ header declarations — without it the
+// functions have no public skity/c/ header declarations — without it the
 // -fvisibility=hidden build would hide the symbols.
 SKITY_C_API skity_canvas skity_canvas_from_native(void* native) {
   if (native == nullptr) {

@@ -8,8 +8,8 @@
 // skip when the fixture is unavailable.
 
 #include <gtest/gtest.h>
-#include <skity_c/skity_paint.h>
-#include <skity_c/skity_text.h>
+#include <skity/c/skity_paint.h>
+#include <skity/c/skity_text.h>
 
 namespace {
 

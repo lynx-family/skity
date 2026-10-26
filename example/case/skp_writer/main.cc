@@ -5,12 +5,12 @@
 // A pure-C demo of the serialization surface: record with the C recorder,
 // capture a display list, wrap it into a picture, write it out as .skp.
 
-#include <skity_c/skity_canvas.h>
-#include <skity_c/skity_paint.h>
-#include <skity_c/skity_picture.h>
-#include <skity_c/skity_recorder.h>
-#include <skity_c/skity_shader.h>
-#include <skity_c/skity_stream.h>
+#include <skity/c/skity_canvas.h>
+#include <skity/c/skity_paint.h>
+#include <skity/c/skity_picture.h>
+#include <skity/c/skity_recorder.h>
+#include <skity/c/skity_shader.h>
+#include <skity/c/skity_stream.h>
 
 int main(void) {
   skity_picture_recorder recorder = skity_picture_recorder_create();

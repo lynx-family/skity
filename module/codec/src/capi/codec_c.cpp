@@ -7,7 +7,7 @@
 // skity-codec); in the unified-lib experiment the codec is folded into
 // libskity, so the entry points resolve inside the single .so.
 
-#include <skity_c/skity_codec.h>
+#include <skity/c/skity_codec.h>
 
 #include <cstring>
 #include <skity/codec/codec.hpp>
