@@ -11,7 +11,7 @@ namespace skity {
 
 class StencilStep : public HWDrawStep {
  public:
-  StencilStep(HWWGSLGeometry* geometry, HWWGSLFragment* fragment, bool no_zero);
+  StencilStep(HWWGSLGeometry* geometry, HWWGSLFragment* fragment);
 
   ~StencilStep() override = default;
 
@@ -21,9 +21,6 @@ class StencilStep : public HWDrawStep {
   bool RequireDepthWrite() const override { return false; }
 
   bool RequireColorWrite() const override { return false; }
-
- private:
-  bool no_zero_;
 };
 
 }  // namespace skity

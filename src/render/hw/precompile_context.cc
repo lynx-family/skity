@@ -167,7 +167,16 @@ void PrecompilePathStep(HWDrawStepContext* ctx, const Paint& paint,
                         bool is_stroke) {
   auto* arena = ctx->context->arena_allocator;
   auto path = MakePrecompilePath();
-  auto coverage = is_stroke ? CoverageType::kNoZero : CoverageType::kWinding;
+  if (is_stroke) {
+    auto* step =
+        arena->Make<ColorStep>(arena->Make<WGSLPathGeometry>(path, paint, true),
+                               MakeColorFragment(ctx, paint),
+                               CoverageType::kNone, /*write_depth=*/true);
+    PrecompileStep(step, ctx, paint.GetBlendMode());
+    return;
+  }
+
+  auto coverage = CoverageType::kWinding;
   const bool has_fragment_mask = paint.IsAntiAlias();
 
   if (has_fragment_mask) {
@@ -176,7 +185,7 @@ void PrecompilePathStep(HWDrawStepContext* ctx, const Paint& paint,
     auto* aa_step = arena->Make<ColorAAStep>(geometry, fragment, coverage);
     PrecompileStep(aa_step, ctx, paint.GetBlendMode(), has_fragment_mask,
                    IsPaintSourceOpaque(paint));
-  } else if (!is_stroke) {
+  } else {
     auto* geometry = arena->Make<WGSLPathGeometry>(path, paint, false);
     auto* fragment = MakeColorFragment(ctx, paint);
     auto* color_step =
@@ -186,10 +195,10 @@ void PrecompilePathStep(HWDrawStepContext* ctx, const Paint& paint,
   }
 
   auto* stencil_step = arena->Make<StencilStep>(
-      arena->Make<WGSLPathGeometry>(path, paint, is_stroke),
-      arena->Make<WGSLStencilFragment>(), is_stroke);
+      arena->Make<WGSLPathGeometry>(path, paint, false),
+      arena->Make<WGSLStencilFragment>());
   PrecompileStep(stencil_step, ctx, BlendMode::kDefault);
-  auto* geometry = arena->Make<WGSLPathGeometry>(path, paint, is_stroke);
+  auto* geometry = arena->Make<WGSLPathGeometry>(path, paint, false);
   auto* fragment = MakeColorFragment(ctx, paint, true, has_fragment_mask);
   auto* color_step = arena->Make<ColorStep>(geometry, fragment, coverage);
   PrecompileStep(color_step, ctx, paint.GetBlendMode(), has_fragment_mask,
@@ -207,11 +216,17 @@ void PrecompileTessPathStep(HWDrawStepContext* ctx, const Paint& paint,
     geometry = arena->Make<WGSLTessPathFillGeometry>(path, paint);
   }
   auto* fragment = MakeColorFragment(ctx, paint);
-  auto coverage = is_stroke ? CoverageType::kNoZero : CoverageType::kWinding;
-  auto* stencil_step = arena->Make<StencilStep>(
-      geometry, arena->Make<WGSLStencilFragment>(), is_stroke);
-  auto* color_step = arena->Make<ColorStep>(geometry, fragment, coverage);
-  if (!is_stroke && !paint.IsAntiAlias()) {
+  if (is_stroke) {
+    auto* depth_step = arena->Make<ColorStep>(
+        geometry, fragment, CoverageType::kNone, /*write_depth=*/true);
+    PrecompileStep(depth_step, ctx, paint.GetBlendMode());
+    return;
+  }
+  auto* stencil_step =
+      arena->Make<StencilStep>(geometry, arena->Make<WGSLStencilFragment>());
+  auto* color_step =
+      arena->Make<ColorStep>(geometry, fragment, CoverageType::kWinding);
+  if (!paint.IsAntiAlias()) {
     auto* single_pass_step =
         arena->Make<ColorStep>(geometry, fragment, CoverageType::kNone);
     // Single pass fill geometry is precompiled as fill geometry.

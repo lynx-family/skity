@@ -29,32 +29,28 @@ HWDynamicPathDraw::HWDynamicPathDraw(Matrix transform, Path path, Paint paint,
 
 void HWDynamicPathDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                                            HWDrawContext* context) {
-  bool single_pass = !is_stroke_ && path_.IsConvex() && !paint_.IsAntiAlias();
-
   auto geom = GenGeometry(context, false);
 
   auto frag = GenShadingFragment(context, paint_, is_stroke_);
   ConfigureShadingFragment(context, paint_, GetBlendPlan(), frag);
 
-  CoverageType coverage = CoverageType::kNone;
+  // Analytical AA strokes become fills upstream, so is_stroke_ only covers
+  // NoAA/MSAA strokes.
+  const bool single_pass =
+      is_stroke_ || (path_.IsConvex() && !paint_.IsAntiAlias());
+  const bool write_depth = is_stroke_;
 
   if (single_pass) {
-    coverage = CoverageType::kNone;
-  } else if (is_stroke_) {
-    coverage = CoverageType::kNoZero;
-  } else if (path_.GetFillType() == Path::PathFillType::kEvenOdd) {
-    coverage = CoverageType::kEvenOdd;
-  } else {
-    coverage = CoverageType::kWinding;
+    steps.emplace_back(context->arena_allocator->Make<ColorStep>(
+        geom, frag, CoverageType::kNone, write_depth));
+    return;
   }
 
-  if (!single_pass) {
-    // need stencil step first
-    steps.emplace_back(context->arena_allocator->Make<StencilStep>(
-        GenGeometry(context, false),
-        context->arena_allocator->Make<WGSLStencilFragment>(),
-        coverage == CoverageType::kNoZero));
-  }
+  const auto coverage = path_.GetFillType() == Path::PathFillType::kEvenOdd
+                            ? CoverageType::kEvenOdd
+                            : CoverageType::kWinding;
+  steps.emplace_back(context->arena_allocator->Make<StencilStep>(
+      geom, context->arena_allocator->Make<WGSLStencilFragment>()));
 
   if (paint_.IsAntiAlias()) {
     auto geometry = GenGeometry(context, true);

@@ -36,7 +36,7 @@ void HWDynamicPathClip::OnGenerateDrawStep(ArrayList<HWDrawStep *, 2> &steps,
   }
   // clip always use stencil first
   steps.emplace_back(arena_allocator->Make<StencilStep>(
-      geometry, arena_allocator->Make<WGSLStencilFragment>(), false));
+      geometry, arena_allocator->Make<WGSLStencilFragment>()));
 
   if (op_ == Canvas::ClipOp::kDifference) {
     steps.emplace_back(arena_allocator->Make<ClipStep>(

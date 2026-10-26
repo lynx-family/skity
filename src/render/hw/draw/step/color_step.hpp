@@ -13,7 +13,6 @@ namespace skity {
 
 enum class CoverageType {
   kNone,
-  kNoZero,
   kEvenOdd,
   kWinding,
 };
@@ -21,19 +20,20 @@ enum class CoverageType {
 class ColorStep : public HWDrawStep {
  public:
   ColorStep(HWWGSLGeometry* geometry, HWWGSLFragment* fragment,
-            CoverageType coverage);
+            CoverageType coverage, bool write_depth = false);
 
   ~ColorStep() override = default;
 
  protected:
   GPUStencilState GetStencilState() override;
 
-  bool RequireDepthWrite() const override { return false; }
+  bool RequireDepthWrite() const override { return write_depth_; }
 
   bool RequireColorWrite() const override { return true; }
 
  private:
   CoverageType coverage_;
+  bool write_depth_;
 };
 
 class ColorAAStep : public HWDrawStep {
