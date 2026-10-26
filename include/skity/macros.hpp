@@ -40,7 +40,14 @@
 #endif
 #endif
 
-#ifdef SKITY_DLL
+// SKITY_UNIFIED_LIB builds hide the legacy C++ API: libskity exports only the
+// skity_* C ABI (SKITY_C_API carries its own visibility attribute) and C++
+// consumers go through the header-only wrapper under skity/hpp/. The build
+// defines SKITY_HIDE_CXX_API on the library targets so SKITY_API expands to
+// nothing there.
+#if defined(SKITY_HIDE_CXX_API)
+#define SKITY_API
+#elif defined(SKITY_DLL)
 
 #if defined(SKITY_WIN)
 #define SKITY_API __declspec(dllexport)

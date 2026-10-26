@@ -237,7 +237,16 @@ class TestRunner:
         elif self.suite == "golden-text":
             target_exe = "skity_golden_test_text"
 
-        return self._find_named_test_executable(target_exe)
+        executable = self._find_named_test_executable(target_exe)
+        if (
+            not executable
+            and self.suite == "unit"
+        ):
+            # Unified-lib builds replace skity_unit_test (its legacy-API test
+            # sources cannot link against the unified library) with the
+            # dedicated wrapper test binary.
+            executable = self._find_named_test_executable("skity_wrapper_unit_test")
+        return executable
 
     def find_test_executables(self) -> List[str]:
         test_executable = self.find_test_executable()
@@ -246,9 +255,12 @@ class TestRunner:
 
         executables = [test_executable]
         if self.suite == "unit":
-            vulkan_executable = self._find_named_test_executable("skity_vulkan_unit_test")
-            if vulkan_executable:
-                executables.append(vulkan_executable)
+            if test_executable.endswith("skity_unit_test"):
+                vulkan_executable = self._find_named_test_executable(
+                    "skity_vulkan_unit_test"
+                )
+                if vulkan_executable:
+                    executables.append(vulkan_executable)
         return executables
 
     def run_gtest_suite(self) -> Dict[str, Any]:

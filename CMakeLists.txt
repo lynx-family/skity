@@ -38,7 +38,19 @@ set(CMAKE_CXX_EXTENSIONS OFF) # disable -std=gnu++11 by default
 # options should set before define skity library
 include(cmake/Options.cmake)
 
-if (MSVC AND SKITY_TEST)
+if (${SKITY_UNIFIED_LIB})
+  if (EMSCRIPTEN)
+    # hiding the legacy C++ API relies on the shared library's dynamic export
+    # table; a static archive keeps every definition reachable to the linker,
+    # which would let wrapper inline calls bind to the legacy implementations
+    message(FATAL_ERROR "SKITY_UNIFIED_LIB requires a shared libskity (EMSCRIPTEN builds STATIC)")
+  endif()
+  if (${SKITY_GENERATE_FRAMEWORK})
+    message(FATAL_ERROR "SKITY_UNIFIED_LIB cannot be combined with SKITY_GENERATE_FRAMEWORK (static framework)")
+  endif()
+endif()
+
+if (MSVC AND SKITY_TEST AND NOT SKITY_UNIFIED_LIB)
   # MSVC needs to set export all symbols for test since UT case needs to access private symbols
   set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON CACHE BOOL "Force MSVC export all symbols")
 endif()
@@ -119,6 +131,9 @@ include(GNUInstallDirs)
 # platform
 include(cmake/Platform.cmake)
 
+# C-ABI-only export policy (SKITY_UNIFIED_LIB)
+include(cmake/CABIExports.cmake)
+
 # third party deps
 include(cmake/ThirdPartyDep.cmake)
 
@@ -184,7 +199,8 @@ target_include_directories(skity-capi-internal
 
 # The C ABI library must be configured before codec / io: their internals
 # call the skity_* entry points, which live in the standalone skity-capi
-# library the modules link against.
+# library the modules link against (in the unified shape skity::capi is an
+# alias of skity itself and the entry points compile into libskity).
 if(${SKITY_CAPI_MODULE})
   add_subdirectory(module/capi)
 endif()

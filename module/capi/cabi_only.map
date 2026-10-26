@@ -1,0 +1,13 @@
+/* Copyright 2021 The Lynx Authors. All rights reserved.
+ * Licensed under the Apache License Version 2.0 that can be found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ * GNU ld version script applied to the SKITY_UNIFIED_LIB shared libraries:
+ * only the skity_* C ABI is exported, every other symbol (legacy C++ API,
+ * statically linked third-party archives) stays local. The Apple equivalent
+ * is the -exported_symbol,_skity_* allow-list in cmake/CABIExports.cmake.
+ */
+skity_cabi_only {
+  global: skity_*;
+  local: *;
+};

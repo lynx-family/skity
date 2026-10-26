@@ -54,9 +54,11 @@ set(SKITY_PUBLIC_HEADERS
 target_sources(skity PRIVATE ${SKITY_PUBLIC_HEADERS})
 
 
-if (${SKITY_BUILD_INSTALL})
+if (${SKITY_BUILD_INSTALL} AND NOT ${SKITY_UNIFIED_LIB})
 
   # install header
+  # (unified shape skips this: libskity hides the legacy C++ API there, so
+  # these headers would describe a surface that does not link)
   install(
     DIRECTORY
     "${CMAKE_CURRENT_LIST_DIR}/skity"

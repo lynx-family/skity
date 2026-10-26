@@ -80,7 +80,9 @@ There are several options you can use to configure the build:
     * `SKITY_LOG` - Option for logging. Default is OFF since print log may slow down the performance. Pass `-DSKITY_LOG=ON` in command line to enable it.
 
 * Options for build optional modules:
-    * `SKITY_CODEC_MODULE` - Option for building codec module. Default is ON for some historical reasons. Pass `-DSKITY_CODEC_MODULE=OFF` in command line to disable it.
+    * `SKITY_CAPI_MODULE` - Option for building the C API module. Default is ON.
+    * `SKITY_CODEC_MODULE` - Option for building codec module. Default is ON for some historical reasons. Pass `-DSKITY_CODEC_MODULE=OFF` in command line to disable it. (Requires `SKITY_CAPI_MODULE`; so does `SKITY_IO_MODULE`.)
+    * `SKITY_UNIFIED_LIB` - Option for the unified single-library shape. Default is OFF. Pass `-DSKITY_UNIFIED_LIB=ON` to compile the C API sources into `libskity`, hide the legacy C++ API (only the `skity_*` C ABI is exported) and make the header-only C++ wrapper under `module/capi/include/skity/hpp/` the C++ surface. In this shape the legacy-API tests, golden tests, benchmarks and legacy examples are not built; the unit test entry becomes `skity_wrapper_unit_test`. See [module/capi/README.md](../module/capi/README.md) for details.
 
 * Options for build other development components (Make sure you sync dev dependencies):
     * `SKITY_EXAMPLE` - Option for building example code. Default is OFF. Pass `-DSKITY_EXAMPLE=ON` in command line to enable it.

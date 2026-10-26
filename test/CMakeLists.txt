@@ -9,10 +9,10 @@ if(${SKITY_TEST_UT})
   add_subdirectory(ut)
 endif()
 
-if(${SKITY_TEST_BENCH} AND ${SKITY_SW_RENDERER})
+if(${SKITY_TEST_BENCH} AND ${SKITY_SW_RENDERER} AND NOT ${SKITY_UNIFIED_LIB})
   add_subdirectory(bench)
 endif()
 
-if(${SKITY_TEST_GOLDEN} AND ${SKITY_MTL_BACKEND} AND ${SKITY_CODEC_MODULE})
+if(${SKITY_TEST_GOLDEN} AND ${SKITY_MTL_BACKEND} AND ${SKITY_CODEC_MODULE} AND NOT ${SKITY_UNIFIED_LIB})
   add_subdirectory(golden)
 endif()

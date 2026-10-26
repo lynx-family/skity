@@ -168,7 +168,10 @@ endif()
 # so the C ABI surface ships inside the static framework. The skity-capi target
 # is always defined before this directory is added (module/capi at root line
 # 182, platform/darwin at line 252), so its properties are available here.
-if(${SKITY_CAPI_MODULE})
+# (SKITY_UNIFIED_LIB builds never reach this file — the root CMakeLists.txt
+# rejects the combination — and in that shape the C API sources are already on
+# the skity target's source list.)
+if(${SKITY_CAPI_MODULE} AND NOT ${SKITY_UNIFIED_LIB})
   get_target_property(capi_sources skity-capi SOURCES)
   if (capi_sources STREQUAL "capi_sources-NOTFOUND")
     message(FATAL_ERROR "capi_sources is not found")
@@ -311,9 +314,12 @@ if(${SKITY_CAPI_MODULE})
       DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
       COMPONENT Runtime
   )
+  # Only the C++ bridge header ships here: the framework is a static library
+  # that keeps the legacy C++ symbols reachable, and the header-only wrapper
+  # (skity/hpp/, SKITY_UNIFIED_LIB-only) must not be compiled against them.
   install(
-      DIRECTORY "${CMAKE_SOURCE_DIR}/module/capi/include/skity/hpp"
-      DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers"
+      FILES "${CMAKE_SOURCE_DIR}/module/capi/include/skity/hpp/skity_bridge.hpp"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/skity.framework/Headers/hpp"
       COMPONENT Runtime
   )
 endif()

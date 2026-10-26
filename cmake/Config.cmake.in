@@ -12,6 +12,9 @@ if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/skityCapiTargets.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/skityCapiTargets.cmake")
 
     add_library(skity::capi ALIAS skity::skity-capi)
+elseif(@SKITY_UNIFIED_LIB@)
+    # unified shape: the C ABI lives inside libskity itself
+    add_library(skity::capi ALIAS skity::skity)
 endif()
 
 check_required_components(skity)

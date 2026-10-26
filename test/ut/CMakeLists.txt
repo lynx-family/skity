@@ -6,6 +6,50 @@ include(GoogleTest)
 
 enable_testing()
 
+if (${SKITY_UNIFIED_LIB})
+    # Unified-lib builds replace skity_unit_test — its legacy-API test sources
+    # cannot link against a library that exports only the C ABI — with this
+    # dedicated binary: the C ABI tests that need no legacy surface (the
+    # header-only wrapper tests join here once they land).
+    add_executable(skity_wrapper_unit_test
+        capi/text_delegate_c_test.cc
+        capi/serialization_c_test.cc
+    )
+
+    target_include_directories(skity_wrapper_unit_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/module/capi/include)
+
+    if (${SKITY_VK_BACKEND})
+        target_sources(skity_wrapper_unit_test PRIVATE
+            capi/vulkan_c_test.cc
+        )
+        target_include_directories(skity_wrapper_unit_test PRIVATE
+            ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include
+        )
+    endif()
+
+    target_compile_definitions(skity_wrapper_unit_test PRIVATE
+        -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/")
+    if (CMAKE_SYSTEM_NAME MATCHES "Windows")
+        target_compile_definitions(skity_wrapper_unit_test PRIVATE
+            -DSKITY_TEST_FONT_ROOT="${CMAKE_SOURCE_DIR}/test/fonts/resources"
+        )
+    endif()
+
+    if (MSVC)
+        target_compile_options(skity_wrapper_unit_test PUBLIC /EHsc /GR-)
+    else()
+        target_compile_options(skity_wrapper_unit_test PUBLIC -fno-rtti)
+    endif()
+
+    target_link_libraries(skity_wrapper_unit_test PUBLIC skity::capi gmock_main)
+
+    gtest_add_tests(skity_wrapper_unit_test "" AUTO)
+
+    # the legacy-API binaries below cannot link against the unified library
+    return()
+endif()
+
 # Test case list
 add_executable(skity_unit_test
     base/lru_cache_test.cc
