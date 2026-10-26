@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "src/codec/codec_priv.hpp"
+#include "src/codec/core_bridge.hpp"
 
 namespace skity {
 
@@ -68,11 +69,13 @@ std::shared_ptr<Pixmap> skity::PNGCodec::DecodeIntrinsic() {
     return nullptr;
   }
 
-  auto raw_data = Data::MakeFromMalloc(buffer, raw_data_size);
+  auto raw_data = core_bridge::MakeDataFromMalloc(buffer, raw_data_size);
   uint32_t width = png_image.image.width;
   uint32_t height = png_image.image.height;
 
-  return std::make_shared<Pixmap>(raw_data, width * 4, width, height);
+  return core_bridge::MakePixmap(raw_data, width * 4, width, height,
+                                 AlphaType::kUnpremul_AlphaType,
+                                 ColorType::kRGBA);
 }
 
 std::shared_ptr<MultiFrameDecoder> PNGCodec::DecodeMultiFrame() { return {}; }
@@ -132,7 +135,7 @@ std::shared_ptr<Data> skity::PNGCodec::Encode(const Pixmap* pixmap) {
 
   png_write_end(png_ptr, info_ptr);
 
-  return Data::MakeWithCopy(encode_data.data(), encode_data.size());
+  return core_bridge::MakeDataWithCopy(encode_data.data(), encode_data.size());
 }
 
 bool skity::PNGCodec::RecognizeFileType(const char* header, size_t size) {

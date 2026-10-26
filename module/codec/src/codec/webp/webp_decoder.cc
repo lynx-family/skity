@@ -7,6 +7,8 @@
 #include <cstring>
 #include <skity/io/pixmap.hpp>
 
+#include "src/codec/core_bridge.hpp"
+
 namespace skity {
 
 namespace {
@@ -34,10 +36,12 @@ std::shared_ptr<Pixmap> PrepareOutputPixmap(std::shared_ptr<Pixmap> pixmap,
                                             int32_t width, int32_t height) {
   if (!pixmap || pixmap->Width() != width || pixmap->Height() != height ||
       pixmap->GetColorType() != ColorType::kRGBA) {
-    pixmap = std::make_shared<Pixmap>(
-        width, height, AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
+    pixmap = core_bridge::MakePixmapAlloc(
+        static_cast<uint32_t>(width), static_cast<uint32_t>(height),
+        AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
   } else {
-    pixmap->SetColorInfo(AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
+    core_bridge::SetPixmapColorInfo(
+        pixmap.get(), AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
   }
 
   return pixmap;
@@ -121,8 +125,8 @@ std::shared_ptr<Pixmap> WebpDecoder::DecodeFrame(
 
   auto pixmap =
       PrepareOutputPixmap(std::move(prev_pixmap), frame_width_, frame_height_);
-  std::memcpy(pixmap->WritableAddr8(0, 0), decoded_frame,
-              pixmap->RowBytes() * pixmap->Height());
+  std::memcpy(core_bridge::PixmapWritableAddr8(pixmap.get(), 0, 0),
+              decoded_frame, pixmap->RowBytes() * pixmap->Height());
 
   return pixmap;
 }
@@ -164,16 +168,17 @@ std::shared_ptr<Pixmap> WebpDecoder::DecodeFirstFrameScaled(
     return nullptr;
   }
 
-  auto pixmap = std::make_shared<Pixmap>(
-      config.output.width, config.output.height, AlphaType::kUnpremul_AlphaType,
-      ColorType::kRGBA);
+  auto pixmap = core_bridge::MakePixmapAlloc(
+      static_cast<uint32_t>(config.output.width),
+      static_cast<uint32_t>(config.output.height),
+      AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
 
   // Stride is width * 4 for an internal RGBA buffer, but copy row by row to
   // stay independent of that assumption.
   const uint8_t* rgba = config.output.u.RGBA.rgba;
   int stride = config.output.u.RGBA.stride;
   for (int i = 0; i < config.output.height; i++) {
-    std::memcpy(pixmap->WritableAddr8(0, i),
+    std::memcpy(core_bridge::PixmapWritableAddr8(pixmap.get(), 0, i),
                 rgba + static_cast<size_t>(i) * stride,
                 static_cast<size_t>(config.output.width) * 4);
   }

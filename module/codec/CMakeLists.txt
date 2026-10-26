@@ -81,6 +81,10 @@ target_compile_definitions(skity-codec PRIVATE -DDISABLE_SKITY_EXPERIMENTAL_WARN
 target_link_libraries(skity-codec PUBLIC skity)
 # the module's own C ABI surface shares the capi handle protocol
 target_link_libraries(skity-codec PRIVATE skity-capi-internal)
+# the module internals reach the core only through the C ABI
+# (src/codec/core_bridge.hpp), so libskity-codec imports no core C++ symbol;
+# in the normal build those entry points live in the standalone skity-capi
+target_link_libraries(skity-codec PRIVATE skity::capi)
 # capi paths must also be listed here directly: INTERFACE-library usage
 # requirements do not survive cmake_to_gn, so "handle.hpp" and the shared
 # skity/c headers would be unresolvable in the GN build

@@ -21,6 +21,7 @@ extern "C" {
 #include <skity/io/pixmap.hpp>
 
 #include "src/codec/codec_priv.hpp"
+#include "src/codec/core_bridge.hpp"
 
 namespace skity {
 
@@ -221,11 +222,11 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode(const DecodeOptions& options) {
     if (buf && width > 0 && height > 0) {
       size_t size =
           static_cast<size_t>(width) * height * tjPixelSize[TJPF_RGBA];
-      auto image_data = skity::Data::MakeWithCopy(buf, size);
+      auto image_data = core_bridge::MakeDataWithCopy(buf, size);
       tjFree(buf);
-      auto pixmap = std::make_shared<Pixmap>(
+      auto pixmap = core_bridge::MakePixmap(
           image_data, static_cast<size_t>(width) * tjPixelSize[TJPF_RGBA],
-          width, height);
+          width, height, AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
       return codec_priv::ResamplePixmapToSize(pixmap, resample_width,
                                               resample_height);
     }
@@ -337,9 +338,11 @@ std::shared_ptr<Pixmap> JPEGCodec::Decode(const DecodeOptions& options) {
   jpeg_finish_decompress(&cinfo);
   jpeg_destroy_decompress(&cinfo);
 
-  auto image_data = skity::Data::MakeWithCopy(buf, pixel_size);
+  auto image_data = core_bridge::MakeDataWithCopy(buf, pixel_size);
   tjFree(buf);
-  auto pixmap = std::make_shared<Pixmap>(image_data, row_bytes, width, height);
+  auto pixmap =
+      core_bridge::MakePixmap(image_data, row_bytes, width, height,
+                              AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
 
   return codec_priv::ResamplePixmapToSize(pixmap, resample_width,
                                           resample_height);
@@ -406,7 +409,7 @@ std::shared_ptr<Data> JPEGCodec::Encode(const Pixmap* pixmap) {
 
   jpeg_destroy_compress(&cinfo);
 
-  return skity::Data::MakeWithCopy(dest.data.data(), dest.data.size());
+  return core_bridge::MakeDataWithCopy(dest.data.data(), dest.data.size());
 }
 
 }  // namespace skity

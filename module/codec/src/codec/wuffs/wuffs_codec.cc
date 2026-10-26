@@ -9,6 +9,8 @@
 #include <limits>
 #include <skity/io/pixmap.hpp>
 
+#include "src/codec/core_bridge.hpp"
+
 namespace skity {
 
 namespace {
@@ -69,8 +71,8 @@ WuffsDecoder::WuffsDecoder(WuffsImageDecoder decoder, WuffsBuffer buffer,
   auto workbuff_len = decoder_->workbuf_len().max_incl;
 
   if (workbuff_len > 0) {
-    work_buffer_ =
-        Data::MakeFromMalloc(std::malloc(workbuff_len), workbuff_len);
+    work_buffer_ = core_bridge::MakeDataFromMalloc(std::malloc(workbuff_len),
+                                                   workbuff_len);
 
     if (!work_buffer_) {
       return;
@@ -113,14 +115,19 @@ std::shared_ptr<Pixmap> WuffsDecoder::DecodeFrame(
 
   // create pixmap to store decoded frame
   auto pixmap =
-      prev_pixmap ? prev_pixmap : std::make_shared<Pixmap>(width, height);
+      prev_pixmap
+          ? prev_pixmap
+          : core_bridge::MakePixmapAlloc(
+                static_cast<uint32_t>(width), static_cast<uint32_t>(height),
+                AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
 
   wuffs_base__pixel_config pixel_config;
   pixel_config.set(WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL,
                    WUFFS_BASE__PIXEL_SUBSAMPLING__NONE, width, height);
 
   wuffs_base__slice_u8 table_slice = wuffs_base__make_slice_u8(
-      pixmap->WritableAddr8(0, 0), pixmap->Width() * pixmap->Height() * 4);
+      core_bridge::PixmapWritableAddr8(pixmap.get(), 0, 0),
+      pixmap->Width() * pixmap->Height() * 4);
   wuffs_base__pixel_buffer pixel_buffer = wuffs_base__null_pixel_buffer();
   auto status = pixel_buffer.set_from_slice(&pixel_config, table_slice);
 
@@ -134,7 +141,7 @@ std::shared_ptr<Pixmap> WuffsDecoder::DecodeFrame(
     pixel_blend = WUFFS_BASE__PIXEL_BLEND__SRC_OVER;
   } else {
     // clear pixmap if it is the first frame
-    std::memset(pixmap->WritableAddr8(0, 0), 0,
+    std::memset(core_bridge::PixmapWritableAddr8(pixmap.get(), 0, 0), 0,
                 pixmap->Width() * pixmap->Height() * 4);
   }
 

@@ -142,6 +142,19 @@ skity_pixmap skity_pixmap_create(skity_data data, size_t row_bytes,
       SKITY_OBJECT_TYPE_PIXMAP, SKITY_HANDLE_OWNING, std::move(pm));
 }
 
+skity_pixmap skity_pixmap_create_alloc(uint32_t width, uint32_t height,
+                                       skity_alpha_type alpha_type,
+                                       skity_color_type color_type) {
+  if (width == 0 || height == 0) {
+    return nullptr;
+  }
+  auto pm = std::make_shared<skity::Pixmap>(
+      width, height, static_cast<skity::AlphaType>(alpha_type),
+      static_cast<skity::ColorType>(color_type));
+  return skity::capi::alloc_handle<skity_pixmap_s>(
+      SKITY_OBJECT_TYPE_PIXMAP, SKITY_HANDLE_OWNING, std::move(pm));
+}
+
 skity_bitmap skity_bitmap_create_from_pixmap(skity_pixmap pixmap,
                                              uint32_t read_only) {
   auto pm = skity::capi::get_impl<skity_pixmap_s, skity::Pixmap>(
