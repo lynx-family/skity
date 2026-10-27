@@ -5,7 +5,44 @@
 # needs python3 interpreter
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+# Resolves an ALIAS target name to the target it aliases; a no-op otherwise.
+function(_gni_resolve_alias OUT_VAR NAME)
+    if (TARGET ${NAME})
+        get_target_property(_aliased ${NAME} ALIASED_TARGET)
+        if (_aliased)
+            set(NAME ${_aliased})
+        endif()
+    endif()
+    set(${OUT_VAR} ${NAME} PARENT_SCOPE)
+endfunction()
+
+# Appends <target>'s <property> to the list variable <var> (deduplicated). An
+# unset property reads back as <var>-NOTFOUND and must not become an element.
+macro(_gni_append_property VAR TGT PROP)
+    get_target_property(_extra ${TGT} ${PROP})
+    if (_extra)
+        if (NOT ${VAR})
+            set(${VAR} "")
+        endif()
+        list(APPEND ${VAR} ${_extra})
+        list(REMOVE_DUPLICATES ${VAR})
+    endif()
+endmacro()
+
+# cmake_to_gni(<target> [MERGE <target>...])
+#
+# Writes <target>.gni from the target's sources / include dirs / definitions /
+# options / link libraries and recurses into the targets it links. MERGE folds
+# the listed targets into the same gni (union of all five lists) instead of
+# emitting one gni per target: GN consumers build libskity as a single library
+# that carries the C ABI, so the standalone skity-capi of the normal CMake
+# shape is absorbed into skity.gni. Merged targets are remembered so the link
+# recursion never emits them on their own, and alias names are resolved
+# everywhere so a target reached as skity::capi lands under its real name.
 function(cmake_to_gni TARGET)
+    cmake_parse_arguments(GNI "" "" "MERGE" ${ARGN})
+
+    _gni_resolve_alias(TARGET ${TARGET})
     message("cmake_to_gni: ${TARGET}")
 
     # Sanitize target name for use in custom target names (replace :: with _)
@@ -16,6 +53,30 @@ function(cmake_to_gni TARGET)
     get_target_property(COMPILE_DEFINITIONS ${TARGET} COMPILE_DEFINITIONS)
     get_target_property(COMPILE_OPTIONS ${TARGET} COMPILE_OPTIONS)
     get_target_property(LINK_LIBRARIES ${TARGET} LINK_LIBRARIES)
+
+    foreach(MERGED ${GNI_MERGE})
+        _gni_resolve_alias(MERGED ${MERGED})
+        message("cmake_to_gni: folding ${MERGED} into ${TARGET}")
+        set_property(GLOBAL APPEND PROPERTY SKITY_GNI_MERGED_TARGETS ${MERGED})
+        _gni_append_property(SOURCE_LISTS ${MERGED} SOURCES)
+        _gni_append_property(INCLUDE_DIRS ${MERGED} INCLUDE_DIRECTORIES)
+        _gni_append_property(COMPILE_DEFINITIONS ${MERGED} COMPILE_DEFINITIONS)
+        _gni_append_property(COMPILE_OPTIONS ${MERGED} COMPILE_OPTIONS)
+        _gni_append_property(LINK_LIBRARIES ${MERGED} LINK_LIBRARIES)
+    endforeach()
+
+    # GN rejects a file listed twice in one target (#525): CMake dedupes the
+    # SOURCES of repeated target_sources() calls only at build time, so
+    # normalise here and flag the CMake side that should be cleaned up
+    if (SOURCE_LISTS)
+        list(LENGTH SOURCE_LISTS _n_listed)
+        list(REMOVE_DUPLICATES SOURCE_LISTS)
+        list(LENGTH SOURCE_LISTS _n_unique)
+        if (NOT _n_listed EQUAL _n_unique)
+            math(EXPR _n_dup "${_n_listed} - ${_n_unique}")
+            message(WARNING "cmake_to_gni: ${TARGET} lists ${_n_dup} source(s) more than once; deduplicated for the gni — fix the target_sources() calls")
+        endif()
+    endif()
 
 
     set(COMPILE_DEFINITIONS_LIST "")
@@ -73,6 +134,14 @@ function(cmake_to_gni TARGET)
         if(TARGET ${LIB})
             if (${LIB} STREQUAL "pugixml::pugixml")
                 set(LIB "pugixml-static")
+            endif()
+            _gni_resolve_alias(LIB ${LIB})
+
+            # targets folded into another gni never get one of their own
+            get_property(_merged GLOBAL PROPERTY SKITY_GNI_MERGED_TARGETS)
+            if (LIB IN_LIST _merged)
+                message("${LIB} is folded into another gni, skipping")
+                continue()
             endif()
 
             # Sanitize library name for checking .gni target existence
