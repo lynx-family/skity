@@ -405,7 +405,6 @@ std::shared_ptr<Shader> HWLayer::CreateDrawLayerShader(
 }
 
 EmulatedLoadInfo HWLayer::CreateEmulatedLoadInfo() {
-  // prepare layer back draw
   const auto& bounds = GetBounds();
   Path path;
   path.AddRect(bounds);
@@ -418,8 +417,9 @@ EmulatedLoadInfo HWLayer::CreateEmulatedLoadInfo() {
           AlphaType::kPremul_AlphaType);
   paint.SetShader(CreateDrawLayerShader(image, bounds));
   paint.SetBlendMode(BlendMode::kSrc);
+  // Restore the resolved color in this layer's local coordinate system.
   auto draw = arena_allocator_->Make<HWDynamicPathDraw>(
-      GetTransform(), std::move(path), std::move(paint), false, false);
+      Matrix{}, std::move(path), std::move(paint), false, false);
 
   // Emulated load copies the resolved texture back into the MSAA attachment
   // with device-independent Src blending.
