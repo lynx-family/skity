@@ -634,6 +634,7 @@ void ModuleBuilder::CollectGlobalVarReferences(const ir::Function& function) {
           info.initializer = global_it->second.initializer;
           info.group = global_it->second.group;
           info.binding = global_it->second.binding;
+          info.read_only = global_it->second.read_only;
           if (global_it->second.inner_type != ir::kInvalidTypeId) {
             info.inner_type = global_it->second.inner_type;
             info.is_wrapped_buffer = true;
@@ -758,7 +759,8 @@ void DecorateBufferStructMembers(
     return;
   }
 
-  const ir::Type* type = type_emitter->GetTypeTable()->GetType(type_id);
+  ir::TypeTable* type_table = type_emitter->GetTypeTable();
+  const ir::Type* type = type_table->GetType(type_id);
   if (type == nullptr || type->kind != ir::TypeKind::kStruct) {
     return;
   }
@@ -781,14 +783,18 @@ void DecorateBufferStructMembers(
         {struct_type_id, index, static_cast<uint32_t>(SpvDecorationOffset),
          member.offset});
 
-    const ir::Type* member_type =
-        type_emitter->GetTypeTable()->GetType(member.type);
-    if (member_type != nullptr && member_type->kind == ir::TypeKind::kMatrix) {
-      const ir::TypeId column_vector_type =
-          type_emitter->GetTypeTable()->GetVectorType(member_type->element_type,
-                                                      member_type->count);
-      const auto column_layout = type_emitter->GetTypeTable()->GetLayoutInfo(
-          column_vector_type, layout_rule);
+    const ir::Type* member_type = type_table->GetType(member.type);
+    const ir::Type* unwrapped_type = member_type;
+    while (unwrapped_type != nullptr &&
+           unwrapped_type->kind == ir::TypeKind::kArray) {
+      unwrapped_type = type_table->GetType(unwrapped_type->element_type);
+    }
+    if (unwrapped_type != nullptr &&
+        unwrapped_type->kind == ir::TypeKind::kMatrix) {
+      const ir::TypeId column_vector_type = type_table->GetVectorType(
+          unwrapped_type->element_type, unwrapped_type->count);
+      const auto column_layout =
+          type_table->GetLayoutInfo(column_vector_type, layout_rule);
       const uint32_t matrix_stride = ir::TypeTable::AlignOffset(
           column_layout.size, column_layout.alignment);
 
@@ -804,8 +810,8 @@ void DecorateBufferStructMembers(
     if (member_type != nullptr && member_type->kind == ir::TypeKind::kArray) {
       const uint32_t array_type_id = type_emitter->EmitType(member.type);
       if (array_type_id != 0) {
-        const auto element_layout = type_emitter->GetTypeTable()->GetLayoutInfo(
-            member_type->element_type, layout_rule);
+        const auto element_layout =
+            type_table->GetLayoutInfo(member_type->element_type, layout_rule);
         uint32_t array_stride = ir::TypeTable::AlignOffset(
             element_layout.size, element_layout.alignment);
         if (layout_rule == ir::TypeTable::LayoutRule::kStd140) {
@@ -819,7 +825,7 @@ void DecorateBufferStructMembers(
       }
 
       const ir::Type* element_type =
-          type_emitter->GetTypeTable()->GetType(member_type->element_type);
+          type_table->GetType(member_type->element_type);
       if (element_type != nullptr &&
           element_type->kind == ir::TypeKind::kStruct) {
         DecorateBufferStructMembers(sections, type_emitter,
@@ -888,6 +894,11 @@ void ModuleBuilder::WriteAnnotationSection() {
   }
   std::unordered_set<ir::TypeId> buffer_visited_types;
   for (const auto& global : global_vars_) {
+    if (global.read_only) {
+      AppendInstruction(&sections_->annotations, SpvOpDecorate,
+                        {global.spirv_var_id,
+                         static_cast<uint32_t>(SpvDecorationNonWritable)});
+    }
     if (global.group.has_value()) {
       AppendInstruction(&sections_->annotations, SpvOpDecorate,
                         {global.spirv_var_id,

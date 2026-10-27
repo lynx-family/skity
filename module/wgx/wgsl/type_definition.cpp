@@ -90,11 +90,25 @@ std::unique_ptr<TypeDefinition> CreateTypeDefinition(const ast::Type& type,
     }
   } else if (type.IsArray()) {
     const auto& args = type.expr->ident->args;
-    if (args.size() < 2) {
+    if (args.empty()) {
       return {};
     }
 
     auto element_type = args[0];
+    if (element_type->GetType() != ast::ExpressionType::kIdentifier) {
+      return {};
+    }
+    ast::Type et{static_cast<ast::IdentifierExp*>(element_type)};
+    auto element = CreateTypeDefinition(et, func, layout);
+    if (!element || element->size == 0) {
+      return {};
+    }
+    if (args.size() == 1) {
+      if (layout == MemoryLayout::kStd140) {
+        return {};
+      }
+      return std::make_unique<RuntimeArray>(std::move(element));
+    }
     auto element_count = args[1];
 
     if (element_type->GetType() != ast::ExpressionType::kIdentifier ||
@@ -105,10 +119,8 @@ std::unique_ptr<TypeDefinition> CreateTypeDefinition(const ast::Type& type,
     size_t count = static_cast<ast::IntLiteralExp*>(element_count)->value;
 
     std::vector<std::unique_ptr<TypeDefinition>> elements{count};
-
-    ast::Type et{static_cast<ast::IdentifierExp*>(element_type)};
-
-    for (size_t i = 0; i < count; ++i) {
+    elements[0] = std::move(element);
+    for (size_t i = 1; i < count; ++i) {
       elements[i] = CreateTypeDefinition(et, func, layout);
     }
 
@@ -265,9 +277,8 @@ CommonArray::CommonArray(std::vector<std::unique_ptr<TypeDefinition>> elements,
                               ? round_up(16, align_of_element)
                               : align_of_element;
 
-  stride_of_element_ = round_up(align_of_array, size_of_element_);
-
-  this->size = stride_of_element_ * this->count;
+  this->stride = round_up(align_of_array, size_of_element_);
+  this->size = stride * this->count;
   this->alignment = align_of_array;
 
   this->name = "array<";
@@ -291,8 +302,7 @@ bool CommonArray::SetData(const void* data, size_t size) {
   }
 
   for (uint32_t i = 0; i < count; i++) {
-    if (!elements_[i]->SetData((uint8_t*)data + i * stride_of_element_,
-                               size_of_element_)) {
+    if (!elements_[i]->SetData((uint8_t*)data + i * stride, size_of_element_)) {
       return false;
     }
   }
@@ -302,7 +312,7 @@ bool CommonArray::SetData(const void* data, size_t size) {
 
 void CommonArray::WriteToBuffer(void* buffer, size_t offset) const {
   for (uint32_t i = 0; i < count; i++) {
-    elements_[i]->WriteToBuffer(buffer, offset + i * stride_of_element_);
+    elements_[i]->WriteToBuffer(buffer, offset + i * stride);
   }
 }
 

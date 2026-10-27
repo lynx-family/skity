@@ -179,7 +179,7 @@ class VulkanTestContext {
     app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     app_info.pEngineName = "wgx";
     app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    app_info.apiVersion = VK_API_VERSION_1_0;
+    app_info.apiVersion = VK_API_VERSION_1_1;
 
     VkInstanceCreateInfo instance_info = {};
     instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -515,6 +515,55 @@ class WgxVulkanPipelineTest : public ::testing::Test {
 };
 
 }  // namespace
+
+TEST_F(WgxVulkanPipelineTest, CreatesGraphicsPipelineForRuntimeStorageArrays) {
+  for (bool record : {false, true}) {
+    std::string source =
+        "struct Record { id: u32, transform: mat4x4<f32>, };\n";
+    source += "@group(0) @binding(0) var<storage, read> transforms: array<";
+    source += record ? "Record>;\n" : "mat4x4<f32>>;\n";
+    source += R"(
+fn position(index: u32) -> vec4<f32> { return transforms[index])";
+    source += record ? ".transform" : "";
+    source += R"( * vec4<f32>(1.0, 2.0, 0.0, 1.0); }
+@vertex fn vs_main(@builtin(vertex_index) index: u32)
+    -> @builtin(position) vec4<f32> { return position(index); }
+@fragment fn fs_main() -> @location(0) vec4<f32> { return position(u32(0)); }
+)";
+    auto vertex_spirv = CompileToSpirv(source.c_str(), "vs_main");
+    auto fragment_spirv = CompileToSpirv(source.c_str(), "fs_main");
+    ASSERT_FALSE(vertex_spirv.empty());
+    ASSERT_FALSE(fragment_spirv.empty());
+    auto vertex_module = context_.CreateShaderModule(vertex_spirv);
+    auto fragment_module = context_.CreateShaderModule(fragment_spirv);
+    ASSERT_NE(vertex_module, VK_NULL_HANDLE);
+    ASSERT_NE(fragment_module, VK_NULL_HANDLE);
+
+    VkDescriptorSetLayoutBinding binding = {};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    binding.descriptorCount = 1;
+    binding.stageFlags =
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    auto set_layout = context_.CreateDescriptorSetLayout({binding});
+    ASSERT_NE(set_layout, VK_NULL_HANDLE);
+    auto pipeline_layout = context_.CreatePipelineLayout({set_layout});
+    ASSERT_NE(pipeline_layout, VK_NULL_HANDLE);
+    auto render_pass = context_.CreateSimpleColorRenderPass();
+    ASSERT_NE(render_pass, VK_NULL_HANDLE);
+    auto pipeline = context_.CreateSimpleGraphicsPipeline(
+        vertex_module, "vs_main", fragment_module, "fs_main", pipeline_layout,
+        render_pass);
+    EXPECT_NE(pipeline, VK_NULL_HANDLE);
+
+    context_.DestroyPipeline(pipeline);
+    context_.DestroyRenderPass(render_pass);
+    context_.DestroyPipelineLayout(pipeline_layout);
+    context_.DestroyDescriptorSetLayout(set_layout);
+    context_.DestroyShaderModule(fragment_module);
+    context_.DestroyShaderModule(vertex_module);
+  }
+}
 
 TEST_F(WgxVulkanPipelineTest,
        CreatesGraphicsPipelineForStructInterfaceAndVectorComparisonShaders) {
