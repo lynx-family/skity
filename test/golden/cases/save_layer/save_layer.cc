@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <skity/recorder/picture_recorder.hpp>
+#include <string>
 
 #include "common/golden_test_check.hpp"
 #include "common/golden_test_env.hpp"
@@ -105,6 +106,67 @@ void CheckFractionalLayerBounds(bool draw_color, bool clipped) {
 }
 
 }  // namespace
+
+TEST(SaveLayerGolden, TextureCopyPreservesTransformedLayerContents) {
+  const skity::Matrix transforms[] = {
+      skity::Matrix{}, skity::Matrix::Translate(140.f, 140.f),
+      skity::Matrix::Translate(210.f, 20.f) *
+          skity::Matrix::RotateDeg(45.f, skity::Vec2{0.f, 0.f}),
+      skity::Matrix::Translate(10.f, 10.f) * skity::Matrix::Scale(1.5f, 1.25f)};
+  for (uint32_t samples : {1u, 4u}) {
+    skity::testing::GoldenTestEnvConfig config;
+    config.sample_count = samples;
+    config.supports_framebuffer_fetch = false;
+    config.supports_native_advanced_blend = false;
+    config.require_exact_pixel_match = true;
+    config.use_backend_specific_golden = true;
+    auto expected = std::filesystem::path(kGoldenTestImageDir) /
+                    (std::string("texture_copy_transformed_layers_") +
+                     std::to_string(samples) + ".png");
+    SCOPED_TRACE(expected.string());
+    EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+        1536, 640, expected.c_str(), config, [&](skity::Canvas* canvas) {
+          canvas->Clear(skity::Color_WHITE);
+          // Columns: identity, translation, rotation, scale. The second row
+          // adds a nested layer with its own translation.
+          int row = 0;
+          for (bool nested : {false, true}) {
+            int column = 0;
+            for (const auto& transform : transforms) {
+              canvas->Save();
+              canvas->Translate(column++ * 384.f, row * 320.f);
+              canvas->Concat(transform);
+              if (nested) {
+                canvas->SaveLayer(skity::Rect::MakeWH(160.f, 140.f), {});
+                canvas->Translate(5.f, 7.f);
+              }
+              auto bounds = skity::Rect::MakeXYWH(40.f, 30.f, 96.f, 80.f);
+              canvas->SaveLayer(bounds, {});
+              skity::Paint paint;
+              paint.SetColor(skity::Color_BLUE);
+              canvas->DrawRect(bounds, paint);
+              paint.SetColor(skity::Color_GREEN);
+              canvas->DrawRect(skity::Rect::MakeXYWH(110.f, 85.f, 16.f, 16.f),
+                               paint);
+              // Baselines were captured without these draws. Red Overlay on
+              // opaque blue preserves color while forcing two pass splits.
+              paint.SetColor(skity::Color_RED);
+              paint.SetBlendMode(skity::BlendMode::kOverlay);
+              canvas->DrawRect(skity::Rect::MakeXYWH(70.f, 55.f, 30.f, 25.f),
+                               paint);
+              canvas->DrawRect(skity::Rect::MakeXYWH(55.f, 40.f, 20.f, 10.f),
+                               paint);
+              canvas->Restore();
+              if (nested) {
+                canvas->Restore();
+              }
+              canvas->Restore();
+            }
+            ++row;
+          }
+        }));
+  }
+}
 
 TEST(SaveLayerGolden, FractionalBoundsLimitDrawColor) {
   CheckFractionalLayerBounds(true, false);
