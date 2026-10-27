@@ -364,6 +364,7 @@ struct Module {
   struct GlobalVariable {
     TypeId type = kInvalidTypeId;
     StorageClass storage_class = StorageClass::kPrivate;
+    bool read_only = false;
     std::optional<Value> initializer;
     std::optional<uint32_t> group;
     std::optional<uint32_t> binding;

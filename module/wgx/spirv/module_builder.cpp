@@ -634,6 +634,7 @@ void ModuleBuilder::CollectGlobalVarReferences(const ir::Function& function) {
           info.initializer = global_it->second.initializer;
           info.group = global_it->second.group;
           info.binding = global_it->second.binding;
+          info.read_only = global_it->second.read_only;
           if (global_it->second.inner_type != ir::kInvalidTypeId) {
             info.inner_type = global_it->second.inner_type;
             info.is_wrapped_buffer = true;
@@ -783,10 +784,16 @@ void DecorateBufferStructMembers(
 
     const ir::Type* member_type =
         type_emitter->GetTypeTable()->GetType(member.type);
-    if (member_type != nullptr && member_type->kind == ir::TypeKind::kMatrix) {
+    const ir::Type* matrix_type = member_type;
+    while (matrix_type != nullptr &&
+           matrix_type->kind == ir::TypeKind::kArray) {
+      matrix_type =
+          type_emitter->GetTypeTable()->GetType(matrix_type->element_type);
+    }
+    if (matrix_type != nullptr && matrix_type->kind == ir::TypeKind::kMatrix) {
       const ir::TypeId column_vector_type =
-          type_emitter->GetTypeTable()->GetVectorType(member_type->element_type,
-                                                      member_type->count);
+          type_emitter->GetTypeTable()->GetVectorType(matrix_type->element_type,
+                                                      matrix_type->count);
       const auto column_layout = type_emitter->GetTypeTable()->GetLayoutInfo(
           column_vector_type, layout_rule);
       const uint32_t matrix_stride = ir::TypeTable::AlignOffset(
@@ -888,6 +895,11 @@ void ModuleBuilder::WriteAnnotationSection() {
   }
   std::unordered_set<ir::TypeId> buffer_visited_types;
   for (const auto& global : global_vars_) {
+    if (global.read_only) {
+      AppendInstruction(&sections_->annotations, SpvOpDecorate,
+                        {global.spirv_var_id,
+                         static_cast<uint32_t>(SpvDecorationNonWritable)});
+    }
     if (global.group.has_value()) {
       AppendInstruction(&sections_->annotations, SpvOpDecorate,
                         {global.spirv_var_id,

@@ -81,6 +81,7 @@ enum class BindingType {
   kUniformBuffer,
   kTexture,
   kSampler,
+  kStorageBuffer,  // Currently only read access is supported.
 };
 
 enum ShaderStage : uint32_t {
@@ -126,13 +127,21 @@ struct WGX_API TypeDefinition {
 };
 
 struct WGX_API ArrayDefinition : public TypeDefinition {
+  // Runtime arrays have no static count or size; the binding supplies the
+  // range.
   size_t count = 0;
+  // Byte distance between adjacent elements, including padding.
+  size_t stride = 0;
 
   ArrayDefinition() : TypeDefinition("Array", 0, 0) {}
 
   ~ArrayDefinition() override = default;
 
   virtual TypeDefinition* GetElementAt(uint32_t index) = 0;
+
+  virtual TypeDefinition* GetElementType() { return GetElementAt(0); }
+
+  virtual bool IsRuntimeSized() const { return false; }
 
   bool IsArray() const override { return true; }
 
@@ -258,6 +267,7 @@ struct WGX_API CompilerContext {
   uint32_t last_ubo_binding = 0;
   uint32_t last_texture_binding = 0;
   uint32_t last_sampler_binding = 0;
+  uint32_t last_storage_binding = 0;
 };
 
 struct WGX_API Result {

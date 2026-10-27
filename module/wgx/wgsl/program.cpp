@@ -72,6 +72,7 @@ Result Program::WriteToGlsl(const char* entry_point, const GlslOptions& options,
             printer.GetUboIndex(),
             printer.GetTextureIndex(),
             0,
+            printer.GetStorageIndex(),
         },
     };
   }

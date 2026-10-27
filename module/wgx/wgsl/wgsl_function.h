@@ -31,7 +31,7 @@ class Function {
         global_declarations_(std::move(global_decls)),
         functions_(std::move(functions)),
         layout_(layout) {
-    InitBindGroups();
+    valid_ = InitBindGroups();
   }
 
   ~Function() = default;
@@ -63,7 +63,7 @@ class Function {
   BindGroup *GetBindGroup(uint32_t group);
 
  private:
-  void InitBindGroups();
+  bool InitBindGroups();
 
   BindGroup &GetOrCreateBindGroup(uint32_t group);
 
@@ -77,6 +77,7 @@ class Function {
   MemoryLayout layout_ = MemoryLayout::kStd140;
 
   std::vector<BindGroup> bind_groups_;
+  bool valid_ = false;
 };
 
 }  // namespace wgx
