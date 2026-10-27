@@ -26,7 +26,7 @@ enum class TypeKind {
   kF32,
   kVector,   // component_type + count
   kMatrix,   // component_type + rows + cols
-  kArray,    // element_type + count
+  kArray,    // element_type + count (zero for runtime arrays)
   kStruct,   // members[]
   kPointer,  // storage_class + pointee_type
   kSampler,

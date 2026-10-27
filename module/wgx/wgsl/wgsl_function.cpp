@@ -90,6 +90,9 @@ class FunctionCreator : public ast::AstVisitor {
   }
 
   void Visit(ast::Identifier *identifier) override {
+    for (auto *arg : identifier->args) {
+      Visit(arg);
+    }
     // try find type declaration first
     auto type_decl = module_->GetGlobalTypeDecl(identifier->name);
 
@@ -336,7 +339,8 @@ std::unique_ptr<Function> Function::Create(ast::Module *module,
   FunctionCreator creator(module, func);
   creator.GatherAllTypes();
 
-  return creator.CreateFunction(layout);
+  auto result = creator.CreateFunction(layout);
+  return result->valid_ ? std::move(result) : nullptr;
 }
 
 ast::TypeDecl *Function::GetTypeDecl(const std::string_view &name) const {
@@ -369,7 +373,7 @@ BindGroup *Function::GetBindGroup(uint32_t group) {
   return nullptr;
 }
 
-void Function::InitBindGroups() {
+bool Function::InitBindGroups() {
   wgx::ShaderStage stage = wgx::ShaderStage::ShaderStage_kNone;
 
   auto pipeline_stage = func_->GetPipelineStage();
@@ -400,23 +404,48 @@ void Function::InitBindGroups() {
     auto &bind_group = GetOrCreateBindGroup(group->index);
 
     if (var->address_space) {
-      // this is a uniform variable
+      if (var->address_space->GetType() != ast::ExpressionType::kIdentifier ||
+          (var->access &&
+           var->access->GetType() != ast::ExpressionType::kIdentifier)) {
+        return false;
+      }
+      const auto &address_space =
+          static_cast<ast::IdentifierExp *>(var->address_space)->ident->name;
+      bool storage = address_space == "storage";
+      if (address_space != "uniform" && !storage) {
+        return false;
+      }
+      if (storage && var->access &&
+          static_cast<ast::IdentifierExp *>(var->access)->ident->name !=
+              "read") {
+        return false;
+      }
 
       BindGroupEntry entry{
-          BindingType::kUniformBuffer,
+          storage ? BindingType::kStorageBuffer : BindingType::kUniformBuffer,
           static_cast<uint32_t>(binding->index),
       };
       entry.stage = stage;
 
-      // currently we only use uniform buffer, so it can switch to std140 if
-      // layout is kWGSL
-
       auto layout = layout_;
+      if (storage && layout == MemoryLayout::kStd140) {
+        layout = MemoryLayout::kStd430;
+      }
       if (layout == MemoryLayout::kWGSL) {
-        layout = MemoryLayout::kStd140;
+        layout = storage ? MemoryLayout::kStd430 : MemoryLayout::kStd140;
       }
 
       entry.type_definition = CreateTypeDefinition(var->type, this, layout);
+      if (!entry.type_definition) {
+        return false;
+      }
+      // shortcut: root runtime arrays only; extend for new shader requirements.
+      if (storage &&
+          (!entry.type_definition->IsArray() ||
+           !static_cast<ArrayDefinition *>(entry.type_definition.get())
+                ->IsRuntimeSized())) {
+        return false;
+      }
       entry.name = var->name->name;
       bind_group.entries.push_back(entry);
     } else if (var->type.expr->ident->name == "texture_2d") {
@@ -437,6 +466,7 @@ void Function::InitBindGroups() {
       bind_group.entries.push_back(entry);
     }
   }
+  return true;
 }
 
 BindGroup &Function::GetOrCreateBindGroup(uint32_t group) {

@@ -36,6 +36,7 @@ class AstPrinter : public ast::AstVisitor {
     if (ctx) {
       ubo_index_ = ctx->last_ubo_binding;
       texture_index_ = ctx->last_texture_binding;
+      storage_index_ = ctx->last_storage_binding;
     }
   }
 
@@ -66,6 +67,7 @@ class AstPrinter : public ast::AstVisitor {
   std::string GetResult() const;
 
   uint32_t GetUboIndex() const { return ubo_index_; }
+  uint32_t GetStorageIndex() const { return storage_index_; }
 
   uint32_t GetTextureIndex() const { return texture_index_; }
 
@@ -156,6 +158,7 @@ class AstPrinter : public ast::AstVisitor {
   std::stringstream ss_;
   bool has_error_ = false;
   uint32_t ubo_index_ = 0;
+  uint32_t storage_index_ = 0;
   uint32_t texture_index_ = 0;
   bool needs_fb_fetch_ = false;
   bool needs_advanced_blend_ = false;

@@ -2708,6 +2708,12 @@ Lowerer::VarInfo Lowerer::LookupOrRegisterGlobalVar(
           global_var_info.storage_class = ir::StorageClass::kUniform;
         } else if (space == "storage") {
           global_var_info.storage_class = ir::StorageClass::kStorage;
+          global_var_info.read_only =
+              var_node->access == nullptr ||
+              (var_node->access->GetType() ==
+                   ast::ExpressionType::kIdentifier &&
+               static_cast<ast::IdentifierExp*>(var_node->access)
+                       ->ident->name == "read");
         } else if (space == "workgroup") {
           global_var_info.storage_class = ir::StorageClass::kWorkgroup;
         } else if (space == "private") {
@@ -2715,6 +2721,11 @@ Lowerer::VarInfo Lowerer::LookupOrRegisterGlobalVar(
         }
       }
     }
+  }
+
+  if (resolved_type && resolved_type->kind == ir::TypeKind::kArray &&
+      resolved_type->count == 0 && !global_var_info.read_only) {
+    return VarInfo{};
   }
 
   if (global_var_info.storage_class == ir::StorageClass::kUniform ||
@@ -2729,6 +2740,7 @@ Lowerer::VarInfo Lowerer::LookupOrRegisterGlobalVar(
       global_var_info.type = CreateBufferCompatibleType(var_type, layout_rule);
       var_type = global_var_info.type;
     } else if (type != nullptr) {
+      var_type = CreateBufferCompatibleType(var_type, layout_rule);
       global_var_info.inner_type = var_type;
 
       auto member_layout = type_table_->GetLayoutInfo(var_type, layout_rule);

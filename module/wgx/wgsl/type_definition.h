@@ -164,6 +164,25 @@ struct Mat2x2F32 : public Primitive<std::array<float, 4>, 8> {
   Mat2x2F32() : Primitive("mat2x2<f32>") {}
 };
 
+// Runtime arrays describe externally uploaded data, not uniform values.
+struct RuntimeArray : public ArrayDefinition {
+  explicit RuntimeArray(std::unique_ptr<TypeDefinition> element)
+      : element_(std::move(element)) {
+    alignment = element_->alignment;
+    stride = (element_->size + alignment - 1) / alignment * alignment;
+    name = "array<" + element_->name + ">";
+  }
+
+  TypeDefinition* GetElementAt(uint32_t) override { return nullptr; }
+  TypeDefinition* GetElementType() override { return element_.get(); }
+  bool IsRuntimeSized() const override { return true; }
+  bool SetData(const void*, size_t) override { return false; }
+  void WriteToBuffer(void*, size_t) const override {}
+
+ private:
+  std::unique_ptr<TypeDefinition> element_;
+};
+
 struct CommonArray : public ArrayDefinition {
   CommonArray(std::vector<std::unique_ptr<TypeDefinition>> elements,
               MemoryLayout layout);

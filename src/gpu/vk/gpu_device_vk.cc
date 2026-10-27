@@ -51,6 +51,7 @@ VkDescriptorType ToVkDescriptorType(wgx::BindingType type) {
       return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     case wgx::BindingType::kSampler:
       return VK_DESCRIPTOR_TYPE_SAMPLER;
+    case wgx::BindingType::kStorageBuffer:
     case wgx::BindingType::kUndefined:
       break;
   }

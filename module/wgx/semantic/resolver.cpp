@@ -907,8 +907,10 @@ bool Resolver::ValidateMatrixType(std::string_view type_name,
 
 bool Resolver::ValidateArrayType(std::string_view type_name,
                                  const std::vector<ast::Expression*>& args) {
-  if (args.size() != 2) {
-    ReportTypeError(type_name, "array expects 2 template arguments");
+  // shortcut: internal shaders ensure valid runtime array placement; validate
+  // placement if external shaders are supported.
+  if (args.size() != 1 && args.size() != 2) {
+    ReportTypeError(type_name, "array expects 1 or 2 template arguments");
     return false;
   }
 
@@ -920,6 +922,10 @@ bool Resolver::ValidateArrayType(std::string_view type_name,
   ast::Type elem_type;
   elem_type.expr = elem;
   ResolveType(elem_type);
+
+  if (args.size() == 1) {
+    return true;
+  }
 
   if (args[1] == nullptr ||
       args[1]->GetType() != ast::ExpressionType::kIntLiteral) {

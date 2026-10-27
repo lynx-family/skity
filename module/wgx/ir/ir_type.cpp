@@ -100,7 +100,7 @@ TypeId TypeTable::GetMatrixType(TypeId component_type, uint32_t rows,
 }
 
 TypeId TypeTable::GetArrayType(TypeId element_type, uint32_t count) {
-  if (element_type == kInvalidTypeId || count == 0) {
+  if (element_type == kInvalidTypeId) {
     return kInvalidTypeId;
   }
 
