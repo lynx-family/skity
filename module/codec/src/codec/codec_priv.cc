@@ -9,6 +9,8 @@
 #include <limits>
 #include <vector>
 
+#include "src/codec/core_bridge.hpp"
+
 namespace skity {
 namespace codec_priv {
 
@@ -108,7 +110,7 @@ void CodecTransformLinePremul(uint8_t* dst, uint8_t* src, int width,
   auto src32 = reinterpret_cast<uint32_t*>(src);
   for (int x = 0; x < width; x++) {
     auto pm_color = *src32;
-    *dst32 = ColorToPMColor(pm_color);
+    *dst32 = core_bridge::ColorToPMColor(pm_color);
 
     dst32++;
     src32++;
@@ -126,7 +128,7 @@ void CodecTransformLineUnpremul(uint8_t* dst, uint8_t* src, int width,
   auto src32 = reinterpret_cast<uint32_t*>(src);
   for (int x = 0; x < width; x++) {
     auto pm_color = *src32;
-    *dst32 = PMColorToColor(pm_color);
+    *dst32 = core_bridge::PMColorToColor(pm_color);
 
     dst32++;
     src32++;
@@ -227,7 +229,7 @@ std::shared_ptr<Pixmap> ResamplePixmap(const std::shared_ptr<Pixmap>& src,
   std::vector<uint8_t> mid(mid_bytes);
 
   for (int32_t y = 0; y < src_height; y++) {
-    const uint8_t* row = src->Addr8(0, y);
+    const uint8_t* row = core_bridge::PixmapAddr8(src.get(), 0, y);
     for (int32_t x = 0; x < src_width; x++) {
       size_t idx = static_cast<size_t>(x) * 4;
       uint8_t a = row[idx + 3];
@@ -260,7 +262,7 @@ std::shared_ptr<Pixmap> ResamplePixmap(const std::shared_ptr<Pixmap>& src,
   }
 
   // Pass 2: vertical box filter, converting back to unpremul on output.
-  auto dst = std::make_shared<Pixmap>(
+  auto dst = core_bridge::MakePixmapAlloc(
       static_cast<uint32_t>(dst_width), static_cast<uint32_t>(dst_height),
       AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
 
@@ -279,7 +281,7 @@ std::shared_ptr<Pixmap> ResamplePixmap(const std::shared_ptr<Pixmap>& src,
       }
     }
 
-    uint8_t* out_row = dst->WritableAddr8(0, y);
+    uint8_t* out_row = core_bridge::PixmapWritableAddr8(dst.get(), 0, y);
     for (int32_t x = 0; x < dst_width; x++) {
       size_t idx = static_cast<size_t>(x) * 4;
       uint8_t a = DivRound(acc[idx + 3], weight);

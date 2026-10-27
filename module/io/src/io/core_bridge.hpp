@@ -50,7 +50,8 @@
 #include <utility>
 #include <vector>
 
-#include "src/handle.hpp"
+// capi's handle protocol (module/capi/common on the include path)
+#include "handle.hpp"  // NOLINT(build/include_subdir)
 
 namespace skity {
 namespace core_bridge {

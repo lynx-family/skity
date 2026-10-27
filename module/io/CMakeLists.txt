@@ -60,14 +60,10 @@ target_include_directories(skity-io
 target_include_directories(skity-io
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    # resolves "src/handle.hpp" (module/capi/src/handle.hpp) for
-    # core_bridge.hpp; comes after the module root on purpose so io's own
-    # "src/..." includes keep resolving against module/io first
-    ${SKITY_ROOT}/module/capi
     # capi paths must also be listed here directly: INTERFACE-library usage
     # requirements do not survive cmake_to_gn, so "handle.hpp" and the shared
     # skity/c headers would be unresolvable in the GN build
-    ${SKITY_ROOT}/module/capi/src
+    ${SKITY_ROOT}/module/capi/common
     ${SKITY_ROOT}/module/capi/include
 )
 

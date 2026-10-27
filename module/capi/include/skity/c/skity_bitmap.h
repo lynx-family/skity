@@ -91,6 +91,25 @@ SKITY_C_API skity_pixmap skity_pixmap_create(skity_data data, size_t row_bytes,
                                              skity_alpha_type alpha_type,
                                              skity_color_type color_type);
 
+/**
+ * @brief Allocate a new pixmap with pixel storage of its own.
+ *
+ * The buffer is zero-initialized and its row stride is
+ * width * bytes-per-pixel; write through the pointer from
+ * skity_pixmap_get_pixels. This is the destination form for producers that
+ * accumulate output incrementally (decoders filling rows).
+ *
+ * @param width       pixel width
+ * @param height      pixel height
+ * @param alpha_type  alpha interpretation of the pixels
+ * @param color_type  color packing of the pixels
+ * @return            a new handle, or NULL on failure
+ */
+SKITY_C_API skity_pixmap skity_pixmap_create_alloc(uint32_t width,
+                                                   uint32_t height,
+                                                   skity_alpha_type alpha_type,
+                                                   skity_color_type color_type);
+
 /** @brief Release the pixmap handle. Safe on NULL. */
 SKITY_C_API void skity_pixmap_destroy(skity_pixmap pixmap);
 

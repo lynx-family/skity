@@ -14,6 +14,7 @@
 #include <skity/io/data.hpp>
 
 #include "handle.hpp"
+#include "src/codec/core_bridge.hpp"
 
 namespace {
 
@@ -64,7 +65,7 @@ skity_pixmap skity_codec_decode(const void* data, size_t size,
   if (data == nullptr || size == 0) {
     return nullptr;
   }
-  auto bytes = skity::Data::MakeWithCopy(data, size);
+  auto bytes = skity::core_bridge::MakeDataWithCopy(data, size);
   auto codec = skity::Codec::MakeFromData(bytes);
   if (codec == nullptr) {
     return nullptr;
@@ -118,7 +119,7 @@ skity_multi_frame_decoder skity_codec_decode_multi_frame(const void* data,
   if (data == nullptr || size == 0) {
     return nullptr;
   }
-  auto bytes = skity::Data::MakeWithCopy(data, size);
+  auto bytes = skity::core_bridge::MakeDataWithCopy(data, size);
   auto codec = skity::Codec::MakeFromData(bytes);
   if (codec == nullptr) {
     return nullptr;

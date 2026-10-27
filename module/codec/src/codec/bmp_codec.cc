@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "src/codec/codec_priv.hpp"
+#include "src/codec/core_bridge.hpp"
 
 namespace skity {
 
@@ -237,8 +238,10 @@ std::shared_ptr<Pixmap> BMPCodec::DecodeIntrinsic() {
     }
   }
 
-  auto raw_data = Data::MakeFromMalloc(output, width * height * 4);
-  return std::make_shared<Pixmap>(raw_data, width * 4, width, height);
+  auto raw_data = core_bridge::MakeDataFromMalloc(output, width * height * 4);
+  return core_bridge::MakePixmap(raw_data, width * 4, width, height,
+                                 AlphaType::kUnpremul_AlphaType,
+                                 ColorType::kRGBA);
 }
 
 std::shared_ptr<Data> BMPCodec::Encode(const Pixmap* pixmap) {
@@ -316,7 +319,7 @@ std::shared_ptr<Data> BMPCodec::Encode(const Pixmap* pixmap) {
     }
   }
 
-  return Data::MakeWithCopy(output.data(), output.size());
+  return core_bridge::MakeDataWithCopy(output.data(), output.size());
 }
 
 }  // namespace skity

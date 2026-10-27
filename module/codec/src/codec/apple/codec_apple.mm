@@ -14,6 +14,7 @@
 #import <algorithm>
 
 #import "src/codec/codec_priv.hpp"
+#import "src/codec/core_bridge.hpp"
 
 namespace skity {
 
@@ -103,7 +104,7 @@ std::shared_ptr<Pixmap> CGImageToPixmap(CGImageRef cg_image) {
     return {};
   }
 
-  auto data = Data::MakeFromMalloc(p, total_size);
+  auto data = core_bridge::MakeDataFromMalloc(p, total_size);
 
   CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
 
@@ -150,7 +151,9 @@ std::shared_ptr<Pixmap> CGImageToPixmap(CGImageRef cg_image) {
   }
 
   // default is unpremultiplied RGBA format
-  auto pixmap = std::make_shared<Pixmap>(std::move(data), width, height);
+  auto pixmap = core_bridge::MakePixmap(std::move(data), bytesPerRow, static_cast<uint32_t>(width),
+                                        static_cast<uint32_t>(height),
+                                        AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
 
   return pixmap;
 }
@@ -426,7 +429,7 @@ std::shared_ptr<Data> CodecApple::Encode(const Pixmap* pixmap) {
 
   auto bytes = CFDataGetBytePtr(out_data);
 
-  auto encoded = Data::MakeWithCopy(bytes, length);
+  auto encoded = core_bridge::MakeDataWithCopy(bytes, length);
 
   CFRelease(out_data);
   CGImageRelease(image);

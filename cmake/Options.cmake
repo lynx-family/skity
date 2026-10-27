@@ -25,15 +25,22 @@ if(SKITY_VK_BACKEND AND NOT WGX_SPIRV_BACKEND)
   message(FATAL_ERROR "SKITY_VK_BACKEND requires WGX_SPIRV_BACKEND")
 endif()
 
-option(SKITY_CODEC_MODULE "option for build codec module" ON)
+option(SKITY_CAPI_MODULE "option for build C API wrapper module" ON)
+
+# codec (and through it io) reach the core only via the C ABI, whose entry
+# points live in the capi module
+cmake_dependent_option(
+  SKITY_CODEC_MODULE "option for build codec module"
+  ON
+  [[SKITY_CAPI_MODULE]]
+  OFF
+)
 cmake_dependent_option(
   SKITY_IO_MODULE "option for build io module"
   ON
   [[SKITY_CODEC_MODULE]]
   OFF
 )
-
-option(SKITY_CAPI_MODULE "option for build C API wrapper module" ON)
 
 # option for building example
 # User can pass -DSKITY_EXAMPLE=ON to build example if needed
