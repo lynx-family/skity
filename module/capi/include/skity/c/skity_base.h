@@ -35,8 +35,8 @@ extern "C" {
 
 /**
  * NOTE: the handle header (type tag + ownership flags) and the object-type
- * enum are implementation details of the wrapper (see src/handle.hpp) and are
- * intentionally NOT part of the public C ABI. Handles are fully opaque to
+ * enum are implementation details of the wrapper (see common/handle.hpp) and
+ * are intentionally NOT part of the public C ABI. Handles are fully opaque to
  * consumers — they only ever hold and pass the pointer around.
  */
 

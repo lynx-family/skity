@@ -97,7 +97,7 @@ The `header` being the first member lets the wrapper treat any handle as a
 `skity_object_header*` to validate its type before use:
 
 ```cpp
-/* internal to the wrapper (src/handle.hpp) */
+/* internal to the wrapper (common/handle.hpp) */
 template <typename W>
 W* resolve(void* h, skity_object_type expected) {
     auto* hdr = static_cast<skity_object_header*>(h);
@@ -122,7 +122,7 @@ deleter. Destruction is therefore uniform — the deleter alone decides whether
 the object is touched:
 
 ```cpp
-/* src/handle.hpp */
+/* common/handle.hpp */
 template <typename Wrapper>
 inline void destroy_handle(void* handle, skity_object_type expected) {
     auto* w = resolve<Wrapper>(handle, expected);

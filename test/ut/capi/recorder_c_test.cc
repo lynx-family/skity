@@ -16,7 +16,7 @@
 #include <memory>
 #include <skity/text/text_blob.hpp>
 
-#include "module/capi/src/handle.hpp"
+#include "module/capi/common/handle.hpp"
 
 namespace {
 

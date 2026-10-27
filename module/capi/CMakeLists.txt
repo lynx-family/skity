@@ -16,6 +16,9 @@ target_include_directories(skity-capi
 )
 # module root (for "src/..." includes) and skity public headers
 target_include_directories(skity-capi PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+# the handle protocol (common/handle.hpp) shared with the module-owned C
+# surfaces; see skity-capi-internal in the top-level CMakeLists.txt
+target_include_directories(skity-capi PRIVATE ${CMAKE_CURRENT_LIST_DIR}/common)
 target_include_directories(skity-capi PRIVATE ${SKITY_ROOT}/include)
 
 target_link_libraries(skity-capi PUBLIC skity)
@@ -99,7 +102,7 @@ endif()
 target_sources(
   skity-capi
   PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/src/handle.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/common/handle.hpp
     ${CMAKE_CURRENT_LIST_DIR}/src/context_c.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/surface_c.cpp
     ${SKITY_CAPI_VULKAN_SOURCES}

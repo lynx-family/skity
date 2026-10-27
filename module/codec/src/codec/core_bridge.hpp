@@ -29,8 +29,7 @@
 #include <skity/io/pixmap.hpp>
 #include <utility>
 
-// capi's handle protocol, reached through module/capi/src on the include path
-// like every *_c.cpp consumer of it
+// capi's handle protocol (module/capi/common on the include path)
 #include "handle.hpp"  // NOLINT(build/include_subdir)
 
 namespace skity {

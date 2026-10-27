@@ -89,7 +89,7 @@ target_link_libraries(skity-codec PRIVATE skity::capi)
 # requirements do not survive cmake_to_gn, so "handle.hpp" and the shared
 # skity/c headers would be unresolvable in the GN build
 target_include_directories(skity-codec PRIVATE
-  ${SKITY_ROOT}/module/capi/src
+  ${SKITY_ROOT}/module/capi/common
   ${SKITY_ROOT}/module/capi/include)
 
 if (SKITY_ENABLE_CODEC_GIF)

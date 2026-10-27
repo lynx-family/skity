@@ -2,8 +2,8 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef MODULE_CAPI_SRC_HANDLE_HPP
-#define MODULE_CAPI_SRC_HANDLE_HPP
+#ifndef MODULE_CAPI_COMMON_HANDLE_HPP
+#define MODULE_CAPI_COMMON_HANDLE_HPP
 
 #include <cstdint>
 #include <memory>
@@ -226,4 +226,4 @@ inline std::shared_ptr<T> get_impl(void* handle, skity_object_type expected) {
 }  // namespace capi
 }  // namespace skity
 
-#endif  // MODULE_CAPI_SRC_HANDLE_HPP
+#endif  // MODULE_CAPI_COMMON_HANDLE_HPP
