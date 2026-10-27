@@ -17,12 +17,14 @@ class TargetGNI:
     link_libs: list[str] = []
 
     def __init__(self, target_name: str):
-        # GN target name can not contain '-'
-        target_name = target_name.replace('-', '_')
+        # GN identifiers can contain neither '-' nor the '::' of a CMake
+        # namespaced / alias target name
+        target_name = target_name.replace('-', '_').replace('::', '_')
         self.target_name = target_name
 
     def set_sources(self, sources: list[str], strip_root: str):
-        self.sources = [source.replace(strip_root, '') for source in sources]
+        # GN rejects a file listed twice in one target; keep the first occurrence
+        self.sources = list(dict.fromkeys(source.replace(strip_root, '') for source in sources))
 
     def set_include_dirs(self, include_dirs: list[str], strip_root: str):
         for include_dir in include_dirs:
@@ -37,6 +39,9 @@ class TargetGNI:
                 self.include_dirs.append(path.replace(strip_root, ''))
             else:
                 self.include_dirs.append(include_dir.replace(strip_root, ''))
+        # the same directory often arrives twice (plain and generator-expression
+        # spelling, or once per merged target); keep the first occurrence
+        self.include_dirs = list(dict.fromkeys(self.include_dirs))
     
     def set_compile_definitions(self, compile_definitions: list[str]):
         self.compile_definitions = [cd.replace('\"', '\\"') for cd in compile_definitions]

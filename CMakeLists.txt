@@ -276,7 +276,16 @@ if(${SKITY_CMAKE_TO_GN})
   # generate gn files for skity and skity-codec
   include(cmake/CMakeToGN.cmake)
 
-  cmake_to_gni(skity)
+  # GN consumers build libskity as one library that carries the C ABI (the
+  # layout the unified shape has anyway), so the standalone skity-capi of the
+  # normal shape is folded into skity.gni instead of getting a gni of its own.
+  # codec and io reach the core through those skity_* entry points, so without
+  # this the GN build would have nothing that defines them.
+  if (TARGET skity-capi)
+    cmake_to_gni(skity MERGE skity-capi)
+  else()
+    cmake_to_gni(skity)
+  endif()
 
   if (${SKITY_CODEC_MODULE})
     cmake_to_gni(skity-codec)
