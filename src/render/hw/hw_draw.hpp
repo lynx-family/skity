@@ -178,7 +178,7 @@ class HWDraw {
 
  private:
   Matrix transform_;
-  uint32_t clip_depth_;
+  uint32_t clip_depth_ = 0;
   uint32_t sample_count_ = 1;
   float clip_value_ = 0.f;
   GPUTextureFormat target_format_ = GPUTextureFormat::kRGBA8Unorm;

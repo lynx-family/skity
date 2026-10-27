@@ -22,7 +22,8 @@ HWDrawState HWDynamicDraw::OnPrepare(HWDrawContext* context) {
     }
 
     if (step->RequireDepth()) {
-      state |= HWDrawState::kDrawStateDepth;
+      // Depth attachments use a combined depth/stencil format.
+      state |= HWDrawState::kDrawStateDepth | HWDrawState::kDrawStateStencil;
     }
   }
 

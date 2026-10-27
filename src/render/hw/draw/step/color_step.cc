@@ -7,9 +7,11 @@
 namespace skity {
 
 ColorStep::ColorStep(HWWGSLGeometry* geometry, HWWGSLFragment* fragment,
-                     CoverageType coverage)
-    : HWDrawStep(geometry, fragment, coverage != CoverageType::kNone, false),
-      coverage_(coverage) {}
+                     CoverageType coverage, bool write_depth)
+    : HWDrawStep(geometry, fragment, coverage != CoverageType::kNone,
+                 write_depth),
+      coverage_(coverage),
+      write_depth_(write_depth) {}
 
 GPUStencilState ColorStep::GetStencilState() {
   if (coverage_ == CoverageType::kNone) {
@@ -18,25 +20,17 @@ GPUStencilState ColorStep::GetStencilState() {
 
   GPUStencilState state{};
 
-  if (coverage_ == CoverageType::kNoZero) {
-    state.front.compare = GPUCompareFunction::kNotEqual;
-    state.front.pass_op = GPUStencilOperation::kReplace;
+  state.front.compare = GPUCompareFunction::kNotEqual;
+  state.front.pass_op = GPUStencilOperation::kReplace;
 
-    state.back.compare = GPUCompareFunction::kNotEqual;
-    state.back.pass_op = GPUStencilOperation::kReplace;
-  } else {
-    state.front.compare = GPUCompareFunction::kNotEqual;
-    state.front.pass_op = GPUStencilOperation::kReplace;
+  state.back.compare = GPUCompareFunction::kNotEqual;
+  state.back.pass_op = GPUStencilOperation::kReplace;
 
-    state.back.compare = GPUCompareFunction::kNotEqual;
-    state.back.pass_op = GPUStencilOperation::kReplace;
-
-    if (coverage_ == CoverageType::kEvenOdd) {
-      state.front.stencil_read_mask = 0x01;
-      state.back.stencil_read_mask = 0x01;
-      state.front.fail_op = GPUStencilOperation::kReplace;
-      state.back.fail_op = GPUStencilOperation::kReplace;
-    }
+  if (coverage_ == CoverageType::kEvenOdd) {
+    state.front.stencil_read_mask = 0x01;
+    state.back.stencil_read_mask = 0x01;
+    state.front.fail_op = GPUStencilOperation::kReplace;
+    state.back.fail_op = GPUStencilOperation::kReplace;
   }
 
   return state;

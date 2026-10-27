@@ -108,23 +108,21 @@ TEST(HWPipelineKey, StrokePath_SolidColor) {
   bool use_gpu_tessellation = false;
   skity::HWDynamicPathDraw dynamic_path_draw(Matrix{}, path, paint, is_stroke,
                                              use_gpu_tessellation);
-  dynamic_path_draw.Prepare(&draw_context);
+  draw_context.total_clip_depth = 2;
+  dynamic_path_draw.SetClipDepth(1);
+  EXPECT_EQ(dynamic_path_draw.Prepare(&draw_context),
+            kDrawStateDepth | kDrawStateStencil);
   const ArrayList<HWDrawStep*, 2>& steps = dynamic_path_draw.GetSteps();
 
-  EXPECT_EQ(steps.size(), 2);
+  ASSERT_EQ(steps.size(), 1);
+  EXPECT_TRUE(steps[0]->RequireDepth());
+  EXPECT_FALSE(steps[0]->RequireStencil());
   EXPECT_EQ(steps[0]->GetVertexKey(),
             MakeFunctionBaseKey(HWGeometryKeyType::kPath));
   EXPECT_EQ(steps[0]->GetFragmentKey(),
-            MakeFunctionBaseKey(HWFragmentKeyType::kStencil));
-  EXPECT_EQ(steps[0]->GetVertexName(), "VS_Path");
-  EXPECT_EQ(steps[0]->GetFragmentName(), "StencilFragmentWGSL");
-
-  EXPECT_EQ(steps[1]->GetVertexKey(),
-            MakeFunctionBaseKey(HWGeometryKeyType::kPath));
-  EXPECT_EQ(steps[1]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolid));
-  EXPECT_EQ(steps[1]->GetVertexName(), "VS_Path");
-  EXPECT_EQ(steps[1]->GetFragmentName(), "FS_SolidColor");
+  EXPECT_EQ(steps[0]->GetVertexName(), "VS_Path");
+  EXPECT_EQ(steps[0]->GetFragmentName(), "FS_SolidColor");
 }
 
 TEST(HWPipelineKey, ConvexPath_SolidColor_AA) {
@@ -183,48 +181,6 @@ TEST(HWPipelineKey, ConcavePath_SolidColor_AA) {
   HWDrawContext draw_context;
   draw_context.arena_allocator = &arena_allocator;
   bool is_stroke = false;
-  bool use_gpu_tessellation = false;
-  skity::HWDynamicPathDraw dynamic_path_draw(Matrix{}, path, paint, is_stroke,
-                                             use_gpu_tessellation);
-  dynamic_path_draw.Prepare(&draw_context);
-  const ArrayList<HWDrawStep*, 2>& steps = dynamic_path_draw.GetSteps();
-
-  EXPECT_EQ(steps.size(), 3);
-  EXPECT_EQ(steps[0]->GetVertexKey(),
-            MakeFunctionBaseKey(HWGeometryKeyType::kPath));
-  EXPECT_EQ(steps[0]->GetFragmentKey(),
-            MakeFunctionBaseKey(HWFragmentKeyType::kStencil));
-  EXPECT_EQ(steps[0]->GetVertexName(), "VS_Path");
-  EXPECT_EQ(steps[0]->GetFragmentName(), "StencilFragmentWGSL");
-
-  EXPECT_EQ(steps[1]->GetVertexKey(),
-            MakeFunctionBaseKey(HWGeometryKeyType::kPathAA));
-  EXPECT_EQ(steps[1]->GetFragmentKey(),
-            MakeFunctionBaseKey(HWFragmentKeyType::kSolid,
-                                HWGeometryFSKeyType::kPathAA));
-  EXPECT_EQ(steps[1]->GetVertexName(), "VS_PathAA");
-  EXPECT_EQ(steps[1]->GetFragmentName(), "FS_SolidColor_AA");
-
-  EXPECT_EQ(steps[2]->GetVertexKey(),
-            MakeFunctionBaseKey(HWGeometryKeyType::kPath));
-  EXPECT_EQ(steps[2]->GetFragmentKey(),
-            MakeFunctionBaseKey(HWFragmentKeyType::kSolid));
-  EXPECT_EQ(steps[2]->GetVertexName(), "VS_Path");
-  EXPECT_EQ(steps[2]->GetFragmentName(), "FS_SolidColor");
-}
-
-TEST(HWPipelineKey, StrokePath_SolidColor_AA) {
-  Path path;
-  path.MoveTo(10, 10);
-  path.LineTo(100, 100);
-  path.LineTo(200, 10);
-  path.Close();
-  Paint paint;
-  paint.SetAntiAlias(true);
-  ArenaAllocator arena_allocator;
-  HWDrawContext draw_context;
-  draw_context.arena_allocator = &arena_allocator;
-  bool is_stroke = true;
   bool use_gpu_tessellation = false;
   skity::HWDynamicPathDraw dynamic_path_draw(Matrix{}, path, paint, is_stroke,
                                              use_gpu_tessellation);
@@ -329,23 +285,61 @@ TEST(HWPipelineKey, StrokePath_SolidColor_GPUTess) {
   bool use_gpu_tessellation = true;
   skity::HWDynamicPathDraw dynamic_path_draw(Matrix{}, path, paint, is_stroke,
                                              use_gpu_tessellation);
-  dynamic_path_draw.Prepare(&draw_context);
+  draw_context.total_clip_depth = 2;
+  dynamic_path_draw.SetClipDepth(1);
+  EXPECT_EQ(dynamic_path_draw.Prepare(&draw_context),
+            kDrawStateDepth | kDrawStateStencil);
   const ArrayList<HWDrawStep*, 2>& steps = dynamic_path_draw.GetSteps();
 
-  EXPECT_EQ(steps.size(), 2);
+  ASSERT_EQ(steps.size(), 1);
+  EXPECT_TRUE(steps[0]->RequireDepth());
+  EXPECT_FALSE(steps[0]->RequireStencil());
   EXPECT_EQ(steps[0]->GetVertexKey(),
             MakeFunctionBaseKey(HWGeometryKeyType::kTessStroke));
   EXPECT_EQ(steps[0]->GetFragmentKey(),
-            MakeFunctionBaseKey(HWFragmentKeyType::kStencil));
-  EXPECT_EQ(steps[0]->GetVertexName(), "VS_TessPathStroke");
-  EXPECT_EQ(steps[0]->GetFragmentName(), "StencilFragmentWGSL");
-
-  EXPECT_EQ(steps[1]->GetVertexKey(),
-            MakeFunctionBaseKey(HWGeometryKeyType::kTessStroke));
-  EXPECT_EQ(steps[1]->GetFragmentKey(),
             MakeFunctionBaseKey(HWFragmentKeyType::kSolid));
-  EXPECT_EQ(steps[1]->GetVertexName(), "VS_TessPathStroke");
-  EXPECT_EQ(steps[1]->GetFragmentName(), "FS_SolidColor");
+  EXPECT_EQ(steps[0]->GetVertexName(), "VS_TessPathStroke");
+  EXPECT_EQ(steps[0]->GetFragmentName(), "FS_SolidColor");
+}
+
+TEST(HWPipelineKey, StrokeAlwaysUsesDepth) {
+  struct Case {
+    uint32_t total_depth;
+    uint32_t draw_depth;
+    bool perspective;
+  };
+  const Case cases[] = {
+      {(1u << 20) - 1, 1, false},
+      {1u << 20, (1u << 20) - 1, false},
+      {8, 0, false},
+      {8, 1, true},
+  };
+  for (bool gpu_tessellation : {false, true}) {
+    for (const auto& test : cases) {
+      SCOPED_TRACE(::testing::Message() << "gpu=" << gpu_tessellation
+                                        << " total=" << test.total_depth
+                                        << " depth=" << test.draw_depth
+                                        << " perspective=" << test.perspective);
+      ArenaAllocator arena;
+      HWDrawContext context;
+      context.arena_allocator = &arena;
+      context.total_clip_depth = test.total_depth;
+      Paint paint;
+      Path path;
+      path.MoveTo(0, 0);
+      path.LineTo(16, 16);
+      Matrix transform;
+      if (test.perspective) {
+        transform.SetPersp0(0.001f);
+      }
+      HWDynamicPathDraw draw(transform, path, paint, true, gpu_tessellation);
+      draw.SetClipDepth(test.draw_depth);
+      EXPECT_EQ(draw.Prepare(&context), kDrawStateDepth | kDrawStateStencil);
+      ASSERT_EQ(draw.GetSteps().size(), 1u);
+      EXPECT_TRUE(draw.GetSteps()[0]->RequireDepth());
+      EXPECT_FALSE(draw.GetSteps()[0]->RequireStencil());
+    }
+  }
 }
 
 // Gradient

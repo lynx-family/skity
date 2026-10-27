@@ -170,6 +170,111 @@ TEST(ShapeGolden, CatHeadPath) {
           .coverage_aa_path = expected_coverage_aa_path.c_str()}));
 }
 
+TEST(ShapeGolden, StrokeDepthOverlap) {
+  // These baselines are captured from the stencil + color implementation.
+  // Keep exact comparison: a second blend in an overlap is a regression.
+  for (bool gpu_tessellation : {false, true}) {
+    for (uint32_t samples : {1u, 4u}) {
+      skity::testing::GoldenTestEnvConfig config;
+      config.enable_gpu_tessellation = gpu_tessellation;
+      config.sample_count = samples;
+      config.require_exact_pixel_match = true;
+      config.use_backend_specific_golden = true;
+      config.supports_framebuffer_fetch = false;
+      config.supports_native_advanced_blend = false;
+      const std::string name = std::string("stroke_depth_overlap_") +
+                               (gpu_tessellation ? "gpu_" : "cpu_") +
+                               std::to_string(samples) + ".png";
+      auto expected = std::filesystem::path(kGoldenTestImageDir) / name;
+      SCOPED_TRACE(name);
+      EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+          384, 384, expected.c_str(), config, [](skity::Canvas* canvas) {
+            canvas->Clear(skity::Color_WHITE);
+            skity::Path path;
+            // Repeated, self-intersecting contours exercise both triangle
+            // overlap and overlap across tessellation instances.
+            for (int i = 0; i < 2; ++i) {
+              path.MoveTo(12.f, 12.f);
+              path.LineTo(84.f, 60.f);
+              path.LineTo(12.f, 60.f);
+              path.CubicTo(84.f, 12.f, 84.f, 60.f, 12.f, 12.f);
+            }
+            skity::Paint paint;
+            paint.SetStyle(skity::Paint::kStroke_Style);
+            paint.SetStrokeWidth(12.f);
+            paint.SetColor(skity::ColorSetARGB(96, 30, 80, 220));
+            paint.SetAntiAlias(true);
+            int row = 0;
+            for (auto cap : {skity::Paint::kButt_Cap, skity::Paint::kRound_Cap,
+                             skity::Paint::kSquare_Cap}) {
+              int column = 0;
+              for (auto join :
+                   {skity::Paint::kMiter_Join, skity::Paint::kRound_Join,
+                    skity::Paint::kBevel_Join}) {
+                canvas->Save();
+                canvas->Translate(12.f + column++ * 124.f, 8.f + row * 80.f);
+                paint.SetStrokeCap(cap);
+                paint.SetStrokeJoin(join);
+                canvas->DrawPath(path, paint);
+                canvas->Restore();
+              }
+              ++row;
+            }
+
+            canvas->Save();
+            canvas->Translate(12.f, 258.f);
+            // Distinct strokes must blend with one another and allow a
+            // following fill, even where the earlier draw wrote depth.
+            canvas->DrawPath(path, paint);
+            paint.SetColor(skity::ColorSetARGB(128, 220, 60, 30));
+            canvas->Translate(8.f, 6.f);
+            canvas->DrawPath(path, paint);
+            paint.SetStyle(skity::Paint::kFill_Style);
+            canvas->DrawPath(path, paint);
+            canvas->Restore();
+
+            canvas->Save();
+            canvas->Translate(134.f, 258.f);
+            canvas->SaveLayer(skity::Rect::MakeWH(112.f, 112.f), {});
+            canvas->Save();
+            skity::Path clip;
+            clip.AddCircle(48.f, 40.f, 38.f);
+            canvas->ClipPath(clip);
+            canvas->Save();
+            skity::Path hole;
+            hole.AddCircle(48.f, 40.f, 12.f);
+            canvas->ClipPath(hole, skity::Canvas::ClipOp::kDifference);
+            paint.SetStyle(skity::Paint::kStroke_Style);
+            canvas->DrawPath(path, paint);
+            paint.SetBlendMode(skity::BlendMode::kOverlay);
+            // Forces a pass split and clip replay at both sample counts.
+            canvas->DrawPath(path, paint);
+            canvas->Restore();
+            canvas->Translate(4.f, 4.f);
+            canvas->DrawPath(path, paint);
+            canvas->Restore();
+            paint.SetBlendMode(skity::BlendMode::kSrcOver);
+            paint.SetColor(skity::ColorSetARGB(96, 30, 180, 60));
+            canvas->Translate(0.f, 24.f);
+            canvas->DrawPath(path, paint);
+            canvas->Restore();
+            canvas->Restore();
+
+            canvas->Save();
+            canvas->Translate(260.f, 258.f);
+            skity::Point points[] = {{0.f, 0.f, 0.f, 1.f},
+                                     {96.f, 72.f, 0.f, 1.f}};
+            skity::Vec4 colors[] = {skity::Colors::kRed, skity::Colors::kBlue};
+            paint.SetShader(
+                skity::Shader::MakeLinear(points, colors, nullptr, 2));
+            paint.SetAlphaF(0.5f);
+            canvas->DrawPath(path, paint);
+            canvas->Restore();
+          }));
+    }
+  }
+}
+
 TEST(ShapeGolden, StrokeMiterLimit) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(400.f, 200.f));

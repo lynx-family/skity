@@ -6,26 +6,17 @@
 
 namespace skity {
 
-StencilStep::StencilStep(HWWGSLGeometry* geometry, HWWGSLFragment* fragment,
-                         bool no_zero)
-    : HWDrawStep(geometry, fragment, true, false), no_zero_(no_zero) {}
+StencilStep::StencilStep(HWWGSLGeometry* geometry, HWWGSLFragment* fragment)
+    : HWDrawStep(geometry, fragment, true, false) {}
 
 GPUStencilState StencilStep::GetStencilState() {
   GPUStencilState state{};
 
-  if (no_zero_) {
-    state.front.compare = GPUCompareFunction::kEqual;
-    state.front.pass_op = GPUStencilOperation::kIncrementWrap;
+  state.front.compare = GPUCompareFunction::kAlways;
+  state.front.pass_op = GPUStencilOperation::kIncrementWrap;
 
-    state.back.compare = GPUCompareFunction::kEqual;
-    state.back.pass_op = GPUStencilOperation::kIncrementWrap;
-  } else {
-    state.front.compare = GPUCompareFunction::kAlways;
-    state.front.pass_op = GPUStencilOperation::kIncrementWrap;
-
-    state.back.compare = GPUCompareFunction::kAlways;
-    state.back.pass_op = GPUStencilOperation::kDecrementWrap;
-  }
+  state.back.compare = GPUCompareFunction::kAlways;
+  state.back.pass_op = GPUStencilOperation::kDecrementWrap;
 
   return state;
 }

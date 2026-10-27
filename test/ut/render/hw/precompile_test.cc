@@ -32,9 +32,14 @@
 #include "src/gpu/gpu_shader_module.hpp"
 #include "src/gpu/gpu_surface_impl.hpp"
 #include "src/gpu/gpu_texture.hpp"
+#include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
+#include "src/render/hw/draw/geometry/wgsl_path_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
 #include "src/render/hw/draw/hw_dynamic_coverage_path_draw.hpp"
+#include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_text_draw.hpp"
+#include "src/render/hw/draw/step/color_step.hpp"
+#include "src/render/hw/hw_render_pass_builder.hpp"
 #include "src/render/hw/layer/hw_root_layer.hpp"
 #include "src/render/text/glyph_run.hpp"
 
@@ -682,18 +687,25 @@ TEST(PrecompileDrawTest,
 }
 
 TEST(PrecompileDrawTest, PrecompilePathUsesContourAAWhenEnabled) {
-  FakeGPUContext context;
-  ASSERT_TRUE(context.Init());
-  context.SetEnableContourAA(true);
-  auto* device = context.device();
-  ASSERT_NE(device, nullptr);
+  for (auto style : {Paint::kFill_Style, Paint::kStroke_Style}) {
+    SCOPED_TRACE(style);
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    context.SetEnableContourAA(true);
+    auto* device = context.device();
 
-  Paint paint;
-  paint.SetAntiAlias(true);
-  PrecompileDraw(context, false, PrecompileDrawType::kDrawPath, paint);
+    Paint paint;
+    paint.SetStyle(style);
+    paint.SetStrokeWidth(4.f);
+    paint.SetAntiAlias(true);
+    ExpectRealDrawHitsPrecompiledPipeline(
+        context, PrecompileDrawType::kDrawPath, paint, false,
+        [&](Canvas* canvas) { canvas->DrawPath(MakeTestPath(), paint); });
 
-  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("PathAA"));
-  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("TessPath"));
+    EXPECT_TRUE(device->HasVertexFunctionLabelContaining("PathAA"));
+    EXPECT_FALSE(device->HasVertexFunctionLabelContaining("TessPath"));
+    EXPECT_EQ(device->last_instance_counts().size(), 3u);
+  }
 }
 
 TEST(PrecompileDrawTest, AnalyticalAAModesCanBeEnabledTogether) {
@@ -1165,6 +1177,194 @@ TEST(PrecompileDrawTest, CreatesAndCachesSolidDrawPipeline) {
   EXPECT_EQ(device->shader_function_count(), shader_function_count);
   EXPECT_EQ(device->render_pipeline_count(), render_pipeline_count);
   EXPECT_GT(device->clone_pipeline_count(), 0u);
+}
+
+TEST(PrecompileDrawTest, StrokeWritesColorAndDepthInOneCommand) {
+  for (bool gpu_tessellation : {false, true}) {
+    for (uint32_t samples : {1u, 4u}) {
+      SCOPED_TRACE(::testing::Message()
+                   << "gpu=" << gpu_tessellation << " samples=" << samples);
+      FakeGPUContext context;
+      ASSERT_TRUE(context.Init());
+      ArenaAllocator arena;
+      HWStageBuffer stage_buffer(context.device());
+      HWStaticBuffer static_buffer(context.device());
+      VectorCache<float> vertices;
+      VectorCache<uint32_t> indices;
+      HWDrawContext draw_context{};
+      draw_context.arena_allocator = &arena;
+      draw_context.gpuContext = &context;
+      draw_context.pipelineLib = context.GetPipelineLib();
+      draw_context.stageBuffer = &stage_buffer;
+      draw_context.static_buffer = &static_buffer;
+      draw_context.vertex_vector_cache = &vertices;
+      draw_context.index_vector_cache = &indices;
+      draw_context.total_clip_depth = 4;
+
+      Paint paint;
+      paint.SetStyle(Paint::kStroke_Style);
+      paint.SetStrokeWidth(8.f);
+      paint.SetAlphaF(0.5f);
+      HWDynamicPathDraw draw(Matrix{}, MakeTestPath(), paint, true,
+                             gpu_tessellation);
+      draw.SetClipDepth(2);
+      draw.SetSampleCount(samples);
+      draw.SetScissorBox(Rect::MakeWH(32.f, 32.f));
+      auto plan = ResolveHWBlendPlan(BlendMode::kSrcOver, false, false,
+                                     context.device()->GetCaps(), true);
+      ASSERT_TRUE(plan.has_value());
+      draw.SetBlendPlan(*plan);
+      auto state = draw.Prepare(&draw_context);
+      ASSERT_EQ(state, kDrawStateDepth | kDrawStateStencil);
+      EXPECT_FLOAT_EQ(draw.GetClipValue(), 0.4f);
+      draw.GenerateCommand(&draw_context, state);
+      std::vector<uint32_t> instance_counts;
+      FakeRenderPass pass(GPURenderPassDescriptor{}, instance_counts);
+      draw.Draw(&pass, nullptr);
+      ASSERT_EQ(pass.GetCommands().size(), 1u);
+      const auto* command = pass.GetCommands().front();
+      ASSERT_GT(command->index_count, 0u);
+      const auto& pipeline = command->pipeline->GetDescriptor();
+      EXPECT_EQ(pipeline.sample_count, samples);
+      EXPECT_EQ(pipeline.target.write_mask, 0xFu);
+      EXPECT_EQ(pipeline.depth_stencil.format,
+                GPUTextureFormat::kDepth24Stencil8);
+      EXPECT_TRUE(pipeline.depth_stencil.enable_depth);
+      EXPECT_TRUE(pipeline.depth_stencil.depth_state.enableWrite);
+      EXPECT_EQ(pipeline.depth_stencil.depth_state.compare,
+                GPUCompareFunction::kGreater);
+      EXPECT_FALSE(pipeline.depth_stencil.enable_stencil);
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, ColorStepDepthWriteIsIndependentOfCoverage) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  ArenaAllocator arena;
+  HWStageBuffer stage_buffer(context.device());
+  VectorCache<float> vertices;
+  VectorCache<uint32_t> indices;
+  HWDrawContext draw_context{};
+  draw_context.arena_allocator = &arena;
+  draw_context.gpuContext = &context;
+  draw_context.pipelineLib = context.GetPipelineLib();
+  draw_context.stageBuffer = &stage_buffer;
+  draw_context.vertex_vector_cache = &vertices;
+  draw_context.index_vector_cache = &indices;
+
+  HWDrawStepContext step_context{};
+  step_context.context = &draw_context;
+  step_context.state = kDrawStateDepth | kDrawStateStencil;
+  step_context.clip_depth = 0.5f;
+  step_context.scissor = Rect::MakeWH(32.f, 32.f);
+
+  Paint paint;
+  auto path = MakeConvexTestPath();
+  WGSLPathGeometry geometry(path, paint, false);
+  WGSLSolidColor fragment(paint.GetFillColor());
+  for (auto coverage :
+       {CoverageType::kNone, CoverageType::kEvenOdd, CoverageType::kWinding}) {
+    for (bool write_depth : {false, true}) {
+      SCOPED_TRACE(::testing::Message()
+                   << "coverage=" << static_cast<int>(coverage)
+                   << " write_depth=" << write_depth);
+      ColorStep step(&geometry, &fragment, coverage, write_depth);
+      EXPECT_EQ(step.RequireDepth(), write_depth);
+      EXPECT_EQ(step.RequireStencil(), coverage != CoverageType::kNone);
+      Command command;
+      step.GenerateCommand(step_context, &command, nullptr);
+      ASSERT_TRUE(command.IsValid());
+      const auto& state = command.pipeline->GetDescriptor().depth_stencil;
+      EXPECT_TRUE(state.enable_depth);
+      EXPECT_EQ(state.depth_state.enableWrite, write_depth);
+      EXPECT_EQ(state.depth_state.compare, GPUCompareFunction::kGreater);
+      EXPECT_EQ(state.enable_stencil, coverage != CoverageType::kNone);
+      if (state.enable_stencil) {
+        EXPECT_EQ(state.stencil_state.front, state.stencil_state.back);
+        EXPECT_EQ(state.stencil_state.front.compare,
+                  GPUCompareFunction::kNotEqual);
+        EXPECT_EQ(state.stencil_state.front.pass_op,
+                  GPUStencilOperation::kReplace);
+        EXPECT_EQ(state.stencil_state.front.stencil_read_mask,
+                  coverage == CoverageType::kEvenOdd ? 0x01u : 0xFFFFFFFFu);
+      }
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, RenderPassAttachmentsMatchDrawState) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  HWRenderTargetCache::Pool pool(context.GetRenderTargetCache());
+  HWDrawContext draw_context{};
+  draw_context.gpuContext = &context;
+  draw_context.pool = &pool;
+  GPUTextureDescriptor target_desc;
+  target_desc.width = target_desc.height = 32;
+  target_desc.format = GPUTextureFormat::kRGBA8Unorm;
+  auto target = context.device()->CreateTexture(target_desc);
+  for (auto state : {kDrawStateNone, kDrawStateStencil,
+                     kDrawStateDepth | kDrawStateStencil}) {
+    for (uint32_t samples : {1u, 4u}) {
+      GPURenderPassDescriptor pass;
+      HWRenderPassBuilder(&draw_context, target)
+          .SetSampleCount(samples)
+          .SetDrawState(state)
+          .Build(pass);
+      if (state == kDrawStateNone) {
+        EXPECT_EQ(pass.depth_attachment.texture, nullptr);
+        EXPECT_EQ(pass.stencil_attachment.texture, nullptr);
+        continue;
+      }
+      ASSERT_NE(pass.stencil_attachment.texture, nullptr);
+      const auto& attachment = pass.stencil_attachment.texture->GetDescriptor();
+      EXPECT_EQ(attachment.sample_count, samples);
+      if (state & kDrawStateDepth) {
+        EXPECT_EQ(attachment.format, GPUTextureFormat::kDepth24Stencil8);
+        EXPECT_EQ(pass.depth_attachment.texture,
+                  pass.stencil_attachment.texture);
+        EXPECT_EQ(pass.depth_attachment.load_op, GPULoadOp::kClear);
+        EXPECT_EQ(pass.depth_attachment.store_op, GPUStoreOp::kDiscard);
+        EXPECT_FLOAT_EQ(pass.depth_attachment.clear_value, 0.f);
+      } else {
+        EXPECT_EQ(attachment.format, GPUTextureFormat::kStencil8);
+        EXPECT_EQ(pass.depth_attachment.texture, nullptr);
+      }
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, PrecompiledStrokePipelineIsHitByRealDraw) {
+  for (bool gpu_tessellation : {false, true}) {
+    for (bool msaa : {false, true}) {
+      for (bool perspective : {false, true}) {
+        SCOPED_TRACE(::testing::Message()
+                     << "gpu=" << gpu_tessellation << " msaa=" << msaa
+                     << " perspective=" << perspective);
+        FakeGPUContext context;
+        ASSERT_TRUE(context.Init());
+        context.SetEnableGPUTessellation(gpu_tessellation);
+        Paint paint;
+        paint.SetStyle(Paint::kStroke_Style);
+        paint.SetStrokeWidth(4.f);
+        paint.SetAlphaF(0.5f);
+        ExpectRealDrawHitsPrecompiledPipeline(
+            context, PrecompileDrawType::kDrawPath, paint, msaa,
+            [&](Canvas* canvas) {
+              if (perspective) {
+                Matrix transform;
+                transform.SetPersp0(0.001f);
+                canvas->Concat(transform);
+              }
+              canvas->DrawPath(MakeTestPath(), paint);
+            });
+        EXPECT_EQ(context.device()->last_instance_counts().size(), 1u);
+        EXPECT_FALSE(
+            context.device()->HasFragmentFunctionLabel("StencilFragmentWGSL"));
+      }
+    }
+  }
 }
 
 TEST(PrecompileDrawTest, PrecompiledPathPipelineIsHitByRealDraw) {
