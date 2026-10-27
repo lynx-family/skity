@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "font.font_manager.fontconfig.fallback_unknown_family",
   "category": "font_manager",
-  "status": "active",
+  "status": "expected_diff",
   "backend": "fontconfig",
   "platforms": [
     "linux-fontconfig"
@@ -43,5 +43,30 @@
   },
   "font_manager_expectation": {
     "inventory_count": 11
+  },
+  "expected_diff": {
+    "reason": "Character fallback may leave an unknown family to find coverage. Skity applies its sans-serif CJK rules and selects SC in this zh_CN environment; native Skia selects JP in the controlled config. Covered by CharacterFallbackChecksActualCoverage and MissingFamilyUsesRegionalFallback.",
+    "skia": {
+      "available": true,
+      "family_name": "Noto Sans CJK JP",
+      "post_script_name": "NotoSansCJKJP-Regular",
+      "collection_index": 0,
+      "style": {
+        "slant": "upright",
+        "weight": 400,
+        "width": 5
+      }
+    },
+    "skity": {
+      "available": true,
+      "family_name": "Noto Sans CJK SC",
+      "post_script_name": "NotoSansCJKSC-Regular",
+      "collection_index": 2,
+      "style": {
+        "slant": "upright",
+        "weight": 400,
+        "width": 5
+      }
+    }
   }
 }

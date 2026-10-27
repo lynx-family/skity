@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "font.font_manager.fontconfig.default_italic",
   "category": "font_manager",
-  "status": "active",
+  "status": "expected_diff",
   "backend": "fontconfig",
   "platforms": [
     "linux-fontconfig"
@@ -40,5 +40,22 @@
   },
   "font_manager_expectation": {
     "inventory_count": 11
+  },
+  "expected_diff": {
+    "reason": "Skity supplies sans-serif for the default typeface and matches the requested italic style in the controlled config. Native Skia returns unavailable. Default-family fallback is intentional; named-family matching remains strict.",
+    "skia": {
+      "available": false
+    },
+    "skity": {
+      "available": true,
+      "family_name": "Source Sans Pro",
+      "post_script_name": "SourceSansPro-Italic",
+      "collection_index": 0,
+      "style": {
+        "slant": "italic",
+        "weight": 400,
+        "width": 5
+      }
+    }
   }
 }

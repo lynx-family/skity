@@ -914,6 +914,43 @@ Json::Value NormalizeFontManagerProbe(const Json::Value& root) {
   return value;
 }
 
+Json::Value ExpectedDiffSelection(const Json::Value& root) {
+  const auto& face = root["font_manager_probe"]["matched_typefaces"][0];
+  Json::Value selection(Json::objectValue);
+  selection["available"] = face["available"];
+  if (face["available"].asBool()) {
+    const auto identity = NormalizeTypefaceSelectionIdentity(face);
+    for (const char* field :
+         {"family_name", "post_script_name", "collection_index"}) {
+      selection[field] = identity[field];
+    }
+    selection["style"] = NormalizeStyle(face["font_style"]);
+  }
+  return selection;
+}
+
+bool MatchesExpectedDiff(const Json::Value& expectation,
+                         const Json::Value& expected, const Json::Value& actual,
+                         const std::vector<Diff>& diffs) {
+  if (expectation["skia"] != ExpectedDiffSelection(expected) ||
+      expectation["skity"] != ExpectedDiffSelection(actual)) {
+    return false;
+  }
+  // Different faces have different identity metadata. Only availability and
+  // identity differences are covered; inventory, style, metrics and input
+  // validation failures must still fail.
+  const std::string prefix = "font_manager_probe.matched_typefaces[0].";
+  for (const auto& diff : diffs) {
+    if (diff.reason_code != "selection_mismatch" ||
+        (diff.path != prefix + "available" &&
+         diff.path.rfind(prefix + "identity.", 0) != 0) ||
+        diff.path.rfind(prefix + "identity.style", 0) == 0) {
+      return false;
+    }
+  }
+  return !diffs.empty();
+}
+
 double ReadCompareEpsilon(const Json::Value& compare, const std::string& field,
                           double fallback) {
   if (!compare.isObject() || !compare.isMember(field) ||
@@ -1555,6 +1592,15 @@ CompareResult RunCompare(const CompareRequest& request) {
     }
   }
 
+  if (case_root["status"] == "expected_diff") {
+    // Skity must still satisfy its declared policy if the engines converge.
+    // Otherwise losing Skity's default face could pass against an absent
+    // oracle.
+    CompareJsonSubset(case_root["expected_diff"]["skity"],
+                      ExpectedDiffSelection(actual_root), "expected_diff.skity",
+                      "selection_mismatch", "expected_selection", 0.0, false,
+                      &diffs);
+  }
   CompareResult result;
   result.case_id = case_validation.case_id;
   result.backend = backend;
@@ -1572,6 +1618,17 @@ CompareResult RunCompare(const CompareRequest& request) {
     result.report["diff_path"] = diffs.front().path;
     result.report["diff_count"] = static_cast<Json::UInt64>(diffs.size());
     result.report["diffs"] = ToDiffsJson(diffs);
+  }
+  if (case_root["status"] == "expected_diff") {
+    const bool accepted = MatchesExpectedDiff(
+        case_root["expected_diff"], expected_root, actual_root, diffs);
+    result.report["expected_diff"] = accepted;
+    result.report["expected_diff_contract"] = case_root["expected_diff"];
+    if (accepted) {
+      result.status = CompareStatus::kPass;
+      result.report["passed"] = true;
+      result.report["reason_code"] = "expected_diff";
+    }
   }
   result.report["compare_config"] = CompareConfigToJson(config);
   return result;

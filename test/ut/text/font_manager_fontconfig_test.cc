@@ -206,6 +206,27 @@ TEST_F(FontManagerFontConfigTest, StyleSetMatchStaysWithinItsFamily) {
             nullptr);
 }
 
+TEST_F(FontManagerFontConfigTest, NamedFamilyDoesNotInjectUnrelatedGeneric) {
+  const auto config = WriteConfig("named-family.conf", true, R"(
+    <alias>
+      <family>Noto Serif</family>
+      <default><family>serif</family></default>
+    </alias>
+    <match target="pattern">
+      <test name="family"><string>sans-serif</string></test>
+      <edit name="family" mode="append_last" binding="strong">
+        <string>Source Sans Pro</string>
+      </edit>
+    </match>)");
+  auto manager = MakeFontManagerFontConfig(config.c_str());
+  ASSERT_NE(manager, nullptr);
+  auto styles = manager->MatchFamily("Noto Serif");
+  ASSERT_EQ(styles->Count(), 1);
+  auto face = styles->MatchStyle(FontStyle());
+  ASSERT_NE(face, nullptr);
+  EXPECT_EQ(face->GetFontDescriptor().family_name, "Noto Serif");
+}
+
 TEST_F(FontManagerFontConfigTest, CharacterFallbackChecksActualCoverage) {
   for (uint32_t character : {0x0041u, 0x4E00u, 0x1F600u}) {
     auto face = manager_->MatchFamilyStyleCharacter(

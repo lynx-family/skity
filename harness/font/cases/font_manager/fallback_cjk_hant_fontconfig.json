@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "font.font_manager.fontconfig.fallback_cjk_hant",
   "category": "font_manager",
-  "status": "active",
+  "status": "expected_diff",
   "backend": "fontconfig",
   "platforms": [
     "linux-fontconfig"
@@ -46,5 +46,30 @@
   "font_manager_expectation": {
     "matched": true,
     "inventory_count": 11
+  },
+  "expected_diff": {
+    "reason": "Skity uses its embedded CJK rules to honor zh-Hant and select the TC face; native Skia selects the JP face without these rules in the controlled config. Covered by the HantOverridesChinese regional fallback test.",
+    "skia": {
+      "available": true,
+      "family_name": "Noto Sans CJK JP",
+      "post_script_name": "NotoSansCJKJP-Regular",
+      "collection_index": 0,
+      "style": {
+        "slant": "upright",
+        "weight": 400,
+        "width": 5
+      }
+    },
+    "skity": {
+      "available": true,
+      "family_name": "Noto Sans CJK TC",
+      "post_script_name": "NotoSansCJKTC-Regular",
+      "collection_index": 3,
+      "style": {
+        "slant": "upright",
+        "weight": 400,
+        "width": 5
+      }
+    }
   }
 }
