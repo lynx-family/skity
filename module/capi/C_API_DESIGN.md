@@ -61,14 +61,15 @@ unified (-DSKITY_UNIFIED_LIB=ON)
 libskity.so              exports ONLY the skity_* C ABI (C++ symbols hidden)
 libskity-codec.so        exports ONLY its skity_codec_* C ABI
 include/skity/c/*.h      pure C headers: handles + CreateInfo + POD types
-include/skity/hpp/       header-only: RAII wrappers over C handles (a la vulkan.hpp;
+include/skity/*.hpp     header-only: RAII wrappers over C handles (a la vulkan.hpp;
+                         paths spell EXACTLY like the legacy headers;
                          source root: module/capi/wrapper/include)
 ```
 
 In both shapes the ABI is stable because only **C handles + POD structs** flow
 across the `.so` boundary. Every C++ type (smart pointers, containers, vtables)
 lives in the consumer's translation unit — in the unified shape through the
-header-only `skity/hpp/` layer, compiled with the consumer's own toolchain —
+header-only wrapper layer, compiled with the consumer's own toolchain —
 so it never crosses the boundary at all.
 
 This is the same split Khronos uses between `vulkan.h` (C) and `vulkan.hpp`
@@ -321,7 +322,7 @@ non-ObjC TU is a compile `#error`. The typed entry points therefore live in
 
 ## 8. Header-only C++ Wrapper
 
-For C++ consumers, the unified shape's `skity/hpp/` layer wraps the C
+For C++ consumers, the unified shape's header-only wrapper layer wraps the C
 handles in RAII types that are binary-identical in usage to today's classes.
 Because it is header-only, it is compiled with the consumer's own toolchain
 and may freely use `std::shared_ptr` / `std::vector` without introducing any
@@ -403,7 +404,9 @@ that way.
 ### 8.3 Wrapper coverage
 
 One wrapper header per C domain header (`skity/c/skity_paint.h` →
-`skity/hpp/graphic/paint.hpp`), aggregated by `skity/hpp/skity.hpp`. Following
+`skity/graphic/paint.hpp` — the legacy header's own path), aggregated by
+`skity/skity.hpp`. Consumer include lines are therefore IDENTICAL across the
+two shapes; the build shape decides which tree resolves them. Following
 the coverage discipline of the C layer, the wrapper only forwards existing
 entry points — helper methods that had no C counterpart (Rect / Matrix
 arithmetic, color packing) are implemented inline in `types.hpp`.
@@ -470,7 +473,7 @@ consumers never see `<vulkan/vulkan.h>`:
 | `skity_native_window_vk` | `skity_native_window_vk.hpp` | `NativeWindowVk` presenter lifecycle (create / resize / size queries / `AcquireNextSurface` / `Present` with handle-consumption semantics) |
 | `skity_semaphore_vk` | `skity_semaphore_vk.hpp` | `ImportVkSyncFd` — sync-fd import chaining the VK extension into the neutral import |
 
-A VK consumer includes `<skity/hpp/skity_vk.hpp>` (which also pulls in the
+A VK consumer includes `<skity/skity_vk.hpp>` (which also pulls in the
 whole neutral layer). Raw C handles acquired outside the RAII layer can
 still be adopted via `Context::Adopt` / `Surface::Adopt`.
 
@@ -484,7 +487,7 @@ The migration is no longer a stage sequence on one library but a build-mode
 choice: both shapes below ship side by side and are selected at configure
 time (`SKITY_UNIFIED_LIB`, default OFF).
 
-| Shape | `libskity.so` | C API | header-only `skity/hpp/` | old `include/skity/` C++ headers | Risk |
+| Shape | `libskity.so` | C API | header-only wrapper (`<skity/...>`) | old `include/skity/` C++ headers | Risk |
 |---|---|---|---|---|---|
 | normal (default) | exports C++ | `libskity-capi.so` | not installed (guarded by `#error`) | primary, installed | — existing C++ consumers unchanged |
 | unified (`SKITY_UNIFIED_LIB=ON`) | C++ symbols hidden, only `skity_*` exported; capi compiled in | inside `libskity.so` | installed, plain `skity::` | not installed | C++ consumers must move to the wrapper (or stay on the normal shape) |

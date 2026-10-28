@@ -1,0 +1,95 @@
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
+
+#ifndef MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_SURFACE_HPP
+#define MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_SURFACE_HPP
+
+#include <skity/c/skity_surface.h>
+
+#include <cstdint>
+#include <skity/base.hpp>
+#include <skity/gpu/context.hpp>
+#include <skity/gpu/semaphore.hpp>
+#include <skity/graphic/bitmap.hpp>
+#include <skity/render/canvas.hpp>
+#include <skity/types.hpp>
+
+namespace skity {
+
+/**
+ * @class Surface
+ *
+ * GPU surface wrapper: owns a render target and its canvas.
+ *
+ */
+class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
+ public:
+  /**
+   * Create a surface on context; the backend is selected by the
+   * p_next extension of info (see skity_surface_create_info_gl etc.).
+   * On failure out is left empty and the result code is returned.
+   */
+  static skity_result Create(const Context& context,
+                             const skity_surface_create_info& info,
+                             Surface* out) {
+    skity_surface handle = nullptr;
+    skity_result result = skity_surface_create(context.get(), &info, &handle);
+    if (result == SKITY_SUCCESS && out != nullptr) {
+      out->reset(handle);
+    }
+    return result;
+  }
+
+  /**
+   * Adopt a surface handle created through the raw C API — e.g. one
+   * acquired from skity_native_window_acquire_next_surface_vk. The wrapper
+   * takes ownership; destroying it releases (invalidates) the surface.
+   */
+  static Surface Adopt(skity_surface handle) { return Surface(handle); }
+
+  /**
+   * Lock the canvas for the current frame. The returned view (and the
+   * underlying canvas) stays valid until the next LockCanvas call or
+   * until the surface is destroyed. Call Canvas::Flush, then Flush().
+   */
+  Canvas LockCanvas(bool clear = true) {
+    return Canvas(skity_surface_lock_canvas(get(), clear ? 1u : 0u));
+  }
+
+  /** Present the rendering result; the canvas must be flushed first. */
+  void Flush() { skity_surface_flush(get()); }
+
+  /**
+   * Read pixels back to CPU memory (rect selects a sub-region; an empty
+   * rect reads the whole surface). Returns an empty wrapper on failure.
+   */
+  Pixmap ReadPixels(const Rect& rect = Rect::MakeEmpty()) const {
+    bool whole = rect.IsEmpty();
+    return Pixmap(skity_surface_read_pixels(get(), whole ? nullptr : &rect));
+  }
+
+  uint32_t GetWidth() const { return skity_surface_get_width(get()); }
+  uint32_t GetHeight() const { return skity_surface_get_height(get()); }
+  float GetContentScale() const {
+    return skity_surface_get_content_scale(get());
+  }
+
+  /**
+   * Wait on semaphore during the next flush (external GPU work feeding
+   * this surface). Call between LockCanvas and Flush; consumed by the flush.
+   */
+  void AddExternalWaitSemaphore(const Semaphore& semaphore) {
+    skity_surface_add_external_wait_semaphore(get(), semaphore.get());
+  }
+
+  /** Empty surface; filled by Create / AcquireNextSurface out-params. */
+  Surface() = default;
+
+ private:
+  explicit Surface(skity_surface h) : OwnHandle(h) {}
+};
+
+}  // namespace skity
+
+#endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_SURFACE_HPP

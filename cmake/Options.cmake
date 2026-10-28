@@ -45,7 +45,10 @@ cmake_dependent_option(
 # Single-library shape (see module/capi/README.md): the C API sources compile
 # into libskity itself, the legacy C++ exports are hidden so libskity exports
 # only the skity_* C ABI, and the header-only C++ wrapper under
-# module/capi/wrapper/include/skity/hpp/ becomes the C++ surface. OFF keeps
+# module/capi/wrapper/include/skity/ becomes the C++ surface — its headers
+# spell the include paths EXACTLY like the legacy ones (<skity/skity.hpp>,
+# <skity/graphic/paint.hpp>, ...), the build shape deciding which tree
+# resolves them. OFF keeps
 # today's layout — C++ API exported, skity-capi as a separate library, the
 # wrapper headers neither built nor installed. The two shapes are mutually
 # exclusive.

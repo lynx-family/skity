@@ -10,7 +10,7 @@
 
 #include <vulkan/vulkan.h>
 
-#include <skity/hpp/skity_vk.hpp>
+#include <skity/skity_vk.hpp>
 
 #include "gtest/gtest.h"
 

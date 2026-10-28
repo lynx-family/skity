@@ -3,7 +3,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # The unified-shape C++ consumer example: the basic demo written against the
-# header-only RAII wrapper (skity/hpp/) over the C ABI. GLFW + OpenGL,
+# header-only RAII wrapper (the skity/ wrapper headers, legacy-identical paths) over the C ABI. GLFW + OpenGL,
 # configured only in the unified shape (the wrapper refuses to compile
 # without SKITY_UNIFIED_LIB, which the skity target exports there).
 

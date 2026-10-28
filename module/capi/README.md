@@ -30,7 +30,7 @@ shape:
   no `skity::` C++ symbol),
 - `libskity-codec` stays a separate library exporting only its
   `skity_codec_*` C ABI,
-- the header-only C++ RAII wrapper under `wrapper/include/skity/hpp/` is the
+- the header-only C++ RAII wrapper under `wrapper/include/skity/` (paths spelled exactly like the legacy headers) is the
   C++ surface: it is installed in this shape only (it defines plain `skity::`
   classes and must never be compiled against a library that still exports
   the legacy C++ symbols), and non-CMake consumers must define
