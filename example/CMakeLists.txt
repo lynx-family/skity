@@ -24,6 +24,7 @@ if (${SKITY_UNIFIED_LIB})
   endif()
 
   add_subdirectory(case/c_api)
+  add_subdirectory(case/c_api_hpp)
   if (${SKITY_VK_BACKEND})
     add_subdirectory(case/c_api_vk)
   endif()
