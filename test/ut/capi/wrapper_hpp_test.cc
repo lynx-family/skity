@@ -2,18 +2,18 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-// Smoke tests for the header-only RAII wrapper (skity/hpp/): compile-time
+// Smoke tests for the header-only RAII wrapper (the skity/ wrapper headers): compile-time
 // surface (every wrapped entry point is called once) plus CPU-only behavior
 // spot checks. The wrapper defines plain skity:: classes, so these live in
 // the unified-only skity_wrapper_unit_test — never in a binary that also
-// links the legacy C++ API (see skity/hpp/skity.hpp).
+// links the legacy C++ API (see skity/skity.hpp).
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <skity/hpp/skity.hpp>
+#include <skity/skity.hpp>
 #include <vector>
 
 namespace {

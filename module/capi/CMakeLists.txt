@@ -10,13 +10,17 @@
 # - OFF (default): the standalone skity-capi shared library below.
 # - ON: the sources compile straight into libskity, which hides the legacy
 #   C++ API and exports only the skity_* C ABI; the header-only C++ wrapper
-#   under wrapper/include/skity/hpp/ becomes the C++ surface and skity::capi
+#   under wrapper/include/skity/ becomes the C++ surface (its paths spell
+#   exactly like the legacy headers) and skity::capi
 #   is an alias of skity so consumers keep their link lines.
 #
 # Two include roots, one per surface: include/ carries the C ABI (skity/c)
 # plus the C++ bridge header (skity/hpp/bridge.hpp) — everything valid in
 # BOTH shapes — while wrapper/include/ carries the SKITY_UNIFIED_LIB-only
-# RAII layer (skity/hpp/**). Keeping them apart lets every consumer of the
+# RAII layer (skity/**, spelled EXACTLY like the legacy headers so consumer
+# include lines never change between shapes; the roots are never both
+# public, the build shape decides which tree <skity/...> resolves to).
+# Keeping them apart lets every consumer of the
 # include root (make install rules, the iOS framework, the Android prefab)
 # pick up the normal-shape surface without per-file filtering.
 
@@ -100,7 +104,7 @@ if (${SKITY_UNIFIED_LIB})
 
   # Hide the legacy C++ API (SKITY_API neutralized + export table restricted
   # to skity_*) and tell wrapper consumers this is the unified shape they may
-  # compile the skity/hpp headers against.
+  # compile the wrapper headers against.
   target_compile_definitions(skity PRIVATE SKITY_HIDE_CXX_API=1)
   target_compile_definitions(skity INTERFACE SKITY_UNIFIED_LIB=1)
   skity_export_c_abi_only(skity)

@@ -5,7 +5,7 @@
 //
 // The unified-shape C++ example: the classic "basic" demo (shapes / path
 // effects / gradients / text) written against the header-only RAII wrapper
-// (<skity/hpp/...>), running on the C-ABI-only unified libskity.
+// (<skity/...>), running on the C-ABI-only unified libskity.
 //
 // The GLFW + OpenGL bootstrap mirrors case/c_api/main.c; the drawing is
 // example/case/basic/example.cc ported nearly verbatim onto the wrapper —
@@ -19,7 +19,7 @@
 
 #include <GLFW/glfw3.h>
 #include <skity/c/skity_codec.h>
-#include <skity/hpp/skity.hpp>
+#include <skity/skity.hpp>
 
 #include <cmath>
 #include <cstdio>
