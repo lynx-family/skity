@@ -55,6 +55,47 @@ const FcChar8* FCString(const char* text) {
   return reinterpret_cast<const FcChar8*>(text);
 }
 
+// Fontconfig 2.13.1 can return success after an XML parse error. Completed
+// files have a rule-set entry, while failed files only appear in configFiles.
+bool ConfigFilesParsed(FcConfig* config) {
+  std::set<std::string> parsed;
+  FcConfigFileInfoIter iter;
+  FcConfigFileInfoIterInit(config, &iter);
+  FcChar8* name = nullptr;
+  FcBool enabled = FcFalse;
+  while (FcConfigFileInfoIterGet(config, &iter, &name, nullptr, &enabled)) {
+    if (enabled && name) {
+      parsed.emplace(reinterpret_cast<const char*>(name));
+    }
+    FcStrFree(name);
+    if (!FcConfigFileInfoIterNext(config, &iter)) {
+      break;
+    }
+  }
+  FCPtr<FcStrList, FcStrListDone> files(FcConfigGetConfigFiles(config));
+  if (!files) {
+    return false;
+  }
+  const auto* sysroot = FcConfigGetSysRoot(config);
+  while (const auto* file = FcStrListNext(files.get())) {
+    const auto* filename = reinterpret_cast<const char*>(file);
+    if (parsed.count(filename)) {
+      continue;
+    }
+    // Included directories enumerate configuration files without a rule set.
+    std::filesystem::path path(filename);
+    if (sysroot) {
+      path = std::filesystem::path(reinterpret_cast<const char*>(sysroot)) /
+             path.relative_path();
+    }
+    std::error_code error;
+    if (!std::filesystem::is_directory(path, error)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 std::string String(FcPattern* pattern, const char* key) {
   FcChar8* value = nullptr;
   return FcPatternGetString(pattern, key, 0, &value) == FcResultMatch
@@ -657,7 +698,7 @@ std::shared_ptr<FontManager> MakeFontManagerFontConfig(
       !FcConfigParseAndLoadFromMemory(config.get(),
                                       FCString(kFontConfigCjkRules), FcTrue) ||
       !FcConfigParseAndLoad(config.get(), FCString(config_file), FcTrue) ||
-      !FcConfigBuildFonts(config.get())) {
+      !ConfigFilesParsed(config.get()) || !FcConfigBuildFonts(config.get())) {
     return nullptr;
   }
   return std::make_shared<FontManagerFontConfig>(std::move(config));

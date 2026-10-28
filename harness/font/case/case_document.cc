@@ -34,8 +34,7 @@ const std::vector<std::string>& AllowedStatuses() {
   return values;
 }
 
-// Expected differences currently describe a single font-manager selection.
-// Requiring both selections prevents a status flag from waiving any mismatch.
+// Pin both engine outcomes so a status flag cannot waive arbitrary mismatches.
 void ValidateExpectedDiff(const Json::Value& root, ValidationContext* errors) {
   if (root["status"] != "expected_diff") {
     if (root.isMember("expected_diff")) {
@@ -47,10 +46,14 @@ void ValidateExpectedDiff(const Json::Value& root, ValidationContext* errors) {
   const std::string entry = request.isObject() && request["entry"].isString()
                                 ? request["entry"].asString()
                                 : "";
-  if (root["category"] != "font_manager" ||
-      !IsOneOf(entry, {"GetDefaultTypeface", "MatchFamilyStyle",
-                       "MatchFamilyStyleCharacter"})) {
-    errors->AddError("$.expected_diff", "requires a single font-manager match");
+  const bool style_set =
+      root["category"] == "family_style_set" && entry == "MatchFamily";
+  if (!style_set && (root["category"] != "font_manager" ||
+                     !IsOneOf(entry, {"GetDefaultTypeface", "MatchFamilyStyle",
+                                      "MatchFamilyStyleCharacter"}))) {
+    errors->AddError(
+        "$.expected_diff",
+        "requires a single font-manager match or MatchFamily style counts");
   }
   const Json::Value* expectation = nullptr;
   if (!RequireObjectField(root, "expected_diff", "$", errors, &expectation)) {
@@ -71,6 +74,17 @@ void ValidateExpectedDiff(const Json::Value& root, ValidationContext* errors) {
       continue;
     }
     const std::string path = std::string("$.expected_diff.") + engine;
+    if (style_set) {
+      int count = 0;
+      if (RequireIntField(*selection, "style_count", path, errors, &count)) {
+        ValidateNonNegativeInt(count, path + ".style_count", errors);
+      }
+      if (selection->size() != 1) {
+        errors->AddError(path,
+                         "style-set expectation must only set style_count");
+      }
+      continue;
+    }
     if (!(*selection)["available"].isBool()) {
       errors->AddError(path + ".available", "expected boolean");
       continue;

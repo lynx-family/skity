@@ -414,6 +414,43 @@ Json::Value MakeExpectedDiffCase(const Json::Value& expected,
   return root;
 }
 
+Json::Value MakeExpectedStyleCountDiffCase() {
+  auto root = MakeFontManagerCase();
+  root["category"] = "family_style_set";
+  root["font_manager_request"]["entry"] = "MatchFamily";
+  root["status"] = "expected_diff";
+  root["expected_diff"]["reason"] =
+      "Skity cannot open the Type 1 styles included by Skia.";
+  root["expected_diff"]["skia"]["style_count"] = 2;
+  root["expected_diff"]["skity"]["style_count"] = 1;
+  return root;
+}
+
+Json::Value MakeStyleSetArtifact(int count, double font_ascent = 10.0) {
+  auto root =
+      MakeFontManagerArtifact(true, "Synthetic-Regular", 1, font_ascent, 10);
+  auto& probe = root["font_manager_probe"];
+  probe["request_input"] =
+      MakeExpectedStyleCountDiffCase()["font_manager_request"];
+  probe["operation"]["entry"] = "MatchFamily";
+  const auto& face = probe["matched_typefaces"][0];
+  auto& styles = probe["operation"]["style_set"];
+  styles["available"] = true;
+  styles["style_count"] = count;
+  styles["styles"] = Json::Value(Json::arrayValue);
+  for (int i = 0; i < count; ++i) {
+    Json::Value item(Json::objectValue);
+    item["index"] = i;
+    item["style_name"] = "Regular";
+    item["style"] = face["font_style"];
+    item["create_typeface"] = face;
+    styles["styles"].append(std::move(item));
+  }
+  styles["match_style"]["pattern"] = face["font_style"];
+  styles["match_style"]["typeface"] = face;
+  return root;
+}
+
 void AddMatchedTypefaceTables(Json::Value* root, int head_table_size) {
   Json::Value table(Json::objectValue);
   table["tag"] = "head";
@@ -861,6 +898,80 @@ TEST(FontHarnessCaseDocumentTest, ExpectedDiffRequiresExplicitSelections) {
   EXPECT_FALSE(ValidateCaseDocument(invalid, resolver).valid);
   invalid = root;
   invalid["font_manager_request"]["entry"] = "MatchFamily";
+  EXPECT_FALSE(ValidateCaseDocument(invalid, resolver).valid);
+}
+
+TEST(FontHarnessCompareEngineTest, ExpectedStyleCountDiffPreservesMatchChecks) {
+  TempDir temp("expected_style_count_diff");
+  const auto root = MakeExpectedStyleCountDiffCase();
+  const auto expected = MakeStyleSetArtifact(2);
+  const auto actual = MakeStyleSetArtifact(1);
+  CompareResult result;
+  RunFontManagerCompare(&temp, expected, actual, &result, &root);
+  ASSERT_EQ(CompareStatus::kPass, result.status)
+      << WriteJsonString(result.report);
+  EXPECT_TRUE(result.report["expected_diff"].asBool());
+  EXPECT_EQ("expected_diff", result.report["reason_code"].asString());
+  ASSERT_EQ(1u, result.report["diffs"].size());
+  EXPECT_EQ("font_manager_probe.operation.style_set.style_count",
+            result.report["diffs"][0]["path"].asString());
+
+  // A third count is not covered by the two declared engine outcomes.
+  RunFontManagerCompare(&temp, MakeStyleSetArtifact(3), actual, &result, &root);
+  EXPECT_EQ(CompareStatus::kMismatch, result.status);
+  EXPECT_FALSE(result.report["expected_diff"].asBool());
+
+  // The known count mismatch must not hide a different match or its metrics.
+  auto changed_face = actual;
+  changed_face["font_manager_probe"]["matched_typefaces"][0]["identity"]
+              ["post_script_name"] = "Unexpected-Face";
+  RunFontManagerCompare(&temp, expected, changed_face, &result, &root);
+  EXPECT_EQ(CompareStatus::kMismatch, result.status);
+  EXPECT_FALSE(result.report["expected_diff"].asBool());
+  RunFontManagerCompare(&temp, expected, MakeStyleSetArtifact(1, 15.0), &result,
+                        &root);
+  EXPECT_EQ(CompareStatus::kMismatch, result.status);
+  EXPECT_FALSE(result.report["expected_diff"].asBool());
+  bool metrics_mismatch = false;
+  for (const auto& diff : result.report["diffs"]) {
+    metrics_mismatch |= diff["reason_code"] == "metrics_mismatch";
+  }
+  EXPECT_TRUE(metrics_mismatch) << WriteJsonString(result.report);
+}
+
+TEST(FontHarnessCompareEngineTest, ExpectedStyleCountDiffCanConverge) {
+  TempDir temp("expected_style_count_converged");
+  const auto root = MakeExpectedStyleCountDiffCase();
+  const auto actual = MakeStyleSetArtifact(1);
+  CompareResult result;
+  RunFontManagerCompare(&temp, actual, actual, &result, &root);
+  EXPECT_EQ(CompareStatus::kPass, result.status)
+      << WriteJsonString(result.report);
+  EXPECT_FALSE(result.report["expected_diff"].asBool());
+  EXPECT_EQ("pass", result.report["reason_code"].asString());
+}
+
+TEST(FontHarnessCaseDocumentTest, ExpectedStyleCountDiffRequiresExactCounts) {
+  TempDir temp("expected_style_count_schema");
+  const RepoUriResolver resolver(temp.root());
+  const auto root = MakeExpectedStyleCountDiffCase();
+  ASSERT_TRUE(ValidateCaseDocument(root, resolver).valid);
+  for (const char* engine : {"skia", "skity"}) {
+    for (const auto& count :
+         {Json::Value(), Json::Value(-1), Json::Value(1.5), Json::Value("1")}) {
+      auto invalid = root;
+      invalid["expected_diff"][engine]["style_count"] = count;
+      EXPECT_FALSE(ValidateCaseDocument(invalid, resolver).valid);
+    }
+    auto invalid = root;
+    invalid["expected_diff"][engine]["available"] = true;
+    EXPECT_FALSE(ValidateCaseDocument(invalid, resolver).valid);
+  }
+  auto invalid = root;
+  invalid["expected_diff"]["skia"] = invalid["expected_diff"]["skity"];
+  EXPECT_FALSE(ValidateCaseDocument(invalid, resolver).valid);
+  invalid = root;
+  invalid["font_manager_request"]["entry"] = "CreateStyleSet";
   EXPECT_FALSE(ValidateCaseDocument(invalid, resolver).valid);
 }
 

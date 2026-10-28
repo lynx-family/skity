@@ -77,6 +77,7 @@ There are several options you can use to configure the build:
     * `SKITY_MTL_BACKEND` - Option for Metal backend. Not available on Windows and Linux but open by default on Apple platform.
     * `SKITY_VK_BACKEND` - Option for Vulkan backend (experimental). Default is OFF. Pass `-DSKITY_VK_BACKEND=ON` in command line to enable it. Requires Vulkan at least version 1.1. Skity will attempt to create the highest available Vulkan version and leverage extensions such as dynamic rendering when supported.
     * `WGX_SPIRV_BACKEND` - Option for WGX SPIR-V generation. Defaults to the value of `SKITY_VK_BACKEND`, but can be enabled independently without a Vulkan runtime by passing `-DWGX_SPIRV_BACKEND=ON`.
+    * `SKITY_FONTCONFIG` - Option for the native Linux Fontconfig font manager. Default is ON on Linux with the FreeType backend and OFF on other platforms. Requires Fontconfig development files, version 2.13.1 or newer. Pass `-DSKITY_FONTCONFIG=OFF` to disable it.
     * `SKITY_LOG` - Option for logging. Default is OFF since print log may slow down the performance. Pass `-DSKITY_LOG=ON` in command line to enable it.
 
 * Options for build optional modules:

@@ -915,8 +915,13 @@ Json::Value NormalizeFontManagerProbe(const Json::Value& root) {
 }
 
 Json::Value ExpectedDiffSelection(const Json::Value& root) {
-  const auto& face = root["font_manager_probe"]["matched_typefaces"][0];
   Json::Value selection(Json::objectValue);
+  const auto& operation = root["font_manager_probe"]["operation"];
+  if (operation["entry"] == "MatchFamily") {
+    selection["style_count"] = operation["style_set"]["style_count"];
+    return selection;
+  }
+  const auto& face = root["font_manager_probe"]["matched_typefaces"][0];
   selection["available"] = face["available"];
   if (face["available"].asBool()) {
     const auto identity = NormalizeTypefaceSelectionIdentity(face);
@@ -935,6 +940,15 @@ bool MatchesExpectedDiff(const Json::Value& expectation,
   if (expectation["skia"] != ExpectedDiffSelection(expected) ||
       expectation["skity"] != ExpectedDiffSelection(actual)) {
     return false;
+  }
+  if (expectation["skia"].isMember("style_count")) {
+    for (const auto& diff : diffs) {
+      if (diff.reason_code != "selection_mismatch" ||
+          diff.path != "font_manager_probe.operation.style_set.style_count") {
+        return false;
+      }
+    }
+    return !diffs.empty();
   }
   // Different faces have different identity metadata. Only availability and
   // identity differences are covered; inventory, style, metrics and input
@@ -1304,9 +1318,14 @@ void CompareGlyphImageProbe(const Json::Value& expected_root,
 void CompareFontManagerProbe(const Json::Value& expected_root,
                              const Json::Value& actual_root,
                              const CompareConfig& config,
-                             std::vector<Diff>* diffs) {
+                             std::vector<Diff>* diffs,
+                             bool compare_style_count = true) {
   Json::Value expected = NormalizeFontManagerProbe(expected_root);
   Json::Value actual = NormalizeFontManagerProbe(actual_root);
+  if (!compare_style_count) {
+    expected["style_set"].removeMember("style_count");
+    actual["style_set"].removeMember("style_count");
+  }
   if (CompareSelectionSubset(
           OptionalValue(expected, "entry"), OptionalValue(actual, "entry"),
           "font_manager_probe.operation.entry", "exact", diffs)) {
@@ -1548,6 +1567,16 @@ CompareResult RunCompare(const CompareRequest& request) {
   CompareConfig config = ParseCompareConfig(case_root);
   std::vector<Diff> diffs;
   RunCategoryCompare(expected_root, actual_root, config, &diffs);
+  if (case_root["status"] == "expected_diff" &&
+      case_root["category"] == "family_style_set" &&
+      expected_root["font_manager_probe"]["operation"]["style_set"]
+                   ["style_count"] !=
+          actual_root["font_manager_probe"]["operation"]["style_set"]
+                     ["style_count"]) {
+    // A known inventory-size difference must not short-circuit the selected
+    // face, glyph, table and metric comparisons.
+    CompareFontManagerProbe(expected_root, actual_root, config, &diffs, false);
+  }
   if (case_root["font_manager_expectation"].isMember("inventory_count")) {
     auto names = [](const Json::Value& source) {
       std::vector<std::string> sorted;

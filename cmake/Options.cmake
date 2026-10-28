@@ -97,7 +97,13 @@ cmake_dependent_option(
 
 option(SKITY_LOG "option for logging" OFF)
 option(SKITY_CT_FONT "option for open CoreText font backend on Darwin" OFF)
-option(SKITY_FONTCONFIG "Use the native Linux Fontconfig font manager" OFF)
+set(SKITY_FONTCONFIG_DEFAULT OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID AND NOT SKITY_CT_FONT)
+  set(SKITY_FONTCONFIG_DEFAULT ON)
+endif()
+option(SKITY_FONTCONFIG "Use the native Linux Fontconfig font manager"
+       ${SKITY_FONTCONFIG_DEFAULT})
+unset(SKITY_FONTCONFIG_DEFAULT)
 if(SKITY_FONTCONFIG AND (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID OR SKITY_CT_FONT))
   message(FATAL_ERROR "SKITY_FONTCONFIG requires Linux and the FreeType backend")
 endif()
