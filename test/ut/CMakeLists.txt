@@ -70,6 +70,7 @@ add_executable(skity_unit_test
     graphic/image_test.cc
     graphic/path_measure_test.cc
     graphic/path_test.cc
+    graphic/path_cow_test.cc
     graphic/texture_format_test.cc
     io/data_test.cc
     io/pixmap_test.cc

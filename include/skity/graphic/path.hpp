@@ -8,6 +8,7 @@
 #define INCLUDE_SKITY_GRAPHIC_PATH_HPP
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/point.hpp>
@@ -15,7 +16,6 @@
 #include <skity/geometry/rrect.hpp>
 #include <skity/macros.hpp>
 #include <tuple>
-#include <vector>
 
 namespace skity {
 
@@ -258,19 +258,18 @@ class SKITY_API Path {
     const float* weights_ = nullptr;
   };
 
-  Path() {
-    points_.reserve(4);
-    verbs_.reserve(4);
-    conic_weights_.reserve(2);
-  }
-  ~Path() = default;
+  // Copies share geometry until either value is modified. Concurrent const
+  // queries are supported; mutation of the same Path requires external locking.
+  Path();
+  ~Path();
 
-  Path(Path const&) = default;
-  Path& operator=(Path const&) = default;
-  Path(Path&&) = default;
+  Path(Path const&);
+  Path& operator=(Path const&);
+  Path(Path&&) noexcept;
+  Path& operator=(Path&&) noexcept;
 
-  inline size_t CountPoints() const { return points_.size(); }
-  inline size_t CountVerbs() const { return verbs_.size(); }
+  size_t CountPoints() const;
+  size_t CountVerbs() const;
 
   Path& MoveTo(float x, float y);
   Path& MoveTo(Point const& point) { return MoveTo(point.x, point.y); }
@@ -455,8 +454,12 @@ class SKITY_API Path {
   void SetLastPt(float x, float y);
   void SetLastPt(const Point& p) { this->SetLastPt(p.x, p.y); }
 
-  Direction GetFirstDirection() const { return first_direction_; }
-  inline void SetFirstDirection(Direction dir) { this->first_direction_ = dir; }
+  Direction GetFirstDirection() const {
+    return first_direction_.load(std::memory_order_relaxed);
+  }
+  inline void SetFirstDirection(Direction dir) {
+    first_direction_.store(dir, std::memory_order_relaxed);
+  }
 
   /**
    * @brief Sets FillType, the rule used to fill Path.
@@ -513,22 +516,17 @@ class SKITY_API Path {
    */
   bool Contains(float x, float y) const;
 
-  Rect GetBounds() const {
-    if (bounds_dirty_) {
-      ComputeBounds();
-      bounds_dirty_ = false;
-    }
-    return bounds_;
-  }
+  Rect GetBounds() const;
   /**
    * dump Path content into std::out
    */
   void Dump();
 
-  const Verb* VerbsBegin() const { return verbs_.data(); }
-  const Verb* VerbsEnd() const { return verbs_.data() + CountVerbs(); }
-  const Point* Points() const { return points_.data(); }
-  const float* ConicWeights() const { return conic_weights_.data(); }
+  // Borrowed views; retain a Path copy to keep geometry across mutations.
+  const Verb* VerbsBegin() const;
+  const Verb* VerbsEnd() const;
+  const Point* Points() const;
+  const float* ConicWeights() const;
 
   /**
    * @internal
@@ -538,13 +536,10 @@ class SKITY_API Path {
   Path CopyWithMatrix(Matrix const& matrix) const;
   Path CopyWithScale(float scale) const;
 
-  void SetConvexityType(ConvexityType type) { convexity_ = type; }
-  ConvexityType GetConvexityType() const {
-    if (convexity_ == ConvexityType::kUnknown) {
-      convexity_ = ComputeConvexity();
-    }
-    return convexity_;
+  void SetConvexityType(ConvexityType type) {
+    convexity_.store(type, std::memory_order_release);
   }
+  ConvexityType GetConvexityType() const;
   bool IsConvex() const { return GetConvexityType() == ConvexityType::kConvex; }
 
   struct SegmentMask {
@@ -571,9 +566,14 @@ class SKITY_API Path {
   void ComputeBounds() const;
   Path::ConvexityType ComputeConvexity() const;
   int LeadingMoveToCount() const;
-  inline const Point& AtPoint(int32_t index) const { return points_[index]; }
+  inline const Point& AtPoint(int32_t index) const { return Points()[index]; }
   bool HasOnlyMoveTos() const;
-  void MarkBoundsDirty() const { bounds_dirty_ = true; }
+  // Geometry writers must ensure unique storage before editing and invalidate
+  // caches afterwards; metadata-only edits do not need to detach storage.
+  void GeometryChanged();
+  void EnsureWritable(size_t add_points = 0, size_t add_verbs = 0,
+                      size_t add_weights = 0);
+  void DetachStorage(size_t add_points, size_t add_verbs, size_t add_weights);
 
   bool IsZeroLengthSincePoint(int startPtIndex) const;
   static bool ComputePtBounds(Rect* bounds, Path const& ref);
@@ -583,16 +583,12 @@ class SKITY_API Path {
   friend class RawIter;
   friend class PathStroker;
 
+  struct Storage;
+  Storage* storage_;
   int32_t last_move_to_index_ = ~0;
-  mutable ConvexityType convexity_ = ConvexityType::kUnknown;
-  mutable Direction first_direction_ = Direction::kCCW;
+  mutable std::atomic<ConvexityType> convexity_{ConvexityType::kUnknown};
+  mutable std::atomic<Direction> first_direction_{Direction::kCCW};
 
-  std::vector<Point> points_;
-  std::vector<Verb> verbs_;
-  std::vector<float> conic_weights_;
-  mutable bool is_finite_ = true;
-  mutable Rect bounds_;
-  mutable bool bounds_dirty_ = true;
   PathFillType fill_type_ = PathFillType::kWinding;
   uint32_t segment_masks_ = 0;
   IsAType type_ = IsAType::kGeneral;
