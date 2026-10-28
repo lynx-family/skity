@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "font.family_style_set.fontconfig.system_sans_serif_bold_styles",
   "category": "family_style_set",
-  "status": "active",
+  "status": "expected_diff",
   "backend": "fontconfig",
   "platforms": [
     "linux-fontconfig"
@@ -39,5 +39,14 @@
       "epsilon": 0.001
     }
   },
-  "fontconfig_profile": "system"
+  "fontconfig_profile": "system",
+  "expected_diff": {
+    "reason": "Skity's bundled FreeType temporarily does not support Type 1 fonts. Skia includes the URW Type 1 (.pfb/.t1) entries that Skity filters out. These counts pin the verified Chinese Ubuntu system inventory; the final matched typeface, glyphs and metrics must still agree with Skia.",
+    "skia": {
+      "style_count": 213
+    },
+    "skity": {
+      "style_count": 189
+    }
+  }
 }

@@ -19,6 +19,10 @@ jobs:
             with:
                 fetch-depth: 10
                 ref: ${{ github.event.pull_request.head.sha }}
+          - name: Fetch base commit
+            env:
+                BASE_SHA: ${{ github.event.pull_request.base.sha }}
+            run: git fetch --no-tags --depth=1 origin "$BASE_SHA"
           - name: Sync Dependencies
             uses: ./.github/actions/sync-deps
           - name: cpplint check

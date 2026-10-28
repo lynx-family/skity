@@ -332,6 +332,15 @@ TEST_F(FontManagerFontConfigTest, InvalidConfigDoesNotFallBackToHost) {
   EXPECT_EQ(MakeFontManagerFontConfig(""), nullptr);
 }
 
+TEST_F(FontManagerFontConfigTest, MalformedIncludedConfigIsRejected) {
+  std::ofstream(root_ / "invalid.conf") << "<fontconfig><broken>";
+  const auto config = WriteConfig(
+      "invalid-include.conf", true,
+      "<include ignore_missing=\"no\">" +
+          EscapeXml((root_ / "invalid.conf").string()) + "</include>");
+  EXPECT_EQ(MakeFontManagerFontConfig(config.c_str()), nullptr);
+}
+
 TEST_F(FontManagerFontConfigTest,
        SyntheticBoldPreservesCacheAndReachesFreeType) {
   const auto config = WriteConfig("synthetic.conf", true, R"(
@@ -559,6 +568,8 @@ class FontConfigCjkTest : public FontConfigEnvironmentTest {
   void UseTestFonts(const char* locale) {
     SetEnvironment(locale);
     ASSERT_FALSE(::testing::Test::HasFatalFailure());
+    // Fontconfig 2.13.1 supports xdg, but not relative directory prefixes.
+    ASSERT_EQ(setenv("XDG_DATA_HOME", root_.c_str(), 1), 0);
     ASSERT_EQ(setenv("FONTCONFIG_FILE", (root_ / "fonts.conf").c_str(), 1), 0);
   }
 
