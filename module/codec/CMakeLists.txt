@@ -92,6 +92,15 @@ target_include_directories(skity-codec PRIVATE
   ${SKITY_ROOT}/module/capi/common
   ${SKITY_ROOT}/module/capi/include)
 
+if (${SKITY_UNIFIED_LIB})
+  # unified shape: the module exports its skity_codec_* C ABI only. The
+  # legacy C++ surface is hidden as well — a still-exported skity::Codec
+  # would capture the header-only wrapper's inline definitions at link time
+  # the same way the core classes would.
+  target_compile_definitions(skity-codec PRIVATE SKITY_HIDE_CXX_API=1)
+  skity_export_c_abi_only(skity-codec)
+endif()
+
 if (SKITY_ENABLE_CODEC_GIF)
 
   # wuffs
@@ -244,12 +253,16 @@ endif()
 if (${SKITY_BUILD_INSTALL})
 
   # install header
-  install(
-    DIRECTORY
-    "${CMAKE_CURRENT_LIST_DIR}/include/skity"
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.hpp"
-  )
+  # (unified shape: only the C ABI ships — the module's C++ API symbols are
+  # hidden there, so codec.hpp is not part of the surface)
+  if (NOT ${SKITY_UNIFIED_LIB})
+    install(
+      DIRECTORY
+      "${CMAKE_CURRENT_LIST_DIR}/include/skity"
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+      FILES_MATCHING PATTERN "*.hpp"
+    )
+  endif()
 
   install(
     DIRECTORY

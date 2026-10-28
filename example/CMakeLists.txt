@@ -10,6 +10,27 @@ endif()
 
 add_definitions(-DDISABLE_SKITY_EXPERIMENTAL_WARNINGS)
 
+if (${SKITY_UNIFIED_LIB})
+  # The unified library exports only the C ABI: the legacy-API examples (and
+  # the example/common frame framework built on the C++ API) cannot link
+  # against it, so only the C API examples are configured in this shape.
+  set(GLFW_INSTALL OFF CACHE BOOL "disable GLFW_INSTALL")
+  add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glfw third_party/glfw)
+
+  if (MSVC)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+  else()
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/example/case)
+  endif()
+
+  add_subdirectory(case/c_api)
+  if (${SKITY_VK_BACKEND})
+    add_subdirectory(case/c_api_vk)
+  endif()
+
+  return()
+endif()
+
 add_subdirectory(common)
 
 # align output directory

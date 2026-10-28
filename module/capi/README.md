@@ -17,6 +17,39 @@ cmake --build .
 This produces `libskity-capi.so`. With `-DSKITY_CAPI_MODULE=OFF` the wrapper is
 not built and the rest of the project is unaffected.
 
+## Unified build (SKITY_UNIFIED_LIB)
+
+`-DSKITY_UNIFIED_LIB=ON` selects the alternative, mutually exclusive library
+shape:
+
+- the C API sources compile straight into `libskity` (`skity-capi` is not
+  built; the `skity::capi` CMake target becomes an alias of `skity` so
+  existing link lines keep working),
+- `libskity` hides the legacy C++ API and exports **only** the `skity_*` C
+  ABI (`SKITY_API` is neutralized plus a linker export allow-list; `nm` shows
+  no `skity::` C++ symbol),
+- `libskity-codec` stays a separate library exporting only its
+  `skity_codec_*` C ABI,
+- the header-only C++ RAII wrapper under `include/skity/hpp/` is the C++
+  surface: it is installed in this shape only (it defines plain `skity::`
+  classes and must never be compiled against a library that still exports
+  the legacy C++ symbols), and non-CMake consumers must define
+  `SKITY_UNIFIED_LIB` themselves when including it,
+- everything written against the legacy C++ API — `skity_unit_test`, the
+  golden tests, the bench, and the legacy examples — is not configured; the
+  unified test entry is `skity_wrapper_unit_test`, and only the C API
+  examples (`skity-c-api`, `skity-c-api-vk`) are built.
+
+```
+cmake -DSKITY_UNIFIED_LIB=ON -DSKITY_TEST=ON -DSKITY_VK_BACKEND=ON ...
+cmake --build .
+```
+
+The option needs a shared `libskity`: combining it with `EMSCRIPTEN` (static)
+or `SKITY_GENERATE_FRAMEWORK` (static framework) is rejected at configure
+time, because a static archive keeps the legacy C++ definitions reachable to
+the linker and the wrapper would bind its inline calls to them.
+
 ## Example
 
 A complete, runnable GL example lives with the other skity examples in

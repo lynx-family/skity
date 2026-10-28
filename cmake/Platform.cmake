@@ -30,7 +30,10 @@ else()
     PUBLIC
     PRIVATE -fno-exceptions -fno-rtti)
 
-    if (NOT ${SKITY_TEST})
+    # the unit tests reach into non-exported internals, so a test build keeps
+    # default visibility — except in the unified shape, whose export table is
+    # the C ABI alone and whose tests go through it
+    if (NOT ${SKITY_TEST} OR ${SKITY_UNIFIED_LIB})
       target_compile_options(
         skity
         PUBLIC
