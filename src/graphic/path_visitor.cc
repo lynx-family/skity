@@ -44,7 +44,7 @@ float device_precision_to_local_precision(float device_precision,
 
 void PathVisitor::VisitPath(const Path& path, bool force_close) {
   Path::Iter iter{path, force_close};
-  std::array<Point, 4> pts = {};
+  std::array<Vec2, 4> pts = {};
 
   this->OnBeginPath();
 
@@ -57,28 +57,19 @@ void PathVisitor::VisitPath(const Path& path, bool force_close) {
     Path::Verb verb = iter.Next(pts.data());
     switch (verb) {
       case Path::Verb::kMove:
-        HandleMoveTo(reinterpret_cast<const Vec2&>(pts[0]));
+        HandleMoveTo(pts[0]);
         break;
       case Path::Verb::kLine:
-        HandleLineTo(reinterpret_cast<const Vec2&>(pts[0]),
-                     reinterpret_cast<const Vec2&>(pts[1]));
+        HandleLineTo(pts[0], pts[1]);
         break;
       case Path::Verb::kQuad:
-        HandleQuadTo(reinterpret_cast<const Vec2&>(pts[0]),
-                     reinterpret_cast<const Vec2&>(pts[1]),
-                     reinterpret_cast<const Vec2&>(pts[2]), precision);
+        HandleQuadTo(pts[0], pts[1], pts[2], precision);
         break;
       case Path::Verb::kConic:
-        HandleConicTo(reinterpret_cast<const Vec2&>(pts[0]),
-                      reinterpret_cast<const Vec2&>(pts[1]),
-                      reinterpret_cast<const Vec2&>(pts[2]), iter.ConicWeight(),
-                      precision);
+        HandleConicTo(pts[0], pts[1], pts[2], iter.ConicWeight(), precision);
         break;
       case Path::Verb::kCubic:
-        HandleCubicTo(reinterpret_cast<const Vec2&>(pts[0]),
-                      reinterpret_cast<const Vec2&>(pts[1]),
-                      reinterpret_cast<const Vec2&>(pts[2]),
-                      reinterpret_cast<const Vec2&>(pts[3]), precision);
+        HandleCubicTo(pts[0], pts[1], pts[2], pts[3], precision);
         break;
       case Path::Verb::kClose:
         HandleClose();

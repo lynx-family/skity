@@ -39,6 +39,22 @@ bool PathMeasure::GetPosTan(float distance, Point* position, Vector* tangent) {
   return contour_ && contour_->getPosTan(distance, position, tangent);
 }
 
+bool PathMeasure::GetPosTan2D(float distance, Vec2* position, Vec2* tangent) {
+  Point pos;
+  Vector tan;
+  if (!GetPosTan(distance, position ? &pos : nullptr,
+                 tangent ? &tan : nullptr)) {
+    return false;
+  }
+  if (position) {
+    *position = Vec2{pos};
+  }
+  if (tangent) {
+    *tangent = Vec2{tan};
+  }
+  return true;
+}
+
 bool PathMeasure::GetSegment(float startD, float stopD, Path* dst,
                              bool startWithMoveTo) {
   return contour_ && contour_->getSegment(startD, stopD, dst, startWithMoveTo);

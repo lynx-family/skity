@@ -687,7 +687,7 @@ TEST(TypefaceFreeTypeTest, EveryGlyphOutlineContourIsExplicitlyClosed) {
   font.LoadGlyphPath(&id, 1, &glyph);
   ASSERT_NE(glyph, nullptr);
   Path::Iter iter(glyph->GetPath(), false);
-  Point points[4];
+  Vec2 points[4];
   int moves = 0;
   int closes = 0;
   for (auto verb = iter.Next(points); verb != Path::Verb::kDone;

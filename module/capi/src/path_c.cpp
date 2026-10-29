@@ -12,7 +12,18 @@
 
 #include "handle.hpp"
 
+struct skity_path_iter_s : skity_handle_base<skity::Path> {
+  skity::Path::Iter iter;
+};
+
+struct skity_path_raw_iter_s : skity_handle_base<skity::Path> {
+  skity::Path::RawIter iter;
+};
+
 namespace {
+
+static_assert(sizeof(skity_vec2) == sizeof(skity::Vec2));
+static_assert(alignof(skity_vec2) == alignof(skity::Vec2));
 
 skity::Path* path_of(skity_path handle) {
   auto* w = skity::capi::resolve<skity_path_s>(handle, SKITY_OBJECT_TYPE_PATH);
@@ -438,6 +449,148 @@ skity_path skity_path_copy_with_scale(skity_path path, float scale) {
   return skity::capi::alloc_handle<skity_path_s>(
       SKITY_OBJECT_TYPE_PATH, SKITY_HANDLE_OWNING,
       std::make_shared<skity::Path>(std::move(copy)));
+}
+
+uint32_t skity_path_get_point_2d(skity_path path, int32_t index,
+                                 skity_vec2* out) {
+  auto* p = path_of(path);
+  if (!p || !out) return 0u;
+  auto point = p->GetPoint2D(index);
+  *out = {point.x, point.y};
+  return index >= 0 && static_cast<size_t>(index) < p->CountPoints() ? 1u : 0u;
+}
+
+uint32_t skity_path_get_last_pt_2d(skity_path path, skity_vec2* out) {
+  auto* p = path_of(path);
+  if (!p) return 0u;
+  skity::Vec2 point;
+  bool ok = p->GetLastPt2D(out ? &point : nullptr);
+  if (out) *out = {point.x, point.y};
+  return ok ? 1u : 0u;
+}
+
+void skity_path_get_last_move_pt_2d(skity_path path, skity_vec2* out) {
+  auto* p = path_of(path);
+  if (!p || !out) return;
+  auto point = p->GetLastMovePt2D();
+  *out = {point.x, point.y};
+}
+
+size_t skity_path_copy_points_2d(skity_path path, skity_vec2* out,
+                                 size_t capacity) {
+  auto* p = path_of(path);
+  if (!p) return 0;
+  return p->CopyPoints2D(reinterpret_cast<skity::Vec2*>(out), capacity);
+}
+
+uint32_t skity_path_is_line_2d(skity_path path, skity_vec2 out_pts[2]) {
+  auto* p = path_of(path);
+  if (!p) return 0u;
+  skity::Vec2 points[2];
+  if (!p->IsLine2D(out_pts ? points : nullptr)) return 0u;
+  if (out_pts) {
+    for (int i = 0; i < 2; ++i) out_pts[i] = {points[i].x, points[i].y};
+  }
+  return 1u;
+}
+
+skity_path_iter skity_path_iter_create(skity_path path, uint32_t force_closed) {
+  auto p = skity::capi::get_impl<skity_path_s>(path, SKITY_OBJECT_TYPE_PATH);
+  if (!p) return nullptr;
+  auto* w = skity::capi::alloc_handle<skity_path_iter_s>(
+      SKITY_OBJECT_TYPE_PATH_ITER, SKITY_HANDLE_OWNING, std::move(p));
+  if (w) w->iter.SetPath(*w->impl, force_closed != 0);
+  return w;
+}
+
+skity_path_raw_iter skity_path_raw_iter_create(skity_path path) {
+  auto p = skity::capi::get_impl<skity_path_s>(path, SKITY_OBJECT_TYPE_PATH);
+  if (!p) return nullptr;
+  auto* w = skity::capi::alloc_handle<skity_path_raw_iter_s>(
+      SKITY_OBJECT_TYPE_PATH_RAW_ITER, SKITY_HANDLE_OWNING, std::move(p));
+  if (w) w->iter.SetPath(*w->impl);
+  return w;
+}
+
+uint32_t skity_path_iter_set_path(skity_path_iter iter, skity_path path,
+                                  uint32_t force_closed) {
+  auto* w = skity::capi::resolve<skity_path_iter_s>(
+      iter, SKITY_OBJECT_TYPE_PATH_ITER);
+  auto p = skity::capi::get_impl<skity_path_s>(path, SKITY_OBJECT_TYPE_PATH);
+  if (!w || !p) return 0u;
+  w->impl = std::move(p);
+  w->iter.SetPath(*w->impl, force_closed != 0);
+  return 1u;
+}
+
+uint32_t skity_path_raw_iter_set_path(skity_path_raw_iter iter,
+                                      skity_path path) {
+  auto* w = skity::capi::resolve<skity_path_raw_iter_s>(
+      iter, SKITY_OBJECT_TYPE_PATH_RAW_ITER);
+  auto p = skity::capi::get_impl<skity_path_s>(path, SKITY_OBJECT_TYPE_PATH);
+  if (!w || !p) return 0u;
+  w->impl = std::move(p);
+  w->iter.SetPath(*w->impl);
+  return 1u;
+}
+
+void skity_path_iter_destroy(skity_path_iter iter) {
+  skity::capi::destroy_handle<skity_path_iter_s>(iter,
+                                                 SKITY_OBJECT_TYPE_PATH_ITER);
+}
+
+skity_path_verb skity_path_iter_next_2d(skity_path_iter iter,
+                                        skity_vec2 out_pts[4]) {
+  auto* w = skity::capi::resolve<skity_path_iter_s>(
+      iter, SKITY_OBJECT_TYPE_PATH_ITER);
+  return w && out_pts ? static_cast<skity_path_verb>(w->iter.Next(
+                            reinterpret_cast<skity::Vec2*>(out_pts)))
+                      : SKITY_PATH_VERB_DONE;
+}
+
+float skity_path_iter_conic_weight(skity_path_iter iter) {
+  auto* w = skity::capi::resolve<skity_path_iter_s>(
+      iter, SKITY_OBJECT_TYPE_PATH_ITER);
+  return w ? w->iter.ConicWeight() : 0.f;
+}
+
+void skity_path_raw_iter_destroy(skity_path_raw_iter iter) {
+  skity::capi::destroy_handle<skity_path_raw_iter_s>(
+      iter, SKITY_OBJECT_TYPE_PATH_RAW_ITER);
+}
+
+skity_path_verb skity_path_raw_iter_next_2d(skity_path_raw_iter iter,
+                                            skity_vec2 out_pts[4]) {
+  auto* w = skity::capi::resolve<skity_path_raw_iter_s>(
+      iter, SKITY_OBJECT_TYPE_PATH_RAW_ITER);
+  return w && out_pts ? static_cast<skity_path_verb>(w->iter.Next(
+                            reinterpret_cast<skity::Vec2*>(out_pts)))
+                      : SKITY_PATH_VERB_DONE;
+}
+
+float skity_path_raw_iter_conic_weight(skity_path_raw_iter iter) {
+  auto* w = skity::capi::resolve<skity_path_raw_iter_s>(
+      iter, SKITY_OBJECT_TYPE_PATH_RAW_ITER);
+  return w ? w->iter.ConicWeight() : 0.f;
+}
+
+uint32_t skity_path_iter_is_close_line(skity_path_iter iter) {
+  auto* w = skity::capi::resolve<skity_path_iter_s>(
+      iter, SKITY_OBJECT_TYPE_PATH_ITER);
+  return w && w->iter.IsCloseLine() ? 1u : 0u;
+}
+
+uint32_t skity_path_iter_is_closed_contour(skity_path_iter iter) {
+  auto* w = skity::capi::resolve<skity_path_iter_s>(
+      iter, SKITY_OBJECT_TYPE_PATH_ITER);
+  return w && w->iter.IsClosedContour() ? 1u : 0u;
+}
+
+skity_path_verb skity_path_raw_iter_peek(skity_path_raw_iter iter) {
+  auto* w = skity::capi::resolve<skity_path_raw_iter_s>(
+      iter, SKITY_OBJECT_TYPE_PATH_RAW_ITER);
+  return w ? static_cast<skity_path_verb>(w->iter.Peek())
+           : SKITY_PATH_VERB_DONE;
 }
 
 }  // extern "C"
