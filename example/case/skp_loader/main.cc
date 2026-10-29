@@ -9,7 +9,7 @@
 #include <skity/c/skity_picture.h>
 #include <skity/c/skity_stream.h>
 
-#include <skity/hpp/skity_bridge.hpp>
+#include <skity/hpp/bridge.hpp>
 
 #include "common/app.hpp"
 

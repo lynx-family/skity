@@ -223,6 +223,10 @@ typedef enum {
                                                     creation info */
   SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_MTL, /**< Metal-specific backend
                                                     texture info */
+  SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO,    /**< base presenter creation
+                                                    info */
+  SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO_VK, /**< Vulkan-specific presenter
+                                                    creation info */
 } skity_structure_type;
 
 /**

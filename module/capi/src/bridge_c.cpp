@@ -12,7 +12,7 @@
 #include "handle.hpp"
 
 /*
- * Bridge entry points (declared in include/skity/hpp/skity_bridge.hpp). They
+ * Bridge entry points (declared in include/skity/hpp/bridge.hpp). They
  * wrap existing native C++ objects as C handles and are declared in the
  * bridge header rather than the public skity/c/ headers because they are
  * meaningful only to C++ callers. Ownership follows the native object's

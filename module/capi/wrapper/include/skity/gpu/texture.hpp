@@ -1,0 +1,100 @@
+// Copyright 2021 The Lynx Authors. All rights reserved.
+// Licensed under the Apache License Version 2.0 that can be found in the
+// LICENSE file in the root directory of this source tree.
+
+#ifndef MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_TEXTURE_HPP
+#define MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_TEXTURE_HPP
+
+#include <skity/c/skity_texture.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <skity/base.hpp>
+#include <skity/gpu/context.hpp>
+#include <skity/types.hpp>
+
+namespace skity {
+
+/**
+ * @class Texture
+ *
+ * A GPU image resource owned by a Context.
+ *
+ */
+class Texture : public detail::OwnHandle<skity_texture, skity_texture_destroy> {
+ public:
+  /** Pixel format, mirroring the C skity_texture_format. */
+  enum class Format : uint32_t {
+    kR = SKITY_TEXTURE_FORMAT_R,
+    kRGB = SKITY_TEXTURE_FORMAT_RGB,
+    kRGB565 = SKITY_TEXTURE_FORMAT_RGB565,
+    kRGBA = SKITY_TEXTURE_FORMAT_RGBA,
+    kBGRA = SKITY_TEXTURE_FORMAT_BGRA,
+    kS = SKITY_TEXTURE_FORMAT_S,
+  };
+
+  /** Wrap an existing handle created through the raw C API. */
+  static Texture Adopt(skity_texture handle) { return Texture(handle); }
+
+  /**
+   * Upload pixel data immediately. pixels is copied before the upload,
+   * so the caller's buffer may be released right away.
+   */
+  void Upload(const void* pixels, size_t row_bytes, ColorType color_type,
+              AlphaType alpha_type) {
+    skity_texture_upload(get(), pixels, row_bytes,
+                         static_cast<skity_color_type>(color_type),
+                         static_cast<skity_alpha_type>(alpha_type));
+  }
+
+  /**
+   * Store pixel data for a deferred upload; the GPU upload happens when the
+   * texture is first used by the rendering pipeline.
+   */
+  void DeferredUpload(const void* pixels, size_t row_bytes,
+                      ColorType color_type, AlphaType alpha_type) {
+    skity_texture_deferred_upload(get(), pixels, row_bytes,
+                                  static_cast<skity_color_type>(color_type),
+                                  static_cast<skity_alpha_type>(alpha_type));
+  }
+
+  uint32_t GetWidth() const { return skity_texture_get_width(get()); }
+  uint32_t GetHeight() const { return skity_texture_get_height(get()); }
+
+  /** Empty texture; filled by the Create* factories or Adopt. */
+  Texture() = default;
+
+ private:
+  explicit Texture(skity_texture handle) : OwnHandle(handle) {}
+  friend class Context;
+};
+
+inline std::shared_ptr<Texture> Context::CreateTexture(
+    skity_texture_format format, uint32_t width, uint32_t height,
+    AlphaType alpha_type) const {
+  auto handle = skity_texture_create(get(), format, width, height,
+                                     static_cast<skity_alpha_type>(alpha_type));
+  return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
+                           : nullptr;
+}
+
+inline std::shared_ptr<Texture> Context::CreateTextureWithDesc(
+    const skity_texture_descriptor& desc) const {
+  auto handle = skity_texture_create_with_desc(get(), &desc);
+  return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
+                           : nullptr;
+}
+
+inline std::shared_ptr<Texture> Context::WrapTexture(
+    const skity_backend_texture_info& info,
+    skity_texture_release_callback release, void* userdata) const {
+  auto handle =
+      skity_texture_create_from_backend(get(), &info, release, userdata);
+  return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
+                           : nullptr;
+}
+
+}  // namespace skity
+
+#endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_TEXTURE_HPP

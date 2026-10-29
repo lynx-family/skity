@@ -9,11 +9,20 @@
 #include <GLFW/glfw3.h>
 #include <skity/c/skity.h>
 #include <skity/c/skity_context_vk.h>
-#include <skity/c/skity_native_window_vk.h>
+#include <skity/c/skity_presenter.h>
+#include <skity/c/skity_presenter_vk.h>
 #include <volk.h>
 #include <vulkan/vulkan.h>
 
-#include <skity/macros.hpp>
+// Platform tags without the legacy headers: the C API headers carry none,
+// so derive them from the compiler (unified build has no skity/macros.hpp).
+#if defined(__APPLE__)
+#define SKITY_MACOS 1
+#elif defined(_WIN32) || defined(__WIN32__)
+#define SKITY_WIN 1
+#elif defined(__linux__)
+#define SKITY_LINUX 1
+#endif
 
 #if defined(SKITY_MACOS)
 #include <vulkan/vulkan_macos.h>
@@ -186,17 +195,21 @@ int main() {
   int framebuffer_width = 0;
   int framebuffer_height = 0;
   glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
-  skity_native_window_create_info_vk window_info = {};
-  window_info.native_window = native_info;
+  skity_presenter_create_info_vk window_ext = {};
+  window_ext.s_type = SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO_VK;
+  window_ext.native_window = native_info;
+  window_ext.min_image_count = 2;
+  window_ext.present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+  skity_presenter_create_info window_info = {};
+  window_info.s_type = SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO;
+  window_info.p_next = &window_ext;
   window_info.width = static_cast<uint32_t>(framebuffer_width);
   window_info.height = static_cast<uint32_t>(framebuffer_height);
-  window_info.min_image_count = 2;
-  window_info.present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
 
-  skity_native_window_vk native_window =
-      skity_native_window_create_vk(context, &window_info);
-  if (native_window == nullptr) {
-    fprintf(stderr, "skity_native_window_create_vk failed\n");
+  skity_presenter native_window = nullptr;
+  if (skity_presenter_create(context, &window_info, &native_window) !=
+      SKITY_SUCCESS) {
+    fprintf(stderr, "skity_presenter_create failed\n");
     return 1;
   }
 
@@ -228,13 +241,13 @@ int main() {
 
   while (glfwWindowShouldClose(window) == GLFW_FALSE) {
     skity_surface surface = nullptr;
-    skity_result result = skity_native_window_acquire_next_surface_vk(
+    skity_result result = skity_presenter_acquire_next_surface(
         native_window, 4, ContentScale(window), &surface);
     if (result == SKITY_ERROR_NEED_RECREATE) {
       glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
-      skity_native_window_resize_vk(native_window,
-                                    static_cast<uint32_t>(framebuffer_width),
-                                    static_cast<uint32_t>(framebuffer_height));
+      skity_presenter_resize(native_window,
+                             static_cast<uint32_t>(framebuffer_width),
+                             static_cast<uint32_t>(framebuffer_height));
       continue;
     }
     if (result != SKITY_SUCCESS) {
@@ -250,12 +263,12 @@ int main() {
     skity_canvas_flush(canvas);
     skity_canvas_destroy(canvas);
 
-    result = skity_native_window_present_vk(native_window, &surface);
+    result = skity_presenter_present(native_window, &surface);
     if (result == SKITY_ERROR_NEED_RECREATE) {
       glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
-      skity_native_window_resize_vk(native_window,
-                                    static_cast<uint32_t>(framebuffer_width),
-                                    static_cast<uint32_t>(framebuffer_height));
+      skity_presenter_resize(native_window,
+                             static_cast<uint32_t>(framebuffer_width),
+                             static_cast<uint32_t>(framebuffer_height));
     } else if (result != SKITY_SUCCESS) {
       break;
     }
@@ -266,7 +279,7 @@ int main() {
   skity_paint_destroy(gradient);
   skity_shader_destroy(shader);
   skity_paint_destroy(fill);
-  skity_native_window_destroy_vk(native_window);
+  skity_presenter_destroy(native_window);
   skity_context_destroy(context);
   glfwDestroyWindow(window);
   glfwTerminate();

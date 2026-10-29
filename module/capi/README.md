@@ -30,8 +30,8 @@ shape:
   no `skity::` C++ symbol),
 - `libskity-codec` stays a separate library exporting only its
   `skity_codec_*` C ABI,
-- the header-only C++ RAII wrapper under `include/skity/hpp/` is the C++
-  surface: it is installed in this shape only (it defines plain `skity::`
+- the header-only C++ RAII wrapper under `wrapper/include/skity/` (paths spelled exactly like the legacy headers) is the
+  C++ surface: it is installed in this shape only (it defines plain `skity::`
   classes and must never be compiled against a library that still exports
   the legacy C++ symbols), and non-CMake consumers must define
   `SKITY_UNIFIED_LIB` themselves when including it,
@@ -78,7 +78,7 @@ Build it with `SKITY_CAPI_MODULE=ON`, `SKITY_VK_BACKEND=ON`, and
 #include <skity/c/skity_surface_vk.h>
 #include <skity/c/skity_texture_vk.h>
 #include <skity/c/skity_semaphore_vk.h>
-#include <skity/c/skity_native_window_vk.h>
+#include <skity/c/skity_presenter_vk.h>
 */
 
 skity_context ctx;
