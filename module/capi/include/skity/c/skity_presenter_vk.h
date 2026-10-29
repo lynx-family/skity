@@ -5,10 +5,7 @@
 #ifndef MODULE_CAPI_INCLUDE_SKITY_C_SKITY_PRESENTER_VK_H
 #define MODULE_CAPI_INCLUDE_SKITY_C_SKITY_PRESENTER_VK_H
 
-#include <skity/c/skity_base.h>
-#include <skity/c/skity_context.h>
-#include <skity/c/skity_context_vk.h>
-#include <skity/c/skity_surface.h>
+#include <skity/c/skity_presenter.h>
 #include <vulkan/vulkan.h>
 
 #ifdef __cplusplus
@@ -34,61 +31,27 @@ typedef struct skity_vk_native_window_info {
   uint64_t window_id;
 } skity_vk_native_window_info;
 
-/** @brief Vulkan native window and swapchain creation descriptor. */
+/**
+ * @brief Vulkan presenter extension. Chain via
+ *        skity_presenter_create_info::p_next with s_type =
+ *        SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO_VK; the base info
+ *        carries the physical size.
+ */
 typedef struct skity_presenter_create_info_vk {
-  skity_vk_native_window_info native_window;
-  uint32_t width;
-  uint32_t height;
-  VkQueue present_queue;
+  skity_structure_type
+      s_type;         /**< SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO_VK */
+  const void* p_next; /**< reserved for future extensions */
+  skity_vk_native_window_info native_window; /**< the window to present on */
+  VkQueue present_queue;                     /**< queue that will present */
   int32_t present_queue_family_index;
-  uint32_t min_image_count;
-  VkFormat format;
-  VkColorSpaceKHR color_space;
+  uint32_t min_image_count;    /**< swapchain image count */
+  VkFormat format;             /**< swapchain image format */
+  VkColorSpaceKHR color_space; /**< swapchain color space */
   VkPresentModeKHR present_mode;
   VkCompositeAlphaFlagBitsKHR composite_alpha;
   VkSurfaceTransformFlagBitsKHR pre_transform;
-  uint32_t clipped;
+  uint32_t clipped; /**< non-zero to clip to the window bounds */
 } skity_presenter_create_info_vk;
-
-/** @brief Opaque handle to a Vulkan native window presenter. */
-typedef struct skity_presenter_s* skity_presenter_vk;
-
-/** @brief Create a Vulkan native window and its initial swapchain. */
-SKITY_C_API skity_presenter_vk skity_presenter_create_vk(
-    skity_context context, const skity_presenter_create_info_vk* info);
-
-/** @brief Destroy the native window presenter and its swapchain. */
-SKITY_C_API void skity_presenter_destroy_vk(skity_presenter_vk window);
-
-/** @brief Return the current physical presentation width in pixels. */
-SKITY_C_API uint32_t skity_presenter_get_width_vk(skity_presenter_vk window);
-
-/** @brief Return the current physical presentation height in pixels. */
-SKITY_C_API uint32_t skity_presenter_get_height_vk(skity_presenter_vk window);
-
-/**
- * @brief Recreate the presenter and swapchain for a new physical size.
- * @return SKITY_SUCCESS on success, or a SKITY_ERROR_* code on failure
- */
-SKITY_C_API skity_result skity_presenter_resize_vk(skity_presenter_vk window,
-                                                   uint32_t width,
-                                                   uint32_t height);
-
-/**
- * @brief Acquire the next one-shot render surface. It must be passed to
- *        skity_presenter_present_vk before acquiring another surface.
- */
-SKITY_C_API skity_result skity_presenter_acquire_next_surface_vk(
-    skity_presenter_vk window, uint32_t sample_count, float content_scale,
-    skity_surface* out_surface);
-
-/**
- * @brief Present a surface acquired from this window. On success or
- *        SKITY_ERROR_NEED_RECREATE the surface handle is consumed and must not
- *        be used or destroyed again.
- */
-SKITY_C_API skity_result skity_presenter_present_vk(skity_presenter_vk window,
-                                                    skity_surface* surface);
 
 #ifdef __cplusplus
 }  // extern "C"

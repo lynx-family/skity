@@ -12,8 +12,9 @@
 // out of skity.hpp so GL / CPU consumers never see <vulkan/vulkan.h>.
 //
 // Only what CANNOT live on the neutral layer is VK-gated here: context
-// creation (the C entries carry Vulkan-typed signatures) and GPUPresenter
-// (its creation info carries VK native-window handles). Surfaces /
+// creation — the C entries carry Vulkan-typed signatures. Everything else
+// (surfaces, textures, semaphores, the presenter) reaches Vulkan through
+// CreateInfo p_next extensions from the neutral layer. Surfaces /
 // backend-texture wraps / semaphore imports have no VK wrappers — the
 // CreateInfo structs are already Vulkan-style p_next chains, so consumers chain
 // the extension themselves (s_type / SKITY_GPU_BACKEND_TYPE_VULKAN where
@@ -25,7 +26,6 @@
 // include/skity/.
 
 #include <skity/gpu/context_vk.hpp>
-#include <skity/gpu/presenter.hpp>
 #include <skity/skity.hpp>
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_SKITY_VK_HPP

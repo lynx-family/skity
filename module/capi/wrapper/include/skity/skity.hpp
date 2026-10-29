@@ -85,6 +85,7 @@
 #include <skity/effect/shader.hpp>
 #include <skity/geometry/quaternion.hpp>
 #include <skity/geometry/stroke.hpp>
+#include <skity/gpu/presenter.hpp>
 #include <skity/gpu/semaphore.hpp>
 #include <skity/gpu/surface.hpp>
 #include <skity/graphic/image.hpp>

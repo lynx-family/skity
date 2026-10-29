@@ -8,6 +8,7 @@
 // full create / present flow is exercised by the golden Vulkan tests; this
 // TU belongs to the unified-only skity_wrapper_unit_test binary.
 
+#include <skity/c/skity_presenter_vk.h>
 #include <skity/c/skity_surface_vk.h>
 #include <skity/c/skity_texture_vk.h>
 #include <vulkan/vulkan.h>
@@ -74,10 +75,15 @@ TEST(WrapperVkHpp, PresenterLifecycleValidation) {
   // without touching the (null) presenter handle (legacy status shape).
   EXPECT_EQ(presenter.Present(nullptr), GPUPresenterStatus::kError);
 
-  // Creation with a null context fails cleanly.
+  // Creation with a null context fails cleanly (base info + chained VK
+  // extension, the surface-style CreateInfo chain).
   Context null_context;
-  skity_presenter_create_info_vk info = {};
-  EXPECT_EQ(GPUPresenter::Create(null_context, info), nullptr);
+  skity_presenter_create_info_vk ext = {};
+  ext.s_type = SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO_VK;
+  skity_presenter_create_info info = {};
+  info.s_type = SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO;
+  info.p_next = &ext;
+  EXPECT_EQ(null_context.CreatePresenter(info), nullptr);
 
   // Adopting a raw NULL handle is equally safe.
   EXPECT_FALSE(GPUPresenter::Adopt(nullptr));
