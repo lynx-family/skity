@@ -28,10 +28,11 @@ Rect TextBlob::CalculateBoundsRect() const {
   }
 
   float top = std::numeric_limits<float>::max();
-  float bottom = std::numeric_limits<float>::min();
+  float bottom = std::numeric_limits<float>::lowest();
   float left = std::numeric_limits<float>::max();
-  float right = std::numeric_limits<float>::min();
+  float right = std::numeric_limits<float>::lowest();
   float advance_x = 0;
+  bool has_glyph = false;
   for (auto const &run : text_run_) {
     auto typeface = run.LockTypeface();
     Font font(typeface, run.GetFontSize());
@@ -44,6 +45,7 @@ Rect TextBlob::CalculateBoundsRect() const {
     if (glyphs.empty()) {
       continue;
     }
+    has_glyph = true;
 
     std::vector<float> pos_y;
     std::vector<float> pos_x;
@@ -78,6 +80,11 @@ Rect TextBlob::CalculateBoundsRect() const {
       right = std::max(right, x + glyph->GetHoriBearingX() + glyph->GetWidth());
     }
   }
+  // Runs without glyphs leave the extrema at their sentinels, which would form
+  // an inverted rect with infinite size. Match the no-run case instead.
+  if (!has_glyph) {
+    return Rect::MakeEmpty();
+  }
   return Rect::MakeLTRB(left, top, right, bottom);
 }
 
@@ -93,7 +100,7 @@ Rect TextBlob::ComputeBounds(uint32_t count, const GlyphID *glyphs,
                 glyph_info[count - 1]->GetHoriBearingX() +
                 glyph_info[count - 1]->GetWidth();
   float top = std::numeric_limits<float>::max();
-  float bottom = std::numeric_limits<float>::min();
+  float bottom = std::numeric_limits<float>::lowest();
   for (size_t i = 0; i < count; ++i) {
     top = std::min(top, position_y[i] - glyph_info[i]->GetHoriBearingY());
     bottom = std::max(bottom, position_y[i] - glyph_info[i]->GetYMin());

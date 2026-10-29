@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <skity/text/font_manager.hpp>
 #include <skity/text/text_blob.hpp>
 #include <skity/text/text_run.hpp>
@@ -25,8 +26,8 @@ namespace {
 // (OnCreateScalerContext returns nullptr), so it must only be used in cases
 // that never query glyph metrics. Font::LoadGlyphMetrics (and anything that
 // calls it, like TextBlob::GetBoundsRect/ComputeBounds) dereferences the
-// ScalerContext returned here, so those cases use a real typeface from
-// FontManager instead.
+// ScalerContext returned here, so metrics cases provide a real or synthetic
+// ScalerContext through BoundsTypeface instead.
 class MockTypeface : public Typeface {
  public:
   MockTypeface() : Typeface(FontStyle()) {}
@@ -65,7 +66,117 @@ class BoundsTypeface : public MockTypeface {
               (const ScalerContextDesc*), (const, override));
 };
 
+// Zero metrics represent a valid nonempty run of zero-extent glyphs. Position
+// those glyphs explicitly to test extrema without depending on installed fonts.
+class ZeroMetricsScalerContext final : public ScalerContext {
+ public:
+  ZeroMetricsScalerContext(std::weak_ptr<Typeface> typeface,
+                           const ScalerContextDesc* desc)
+      : ScalerContext(typeface, desc) {}
+
+ protected:
+  void GenerateMetrics(GlyphData* glyph) override { glyph->ZeroMetrics(); }
+  void GenerateImage(PackedGlyphID, GlyphData*, const StrokeDesc&) override {}
+  void GenerateImageInfo(PackedGlyphID, GlyphData*,
+                         const StrokeDesc&) override {}
+  bool GeneratePath(GlyphData*) override { return false; }
+  void GenerateFontMetrics(FontMetrics* metrics) override { *metrics = {}; }
+  uint16_t OnGetFixedSize() override { return 0; }
+};
+
+Font MakeZeroMetricsFont() {
+  auto typeface = std::make_shared<BoundsTypeface>();
+  std::weak_ptr<Typeface> weak_typeface = typeface;
+  EXPECT_CALL(*typeface, OnCreateScalerContext(testing::_))
+      .Times(testing::AtLeast(1))
+      .WillRepeatedly([weak_typeface](const ScalerContextDesc* desc) {
+        return std::make_unique<ZeroMetricsScalerContext>(weak_typeface, desc);
+      });
+  return Font(typeface, 20.f);
+}
+
+void ExpectBounds(const Rect& bounds, float left, float top, float right,
+                  float bottom) {
+  EXPECT_FLOAT_EQ(bounds.Left(), left);
+  EXPECT_FLOAT_EQ(bounds.Top(), top);
+  EXPECT_FLOAT_EQ(bounds.Right(), right);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), bottom);
+}
+
 }  // namespace
+
+TEST(TextBlobBoundsTest, ZeroMaxima) {
+  const auto font = MakeZeroMetricsFont();
+  const std::vector<GlyphID> glyphs = {1};
+  const std::vector<float> x = {0.f}, y = {0.f};
+  const TextBlob blob({TextRun(font, glyphs, x, y)});
+
+  ExpectBounds(blob.GetBoundsRect(), 0.f, 0.f, 0.f, 0.f);
+  EXPECT_FLOAT_EQ(blob.GetBoundSize().x, 0.f);
+  EXPECT_FLOAT_EQ(blob.GetBoundSize().y, 0.f);
+  ExpectBounds(TextBlob::ComputeBounds(1, glyphs.data(), x.data(), y.data(),
+                                       font, Paint()),
+               0.f, 0.f, 0.f, 0.f);
+}
+
+TEST(TextBlobBoundsTest, EntirelyNegativePositions) {
+  const auto font = MakeZeroMetricsFont();
+  const std::vector<GlyphID> glyphs = {1, 2};
+  const std::vector<float> x = {-20.f, -10.f}, y = {-40.f, -30.f};
+  const TextBlob blob({TextRun(font, glyphs, x, y)});
+
+  ExpectBounds(blob.GetBoundsRect(), -20.f, -40.f, -10.f, -30.f);
+  EXPECT_FLOAT_EQ(blob.GetBoundSize().x, 10.f);
+  EXPECT_FLOAT_EQ(blob.GetBoundSize().y, 10.f);
+  ExpectBounds(TextBlob::ComputeBounds(2, glyphs.data(), x.data(), y.data(),
+                                       font, Paint()),
+               -20.f, -40.f, -10.f, -30.f);
+}
+
+TEST(TextBlobBoundsTest, TranslationAcrossOrigin) {
+  const auto font = MakeZeroMetricsFont();
+  const std::vector<GlyphID> glyphs = {1, 2};
+  for (const auto offset : {Vec2{-50.f, -70.f}, Vec2{-20.f, -40.f},
+                            Vec2{0.f, 0.f}, Vec2{35.f, 60.f}}) {
+    SCOPED_TRACE(testing::Message() << offset.x << "," << offset.y);
+    const std::vector<float> x = {10.f + offset.x, 20.f + offset.x};
+    const std::vector<float> y = {30.f + offset.y, 40.f + offset.y};
+    const TextBlob blob({TextRun(font, glyphs, x, y)});
+
+    ExpectBounds(blob.GetBoundsRect(), x[0], y[0], x[1], y[1]);
+    EXPECT_FLOAT_EQ(blob.GetBoundSize().x, 10.f);
+    EXPECT_FLOAT_EQ(blob.GetBoundSize().y, 10.f);
+    ExpectBounds(TextBlob::ComputeBounds(2, glyphs.data(), x.data(), y.data(),
+                                         font, Paint()),
+                 x[0], y[0], x[1], y[1]);
+  }
+}
+
+TEST(TextBlobBoundsTest, NegativeRuns) {
+  const auto font = MakeZeroMetricsFont();
+  const TextBlob blob({TextRun(font, {1, 2}, {-40.f, -30.f}, {-60.f, -50.f}),
+                       TextRun(font, {3, 4}, {-20.f, -10.f}, {-40.f, -30.f})});
+  const std::vector<GlyphID> glyphs = {1, 2, 3, 4};
+  const std::vector<float> x = {-40.f, -30.f, -20.f, -10.f};
+  const std::vector<float> y = {-60.f, -50.f, -40.f, -30.f};
+
+  ExpectBounds(blob.GetBoundsRect(), -40.f, -60.f, -10.f, -30.f);
+  EXPECT_FLOAT_EQ(blob.GetBoundSize().x, 30.f);
+  EXPECT_FLOAT_EQ(blob.GetBoundSize().y, 30.f);
+  ExpectBounds(TextBlob::ComputeBounds(4, glyphs.data(), x.data(), y.data(),
+                                       font, Paint()),
+               -40.f, -60.f, -10.f, -30.f);
+}
+
+TEST(TextBlobBoundsTest, AllRunsEmpty) {
+  const auto font = MakeZeroMetricsFont();
+  const TextBlob blob({TextRun(font, std::vector<GlyphID>{}),
+                       TextRun(font, std::vector<GlyphID>{})});
+
+  EXPECT_EQ(blob.GetBoundsRect(), Rect::MakeEmpty());
+  EXPECT_FLOAT_EQ(blob.GetBoundSize().x, 0.f);
+  EXPECT_FLOAT_EQ(blob.GetBoundSize().y, 0.f);
+}
 
 class TextBlobTest : public ::testing::Test {
  protected:
