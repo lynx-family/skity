@@ -6,6 +6,7 @@
 #define MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_CONTEXT_HPP
 
 #include <skity/c/skity_context.h>
+#include <skity/c/skity_presenter.h>
 #include <skity/c/skity_surface.h>
 #include <skity/c/skity_texture.h>
 
@@ -20,6 +21,7 @@ namespace skity {
 class Surface;
 class Texture;
 class Semaphore;
+class GPUPresenter;
 namespace detail {
 struct ContextCreate;
 }  // namespace detail
@@ -130,6 +132,8 @@ class Context : public detail::OwnHandle<skity_context, skity_context_destroy> {
       skity_texture_release_callback release = nullptr,
       void* userdata = nullptr) const;
   std::shared_ptr<Semaphore> CreateSemaphore() const;
+  std::unique_ptr<GPUPresenter> CreatePresenter(
+      const skity_presenter_create_info& info) const;
 
   /** GPU backend classification, mirroring skity::GPUBackendType. */
   enum class BackendType : uint32_t {

@@ -415,9 +415,9 @@ arithmetic, color packing) are implemented inline in `types.hpp`.
 Coverage (2026-10, counted mechanically over `SKITY_C_API` declarations):
 397 C functions across the headers under `skity/c/`. The wrapper layer
 forwards 393 of them (98%) — everything except the 4 precompile entry
-points (below). 9 of those are VK-specific functions behind the opt-in
-`skity_vk.hpp` (2 `context_vk` + 7 `native_window_vk`); all the rest live
-in the neutral `skity.hpp` umbrella — except Metal, which has NO wrapper
+points (below). Only 2 of those are VK-specific functions behind the
+opt-in `skity_vk.hpp` (context creation — `skity_context_vk`); all the
+rest live in the neutral `skity.hpp` umbrella — except Metal, which has NO wrapper
 at all: like the legacy C++ API (whose only Metal header was the
 Objective-C++ `gpu_context_mtl.h`), Metal consumers call the C ABI
 directly (`skity_context_mtl.h` / `skity_surface_mtl.h` /
@@ -452,6 +452,7 @@ shared_ptr. All other wrappers own uniquely and remain move-only.
 |---|---|---|
 | `skity_types` | `types.hpp` | Rect / Matrix / RRect value types (binary-compatible with the C PODs), BlendMode / TileMode / AlphaType / ColorType / SamplingOptions / FilterMode / MipmapMode enums, color helpers |
 | `skity_base` | `base.hpp` | `detail::OwnHandle` (move-only owner) |
+| `skity_presenter` | `gpu/presenter.hpp` | `GPUPresenter` — the legacy class, neutral like `GPUSurface`: `Context::CreatePresenter` (base info + p_next backend extension, `unique_ptr`), `GPUPresenterStatus`, `GPUSurfaceAcquireResult AcquireNextSurface(desc)`, `Present(unique_ptr<Surface>)`; Vulkan is the only backend today (extension in `skity_presenter_vk.h`). Resize / size queries are C-side additions; `GetPresentMode` has no C entry |
 | `skity_camera` | `geometry/camera.hpp` | `Camera` (viewport ctor, position / look-at / dist / rotation setters, `GetCamera` / `GetFixedCamera` view matrices) |
 | `skity_quaternion` | `geometry/quaternion.hpp` | free functions `QuaternionEulerToMatrix` / `QuaternionAxisAngleToMatrix` |
 | `skity_semaphore` | `gpu/semaphore.hpp` | `Semaphore` (Create on a Context, Import via the untyped base info + backend p_next extension, GetBackendType) — VK implementation only today |

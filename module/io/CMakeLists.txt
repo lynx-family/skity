@@ -60,6 +60,9 @@ target_include_directories(skity-io
 target_include_directories(skity-io
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    # the legacy headers stay build-private on skity in the unified shape;
+    # list the root directly like skity-codec does
+    ${SKITY_ROOT}/include
     # capi paths must also be listed here directly: INTERFACE-library usage
     # requirements do not survive cmake_to_gn, so "handle.hpp" and the shared
     # skity/c headers would be unresolvable in the GN build
