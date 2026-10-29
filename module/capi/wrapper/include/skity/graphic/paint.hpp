@@ -196,59 +196,26 @@ class Paint : public detail::OwnHandle<skity_paint, skity_paint_destroy> {
   float GetTextSize() const { return skity_paint_get_text_size(get()); }
 
   /**
-   * Attach an effect or typeface (raw-handle overloads). The paint takes a
-   * shared reference, so the passed (owning) handle may be destroyed
-   * immediately afterwards — passing e.g. a temporary wrapper works:
-   * `paint.SetShader(shader.get());`.
-   */
-  void SetShader(skity_shader shader) { skity_paint_set_shader(get(), shader); }
-  void SetColorFilter(skity_color_filter filter) {
-    skity_paint_set_color_filter(get(), filter);
-  }
-  void SetImageFilter(skity_image_filter filter) {
-    skity_paint_set_image_filter(get(), filter);
-  }
-  void SetMaskFilter(skity_mask_filter filter) {
-    skity_paint_set_mask_filter(get(), filter);
-  }
-  void SetPathEffect(skity_path_effect effect) {
-    skity_paint_set_path_effect(get(), effect);
-  }
-  void SetTypeface(skity_typeface typeface) {
-    skity_paint_set_typeface(get(), typeface);
-  }
-
-  /** Wrapper-object overloads (accept temporaries: the paint shares). */
-  void SetShader(const Shader& shader) { SetShader(shader.get()); }
-  void SetColorFilter(const ColorFilter& filter) {
-    SetColorFilter(filter.get());
-  }
-  void SetImageFilter(const ImageFilter& filter) {
-    SetImageFilter(filter.get());
-  }
-  void SetMaskFilter(const MaskFilter& filter) { SetMaskFilter(filter.get()); }
-  void SetPathEffect(const PathEffect& effect) { SetPathEffect(effect.get()); }
-
-  /**
-   * shared_ptr overloads — the legacy signatures. The paint takes a shared
-   * reference, so passing a factory temporary works
+   * Effect / typeface attach — the legacy shared_ptr signatures. The paint
+   * takes a shared reference, so passing a factory temporary works
    * (`paint.SetShader(Shader::MakeLinear(...))`) and a null pointer
-   * detaches the effect.
+   * detaches the effect. Handles obtained through the raw C API are
+   * wrapped with the class's Adopt first.
    */
   void SetShader(std::shared_ptr<Shader> shader) {
-    SetShader(shader ? shader->get() : nullptr);
+    skity_paint_set_shader(get(), shader ? shader->get() : nullptr);
   }
   void SetColorFilter(std::shared_ptr<ColorFilter> filter) {
-    SetColorFilter(filter ? filter->get() : nullptr);
+    skity_paint_set_color_filter(get(), filter ? filter->get() : nullptr);
   }
   void SetImageFilter(std::shared_ptr<ImageFilter> filter) {
-    SetImageFilter(filter ? filter->get() : nullptr);
+    skity_paint_set_image_filter(get(), filter ? filter->get() : nullptr);
   }
   void SetMaskFilter(std::shared_ptr<MaskFilter> filter) {
-    SetMaskFilter(filter ? filter->get() : nullptr);
+    skity_paint_set_mask_filter(get(), filter ? filter->get() : nullptr);
   }
   void SetPathEffect(std::shared_ptr<PathEffect> effect) {
-    SetPathEffect(effect ? effect->get() : nullptr);
+    skity_paint_set_path_effect(get(), effect ? effect->get() : nullptr);
   }
   /** Defined in text/text.hpp (Typeface is forward-declared here). */
   void SetTypeface(std::shared_ptr<Typeface> typeface);
