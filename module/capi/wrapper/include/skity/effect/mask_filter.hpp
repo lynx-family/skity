@@ -8,6 +8,7 @@
 #include <skity/c/skity_mask_filter.h>
 
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 
 namespace skity {
@@ -34,8 +35,11 @@ class MaskFilter
     : public detail::OwnHandle<skity_mask_filter, skity_mask_filter_destroy> {
  public:
   /** Gaussian blur of the alpha mask; radius in pixels (> 0). */
-  static MaskFilter MakeBlur(BlurStyle style, float radius) {
-    return MaskFilter(skity_mask_filter_create_blur(to_c(style), radius));
+  static std::shared_ptr<MaskFilter> MakeBlur(BlurStyle style, float radius) {
+    auto handle = skity_mask_filter_create_blur(to_c(style), radius);
+    return handle != nullptr
+               ? std::shared_ptr<MaskFilter>(new MaskFilter(handle))
+               : nullptr;
   }
 
   /**
@@ -43,6 +47,8 @@ class MaskFilter
    * destroying the wrapper releases the shared reference.
    */
   static MaskFilter Adopt(skity_mask_filter h) { return MaskFilter(h); }
+
+  friend class Paint;
 
  private:
   explicit MaskFilter(skity_mask_filter h) : OwnHandle(h) {}

@@ -427,8 +427,18 @@ layers.
 Value-type wrappers mirror their copyable C++ counterparts: `Paint`, `Path`
 and `Font` have copy construction / assignment that clones the underlying
 object via the C `*_clone` entry points (parameters duplicated, refcounted
-children — effects, typeface — shared), while moves stay cheap. All other
-wrappers own uniquely and remain move-only.
+children — effects, typeface — shared), while moves stay cheap.
+
+The shared_ptr-managed legacy types keep their legacy shapes exactly: every
+effect / typeface factory returns `std::shared_ptr<T>` (nullptr on failure,
+matching the legacy null convention), `Paint`'s effect attach / getters and
+the `Font` / `FontManager` typeface hand-offs take / return `shared_ptr`,
+and `TypefaceDelegate::CreateSimpleFallbackDelegate` takes a
+`vector<shared_ptr<Typeface>>` and returns a `unique_ptr` — legacy effect
+code (arrow calls, factory temporaries, null checks) compiles verbatim. The
+underlying wrapper classes stay move-only handle owners; the shared_ptr
+controls the wrapper's lifetime, and a null C handle maps to a null
+shared_ptr. All other wrappers own uniquely and remain move-only.
 
 | C domain | Wrapper | Notes |
 |---|---|---|
@@ -438,16 +448,16 @@ wrappers own uniquely and remain move-only.
 | `skity_quaternion` | `geometry/quaternion.hpp` | free functions `QuaternionEulerToMatrix` / `QuaternionAxisAngleToMatrix` |
 | `skity_semaphore` | `gpu/semaphore.hpp` | `Semaphore` (Create on a Context, Import via the untyped base info + backend p_next extension, GetBackendType) — VK implementation only today |
 | `skity_canvas` | `render/canvas.hpp` | full draw / state / clip / text / image surface; `SoftwareCanvas` inherits the non-owning `Canvas` view and owns its handle |
-| `skity_paint` | `graphic/paint.hpp` | all setters + getters, effect attach (raw + wrapper overloads), effect getters via `Adopt`, copy semantics (deep-copy params, shared effects) |
+| `skity_paint` | `graphic/paint.hpp` | all setters + getters, effect attach in the legacy shapes (raw handle + `shared_ptr`, null detaches), `shared_ptr` effect/typeface getters, copy semantics (deep-copy params, shared effects) |
 | `skity_path` | `graphic/path.hpp` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii + `AddMode`), point / verb / conic-weight access, `IsRect` / `IsLine` / `IsEqual`, convexity, segment masks, last-pt family, `CopyWith*`, `Clone` + copy semantics (deep geometry copy) |
 | `skity_path_effect` | `effect/path_effect.hpp` | discrete + dash |
 | `skity_path_measure` | `graphic/path_measure.hpp` | length / pos-tan / segment / contour advance |
 | `skity_path_op` | `graphic/path_op.hpp` | free function `Op(one, two, PathOp, out)` |
 | `skity_stroke` | `geometry/stroke.hpp` | free functions `StrokePath` / `QuadPath` |
 | `skity_shader` | `effect/shader.hpp` | linear / radial / sweep / two-point conical gradients, image shader, local matrix |
-| `skity_color_filter` | `effect/color_filter.hpp` | all factories |
+| `skity_color_filter` | `effect/color_filter.hpp` | all factories (`shared_ptr` returns, legacy shape) |
 | `skity_mask_filter` | `effect/mask_filter.hpp` | blur (+ `BlurStyle`) |
-| `skity_image_filter` | `effect/image_filter.hpp` | all factories |
+| `skity_image_filter` | `effect/image_filter.hpp` | all factories (`shared_ptr` returns/params, legacy shape) |
 | `skity_data` | `io/data.hpp` | copy / with-proc / from-file / empty + accessors |
 | `skity_bitmap` | `graphic/bitmap.hpp` | `Bitmap` + `Pixmap` (incl. zero-copy wrap via `Data`) |
 | `skity_image` | `graphic/image.hpp` | raster / texture / deferred / promise factories, read / scale pixels |
@@ -457,7 +467,7 @@ wrappers own uniquely and remain move-only.
 | `skity_context_mtl` | `gpu/context_mtl.hpp` | free functions `CreateMtlContext` (device / queue optional) + `GetMtlDevice` / `GetMtlCommandQueue` (Objective-C-only wrappers, guarded under `__OBJC__` in the umbrella) |
 | `skity_surface_mtl` | `gpu/surface_mtl.hpp` | `CreateMtlSurface` — chains the MTL CreateInfo extension (one-shot `id<MTLTexture>` or `CAMetalLayer` target) |
 | `skity_texture_mtl` | `gpu/texture_mtl.hpp` | `WrapMtlTexture` — wraps an existing `id<MTLTexture>` as a `Texture` |
-| `skity_font` + `skity_text` | `text/text.hpp` | `Typeface` (load / default / unichar→glyph / style / tables / variations / `MakeVariation`), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / bounds / make-with-size / `LoadGlyph*` family, copy semantics with shared typeface), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
+| `skity_font` + `skity_text` | `text/text.hpp` | `Typeface` (load / default / unichar→glyph / style / tables / variations / `MakeVariation`; factories and hand-offs return `shared_ptr`, the legacy shape), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / bounds / make-with-size / `LoadGlyph*` family, copy semantics with shared typeface), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
 | `skity_glyph` | `text/glyph.hpp` | `GlyphData` non-owning views over the global glyph cache (metrics / bearings / outline path / bitmap description), `GlyphFormat` / `BitmapFormat` enums, `GlyphBitmap` POD passthrough |
 | `skity_recorder` | `recorder/recorder.hpp` | `PictureRecorder` (+ build options, last-op offset) and `DisplayList` (draw / cull-rect draw / bounds / op count / properties / rtree search / per-op paint mutation) |
 

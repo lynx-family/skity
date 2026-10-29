@@ -19,11 +19,11 @@
 
 #include <GLFW/glfw3.h>
 #include <skity/c/skity_codec.h>
-#include <skity/skity.hpp>
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <skity/skity.hpp>
 
 namespace {
 
@@ -36,8 +36,8 @@ void* GetGLProc(const char* name) {
 // GPU-to-CPU readback today, and a CPU replay is deterministic). The
 // skity-data / skity-pixmap handles are shared across libskity and
 // libskity-codec, so the RAII layer interops with the raw codec ABI.
-bool SavePNG(const skity::DisplayList& scene, const char* path,
-             uint32_t width, uint32_t height) {
+bool SavePNG(const skity::DisplayList& scene, const char* path, uint32_t width,
+             uint32_t height) {
   skity::Bitmap bitmap(width, height);
   skity::SoftwareCanvas canvas(bitmap.get());
   canvas.DrawColor(skity::Color_WHITE, skity::BlendMode::kSrc);
@@ -178,7 +178,7 @@ void DrawLinearGradientExample(skity::Canvas* canvas) {
     }
     auto lgs = skity::Shader::MakeLinear(pts, colors, positions, 3,
                                          skity::TileMode::kMirror, flag);
-    lgs.SetLocalMatrix(matrix);
+    lgs->SetLocalMatrix(matrix);
     p.SetShader(lgs);
     auto r = skity::Rect::MakeLTRB(blockX, blockY, blockX + 100, blockY + 100);
     canvas->DrawRect(r, p);
@@ -198,8 +198,9 @@ void DrawLinearGradientExample(skity::Canvas* canvas) {
 }
 
 // same as https://fiddle.skia.org/c/@text_rendering
-void DrawSimpleText(skity::Canvas* canvas, const skity::Typeface& primary,
-                    const skity::Typeface& cjk) {
+void DrawSimpleText(skity::Canvas* canvas,
+                    const std::shared_ptr<skity::Typeface>& primary,
+                    const std::shared_ptr<skity::Typeface>& cjk) {
   skity::Paint paint;
 
   paint.SetTextSize(64.f);
@@ -207,10 +208,11 @@ void DrawSimpleText(skity::Canvas* canvas, const skity::Typeface& primary,
   paint.SetFillColor(0x42 / 255.f, 0x85 / 255.f, 0xF4 / 255.f, 1.f);
   paint.SetStyle(skity::Paint::kFill_Style);
 
-  paint.SetTypeface(primary.get());
+  paint.SetTypeface(primary);
   // The legacy TextBlobBuilder + BuildTextBlob collapses onto TextBlob
-  // factories on the wrapper: MakeWithDelegate threads the fallback through.
-  // The fallback delegate stays alive for as long as the blob draws.
+  // factories on the wrapper: MakeWithDelegate threads the fallback through
+  // (raw delegate pointer, the legacy builder shape). The fallback delegate
+  // stays alive for as long as the blob draws.
   auto draw_text = [&](const skity::TextBlob& blob) {
     canvas->DrawTextBlob(blob, 20.f, 64.f, paint);
 
@@ -243,8 +245,8 @@ void DrawSimpleText(skity::Canvas* canvas, const skity::Typeface& primary,
     canvas->Restore();
   };
   if (cjk) {
-    skity::TypefaceDelegate delegate =
-        skity::TypefaceDelegate::CreateSimpleFallbackDelegate(&cjk, 1);
+    auto delegate =
+        skity::TypefaceDelegate::CreateSimpleFallbackDelegate({cjk});
     draw_text(
         skity::TextBlob::MakeWithDelegate("Skity 你好", paint, delegate.get()));
   } else {
@@ -278,8 +280,9 @@ void DrawEvenOddFill(skity::Canvas* canvas) {
   canvas->Restore();
 }
 
-void DrawScene(skity::Canvas* canvas, const skity::Typeface& primary,
-               const skity::Typeface& cjk) {
+void DrawScene(skity::Canvas* canvas,
+               const std::shared_ptr<skity::Typeface>& primary,
+               const std::shared_ptr<skity::Typeface>& cjk) {
   DrawBasicExample(canvas);
 
   canvas->Save();
@@ -333,9 +336,8 @@ int main(int argc, char** argv) {
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 
-  GLFWwindow* window =
-      glfwCreateWindow(1000, 800, "skity-hpp: unified C ABI + RAII wrapper",
-                       nullptr, nullptr);
+  GLFWwindow* window = glfwCreateWindow(
+      1000, 800, "skity-hpp: unified C ABI + RAII wrapper", nullptr, nullptr);
   if (window == nullptr) {
     glfwTerminate();
     return 1;
@@ -350,7 +352,7 @@ int main(int argc, char** argv) {
   }
 
   // -- typefaces: explicit primary font, CJK fallback for 你好 --
-  skity::Typeface primary = skity::Typeface::GetDefaultTypeface();
+  auto primary = skity::Typeface::GetDefaultTypeface();
 #ifdef SKITY_FONT_DIR
   if (!primary) {
     primary = skity::Typeface::MakeFromFile(
@@ -359,7 +361,7 @@ int main(int argc, char** argv) {
 #endif
   skity::FontStyle normal_style{400, 5, SKITY_FONT_SLANT_UPRIGHT};
   skity::FontManager font_manager = skity::FontManager::RefDefault();
-  skity::Typeface cjk = font_manager.MatchFamilyStyleCharacter(
+  auto cjk = font_manager.MatchFamilyStyleCharacter(
       nullptr, normal_style, nullptr, 0, 0x7ECF /* 界 */);
 #ifdef SKITY_FONT_DIR
   if (!cjk) {

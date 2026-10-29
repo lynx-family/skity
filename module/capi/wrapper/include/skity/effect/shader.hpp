@@ -8,6 +8,7 @@
 #include <skity/c/skity_shader.h>
 
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 #include <skity/graphic/image.hpp>
 #include <skity/types.hpp>
@@ -27,59 +28,72 @@ class Shader : public detail::OwnHandle<skity_shader, skity_shader_destroy> {
    * Linear gradient between two points. pts uses only x/y of each Vec4;
    * pos may be NULL for evenly distributed stops.
    */
-  static Shader MakeLinear(const Point pts[2], const Color4f* colors,
-                           const float* pos, int32_t count,
-                           TileMode mode = TileMode::kClamp,
-                           int32_t flags = 0) {
-    return Shader(
-        skity_shader_create_linear(pts, colors, pos, count, to_c(mode), flags));
+  static std::shared_ptr<Shader> MakeLinear(const Point pts[2],
+                                            const Color4f* colors,
+                                            const float* pos, int32_t count,
+                                            TileMode mode = TileMode::kClamp,
+                                            int32_t flags = 0) {
+    auto handle =
+        skity_shader_create_linear(pts, colors, pos, count, to_c(mode), flags);
+    return handle != nullptr ? std::shared_ptr<Shader>(new Shader(handle))
+                             : nullptr;
   }
 
   /** Radial gradient from center (x/y used). */
-  static Shader MakeRadial(Point center, float radius, const Color4f* colors,
-                           const float* pos, int32_t count,
-                           TileMode mode = TileMode::kClamp,
-                           int32_t flags = 0) {
-    return Shader(skity_shader_create_radial(center, radius, colors, pos, count,
-                                             to_c(mode), flags));
+  static std::shared_ptr<Shader> MakeRadial(Point center, float radius,
+                                            const Color4f* colors,
+                                            const float* pos, int32_t count,
+                                            TileMode mode = TileMode::kClamp,
+                                            int32_t flags = 0) {
+    auto handle = skity_shader_create_radial(center, radius, colors, pos, count,
+                                             to_c(mode), flags);
+    return handle != nullptr ? std::shared_ptr<Shader>(new Shader(handle))
+                             : nullptr;
   }
 
   /** Sweep (angular) gradient from start_angle to end_angle, both in
    *  degrees around (cx, cy). */
-  static Shader MakeSweep(float cx, float cy, float start_angle,
-                          float end_angle, const Color4f* colors,
-                          const float* pos, int32_t count,
-                          TileMode mode = TileMode::kClamp, int32_t flags = 0) {
-    return Shader(skity_shader_create_sweep(
-        cx, cy, start_angle, end_angle, colors, pos, count, to_c(mode), flags));
+  static std::shared_ptr<Shader> MakeSweep(float cx, float cy,
+                                           float start_angle, float end_angle,
+                                           const Color4f* colors,
+                                           const float* pos, int32_t count,
+                                           TileMode mode = TileMode::kClamp,
+                                           int32_t flags = 0) {
+    auto handle = skity_shader_create_sweep(
+        cx, cy, start_angle, end_angle, colors, pos, count, to_c(mode), flags);
+    return handle != nullptr ? std::shared_ptr<Shader>(new Shader(handle))
+                             : nullptr;
   }
 
   /**
    * Two-point conical gradient (radial between two circles), following the
    * HTML canvas createRadialGradient spec.
    */
-  static Shader MakeTwoPointConical(Point start, float start_radius, Point end,
-                                    float end_radius, const Color4f* colors,
-                                    const float* pos, int32_t count,
-                                    TileMode mode = TileMode::kClamp,
-                                    int32_t flags = 0) {
-    return Shader(skity_shader_create_two_point_conical(
+  static std::shared_ptr<Shader> MakeTwoPointConical(
+      Point start, float start_radius, Point end, float end_radius,
+      const Color4f* colors, const float* pos, int32_t count,
+      TileMode mode = TileMode::kClamp, int32_t flags = 0) {
+    auto handle = skity_shader_create_two_point_conical(
         start, start_radius, end, end_radius, colors, pos, count, to_c(mode),
-        flags));
+        flags);
+    return handle != nullptr ? std::shared_ptr<Shader>(new Shader(handle))
+                             : nullptr;
   }
 
   /**
    * Image-fill shader (legacy MakeShader shape): tiles image's pixels.
    * An empty image yields an empty wrapper.
    */
-  static Shader MakeShader(const Image& image,
-                           const SamplingOptions& sampling = SamplingOptions(),
-                           TileMode x_tile_mode = TileMode::kClamp,
-                           TileMode y_tile_mode = TileMode::kClamp,
-                           const Matrix& local_matrix = Matrix()) {
-    return Shader(skity_shader_create_image(image.get(), &sampling,
-                                            to_c(x_tile_mode),
-                                            to_c(y_tile_mode), &local_matrix));
+  static std::shared_ptr<Shader> MakeShader(
+      const Image& image, const SamplingOptions& sampling = SamplingOptions(),
+      TileMode x_tile_mode = TileMode::kClamp,
+      TileMode y_tile_mode = TileMode::kClamp,
+      const Matrix& local_matrix = Matrix()) {
+    auto handle =
+        skity_shader_create_image(image.get(), &sampling, to_c(x_tile_mode),
+                                  to_c(y_tile_mode), &local_matrix);
+    return handle != nullptr ? std::shared_ptr<Shader>(new Shader(handle))
+                             : nullptr;
   }
 
   /**
@@ -135,6 +149,8 @@ class Shader : public detail::OwnHandle<skity_shader, skity_shader_destroy> {
     }
     return static_cast<GradientType>(raw);
   }
+
+  friend class Paint;
 
  private:
   explicit Shader(skity_shader h) : OwnHandle(h) {}

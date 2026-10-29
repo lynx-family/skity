@@ -2,11 +2,11 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-// Smoke tests for the header-only RAII wrapper (the skity/ wrapper headers): compile-time
-// surface (every wrapped entry point is called once) plus CPU-only behavior
-// spot checks. The wrapper defines plain skity:: classes, so these live in
-// the unified-only skity_wrapper_unit_test — never in a binary that also
-// links the legacy C++ API (see skity/skity.hpp).
+// Smoke tests for the header-only RAII wrapper (the skity/ wrapper headers):
+// compile-time surface (every wrapped entry point is called once) plus CPU-only
+// behavior spot checks. The wrapper defines plain skity:: classes, so these
+// live in the unified-only skity_wrapper_unit_test — never in a binary that
+// also links the legacy C++ API (see skity/skity.hpp).
 
 #include <gtest/gtest.h>
 
@@ -162,8 +162,8 @@ TEST(WrapperHpp, ValueTypeCopySemantics) {
 
   // Attached effects are shared: mutating through one copy is visible via
   // the other (same underlying shader object).
-  copied.GetShader().SetLocalMatrix(Matrix::Translate(5.f, 0.f));
-  EXPECT_FLOAT_EQ(original.GetShader().GetLocalMatrix().GetTranslateX(), 5.f);
+  copied.GetShader()->SetLocalMatrix(Matrix::Translate(5.f, 0.f));
+  EXPECT_FLOAT_EQ(original.GetShader()->GetLocalMatrix().GetTranslateX(), 5.f);
 
   Paint assigned;
   assigned = original;  // copy assignment
@@ -192,12 +192,12 @@ TEST(WrapperHpp, ValueTypeCopySemantics) {
   EXPECT_FLOAT_EQ(font.GetSize(), 12.f);
   EXPECT_FLOAT_EQ(font_copy.GetSize(), 20.f);
 
-  Typeface tf = font.GetTypeface();
+  auto tf = font.GetTypeface();
   if (tf) {  // default typeface is platform-dependent (may be absent)
-    Font with_tf(tf.get(), 12.f);
+    Font with_tf(tf, 12.f);
     Font with_tf_copy = with_tf;
-    EXPECT_EQ(with_tf_copy.GetTypeface().GetUniqueId(),
-              with_tf.GetTypeface().GetUniqueId());
+    EXPECT_EQ(with_tf_copy.GetTypeface()->GetUniqueId(),
+              with_tf.GetTypeface()->GetUniqueId());
   }
 }
 
@@ -221,15 +221,15 @@ TEST(WrapperHpp, PaintEffectsRoundTrip) {
       {0.f, 0.f, 0.f, 1.f},
       {100.f, 0.f, 0.f, 1.f},
   };
-  Shader shader = Shader::MakeLinear(pts, stops, pos, 2);
+  auto shader = Shader::MakeLinear(pts, stops, pos, 2);
   ASSERT_TRUE(shader);
   paint.SetShader(shader);
-  Shader got = paint.GetShader();
+  auto got = paint.GetShader();
   EXPECT_TRUE(got);
   // The getter owns a shared reference to the SAME shader object, so the
   // local matrix set through it is visible through the paint's reference.
-  got.SetLocalMatrix(Matrix::Translate(1.f, 2.f));
-  EXPECT_FLOAT_EQ(paint.GetShader().GetLocalMatrix().GetTranslateX(), 1.f);
+  got->SetLocalMatrix(Matrix::Translate(1.f, 2.f));
+  EXPECT_FLOAT_EQ(paint.GetShader()->GetLocalMatrix().GetTranslateX(), 1.f);
 
   paint.SetMaskFilter(MaskFilter::MakeBlur(BlurStyle::kNormal, 5.f));
   EXPECT_TRUE(paint.GetMaskFilter());
@@ -247,8 +247,8 @@ TEST(WrapperHpp, PaintEffectsRoundTrip) {
   paint.SetPathEffect(PathEffect::MakeDashPathEffect(pos, 2));
   EXPECT_TRUE(paint.GetPathEffect());
 
-  // Getter wrappers own a shared reference: they outlive the paint.
-  ImageFilter filter = paint.GetImageFilter();
+  // Getter results own a shared reference: they outlive the paint.
+  auto filter = paint.GetImageFilter();
   paint.Reset();
   EXPECT_TRUE(filter);
 }
@@ -304,12 +304,12 @@ TEST(WrapperHpp, ShaderFactories) {
                                     skity::MipmapMode::kNone)));
 
   // Gradient introspection: recover the linear gradient's stops / geometry.
-  Shader linear = Shader::MakeLinear(pts, stops, nullptr, 2);
+  auto linear = Shader::MakeLinear(pts, stops, nullptr, 2);
   ASSERT_TRUE(linear);
   Shader::GradientInfo info{};
   std::vector<skity::Color4f> out_colors;
   std::vector<float> out_offsets;
-  EXPECT_EQ(linear.AsGradient(&info, &out_colors, &out_offsets),
+  EXPECT_EQ(linear->AsGradient(&info, &out_colors, &out_offsets),
             Shader::GradientType::kLinear);
   ASSERT_EQ(out_colors.size(), 2u);
   EXPECT_FLOAT_EQ(out_colors[0].e[1], 0.f);  // blue stop
@@ -319,7 +319,7 @@ TEST(WrapperHpp, ShaderFactories) {
   EXPECT_FLOAT_EQ(info.point[0].e[0], 0.f);
   EXPECT_FLOAT_EQ(info.point[1].e[0], 100.f);
   // Both stops are fully opaque, so the gradient is opaque.
-  EXPECT_TRUE(linear.IsOpaque());
+  EXPECT_TRUE(linear->IsOpaque());
 
   // Image introspection on the raster image above.
   EXPECT_EQ(image.GetAlphaType(), skity::AlphaType::kUnpremul_AlphaType);
@@ -517,7 +517,7 @@ TEST(WrapperHpp, ImageFilters) {
   ASSERT_TRUE(ColorFilter::SRGBToLinearGamma());
   ASSERT_TRUE(ColorFilter::Compose(ColorFilter::LinearToSRGBGamma(),
                                    ColorFilter::SRGBToLinearGamma()));
-  ImageFilter blur = ImageFilter::Blur(1.f, 1.f);
+  auto blur = ImageFilter::Blur(1.f, 1.f);
   ASSERT_TRUE(ImageFilter::Compose(blur, blur));
   ASSERT_TRUE(ImageFilter::LocalMatrix(blur, Matrix::Translate(1.f, 1.f)));
   ASSERT_TRUE(ImageFilter::DropShadow(1.f, 1.f, 2.f, 2.f, Color_BLACK));
@@ -578,47 +578,47 @@ TEST(WrapperHpp, RecordAndReplay) {
 
 #ifdef SKITY_FONT_DIR
 TEST(WrapperHpp, TextFontTypeface) {
-  Typeface typeface = Typeface::MakeFromFile(
-      SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf");
+  auto typeface = Typeface::MakeFromFile(SKITY_FONT_DIR
+                                         "fonts/resources/Roboto-Regular.ttf");
   ASSERT_TRUE(typeface);
-  EXPECT_NE(typeface.UnicharToGlyph('A'), 0);
+  EXPECT_NE(typeface->UnicharToGlyph('A'), 0);
   uint32_t code_points[] = {'A', 'B'};
   uint16_t glyphs[2] = {};
-  typeface.UnicharsToGlyphs(code_points, 2, glyphs);
+  typeface->UnicharsToGlyphs(code_points, 2, glyphs);
   EXPECT_NE(glyphs[0], 0);
 
-  Data font_data = typeface.GetData();
+  Data font_data = typeface->GetData();
   EXPECT_GT(font_data.GetSize(), 0u);
   EXPECT_NE(font_data.GetData(), nullptr);
-  EXPECT_EQ(typeface.GetUnitsPerEm(), 2048u);  // Roboto's head.unitsPerEm.
-  skity_font_style style = typeface.GetFontStyle();
+  EXPECT_EQ(typeface->GetUnitsPerEm(), 2048u);  // Roboto's head.unitsPerEm.
+  skity_font_style style = typeface->GetFontStyle();
   EXPECT_EQ(style.weight, 400);
   EXPECT_EQ(style.slant, SKITY_FONT_SLANT_UPRIGHT);
-  const uint32_t unique_id = typeface.GetUniqueId();
+  const uint32_t unique_id = typeface->GetUniqueId();
   EXPECT_NE(unique_id, 0u);
 
   std::string family;
-  skity_font_descriptor descriptor = typeface.GetFontDescriptor(&family);
+  skity_font_descriptor descriptor = typeface->GetFontDescriptor(&family);
   EXPECT_EQ(family, "Roboto");
   EXPECT_EQ(descriptor.style.weight, 400);
   EXPECT_EQ(descriptor.collection_index, 0);
 
   // Coverage / style / table introspection (Roboto-Regular: static, upright).
-  EXPECT_FALSE(typeface.IsBold());
-  EXPECT_FALSE(typeface.IsItalic());
-  EXPECT_TRUE(typeface.ContainGlyph('A'));
-  EXPECT_FALSE(typeface.ContainGlyph(0x10FFFF));
-  EXPECT_FALSE(typeface.ContainsColorTable());
-  const int32_t table_count = typeface.CountTables();
+  EXPECT_FALSE(typeface->IsBold());
+  EXPECT_FALSE(typeface->IsItalic());
+  EXPECT_TRUE(typeface->ContainGlyph('A'));
+  EXPECT_FALSE(typeface->ContainGlyph(0x10FFFF));
+  EXPECT_FALSE(typeface->ContainsColorTable());
+  const int32_t table_count = typeface->CountTables();
   EXPECT_GT(table_count, 0);
   std::vector<uint32_t> tags((size_t)table_count);
-  EXPECT_EQ(typeface.GetTableTags(tags.data(), table_count), table_count);
+  EXPECT_EQ(typeface->GetTableTags(tags.data(), table_count), table_count);
   const uint32_t kHeadTag = 0x68656164;  // 'head'
   EXPECT_NE(std::find(tags.begin(), tags.end(), kHeadTag), tags.end());
-  const size_t head_size = typeface.GetTableSize(kHeadTag);
+  const size_t head_size = typeface->GetTableSize(kHeadTag);
   EXPECT_EQ(head_size, 54u);  // TrueType head table is fixed-size.
   std::vector<uint8_t> head_bytes(head_size);
-  EXPECT_EQ(typeface.GetTableData(kHeadTag, 0, head_size, head_bytes.data()),
+  EXPECT_EQ(typeface->GetTableData(kHeadTag, 0, head_size, head_bytes.data()),
             head_size);
   // unitsPerEm lives at offset 18 of head, big endian: 2048.
   EXPECT_EQ((head_bytes[18] << 8) | head_bytes[19], 2048);
@@ -627,15 +627,15 @@ TEST(WrapperHpp, TextFontTypeface) {
   // each at the axis default (FreeType initializes blend coords to the
   // defaults when nothing is set).
   const std::vector<skity_variation_coordinate> position =
-      typeface.GetVariationPosition();
-  const std::vector<skity_variation_axis> axes = typeface.GetVariationAxes();
+      typeface->GetVariationPosition();
+  const std::vector<skity_variation_axis> axes = typeface->GetVariationAxes();
   EXPECT_EQ(position.size(), axes.size());
   for (size_t i = 0; i < position.size(); i++) {
     EXPECT_EQ(position[i].axis, axes[i].tag);
     EXPECT_FLOAT_EQ(position[i].value, axes[i].def);
   }
 
-  Font font(typeface.get(), 32.f);
+  Font font(typeface, 32.f);
   EXPECT_FLOAT_EQ(font.GetSize(), 32.f);
   font.SetScaleX(1.5f);
   EXPECT_FLOAT_EQ(font.GetScaleX(), 1.5f);
@@ -650,8 +650,8 @@ TEST(WrapperHpp, TextFontTypeface) {
   Font bigger = font.MakeWithSize(64.f);
   EXPECT_FLOAT_EQ(bigger.GetSize(), 64.f);
   EXPECT_TRUE(bigger.GetTypeface());
-  // MakeWithSize copies the typeface shared_ptr: same instance, same id.
-  EXPECT_EQ(bigger.GetTypeface().GetUniqueId(), unique_id);
+  // MakeWithSize shares the typeface: same underlying face, same id.
+  EXPECT_EQ(bigger.GetTypeface()->GetUniqueId(), unique_id);
 
   skity_font_metrics metrics{};
   font.GetMetrics(&metrics);
@@ -665,7 +665,7 @@ TEST(WrapperHpp, TextFontTypeface) {
   EXPECT_GT(glyph_bounds[0].bottom, glyph_bounds[0].top);
 
   Paint paint;
-  paint.SetTypeface(typeface.get());
+  paint.SetTypeface(typeface);
   paint.SetTextSize(32.f);
   TextBlob blob = TextBlob::Make("AB", paint);
   ASSERT_TRUE(blob);
@@ -683,10 +683,10 @@ TEST(WrapperHpp, TextFontTypeface) {
 
 TEST(WrapperHpp, TypefaceVariationAndGlyphLoading) {
   // Variable font: axes are readable and MakeVariation instantiates a face.
-  Typeface flex = Typeface::MakeFromFile(
-      SKITY_FONT_DIR "fonts/resources/RobotoFlex-Regular.ttf");
+  auto flex = Typeface::MakeFromFile(SKITY_FONT_DIR
+                                     "fonts/resources/RobotoFlex-Regular.ttf");
   ASSERT_TRUE(flex);
-  auto axes = flex.GetVariationAxes();
+  auto axes = flex->GetVariationAxes();
   ASSERT_FALSE(axes.empty());
   const uint32_t kWght = 0x77676874;  // 'wght'
   bool has_wght = false;
@@ -695,19 +695,19 @@ TEST(WrapperHpp, TypefaceVariationAndGlyphLoading) {
   }
   EXPECT_TRUE(has_wght);
   const skity_variation_coordinate wght700[] = {{kWght, 700.f}};
-  Typeface bold = flex.MakeVariation(wght700, 1);
+  auto bold = flex->MakeVariation(wght700, 1);
   EXPECT_TRUE(bold);
   if (bold) {
-    EXPECT_TRUE(bold.IsBold());
+    EXPECT_TRUE(bold->IsBold());
   }
 
   // Glyph loading family on the static face.
-  Typeface typeface = Typeface::MakeFromFile(
-      SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf");
+  auto typeface = Typeface::MakeFromFile(SKITY_FONT_DIR
+                                         "fonts/resources/Roboto-Regular.ttf");
   ASSERT_TRUE(typeface);
-  uint16_t glyph = typeface.UnicharToGlyph('A');
+  uint16_t glyph = typeface->UnicharToGlyph('A');
   ASSERT_NE(glyph, 0);
-  Font font(typeface.get(), 32.f);
+  Font font(typeface, 32.f);
 
   auto metrics = font.LoadGlyphMetrics(&glyph, 1);
   ASSERT_EQ(metrics.size(), 1u);
@@ -762,7 +762,7 @@ TEST(WrapperHpp, FontManagerFamilies) {
     std::string style_name;
     style_set.GetStyle(0, &style_name);
   }
-  Typeface from_file =
+  auto from_file =
       manager.MakeFromFile(SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf");
   ASSERT_TRUE(from_file);
 }

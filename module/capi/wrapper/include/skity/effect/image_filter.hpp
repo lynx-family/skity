@@ -8,6 +8,7 @@
 #include <skity/c/skity_image_filter.h>
 
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 #include <skity/effect/color_filter.hpp>
 #include <skity/types.hpp>
@@ -24,36 +25,53 @@ class ImageFilter
     : public detail::OwnHandle<skity_image_filter, skity_image_filter_destroy> {
  public:
   /** Gaussian blur; sigma_x / sigma_y in pixels (>= 0). */
-  static ImageFilter Blur(float sigma_x, float sigma_y) {
-    return ImageFilter(skity_image_filter_create_blur(sigma_x, sigma_y));
+  static std::shared_ptr<ImageFilter> Blur(float sigma_x, float sigma_y) {
+    auto handle = skity_image_filter_create_blur(sigma_x, sigma_y);
+    return handle != nullptr
+               ? std::shared_ptr<ImageFilter>(new ImageFilter(handle))
+               : nullptr;
   }
 
   /** Morphology dilate (max); radii in pixels. */
-  static ImageFilter Dilate(float radius_x, float radius_y) {
-    return ImageFilter(skity_image_filter_create_dilate(radius_x, radius_y));
+  static std::shared_ptr<ImageFilter> Dilate(float radius_x, float radius_y) {
+    auto handle = skity_image_filter_create_dilate(radius_x, radius_y);
+    return handle != nullptr
+               ? std::shared_ptr<ImageFilter>(new ImageFilter(handle))
+               : nullptr;
   }
 
   /** Morphology erode (min); radii in pixels. */
-  static ImageFilter Erode(float radius_x, float radius_y) {
-    return ImageFilter(skity_image_filter_create_erode(radius_x, radius_y));
+  static std::shared_ptr<ImageFilter> Erode(float radius_x, float radius_y) {
+    auto handle = skity_image_filter_create_erode(radius_x, radius_y);
+    return handle != nullptr
+               ? std::shared_ptr<ImageFilter>(new ImageFilter(handle))
+               : nullptr;
   }
 
   /** Transform the filtered result by matrix. */
-  static ImageFilter MatrixTransform(const Matrix& matrix) {
-    return ImageFilter(skity_image_filter_create_matrix_transform(&matrix));
+  static std::shared_ptr<ImageFilter> MatrixTransform(const Matrix& matrix) {
+    auto handle = skity_image_filter_create_matrix_transform(&matrix);
+    return handle != nullptr
+               ? std::shared_ptr<ImageFilter>(new ImageFilter(handle))
+               : nullptr;
   }
 
   /** Wrap a color filter so it can be chained / attached as an image filter. */
-  static ImageFilter ColorFilter(const ColorFilter& filter) {
-    return ImageFilter(
-        skity_image_filter_create_from_color_filter(filter.get()));
+  static std::shared_ptr<ImageFilter> ColorFilter(
+      std::shared_ptr<ColorFilter> filter) {
+    auto handle = skity_image_filter_create_from_color_filter(filter->get());
+    return handle != nullptr
+               ? std::shared_ptr<ImageFilter>(new ImageFilter(handle))
+               : nullptr;
   }
 
   /** Chain two filters: result = outer(inner(src)). */
-  static ImageFilter Compose(const ImageFilter& outer,
-                             const ImageFilter& inner) {
-    return ImageFilter(
-        skity_image_filter_create_compose(outer.get(), inner.get()));
+  static std::shared_ptr<ImageFilter> Compose(
+      std::shared_ptr<ImageFilter> outer, std::shared_ptr<ImageFilter> inner) {
+    auto handle = skity_image_filter_create_compose(outer->get(), inner->get());
+    return handle != nullptr
+               ? std::shared_ptr<ImageFilter>(new ImageFilter(handle))
+               : nullptr;
   }
 
   /**
@@ -61,32 +79,45 @@ class ImageFilter
    * (sigma_x, sigma_y), drawn in color. An empty input shadows
    * the source primitive directly; crop (optional) clips the output.
    */
-  static ImageFilter DropShadow(float dx, float dy, float sigma_x,
-                                float sigma_y, Color color,
-                                const ImageFilter& input) {
-    return ImageFilter(skity_image_filter_create_drop_shadow(
-        dx, dy, sigma_x, sigma_y, color, input.get(), nullptr));
+  static std::shared_ptr<ImageFilter> DropShadow(
+      float dx, float dy, float sigma_x, float sigma_y, Color color,
+      std::shared_ptr<ImageFilter> input) {
+    auto handle = skity_image_filter_create_drop_shadow(
+        dx, dy, sigma_x, sigma_y, color, input ? input->get() : nullptr,
+        nullptr);
+    return handle != nullptr
+               ? std::shared_ptr<ImageFilter>(new ImageFilter(handle))
+               : nullptr;
   }
   /** Drop shadow of the source primitive directly (no input filter, no crop).
    */
-  static ImageFilter DropShadow(float dx, float dy, float sigma_x,
-                                float sigma_y, Color color) {
-    return ImageFilter(skity_image_filter_create_drop_shadow(
-        dx, dy, sigma_x, sigma_y, color, nullptr, nullptr));
+  static std::shared_ptr<ImageFilter> DropShadow(float dx, float dy,
+                                                 float sigma_x, float sigma_y,
+                                                 Color color) {
+    auto handle = skity_image_filter_create_drop_shadow(
+        dx, dy, sigma_x, sigma_y, color, nullptr, nullptr);
+    return handle != nullptr
+               ? std::shared_ptr<ImageFilter>(new ImageFilter(handle))
+               : nullptr;
   }
   /** Drop-shadow variant with an explicit crop rectangle on the output. */
-  static ImageFilter DropShadow(float dx, float dy, float sigma_x,
-                                float sigma_y, Color color,
-                                const ImageFilter& input, const Rect& crop) {
-    return ImageFilter(skity_image_filter_create_drop_shadow(
-        dx, dy, sigma_x, sigma_y, color, input.get(), &crop));
+  static std::shared_ptr<ImageFilter> DropShadow(
+      float dx, float dy, float sigma_x, float sigma_y, Color color,
+      std::shared_ptr<ImageFilter> input, const Rect& crop) {
+    auto handle = skity_image_filter_create_drop_shadow(
+        dx, dy, sigma_x, sigma_y, color, input ? input->get() : nullptr, &crop);
+    return handle != nullptr
+               ? std::shared_ptr<ImageFilter>(new ImageFilter(handle))
+               : nullptr;
   }
 
   /** Wrap input with a local matrix applied before the canvas matrix. */
-  static ImageFilter LocalMatrix(const ImageFilter& input,
-                                 const Matrix& matrix) {
-    return ImageFilter(
-        skity_image_filter_create_local_matrix(input.get(), &matrix));
+  static std::shared_ptr<ImageFilter> LocalMatrix(
+      std::shared_ptr<ImageFilter> input, const Matrix& matrix) {
+    auto handle = skity_image_filter_create_local_matrix(input->get(), &matrix);
+    return handle != nullptr
+               ? std::shared_ptr<ImageFilter>(new ImageFilter(handle))
+               : nullptr;
   }
 
   /**
@@ -94,6 +125,8 @@ class ImageFilter
    * destroying the wrapper releases the shared reference.
    */
   static ImageFilter Adopt(skity_image_filter h) { return ImageFilter(h); }
+
+  friend class Paint;
 
  private:
   explicit ImageFilter(skity_image_filter h) : OwnHandle(h) {}
