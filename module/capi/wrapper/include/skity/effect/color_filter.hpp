@@ -8,6 +8,7 @@
 #include <skity/c/skity_color_filter.h>
 
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 #include <skity/types.hpp>
 
@@ -23,30 +24,44 @@ class ColorFilter
     : public detail::OwnHandle<skity_color_filter, skity_color_filter_destroy> {
  public:
   /** Blend each source pixel with a constant color. */
-  static ColorFilter Blend(Color color, BlendMode mode) {
-    return ColorFilter(skity_color_filter_create_blend(color, to_c(mode)));
+  static std::shared_ptr<ColorFilter> Blend(Color color, BlendMode mode) {
+    auto handle = skity_color_filter_create_blend(color, to_c(mode));
+    return handle != nullptr
+               ? std::shared_ptr<ColorFilter>(new ColorFilter(handle))
+               : nullptr;
   }
 
   /** Apply outer after inner: result = outer(inner(src)). */
-  static ColorFilter Compose(const ColorFilter& outer,
-                             const ColorFilter& inner) {
-    return ColorFilter(
-        skity_color_filter_create_compose(outer.get(), inner.get()));
+  static std::shared_ptr<ColorFilter> Compose(
+      std::shared_ptr<ColorFilter> outer, std::shared_ptr<ColorFilter> inner) {
+    auto handle = skity_color_filter_create_compose(outer->get(), inner->get());
+    return handle != nullptr
+               ? std::shared_ptr<ColorFilter>(new ColorFilter(handle))
+               : nullptr;
   }
 
   /** Apply a 4x5 color matrix (20 floats, row-major RGBA + bias). */
-  static ColorFilter Matrix(const float row_major[20]) {
-    return ColorFilter(skity_color_filter_create_matrix(row_major));
+  static std::shared_ptr<ColorFilter> Matrix(const float row_major[20]) {
+    auto handle = skity_color_filter_create_matrix(row_major);
+    return handle != nullptr
+               ? std::shared_ptr<ColorFilter>(new ColorFilter(handle))
+               : nullptr;
   }
 
   /** Convert sRGB-encoded pixels to a linear gamma. */
-  static ColorFilter LinearToSRGBGamma() {
-    return ColorFilter(skity_color_filter_create_linear_to_srgb());
+  static std::shared_ptr<ColorFilter> LinearToSRGBGamma() {
+    auto handle = skity_color_filter_create_linear_to_srgb();
+    return handle != nullptr
+               ? std::shared_ptr<ColorFilter>(new ColorFilter(handle))
+               : nullptr;
   }
 
   /** Convert linear-gamma pixels to sRGB encoding. */
-  static ColorFilter SRGBToLinearGamma() {
-    return ColorFilter(skity_color_filter_create_srgb_to_linear());
+  static std::shared_ptr<ColorFilter> SRGBToLinearGamma() {
+    auto handle = skity_color_filter_create_srgb_to_linear();
+    return handle != nullptr
+               ? std::shared_ptr<ColorFilter>(new ColorFilter(handle))
+               : nullptr;
   }
 
   /**
@@ -54,6 +69,8 @@ class ColorFilter
    * destroying the wrapper releases the shared reference.
    */
   static ColorFilter Adopt(skity_color_filter h) { return ColorFilter(h); }
+
+  friend class Paint;
 
  private:
   explicit ColorFilter(skity_color_filter h) : OwnHandle(h) {}

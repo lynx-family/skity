@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/io/data.hpp>
@@ -29,19 +30,25 @@ using FontStyle = skity_font_style;
 class Typeface
     : public detail::OwnHandle<skity_typeface, skity_typeface_destroy> {
  public:
-  /** Load a typeface from a font file path; empty on failure. */
-  static Typeface MakeFromFile(const char* path) {
-    return Typeface(skity_typeface_make_from_file(path));
+  /** Load a typeface from a font file path; null on failure. */
+  static std::shared_ptr<Typeface> MakeFromFile(const char* path) {
+    auto handle = skity_typeface_make_from_file(path);
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
   /** Load a typeface from font data; data must outlive the typeface. */
-  static Typeface MakeFromData(skity_data data) {
-    return Typeface(skity_typeface_make_from_data(data));
+  static std::shared_ptr<Typeface> MakeFromData(skity_data data) {
+    auto handle = skity_typeface_make_from_data(data);
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
   /** The platform default typeface (legacy naming). */
-  static Typeface GetDefaultTypeface() {
-    return Typeface(skity_typeface_get_default());
+  static std::shared_ptr<Typeface> GetDefaultTypeface() {
+    auto handle = skity_typeface_get_default();
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
   /**
@@ -136,14 +143,16 @@ class Typeface
    * Instantiate this variable font at coordinates (legacy MakeVariation);
    * empty wrapper for non-variable faces or on failure.
    */
-  Typeface MakeVariation(const skity_variation_coordinate* coordinates,
-                         uint32_t coordinate_count,
-                         int32_t collection_index = 0) const {
+  std::shared_ptr<Typeface> MakeVariation(
+      const skity_variation_coordinate* coordinates, uint32_t coordinate_count,
+      int32_t collection_index = 0) const {
     skity_font_arguments args{};
     args.collection_index = collection_index;
     args.variation_coordinates = coordinates;
     args.variation_coordinate_count = coordinate_count;
-    return Typeface(skity_typeface_make_variation(get(), &args));
+    auto handle = skity_typeface_make_variation(get(), &args);
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
   /**
@@ -172,7 +181,19 @@ class Typeface
   explicit Typeface(skity_typeface h) : OwnHandle(h) {}
   friend class FontManager;
   friend class FontStyleSet;
+  friend class Font;
+  friend class Paint;
 };
+
+// Out-of-line Paint accessors declared in graphic/paint.hpp (Typeface is
+// forward-declared there to keep the include graph one-directional).
+inline void Paint::SetTypeface(std::shared_ptr<Typeface> typeface) {
+  skity_paint_set_typeface(get(), typeface ? typeface->get() : nullptr);
+}
+inline std::shared_ptr<Typeface> Paint::GetTypeface() const {
+  skity_typeface h = skity_paint_get_typeface(get());
+  return h != nullptr ? std::shared_ptr<Typeface>(new Typeface(h)) : nullptr;
+}
 
 /**
  * @class TypefaceDelegate
@@ -191,14 +212,15 @@ class TypefaceDelegate
    * containing a glyph for it is used. The delegate shares the typefaces, so
    * the passed wrappers may be released immediately afterwards.
    */
-  static TypefaceDelegate CreateSimpleFallbackDelegate(
-      const Typeface* typefaces, uint32_t count) {
-    std::vector<skity_typeface> handles(count);
-    for (uint32_t i = 0; i < count; i++) {
-      handles[i] = typefaces[i].get();
+  static std::unique_ptr<TypefaceDelegate> CreateSimpleFallbackDelegate(
+      const std::vector<std::shared_ptr<Typeface>>& typefaces) {
+    std::vector<skity_typeface> handles(typefaces.size());
+    for (size_t i = 0; i < typefaces.size(); i++) {
+      handles[i] = typefaces[i] ? typefaces[i]->get() : nullptr;
     }
-    return TypefaceDelegate(
-        skity_typeface_delegate_create_simple(handles.data(), count));
+    return std::unique_ptr<TypefaceDelegate>(
+        new TypefaceDelegate(skity_typeface_delegate_create_simple(
+            handles.data(), static_cast<uint32_t>(handles.size()))));
   }
 
   /**
@@ -241,14 +263,18 @@ class FontStyleSet : public detail::OwnHandle<skity_font_style_set,
     return style;
   }
 
-  /** Create the typeface of the variant at index; empty on failure. */
-  Typeface CreateTypeface(int32_t index) const {
-    return Typeface(skity_font_style_set_create_typeface(get(), index));
+  /** Create the typeface of the variant at index; null on failure. */
+  std::shared_ptr<Typeface> CreateTypeface(int32_t index) const {
+    auto handle = skity_font_style_set_create_typeface(get(), index);
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
-  /** Variant closest to style; empty if the family has none. */
-  Typeface MatchStyle(FontStyle style) const {
-    return Typeface(skity_font_style_set_match_style(get(), style));
+  /** Variant closest to style; null if the family has none. */
+  std::shared_ptr<Typeface> MatchStyle(FontStyle style) const {
+    auto handle = skity_font_style_set_match_style(get(), style);
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
  private:
@@ -299,36 +325,49 @@ class FontManager
     return FontStyleSet(skity_font_manager_match_family(get(), name));
   }
 
-  /** Typeface closest to style within name; empty when not found. */
-  Typeface MatchFamilyStyle(const char* name, FontStyle style) const {
-    return Typeface(skity_font_manager_match_family_style(get(), name, style));
+  /** Typeface closest to style within name; null when not found. */
+  std::shared_ptr<Typeface> MatchFamilyStyle(const char* name,
+                                             FontStyle style) const {
+    auto handle = skity_font_manager_match_family_style(get(), name, style);
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
-  /** Find a typeface in name covering character; empty if none. */
-  Typeface MatchFamilyStyleCharacter(const char* name, FontStyle style,
-                                     const char** bcp47, int32_t bcp47_count,
-                                     uint32_t character) const {
-    return Typeface(skity_font_manager_match_family_style_character(
-        get(), name, style, bcp47, bcp47_count, character));
+  /** Find a typeface in name covering character; null if none. */
+  std::shared_ptr<Typeface> MatchFamilyStyleCharacter(
+      const char* name, FontStyle style, const char** bcp47,
+      int32_t bcp47_count, uint32_t character) const {
+    auto handle = skity_font_manager_match_family_style_character(
+        get(), name, style, bcp47, bcp47_count, character);
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
   /**
    * Load a typeface through this manager from a font collection file
    * (ttc_index selects the face inside a .ttc).
    */
-  Typeface MakeFromFile(const char* path, int32_t ttc_index = 0) const {
-    return Typeface(skity_font_manager_make_from_file(get(), path, ttc_index));
+  std::shared_ptr<Typeface> MakeFromFile(const char* path,
+                                         int32_t ttc_index = 0) const {
+    auto handle = skity_font_manager_make_from_file(get(), path, ttc_index);
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
   /** Load a typeface through this manager from in-memory font data. */
-  Typeface MakeFromData(const Data& data, int32_t ttc_index = 0) const {
-    return Typeface(
-        skity_font_manager_make_from_data(get(), data.get(), ttc_index));
+  std::shared_ptr<Typeface> MakeFromData(const Data& data,
+                                         int32_t ttc_index = 0) const {
+    auto handle =
+        skity_font_manager_make_from_data(get(), data.get(), ttc_index);
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
-  /** The default typeface for style; empty when none is available. */
-  Typeface GetDefaultTypeface(FontStyle style) const {
-    return Typeface(skity_font_manager_get_default_typeface(get(), style));
+  /** The default typeface for style; null when none is available. */
+  std::shared_ptr<Typeface> GetDefaultTypeface(FontStyle style) const {
+    auto handle = skity_font_manager_get_default_typeface(get(), style);
+    return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
+                             : nullptr;
   }
 
  private:
@@ -365,6 +404,17 @@ class Font : public detail::OwnHandle<skity_font, skity_font_destroy> {
       : OwnHandle(skity_font_create_with_typeface_scale(typeface, size, scale_x,
                                                         skew_x)) {}
 
+  /** shared_ptr constructors, the legacy signatures. */
+  explicit Font(std::shared_ptr<Typeface> typeface)
+      : Font(typeface ? typeface->get() : nullptr, 0.f) {}
+
+  explicit Font(std::shared_ptr<Typeface> typeface, float size)
+      : Font(typeface ? typeface->get() : nullptr, size) {}
+
+  Font(std::shared_ptr<Typeface> typeface, float size, float scale_x,
+       float skew_x)
+      : Font(typeface ? typeface->get() : nullptr, size, scale_x, skew_x) {}
+
   /**
    * Copy semantics of the value-type skity::Font: parameters are
    * duplicated while the typeface is shared — identical to copying a
@@ -384,10 +434,14 @@ class Font : public detail::OwnHandle<skity_font, skity_font_destroy> {
     skity_font_set_typeface(get(), typeface);
   }
   void SetTypeface(const Typeface& typeface) { SetTypeface(typeface.get()); }
+  void SetTypeface(std::shared_ptr<Typeface> typeface) {
+    SetTypeface(typeface ? typeface->get() : nullptr);
+  }
 
-  /** Owning reference to the bound typeface; empty when none is set. */
-  Typeface GetTypeface() const {
-    return Typeface::Adopt(skity_font_get_typeface(get()));
+  /** Owning shared reference to the bound typeface; null when none is set. */
+  std::shared_ptr<Typeface> GetTypeface() const {
+    skity_typeface h = skity_font_get_typeface(get());
+    return h != nullptr ? std::shared_ptr<Typeface>(new Typeface(h)) : nullptr;
   }
 
   void SetSize(float size) { skity_font_set_size(get(), size); }
@@ -535,9 +589,9 @@ class TextBlob
    * equivalent to Make.
    */
   static TextBlob MakeWithDelegate(const char* text, const Paint& paint,
-                                   skity_typeface_delegate delegate) {
-    return TextBlob(
-        skity_text_blob_create_with_delegate(text, paint.get(), delegate));
+                                   const TypefaceDelegate* delegate) {
+    return TextBlob(skity_text_blob_create_with_delegate(
+        text, paint.get(), delegate ? delegate->get() : nullptr));
   }
 
   /**

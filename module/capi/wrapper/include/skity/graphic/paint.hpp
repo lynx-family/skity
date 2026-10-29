@@ -8,6 +8,7 @@
 #include <skity/c/skity_paint.h>
 
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 #include <skity/effect/color_filter.hpp>
 #include <skity/effect/image_filter.hpp>
@@ -16,13 +17,15 @@
 #include <skity/effect/shader.hpp>
 #include <skity/types.hpp>
 
-// text/text.hpp is intentionally NOT included here: it includes
-// this header (TextBlob::Make takes a Paint), so the dependency must stay
-// one-directional. The Typeface members therefore use the raw skity_typeface
-// handle (available through skity/c/skity_paint.h); wrap results with
-// Typeface::Adopt.
+// text/text.hpp is intentionally NOT included here: it includes this header
+// (TextBlob::Make takes a Paint), so the dependency must stay
+// one-directional. Typeface is therefore only forward-declared and its
+// Paint accessors are defined out-of-line in text/text.hpp — include that
+// header when using them.
 
 namespace skity {
+
+class Typeface;
 
 /**
  * @class Paint
@@ -227,31 +230,61 @@ class Paint : public detail::OwnHandle<skity_paint, skity_paint_destroy> {
   void SetPathEffect(const PathEffect& effect) { SetPathEffect(effect.get()); }
 
   /**
-   * Effect getters: the returned wrappers own a shared reference (adopting
-   * the handle the C layer created), so they keep the effect alive even if
-   * the paint is destroyed; empty when none is attached.
+   * shared_ptr overloads — the legacy signatures. The paint takes a shared
+   * reference, so passing a factory temporary works
+   * (`paint.SetShader(Shader::MakeLinear(...))`) and a null pointer
+   * detaches the effect.
    */
-  Shader GetShader() const {
-    return Shader::Adopt(skity_paint_get_shader(get()));
+  void SetShader(std::shared_ptr<Shader> shader) {
+    SetShader(shader ? shader->get() : nullptr);
   }
-  ColorFilter GetColorFilter() const {
-    return ColorFilter::Adopt(skity_paint_get_color_filter(get()));
+  void SetColorFilter(std::shared_ptr<ColorFilter> filter) {
+    SetColorFilter(filter ? filter->get() : nullptr);
   }
-  ImageFilter GetImageFilter() const {
-    return ImageFilter::Adopt(skity_paint_get_image_filter(get()));
+  void SetImageFilter(std::shared_ptr<ImageFilter> filter) {
+    SetImageFilter(filter ? filter->get() : nullptr);
   }
-  MaskFilter GetMaskFilter() const {
-    return MaskFilter::Adopt(skity_paint_get_mask_filter(get()));
+  void SetMaskFilter(std::shared_ptr<MaskFilter> filter) {
+    SetMaskFilter(filter ? filter->get() : nullptr);
   }
-  PathEffect GetPathEffect() const {
-    return PathEffect::Adopt(skity_paint_get_path_effect(get()));
+  void SetPathEffect(std::shared_ptr<PathEffect> effect) {
+    SetPathEffect(effect ? effect->get() : nullptr);
   }
+  /** Defined in text/text.hpp (Typeface is forward-declared here). */
+  void SetTypeface(std::shared_ptr<Typeface> typeface);
+  std::shared_ptr<Typeface> GetTypeface() const;
 
   /**
-   * Typeface access through the raw handle (see the include note above):
-   * wrap with Typeface::Adopt. NULL when none is attached.
+   * Effect getters, the legacy shared_ptr shape: the returned wrapper owns
+   * a shared reference, so it keeps the effect alive even if the paint is
+   * destroyed; a null pointer when none is attached. (Each call adopts a
+   * fresh shared reference, so identity comparison between two calls is not
+   * meaningful — unlike the legacy member-cached shared_ptr.)
    */
-  skity_typeface GetTypeface() const { return skity_paint_get_typeface(get()); }
+  std::shared_ptr<Shader> GetShader() const {
+    skity_shader h = skity_paint_get_shader(get());
+    return h != nullptr ? std::shared_ptr<Shader>(new Shader(h)) : nullptr;
+  }
+  std::shared_ptr<ColorFilter> GetColorFilter() const {
+    skity_color_filter h = skity_paint_get_color_filter(get());
+    return h != nullptr ? std::shared_ptr<ColorFilter>(new ColorFilter(h))
+                        : nullptr;
+  }
+  std::shared_ptr<ImageFilter> GetImageFilter() const {
+    skity_image_filter h = skity_paint_get_image_filter(get());
+    return h != nullptr ? std::shared_ptr<ImageFilter>(new ImageFilter(h))
+                        : nullptr;
+  }
+  std::shared_ptr<MaskFilter> GetMaskFilter() const {
+    skity_mask_filter h = skity_paint_get_mask_filter(get());
+    return h != nullptr ? std::shared_ptr<MaskFilter>(new MaskFilter(h))
+                        : nullptr;
+  }
+  std::shared_ptr<PathEffect> GetPathEffect() const {
+    skity_path_effect h = skity_paint_get_path_effect(get());
+    return h != nullptr ? std::shared_ptr<PathEffect>(new PathEffect(h))
+                        : nullptr;
+  }
 
   /** Split stroke / fill colors as floating-point RGBA (legacy getters). */
   Color4f GetStrokeColor() const {
