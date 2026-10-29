@@ -30,20 +30,6 @@ struct SurfaceCreate;
 class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
  public:
   /**
-   * Create a surface on context; the backend is selected by the
-   * p_next extension of info (see skity_surface_create_info_gl etc.).
-   * On failure out is left empty and the result code is returned.
-   */
-  static std::unique_ptr<Surface> Create(
-      const Context& context, const skity_surface_create_info& info) {
-    skity_surface handle = nullptr;
-    if (skity_surface_create(context.get(), &info, &handle) != SKITY_SUCCESS) {
-      return nullptr;
-    }
-    return std::unique_ptr<Surface>(new Surface(handle));
-  }
-
-  /**
    * Adopt a surface handle created through the raw C API — e.g. one
    * acquired from skity_native_window_acquire_next_surface_vk. The wrapper
    * takes ownership; destroying it releases (invalidates) the surface.
@@ -98,14 +84,23 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
 };
 
 namespace detail {
-/** Internal: backend creation helpers (skity_vk / mtl headers) and the VK
- *  presenter construct through here. */
+/** Internal: backend creation helpers (skity_vk) and the VK presenter
+ *  construct through here. */
 struct SurfaceCreate {
   static std::unique_ptr<Surface> New(skity_surface h) {
     return std::unique_ptr<Surface>(new Surface(h));
   }
 };
 }  // namespace detail
+
+inline std::unique_ptr<Surface> Context::CreateSurface(
+    const skity_surface_create_info& info) const {
+  skity_surface handle = nullptr;
+  if (skity_surface_create(get(), &info, &handle) != SKITY_SUCCESS) {
+    return nullptr;
+  }
+  return detail::SurfaceCreate::New(handle);
+}
 
 }  // namespace skity
 

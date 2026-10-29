@@ -404,13 +404,13 @@ int main(int argc, char** argv) {
     info.sample_count = 4;
     info.content_scale = ContentScale(window);
 
-    *out = skity::Surface::Create(*context, info);
+    *out = context->CreateSurface(info);
   };
 
   std::unique_ptr<skity::Surface> surface;
   create_surface(&surface);
   if (surface == nullptr) {
-    std::fprintf(stderr, "skity::Surface::Create failed\n");
+    std::fprintf(stderr, "Context::CreateSurface failed\n");
     return 1;
   }
 

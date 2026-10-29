@@ -15,7 +15,7 @@ namespace skity {
 /**
  * Wrap an existing VkImage (+ its view) as a Texture on context: chains
  * ext into base's p_next (s_type and the Vulkan backend tag are set
- * automatically) and forwards to Texture::CreateFromBackend. release
+ * automatically) and forwards to Context::WrapTexture. release
  * fires (with userdata) when skity drops its last reference.
  */
 inline std::shared_ptr<Texture> WrapVkTexture(
@@ -30,7 +30,7 @@ inline std::shared_ptr<Texture> WrapVkTexture(
   info.s_type = SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO;
   info.p_next = &chained;
   info.backend = SKITY_GPU_BACKEND_TYPE_VULKAN;
-  return Texture::CreateFromBackend(context, info, release, userdata);
+  return context.WrapTexture(info, release, userdata);
 }
 
 }  // namespace skity
