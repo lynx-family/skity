@@ -448,7 +448,7 @@ shared_ptr. All other wrappers own uniquely and remain move-only.
 | `skity_quaternion` | `geometry/quaternion.hpp` | free functions `QuaternionEulerToMatrix` / `QuaternionAxisAngleToMatrix` |
 | `skity_semaphore` | `gpu/semaphore.hpp` | `Semaphore` (Create on a Context, Import via the untyped base info + backend p_next extension, GetBackendType) — VK implementation only today |
 | `skity_canvas` | `render/canvas.hpp` | full draw / state / clip / text / image surface; `SoftwareCanvas` inherits the non-owning `Canvas` view and owns its handle |
-| `skity_paint` | `graphic/paint.hpp` | all setters + getters, effect attach in the legacy shapes (raw handle + `shared_ptr`, null detaches), `shared_ptr` effect/typeface getters, copy semantics (deep-copy params, shared effects) |
+| `skity_paint` | `graphic/paint.hpp` | all setters + getters, effect attach in the legacy `shared_ptr` shapes (null detaches), `shared_ptr` effect/typeface getters, copy semantics (deep-copy params, shared effects) |
 | `skity_path` | `graphic/path.hpp` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii + `AddMode`), point / verb / conic-weight access, `IsRect` / `IsLine` / `IsEqual`, convexity, segment masks, last-pt family, `CopyWith*`, `Clone` + copy semantics (deep geometry copy) |
 | `skity_path_effect` | `effect/path_effect.hpp` | discrete + dash |
 | `skity_path_measure` | `graphic/path_measure.hpp` | length / pos-tan / segment / contour advance |

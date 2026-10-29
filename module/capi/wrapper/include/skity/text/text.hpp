@@ -395,25 +395,20 @@ class Font : public detail::OwnHandle<skity_font, skity_font_destroy> {
 
   Font() : OwnHandle(skity_font_create()) {}
 
-  /** typeface NULL selects the default; sizes <= 0 are ignored. */
-  explicit Font(skity_typeface typeface, float size)
-      : OwnHandle(skity_font_create_with_typeface(typeface, size)) {}
-
-  /** Typeface + size + horizontal axis transforms (scale 1 / skew 0 = off). */
-  Font(skity_typeface typeface, float size, float scale_x, float skew_x)
-      : OwnHandle(skity_font_create_with_typeface_scale(typeface, size, scale_x,
-                                                        skew_x)) {}
-
-  /** shared_ptr constructors, the legacy signatures. */
+  /** shared_ptr constructors, the legacy signatures; a null typeface
+   *  selects the default and sizes <= 0 are ignored. */
   explicit Font(std::shared_ptr<Typeface> typeface)
-      : Font(typeface ? typeface->get() : nullptr, 0.f) {}
+      : OwnHandle(skity_font_create_with_typeface(
+            typeface ? typeface->get() : nullptr, 0.f)) {}
 
   explicit Font(std::shared_ptr<Typeface> typeface, float size)
-      : Font(typeface ? typeface->get() : nullptr, size) {}
+      : OwnHandle(skity_font_create_with_typeface(
+            typeface ? typeface->get() : nullptr, size)) {}
 
   Font(std::shared_ptr<Typeface> typeface, float size, float scale_x,
        float skew_x)
-      : Font(typeface ? typeface->get() : nullptr, size, scale_x, skew_x) {}
+      : OwnHandle(skity_font_create_with_typeface_scale(
+            typeface ? typeface->get() : nullptr, size, scale_x, skew_x)) {}
 
   /**
    * Copy semantics of the value-type skity::Font: parameters are
@@ -430,12 +425,8 @@ class Font : public detail::OwnHandle<skity_font, skity_font_destroy> {
   Font(Font&&) = default;
   Font& operator=(Font&&) = default;
 
-  void SetTypeface(skity_typeface typeface) {
-    skity_font_set_typeface(get(), typeface);
-  }
-  void SetTypeface(const Typeface& typeface) { SetTypeface(typeface.get()); }
   void SetTypeface(std::shared_ptr<Typeface> typeface) {
-    SetTypeface(typeface ? typeface->get() : nullptr);
+    skity_font_set_typeface(get(), typeface ? typeface->get() : nullptr);
   }
 
   /** Owning shared reference to the bound typeface; null when none is set. */
