@@ -129,3 +129,16 @@ TEST(SWCanvas, StrokeThenFillDrawsFillAfterStroke) {
   EXPECT_EQ(bitmap.GetPixel(12, 20), skity::Color_WHITE);
   EXPECT_EQ(bitmap.GetPixel(7, 20), skity::Color_RED);
 }
+
+TEST(SWCanvas, PremultipliedSurfaceHonorsChannelOrder) {
+  for (auto type : {skity::ColorType::kRGBA, skity::ColorType::kBGRA}) {
+    SCOPED_TRACE(static_cast<int>(type));
+    skity::Bitmap bitmap(8, 8, skity::AlphaType::kPremul_AlphaType, type);
+    auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+    skity::Paint paint;
+    paint.SetColor(skity::ColorSetARGB(255, 36, 105, 222));
+    canvas->DrawRect(skity::Rect::MakeWH(8, 8), paint);
+    canvas->Flush();
+    EXPECT_EQ(bitmap.GetPixel(4, 4), skity::ColorSetARGB(255, 36, 105, 222));
+  }
+}
