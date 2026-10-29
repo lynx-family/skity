@@ -34,41 +34,6 @@ class Texture : public detail::OwnHandle<skity_texture, skity_texture_destroy> {
     kS = SKITY_TEXTURE_FORMAT_S,
   };
 
-  /** Allocate a texture on context's backend; empty on failure. */
-  static std::shared_ptr<Texture> Create(const Context& context, Format format,
-                                         uint32_t width, uint32_t height,
-                                         AlphaType alpha_type) {
-    auto handle = skity_texture_create(
-        context.get(), static_cast<skity_texture_format>(format), width, height,
-        static_cast<skity_alpha_type>(alpha_type));
-    return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
-                             : nullptr;
-  }
-
-  /** Create from a full descriptor (mipmap control); empty on failure. */
-  static std::shared_ptr<Texture> CreateWithDesc(
-      const Context& context, const skity_texture_descriptor& desc) {
-    auto handle = skity_texture_create_with_desc(context.get(), &desc);
-    return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
-                             : nullptr;
-  }
-
-  /**
-   * Wrap an existing backend texture as a skity texture. The backend is
-   * selected by info's p_next extension (see skity_backend_texture_info_gl
-   * / skity_backend_texture_info_vk). release (with userdata) fires
-   * when skity drops its last reference; may be null.
-   */
-  static std::shared_ptr<Texture> CreateFromBackend(
-      const Context& context, const skity_backend_texture_info& info,
-      skity_texture_release_callback release = nullptr,
-      void* userdata = nullptr) {
-    auto handle = skity_texture_create_from_backend(context.get(), &info,
-                                                    release, userdata);
-    return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
-                             : nullptr;
-  }
-
   /** Wrap an existing handle created through the raw C API. */
   static Texture Adopt(skity_texture handle) { return Texture(handle); }
 
@@ -102,7 +67,33 @@ class Texture : public detail::OwnHandle<skity_texture, skity_texture_destroy> {
 
  private:
   explicit Texture(skity_texture handle) : OwnHandle(handle) {}
+  friend class Context;
 };
+
+inline std::shared_ptr<Texture> Context::CreateTexture(
+    skity_texture_format format, uint32_t width, uint32_t height,
+    AlphaType alpha_type) const {
+  auto handle = skity_texture_create(get(), format, width, height,
+                                     static_cast<skity_alpha_type>(alpha_type));
+  return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
+                           : nullptr;
+}
+
+inline std::shared_ptr<Texture> Context::CreateTextureWithDesc(
+    const skity_texture_descriptor& desc) const {
+  auto handle = skity_texture_create_with_desc(get(), &desc);
+  return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
+                           : nullptr;
+}
+
+inline std::shared_ptr<Texture> Context::WrapTexture(
+    const skity_backend_texture_info& info,
+    skity_texture_release_callback release, void* userdata) const {
+  auto handle =
+      skity_texture_create_from_backend(get(), &info, release, userdata);
+  return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
+                           : nullptr;
+}
 
 }  // namespace skity
 

@@ -27,6 +27,7 @@ using skity::Color_BLACK;
 using skity::Color_WHITE;
 using skity::ColorFilter;
 using skity::ColorPackRGBA;
+using skity::Context;
 using skity::Data;
 using skity::DisplayList;
 using skity::DisplayListBuildOptions;
@@ -91,6 +92,22 @@ TEST(WrapperHpp, SemaphoreNeutralApi) {
 // Metal has no wrapper — like the legacy gpu_context_mtl.h, Metal consumers
 // call the C ABI (skity/c/skity_context_mtl.h etc.) directly, so there is
 // no wrapper validation test here.
+
+TEST(WrapperHpp, ContextHubFactoriesValidateHandles) {
+  // The legacy GPUContext hub members, on an empty context: every creation
+  // entry fails cleanly with a null smart pointer (no GPU needed).
+  Context context;
+  skity_surface_create_info surface_info = {};
+  EXPECT_EQ(context.CreateSurface(surface_info), nullptr);
+  EXPECT_EQ(context.CreateTexture(SKITY_TEXTURE_FORMAT_RGBA, 4, 4,
+                                  skity::AlphaType::kUnpremul_AlphaType),
+            nullptr);
+  skity_texture_descriptor desc = {};
+  EXPECT_EQ(context.CreateTextureWithDesc(desc), nullptr);
+  skity_backend_texture_info backend_info = {};
+  EXPECT_EQ(context.WrapTexture(backend_info), nullptr);
+  EXPECT_EQ(context.CreateSemaphore(), nullptr);
+}
 
 TEST(WrapperHpp, ValueTypes) {
   Rect r = Rect::MakeXYWH(10.f, 20.f, 30.f, 40.f);

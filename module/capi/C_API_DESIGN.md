@@ -438,9 +438,10 @@ legacy null convention), every legacy shared_ptr parameter / getter
 (Paint's effects, Font / FontManager / Pixmap hand-offs, Bitmap::GetPixmap,
 Image::ScalePixels, Shader::MakeShader) uses the shared_ptr shape, and the
 legacy unique_ptr creations map onto unique_ptr: GLContextCreate /
-CreateSurface / FinishRecording / MakeSoftwareCanvas /
-CreateSimpleFallbackDelegate (plus the VK / MTL context-surface-window
-creation helpers). Legacy code — arrow calls, factory temporaries, null
+FinishRecording / MakeSoftwareCanvas / CreateSimpleFallbackDelegate
+(plus the VK context-surface-window creation helpers); the GPUContext
+hub members (CreateSurface / CreateTexture / CreateTextureWithDesc /
+WrapTexture / CreateSemaphore) live on Context with their legacy shapes. Legacy code — arrow calls, factory temporaries, null
 checks — compiles verbatim; `Canvas::MakeSoftwareCanvas` replaces the
 interim `SoftwareCanvas` class. The
 underlying wrapper classes stay move-only handle owners; the shared_ptr
@@ -468,9 +469,9 @@ shared_ptr. All other wrappers own uniquely and remain move-only.
 | `skity_data` | `io/data.hpp` | copy / with-proc / from-file / empty + accessors; factories return `shared_ptr` (legacy shape) |
 | `skity_bitmap` | `graphic/bitmap.hpp` | `Bitmap` + `Pixmap`; the zero-copy wrap takes / `GetPixmap` returns `shared_ptr<Pixmap>` (legacy shapes) |
 | `skity_image` | `graphic/image.hpp` | raster / texture / deferred / promise factories, read / scale pixels |
-| `skity_surface` | `gpu/surface.hpp` | create (`unique_ptr`, the legacy CreateSurface shape) / lock-canvas / flush / size / read-pixels (`shared_ptr<Pixmap>`, GL CreateInfo path), `AddExternalWaitSemaphore` |
-| `skity_context` | `gpu/context.hpp` | `CreateGL` (`unique_ptr`, the legacy GLContextCreate shape), error callback, all `set_enable_*` tuning knobs, resource cache limit |
-| `skity_texture` | `gpu/texture.hpp` | `Texture` (create / create-with-descriptor / wrap-from-backend incl. p_next extension chaining — `shared_ptr` returns, the legacy CreateTexture / WrapTexture shapes — immediate + deferred upload, size queries) |
+| `skity_surface` | `gpu/surface.hpp` | `Context::CreateSurface` (`unique_ptr`, the legacy hub member) / lock-canvas / flush / size / read-pixels (`shared_ptr<Pixmap>`, GL CreateInfo path), `AddExternalWaitSemaphore` |
+| `skity_context` | `gpu/context.hpp` | `CreateGL` (`unique_ptr`, the legacy GLContextCreate shape), the GPUContext hub members `CreateSurface` / `CreateTexture` / `CreateTextureWithDesc` / `WrapTexture` / `CreateSemaphore` (declared here, defined in the surface / texture / semaphore headers), error callback, all `set_enable_*` tuning knobs, resource cache limit |
+| `skity_texture` | `gpu/texture.hpp` | `Texture` (created through the `Context::CreateTexture` / `CreateTextureWithDesc` / `WrapTexture` hub members — `shared_ptr` returns, the legacy shapes, p_next extension chaining on WrapTexture; immediate + deferred upload, size queries) |
 | `skity_font` + `skity_text` | `text/text.hpp` | `Typeface` (load / default / unichar→glyph / style / tables / variations / `MakeVariation`; factories and hand-offs return `shared_ptr`, the legacy shape), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / bounds / make-with-size / `LoadGlyph*` family, copy semantics with shared typeface), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
 | `skity_glyph` | `text/glyph.hpp` | `GlyphData` non-owning views over the global glyph cache (metrics / bearings / outline path / bitmap description), `GlyphFormat` / `BitmapFormat` enums, `GlyphBitmap` POD passthrough |
 | `skity_recorder` | `recorder/recorder.hpp` | `PictureRecorder` (+ build options, last-op offset) and `DisplayList` (draw / cull-rect draw / bounds / op count / properties / rtree search / per-op paint mutation) |

@@ -15,7 +15,7 @@ namespace skity {
 /**
  * Create a one-shot Vulkan render surface on context: chains ext into
  * base's p_next (s_type set automatically) and forwards to
- * Surface::Create. base carries the geometry / sample count; ext the
+ * Context::CreateSurface. base carries the geometry / sample count; ext the
  * VkImage / format / layout / external sync description.
  */
 inline std::unique_ptr<Surface> CreateVkSurface(
@@ -27,7 +27,7 @@ inline std::unique_ptr<Surface> CreateVkSurface(
   skity_surface_create_info info = base;
   info.s_type = SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
   info.p_next = &chained;
-  return Surface::Create(context, info);
+  return context.CreateSurface(info);
 }
 
 }  // namespace skity

@@ -97,8 +97,8 @@
 // recorder
 #include <skity/recorder/recorder.hpp>
 // text
-#include <skity/text/glyph.hpp>
 #include <skity/gpu/texture.hpp>
+#include <skity/text/glyph.hpp>
 #include <skity/text/text.hpp>
 #include <skity/types.hpp>
 

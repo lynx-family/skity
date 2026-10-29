@@ -6,13 +6,20 @@
 #define MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_CONTEXT_HPP
 
 #include <skity/c/skity_context.h>
+#include <skity/c/skity_surface.h>
+#include <skity/c/skity_texture.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <skity/base.hpp>
+#include <skity/types.hpp>
 
 namespace skity {
+
+class Surface;
+class Texture;
+class Semaphore;
 namespace detail {
 struct ContextCreate;
 }  // namespace detail
@@ -101,6 +108,28 @@ class Context : public detail::OwnHandle<skity_context, skity_context_destroy> {
   void SetResourceCacheLimit(size_t max_bytes) {
     skity_context_set_resource_cache_limit(get(), max_bytes);
   }
+
+  /**
+   * The legacy GPUContext hub members (the C++ API's CreateSurface /
+   * CreateTexture / CreateTextureWithDesc / WrapTexture / CreateSemaphore).
+   * Their parameters use the C ABI's own descriptor structs — the C layer
+   * replaced the legacy GPUSurfaceDescriptor / GPUBackendTextureInfo with
+   * the p_next-chained CreateInfo families. Declared here, defined in
+   * gpu/surface.hpp / gpu/texture.hpp / gpu/semaphore.hpp — include the
+   * matching header to call them (the skity.hpp umbrella already does).
+   */
+  std::unique_ptr<Surface> CreateSurface(
+      const skity_surface_create_info& info) const;
+  std::shared_ptr<Texture> CreateTexture(skity_texture_format format,
+                                         uint32_t width, uint32_t height,
+                                         AlphaType alpha_type) const;
+  std::shared_ptr<Texture> CreateTextureWithDesc(
+      const skity_texture_descriptor& desc) const;
+  std::shared_ptr<Texture> WrapTexture(
+      const skity_backend_texture_info& info,
+      skity_texture_release_callback release = nullptr,
+      void* userdata = nullptr) const;
+  std::shared_ptr<Semaphore> CreateSemaphore() const;
 
   /** GPU backend classification, mirroring skity::GPUBackendType. */
   enum class BackendType : uint32_t {

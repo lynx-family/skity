@@ -54,7 +54,14 @@ class Semaphore
 
  private:
   explicit Semaphore(skity_semaphore h) : OwnHandle(h) {}
+  friend class Context;
 };
+
+inline std::shared_ptr<Semaphore> Context::CreateSemaphore() const {
+  auto handle = skity_semaphore_create(get());
+  return handle != nullptr ? std::shared_ptr<Semaphore>(new Semaphore(handle))
+                           : nullptr;
+}
 
 }  // namespace skity
 
