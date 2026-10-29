@@ -20,8 +20,8 @@ namespace {
 
 using skity::Context;
 using skity::CreateVkContext;
-using skity::NativeWindowVk;
-using skity::Surface;
+using skity::GPUPresenter;
+using skity::GPUPresenterStatus;
 
 }  // namespace
 
@@ -57,28 +57,28 @@ TEST(WrapperVkHpp, ChainedCreateInfoRejectsNullContext) {
   EXPECT_EQ(context.WrapTexture(tex_base), nullptr);
 }
 
-TEST(WrapperVkHpp, NativeWindowLifecycleValidation) {
-  NativeWindowVk window;  // empty (never created)
-  EXPECT_EQ(window.GetWidth(), 0u);
-  EXPECT_EQ(window.GetHeight(), 0u);
-  EXPECT_EQ(window.Resize(100, 100), SKITY_ERROR_INVALID_HANDLE);
-  EXPECT_FALSE(window);
+TEST(WrapperVkHpp, PresenterLifecycleValidation) {
+  GPUPresenter presenter;  // empty (never created)
+  EXPECT_EQ(presenter.GetWidth(), 0u);
+  EXPECT_EQ(presenter.GetHeight(), 0u);
+  EXPECT_EQ(presenter.Resize(100, 100), SKITY_ERROR_INVALID_HANDLE);
+  EXPECT_FALSE(presenter);
 
-  std::unique_ptr<Surface> surface;
-  EXPECT_EQ(window.AcquireNextSurface(1, 1.f, &surface),
-            SKITY_ERROR_INVALID_HANDLE);
-  EXPECT_FALSE(surface);
+  // Acquire on an empty presenter fails with an error status and no
+  // surface (the legacy GPUSurfaceAcquireResult shape).
+  auto acquired = presenter.AcquireNextSurface({1, 1.f});
+  EXPECT_EQ(acquired.status, GPUPresenterStatus::kError);
+  EXPECT_EQ(acquired.surface, nullptr);
 
   // Present requires a non-empty surface; the empty wrapper is rejected
-  // without touching the (null) window handle.
-  EXPECT_EQ(window.Present(std::move(surface)), SKITY_ERROR_INVALID_HANDLE);
-  EXPECT_EQ(window.Present(nullptr), SKITY_ERROR_INVALID_HANDLE);
+  // without touching the (null) presenter handle (legacy status shape).
+  EXPECT_EQ(presenter.Present(nullptr), GPUPresenterStatus::kError);
 
   // Creation with a null context fails cleanly.
   Context null_context;
   skity_native_window_create_info_vk info = {};
-  EXPECT_FALSE(NativeWindowVk::Create(null_context, info));
+  EXPECT_EQ(GPUPresenter::Create(null_context, info), nullptr);
 
   // Adopting a raw NULL handle is equally safe.
-  EXPECT_FALSE(NativeWindowVk::Adopt(nullptr));
+  EXPECT_FALSE(GPUPresenter::Adopt(nullptr));
 }
