@@ -11,15 +11,21 @@
 // Vulkan-only wrapper headers below. The VK headers are deliberately kept
 // out of skity.hpp so GL / CPU consumers never see <vulkan/vulkan.h>.
 //
+// Only what CANNOT live on the neutral layer is VK-gated here: context
+// creation (the C entries carry Vulkan-typed signatures) and the presenter
+// lifecycle. Surfaces / backend-texture wraps / semaphore imports have no
+// VK wrappers — the CreateInfo structs are already Vulkan-style p_next
+// chains, so consumers chain the extension themselves (s_type /
+// SKITY_GPU_BACKEND_TYPE_VULKAN where applicable) and call the neutral
+// Context::CreateSurface / WrapTexture / Semaphore::Import entries; the
+// C headers document the chain recipes.
+//
 // Same usage rules as skity.hpp: unified library (SKITY_UNIFIED_LIB) only,
 // and never in a TU that also includes the legacy headers under
 // include/skity/.
 
 #include <skity/gpu/context_vk.hpp>
 #include <skity/gpu/native_window_vk.hpp>
-#include <skity/gpu/semaphore_vk.hpp>
-#include <skity/gpu/surface_vk.hpp>
-#include <skity/gpu/texture_vk.hpp>
 #include <skity/skity.hpp>
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_SKITY_VK_HPP
