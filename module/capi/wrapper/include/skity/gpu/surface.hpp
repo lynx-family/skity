@@ -31,7 +31,7 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
  public:
   /**
    * Adopt a surface handle created through the raw C API — e.g. one
-   * acquired from skity_native_window_acquire_next_surface_vk. The wrapper
+   * acquired from skity_presenter_acquire_next_surface_vk. The wrapper
    * takes ownership; destroying it releases (invalidates) the surface.
    */
   static Surface Adopt(skity_surface handle) { return Surface(handle); }

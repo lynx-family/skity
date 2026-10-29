@@ -29,7 +29,7 @@
 set(SKITY_CAPI_VULKAN_SOURCES)
 if (${SKITY_VK_BACKEND})
   list(APPEND SKITY_CAPI_VULKAN_SOURCES
-    ${CMAKE_CURRENT_LIST_DIR}/src/native_window_vk.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/presenter_vk.cpp
   )
 endif()
 

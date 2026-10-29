@@ -3,7 +3,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <skity/c/skity_context_vk.h>
-#include <skity/c/skity_native_window_vk.h>
+#include <skity/c/skity_presenter_vk.h>
 #include <skity/c/skity_semaphore_vk.h>
 #include <skity/c/skity_surface_vk.h>
 #include <skity/c/skity_texture_vk.h>
@@ -38,9 +38,8 @@ TEST(VulkanCAPITest, SemaphoreAndSurfaceValidateHandles) {
   skity_surface surface = nullptr;
   skity_semaphore semaphore = nullptr;
   skity_surface_add_external_wait_semaphore(surface, semaphore);
-  EXPECT_EQ(
-      skity_native_window_acquire_next_surface_vk(nullptr, 1, 1.f, &surface),
-      SKITY_ERROR_INVALID_HANDLE);
-  EXPECT_EQ(skity_native_window_present_vk(nullptr, &surface),
+  EXPECT_EQ(skity_presenter_acquire_next_surface_vk(nullptr, 1, 1.f, &surface),
+            SKITY_ERROR_INVALID_HANDLE);
+  EXPECT_EQ(skity_presenter_present_vk(nullptr, &surface),
             SKITY_ERROR_INVALID_HANDLE);
 }

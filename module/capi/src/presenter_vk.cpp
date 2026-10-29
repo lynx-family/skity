@@ -2,7 +2,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <skity/c/skity_native_window_vk.h>
+#include <skity/c/skity_presenter_vk.h>
 
 #include <skity/gpu/gpu_context.hpp>
 #include <skity/gpu/gpu_context_vk.hpp>
@@ -14,10 +14,10 @@
 
 namespace {
 
-skity::GPUNativeWindowVK* NativeWindowOf(skity_native_window_vk handle) {
+skity::GPUNativeWindowVK* NativeWindowOf(skity_presenter_vk handle) {
   auto window =
-      skity::capi::get_impl<skity_native_window_vk_s, skity::GPUNativeWindowVK>(
-          handle, SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK);
+      skity::capi::get_impl<skity_presenter_s, skity::GPUNativeWindowVK>(
+          handle, SKITY_OBJECT_TYPE_PRESENTER);
   return window.get();
 }
 
@@ -25,8 +25,8 @@ skity::GPUNativeWindowVK* NativeWindowOf(skity_native_window_vk handle) {
 
 extern "C" {
 
-skity_native_window_vk skity_native_window_create_vk(
-    skity_context context, const skity_native_window_create_info_vk* info) {
+skity_presenter_vk skity_presenter_create_vk(
+    skity_context context, const skity_presenter_create_info_vk* info) {
   if (info == nullptr) {
     return nullptr;
   }
@@ -60,27 +60,27 @@ skity_native_window_vk skity_native_window_create_vk(
     return nullptr;
   }
   std::shared_ptr<skity::GPUNativeWindowVK> impl(window.release());
-  return skity::capi::alloc_handle<skity_native_window_vk_s>(
-      SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK, SKITY_HANDLE_OWNING, std::move(impl));
+  return skity::capi::alloc_handle<skity_presenter_s>(
+      SKITY_OBJECT_TYPE_PRESENTER, SKITY_HANDLE_OWNING, std::move(impl));
 }
 
-void skity_native_window_destroy_vk(skity_native_window_vk window) {
-  skity::capi::destroy_handle<skity_native_window_vk_s>(
-      window, SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK);
+void skity_presenter_destroy_vk(skity_presenter_vk window) {
+  skity::capi::destroy_handle<skity_presenter_s>(window,
+                                                 SKITY_OBJECT_TYPE_PRESENTER);
 }
 
-uint32_t skity_native_window_get_width_vk(skity_native_window_vk window) {
+uint32_t skity_presenter_get_width_vk(skity_presenter_vk window) {
   auto* native_window = NativeWindowOf(window);
   return native_window != nullptr ? native_window->GetWidth() : 0u;
 }
 
-uint32_t skity_native_window_get_height_vk(skity_native_window_vk window) {
+uint32_t skity_presenter_get_height_vk(skity_presenter_vk window) {
   auto* native_window = NativeWindowOf(window);
   return native_window != nullptr ? native_window->GetHeight() : 0u;
 }
 
-skity_result skity_native_window_resize_vk(skity_native_window_vk window,
-                                           uint32_t width, uint32_t height) {
+skity_result skity_presenter_resize_vk(skity_presenter_vk window,
+                                       uint32_t width, uint32_t height) {
   auto* native_window = NativeWindowOf(window);
   if (native_window == nullptr) {
     return SKITY_ERROR_INVALID_HANDLE;
@@ -90,8 +90,8 @@ skity_result skity_native_window_resize_vk(skity_native_window_vk window,
              : SKITY_ERROR_INITIALIZATION_FAILED;
 }
 
-skity_result skity_native_window_acquire_next_surface_vk(
-    skity_native_window_vk window, uint32_t sample_count, float content_scale,
+skity_result skity_presenter_acquire_next_surface_vk(
+    skity_presenter_vk window, uint32_t sample_count, float content_scale,
     skity_surface* out_surface) {
   if (out_surface == nullptr) {
     return SKITY_ERROR_INVALID_ARGUMENT;
@@ -130,8 +130,8 @@ skity_result skity_native_window_acquire_next_surface_vk(
   return SKITY_SUCCESS;
 }
 
-skity_result skity_native_window_present_vk(skity_native_window_vk window,
-                                            skity_surface* surface) {
+skity_result skity_presenter_present_vk(skity_presenter_vk window,
+                                        skity_surface* surface) {
   if (surface == nullptr) {
     return SKITY_ERROR_INVALID_ARGUMENT;
   }

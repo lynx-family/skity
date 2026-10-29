@@ -483,7 +483,7 @@ consumers never see `<vulkan/vulkan.h>`:
 | C domain | Wrapper | Notes |
 |---|---|---|
 | `skity_context_vk` | `skity_context_vk.hpp` | free functions `CreateVkContext` ×2 (own instance/device, or caller-provided state via `skity_context_create_info_vk`) — the C entries carry Vulkan-typed signatures, so they cannot become neutral `Context` members |
-| `skity_native_window_vk` | `skity_native_window_vk.hpp` | `NativeWindowVk` presenter lifecycle (create / resize / size queries / `AcquireNextSurface` / `Present` consuming a `unique_ptr<Surface>`) — the VK counterpart of the legacy GPUPresenter |
+| `skity_presenter_vk` | `skity_presenter_vk.hpp` | `NativeWindowVk` presenter lifecycle (create / resize / size queries / `AcquireNextSurface` / `Present` consuming a `unique_ptr<Surface>`) — the VK counterpart of the legacy GPUPresenter |
 
 `skity_surface_vk` / `skity_texture_vk` / `skity_semaphore_vk` have NO
 wrappers: the CreateInfo structs are already Vulkan-style `p_next`
@@ -579,7 +579,7 @@ These modules have complete (or near-complete) C coverage of their core:
 - `GPUContext` (create, `set_error_callback`, all `set_enable_*` tuning,
   precompile, `create_texture`, `wrap_texture`, `set_resource_cache_limit`)
 - `GPUNativeWindowVK` / presenter lifecycle (create, resize,
-  `acquire_next_surface`, `present` through `skity_native_window_vk`)
+  `acquire_next_surface`, `present` through `skity_presenter_vk`)
 - Metal backend (`skity_context_mtl.h` / `skity_surface_mtl.h` /
   `skity_texture_mtl.h`): context create + device / queue getters, and the
   surface / texture-wrap p_next extensions — Objective-C-only handles via
