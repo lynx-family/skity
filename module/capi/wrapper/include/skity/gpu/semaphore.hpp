@@ -27,8 +27,10 @@ class Semaphore
    * Create on context's backend; empty wrapper on backends without
    * semaphore support (currently Vulkan only).
    */
-  static Semaphore Create(const Context& context) {
-    return Semaphore(skity_semaphore_create(context.get()));
+  static std::shared_ptr<Semaphore> Create(const Context& context) {
+    auto handle = skity_semaphore_create(context.get());
+    return handle != nullptr ? std::shared_ptr<Semaphore>(new Semaphore(handle))
+                             : nullptr;
   }
 
   /** Adopt an owning C handle. */

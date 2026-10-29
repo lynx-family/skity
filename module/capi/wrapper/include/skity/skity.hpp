@@ -44,7 +44,7 @@
  *  - classes deriving from detail::OwnHandle own their handle; the
  *    destructor calls the matching skity_*_destroy;
  *  - Canvas is a non-owning view (matching the handle borrowed from
- *    skity_surface_lock_canvas); SoftwareCanvas additionally owns one.
+ *    skity_surface_lock_canvas); Canvas::MakeSoftwareCanvas owns one.
  *
  * Following the coverage discipline of the C API, this layer only wraps
  * existing entry points — it never needs new C functions. Where the legacy

@@ -8,6 +8,7 @@
 #include <skity/c/skity_surface.h>
 
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 #include <skity/gpu/context.hpp>
 #include <skity/gpu/semaphore.hpp>
@@ -16,6 +17,9 @@
 #include <skity/types.hpp>
 
 namespace skity {
+namespace detail {
+struct SurfaceCreate;
+}  // namespace detail
 
 /**
  * @class Surface
@@ -30,15 +34,13 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
    * p_next extension of info (see skity_surface_create_info_gl etc.).
    * On failure out is left empty and the result code is returned.
    */
-  static skity_result Create(const Context& context,
-                             const skity_surface_create_info& info,
-                             Surface* out) {
+  static std::unique_ptr<Surface> Create(
+      const Context& context, const skity_surface_create_info& info) {
     skity_surface handle = nullptr;
-    skity_result result = skity_surface_create(context.get(), &info, &handle);
-    if (result == SKITY_SUCCESS && out != nullptr) {
-      out->reset(handle);
+    if (skity_surface_create(context.get(), &info, &handle) != SKITY_SUCCESS) {
+      return nullptr;
     }
-    return result;
+    return std::unique_ptr<Surface>(new Surface(handle));
   }
 
   /**
@@ -64,9 +66,12 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
    * Read pixels back to CPU memory (rect selects a sub-region; an empty
    * rect reads the whole surface). Returns an empty wrapper on failure.
    */
-  Pixmap ReadPixels(const Rect& rect = Rect::MakeEmpty()) const {
+  std::shared_ptr<Pixmap> ReadPixels(
+      const Rect& rect = Rect::MakeEmpty()) const {
     bool whole = rect.IsEmpty();
-    return Pixmap(skity_surface_read_pixels(get(), whole ? nullptr : &rect));
+    auto handle = skity_surface_read_pixels(get(), whole ? nullptr : &rect);
+    return handle != nullptr ? std::shared_ptr<Pixmap>(new Pixmap(handle))
+                             : nullptr;
   }
 
   uint32_t GetWidth() const { return skity_surface_get_width(get()); }
@@ -88,7 +93,19 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
 
  private:
   explicit Surface(skity_surface h) : OwnHandle(h) {}
+  friend struct detail::SurfaceCreate;
+  friend class NativeWindowVk;
 };
+
+namespace detail {
+/** Internal: backend creation helpers (skity_vk / mtl headers) and the VK
+ *  presenter construct through here. */
+struct SurfaceCreate {
+  static std::unique_ptr<Surface> New(skity_surface h) {
+    return std::unique_ptr<Surface>(new Surface(h));
+  }
+};
+}  // namespace detail
 
 }  // namespace skity
 

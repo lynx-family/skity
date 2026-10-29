@@ -7,6 +7,7 @@
 
 #include <skity/c/skity_context_mtl.h>
 
+#include <memory>
 #include <skity/gpu/context.hpp>
 
 namespace skity {
@@ -14,23 +15,18 @@ namespace skity {
 /**
  * Create a Metal GPUContext. Both device (id<MTLDevice>) and
  * command_queue (id<MTLCommandQueue>) may be null, letting the engine
- * pick / create them. Mirrors the shape of Context::CreateGL. The handles
- * are the real Objective-C types in Objective-C(++) code and void*
- * elsewhere.
+ * pick / create them. Mirrors the shape of Context::CreateGL; null on
+ * failure. The handles are the real Objective-C types in
+ * Objective-C(++) code and void* elsewhere.
  */
-inline skity_result CreateMtlContext(skity_mtl_device device,
-                                     skity_mtl_command_queue command_queue,
-                                     Context* out) {
-  if (out == nullptr) {
-    return SKITY_ERROR_INVALID_ARGUMENT;
-  }
+inline std::unique_ptr<Context> CreateMtlContext(
+    skity_mtl_device device, skity_mtl_command_queue command_queue) {
   skity_context handle = nullptr;
-  skity_result result =
-      skity_context_create_mtl(device, command_queue, &handle);
-  if (result == SKITY_SUCCESS) {
-    out->reset(handle);
+  if (skity_context_create_mtl(device, command_queue, &handle) !=
+      SKITY_SUCCESS) {
+    return nullptr;
   }
-  return result;
+  return detail::ContextCreate::New(handle);
 }
 
 /**

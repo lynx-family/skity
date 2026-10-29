@@ -31,11 +31,12 @@ class Pixmap : public detail::OwnHandle<skity_pixmap, skity_pixmap_destroy> {
    * exceed width * bytes-per-pixel; the buffer must hold at least
    * row_bytes * height bytes.
    */
-  static Pixmap MakeFromData(const Data& data, size_t row_bytes, uint32_t width,
-                             uint32_t height, AlphaType alpha_type,
-                             ColorType color_type) {
-    return Pixmap(skity_pixmap_create(data.get(), row_bytes, width, height,
-                                      to_c(alpha_type), to_c(color_type)));
+  static Pixmap MakeFromData(const std::shared_ptr<Data>& data,
+                             size_t row_bytes, uint32_t width, uint32_t height,
+                             AlphaType alpha_type, ColorType color_type) {
+    return Pixmap(skity_pixmap_create(data ? data->get() : nullptr, row_bytes,
+                                      width, height, to_c(alpha_type),
+                                      to_c(color_type)));
   }
 
   uint32_t Width() const { return skity_pixmap_get_width(get()); }
@@ -79,13 +80,13 @@ class Bitmap : public detail::OwnHandle<skity_bitmap, skity_bitmap_destroy> {
 
   /**
    * Wrap a pixmap's pixel memory without copying (shares ownership of the
-   * buffer). Pass read_only false when the pixels will be written through
-   * this bitmap (software rendering target).
+   * buffer), the legacy constructor shape. Pass read_only false when the
+   * pixels will be written through this bitmap (software rendering target);
+   * empty wrapper on failure.
    */
-  static Bitmap MakeFromPixmap(const Pixmap& pixmap, bool read_only) {
-    return Bitmap(
-        skity_bitmap_create_from_pixmap(pixmap.get(), read_only ? 1u : 0u));
-  }
+  explicit Bitmap(std::shared_ptr<Pixmap> pixmap, bool read_only = true)
+      : OwnHandle(skity_bitmap_create_from_pixmap(
+            pixmap ? pixmap->get() : nullptr, read_only ? 1u : 0u)) {}
 
   uint32_t Width() const { return skity_bitmap_get_width(get()); }
   uint32_t Height() const { return skity_bitmap_get_height(get()); }
@@ -98,7 +99,11 @@ class Bitmap : public detail::OwnHandle<skity_bitmap, skity_bitmap_destroy> {
    * Borrow the writable pixel view of this bitmap (writes through it are
    * visible here). The returned pixmap keeps the pixels alive.
    */
-  Pixmap GetPixmap() const { return Pixmap(skity_bitmap_get_pixmap(get())); }
+  std::shared_ptr<Pixmap> GetPixmap() const {
+    auto handle = skity_bitmap_get_pixmap(get());
+    return handle != nullptr ? std::shared_ptr<Pixmap>(new Pixmap(handle))
+                             : nullptr;
+  }
 
  private:
   explicit Bitmap(skity_bitmap h) : OwnHandle(h) {}

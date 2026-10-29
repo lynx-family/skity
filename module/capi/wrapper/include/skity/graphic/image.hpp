@@ -9,8 +9,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 #include <skity/gpu/context.hpp>
+#include <skity/gpu/texture.hpp>
 #include <skity/graphic/bitmap.hpp>
 #include <skity/types.hpp>
 
@@ -28,11 +30,15 @@ class Image : public detail::OwnHandle<skity_image, skity_image_destroy> {
    * Raster image from raw pixel data; the pixels are copied, so the caller's
    * buffer may be released immediately. row_bytes 0 means tightly packed.
    */
-  static Image MakeFromPixels(uint32_t width, uint32_t height,
-                              const void* pixels, size_t row_bytes,
-                              AlphaType alpha_type, ColorType color_type) {
-    return Image(skity_image_create_from_pixels(
-        width, height, pixels, row_bytes, to_c(alpha_type), to_c(color_type)));
+  static std::shared_ptr<Image> MakeFromPixels(uint32_t width, uint32_t height,
+                                               const void* pixels,
+                                               size_t row_bytes,
+                                               AlphaType alpha_type,
+                                               ColorType color_type) {
+    auto handle = skity_image_create_from_pixels(
+        width, height, pixels, row_bytes, to_c(alpha_type), to_c(color_type));
+    return handle != nullptr ? std::shared_ptr<Image>(new Image(handle))
+                             : nullptr;
   }
 
   /**
@@ -40,28 +46,39 @@ class Image : public detail::OwnHandle<skity_image, skity_image_destroy> {
    * that device); otherwise identical to MakeFromPixels. A null context
    * degrades to the pure-CPU path.
    */
-  static Image MakeFromPixels(const Context& context, uint32_t width,
-                              uint32_t height, const void* pixels,
-                              size_t row_bytes, AlphaType alpha_type,
-                              ColorType color_type) {
-    return Image(skity_image_create_from_pixels_with_context(
+  static std::shared_ptr<Image> MakeFromPixels(const Context& context,
+                                               uint32_t width, uint32_t height,
+                                               const void* pixels,
+                                               size_t row_bytes,
+                                               AlphaType alpha_type,
+                                               ColorType color_type) {
+    auto handle = skity_image_create_from_pixels_with_context(
         width, height, pixels, row_bytes, to_c(alpha_type), to_c(color_type),
-        context.get()));
+        context.get());
+    return handle != nullptr ? std::shared_ptr<Image>(new Image(handle))
+                             : nullptr;
   }
 
-  /** Wrap an existing GPU texture; the texture must outlive the image. */
-  static Image MakeFromTexture(skity_texture texture) {
-    return Image(skity_image_create_from_texture(texture));
+  /** Wrap an existing GPU texture (legacy MakeHWImage shape). */
+  static std::shared_ptr<Image> MakeFromTexture(
+      std::shared_ptr<Texture> texture) {
+    auto handle =
+        skity_image_create_from_texture(texture ? texture->get() : nullptr);
+    return handle != nullptr ? std::shared_ptr<Image>(new Image(handle))
+                             : nullptr;
   }
 
   /**
    * Deferred-upload placeholder: format and size are known but the GPU
    * texture is bound later with SetDeferredTexture.
    */
-  static Image MakeDeferred(skity_texture_format format, uint32_t width,
-                            uint32_t height, AlphaType alpha_type) {
-    return Image(
-        skity_image_create_deferred(format, width, height, to_c(alpha_type)));
+  static std::shared_ptr<Image> MakeDeferred(skity_texture_format format,
+                                             uint32_t width, uint32_t height,
+                                             AlphaType alpha_type) {
+    auto handle =
+        skity_image_create_deferred(format, width, height, to_c(alpha_type));
+    return handle != nullptr ? std::shared_ptr<Image>(new Image(handle))
+                             : nullptr;
   }
 
   /**
@@ -69,25 +86,27 @@ class Image : public detail::OwnHandle<skity_image, skity_image_destroy> {
    * the current GPU texture (video / camera frames); release when the
    * promise is no longer needed. The returned texture handle is shared.
    */
-  static Image MakePromise(skity_texture_format format, uint32_t width,
-                           uint32_t height, AlphaType alpha_type,
-                           skity_promise_texture_callback get_texture,
-                           skity_promise_release_callback release,
-                           void* userdata) {
-    return Image(skity_image_create_promise(format, width, height,
-                                            to_c(alpha_type), get_texture,
-                                            release, userdata));
+  static std::shared_ptr<Image> MakePromise(
+      skity_texture_format format, uint32_t width, uint32_t height,
+      AlphaType alpha_type, skity_promise_texture_callback get_texture,
+      skity_promise_release_callback release, void* userdata) {
+    auto handle =
+        skity_image_create_promise(format, width, height, to_c(alpha_type),
+                                   get_texture, release, userdata);
+    return handle != nullptr ? std::shared_ptr<Image>(new Image(handle))
+                             : nullptr;
   }
 
   /** Promise variant whose callback also receives the GPU context in use. */
-  static Image MakePromise2(skity_texture_format format, uint32_t width,
-                            uint32_t height, AlphaType alpha_type,
-                            skity_promise_texture_callback2 get_texture,
-                            skity_promise_release_callback release,
-                            void* userdata) {
-    return Image(skity_image_create_promise2(format, width, height,
-                                             to_c(alpha_type), get_texture,
-                                             release, userdata));
+  static std::shared_ptr<Image> MakePromise2(
+      skity_texture_format format, uint32_t width, uint32_t height,
+      AlphaType alpha_type, skity_promise_texture_callback2 get_texture,
+      skity_promise_release_callback release, void* userdata) {
+    auto handle =
+        skity_image_create_promise2(format, width, height, to_c(alpha_type),
+                                    get_texture, release, userdata);
+    return handle != nullptr ? std::shared_ptr<Image>(new Image(handle))
+                             : nullptr;
   }
 
   /** Bind a texture to a deferred image; no-op semantics on other kinds. */
@@ -102,15 +121,17 @@ class Image : public detail::OwnHandle<skity_image, skity_image_destroy> {
    * Read pixels back to CPU memory. GPU-backed images require a live
    * context; returns an empty wrapper on failure.
    */
-  Pixmap ReadPixels(const Context& context) const {
-    return Pixmap(skity_image_read_pixels(get(), context.get()));
+  std::shared_ptr<Pixmap> ReadPixels(const Context& context) const {
+    auto handle = skity_image_read_pixels(get(), context.get());
+    return handle != nullptr ? std::shared_ptr<Pixmap>(new Pixmap(handle))
+                             : nullptr;
   }
 
-  /** Resample into dst, scaling to fill it. */
-  bool ScalePixels(Pixmap& dst, const Context& context,
+  /** Resample into dst, scaling to fill it (legacy shared_ptr shape). */
+  bool ScalePixels(const std::shared_ptr<Pixmap>& dst, const Context& context,
                    const SamplingOptions& sampling) const {
-    return skity_image_scale_pixels(get(), dst.get(), context.get(),
-                                    &sampling) != 0;
+    return skity_image_scale_pixels(get(), dst ? dst->get() : nullptr,
+                                    context.get(), &sampling) != 0;
   }
   bool ScalePixels(Pixmap& dst, const Context& context) const {
     return skity_image_scale_pixels(get(), dst.get(), context.get(), nullptr) !=

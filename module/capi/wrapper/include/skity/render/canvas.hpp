@@ -9,7 +9,10 @@
 #include <skity/c/skity_canvas.h>
 
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
+#include <skity/graphic/bitmap.hpp>
+#include <skity/graphic/image.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/graphic/path.hpp>
 #include <skity/text/text.hpp>
@@ -32,9 +35,10 @@ inline constexpr skity_clip_op to_c(ClipOp op) {
  *
  * Non-owning canvas view. Matches the handle borrowed from
  * Surface::LockCanvas: destroying the view only drops the reference — the
- * surface (or a SoftwareCanvas) keeps the underlying object alive.
- * Cheap to copy; treat one view per frame — the underlying canvas is
- * replaced on the next Surface::LockCanvas call.
+ * surface keeps the underlying object alive. Views are move-only; treat
+ * one view per frame — the underlying canvas is replaced on the next
+ * Surface::LockCanvas call. The owning form is Canvas::MakeSoftwareCanvas
+ * (legacy unique_ptr<Canvas> shape).
  *
  */
 class Canvas {
@@ -42,6 +46,33 @@ class Canvas {
   Canvas() = default;
 
   explicit Canvas(skity_canvas canvas) : canvas_(canvas) {}
+
+  Canvas(Canvas&& other) noexcept
+      : canvas_(other.canvas_), owning_(other.owning_) {
+    other.canvas_ = nullptr;
+    other.owning_ = false;
+  }
+  Canvas& operator=(Canvas&& other) noexcept {
+    if (this != &other) {
+      Destroy();
+      canvas_ = other.canvas_;
+      owning_ = other.owning_;
+      other.canvas_ = nullptr;
+      other.owning_ = false;
+    }
+    return *this;
+  }
+  Canvas(const Canvas&) = delete;
+  Canvas& operator=(const Canvas&) = delete;
+
+  ~Canvas() { Destroy(); }
+
+  /**
+   * Software canvas over a CPU bitmap, the legacy MakeSoftwareCanvas
+   * shape: the returned canvas owns its handle (deleted on destruction);
+   * the bitmap must outlive it. Null on failure.
+   */
+  static std::unique_ptr<Canvas> MakeSoftwareCanvas(Bitmap* bitmap);
 
   skity_canvas get() const { return canvas_; }
   explicit operator bool() const { return canvas_ != nullptr; }
@@ -141,9 +172,10 @@ class Canvas {
     skity_canvas_draw_path(canvas_, path.get(), paint.get());
   }
 
-  void DrawTextBlob(const TextBlob& blob, float x, float y,
+  void DrawTextBlob(const std::shared_ptr<TextBlob>& blob, float x, float y,
                     const Paint& paint) {
-    skity_canvas_draw_text_blob(canvas_, blob.get(), x, y, paint.get());
+    skity_canvas_draw_text_blob(canvas_, blob ? blob->get() : nullptr, x, y,
+                                paint.get());
   }
   void DrawGlyphs(uint32_t count, const uint16_t* glyphs,
                   const float* positions_x, const float* positions_y,
@@ -152,27 +184,30 @@ class Canvas {
                              font.get(), paint.get());
   }
 
-  void DrawImage(skity_image image, float x, float y) {
-    skity_canvas_draw_image(canvas_, image, x, y);
+  void DrawImage(const std::shared_ptr<Image>& image, float x, float y) {
+    skity_canvas_draw_image(canvas_, image ? image->get() : nullptr, x, y);
   }
-  void DrawImageWithSampling(skity_image image, float x, float y,
-                             const SamplingOptions& sampling,
+  void DrawImageWithSampling(const std::shared_ptr<Image>& image, float x,
+                             float y, const SamplingOptions& sampling,
                              const Paint& paint) {
-    skity_canvas_draw_image_with_sampling(canvas_, image, x, y, &sampling,
-                                          paint.get());
+    skity_canvas_draw_image_with_sampling(
+        canvas_, image ? image->get() : nullptr, x, y, &sampling, paint.get());
   }
-  void DrawImageRect(skity_image image, const Rect& dst, const Paint& paint) {
-    skity_canvas_draw_image_to_rect(canvas_, image, &dst, nullptr, paint.get());
-  }
-  void DrawImageRect(skity_image image, const Rect& src, const Rect& dst,
+  void DrawImageRect(const std::shared_ptr<Image>& image, const Rect& dst,
                      const Paint& paint) {
-    skity_canvas_draw_image_rect(canvas_, image, &src, &dst, nullptr,
-                                 paint.get());
+    skity_canvas_draw_image_to_rect(canvas_, image ? image->get() : nullptr,
+                                    &dst, nullptr, paint.get());
   }
-  void DrawImageRect(skity_image image, const Rect& src, const Rect& dst,
-                     const SamplingOptions& sampling, const Paint& paint) {
-    skity_canvas_draw_image_rect(canvas_, image, &src, &dst, &sampling,
-                                 paint.get());
+  void DrawImageRect(const std::shared_ptr<Image>& image, const Rect& src,
+                     const Rect& dst, const Paint& paint) {
+    skity_canvas_draw_image_rect(canvas_, image ? image->get() : nullptr, &src,
+                                 &dst, nullptr, paint.get());
+  }
+  void DrawImageRect(const std::shared_ptr<Image>& image, const Rect& src,
+                     const Rect& dst, const SamplingOptions& sampling,
+                     const Paint& paint) {
+    skity_canvas_draw_image_rect(canvas_, image ? image->get() : nullptr, &src,
+                                 &dst, &sampling, paint.get());
   }
 
   /**
@@ -219,48 +254,36 @@ class Canvas {
   skity_canvas Steal() {
     skity_canvas c = canvas_;
     canvas_ = nullptr;
+    owning_ = false;
     return c;
   }
 
-  skity_canvas canvas_ = nullptr;
-};
-
-/**
- * @class SoftwareCanvas
- *
- * Owning canvas over a CPU bitmap (skity_canvas_make_software_canvas).
- * It IS a Canvas (all draw calls available directly); destruction deletes
- * the underlying software canvas. The bitmap must outlive the canvas.
- *
- */
-class SoftwareCanvas : public Canvas {
- public:
-  explicit SoftwareCanvas(skity_bitmap bitmap)
-      : Canvas(skity_canvas_make_software_canvas(bitmap)) {}
-
-  SoftwareCanvas(SoftwareCanvas&& other) noexcept : Canvas(other.Steal()) {}
-
-  SoftwareCanvas& operator=(SoftwareCanvas&& other) noexcept {
-    if (this != &other) {
-      Destroy();
-      canvas_ = other.Steal();
-    }
-    return *this;
-  }
-
-  SoftwareCanvas(const SoftwareCanvas&) = delete;
-  SoftwareCanvas& operator=(const SoftwareCanvas&) = delete;
-
-  ~SoftwareCanvas() { Destroy(); }
-
  private:
+  explicit Canvas(skity_canvas canvas, bool owning)
+      : canvas_(canvas), owning_(owning) {}
+
   void Destroy() {
-    if (canvas_ != nullptr) {
+    if (owning_ && canvas_ != nullptr) {
       skity_canvas_destroy(canvas_);
-      canvas_ = nullptr;
     }
+    canvas_ = nullptr;
+    owning_ = false;
   }
+
+  skity_canvas canvas_ = nullptr;
+  bool owning_ = false;
 };
+
+inline std::unique_ptr<Canvas> Canvas::MakeSoftwareCanvas(Bitmap* bitmap) {
+  if (bitmap == nullptr || !*bitmap) {
+    return nullptr;
+  }
+  skity_canvas handle = skity_canvas_make_software_canvas(bitmap->get());
+  if (handle == nullptr) {
+    return nullptr;
+  }
+  return std::unique_ptr<Canvas>(new Canvas(handle, true));
+}
 
 }  // namespace skity
 

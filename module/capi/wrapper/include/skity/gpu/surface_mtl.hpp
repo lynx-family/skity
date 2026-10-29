@@ -7,6 +7,7 @@
 
 #include <skity/c/skity_surface_mtl.h>
 
+#include <memory>
 #include <skity/gpu/surface.hpp>
 
 namespace skity {
@@ -18,17 +19,16 @@ namespace skity {
  * id<MTLTexture> with MTLTextureUsageRenderTarget, or a CAMetalLayer the
  * caller keeps sizing).
  */
-inline skity_result CreateMtlSurface(const Context& context,
-                                     const skity_surface_create_info& base,
-                                     const skity_surface_create_info_mtl& ext,
-                                     Surface* out) {
+inline std::unique_ptr<Surface> CreateMtlSurface(
+    const Context& context, const skity_surface_create_info& base,
+    const skity_surface_create_info_mtl& ext) {
   skity_surface_create_info_mtl chained = ext;
   chained.s_type = SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_MTL;
   chained.p_next = nullptr;
   skity_surface_create_info info = base;
   info.s_type = SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
   info.p_next = &chained;
-  return Surface::Create(context, info, out);
+  return Surface::Create(context, info);
 }
 
 }  // namespace skity

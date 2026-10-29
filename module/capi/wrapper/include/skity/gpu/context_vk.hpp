@@ -7,6 +7,7 @@
 
 #include <skity/c/skity_context_vk.h>
 
+#include <memory>
 #include <skity/gpu/context.hpp>
 
 namespace skity {
@@ -14,20 +15,16 @@ namespace skity {
 /**
  * Create a Vulkan GPUContext that creates and owns its own VkInstance /
  * VkDevice (it cannot be mixed with other Vulkan code). Mirrors the shape
- * of Context::CreateGL: out receives the context on success.
+ * of Context::CreateGL; null on failure.
  */
-inline skity_result CreateVkContext(
-    PFN_vkGetInstanceProcAddr get_instance_proc_addr, Context* out) {
-  if (out == nullptr) {
-    return SKITY_ERROR_INVALID_ARGUMENT;
-  }
+inline std::unique_ptr<Context> CreateVkContext(
+    PFN_vkGetInstanceProcAddr get_instance_proc_addr) {
   skity_context handle = nullptr;
-  skity_result result =
-      skity_context_create_vk(get_instance_proc_addr, &handle);
-  if (result == SKITY_SUCCESS) {
-    out->reset(handle);
+  if (skity_context_create_vk(get_instance_proc_addr, &handle) !=
+      SKITY_SUCCESS) {
+    return nullptr;
   }
-  return result;
+  return detail::ContextCreate::New(handle);
 }
 
 /**
@@ -35,17 +32,13 @@ inline skity_result CreateVkContext(
  * handle in info is optional; supplied handles stay owned by (and must
  * outlive) the caller.
  */
-inline skity_result CreateVkContext(const skity_context_create_info_vk& info,
-                                    Context* out) {
-  if (out == nullptr) {
-    return SKITY_ERROR_INVALID_ARGUMENT;
-  }
+inline std::unique_ptr<Context> CreateVkContext(
+    const skity_context_create_info_vk& info) {
   skity_context handle = nullptr;
-  skity_result result = skity_context_create_vk_ex(&info, &handle);
-  if (result == SKITY_SUCCESS) {
-    out->reset(handle);
+  if (skity_context_create_vk_ex(&info, &handle) != SKITY_SUCCESS) {
+    return nullptr;
   }
-  return result;
+  return detail::ContextCreate::New(handle);
 }
 
 }  // namespace skity

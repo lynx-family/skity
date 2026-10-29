@@ -38,8 +38,9 @@ class Typeface
   }
 
   /** Load a typeface from font data; data must outlive the typeface. */
-  static std::shared_ptr<Typeface> MakeFromData(skity_data data) {
-    auto handle = skity_typeface_make_from_data(data);
+  static std::shared_ptr<Typeface> MakeFromData(
+      const std::shared_ptr<Data>& data) {
+    auto handle = skity_typeface_make_from_data(data ? data->get() : nullptr);
     return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
                              : nullptr;
   }
@@ -67,8 +68,12 @@ class Typeface
     return skity_typeface_unichar_to_glyph(get(), unichar);
   }
 
-  /** Raw font file bytes; empty wrapper when none are accessible. */
-  Data GetData() const { return Data(skity_typeface_get_data(get())); }
+  /** Raw font file bytes; null when none are accessible. */
+  std::shared_ptr<Data> GetData() const {
+    auto handle = skity_typeface_get_data(get());
+    return handle != nullptr ? std::shared_ptr<Data>(new Data(handle))
+                             : nullptr;
+  }
 
   /** Font design units per em square (0 on an empty handle). */
   uint32_t GetUnitsPerEm() const {
@@ -292,8 +297,11 @@ class FontManager
     : public detail::OwnHandle<skity_font_manager, skity_font_manager_destroy> {
  public:
   /** Reference to the platform default manager (legacy naming). */
-  static FontManager RefDefault() {
-    return FontManager(skity_font_manager_ref_default());
+  static std::shared_ptr<FontManager> RefDefault() {
+    auto handle = skity_font_manager_ref_default();
+    return handle != nullptr
+               ? std::shared_ptr<FontManager>(new FontManager(handle))
+               : nullptr;
   }
 
   /** Number of known font families. */
@@ -315,14 +323,20 @@ class FontManager
     return name;
   }
 
-  /** Style set of the family at index; empty wrapper when out of range. */
-  FontStyleSet CreateStyleSet(int32_t index) const {
-    return FontStyleSet(skity_font_manager_create_style_set(get(), index));
+  /** Style set of the family at index; null when out of range. */
+  std::shared_ptr<FontStyleSet> CreateStyleSet(int32_t index) const {
+    auto handle = skity_font_manager_create_style_set(get(), index);
+    return handle != nullptr
+               ? std::shared_ptr<FontStyleSet>(new FontStyleSet(handle))
+               : nullptr;
   }
 
-  /** Style set of the named family; empty wrapper when not found. */
-  FontStyleSet MatchFamily(const char* name) const {
-    return FontStyleSet(skity_font_manager_match_family(get(), name));
+  /** Style set of the named family; null when not found. */
+  std::shared_ptr<FontStyleSet> MatchFamily(const char* name) const {
+    auto handle = skity_font_manager_match_family(get(), name);
+    return handle != nullptr
+               ? std::shared_ptr<FontStyleSet>(new FontStyleSet(handle))
+               : nullptr;
   }
 
   /** Typeface closest to style within name; null when not found. */
@@ -355,10 +369,10 @@ class FontManager
   }
 
   /** Load a typeface through this manager from in-memory font data. */
-  std::shared_ptr<Typeface> MakeFromData(const Data& data,
+  std::shared_ptr<Typeface> MakeFromData(const std::shared_ptr<Data>& data,
                                          int32_t ttc_index = 0) const {
-    auto handle =
-        skity_font_manager_make_from_data(get(), data.get(), ttc_index);
+    auto handle = skity_font_manager_make_from_data(
+        get(), data ? data->get() : nullptr, ttc_index);
     return handle != nullptr ? std::shared_ptr<Typeface>(new Typeface(handle))
                              : nullptr;
   }
@@ -570,8 +584,10 @@ class TextBlob
     : public detail::OwnHandle<skity_text_blob, skity_text_blob_destroy> {
  public:
   /** Layout text with the paint's text size and typeface. */
-  static TextBlob Make(const char* text, const Paint& paint) {
-    return TextBlob(skity_text_blob_create(text, paint.get()));
+  static std::shared_ptr<TextBlob> Make(const char* text, const Paint& paint) {
+    auto handle = skity_text_blob_create(text, paint.get());
+    return handle != nullptr ? std::shared_ptr<TextBlob>(new TextBlob(handle))
+                             : nullptr;
   }
 
   /**
@@ -579,10 +595,12 @@ class TextBlob
    * multi-font fallback (legacy TextBlobBuilder shape). A NULL delegate is
    * equivalent to Make.
    */
-  static TextBlob MakeWithDelegate(const char* text, const Paint& paint,
-                                   const TypefaceDelegate* delegate) {
-    return TextBlob(skity_text_blob_create_with_delegate(
-        text, paint.get(), delegate ? delegate->get() : nullptr));
+  static std::shared_ptr<TextBlob> MakeWithDelegate(
+      const char* text, const Paint& paint, const TypefaceDelegate* delegate) {
+    auto handle = skity_text_blob_create_with_delegate(
+        text, paint.get(), delegate ? delegate->get() : nullptr);
+    return handle != nullptr ? std::shared_ptr<TextBlob>(new TextBlob(handle))
+                             : nullptr;
   }
 
   /**
@@ -590,11 +608,15 @@ class TextBlob
    * their own shaping and inject glyph ids + positions). Arrays hold
    * count elements; pos_x/pos_y may be NULL for natural advances.
    */
-  static TextBlob MakeFromGlyphs(const Font& font, const uint16_t* glyph_ids,
-                                 const float* pos_x, const float* pos_y,
-                                 size_t count) {
-    return TextBlob(skity_text_blob_create_from_glyphs(font.get(), glyph_ids,
-                                                       pos_x, pos_y, count));
+  static std::shared_ptr<TextBlob> MakeFromGlyphs(const Font& font,
+                                                  const uint16_t* glyph_ids,
+                                                  const float* pos_x,
+                                                  const float* pos_y,
+                                                  size_t count) {
+    auto handle = skity_text_blob_create_from_glyphs(font.get(), glyph_ids,
+                                                     pos_x, pos_y, count);
+    return handle != nullptr ? std::shared_ptr<TextBlob>(new TextBlob(handle))
+                             : nullptr;
   }
 
   /** Bounding box of a glyph run without building a blob. */

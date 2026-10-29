@@ -8,6 +8,7 @@
 #include <skity/c/skity_data.h>
 
 #include <cstddef>
+#include <memory>
 #include <skity/base.hpp>
 
 namespace skity {
@@ -21,8 +22,10 @@ namespace skity {
 class Data : public detail::OwnHandle<skity_data, skity_data_destroy> {
  public:
   /** Copy the first length bytes of data into a new buffer. */
-  static Data MakeWithCopy(const void* data, size_t length) {
-    return Data(skity_data_make_with_copy(data, length));
+  static std::shared_ptr<Data> MakeWithCopy(const void* data, size_t length) {
+    auto handle = skity_data_make_with_copy(data, length);
+    return handle != nullptr ? std::shared_ptr<Data>(new Data(handle))
+                             : nullptr;
   }
 
   /**
@@ -30,18 +33,27 @@ class Data : public detail::OwnHandle<skity_data, skity_data_destroy> {
    * the buffer's last reference goes away — the place to unlock/free the
    * source. ptr must stay valid until then.
    */
-  static Data MakeWithProc(const void* ptr, size_t length,
-                           skity_data_release_proc proc, void* context) {
-    return Data(skity_data_make_with_proc(ptr, length, proc, context));
+  static std::shared_ptr<Data> MakeWithProc(const void* ptr, size_t length,
+                                            skity_data_release_proc proc,
+                                            void* context) {
+    auto handle = skity_data_make_with_proc(ptr, length, proc, context);
+    return handle != nullptr ? std::shared_ptr<Data>(new Data(handle))
+                             : nullptr;
   }
 
   /** Load a whole file into memory; empty wrapper on failure. */
-  static Data MakeFromFile(const char* path) {
-    return Data(skity_data_make_from_file(path));
+  static std::shared_ptr<Data> MakeFromFileName(const char* path) {
+    auto handle = skity_data_make_from_file(path);
+    return handle != nullptr ? std::shared_ptr<Data>(new Data(handle))
+                             : nullptr;
   }
 
   /** Shared, always-valid empty buffer. */
-  static Data MakeEmpty() { return Data(skity_data_make_empty()); }
+  static std::shared_ptr<Data> MakeEmpty() {
+    auto handle = skity_data_make_empty();
+    return handle != nullptr ? std::shared_ptr<Data>(new Data(handle))
+                             : nullptr;
+  }
 
   /** Number of bytes stored. */
   size_t GetSize() const { return skity_data_get_size(get()); }

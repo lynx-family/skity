@@ -7,6 +7,7 @@
 
 #include <skity/c/skity_surface_vk.h>
 
+#include <memory>
 #include <skity/gpu/surface.hpp>
 
 namespace skity {
@@ -17,17 +18,16 @@ namespace skity {
  * Surface::Create. base carries the geometry / sample count; ext the
  * VkImage / format / layout / external sync description.
  */
-inline skity_result CreateVkSurface(const Context& context,
-                                    const skity_surface_create_info& base,
-                                    const skity_surface_create_info_vk& ext,
-                                    Surface* out) {
+inline std::unique_ptr<Surface> CreateVkSurface(
+    const Context& context, const skity_surface_create_info& base,
+    const skity_surface_create_info_vk& ext) {
   skity_surface_create_info_vk chained = ext;
   chained.s_type = SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_VK;
   chained.p_next = nullptr;
   skity_surface_create_info info = base;
   info.s_type = SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
   info.p_next = &chained;
-  return Surface::Create(context, info, out);
+  return Surface::Create(context, info);
 }
 
 }  // namespace skity

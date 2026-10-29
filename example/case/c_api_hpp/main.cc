@@ -39,13 +39,13 @@ void* GetGLProc(const char* name) {
 bool SavePNG(const skity::DisplayList& scene, const char* path, uint32_t width,
              uint32_t height) {
   skity::Bitmap bitmap(width, height);
-  skity::SoftwareCanvas canvas(bitmap.get());
-  canvas.DrawColor(skity::Color_WHITE, skity::BlendMode::kSrc);
-  scene.Draw(canvas);
-  canvas.Flush();
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+  canvas->DrawColor(skity::Color_WHITE, skity::BlendMode::kSrc);
+  scene.Draw(*canvas);
+  canvas->Flush();
 
-  skity::Pixmap pixels = bitmap.GetPixmap();
-  skity_data png = skity_codec_encode(pixels.get(), SKITY_CODEC_TYPE_PNG);
+  auto pixels = bitmap.GetPixmap();
+  skity_data png = skity_codec_encode(pixels->get(), SKITY_CODEC_TYPE_PNG);
   if (png == nullptr) {
     std::fprintf(stderr, "skity_codec_encode failed\n");
     return false;
@@ -213,7 +213,7 @@ void DrawSimpleText(skity::Canvas* canvas,
   // factories on the wrapper: MakeWithDelegate threads the fallback through
   // (raw delegate pointer, the legacy builder shape). The fallback delegate
   // stays alive for as long as the blob draws.
-  auto draw_text = [&](const skity::TextBlob& blob) {
+  auto draw_text = [&](const std::shared_ptr<skity::TextBlob>& blob) {
     canvas->DrawTextBlob(blob, 20.f, 64.f, paint);
 
     paint.SetStyle(skity::Paint::kStroke_Style);
@@ -344,9 +344,9 @@ int main(int argc, char** argv) {
   }
   glfwMakeContextCurrent(window);
 
-  // -- skity GL context (RAII: destroyed automatically in reverse order) --
-  skity::Context context;
-  if (skity::Context::CreateGL(&GetGLProc, &context) != SKITY_SUCCESS) {
+  // -- skity GL context (the legacy GLContextCreate shape, RAII-owned) --
+  auto context = skity::Context::CreateGL(&GetGLProc);
+  if (context == nullptr) {
     std::fprintf(stderr, "skity::Context::CreateGL failed\n");
     return 1;
   }
@@ -360,14 +360,14 @@ int main(int argc, char** argv) {
   }
 #endif
   skity::FontStyle normal_style{400, 5, SKITY_FONT_SLANT_UPRIGHT};
-  skity::FontManager font_manager = skity::FontManager::RefDefault();
-  auto cjk = font_manager.MatchFamilyStyleCharacter(
+  auto font_manager = skity::FontManager::RefDefault();
+  auto cjk = font_manager->MatchFamilyStyleCharacter(
       nullptr, normal_style, nullptr, 0, 0x7ECF /* 界 */);
 #ifdef SKITY_FONT_DIR
   if (!cjk) {
     // No system CJK face available (e.g. macOS without the CoreText
     // backend): fall back to the bundled Noto Sans CJK collection.
-    cjk = font_manager.MakeFromFile(
+    cjk = font_manager->MakeFromFile(
         SKITY_FONT_DIR "fonts/resources/NotoSansCJK-Regular.ttc", 0);
   }
 #endif
@@ -377,15 +377,15 @@ int main(int argc, char** argv) {
   recorder.BeginRecording(skity::Rect::MakeWH(1000.f, 800.f));
   skity::Canvas recording_canvas = recorder.GetRecordingCanvas();
   DrawScene(&recording_canvas, primary, cjk);
-  skity::DisplayList scene = recorder.FinishRecording();
-  if (!scene) {
+  auto scene = recorder.FinishRecording();
+  if (scene == nullptr) {
     std::fprintf(stderr, "FinishRecording failed\n");
     return 1;
   }
-  std::printf("recorded %u draw ops\n", scene.GetOpCount());
+  std::printf("recorded %u draw ops\n", scene->GetOpCount());
 
   // -- surface bound to the default framebuffer (gl_id = 0) --
-  auto create_surface = [&](skity::Surface* out) {
+  auto create_surface = [&](std::unique_ptr<skity::Surface>* out) {
     int fbw = 0, fbh = 0, winw = 0, winh = 0;
     glfwGetFramebufferSize(window, &fbw, &fbh);
     glfwGetWindowSize(window, &winw, &winh);
@@ -404,12 +404,12 @@ int main(int argc, char** argv) {
     info.sample_count = 4;
     info.content_scale = ContentScale(window);
 
-    skity::Surface::Create(context, info, out);
+    *out = skity::Surface::Create(*context, info);
   };
 
-  skity::Surface surface;
+  std::unique_ptr<skity::Surface> surface;
   create_surface(&surface);
-  if (!surface) {
+  if (surface == nullptr) {
     std::fprintf(stderr, "skity::Surface::Create failed\n");
     return 1;
   }
@@ -418,29 +418,29 @@ int main(int argc, char** argv) {
   uint32_t winw = 0, winh = 0;
   while (glfwWindowShouldClose(window) == GLFW_FALSE) {
     // Recreate the surface when the window size changes.
-    if (surface.GetWidth() != winw || surface.GetHeight() != winh) {
+    if (surface->GetWidth() != winw || surface->GetHeight() != winh) {
       int cur_w = 0, cur_h = 0;
       glfwGetWindowSize(window, &cur_w, &cur_h);
       winw = static_cast<uint32_t>(cur_w);
       winh = static_cast<uint32_t>(cur_h);
-      surface = skity::Surface();
+      surface.reset();
       create_surface(&surface);
-      if (!surface) {
+      if (surface == nullptr) {
         std::fprintf(stderr, "surface recreation failed\n");
         break;
       }
     }
 
-    skity::Canvas canvas = surface.LockCanvas(true);
+    skity::Canvas canvas = surface->LockCanvas(true);
 
     canvas.DrawColor(skity::Color_WHITE, skity::BlendMode::kSrc);
-    scene.Draw(canvas);
+    scene->Draw(canvas);
 
     canvas.Flush();
-    surface.Flush();
+    surface->Flush();
 
     if (frames > 0 && frames == 1 && save_path != nullptr) {
-      SavePNG(scene, save_path, surface.GetWidth(), surface.GetHeight());
+      SavePNG(*scene, save_path, surface->GetWidth(), surface->GetHeight());
     }
 
     glfwSwapBuffers(window);

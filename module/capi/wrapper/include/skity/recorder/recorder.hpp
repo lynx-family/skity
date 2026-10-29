@@ -8,6 +8,7 @@
 #include <skity/c/skity_recorder.h>
 
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/render/canvas.hpp>
@@ -181,10 +182,12 @@ class PictureRecorder
    * Finish recording and produce the display list; invalidates the recording
    * canvas view. Returns an empty wrapper when recording has not begun.
    */
-  DisplayList FinishRecording() {
+  std::unique_ptr<DisplayList> FinishRecording() {
     skity_display_list out = nullptr;
-    skity_result result = skity_picture_recorder_finish(get(), &out);
-    return result == SKITY_SUCCESS ? DisplayList(out) : DisplayList(nullptr);
+    if (skity_picture_recorder_finish(get(), &out) != SKITY_SUCCESS) {
+      return nullptr;
+    }
+    return std::unique_ptr<DisplayList>(new DisplayList(out));
   }
 };
 
