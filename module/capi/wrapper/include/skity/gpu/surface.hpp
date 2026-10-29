@@ -37,12 +37,14 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
   static Surface Adopt(skity_surface handle) { return Surface(handle); }
 
   /**
-   * Lock the canvas for the current frame. The returned view (and the
-   * underlying canvas) stays valid until the next LockCanvas call or
-   * until the surface is destroyed. Call Canvas::Flush, then Flush().
+   * Lock the canvas for the current frame (the legacy Canvas* LockCanvas
+   * shape). The returned pointer (and the underlying canvas) stays valid
+   * until the next LockCanvas call or until the surface is destroyed;
+   * null on failure. Call Canvas::Flush, then Flush().
    */
-  Canvas LockCanvas(bool clear = true) {
-    return Canvas(skity_surface_lock_canvas(get(), clear ? 1u : 0u));
+  Canvas* LockCanvas(bool clear = true) {
+    canvas_ = Canvas(skity_surface_lock_canvas(get(), clear ? 1u : 0u));
+    return canvas_ ? &canvas_ : nullptr;
   }
 
   /** Present the rendering result; the canvas must be flushed first. */
@@ -79,6 +81,9 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
 
  private:
   explicit Surface(skity_surface h) : OwnHandle(h) {}
+
+  /** Borrowed canvas view handed out by LockCanvas (one per surface). */
+  Canvas canvas_;
   friend struct detail::SurfaceCreate;
   friend class GPUPresenter;
 };

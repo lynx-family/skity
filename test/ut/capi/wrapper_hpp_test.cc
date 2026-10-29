@@ -526,17 +526,17 @@ TEST(WrapperHpp, RecordAndReplay) {
   DisplayListBuildOptions options;
   options.build_rtree = true;
   recorder.BeginRecording(kBounds, options);
-  Canvas canvas = recorder.GetRecordingCanvas();
+  Canvas* canvas = recorder.GetRecordingCanvas();
   ASSERT_TRUE(canvas);
 
   Paint paint = RedStrokePaint();
-  canvas.DrawRect(Rect::MakeXYWH(10.f, 10.f, 20.f, 20.f), paint);
+  canvas->DrawRect(Rect::MakeXYWH(10.f, 10.f, 20.f, 20.f), paint);
   int32_t rect_offset = recorder.GetLastOpOffset();
   EXPECT_GE(rect_offset, 0);
 
   Path path;
   path.AddCircle(60.f, 60.f, 10.f);
-  canvas.DrawPath(path, Paint());
+  canvas->DrawPath(path, Paint());
   int32_t circle_offset = recorder.GetLastOpOffset();
   EXPECT_GT(circle_offset, rect_offset);
 
@@ -557,7 +557,7 @@ TEST(WrapperHpp, RecordAndReplay) {
 
   PictureRecorder replay_target;
   replay_target.BeginRecording(kBounds);
-  Canvas target = replay_target.GetRecordingCanvas();
+  Canvas* target = replay_target.GetRecordingCanvas();
   // The cull rect misses the circle at (50..70, 50..70): partial replay.
   list->Draw(target, Rect::MakeXYWH(0.f, 0.f, 30.f, 30.f));
   auto partial = replay_target.FinishRecording();
