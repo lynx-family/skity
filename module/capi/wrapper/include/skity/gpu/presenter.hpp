@@ -5,7 +5,7 @@
 #ifndef MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_PRESENTER_HPP
 #define MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_PRESENTER_HPP
 
-#include <skity/c/skity_native_window_vk.h>
+#include <skity/c/skity_presenter_vk.h>
 
 #include <cstdint>
 #include <memory>
@@ -56,7 +56,7 @@ struct GPUSurfaceAcquireResult {
  * @class GPUPresenter
  *
  * The legacy GPUPresenter, RAII-wrapped over the VK presenter entries
- * (skity_native_window_vk): acquires one-shot render surfaces and presents
+ * (skity_presenter_vk): acquires one-shot render surfaces and presents
  * them. Only one surface may be outstanding; present it before acquiring
  * again. Resize / GetWidth / GetHeight are C-side additions without legacy
  * counterparts (the legacy presenter had to be recreated on size changes);
@@ -64,8 +64,7 @@ struct GPUSurfaceAcquireResult {
  *
  */
 class GPUPresenter
-    : public detail::OwnHandle<skity_native_window_vk,
-                               skity_native_window_destroy_vk> {
+    : public detail::OwnHandle<skity_presenter_vk, skity_presenter_destroy_vk> {
  public:
   /**
    * Create a presenter + initial swapchain; null on failure. This stands in
@@ -74,16 +73,15 @@ class GPUPresenter
    * Context member.
    */
   static std::unique_ptr<GPUPresenter> Create(
-      const Context& context,
-      const skity_native_window_create_info_vk& info) {
-    auto handle = skity_native_window_create_vk(context.get(), &info);
+      const Context& context, const skity_presenter_create_info_vk& info) {
+    auto handle = skity_presenter_create_vk(context.get(), &info);
     return handle != nullptr
                ? std::unique_ptr<GPUPresenter>(new GPUPresenter(handle))
                : nullptr;
   }
 
   /** Wrap a handle created through the raw C API. */
-  static GPUPresenter Adopt(skity_native_window_vk handle) {
+  static GPUPresenter Adopt(skity_presenter_vk handle) {
     return GPUPresenter(handle);
   }
 
@@ -96,7 +94,7 @@ class GPUPresenter
       const GPUSurfaceAcquireDescriptor& desc) {
     GPUSurfaceAcquireResult result;
     skity_surface handle = nullptr;
-    skity_result raw = skity_native_window_acquire_next_surface_vk(
+    skity_result raw = skity_presenter_acquire_next_surface_vk(
         get(), desc.sample_count, desc.content_scale, &handle);
     result.status = presenter_status_of(raw);
     if (raw == SKITY_SUCCESS) {
@@ -115,7 +113,7 @@ class GPUPresenter
       return GPUPresenterStatus::kError;
     }
     skity_surface handle = surface->get();
-    skity_result raw = skity_native_window_present_vk(get(), &handle);
+    skity_result raw = skity_presenter_present_vk(get(), &handle);
     if (raw == SKITY_SUCCESS || raw == SKITY_ERROR_NEED_RECREATE) {
       (void)surface->release();
     }
@@ -123,23 +121,21 @@ class GPUPresenter
   }
 
   /** Presenter width in pixels (C-side addition). */
-  uint32_t GetWidth() const { return skity_native_window_get_width_vk(get()); }
+  uint32_t GetWidth() const { return skity_presenter_get_width_vk(get()); }
 
   /** Presenter height in pixels (C-side addition). */
-  uint32_t GetHeight() const {
-    return skity_native_window_get_height_vk(get());
-  }
+  uint32_t GetHeight() const { return skity_presenter_get_height_vk(get()); }
 
   /** Recreate the swapchain for a new physical size (C-side addition). */
   skity_result Resize(uint32_t width, uint32_t height) {
-    return skity_native_window_resize_vk(get(), width, height);
+    return skity_presenter_resize_vk(get(), width, height);
   }
 
   /** Empty presenter (e.g. awaiting a Create result). */
   GPUPresenter() = default;
 
  private:
-  explicit GPUPresenter(skity_native_window_vk h) : OwnHandle(h) {}
+  explicit GPUPresenter(skity_presenter_vk h) : OwnHandle(h) {}
 };
 
 }  // namespace skity

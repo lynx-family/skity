@@ -76,7 +76,7 @@ TEST(WrapperVkHpp, PresenterLifecycleValidation) {
 
   // Creation with a null context fails cleanly.
   Context null_context;
-  skity_native_window_create_info_vk info = {};
+  skity_presenter_create_info_vk info = {};
   EXPECT_EQ(GPUPresenter::Create(null_context, info), nullptr);
 
   // Adopting a raw NULL handle is equally safe.
