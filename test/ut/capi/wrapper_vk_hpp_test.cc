@@ -8,6 +8,8 @@
 // full create / present flow is exercised by the golden Vulkan tests; this
 // TU belongs to the unified-only skity_wrapper_unit_test binary.
 
+#include <skity/c/skity_surface_vk.h>
+#include <skity/c/skity_texture_vk.h>
 #include <vulkan/vulkan.h>
 
 #include <skity/skity_vk.hpp>
@@ -18,11 +20,8 @@ namespace {
 
 using skity::Context;
 using skity::CreateVkContext;
-using skity::CreateVkSurface;
 using skity::NativeWindowVk;
 using skity::Surface;
-using skity::Texture;
-using skity::WrapVkTexture;
 
 }  // namespace
 
@@ -36,16 +35,26 @@ TEST(WrapperVkHpp, ContextFactoriesValidateArguments) {
   EXPECT_EQ(CreateVkContext(info), nullptr);
 }
 
-TEST(WrapperVkHpp, ChainHelpersRejectNullContext) {
-  Context context;  // empty (null) context
+TEST(WrapperVkHpp, ChainedCreateInfoRejectsNullContext) {
+  // The VK CreateInfo structs are plain p_next chains (there are no VK
+  // chaining helpers): chain the extension and go through the neutral
+  // members — both fail cleanly on the empty context.
+  Context context;
 
-  skity_surface_create_info base = {};
   skity_surface_create_info_vk ext = {};
-  EXPECT_EQ(CreateVkSurface(context, base, ext), nullptr);
+  ext.s_type = SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_VK;
+  skity_surface_create_info base = {};
+  base.s_type = SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
+  base.p_next = &ext;
+  EXPECT_EQ(context.CreateSurface(base), nullptr);
 
-  skity_backend_texture_info tex_base = {};
   skity_backend_texture_info_vk tex_ext = {};
-  EXPECT_EQ(WrapVkTexture(context, tex_base, tex_ext), nullptr);
+  tex_ext.s_type = SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_VK;
+  skity_backend_texture_info tex_base = {};
+  tex_base.s_type = SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO;
+  tex_base.p_next = &tex_ext;
+  tex_base.backend = SKITY_GPU_BACKEND_TYPE_VULKAN;
+  EXPECT_EQ(context.WrapTexture(tex_base), nullptr);
 }
 
 TEST(WrapperVkHpp, NativeWindowLifecycleValidation) {

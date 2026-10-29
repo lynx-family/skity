@@ -476,17 +476,21 @@ shared_ptr. All other wrappers own uniquely and remain move-only.
 | `skity_glyph` | `text/glyph.hpp` | `GlyphData` non-owning views over the global glyph cache (metrics / bearings / outline path / bitmap description), `GlyphFormat` / `BitmapFormat` enums, `GlyphBitmap` POD passthrough |
 | `skity_recorder` | `recorder/recorder.hpp` | `PictureRecorder` (+ build options, last-op offset) and `DisplayList` (draw / cull-rect draw / bounds / op count / properties / rtree search / per-op paint mutation) |
 
-Vulkan-only domains have their own opt-in wrapper headers, aggregated by
+Only what CANNOT live on the neutral layer stays VK-gated, aggregated by
 `skity_vk.hpp` and deliberately kept OUT of `skity.hpp` so GL / CPU
 consumers never see `<vulkan/vulkan.h>`:
 
 | C domain | Wrapper | Notes |
 |---|---|---|
-| `skity_context_vk` | `skity_context_vk.hpp` | free functions `CreateVkContext` ×2 (own instance/device, or caller-provided state via `skity_context_create_info_vk`) |
-| `skity_surface_vk` | `skity_surface_vk.hpp` | `CreateVkSurface` — chains the VK CreateInfo extension into the neutral base info (s_type set automatically) |
-| `skity_texture_vk` | `skity_texture_vk.hpp` | `WrapVkTexture` — wraps an existing VkImage (+ view) as a `Texture` |
-| `skity_native_window_vk` | `skity_native_window_vk.hpp` | `NativeWindowVk` presenter lifecycle (create / resize / size queries / `AcquireNextSurface` / `Present` with handle-consumption semantics) |
-| `skity_semaphore_vk` | `skity_semaphore_vk.hpp` | `ImportVkSyncFd` — sync-fd import chaining the VK extension into the neutral import |
+| `skity_context_vk` | `skity_context_vk.hpp` | free functions `CreateVkContext` ×2 (own instance/device, or caller-provided state via `skity_context_create_info_vk`) — the C entries carry Vulkan-typed signatures, so they cannot become neutral `Context` members |
+| `skity_native_window_vk` | `skity_native_window_vk.hpp` | `NativeWindowVk` presenter lifecycle (create / resize / size queries / `AcquireNextSurface` / `Present` consuming a `unique_ptr<Surface>`) — the VK counterpart of the legacy GPUPresenter |
+
+`skity_surface_vk` / `skity_texture_vk` / `skity_semaphore_vk` have NO
+wrappers: the CreateInfo structs are already Vulkan-style `p_next`
+chains, so consumers chain the extension themselves (setting `s_type`,
+plus `backend = SKITY_GPU_BACKEND_TYPE_VULKAN` for backend-texture wraps)
+and call the neutral `Context::CreateSurface` / `WrapTexture` /
+`Semaphore::Import` — the C headers document the chain recipes.
 
 A VK consumer includes `<skity/skity_vk.hpp>` (which also pulls in the
 whole neutral layer). Raw C handles acquired outside the RAII layer can
