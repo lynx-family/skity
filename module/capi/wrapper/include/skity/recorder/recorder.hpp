@@ -57,9 +57,12 @@ class DisplayList
     kImageFilter = SKITY_DISPLAY_LIST_PROPERTY_IMAGE_FILTER,
   };
 
-  /** Replay the whole list onto canvas. */
-  void Draw(const Canvas& canvas) const {
-    skity_display_list_draw(get(), canvas.get());
+  /** Replay the whole list onto canvas (the legacy Canvas* shape). */
+  void Draw(Canvas* canvas) const {
+    if (canvas == nullptr) {
+      return;
+    }
+    skity_display_list_draw(get(), canvas->get());
   }
 
   /**
@@ -68,8 +71,11 @@ class DisplayList
    * build_rtree recording; otherwise falls back to a whole-list replay. An
    * empty rect draws nothing.
    */
-  void Draw(const Canvas& canvas, const Rect& cull_rect) const {
-    skity_display_list_draw_with_cull_rect(get(), canvas.get(), &cull_rect);
+  void Draw(Canvas* canvas, const Rect& cull_rect) const {
+    if (canvas == nullptr) {
+      return;
+    }
+    skity_display_list_draw_with_cull_rect(get(), canvas->get(), &cull_rect);
   }
 
   /** Cull bounds of the recorded content. */
@@ -161,12 +167,13 @@ class PictureRecorder
   }
 
   /**
-   * The recording canvas (borrowed view, owned by the recorder); stays
-   * valid until FinishRecording or destruction. NULL-view when recording
-   * has not begun.
+   * The recording canvas (the legacy pointer shape — the legacy returns
+   * its RecordingCanvas subclass). The borrowed view stays valid until
+   * FinishRecording or destruction; null when recording has not begun.
    */
-  Canvas GetRecordingCanvas() const {
-    return Canvas(skity_picture_recorder_get_canvas(get()));
+  Canvas* GetRecordingCanvas() {
+    canvas_ = Canvas(skity_picture_recorder_get_canvas(get()));
+    return canvas_ ? &canvas_ : nullptr;
   }
 
   /**
@@ -180,7 +187,7 @@ class PictureRecorder
 
   /**
    * Finish recording and produce the display list; invalidates the recording
-   * canvas view. Returns an empty wrapper when recording has not begun.
+   * canvas view. Returns null when recording has not begun.
    */
   std::unique_ptr<DisplayList> FinishRecording() {
     skity_display_list out = nullptr;
@@ -189,6 +196,10 @@ class PictureRecorder
     }
     return std::unique_ptr<DisplayList>(new DisplayList(out));
   }
+
+ private:
+  /** Borrowed canvas view handed out by GetRecordingCanvas. */
+  Canvas canvas_;
 };
 
 }  // namespace skity

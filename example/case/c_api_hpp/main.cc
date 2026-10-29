@@ -36,12 +36,12 @@ void* GetGLProc(const char* name) {
 // GPU-to-CPU readback today, and a CPU replay is deterministic). The
 // skity-data / skity-pixmap handles are shared across libskity and
 // libskity-codec, so the RAII layer interops with the raw codec ABI.
-bool SavePNG(const skity::DisplayList& scene, const char* path, uint32_t width,
-             uint32_t height) {
+bool SavePNG(const std::unique_ptr<skity::DisplayList>& scene, const char* path,
+             uint32_t width, uint32_t height) {
   skity::Bitmap bitmap(width, height);
   auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
   canvas->DrawColor(skity::Color_WHITE, skity::BlendMode::kSrc);
-  scene.Draw(*canvas);
+  scene->Draw(canvas.get());
   canvas->Flush();
 
   auto pixels = bitmap.GetPixmap();
@@ -375,8 +375,8 @@ int main(int argc, char** argv) {
   // -- record the static scene once, replay it every frame --
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(1000.f, 800.f));
-  skity::Canvas recording_canvas = recorder.GetRecordingCanvas();
-  DrawScene(&recording_canvas, primary, cjk);
+  skity::Canvas* recording_canvas = recorder.GetRecordingCanvas();
+  DrawScene(recording_canvas, primary, cjk);
   auto scene = recorder.FinishRecording();
   if (scene == nullptr) {
     std::fprintf(stderr, "FinishRecording failed\n");
@@ -431,16 +431,16 @@ int main(int argc, char** argv) {
       }
     }
 
-    skity::Canvas canvas = surface->LockCanvas(true);
+    skity::Canvas* canvas = surface->LockCanvas(true);
 
-    canvas.DrawColor(skity::Color_WHITE, skity::BlendMode::kSrc);
+    canvas->DrawColor(skity::Color_WHITE, skity::BlendMode::kSrc);
     scene->Draw(canvas);
 
-    canvas.Flush();
+    canvas->Flush();
     surface->Flush();
 
     if (frames > 0 && frames == 1 && save_path != nullptr) {
-      SavePNG(*scene, save_path, surface->GetWidth(), surface->GetHeight());
+      SavePNG(scene, save_path, surface->GetWidth(), surface->GetHeight());
     }
 
     glfwSwapBuffers(window);
