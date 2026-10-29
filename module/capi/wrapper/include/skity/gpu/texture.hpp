@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 #include <skity/gpu/context.hpp>
 #include <skity/types.hpp>
@@ -34,17 +35,22 @@ class Texture : public detail::OwnHandle<skity_texture, skity_texture_destroy> {
   };
 
   /** Allocate a texture on context's backend; empty on failure. */
-  static Texture Create(const Context& context, Format format, uint32_t width,
-                        uint32_t height, AlphaType alpha_type) {
-    return Adopt(skity_texture_create(
+  static std::shared_ptr<Texture> Create(const Context& context, Format format,
+                                         uint32_t width, uint32_t height,
+                                         AlphaType alpha_type) {
+    auto handle = skity_texture_create(
         context.get(), static_cast<skity_texture_format>(format), width, height,
-        static_cast<skity_alpha_type>(alpha_type)));
+        static_cast<skity_alpha_type>(alpha_type));
+    return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
+                             : nullptr;
   }
 
   /** Create from a full descriptor (mipmap control); empty on failure. */
-  static Texture CreateWithDesc(const Context& context,
-                                const skity_texture_descriptor& desc) {
-    return Adopt(skity_texture_create_with_desc(context.get(), &desc));
+  static std::shared_ptr<Texture> CreateWithDesc(
+      const Context& context, const skity_texture_descriptor& desc) {
+    auto handle = skity_texture_create_with_desc(context.get(), &desc);
+    return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
+                             : nullptr;
   }
 
   /**
@@ -53,12 +59,14 @@ class Texture : public detail::OwnHandle<skity_texture, skity_texture_destroy> {
    * / skity_backend_texture_info_vk). release (with userdata) fires
    * when skity drops its last reference; may be null.
    */
-  static Texture CreateFromBackend(
+  static std::shared_ptr<Texture> CreateFromBackend(
       const Context& context, const skity_backend_texture_info& info,
       skity_texture_release_callback release = nullptr,
       void* userdata = nullptr) {
-    return Adopt(skity_texture_create_from_backend(context.get(), &info,
-                                                   release, userdata));
+    auto handle = skity_texture_create_from_backend(context.get(), &info,
+                                                    release, userdata);
+    return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
+                             : nullptr;
   }
 
   /** Wrap an existing handle created through the raw C API. */

@@ -9,9 +9,13 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 
 namespace skity {
+namespace detail {
+struct ContextCreate;
+}  // namespace detail
 
 /**
  * @class Context
@@ -25,20 +29,16 @@ class Context : public detail::OwnHandle<skity_context, skity_context_destroy> {
   Context() = default;
 
   /**
-   * Create an OpenGL / OpenGL ES context. get_proc loads GL symbol
-   * addresses (glad GLADloadfunc contract); a live GL context is required.
-   * On failure out is left empty and the result code is returned.
+   * Create an OpenGL / OpenGL ES context (the legacy GLContextCreate
+   * shape). get_proc loads GL symbol addresses (glad GLADloadfunc
+   * contract); a live GL context is required. Null on failure.
    */
-  static skity_result CreateGL(skity_gl_get_proc get_proc, Context* out) {
-    if (out == nullptr) {
-      return SKITY_ERROR_INVALID_ARGUMENT;
-    }
+  static std::unique_ptr<Context> CreateGL(skity_gl_get_proc get_proc) {
     skity_context handle = nullptr;
-    skity_result result = skity_context_create_gl(get_proc, &handle);
-    if (result == SKITY_SUCCESS) {
-      out->reset(handle);
+    if (skity_context_create_gl(get_proc, &handle) != SKITY_SUCCESS) {
+      return nullptr;
     }
-    return result;
+    return std::unique_ptr<Context>(new Context(handle));
   }
 
   /**
@@ -125,7 +125,19 @@ class Context : public detail::OwnHandle<skity_context, skity_context_destroy> {
 
  private:
   explicit Context(skity_context h) : OwnHandle(h) {}
+  friend struct detail::ContextCreate;
 };
+
+namespace detail {
+/** Internal: backend creation helpers (skity_vk / mtl headers) construct
+ *  through here — friending those free functions directly would drag
+ *  Vulkan / Objective-C types into this neutral header. */
+struct ContextCreate {
+  static std::unique_ptr<Context> New(skity_context h) {
+    return std::unique_ptr<Context>(new Context(h));
+  }
+};
+}  // namespace detail
 
 }  // namespace skity
 

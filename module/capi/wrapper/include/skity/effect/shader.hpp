@@ -85,13 +85,14 @@ class Shader : public detail::OwnHandle<skity_shader, skity_shader_destroy> {
    * An empty image yields an empty wrapper.
    */
   static std::shared_ptr<Shader> MakeShader(
-      const Image& image, const SamplingOptions& sampling = SamplingOptions(),
+      const std::shared_ptr<Image>& image,
+      const SamplingOptions& sampling = SamplingOptions(),
       TileMode x_tile_mode = TileMode::kClamp,
       TileMode y_tile_mode = TileMode::kClamp,
       const Matrix& local_matrix = Matrix()) {
-    auto handle =
-        skity_shader_create_image(image.get(), &sampling, to_c(x_tile_mode),
-                                  to_c(y_tile_mode), &local_matrix);
+    auto handle = skity_shader_create_image(image ? image->get() : nullptr,
+                                            &sampling, to_c(x_tile_mode),
+                                            to_c(y_tile_mode), &local_matrix);
     return handle != nullptr ? std::shared_ptr<Shader>(new Shader(handle))
                              : nullptr;
   }

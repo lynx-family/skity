@@ -27,15 +27,13 @@ using skity::WrapVkTexture;
 }  // namespace
 
 TEST(WrapperVkHpp, ContextFactoriesValidateArguments) {
-  Context context;
-  EXPECT_EQ(CreateVkContext(nullptr, &context), SKITY_ERROR_INVALID_ARGUMENT);
-  EXPECT_FALSE(context);
+  // A null proc-address loader is rejected by the C layer (null result).
+  EXPECT_EQ(CreateVkContext(nullptr), nullptr);
 
   // A supplied logical device without its proc-address loader is rejected.
   skity_context_create_info_vk info = {};
   info.logical_device = reinterpret_cast<VkDevice>(0x1);
-  EXPECT_EQ(CreateVkContext(info, &context), SKITY_ERROR_INVALID_ARGUMENT);
-  EXPECT_FALSE(context);
+  EXPECT_EQ(CreateVkContext(info), nullptr);
 }
 
 TEST(WrapperVkHpp, ChainHelpersRejectNullContext) {
@@ -43,18 +41,11 @@ TEST(WrapperVkHpp, ChainHelpersRejectNullContext) {
 
   skity_surface_create_info base = {};
   skity_surface_create_info_vk ext = {};
-  Surface surface;
-  EXPECT_EQ(CreateVkSurface(context, base, ext, &surface),
-            SKITY_ERROR_INVALID_HANDLE);
-  EXPECT_FALSE(surface);
+  EXPECT_EQ(CreateVkSurface(context, base, ext), nullptr);
 
   skity_backend_texture_info tex_base = {};
   skity_backend_texture_info_vk tex_ext = {};
-  Texture texture = WrapVkTexture(context, tex_base, tex_ext);
-  EXPECT_FALSE(texture);
-  // Null-safe accessors on the empty wrapper.
-  EXPECT_EQ(texture.GetWidth(), 0u);
-  EXPECT_EQ(texture.GetHeight(), 0u);
+  EXPECT_EQ(WrapVkTexture(context, tex_base, tex_ext), nullptr);
 }
 
 TEST(WrapperVkHpp, NativeWindowLifecycleValidation) {
@@ -64,14 +55,14 @@ TEST(WrapperVkHpp, NativeWindowLifecycleValidation) {
   EXPECT_EQ(window.Resize(100, 100), SKITY_ERROR_INVALID_HANDLE);
   EXPECT_FALSE(window);
 
-  Surface surface;
+  std::unique_ptr<Surface> surface;
   EXPECT_EQ(window.AcquireNextSurface(1, 1.f, &surface),
             SKITY_ERROR_INVALID_HANDLE);
   EXPECT_FALSE(surface);
 
   // Present requires a non-empty surface; the empty wrapper is rejected
   // without touching the (null) window handle.
-  EXPECT_EQ(window.Present(&surface), SKITY_ERROR_INVALID_HANDLE);
+  EXPECT_EQ(window.Present(std::move(surface)), SKITY_ERROR_INVALID_HANDLE);
   EXPECT_EQ(window.Present(nullptr), SKITY_ERROR_INVALID_HANDLE);
 
   // Creation with a null context fails cleanly.

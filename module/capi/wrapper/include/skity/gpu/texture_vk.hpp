@@ -7,6 +7,7 @@
 
 #include <skity/c/skity_texture_vk.h>
 
+#include <memory>
 #include <skity/gpu/texture.hpp>
 
 namespace skity {
@@ -17,11 +18,11 @@ namespace skity {
  * automatically) and forwards to Texture::CreateFromBackend. release
  * fires (with userdata) when skity drops its last reference.
  */
-inline Texture WrapVkTexture(const Context& context,
-                             const skity_backend_texture_info& base,
-                             const skity_backend_texture_info_vk& ext,
-                             skity_texture_release_callback release = nullptr,
-                             void* userdata = nullptr) {
+inline std::shared_ptr<Texture> WrapVkTexture(
+    const Context& context, const skity_backend_texture_info& base,
+    const skity_backend_texture_info_vk& ext,
+    skity_texture_release_callback release = nullptr,
+    void* userdata = nullptr) {
   skity_backend_texture_info_vk chained = ext;
   chained.s_type = SKITY_STRUCTURE_TYPE_BACKEND_TEXTURE_INFO_VK;
   chained.p_next = nullptr;

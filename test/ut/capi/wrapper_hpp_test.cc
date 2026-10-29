@@ -96,17 +96,13 @@ TEST(WrapperHpp, MetalApiValidation) {
   // on every backend (builds without SKITY_MTL_BACKEND return
   // SKITY_ERROR_NOT_SUPPORTED from creation, the getters return NULL).
   skity::Context context;  // empty
-  EXPECT_EQ(skity::CreateMtlContext(nullptr, nullptr, nullptr),
-            SKITY_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(skity::CreateMtlContext(nullptr, nullptr), nullptr);
   EXPECT_EQ(skity::GetMtlDevice(context), nullptr);
   EXPECT_EQ(skity::GetMtlCommandQueue(context), nullptr);
 
   skity_surface_create_info base = {};
   skity_surface_create_info_mtl ext = {};
-  skity::Surface surface;
-  EXPECT_EQ(skity::CreateMtlSurface(context, base, ext, &surface),
-            SKITY_ERROR_INVALID_HANDLE);
-  EXPECT_FALSE(surface);
+  EXPECT_EQ(skity::CreateMtlSurface(context, base, ext), nullptr);
 
   skity_backend_texture_info tex_base = {};
   skity_backend_texture_info_mtl tex_ext = {};
@@ -293,11 +289,11 @@ TEST(WrapperHpp, ShaderFactories) {
   ASSERT_TRUE(Shader::MakeTwoPointConical(pts[0], 0.f, pts[1], 60.f, stops,
                                           nullptr, 2));
 
-  Image image = Image::MakeFromPixels(2, 2, stops, 0,
-                                      skity::AlphaType::kUnpremul_AlphaType,
-                                      skity::ColorType::kRGBA);
+  auto image = Image::MakeFromPixels(2, 2, stops, 0,
+                                     skity::AlphaType::kUnpremul_AlphaType,
+                                     skity::ColorType::kRGBA);
   ASSERT_TRUE(image);
-  EXPECT_EQ(image.Width(), 2u);
+  EXPECT_EQ(image->Width(), 2u);
   EXPECT_TRUE(Shader::MakeShader(image));
   EXPECT_TRUE(Shader::MakeShader(
       image, skity::SamplingOptions(skity::FilterMode::kLinear,
@@ -322,10 +318,10 @@ TEST(WrapperHpp, ShaderFactories) {
   EXPECT_TRUE(linear->IsOpaque());
 
   // Image introspection on the raster image above.
-  EXPECT_EQ(image.GetAlphaType(), skity::AlphaType::kUnpremul_AlphaType);
-  EXPECT_FALSE(image.IsTextureBackend());
-  EXPECT_EQ(image.GetImageType(), Image::ImageType::kPixmap);
-  EXPECT_FALSE(image.IsLazy());
+  EXPECT_EQ(image->GetAlphaType(), skity::AlphaType::kUnpremul_AlphaType);
+  EXPECT_FALSE(image->IsTextureBackend());
+  EXPECT_EQ(image->GetImageType(), Image::ImageType::kPixmap);
+  EXPECT_FALSE(image->IsLazy());
 }
 
 TEST(WrapperHpp, PathConstructionAndQueries) {
@@ -456,10 +452,10 @@ TEST(WrapperHpp, StrokeOutline) {
 }
 
 TEST(WrapperHpp, DataBitmapPixmap) {
-  Data data = Data::MakeWithCopy("rgba", 4);
+  auto data = Data::MakeWithCopy("rgba", 4);
   ASSERT_TRUE(data);
-  EXPECT_EQ(data.GetSize(), 4u);
-  EXPECT_NE(data.GetData(), nullptr);
+  EXPECT_EQ(data->GetSize(), 4u);
+  EXPECT_NE(data->GetData(), nullptr);
   EXPECT_TRUE(Data::MakeEmpty());
 
   Bitmap bitmap(4, 4);
@@ -467,43 +463,43 @@ TEST(WrapperHpp, DataBitmapPixmap) {
   EXPECT_EQ(bitmap.Width(), 4u);
   EXPECT_EQ(bitmap.RowBytes(), 16u);
   EXPECT_NE(bitmap.GetPixels(), nullptr);
-  Pixmap pixmap = bitmap.GetPixmap();
+  auto pixmap = bitmap.GetPixmap();
   ASSERT_TRUE(pixmap);
-  EXPECT_EQ(pixmap.Width(), 4u);
-  EXPECT_NE(pixmap.GetPixels(), nullptr);
-  EXPECT_EQ(pixmap.SetColorInfo(skity::AlphaType::kPremul_AlphaType,
-                                skity::ColorType::kRGBA),
+  EXPECT_EQ(pixmap->Width(), 4u);
+  EXPECT_NE(pixmap->GetPixels(), nullptr);
+  EXPECT_EQ(pixmap->SetColorInfo(skity::AlphaType::kPremul_AlphaType,
+                                 skity::ColorType::kRGBA),
             SKITY_SUCCESS);
 
-  Data pixels = Data::MakeWithCopy("0123456789abcdef", 16);
-  Pixmap wrapped = Pixmap::MakeFromData(pixels, 16, 4, 4,
-                                        skity::AlphaType::kUnpremul_AlphaType,
-                                        skity::ColorType::kRGBA);
-  ASSERT_TRUE(wrapped);
-  Bitmap from_pixmap = Bitmap::MakeFromPixmap(wrapped, true);
+  auto pixels = Data::MakeWithCopy("0123456789abcdef", 16);
+  auto wrapped = std::make_shared<Pixmap>(Pixmap::MakeFromData(
+      pixels, 16, 4, 4, skity::AlphaType::kUnpremul_AlphaType,
+      skity::ColorType::kRGBA));
+  ASSERT_TRUE(*wrapped);
+  Bitmap from_pixmap(wrapped, true);
   ASSERT_TRUE(from_pixmap);
   EXPECT_EQ(from_pixmap.Width(), 4u);
 
   // The wrapped pixmap keeps the data alive beyond the Data wrapper.
   pixels = Data::MakeEmpty();
-  EXPECT_NE(wrapped.GetPixels(), nullptr);
+  EXPECT_NE(wrapped->GetPixels(), nullptr);
   EXPECT_EQ(from_pixmap.Height(), 4u);
 }
 
 TEST(WrapperHpp, ImageRaster) {
   const uint32_t pixels[4] = {0xFF0000FFu, 0xFF00FF00u, 0xFFFF0000u,
                               0xFFFFFFFFu};
-  Image image = Image::MakeFromPixels(2, 2, pixels, 0,
-                                      skity::AlphaType::kUnpremul_AlphaType,
-                                      skity::ColorType::kRGBA);
+  auto image = Image::MakeFromPixels(2, 2, pixels, 0,
+                                     skity::AlphaType::kUnpremul_AlphaType,
+                                     skity::ColorType::kRGBA);
   ASSERT_TRUE(image);
-  EXPECT_EQ(image.Width(), 2u);
-  EXPECT_EQ(image.Height(), 2u);
+  EXPECT_EQ(image->Width(), 2u);
+  EXPECT_EQ(image->Height(), 2u);
 
-  Pixmap read = image.ReadPixels(skity::Context());
+  auto read = image->ReadPixels(skity::Context());
   ASSERT_TRUE(read);
-  EXPECT_EQ(read.Width(), 2u);
-  const auto* out = static_cast<const uint32_t*>(read.GetPixels());
+  EXPECT_EQ(read->Width(), 2u);
+  const auto* out = static_cast<const uint32_t*>(read->GetPixels());
   ASSERT_NE(out, nullptr);
   EXPECT_EQ(out[0], 0xFF0000FFu);
 }
@@ -545,18 +541,18 @@ TEST(WrapperHpp, RecordAndReplay) {
   int32_t circle_offset = recorder.GetLastOpOffset();
   EXPECT_GT(circle_offset, rect_offset);
 
-  DisplayList list = recorder.FinishRecording();
+  auto list = recorder.FinishRecording();
   ASSERT_TRUE(list);
-  EXPECT_EQ(list.GetOpCount(), 2u);
+  EXPECT_EQ(list->GetOpCount(), 2u);
   // Bounds cover the recorded content (stroked rect + circle), not the cull
   // rect.
-  Rect bounds = list.GetBounds();
+  Rect bounds = list->GetBounds();
   EXPECT_GE(bounds.Width(), 60.f);
   EXPECT_LE(bounds.Width(), 80.f);
-  EXPECT_FALSE(list.HasProperty(DisplayList::Property::kShader));
+  EXPECT_FALSE(list->HasProperty(DisplayList::Property::kShader));
 
   // In-place paint mutation through the offset lookup changes the replay.
-  Paint op_paint = list.GetOpPaintByOffset(rect_offset);
+  Paint op_paint = list->GetOpPaintByOffset(rect_offset);
   ASSERT_TRUE(op_paint);
   op_paint.SetColor(Color_WHITE);
 
@@ -564,14 +560,14 @@ TEST(WrapperHpp, RecordAndReplay) {
   replay_target.BeginRecording(kBounds);
   Canvas target = replay_target.GetRecordingCanvas();
   // The cull rect misses the circle at (50..70, 50..70): partial replay.
-  list.Draw(target, Rect::MakeXYWH(0.f, 0.f, 30.f, 30.f));
-  DisplayList partial = replay_target.FinishRecording();
-  EXPECT_EQ(partial.GetOpCount(), 1u);
+  list->Draw(target, Rect::MakeXYWH(0.f, 0.f, 30.f, 30.f));
+  auto partial = replay_target.FinishRecording();
+  EXPECT_EQ(partial->GetOpCount(), 1u);
 
   std::vector<int32_t> offsets =
-      list.Search(Rect::MakeXYWH(55.f, 55.f, 10.f, 10.f));
+      list->Search(Rect::MakeXYWH(55.f, 55.f, 10.f, 10.f));
   EXPECT_EQ(offsets.size(), 1u);
-  std::vector<Rect> damage = list.SearchNonOverlappingDrawnRects(
+  std::vector<Rect> damage = list->SearchNonOverlappingDrawnRects(
       Rect::MakeXYWH(0.f, 0.f, 1000.f, 1000.f));
   EXPECT_EQ(damage.size(), 2u);
 }
@@ -587,9 +583,9 @@ TEST(WrapperHpp, TextFontTypeface) {
   typeface->UnicharsToGlyphs(code_points, 2, glyphs);
   EXPECT_NE(glyphs[0], 0);
 
-  Data font_data = typeface->GetData();
-  EXPECT_GT(font_data.GetSize(), 0u);
-  EXPECT_NE(font_data.GetData(), nullptr);
+  auto font_data = typeface->GetData();
+  EXPECT_GT(font_data->GetSize(), 0u);
+  EXPECT_NE(font_data->GetData(), nullptr);
   EXPECT_EQ(typeface->GetUnitsPerEm(), 2048u);  // Roboto's head.unitsPerEm.
   skity_font_style style = typeface->GetFontStyle();
   EXPECT_EQ(style.weight, 400);
@@ -667,12 +663,11 @@ TEST(WrapperHpp, TextFontTypeface) {
   Paint paint;
   paint.SetTypeface(typeface);
   paint.SetTextSize(32.f);
-  TextBlob blob = TextBlob::Make("AB", paint);
+  auto blob = TextBlob::Make("AB", paint);
   ASSERT_TRUE(blob);
-  EXPECT_GT(blob.GetBounds().Width(), 0.f);
+  EXPECT_GT(blob->GetBounds().Width(), 0.f);
 
-  TextBlob glyphs_blob =
-      TextBlob::MakeFromGlyphs(font, ids, nullptr, nullptr, 2);
+  auto glyphs_blob = TextBlob::MakeFromGlyphs(font, ids, nullptr, nullptr, 2);
   ASSERT_TRUE(glyphs_blob);
   const float pos_x[] = {0.f, 24.f};
   const float pos_y[] = {0.f, 0.f};
@@ -749,21 +744,21 @@ TEST(WrapperHpp, TypefaceVariationAndGlyphLoading) {
 }
 
 TEST(WrapperHpp, FontManagerFamilies) {
-  FontManager manager = FontManager::RefDefault();
+  auto manager = FontManager::RefDefault();
   ASSERT_TRUE(manager);
-  int32_t count = manager.GetFamilyCount();
+  int32_t count = manager->GetFamilyCount();
   EXPECT_GE(count, 0);
   if (count > 0) {
-    std::string name = manager.GetFamilyName(0);
+    std::string name = manager->GetFamilyName(0);
     EXPECT_FALSE(name.empty());
-    auto style_set = manager.CreateStyleSet(0);
+    auto style_set = manager->CreateStyleSet(0);
     ASSERT_TRUE(style_set);
-    EXPECT_GE(style_set.GetCount(), 0);
+    EXPECT_GE(style_set->GetCount(), 0);
     std::string style_name;
-    style_set.GetStyle(0, &style_name);
+    style_set->GetStyle(0, &style_name);
   }
-  auto from_file =
-      manager.MakeFromFile(SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf");
+  auto from_file = manager->MakeFromFile(SKITY_FONT_DIR
+                                         "fonts/resources/Roboto-Regular.ttf");
   ASSERT_TRUE(from_file);
 }
 #endif  // SKITY_FONT_DIR
@@ -804,69 +799,69 @@ TEST(WrapperHpp, CameraAndQuaternion) {
 TEST(WrapperHpp, SoftwareCanvasDraws) {
   Bitmap bitmap(8, 8, skity::AlphaType::kPremul_AlphaType);
   ASSERT_TRUE(bitmap);
-  skity::SoftwareCanvas canvas(bitmap.get());
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
   ASSERT_TRUE(canvas);
-  canvas.DrawColor(Color_WHITE, BlendMode::kSrcOver);
+  canvas->DrawColor(Color_WHITE, BlendMode::kSrcOver);
   Paint paint;
   paint.SetColor(ColorPackRGBA(1.f, 0.f, 0.f, 1.f));
-  canvas.DrawRect(Rect::MakeWH(4.f, 4.f), paint);
+  canvas->DrawRect(Rect::MakeWH(4.f, 4.f), paint);
   {
     // RGBA bytes read back as little-endian words: red = 0xFF0000FF.
     const auto* px =
-        static_cast<const uint32_t*>(bitmap.GetPixmap().GetPixels());
+        static_cast<const uint32_t*>(bitmap.GetPixmap()->GetPixels());
     ASSERT_NE(px, nullptr);
     EXPECT_EQ(px[0], 0xFF0000FFu);
     EXPECT_EQ(px[8 * 7 + 7], 0xFFFFFFFFu);
   }
   Path path;
   path.AddCircle(6.f, 6.f, 1.f);
-  canvas.DrawPath(path, paint);
-  canvas.DrawCircle(2.f, 2.f, 1.f, paint);
-  canvas.DrawOval(Rect::MakeWH(4.f, 2.f), paint);
-  canvas.DrawRoundRect(Rect::MakeWH(6.f, 6.f), 1.f, 1.f, paint);
+  canvas->DrawPath(path, paint);
+  canvas->DrawCircle(2.f, 2.f, 1.f, paint);
+  canvas->DrawOval(Rect::MakeWH(4.f, 2.f), paint);
+  canvas->DrawRoundRect(Rect::MakeWH(6.f, 6.f), 1.f, 1.f, paint);
   const Vec2 radii[4] = {Vec2{1.f, 1.f}, Vec2{1.f, 1.f}, Vec2{1.f, 1.f},
                          Vec2{1.f, 1.f}};
-  canvas.DrawRRect(Rect::MakeWH(8.f, 8.f), radii, paint);
+  canvas->DrawRRect(Rect::MakeWH(8.f, 8.f), radii, paint);
   RRect rrect;
   rrect.SetRect(Rect::MakeWH(8.f, 8.f));
-  canvas.DrawRRect(rrect, paint);
-  canvas.DrawDRRect(Rect::MakeWH(8.f, 8.f), 2.f, 2.f, Rect::MakeWH(4.f, 4.f),
-                    1.f, 1.f, paint);
-  canvas.DrawArc(Rect::MakeWH(8.f, 8.f), 0.f, 90.f, true, paint);
-  canvas.DrawPoint(1.f, 1.f, paint);
-  canvas.DrawLine(0.f, 0.f, 8.f, 8.f, paint);
-  canvas.Save();
-  canvas.ClipRect(Rect::MakeWH(4.f, 4.f));
-  canvas.ClipRRect(Rect::MakeWH(6.f, 6.f), 1.f, 1.f);
-  canvas.ClipPath(path, skity::ClipOp::kDifference);
-  int depth = canvas.SaveLayer(Rect::MakeWH(8.f, 8.f), paint);
+  canvas->DrawRRect(rrect, paint);
+  canvas->DrawDRRect(Rect::MakeWH(8.f, 8.f), 2.f, 2.f, Rect::MakeWH(4.f, 4.f),
+                     1.f, 1.f, paint);
+  canvas->DrawArc(Rect::MakeWH(8.f, 8.f), 0.f, 90.f, true, paint);
+  canvas->DrawPoint(1.f, 1.f, paint);
+  canvas->DrawLine(0.f, 0.f, 8.f, 8.f, paint);
+  canvas->Save();
+  canvas->ClipRect(Rect::MakeWH(4.f, 4.f));
+  canvas->ClipRRect(Rect::MakeWH(6.f, 6.f), 1.f, 1.f);
+  canvas->ClipPath(path, skity::ClipOp::kDifference);
+  int depth = canvas->SaveLayer(Rect::MakeWH(8.f, 8.f), paint);
   EXPECT_GT(depth, 1);
-  canvas.Translate(1.f, 1.f);
-  canvas.Scale(2.f, 2.f);
-  canvas.Rotate(45.f);
-  canvas.Rotate(45.f, 4.f, 4.f);
-  canvas.Skew(0.1f, 0.1f);
-  canvas.Concat(Matrix::Translate(1.f, 1.f));
-  canvas.SetMatrix(Matrix::Scale(1.f, 1.f));
-  EXPECT_TRUE(canvas.GetTotalMatrix().IsIdentity());
-  canvas.ResetMatrix();
+  canvas->Translate(1.f, 1.f);
+  canvas->Scale(2.f, 2.f);
+  canvas->Rotate(45.f);
+  canvas->Rotate(45.f, 4.f, 4.f);
+  canvas->Skew(0.1f, 0.1f);
+  canvas->Concat(Matrix::Translate(1.f, 1.f));
+  canvas->SetMatrix(Matrix::Scale(1.f, 1.f));
+  EXPECT_TRUE(canvas->GetTotalMatrix().IsIdentity());
+  canvas->ResetMatrix();
   // The 8x8 device bounds clip everything else away.
-  EXPECT_TRUE(canvas.QuickReject(Rect::MakeXYWH(100.f, 100.f, 1.f, 1.f)));
-  canvas.RestoreToCount(1);
-  EXPECT_EQ(canvas.GetSaveCount(), 1);
-  canvas.Flush();
+  EXPECT_TRUE(canvas->QuickReject(Rect::MakeXYWH(100.f, 100.f, 1.f, 1.f)));
+  canvas->RestoreToCount(1);
+  EXPECT_EQ(canvas->GetSaveCount(), 1);
+  canvas->Flush();
 
   // Global clip bounds: an unclipped software canvas reports an (effectively)
   // infinite device rect; clip to the device and re-check.
-  canvas.ClipRect(Rect::MakeWH(8.f, 8.f));
-  Rect device_clip = canvas.GetGlobalClipBounds();
+  canvas->ClipRect(Rect::MakeWH(8.f, 8.f));
+  Rect device_clip = canvas->GetGlobalClipBounds();
   EXPECT_FLOAT_EQ(device_clip.Width(), 8.f);
   EXPECT_FLOAT_EQ(device_clip.Height(), 8.f);
 
   // Per-corner-radii clip + drrect draw still render sanely after the
   // pixel assertions above.
   const Vec2 corner_radii[4] = {{1.f, 1.f}, {2.f, 2.f}, {1.f, 2.f}, {2.f, 1.f}};
-  canvas.ClipRRect(Rect::MakeWH(8.f, 8.f), corner_radii);
-  canvas.DrawDRRect(Rect::MakeWH(8.f, 8.f), corner_radii,
-                    Rect::MakeWH(4.f, 4.f), corner_radii, paint);
+  canvas->ClipRRect(Rect::MakeWH(8.f, 8.f), corner_radii);
+  canvas->DrawDRRect(Rect::MakeWH(8.f, 8.f), corner_radii,
+                     Rect::MakeWH(4.f, 4.f), corner_radii, paint);
 }

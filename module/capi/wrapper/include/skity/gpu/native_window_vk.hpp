@@ -8,6 +8,7 @@
 #include <skity/c/skity_native_window_vk.h>
 
 #include <cstdint>
+#include <memory>
 #include <skity/base.hpp>
 #include <skity/gpu/context.hpp>
 #include <skity/gpu/surface.hpp>
@@ -31,10 +32,13 @@ class NativeWindowVk
     : public detail::OwnHandle<skity_native_window_vk,
                                skity_native_window_destroy_vk> {
  public:
-  /** Create a window + initial swapchain; empty on failure. */
-  static NativeWindowVk Create(const Context& context,
-                               const skity_native_window_create_info_vk& info) {
-    return Adopt(skity_native_window_create_vk(context.get(), &info));
+  /** Create a window + initial swapchain; null on failure. */
+  static std::unique_ptr<NativeWindowVk> Create(
+      const Context& context, const skity_native_window_create_info_vk& info) {
+    auto handle = skity_native_window_create_vk(context.get(), &info);
+    return handle != nullptr
+               ? std::unique_ptr<NativeWindowVk>(new NativeWindowVk(handle))
+               : nullptr;
   }
 
   /** Wrap a handle created through the raw C API. */
@@ -53,26 +57,33 @@ class NativeWindowVk
   }
 
   /**
-   * Acquire the next one-shot render surface into out. Only one surface
-   * may be outstanding; present it before acquiring again.
+   * Acquire the next one-shot render surface. Only one surface may be
+   * outstanding; present it before acquiring again. The surface wrapper is
+   * empty on non-success (on SKITY_ERROR_NEED_RECREATE the swapchain must
+   * be resized via Resize and the frame retried).
    */
   skity_result AcquireNextSurface(uint32_t sample_count, float content_scale,
-                                  Surface* out) {
+                                  std::unique_ptr<Surface>* out) {
+    if (out == nullptr) {
+      return SKITY_ERROR_INVALID_ARGUMENT;
+    }
+    out->reset();
     skity_surface handle = nullptr;
     skity_result result = skity_native_window_acquire_next_surface_vk(
         get(), sample_count, content_scale, &handle);
-    if (result == SKITY_SUCCESS && out != nullptr) {
-      out->reset(handle);
+    if (result == SKITY_SUCCESS) {
+      *out = std::unique_ptr<Surface>(new Surface(handle));
     }
     return result;
   }
 
   /**
-   * Present an acquired surface. On SKITY_SUCCESS and
-   * SKITY_ERROR_NEED_RECREATE the C layer consumes the handle and the
-   * wrapper is emptied; on other errors surface keeps its handle.
+   * Present an acquired surface (the legacy Present(std::unique_ptr<
+   * GPUSurface>) shape). On SKITY_SUCCESS and SKITY_ERROR_NEED_RECREATE
+   * the C layer consumes the handle and the wrapper is released; on other
+   * errors surface keeps its handle.
    */
-  skity_result Present(Surface* surface) {
+  skity_result Present(std::unique_ptr<Surface> surface) {
     if (surface == nullptr || !*surface) {
       return SKITY_ERROR_INVALID_HANDLE;
     }

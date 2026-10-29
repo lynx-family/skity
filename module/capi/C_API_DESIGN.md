@@ -429,13 +429,19 @@ and `Font` have copy construction / assignment that clones the underlying
 object via the C `*_clone` entry points (parameters duplicated, refcounted
 children — effects, typeface — shared), while moves stay cheap.
 
-The shared_ptr-managed legacy types keep their legacy shapes exactly: every
-effect / typeface factory returns `std::shared_ptr<T>` (nullptr on failure,
-matching the legacy null convention), `Paint`'s effect attach / getters and
-the `Font` / `FontManager` typeface hand-offs take / return `shared_ptr`,
-and `TypefaceDelegate::CreateSimpleFallbackDelegate` takes a
-`vector<shared_ptr<Typeface>>` and returns a `unique_ptr` — legacy effect
-code (arrow calls, factory temporaries, null checks) compiles verbatim. The
+The smart-pointer-managed legacy shapes are kept exactly: every
+shared_ptr-returning legacy factory (effects, typefaces, Data, Image,
+Texture, Semaphore, FontStyleSet, FontManager, TextBlob) returns
+`std::shared_ptr<T>` (nullptr when the C entry yields a null handle — the
+legacy null convention), every legacy shared_ptr parameter / getter
+(Paint's effects, Font / FontManager / Pixmap hand-offs, Bitmap::GetPixmap,
+Image::ScalePixels, Shader::MakeShader) uses the shared_ptr shape, and the
+legacy unique_ptr creations map onto unique_ptr: GLContextCreate /
+CreateSurface / FinishRecording / MakeSoftwareCanvas /
+CreateSimpleFallbackDelegate (plus the VK / MTL context-surface-window
+creation helpers). Legacy code — arrow calls, factory temporaries, null
+checks — compiles verbatim; `Canvas::MakeSoftwareCanvas` replaces the
+interim `SoftwareCanvas` class. The
 underlying wrapper classes stay move-only handle owners; the shared_ptr
 controls the wrapper's lifetime, and a null C handle maps to a null
 shared_ptr. All other wrappers own uniquely and remain move-only.
@@ -447,7 +453,7 @@ shared_ptr. All other wrappers own uniquely and remain move-only.
 | `skity_camera` | `geometry/camera.hpp` | `Camera` (viewport ctor, position / look-at / dist / rotation setters, `GetCamera` / `GetFixedCamera` view matrices) |
 | `skity_quaternion` | `geometry/quaternion.hpp` | free functions `QuaternionEulerToMatrix` / `QuaternionAxisAngleToMatrix` |
 | `skity_semaphore` | `gpu/semaphore.hpp` | `Semaphore` (Create on a Context, Import via the untyped base info + backend p_next extension, GetBackendType) — VK implementation only today |
-| `skity_canvas` | `render/canvas.hpp` | full draw / state / clip / text / image surface; `SoftwareCanvas` inherits the non-owning `Canvas` view and owns its handle |
+| `skity_canvas` | `render/canvas.hpp` | full draw / state / clip / text / image surface; views borrow (Surface::LockCanvas / recorder), `MakeSoftwareCanvas` returns the legacy `unique_ptr<Canvas>` owning form |
 | `skity_paint` | `graphic/paint.hpp` | all setters + getters, effect attach in the legacy `shared_ptr` shapes (null detaches), `shared_ptr` effect/typeface getters, copy semantics (deep-copy params, shared effects) |
 | `skity_path` | `graphic/path.hpp` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii + `AddMode`), point / verb / conic-weight access, `IsRect` / `IsLine` / `IsEqual`, convexity, segment masks, last-pt family, `CopyWith*`, `Clone` + copy semantics (deep geometry copy) |
 | `skity_path_effect` | `effect/path_effect.hpp` | discrete + dash |
@@ -458,12 +464,12 @@ shared_ptr. All other wrappers own uniquely and remain move-only.
 | `skity_color_filter` | `effect/color_filter.hpp` | all factories (`shared_ptr` returns, legacy shape) |
 | `skity_mask_filter` | `effect/mask_filter.hpp` | blur (+ `BlurStyle`) |
 | `skity_image_filter` | `effect/image_filter.hpp` | all factories (`shared_ptr` returns/params, legacy shape) |
-| `skity_data` | `io/data.hpp` | copy / with-proc / from-file / empty + accessors |
-| `skity_bitmap` | `graphic/bitmap.hpp` | `Bitmap` + `Pixmap` (incl. zero-copy wrap via `Data`) |
+| `skity_data` | `io/data.hpp` | copy / with-proc / from-file / empty + accessors; factories return `shared_ptr` (legacy shape) |
+| `skity_bitmap` | `graphic/bitmap.hpp` | `Bitmap` + `Pixmap`; the zero-copy wrap takes / `GetPixmap` returns `shared_ptr<Pixmap>` (legacy shapes) |
 | `skity_image` | `graphic/image.hpp` | raster / texture / deferred / promise factories, read / scale pixels |
-| `skity_surface` | `gpu/surface.hpp` | create / lock-canvas / flush / size / read-pixels (GL CreateInfo path), `AddExternalWaitSemaphore` |
-| `skity_context` | `gpu/context.hpp` | `CreateGL`, error callback, all `set_enable_*` tuning knobs, resource cache limit |
-| `skity_texture` | `gpu/texture.hpp` | `Texture` (create / create-with-descriptor / wrap-from-backend incl. p_next extension chaining, immediate + deferred upload, size queries) |
+| `skity_surface` | `gpu/surface.hpp` | create (`unique_ptr`, the legacy CreateSurface shape) / lock-canvas / flush / size / read-pixels (`shared_ptr<Pixmap>`, GL CreateInfo path), `AddExternalWaitSemaphore` |
+| `skity_context` | `gpu/context.hpp` | `CreateGL` (`unique_ptr`, the legacy GLContextCreate shape), error callback, all `set_enable_*` tuning knobs, resource cache limit |
+| `skity_texture` | `gpu/texture.hpp` | `Texture` (create / create-with-descriptor / wrap-from-backend incl. p_next extension chaining — `shared_ptr` returns, the legacy CreateTexture / WrapTexture shapes — immediate + deferred upload, size queries) |
 | `skity_context_mtl` | `gpu/context_mtl.hpp` | free functions `CreateMtlContext` (device / queue optional) + `GetMtlDevice` / `GetMtlCommandQueue` (Objective-C-only wrappers, guarded under `__OBJC__` in the umbrella) |
 | `skity_surface_mtl` | `gpu/surface_mtl.hpp` | `CreateMtlSurface` — chains the MTL CreateInfo extension (one-shot `id<MTLTexture>` or `CAMetalLayer` target) |
 | `skity_texture_mtl` | `gpu/texture_mtl.hpp` | `WrapMtlTexture` — wraps an existing `id<MTLTexture>` as a `Texture` |
