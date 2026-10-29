@@ -417,10 +417,11 @@ Coverage (2026-10, counted mechanically over `SKITY_C_API` declarations):
 forwards 393 of them (98%) — everything except the 4 precompile entry
 points (below). 9 of those are VK-specific functions behind the opt-in
 `skity_vk.hpp` (2 `context_vk` + 7 `native_window_vk`); all the rest live
-in the neutral `skity.hpp` umbrella, including the 3 Metal context
-entries (`skity_context_mtl.h`) — the Metal C headers pass Objective-C
-pointers as `void*`, so unlike Vulkan they force no backend headers on
-other consumers. 20 of the 36 wrapper headers carry handle classes (27
+in the neutral `skity.hpp` umbrella — except Metal, which has NO wrapper
+at all: like the legacy C++ API (whose only Metal header was the
+Objective-C++ `gpu_context_mtl.h`), Metal consumers call the C ABI
+directly (`skity_context_mtl.h` / `skity_surface_mtl.h` /
+`skity_texture_mtl.h`). 20 of the 32 wrapper headers carry handle classes (27
 `OwnHandle` classes in total); the rest are POD / free-function / view
 layers.
 
@@ -470,9 +471,6 @@ shared_ptr. All other wrappers own uniquely and remain move-only.
 | `skity_surface` | `gpu/surface.hpp` | create (`unique_ptr`, the legacy CreateSurface shape) / lock-canvas / flush / size / read-pixels (`shared_ptr<Pixmap>`, GL CreateInfo path), `AddExternalWaitSemaphore` |
 | `skity_context` | `gpu/context.hpp` | `CreateGL` (`unique_ptr`, the legacy GLContextCreate shape), error callback, all `set_enable_*` tuning knobs, resource cache limit |
 | `skity_texture` | `gpu/texture.hpp` | `Texture` (create / create-with-descriptor / wrap-from-backend incl. p_next extension chaining — `shared_ptr` returns, the legacy CreateTexture / WrapTexture shapes — immediate + deferred upload, size queries) |
-| `skity_context_mtl` | `gpu/context_mtl.hpp` | free functions `CreateMtlContext` (device / queue optional) + `GetMtlDevice` / `GetMtlCommandQueue` (Objective-C-only wrappers, guarded under `__OBJC__` in the umbrella) |
-| `skity_surface_mtl` | `gpu/surface_mtl.hpp` | `CreateMtlSurface` — chains the MTL CreateInfo extension (one-shot `id<MTLTexture>` or `CAMetalLayer` target) |
-| `skity_texture_mtl` | `gpu/texture_mtl.hpp` | `WrapMtlTexture` — wraps an existing `id<MTLTexture>` as a `Texture` |
 | `skity_font` + `skity_text` | `text/text.hpp` | `Typeface` (load / default / unichar→glyph / style / tables / variations / `MakeVariation`; factories and hand-offs return `shared_ptr`, the legacy shape), `TypefaceDelegate` (simple-list + custom-callback fallback), `FontManager` (family enumeration, style sets, match family / style / character), `FontStyleSet`, `Font` (complete: size / scale / skew / hinting / edging / all quality flags / metrics / widths / bounds / make-with-size / `LoadGlyph*` family, copy semantics with shared typeface), `TextBlob` (UTF-8 + delegate + glyph-run build, bounds) |
 | `skity_glyph` | `text/glyph.hpp` | `GlyphData` non-owning views over the global glyph cache (metrics / bearings / outline path / bitmap description), `GlyphFormat` / `BitmapFormat` enums, `GlyphBitmap` POD passthrough |
 | `skity_recorder` | `recorder/recorder.hpp` | `PictureRecorder` (+ build options, last-op offset) and `DisplayList` (draw / cull-rect draw / bounds / op count / properties / rtree search / per-op paint mutation) |

@@ -88,27 +88,9 @@ TEST(WrapperHpp, SemaphoreNeutralApi) {
   EXPECT_EQ(semaphore.GetBackendType(), skity::Context::BackendType::kNone);
 }
 
-// The Metal C API (and with it these wrappers) is Objective-C-only, so
-// this test only exists in Objective-C++ translation units.
-#if defined(__OBJC__)
-TEST(WrapperHpp, MetalApiValidation) {
-  // Deterministic without a Metal device: argument / null-handle paths hold
-  // on every backend (builds without SKITY_MTL_BACKEND return
-  // SKITY_ERROR_NOT_SUPPORTED from creation, the getters return NULL).
-  skity::Context context;  // empty
-  EXPECT_EQ(skity::CreateMtlContext(nullptr, nullptr), nullptr);
-  EXPECT_EQ(skity::GetMtlDevice(context), nullptr);
-  EXPECT_EQ(skity::GetMtlCommandQueue(context), nullptr);
-
-  skity_surface_create_info base = {};
-  skity_surface_create_info_mtl ext = {};
-  EXPECT_EQ(skity::CreateMtlSurface(context, base, ext), nullptr);
-
-  skity_backend_texture_info tex_base = {};
-  skity_backend_texture_info_mtl tex_ext = {};
-  EXPECT_FALSE(skity::WrapMtlTexture(context, tex_base, tex_ext));
-}
-#endif  // defined(__OBJC__)
+// Metal has no wrapper — like the legacy gpu_context_mtl.h, Metal consumers
+// call the C ABI (skity/c/skity_context_mtl.h etc.) directly, so there is
+// no wrapper validation test here.
 
 TEST(WrapperHpp, ValueTypes) {
   Rect r = Rect::MakeXYWH(10.f, 20.f, 30.f, 40.f);

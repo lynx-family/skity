@@ -79,9 +79,6 @@
 #include <skity/render/canvas.hpp>
 // base / types / bridge
 #include <skity/base.hpp>
-#ifdef __OBJC__
-#include <skity/gpu/context_mtl.hpp>
-#endif
 #include <skity/effect/image_filter.hpp>
 #include <skity/effect/mask_filter.hpp>
 #include <skity/effect/path_effect.hpp>
@@ -101,22 +98,17 @@
 #include <skity/recorder/recorder.hpp>
 // text
 #include <skity/text/glyph.hpp>
-#ifdef __OBJC__
-#include <skity/gpu/surface_mtl.hpp>
-#endif
 #include <skity/gpu/texture.hpp>
 #include <skity/text/text.hpp>
-#ifdef __OBJC__
-#include <skity/gpu/texture_mtl.hpp>
-#endif
 #include <skity/types.hpp>
 
 // Vulkan-only wrapper headers (context / surface / texture / native-window
 // / semaphore sync-fd import, aggregated by skity_vk.hpp) are deliberately
 // NOT included here: they pull in <vulkan/vulkan.h>. VK consumers include
-// <skity/skity_vk.hpp> instead. The Metal wrappers are also guarded:
-// the Metal C API is Objective-C-only (real id<MTLDevice> handles, no
-// void* fallback — see skity_mtl_types.h), so their headers only exist
-// under __OBJC__ and plain C++ consumers are unaffected.
+// <skity/skity_vk.hpp> instead. Metal has NO wrapper at all: like the
+// legacy C++ API (whose only Metal header was the Objective-C++
+// gpu_context_mtl.h), Metal consumers call the C ABI directly —
+// skity/c/skity_context_mtl.h / skity_surface_mtl.h / skity_texture_mtl.h
+// (real id<MTLDevice> handles, no void* fallback — skity_mtl_types.h).
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_SKITY_HPP
