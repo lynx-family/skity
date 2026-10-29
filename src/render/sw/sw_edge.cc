@@ -300,13 +300,16 @@ int SWEdgeBuilder::BuildEdges(const Path& path, const Rect& scan_bounds) {
   PathEdgeIter iter(path);
   while (auto e = iter.next()) {
     switch (e.edge) {
-      case skity::PathEdgeIter::Edge::kLine: {
-        AddLine(e.points, scan_bounds);
+      case PathEdgeIter::Edge::kLine: {
+        Point line[2] = {ToPoint(e.GetPoint2D(0)), ToPoint(e.GetPoint2D(1))};
+        AddLine(line, scan_bounds);
         break;
       }
-      case skity::PathEdgeIter::Edge::kQuad: {
+      case PathEdgeIter::Edge::kQuad: {
+        Point quad[3] = {ToPoint(e.GetPoint2D(0)), ToPoint(e.GetPoint2D(1)),
+                         ToPoint(e.GetPoint2D(2))};
         Point mono_x[5];
-        int n = ChopQuadAtYExtrema(e.points, mono_x);
+        int n = ChopQuadAtYExtrema(quad, mono_x);
         for (int i = 0; i <= n; i++) {
           this->AddQuad(&mono_x[i * 2], scan_bounds);
         }

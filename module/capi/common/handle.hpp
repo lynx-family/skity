@@ -90,6 +90,8 @@ typedef enum {
   SKITY_OBJECT_TYPE_PICTURE,
   SKITY_OBJECT_TYPE_READ_STREAM,
   SKITY_OBJECT_TYPE_WRITE_STREAM,
+  SKITY_OBJECT_TYPE_PATH_ITER,
+  SKITY_OBJECT_TYPE_PATH_RAW_ITER,
 } skity_object_type;
 
 /* When set, the wrapper owns the underlying object and releases it on destroy.

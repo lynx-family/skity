@@ -7,7 +7,7 @@
 
 #include <array>
 #include <memory>
-#include <skity/geometry/point.hpp>
+#include <skity/geometry/vector.hpp>
 #include <vector>
 
 #include "src/geometry/geometry.hpp"
@@ -16,17 +16,17 @@ namespace skity {
 
 class Cubic {
  public:
-  Cubic(const Point& p1, const Point& c1, const Point& c2, const Point& p2);
+  Cubic(const Vec2& p1, const Vec2& c1, const Vec2& c2, const Vec2& p2);
 
-  std::vector<std::array<Point, 3>> ToQuads();
+  std::vector<std::array<Vec2, 3>> ToQuads();
 
  private:
-  std::array<Point, 4> Subsegment(float t1, float t2);
+  std::array<Vec2, 4> Subsegment(float t1, float t2);
 
-  Point p1_{};
-  Point c1_{};
-  Point c2_{};
-  Point p2_{};
+  Vec2 p1_{};
+  Vec2 c1_{};
+  Vec2 c2_{};
+  Vec2 p2_{};
   std::unique_ptr<CubicCoeff> cc_;
   std::unique_ptr<QuadCoeff> qc_;
 };

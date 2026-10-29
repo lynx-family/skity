@@ -108,4 +108,19 @@ uint32_t skity_path_measure_next_contour(skity_path_measure measure) {
   return (m != nullptr && m->NextContour()) ? 1u : 0u;
 }
 
+uint32_t skity_path_measure_get_pos_tan_2d(skity_path_measure measure,
+                                           float distance,
+                                           skity_vec2* out_position,
+                                           skity_vec2* out_tangent) {
+  auto* m = measure_of(measure);
+  if (!m) return 0u;
+  skity::Vec2 position, tangent;
+  if (!m->GetPosTan2D(distance, out_position ? &position : nullptr,
+                      out_tangent ? &tangent : nullptr))
+    return 0u;
+  if (out_position) *out_position = {position.x, position.y};
+  if (out_tangent) *out_tangent = {tangent.x, tangent.y};
+  return 1u;
+}
+
 }  // extern "C"

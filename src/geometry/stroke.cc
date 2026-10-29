@@ -19,7 +19,7 @@ namespace {
 
 bool has_valid_tangent(const Path::Iter* iter) {
   Path::Iter copy = *iter;
-  Point pts[4];
+  Vec2 pts[4];
   for (;;) {
     Path::Verb verb = copy.Next(pts);
     switch (verb) {
@@ -376,9 +376,9 @@ class PathStroker {
   PathStroker(const Path& src, float radius, float miter_limit, Paint::Cap cap,
               Paint::Join join, float scale);
 
-  void MoveTo(const Point&);
-  void LineTo(const Point&, const Path::Iter* iter = nullptr);
-  void QuadTo(const Point&, const Point&);
+  void MoveTo(float x, float y);
+  void LineTo(float x, float y, const Path::Iter* iter = nullptr);
+  void QuadTo(float x1, float y1, float x2, float y2);
   void Close(bool isLine) { this->FinishContour(true, isLine); }
 
   void Done(Path* dst, bool isLine) {
@@ -454,12 +454,12 @@ class PathStroker {
   static ReductionType CheckQuadLinear(const Point quad[3], Point* reduction);
 };
 
-void PathStroker::MoveTo(const Point& pt) {
+void PathStroker::MoveTo(float x, float y) {
   if (fSegmentCount > 0) {
     this->FinishContour(false, false);
   }
   fSegmentCount = 0;
-  fFirstPt = fPrevPt = pt;
+  fFirstPt = fPrevPt = Point{x, y, 0, 1};
   fJoinCompleted = false;
 }
 
@@ -469,7 +469,8 @@ void PathStroker::Init(StrokeType strokeType, QuadConstruct* quadPts,
   quadPts->init(tStart, tEnd);
 }
 
-void PathStroker::LineTo(const Point& currPt, const Path::Iter* iter) {
+void PathStroker::LineTo(float x, float y, const Path::Iter* iter) {
+  const Point currPt{x, y, 0, 1};
   bool teenyLine =
       PointEqualsWithinTolerance(fPrevPt, currPt, kNearlyZero * fInvResScale);
   if (teenyLine && cap_proc_ == ButtCapper) {
@@ -487,33 +488,33 @@ void PathStroker::LineTo(const Point& currPt, const Path::Iter* iter) {
   this->PostJoinTo(currPt, normal, unitNormal);
 }
 
-void PathStroker::QuadTo(const Point& c, const Point& p2) {
-  const Point quad[3] = {fPrevPt, c, p2};
+void PathStroker::QuadTo(float x1, float y1, float x2, float y2) {
+  const Point quad[3] = {fPrevPt, {x1, y1, 0, 1}, {x2, y2, 0, 1}};
   Point reduction;
   ReductionType reductionType = CheckQuadLinear(quad, &reduction);
   if (kPoint_ReductionType == reductionType) {
     /* If the stroke consists of a moveTo followed by a degenerate curve, treat
        it as if it were followed by a zero-length line. Lines without length can
        have square and round end caps. */
-    this->LineTo(p2);
+    this->LineTo(x2, y2);
     return;
   }
   if (kLine_ReductionType == reductionType) {
-    this->LineTo(p2);
+    this->LineTo(x2, y2);
     return;
   }
   if (kDegenerate_ReductionType == reductionType) {
-    this->LineTo(reduction);
+    this->LineTo(reduction.x, reduction.y);
     JoinProc saveJoiner = join_proc_;
     join_proc_ = RoundJoiner;
-    this->LineTo(p2);
+    this->LineTo(x2, y2);
     join_proc_ = saveJoiner;
     return;
   }
 
   Vector normalAB, unitAB, normalBC, unitBC;
-  if (!this->PreJoinTo(c, &normalAB, &unitAB, false)) {
-    this->LineTo(p2);
+  if (!this->PreJoinTo(quad[1], &normalAB, &unitAB, false)) {
+    this->LineTo(x2, y2);
     return;
   }
   QuadConstruct quadPts;
@@ -523,7 +524,7 @@ void PathStroker::QuadTo(const Point& c, const Point& p2) {
   (void)this->QuadStroke(quad, &quadPts);
   this->SetQuadEndNormal(quad, normalAB, unitAB, &normalBC, &unitBC);
 
-  this->PostJoinTo(p2, normalBC, unitBC);
+  this->PostJoinTo(quad[2], normalBC, unitBC);
 }
 
 void PathStroker::SetQuadEndNormal(const Point quad[3], const Vector& normalAB,
@@ -732,7 +733,7 @@ bool PathStroker::PtInQuadBounds(const Point quad[3], const Point& pt) const {
 
 void PathStroker::FinishContour(bool close, bool isLine) {
   if (fSegmentCount > 0) {
-    Point pt;
+    Vec2 pt;
 
     if (close) {
       join_proc_(&outer_path_, &inner_path_, fPrevUnitNormal, fPrevPt,
@@ -748,15 +749,15 @@ void PathStroker::FinishContour(bool close, bool isLine) {
         }
       } else {
         // now add fInner as its own contour
-        inner_path_.GetLastPt(&pt);
+        inner_path_.GetLastPt2D(&pt);
         outer_path_.MoveTo(pt.x, pt.y);
         outer_path_.ReversePathTo(inner_path_);
         outer_path_.Close();
       }
     } else {  // add caps to start and end
       // cap the end
-      inner_path_.GetLastPt(&pt);
-      cap_proc_(&outer_path_, fPrevPt, fPrevNormal, pt);
+      inner_path_.GetLastPt2D(&pt);
+      cap_proc_(&outer_path_, fPrevPt, fPrevNormal, ToPoint(pt));
       outer_path_.ReversePathTo(inner_path_);
       // cap the start
       cap_proc_(&outer_path_, fFirstPt, -fFirstNormal, fFirstOuterPt);
@@ -867,21 +868,21 @@ void Stroke::StrokePath(const Path& src, Path* dst) const {
   PathStroker stroker(src, width_ * 0.5f, miter_limit_, cap_, join_, 1.f);
 
   Path::Iter iter{src, false};
-  std::array<Point, 4> pts = {};
+  std::array<Vec2, 4> pts = {};
   Path::Verb last_verb = Path::Verb::kMove;
   for (;;) {
     Path::Verb verb = iter.Next(pts.data());
 
     switch (verb) {
       case Path::Verb::kMove:
-        stroker.MoveTo(pts[0]);
+        stroker.MoveTo(pts[0].x, pts[0].y);
         break;
       case Path::Verb::kLine:
-        stroker.LineTo(pts[1]);
+        stroker.LineTo(pts[1].x, pts[1].y);
         last_verb = Path::Verb::kLine;
         break;
       case Path::Verb::kQuad:
-        stroker.QuadTo(pts[1], pts[2]);
+        stroker.QuadTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y);
         last_verb = Path::Verb::kQuad;
         break;
       case Path::Verb::kConic:
@@ -913,21 +914,22 @@ void Stroke::QuadPath(const Path& src, Path* dst) const {
 
 void Stroke::QuadPath(const Path& src, Path* dst, bool keep_cubic) const {
   Path::Iter iter{src, false};
-  std::array<Point, 4> pts = {};
+  std::array<Vec2, 4> pts = {};
   for (;;) {
     Path::Verb verb = iter.Next(pts.data());
     switch (verb) {
       case Path::Verb::kMove:
-        dst->MoveTo(pts[0]);
+        dst->MoveTo(pts[0].x, pts[0].y);
         break;
       case Path::Verb::kLine:
-        dst->LineTo(pts[1]);
+        dst->LineTo(pts[1].x, pts[1].y);
         break;
       case Path::Verb::kQuad:
-        dst->QuadTo(pts[1], pts[2]);
+        dst->QuadTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y);
         break;
       case Path::Verb::kConic: {
-        Conic conic(pts[0], pts[1], pts[2], iter.ConicWeight());
+        Conic conic;
+        conic.Set(pts.data(), iter.ConicWeight());
         constexpr auto kPow2 = 1;  // Only works for sweeps up to 90 degrees.
         constexpr auto kQuadCount = 1 + (2 * (1 << kPow2));  // 5
         Point points[kQuadCount];
@@ -939,13 +941,14 @@ void Stroke::QuadPath(const Path& src, Path* dst, bool keep_cubic) const {
       } break;
       case Path::Verb::kCubic: {
         if (keep_cubic) {
-          dst->CubicTo(pts[1], pts[2], pts[3]);
+          dst->CubicTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x,
+                       pts[3].y);
         } else {
           Cubic cubic(pts[0], pts[1], pts[2], pts[3]);
-          std::vector<std::array<Point, 3>> quads = cubic.ToQuads();
+          std::vector<std::array<Vec2, 3>> quads = cubic.ToQuads();
           for (auto& points : quads) {
             // mark_point(dst, points[0]);
-            dst->QuadTo(points[1], points[2]);
+            dst->QuadTo(points[1].x, points[1].y, points[2].x, points[2].y);
           }
         }
       } break;

@@ -248,6 +248,42 @@ Path::Iter::Iter(const Path& path, bool forceClose) : Iter() {
   this->SetPath(path, forceClose);
 }
 
+namespace {
+
+void CopySegmentPoints2D(Path::Verb verb, const Point src[4], Vec2 dst[4]) {
+  size_t count = 0;
+  switch (verb) {
+    case Path::Verb::kMove:
+      count = 1;
+      break;
+    case Path::Verb::kLine:
+      count = 2;
+      break;
+    case Path::Verb::kQuad:
+    case Path::Verb::kConic:
+      count = 3;
+      break;
+    case Path::Verb::kCubic:
+      count = 4;
+      break;
+    case Path::Verb::kClose:
+    case Path::Verb::kDone:
+      break;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    dst[i] = Vec2{src[i]};
+  }
+}
+
+}  // namespace
+
+Path::Verb Path::Iter::Next(Vec2 pts[4]) {
+  Point points[4];
+  auto verb = Next(points);
+  CopySegmentPoints2D(verb, points, pts);
+  return verb;
+}
+
 void Path::Iter::SetPath(Path const& path, bool forceClose) {
   pts_ = path.points_.data();
   verbs_ = path.verbs_.data();
@@ -473,6 +509,13 @@ Path::Verb Path::RawIter::Peek() const {
   return verbs_ < verb_stop_ ? *verbs_ : Verb::kDone;
 }
 
+Path::Verb Path::RawIter::Next(Vec2 pts[4]) {
+  Point points[4];
+  auto verb = Next(points);
+  CopySegmentPoints2D(verb, points, pts);
+  return verb;
+}
+
 float Path::RawIter::ConicWeight() const { return *conic_weights_; }
 
 static int _pts_in_verb(Path::Verb verb) {
@@ -574,8 +617,8 @@ Path& Path::ArcTo(float x1, float y1, float x2, float y2, float radius) {
     return LineTo(x1, y1);
   }
 
-  Point start;
-  GetLastPt(std::addressof(start));
+  Vec2 start;
+  GetLastPt2D(std::addressof(start));
   // need to know prev point so we can construct tangent vectors
   glm::dvec4 befored, afterd;
 
@@ -632,10 +675,11 @@ Path& Path::ArcTo(Rect const& oval, float startAngle, float sweepAngle,
   // we're sufficiently close to 'pt' currently. This prevents spurious LineTos
   // when adding a series of contiguous arcs from the same oval.
   auto addPt = [&forceMove, this](const Point& pt) {
-    Point lastPt;
+    Vec2 lastPt;
     if (forceMove) {
       this->MoveTo(pt);
-    } else if (!this->GetLastPt(&lastPt) || !FloatNearlyZero(lastPt.x - pt.x) ||
+    } else if (!this->GetLastPt2D(&lastPt) ||
+               !FloatNearlyZero(lastPt.x - pt.x) ||
                !FloatNearlyZero(lastPt.y - pt.y)) {
       this->LineTo(pt);
     }
@@ -1126,6 +1170,36 @@ Point Path::GetLastMovePt() const {
   }
 }
 
+Vec2 Path::GetPoint2D(int index) const {
+  if (index < 0 || static_cast<size_t>(index) >= CountPoints()) {
+    return {};
+  }
+  return Vec2{points_[index]};
+}
+
+bool Path::GetLastPt2D(Vec2* last_pt) const {
+  if (last_pt) {
+    *last_pt = CountPoints() == 0 ? Vec2{} : Vec2{points_.back()};
+  }
+  return CountPoints() != 0;
+}
+
+Vec2 Path::GetLastMovePt2D() const {
+  return GetPoint2D(last_move_to_index_ < 0 ? ~last_move_to_index_
+                                            : last_move_to_index_);
+}
+
+size_t Path::CopyPoints2D(Vec2* dst, size_t capacity) const {
+  if (!dst) {
+    return CountPoints();
+  }
+  size_t count = std::min(capacity, CountPoints());
+  for (size_t i = 0; i < count; ++i) {
+    dst[i] = Vec2{points_[i]};
+  }
+  return count;
+}
+
 bool Path::IsFinite() const {
   if (bounds_dirty_) {
     ComputeBounds();
@@ -1150,6 +1224,18 @@ bool Path::IsLine(Point* line) const {
   }
 
   return false;
+}
+
+bool Path::IsLine2D(Vec2* line) const {
+  if (CountVerbs() != 2 || verbs_[0] != Verb::kMove ||
+      verbs_[1] != Verb::kLine) {
+    return false;
+  }
+  if (line) {
+    line[0] = Vec2{points_[0]};
+    line[1] = Vec2{points_[1]};
+  }
+  return true;
 }
 
 bool Path::operator==(const Path& other) const {
@@ -1205,7 +1291,7 @@ Path& Path::AddPath(const Path& src, const Matrix& matrix, AddMode mode) {
           src.last_move_to_index_ + static_cast<int32_t>(CountPoints());
     } else {
       last_move_to_index_ =
-          src.last_move_to_index_ - static_cast<int32_t>(CountVerbs());
+          src.last_move_to_index_ - static_cast<int32_t>(CountPoints());
     }
 
     // add verb
@@ -1395,11 +1481,11 @@ bool Path::IsZeroLengthSincePoint(int startPtIndex) const {
 }
 
 static void append_params(std::ostream& os, const std::string& label,
-                          const Point pts[], int count,
+                          const Vec2 pts[], int count,
                           float conicWeight = -12345) {
   os << label << "(";
   for (int i = 0; i < count; i++) {
-    const Point* point = pts + i;
+    const Vec2* point = pts + i;
     float x = point->x;
     float y = point->y;
     std::stringstream ss;
@@ -1615,7 +1701,7 @@ bool Path::Contains(float x, float y) const {
 void Path::Dump() {
   Iter iter{*this, false};
 
-  Point pts[4];
+  Vec2 pts[4];
   Verb verb;
 
   std::ostringstream res;
@@ -1861,7 +1947,7 @@ Path::ConvexityType Path::ComputeConvexity() const {
   Convexicator state;
 
   Path::Iter iter{*this, false};
-  std::array<Point, 4> pts = {};
+  std::array<Vec2, 4> pts = {};
   for (;;) {
     Path::Verb verb = iter.Next(pts.data());
     if (verb == Path::Verb::kDone) {
@@ -1870,7 +1956,7 @@ Path::ConvexityType Path::ComputeConvexity() const {
 
     if (contour_count == 0) {
       if (verb == Path::Verb::kMove) {
-        state.SetMovePt(FromPoint(pts[0]));
+        state.SetMovePt(pts[0]);
       } else {
         contour_count++;
         needs_close = true;
@@ -1887,7 +1973,7 @@ Path::ConvexityType Path::ComputeConvexity() const {
       } else {
         int count = PointsInVerb(verb);
         for (int i = 1; i <= count; i++) {
-          if (!state.AddPt(FromPoint(pts[i]))) {
+          if (!state.AddPt(pts[i])) {
             return Path::ConvexityType::kConcave;
           }
         }

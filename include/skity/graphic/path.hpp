@@ -103,6 +103,18 @@ class SKITY_API Path {
     Verb Next(Point pts[4]);
 
     /**
+     * @brief Returns the next Path::Verb and advances the iterator, copying
+     *        x/y without perspective division. The Path must remain alive
+     *        and unmodified while iterating.
+     *
+     * @param pts   storage for 4 Vec2s. Writes 1/2/3/3/4 points for
+     *              Move/Line/Quad/Conic/Cubic, including the start point.
+     *              Close and Done leave pts unchanged.
+     * @return      next Path::Verb from verb array
+     */
+    Verb Next(Vec2 pts[4]);
+
+    /**
      * @brief         Retruns conic weight if next() returned Verb::kConic
      *
      * @return float  conic weight for conic Point returned by next()
@@ -162,6 +174,15 @@ class SKITY_API Path {
     void SetPath(Path const& path);
 
     Verb Next(Point pts[4]);
+    /**
+     * @brief Returns the next Path::Verb and advances the iterator without
+     *        synthesizing closing lines. Follows Iter::Next(Vec2*) for
+     *        output and Path lifetime requirements.
+     *
+     * @param pts   storage for 4 Vec2s describing the returned Path::Verb
+     * @return      next Path::Verb from verb array
+     */
+    Verb Next(Vec2 pts[4]);
     Verb Peek() const;
     float ConicWeight() const;
 
@@ -208,6 +229,26 @@ class SKITY_API Path {
     }
 
     Verb PeekVerb() const { return *verb_; }
+
+    /**
+     * @brief Reads x/y from the current segment without advancing.
+     *        Only valid for Move, Line, Quad, Conic, or Cubic.
+     *
+     * @param index   valid point index within the current segment, including
+     *                its start point
+     * @return        point in path coordinates without perspective division
+     */
+    Vec2 GetPoint2D(int index) const {
+      return Vec2{points_[pts_backset_for_verb(PeekVerb()) + index]};
+    }
+
+    /**
+     * @brief Returns the current conic weight. Only valid when PeekVerb()
+     *        is kConic.
+     *
+     * @return conic weight for the current segment
+     */
+    float ConicWeight() const { return *weights_; }
 
    private:
     constexpr static int pts_advance_after_verb(Verb verb) {
@@ -412,6 +453,40 @@ class SKITY_API Path {
   Point GetPoint(int index) const;
   Path::Verb GetVerb(int index) const;
   Point GetLastMovePt() const;
+
+  /**
+   * @brief Returns x/y of the indexed point without perspective division.
+   *
+   * @param index   point index in Path
+   * @return        point in path coordinates, or (0, 0) if index is negative
+   *                or outside CountPoints()
+   */
+  Vec2 GetPoint2D(int index) const;
+
+  /**
+   * @brief Copies x/y of the last point without perspective division.
+   *
+   * @param last_pt   optional output for the last point in path coordinates;
+   *                  receives (0, 0) if Path is empty
+   * @return          true if Path contains a point, false otherwise
+   */
+  bool GetLastPt2D(Vec2* last_pt) const;
+
+  /**
+   * @brief Returns x/y of the last move point without perspective division.
+   *
+   * @return point in path coordinates, or (0, 0) if Path is empty
+   */
+  Vec2 GetLastMovePt2D() const;
+
+  /**
+   * @brief Copies x/y of Path points without perspective division.
+   *
+   * @param dst       output storage, or nullptr to query CountPoints()
+   * @param capacity  maximum number of points to copy into dst
+   * @return          number of points copied, or CountPoints() if dst is null
+   */
+  size_t CopyPoints2D(Vec2* dst, size_t capacity) const;
   /**
    * Returns true for finite Point array values between negative float and
    * positive float. Returns false for any Point array value of FloatInfinity
@@ -427,6 +502,14 @@ class SKITY_API Path {
    * @return        true if Path contains exactly one line
    */
   bool IsLine(Point line[2]) const;
+  /**
+   * @brief Returns true if Path contains a single Move followed by a Line.
+   *
+   * @param line    optional storage for x/y of the two endpoints without
+   *                perspective division; unchanged on failure
+   * @return        true if Path contains exactly one line
+   */
+  bool IsLine2D(Vec2 line[2]) const;
   bool IsEmpty() const { return 0 == CountVerbs(); }
 
   bool operator==(const Path& other) const;

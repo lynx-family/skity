@@ -114,6 +114,9 @@ class PathEdgeIter {
     Edge edge;
     bool is_new_contour;
 
+    // index must identify a point in this edge, including its start point.
+    Vec2 GetPoint2D(int index) const { return Vec2{points[index]}; }
+
     // Returns true when it holds an Edge, false when the path is done.
     explicit operator bool() { return points != nullptr; }
   };

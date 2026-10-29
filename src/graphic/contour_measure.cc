@@ -8,7 +8,6 @@
 
 #include <array>
 #include <cassert>
-#include <tuple>
 
 #include "src/geometry/conic.hpp"
 #include "src/geometry/geometry.hpp"
@@ -122,10 +121,10 @@ static void contour_measure_seg_to(const Point pts[], unsigned segType,
        *  zero-length line. The stroke code will add end caps to zero length
        *  lines as appropriate
        */
-      Point lastPt;
-      auto ret = dst->GetLastPt(&lastPt);
+      Vec2 lastPt;
+      auto ret = dst->GetLastPt2D(&lastPt);
       if (ret) {
-        dst->LineTo(lastPt);
+        dst->LineTo(lastPt.x, lastPt.y);
       }
     }
     return;
@@ -384,10 +383,7 @@ ContourMeasure* ContourMeasureIter::Impl::buildSegments() {
 
   auto end = PathPriv::Iterate(path_).end();
   for (; iter_ != end; ++iter_) {
-    auto ret = *iter_;
-    auto verb = std::get<0>(ret);
-    auto pts = std::get<1>(ret);
-    auto w = std::get<2>(ret);
+    auto verb = iter_.PeekVerb();
     if (have_seen_move_to && verb == Path::Verb::kMove) {
       break;
     }
@@ -395,11 +391,13 @@ ContourMeasure* ContourMeasureIter::Impl::buildSegments() {
     switch (verb) {
       case Path::Verb::kMove:
         pt_index += 1;
-        pts_.emplace_back(pts[0]);
+        pts_.emplace_back(ToPoint(iter_.GetPoint2D(0)));
         assert(!have_seen_move_to);
         have_seen_move_to = true;
         break;
       case Path::Verb::kLine: {
+        Point pts[2] = {ToPoint(iter_.GetPoint2D(0)),
+                        ToPoint(iter_.GetPoint2D(1))};
         assert(have_seen_move_to);
         float prevD = distance;
         distance = this->ComputeLineSeg(pts[0], pts[1], distance, pt_index);
@@ -409,6 +407,9 @@ ContourMeasure* ContourMeasureIter::Impl::buildSegments() {
         }
       } break;
       case Path::Verb::kQuad: {
+        Point pts[3] = {ToPoint(iter_.GetPoint2D(0)),
+                        ToPoint(iter_.GetPoint2D(1)),
+                        ToPoint(iter_.GetPoint2D(2))};
         assert(have_seen_move_to);
         float prevD = distance;
         distance =
@@ -421,7 +422,10 @@ ContourMeasure* ContourMeasureIter::Impl::buildSegments() {
       } break;
       case Path::Verb::kConic: {
         assert(have_seen_move_to);
-        Conic conic{pts, *w};
+        Vec2 points[3] = {iter_.GetPoint2D(0), iter_.GetPoint2D(1),
+                          iter_.GetPoint2D(2)};
+        Conic conic;
+        conic.Set(points, iter_.ConicWeight());
         float prevD = distance;
         distance = this->ComputeConicSegs(conic, distance, 0, conic.pts[0],
                                           kMaxTValue, conic.pts[2], pt_index);
@@ -430,12 +434,15 @@ ContourMeasure* ContourMeasureIter::Impl::buildSegments() {
           // 2 pts thus to reconstitue a conic, you'd need to say
           // SkConic(pts[0], pts[2], pts[3], weight = pts[1].x)
           pts_.emplace_back(Point{conic.w, 0, 0, 0});
-          pts_.emplace_back(pts[1]);
-          pts_.emplace_back(pts[2]);
+          pts_.emplace_back(conic.pts[1]);
+          pts_.emplace_back(conic.pts[2]);
           pt_index += 3;
         }
       } break;
       case Path::Verb::kCubic: {
+        Point pts[4] = {
+            ToPoint(iter_.GetPoint2D(0)), ToPoint(iter_.GetPoint2D(1)),
+            ToPoint(iter_.GetPoint2D(2)), ToPoint(iter_.GetPoint2D(3))};
         assert(have_seen_move_to);
         float prevD = distance;
         distance =

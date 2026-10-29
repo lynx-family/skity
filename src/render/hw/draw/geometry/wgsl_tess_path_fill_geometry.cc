@@ -152,7 +152,7 @@ struct TessPathFillVisitor {
 
   void VisitPath(const Path& path, bool force_close) {
     Path::Iter iter{path, force_close};
-    std::array<Point, 4> pts = {};
+    std::array<Vec2, 4> pts = {};
 
     if (matrix_.HasPersp()) {
       precision_ =
@@ -163,27 +163,19 @@ struct TessPathFillVisitor {
       Path::Verb verb = iter.Next(pts.data());
       switch (verb) {
         case Path::Verb::kMove:
-          OnMoveTo(reinterpret_cast<const Vec2&>(pts[0]));
+          OnMoveTo(pts[0]);
           break;
         case Path::Verb::kLine:
-          OnLineTo(reinterpret_cast<const Vec2&>(pts[0]),
-                   reinterpret_cast<const Vec2&>(pts[1]));
+          OnLineTo(pts[0], pts[1]);
           break;
         case Path::Verb::kQuad:
-          OnQuadTo(reinterpret_cast<const Vec2&>(pts[0]),
-                   reinterpret_cast<const Vec2&>(pts[1]),
-                   reinterpret_cast<const Vec2&>(pts[2]));
+          OnQuadTo(pts[0], pts[1], pts[2]);
           break;
         case Path::Verb::kConic:
-          OnConicTo(reinterpret_cast<const Vec2&>(pts[0]),
-                    reinterpret_cast<const Vec2&>(pts[1]),
-                    reinterpret_cast<const Vec2&>(pts[2]), iter.ConicWeight());
+          OnConicTo(pts[0], pts[1], pts[2], iter.ConicWeight());
           break;
         case Path::Verb::kCubic:
-          OnCubicTo(reinterpret_cast<const Vec2&>(pts[0]),
-                    reinterpret_cast<const Vec2&>(pts[1]),
-                    reinterpret_cast<const Vec2&>(pts[2]),
-                    reinterpret_cast<const Vec2&>(pts[3]));
+          OnCubicTo(pts[0], pts[1], pts[2], pts[3]);
           break;
         case Path::Verb::kClose:
           break;

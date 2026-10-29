@@ -4,7 +4,6 @@
 
 #include "src/effect/dash_path_effect.hpp"
 
-#include <array>
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -14,7 +13,6 @@
 #include <skity/graphic/path_measure.hpp>
 
 #include "src/geometry/math.hpp"
-#include "src/geometry/point_priv.hpp"
 
 namespace skity {
 
@@ -40,47 +38,6 @@ static float find_first_interval(const float intervals[], float phase,
   *index = 0;
   return intervals[0];
 }
-
-class SpecialLineRec final {
- public:
-  SpecialLineRec() = default;
-  ~SpecialLineRec() = default;
-
-  bool Init(Path const& src, Path*, Paint const& paint, int32_t interval_count,
-            float interval_length) {
-    if (paint.GetStrokeCap() != Paint::kButt_Cap) {
-      return false;
-    }
-
-    if (!src.IsLine(pts_.data())) {
-      return false;
-    }
-
-    float path_length = PointDistance(pts_[0], pts_[1]);
-
-    tangent_ = pts_[1] - pts_[0];
-    if (tangent_.x == 0 && tangent_.y == 0) {
-      return false;
-    }
-
-    path_length_ = path_length;
-    tangent_ *= FloatInvert(path_length);
-    PointRotateCCW(tangent_, &normal_);
-    normal_ *= SkityFloatHalf(paint.GetStrokeWidth());
-
-    float pt_count =
-        path_length * interval_count / static_cast<float>(interval_length);
-    pt_count = std::min(pt_count, static_cast<float>(kMaxDashCount));
-
-    return true;
-  }
-
- private:
-  std::array<Point, 2> pts_ = {};
-  Vector tangent_ = {};
-  Vector normal_ = {};
-  float path_length_ = 0.f;
-};
 
 DashPathEffect::DashPathEffect(const float* intervals, int32_t count,
                                float phase)
