@@ -80,12 +80,11 @@ class Surface : public detail::OwnHandle<skity_surface, skity_surface_destroy> {
  private:
   explicit Surface(skity_surface h) : OwnHandle(h) {}
   friend struct detail::SurfaceCreate;
-  friend class NativeWindowVk;
+  friend class GPUPresenter;
 };
 
 namespace detail {
-/** Internal: backend creation helpers (skity_vk) and the VK presenter
- *  construct through here. */
+/** Internal: backend creation helpers (skity_vk) construct through here. */
 struct SurfaceCreate {
   static std::unique_ptr<Surface> New(skity_surface h) {
     return std::unique_ptr<Surface>(new Surface(h));
