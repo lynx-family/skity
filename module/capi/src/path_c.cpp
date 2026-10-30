@@ -456,7 +456,7 @@ uint32_t skity_path_get_point_2d(skity_path path, int32_t index,
   auto* p = path_of(path);
   if (!p || !out) return 0u;
   auto point = p->GetPoint2D(index);
-  *out = {point.x, point.y};
+  *out = {{{point.x, point.y}}};
   return index >= 0 && static_cast<size_t>(index) < p->CountPoints() ? 1u : 0u;
 }
 
@@ -465,7 +465,7 @@ uint32_t skity_path_get_last_pt_2d(skity_path path, skity_vec2* out) {
   if (!p) return 0u;
   skity::Vec2 point;
   bool ok = p->GetLastPt2D(out ? &point : nullptr);
-  if (out) *out = {point.x, point.y};
+  if (out) *out = {{{point.x, point.y}}};
   return ok ? 1u : 0u;
 }
 
@@ -473,7 +473,7 @@ void skity_path_get_last_move_pt_2d(skity_path path, skity_vec2* out) {
   auto* p = path_of(path);
   if (!p || !out) return;
   auto point = p->GetLastMovePt2D();
-  *out = {point.x, point.y};
+  *out = {{{point.x, point.y}}};
 }
 
 size_t skity_path_copy_points_2d(skity_path path, skity_vec2* out,
@@ -489,7 +489,7 @@ uint32_t skity_path_is_line_2d(skity_path path, skity_vec2 out_pts[2]) {
   skity::Vec2 points[2];
   if (!p->IsLine2D(out_pts ? points : nullptr)) return 0u;
   if (out_pts) {
-    for (int i = 0; i < 2; ++i) out_pts[i] = {points[i].x, points[i].y};
+    for (int i = 0; i < 2; ++i) out_pts[i] = {{{points[i].x, points[i].y}}};
   }
   return 1u;
 }
