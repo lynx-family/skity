@@ -120,6 +120,11 @@ else()
 
   target_compile_features(skity-capi PRIVATE cxx_std_17)
 
+  # Keep standalone C API builds as strict as the unified skity target.
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(skity-capi PRIVATE -Werror=missing-braces)
+  endif()
+
   # Match the core library's flags. -fno-strict-aliasing is required because
   # the wrapper reinterprets the binary-compatible POD structs
   # (skity_rect/matrix/...) as their skity:: C++ counterparts across the
