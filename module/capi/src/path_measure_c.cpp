@@ -118,8 +118,8 @@ uint32_t skity_path_measure_get_pos_tan_2d(skity_path_measure measure,
   if (!m->GetPosTan2D(distance, out_position ? &position : nullptr,
                       out_tangent ? &tangent : nullptr))
     return 0u;
-  if (out_position) *out_position = {position.x, position.y};
-  if (out_tangent) *out_tangent = {tangent.x, tangent.y};
+  if (out_position) *out_position = {{{position.x, position.y}}};
+  if (out_tangent) *out_tangent = {{{tangent.x, tangent.y}}};
   return 1u;
 }
 

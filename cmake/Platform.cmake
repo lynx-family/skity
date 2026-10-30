@@ -49,6 +49,11 @@ else()
     endif()
 endif()
 
+# Match the aggregate initialization checks enforced by GN consumers.
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  target_compile_options(skity PRIVATE -Werror=missing-braces)
+endif()
+
 # dependencies
 if(EMSCRIPTEN)
   # use emsd port freetype
