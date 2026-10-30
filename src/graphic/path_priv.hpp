@@ -16,6 +16,8 @@
 
 namespace skity {
 
+class PathBuilder;
+
 class PathPriv {
  public:
   struct Iterate {
@@ -46,9 +48,9 @@ class PathPriv {
     const float* weights_;
   };
 
-  static void CreateDrawArcPath(Path* path, Rect const& oval, float startAngle,
-                                float sweepAngle, bool useCenter,
-                                bool isFillNoPathEffect);
+  static void CreateDrawArcPath(PathBuilder* path, Rect const& oval,
+                                float startAngle, float sweepAngle,
+                                bool useCenter, bool isFillNoPathEffect);
 
   /**
    * Determines if path is a rect by keeping track of changes in direction
@@ -113,6 +115,9 @@ class PathEdgeIter {
     const Point* points;  // points for the segment, or null if done
     Edge edge;
     bool is_new_contour;
+
+    // index must identify a point in this edge, including its start point.
+    Vec2 GetPoint2D(int index) const { return Vec2{points[index]}; }
 
     // Returns true when it holds an Edge, false when the path is done.
     explicit operator bool() { return points != nullptr; }

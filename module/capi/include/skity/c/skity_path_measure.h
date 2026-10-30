@@ -66,6 +66,17 @@ SKITY_C_API uint32_t skity_path_measure_get_pos_tan(skity_path_measure measure,
                                                     skity_vec4* out_tangent);
 
 /**
+ * @brief Sample x/y position and unit tangent without perspective division.
+ * @param distance clamped to [0, length]
+ * @param out_position optional position output
+ * @param out_tangent optional tangent output
+ * @return 1 on success, 0 on failure, leaving both outputs unchanged
+ */
+SKITY_C_API uint32_t skity_path_measure_get_pos_tan_2d(
+    skity_path_measure measure, float distance, skity_vec2* out_position,
+    skity_vec2* out_tangent);
+
+/**
  * @brief Append the sub-path of the current contour between @p start_d and
  *        @p stop_d to @p dst.
  * @param start_d           start distance along the contour

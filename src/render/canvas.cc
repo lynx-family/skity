@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <memory>
+#include <skity/graphic/path_builder.hpp>
 #include <skity/render/canvas.hpp>
 #include <skity/text/font.hpp>
 #include <skity/text/text_blob.hpp>
@@ -142,16 +143,18 @@ void Canvas::ClipRRect(const RRect &rrect, ClipOp op) {
 }
 
 void Canvas::OnClipRect(const Rect &rect, ClipOp op) {
-  Path path;
-  path.AddRect(rect);
+  PathBuilder builder;
+  builder.AddRect(rect);
+  Path path = builder.Detach();
   path.SetConvexityType(Path::ConvexityType::kConvex);
 
   this->OnClipPath(path, op);
 }
 
 void Canvas::OnClipRRect(const RRect &rrect, ClipOp op) {
-  Path path;
-  path.AddRRect(rrect);
+  PathBuilder builder;
+  builder.AddRRect(rrect);
+  Path path = builder.Detach();
   path.SetConvexityType(Path::ConvexityType::kConvex);
   this->OnClipPath(path, op);
 }
@@ -189,14 +192,14 @@ void Canvas::DrawArc(Rect const &oval, float startAngle, float sweepAngle,
     return;
   }
 
-  Path path;
+  PathBuilder builder;
   bool isFillNoPathEffect =
       paint.GetStyle() == Paint::kFill_Style && !paint.GetPathEffect();
 
-  PathPriv::CreateDrawArcPath(&path, oval, startAngle, sweepAngle, useCenter,
+  PathPriv::CreateDrawArcPath(&builder, oval, startAngle, sweepAngle, useCenter,
                               isFillNoPathEffect);
 
-  this->OnDrawPath(path, paint);
+  this->OnDrawPath(builder.Detach(), paint);
 }
 
 void Canvas::DrawOval(Rect const &oval, Paint const &paint) {
@@ -410,11 +413,10 @@ void Canvas::InternalRestore() { this->OnRestore(); }
 
 void Canvas::OnDrawLine(float x0, float y0, float x1, float y1,
                         Paint const &paint) {
-  Path path;
-  path.MoveTo(x0, y0);
-  path.LineTo(x1, y1);
+  PathBuilder builder;
+  builder.MoveTo(x0, y0).LineTo(x1, y1);
 
-  this->OnDrawPath(path, paint);
+  this->OnDrawPath(builder.Detach(), paint);
 }
 
 void Canvas::OnDrawCircle(float cx, float cy, float radius,
@@ -435,18 +437,19 @@ void Canvas::OnDrawOval(Rect const &oval, Paint const &paint) {
 }
 
 void Canvas::OnDrawRRect(RRect const &rrect, Paint const &paint) {
-  Path path;
-  path.AddRRect(rrect);
+  PathBuilder builder;
+  builder.AddRRect(rrect);
+  Path path = builder.Detach();
   path.SetConvexityType(Path::ConvexityType::kConvex);
 
   this->DrawPath(path, paint);
 }
 
 void Canvas::OnDrawRect(Rect const &rect, Paint const &paint) {
-  Path path;
-  path.AddRect(rect);
+  PathBuilder builder;
+  builder.AddRect(rect);
 
-  this->DrawPath(path, paint);
+  this->DrawPath(builder.Detach(), paint);
 }
 
 void Canvas::OnDrawRoundRect(Rect const &rect, float rx, float ry,
@@ -462,11 +465,10 @@ void Canvas::OnDrawRoundRect(Rect const &rect, float rx, float ry,
 
 void Canvas::OnDrawDRRect(RRect const &outer, RRect const &inner,
                           Paint const &paint) {
-  Path path;
-  path.AddRRect(outer);
-  path.AddRRect(inner);
-  path.SetFillType(Path::PathFillType::kEvenOdd);
-  this->DrawPath(path, paint);
+  PathBuilder builder;
+  builder.AddRRect(outer).AddRRect(inner);
+  builder.SetFillType(Path::PathFillType::kEvenOdd);
+  this->DrawPath(builder.Detach(), paint);
 }
 
 bool Canvas::NeedGlyphPath(Paint const &paint) {

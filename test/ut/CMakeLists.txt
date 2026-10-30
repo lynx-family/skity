@@ -14,9 +14,14 @@ if (${SKITY_UNIFIED_LIB})
     add_executable(skity_wrapper_unit_test
         capi/text_delegate_c_test.cc
         capi/serialization_c_test.cc
+        capi/path_2d_c_test.cc
+        capi/path_2d_c_smoke.c
+        capi/path_builder_c_test.cc
+        capi/path_builder_c_smoke.c
     )
 
     target_include_directories(skity_wrapper_unit_test PRIVATE
+        ${CMAKE_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/module/capi/include)
 
     if (${SKITY_VK_BACKEND})
@@ -69,7 +74,9 @@ add_executable(skity_unit_test
     graphic/color_test.cc
     graphic/image_test.cc
     graphic/path_measure_test.cc
+    graphic/path_2d_test.cc
     graphic/path_test.cc
+    graphic/path_builder_test.cc
     graphic/texture_format_test.cc
     io/data_test.cc
     io/pixmap_test.cc
@@ -208,6 +215,10 @@ if (${SKITY_CAPI_MODULE})
         capi/recorder_c_test.cc
         capi/text_delegate_c_test.cc
         capi/serialization_c_test.cc
+        capi/path_2d_c_test.cc
+        capi/path_2d_c_smoke.c
+        capi/path_builder_c_test.cc
+        capi/path_builder_c_smoke.c
     )
     if (${SKITY_VK_BACKEND})
         target_sources(skity_unit_test PRIVATE

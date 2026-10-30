@@ -55,6 +55,7 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/graphic/image.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/paint.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/path.cc
+  ${CMAKE_CURRENT_LIST_DIR}/graphic/path_builder.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/path_measure.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/path_op.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/path_priv.cc

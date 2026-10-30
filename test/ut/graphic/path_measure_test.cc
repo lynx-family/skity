@@ -3,11 +3,63 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <array>
+#include <skity/effect/path_effect.hpp>
+#include <skity/graphic/paint.hpp>
 #include <skity/graphic/path.hpp>
 #include <skity/graphic/path_measure.hpp>
 
 #include "gtest/gtest.h"
 #include "src/geometry/math.hpp"
+
+TEST(PathMeasure, MixedContoursKeepBoundariesAndConicWeights) {
+  std::array<skity::Path, 4> contours;
+  contours[0].MoveTo(2, 3).LineTo(5, 7);
+  contours[1].MoveTo(10, 0).QuadTo(20, 30, 40, 0).Close();
+  contours[2].MoveTo(50, 0).ConicTo(60, 30, 70, 0, 0.5f).Close();
+  contours[3]
+      .MoveTo(80, 0)
+      .ConicTo(90, 30, 100, 0, 0.75f)
+      .CubicTo(110, -20, 120, 20, 130, 0);
+  skity::Path path;
+  path.MoveTo(0, 0).LineTo(0, 0).Close();
+  for (const auto& contour : contours) {
+    path.AddPath(contour);
+  }
+  path.MoveTo(200, 200);
+
+  for (bool force_close : {false, true}) {
+    skity::PathMeasure measure(path, force_close);
+    for (size_t i = 0; i < contours.size(); ++i) {
+      SCOPED_TRACE(i);
+      skity::PathMeasure expected(contours[i], force_close);
+      EXPECT_FLOAT_EQ(measure.GetLength(), expected.GetLength());
+      EXPECT_EQ(measure.IsClosed(), expected.IsClosed());
+      for (float t : {0.f, 0.5f, 1.f}) {
+        skity::Vec2 position, tangent, expected_position, expected_tangent;
+        float distance = t * expected.GetLength();
+        ASSERT_TRUE(expected.GetPosTan2D(distance, &expected_position,
+                                         &expected_tangent));
+        ASSERT_TRUE(measure.GetPosTan2D(distance, &position, &tangent));
+        EXPECT_EQ(position, expected_position);
+        EXPECT_EQ(tangent, expected_tangent);
+      }
+      EXPECT_EQ(measure.NextContour(), i + 1 < contours.size());
+    }
+  }
+}
+
+TEST(PathMeasure, DiscreteEffectKeepsSeededOffsets) {
+  skity::Path source;
+  source.MoveTo(0, 10).LineTo(30, 10);
+  auto effect = skity::PathEffect::MakeDiscretePathEffect(10, 2, 30);
+  skity::Path result;
+  ASSERT_TRUE(effect->FilterPath(&result, source, true, skity::Paint{}));
+  ASSERT_EQ(result.CountPoints(), 4u);
+  EXPECT_EQ(result.GetPoint2D(0), (skity::Vec2{0, 9.055755615234375f}));
+  EXPECT_EQ(result.GetPoint2D(1), (skity::Vec2{10, 8.8857421875f}));
+  EXPECT_EQ(result.GetPoint2D(2), (skity::Vec2{20, 10.721893310546875f}));
+  EXPECT_EQ(result.GetPoint2D(3), (skity::Vec2{30, 11.32855224609375f}));
+}
 
 static void test_small_segment1() {
   skity::Path path;

@@ -12,10 +12,8 @@
 
 namespace skity {
 
-static void Perterb(Point* p, Vector const& tangent, float scale) {
-  Vector normal = tangent;
-  PointRotateCCW(&normal);
-  normal.w = 0.f;
+static void Perterb(Vec2* p, Vec2 const& tangent, float scale) {
+  Vec2 normal{tangent.y, -tangent.x};
 
   PointSetLength<false>(normal, normal.x, normal.y, scale);
 
@@ -87,8 +85,8 @@ bool DiscretePathEffect::OnFilterPath(Path* dst, Path const& src, bool stroke,
 
   LCGRandom rand{seed ^ ((seed << 16) | (seed >> 16))};
   float scale = perterb_;
-  Point p;
-  Vector v;
+  Vec2 p;
+  Vec2 v;
   do {
     float length = meas.GetLength();
     if (seg_length_ * (2 + static_cast<int32_t>(do_fill)) > length) {
@@ -105,16 +103,16 @@ bool DiscretePathEffect::OnFilterPath(Path* dst, Path const& src, bool stroke,
         distance += delta / 2;
       }
 
-      if (meas.GetPosTan(distance, &p, &v)) {
+      if (meas.GetPosTan2D(distance, &p, &v)) {
         Perterb(&p, v, rand.nextSScalar1() * scale);
-        dst->MoveTo(p);
+        dst->MoveTo(p.x, p.y);
       }
 
       while (--n >= 0) {
         distance += delta;
-        if (meas.GetPosTan(distance, &p, &v)) {
+        if (meas.GetPosTan2D(distance, &p, &v)) {
           Perterb(&p, v, rand.nextSScalar1() * scale);
-          dst->LineTo(p);
+          dst->LineTo(p.x, p.y);
         }
       }
       if (meas.IsClosed()) {

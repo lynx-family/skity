@@ -29,6 +29,7 @@
 #include <skity/c/skity_mask_filter.h>
 #include <skity/c/skity_paint.h>
 #include <skity/c/skity_path.h>
+#include <skity/c/skity_path_builder.h>
 #include <skity/c/skity_path_effect.h>
 #include <skity/c/skity_path_measure.h>
 #include <skity/c/skity_path_op.h>

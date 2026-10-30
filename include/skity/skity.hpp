@@ -33,6 +33,7 @@
 #include <skity/graphic/color_type.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/graphic/path.hpp>
+#include <skity/graphic/path_builder.hpp>
 #include <skity/graphic/path_measure.hpp>
 #include <skity/graphic/path_op.hpp>
 #include <skity/graphic/sampling_options.hpp>

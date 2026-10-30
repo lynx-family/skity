@@ -7,6 +7,7 @@
 
 #include <skity/c/skity_base.h>
 #include <skity/c/skity_types.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -247,8 +248,8 @@ SKITY_C_API uint32_t skity_path_get_point(skity_path path, int32_t index,
  *        skity_path_count_verbs / skity_path_count_points /
  *        skity_path_get_point to walk the path by index.
  *
- *        Conic verbs carry a weight that the index-based walk cannot fetch;
- *        it is only available through the C++ Path::Iter.
+ *        Read conic weights with skity_path_get_conic_weight, indexed by
+ *        conic order, or use skity_path_raw_iter for sequential traversal.
  *
  * @return the verb kind, or SKITY_PATH_VERB_DONE if @p index is out of range.
  */
@@ -442,6 +443,114 @@ SKITY_C_API skity_path skity_path_copy_with_matrix(skity_path path,
  *        skity_path_destroy.
  */
 SKITY_C_API skity_path skity_path_copy_with_scale(skity_path path, float scale);
+
+/**
+ * @brief Copy x/y at index without perspective division.
+ * @param out receives (0, 0) for an invalid index; must not be NULL
+ * @return 1 for a valid index, 0 otherwise. Invalid handles leave out
+ * unchanged.
+ */
+SKITY_C_API uint32_t skity_path_get_point_2d(skity_path path, int32_t index,
+                                             skity_vec2* out);
+
+/**
+ * @brief Copy the last point as x/y, or (0, 0) for an empty path.
+ * @param out optional output; NULL only tests whether a point exists
+ * @return 1 if a point exists, 0 otherwise. Invalid handles leave out
+ * unchanged.
+ */
+SKITY_C_API uint32_t skity_path_get_last_pt_2d(skity_path path,
+                                               skity_vec2* out);
+
+/** @brief Copy the last Move point as x/y, or (0, 0) for an empty path.
+ *         NULL output or invalid handles are ignored. */
+SKITY_C_API void skity_path_get_last_move_pt_2d(skity_path path,
+                                                skity_vec2* out);
+
+/**
+ * @brief Copy up to capacity points as x/y without perspective division.
+ * @param out destination array, or NULL to query the point count
+ * @param capacity maximum number of points to write; zero writes nothing
+ * @return number written, total count if out is NULL, or 0 for invalid handles
+ */
+SKITY_C_API size_t skity_path_copy_points_2d(skity_path path, skity_vec2* out,
+                                             size_t capacity);
+
+/**
+ * @brief Test for a single Move followed by a Line.
+ * @param out_pts optional storage for two x/y endpoints; unchanged on failure
+ * @return 1 for a line, 0 otherwise
+ */
+SKITY_C_API uint32_t skity_path_is_line_2d(skity_path path,
+                                           skity_vec2 out_pts[2]);
+
+/** @brief Path iterator that can synthesize closing lines. */
+SKITY_C_DEFINE_HANDLE(skity_path_iter);
+/** @brief Path iterator over stored verbs without synthesizing closing lines.
+ */
+SKITY_C_DEFINE_HANDLE(skity_path_raw_iter);
+
+/**
+ * @brief Create an iterator. The source Path must remain alive and unmodified
+ *        until the iterator is destroyed, including when using borrowed
+ * handles.
+ * @param force_closed non-zero to close open contours
+ * @return owning iterator handle, or NULL for an invalid path
+ */
+SKITY_C_API skity_path_iter skity_path_iter_create(skity_path path,
+                                                   uint32_t force_closed);
+/**
+ * @brief Reuse the iterator on another path, restarting traversal. The source
+ *        Path must remain alive and unmodified until reset or destruction.
+ * @return 1 on success; 0 for invalid handles, leaving the iterator unchanged
+ */
+SKITY_C_API uint32_t skity_path_iter_set_path(skity_path_iter iter,
+                                              skity_path path,
+                                              uint32_t force_closed);
+/** @brief Destroy the iterator. Safe on NULL. */
+SKITY_C_API void skity_path_iter_destroy(skity_path_iter iter);
+/**
+ * @brief Advance and copy x/y without perspective division. A trailing Move
+ *        without a following verb is skipped.
+ * @param out_pts storage for 4 points; Move/Line/Quad/Conic/Cubic write
+ *                1/2/3/3/4 points including the start point. Close and Done
+ *                leave output unchanged. NULL does not advance the iterator.
+ * @return next verb, or Done for invalid handles or NULL output
+ */
+SKITY_C_API skity_path_verb skity_path_iter_next_2d(skity_path_iter iter,
+                                                    skity_vec2 out_pts[4]);
+/** @brief Return the weight of the last Conic; only valid after a Conic verb.
+ */
+SKITY_C_API float skity_path_iter_conic_weight(skity_path_iter iter);
+/** @brief Return 1 if the last Line was generated to close a contour. */
+SKITY_C_API uint32_t skity_path_iter_is_close_line(skity_path_iter iter);
+/** @brief Return 1 if the current contour is closed or force-closed. */
+SKITY_C_API uint32_t skity_path_iter_is_closed_contour(skity_path_iter iter);
+
+/**
+ * @brief Create an iterator over stored verbs. The source Path must remain
+ *        alive and unmodified until the iterator is destroyed.
+ * @return owning iterator handle, or NULL for an invalid path
+ */
+SKITY_C_API skity_path_raw_iter skity_path_raw_iter_create(skity_path path);
+/**
+ * @brief Reuse the iterator on another path, restarting traversal. The source
+ *        Path must remain alive and unmodified until reset or destruction.
+ * @return 1 on success; 0 for invalid handles, leaving the iterator unchanged
+ */
+SKITY_C_API uint32_t skity_path_raw_iter_set_path(skity_path_raw_iter iter,
+                                                  skity_path path);
+/** @brief Destroy the iterator. Safe on NULL. */
+SKITY_C_API void skity_path_raw_iter_destroy(skity_path_raw_iter iter);
+/** @brief Advance over stored verbs, with the same output contract as
+ *         skity_path_iter_next_2d. No closing lines are synthesized. */
+SKITY_C_API skity_path_verb
+skity_path_raw_iter_next_2d(skity_path_raw_iter iter, skity_vec2 out_pts[4]);
+/** @brief Return the next stored verb without advancing, or Done at the end. */
+SKITY_C_API skity_path_verb skity_path_raw_iter_peek(skity_path_raw_iter iter);
+/** @brief Return the weight of the last Conic; only valid after a Conic verb.
+ */
+SKITY_C_API float skity_path_raw_iter_conic_weight(skity_path_raw_iter iter);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -9,6 +9,9 @@
 #include <skity/graphic/paint.hpp>
 #include <skity/render/canvas.hpp>
 
+#include "src/graphic/path_priv.hpp"
+#include "src/render/sw/sw_edge.hpp"
+
 namespace {
 
 void DrawRotatedSaveLayerScene(skity::Bitmap* bitmap,
@@ -128,4 +131,79 @@ TEST(SWCanvas, StrokeThenFillDrawsFillAfterStroke) {
 
   EXPECT_EQ(bitmap.GetPixel(12, 20), skity::Color_WHITE);
   EXPECT_EQ(bitmap.GetPixel(7, 20), skity::Color_RED);
+}
+
+TEST(SWCanvas, PathEdgesCloseEachContourAndSkipEmptyEdges) {
+  skity::SWEdgeBuilder empty;
+  skity::Path path;
+  const auto bounds = skity::Rect::MakeWH(64.f, 64.f);
+  EXPECT_EQ(empty.BuildEdges(path, bounds), 0);
+  path.MoveTo(1, 1).Close().MoveTo(2, 2);
+  EXPECT_EQ(empty.BuildEdges(path, bounds), 0);
+
+  for (bool explicit_close : {false, true}) {
+    SCOPED_TRACE(explicit_close);
+    path.Reset();
+    path.MoveTo(4, 4).LineTo(12, 16).LineTo(20, 8);
+    if (explicit_close) {
+      path.Close();
+    }
+    // The quad splits at its y extremum; its horizontal closing edge is
+    // skipped.
+    path.MoveTo(24, 4).QuadTo(32, 28, 40, 4);
+    if (explicit_close) {
+      path.Close();
+    }
+    // Already closed geometry must not produce an extra zero-length edge.
+    path.MoveTo(44, 4).LineTo(52, 16).LineTo(44, 4);
+    if (explicit_close) {
+      path.Close();
+    }
+    path.MoveTo(60, 60);
+    skity::SWEdgeBuilder builder;
+    ASSERT_EQ(builder.BuildEdges(path, bounds), 7);
+    const auto& edges = builder.GetEdges();
+    EXPECT_EQ(edges[0]->winding, 1);
+    EXPECT_EQ(edges[1]->winding, -1);
+    EXPECT_EQ(edges[2]->winding, -1);
+    EXPECT_EQ(edges[3]->winding, 1);
+    EXPECT_EQ(edges[4]->winding, -1);
+    EXPECT_EQ(edges[5]->winding, 1);
+    EXPECT_EQ(edges[6]->winding, -1);
+  }
+}
+
+TEST(PathEdgeIter, PlanarReadsPreserveClosingEdgesAndContourBoundaries) {
+  skity::Path path;
+  path.MoveTo(1, 2).ConicTo(3, 4, 5, 6, 0.5f);
+  path.MoveTo(10, 20).LineTo(10, 20).Close();
+  skity::PathEdgeIter iter(path);
+
+  auto edge = iter.next();
+  ASSERT_TRUE(static_cast<bool>(edge));
+  EXPECT_EQ(edge.edge, skity::PathEdgeIter::Edge::kConic);
+  EXPECT_TRUE(edge.is_new_contour);
+  EXPECT_EQ(edge.GetPoint2D(0), (skity::Vec2{1, 2}));
+  EXPECT_EQ(edge.GetPoint2D(1), (skity::Vec2{3, 4}));
+  EXPECT_EQ(edge.GetPoint2D(2), (skity::Vec2{5, 6}));
+  EXPECT_EQ(iter.conicWeight(), 0.5f);
+
+  edge = iter.next();
+  ASSERT_TRUE(static_cast<bool>(edge));
+  EXPECT_EQ(edge.edge, skity::PathEdgeIter::Edge::kLine);
+  EXPECT_FALSE(edge.is_new_contour);
+  EXPECT_EQ(edge.GetPoint2D(0), (skity::Vec2{5, 6}));
+  EXPECT_EQ(edge.GetPoint2D(1), (skity::Vec2{1, 2}));
+
+  edge = iter.next();
+  ASSERT_TRUE(static_cast<bool>(edge));
+  EXPECT_TRUE(edge.is_new_contour);
+  EXPECT_EQ(edge.GetPoint2D(0), (skity::Vec2{10, 20}));
+  EXPECT_EQ(edge.GetPoint2D(1), (skity::Vec2{10, 20}));
+  edge = iter.next();
+  ASSERT_TRUE(static_cast<bool>(edge));
+  EXPECT_FALSE(edge.is_new_contour);
+  EXPECT_EQ(edge.GetPoint2D(0), (skity::Vec2{10, 20}));
+  EXPECT_EQ(edge.GetPoint2D(1), (skity::Vec2{10, 20}));
+  EXPECT_FALSE(iter.next());
 }

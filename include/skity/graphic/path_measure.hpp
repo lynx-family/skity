@@ -60,6 +60,18 @@ class SKITY_API PathMeasure final {
   bool GetPosTan(float distance, Point* position, Vector* tangent);
 
   /**
+   * @brief Returns x/y of the position and tangent at the given distance,
+   *        without a transform or perspective division.
+   *
+   * @param [in] distance   pins distance to 0 <= distance <= GetLength()
+   * @param [out] position  optional position output in path coordinates
+   * @param [out] tangent   optional tangent output in path coordinates
+   * @return                false if GetPosTan() fails, leaving outputs
+   *                        unchanged; true otherwise
+   */
+  bool GetPosTan2D(float distance, Vec2* position, Vec2* tangent);
+
+  /**
    * @brief Given a start and stop distance. return the sub-path.
    *  If the segment is zero-length, return false.
    *  if startD > stopD, return false.

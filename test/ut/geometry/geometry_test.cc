@@ -10,9 +10,48 @@
 #include <limits>
 #include <vector>
 
+#include "src/geometry/cubic.hpp"
 #include "src/geometry/math.hpp"
 #include "src/geometry/wangs_formula.hpp"
 #include "src/graphic/path_visitor.hpp"
+
+TEST(Cubic2D, PreservesQuadraticAndPointCurves) {
+  skity::Cubic quadratic({0, 0}, {2, 4}, {4, 4}, {6, 0});
+  auto quads = quadratic.ToQuads();
+  ASSERT_EQ(quads.size(), 1u);
+  EXPECT_EQ(quads[0][0], (skity::Vec2{0, 0}));
+  EXPECT_EQ(quads[0][1], (skity::Vec2{3, 6}));
+  EXPECT_EQ(quads[0][2], (skity::Vec2{6, 0}));
+
+  skity::Cubic point({7, -3}, {7, -3}, {7, -3}, {7, -3});
+  quads = point.ToQuads();
+  ASSERT_EQ(quads.size(), 1u);
+  for (const auto& p : quads[0]) {
+    EXPECT_EQ(p, (skity::Vec2{7, -3}));
+  }
+}
+
+TEST(Cubic2D, SubdividedCurveKeepsContinuityAndApproximationAccuracy) {
+  skity::Cubic cubic({0, 0}, {0, 100}, {100, -100}, {100, 0});
+  auto quads = cubic.ToQuads();
+  ASSERT_GT(quads.size(), 1u);
+  EXPECT_EQ(quads.front()[0], (skity::Vec2{0, 0}));
+  EXPECT_EQ(quads.back()[2], (skity::Vec2{100, 0}));
+  for (size_t i = 0; i < quads.size(); ++i) {
+    const auto& quad = quads[i];
+    if (i > 0) {
+      EXPECT_EQ(quad[0], quads[i - 1][2]);
+    }
+    for (float u : {0.f, 0.25f, 0.5f, 0.75f, 1.f}) {
+      double t = (i + static_cast<double>(u)) / quads.size();
+      skity::Vec2 expected{100 * t * t * (3 - 2 * t),
+                           300 * t * (1 - t) * (1 - 2 * t)};
+      auto actual = (1 - u) * (1 - u) * quad[0] + 2 * (1 - u) * u * quad[1] +
+                    u * u * quad[2];
+      EXPECT_LE((actual - expected).Length(), 0.1001f);
+    }
+  }
+}
 
 TEST(QUAD, tangents) {
   std::vector<std::array<skity::Point, 3>> pts = {

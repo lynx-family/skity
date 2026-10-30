@@ -42,6 +42,7 @@ set(SKITY_CAPI_SOURCES
   ${CMAKE_CURRENT_LIST_DIR}/src/canvas_c.cpp
   ${CMAKE_CURRENT_LIST_DIR}/src/paint_c.cpp
   ${CMAKE_CURRENT_LIST_DIR}/src/path_c.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/src/path_builder_c.cpp
   ${CMAKE_CURRENT_LIST_DIR}/src/path_measure_c.cpp
   ${CMAKE_CURRENT_LIST_DIR}/src/path_op_c.cpp
   ${CMAKE_CURRENT_LIST_DIR}/src/shader_c.cpp

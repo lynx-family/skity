@@ -517,6 +517,38 @@ TEST(Path, bad_case) {
   EXPECT_EQ(pts[0], randomPts[7]);
 }
 
+TEST(path, RangeIterReadsPlanarPointsWithoutAdvancing) {
+  skity::Path path;
+  path.MoveTo(1, 2)
+      .LineTo(3, 4)
+      .QuadTo(5, 6, 7, 8)
+      .ConicTo(9, 10, 11, 12, 0.5f)
+      .CubicTo(13, 14, 15, 16, 17, 18)
+      .Close();
+  skity::Matrix matrix;
+  matrix.Set(2, 3, 7.f);
+  matrix.Set(3, 3, 2.f);
+  path = path.CopyWithMatrix(matrix);
+  skity::PathPriv::Iterate range(path);
+  constexpr int point_counts[] = {1, 2, 3, 3, 4, 0};
+  int count = 0;
+  for (auto iter = range.begin(); iter != range.end(); ++iter) {
+    const auto before = iter;
+    const auto [verb, points, weight] = *iter;
+    EXPECT_EQ(iter.PeekVerb(), verb);
+    for (int i = 0; i < point_counts[static_cast<int>(verb)]; ++i) {
+      EXPECT_EQ(iter.GetPoint2D(i), (skity::Vec2{points[i].x, points[i].y}));
+    }
+    if (verb == skity::Path::Verb::kConic) {
+      EXPECT_EQ(iter.ConicWeight(), *weight);
+      EXPECT_EQ(iter.ConicWeight(), 0.5f);
+    }
+    EXPECT_EQ(iter, before);
+    ++count;
+  }
+  EXPECT_EQ(count, 6);
+}
+
 TEST(path, test_range_iter) {
   skity::Path path;
   skity::PathPriv::Iterate iterate{path};
@@ -1304,6 +1336,22 @@ TEST(Path, AddPath) {
     }
   }
   EXPECT_EQ(move_count, 3);
+}
+
+TEST(Path, AddClosedPathAfterCurveKeepsLastMovePoint) {
+  skity::Path path;
+  path.MoveTo(0, 0).CubicTo(1, 2, 3, 4, 5, 6);
+  skity::Path child;
+  child.MoveTo(10, 20).LineTo(30, 40).Close();
+  path.AddPath(child);
+
+  EXPECT_EQ(path.GetLastMovePt(), (skity::Point{10, 20, 0, 1}));
+  EXPECT_EQ(path.GetLastMovePt2D(), (skity::Vec2{10, 20}));
+
+  skity::Path expected = path;
+  expected.MoveTo(10, 20).LineTo(50, 60);
+  path.LineTo(50, 60);
+  EXPECT_EQ(path, expected);
 }
 
 TEST(Path, StrokePath) {
