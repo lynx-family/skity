@@ -8,9 +8,12 @@
 #include <array>
 #include <cstring>
 #include <glm/gtc/matrix_transform.hpp>
+#include <mutex>
 #include <skity/graphic/path.hpp>
 #include <sstream>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 #include "src/geometry/conic.hpp"
 #include "src/geometry/geometry.hpp"
@@ -21,6 +24,112 @@
 #include "src/logging.hpp"
 
 namespace skity {
+
+struct Path::Storage {
+  explicit Storage(uint32_t refs = 1) : refs_(refs) {}
+
+  static Storage* Empty() {
+    // Zero keeps the shared empty storage permanently non-writable.
+    static Storage empty(0);
+    return &empty;
+  }
+
+  void Ref() {
+    if (this != Empty()) {
+      refs_.fetch_add(1, std::memory_order_relaxed);
+    }
+  }
+
+  void Unref() {
+    if (this != Empty() && refs_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+      delete this;
+    }
+  }
+
+  bool Unique() const {
+    // Acquire pairs with the last reader's release before reusing its memory.
+    return refs_.load(std::memory_order_acquire) == 1;
+  }
+
+  std::vector<Point> points_;
+  std::vector<Verb> verbs_;
+  std::vector<float> conic_weights_;
+  std::atomic<uint32_t> refs_;
+  std::mutex bounds_mutex_;
+  std::atomic<bool> bounds_dirty_{false};
+  bool is_finite_ = true;
+  Rect bounds_;
+};
+
+Path::Path() : storage_(Storage::Empty()) {}
+
+Path::~Path() { storage_->Unref(); }
+
+Path::Path(const Path& other)
+    : storage_(other.storage_),
+      last_move_to_index_(other.last_move_to_index_),
+      convexity_(other.convexity_.load(std::memory_order_acquire)),
+      first_direction_(other.GetFirstDirection()),
+      fill_type_(other.fill_type_),
+      segment_masks_(other.segment_masks_),
+      type_(other.type_),
+      radii_(other.radii_) {
+  storage_->Ref();
+}
+
+Path& Path::operator=(const Path& other) {
+  if (this != &other) {
+    Path copy(other);
+    Swap(copy);
+  }
+  return *this;
+}
+
+Path::Path(Path&& other) noexcept : Path() { Swap(other); }
+
+Path& Path::operator=(Path&& other) noexcept {
+  if (this != &other) {
+    Path moved(std::move(other));
+    Swap(moved);
+  }
+  return *this;
+}
+
+size_t Path::CountPoints() const { return storage_->points_.size(); }
+size_t Path::CountVerbs() const { return storage_->verbs_.size(); }
+const Path::Verb* Path::VerbsBegin() const { return storage_->verbs_.data(); }
+const Path::Verb* Path::VerbsEnd() const {
+  return IsEmpty() ? VerbsBegin() : VerbsBegin() + CountVerbs();
+}
+const Point* Path::Points() const { return storage_->points_.data(); }
+const float* Path::ConicWeights() const {
+  return storage_->conic_weights_.data();
+}
+
+void Path::EnsureWritable(size_t add_points, size_t add_verbs,
+                          size_t add_weights) {
+  // Keep allocation and copying separate so this check can inline into writers.
+  if (!storage_->Unique()) {
+    DetachStorage(add_points, add_verbs, add_weights);
+  }
+}
+
+void Path::DetachStorage(size_t add_points, size_t add_verbs,
+                         size_t add_weights) {
+  auto* writable = new Storage;
+  writable->points_.reserve(std::max(size_t{4}, CountPoints() + add_points));
+  // Leave room to close a four-point contour without another allocation.
+  writable->verbs_.reserve(std::max(size_t{5}, CountVerbs() + add_verbs));
+  size_t weights = storage_->conic_weights_.size() + add_weights;
+  if (weights) {
+    writable->conic_weights_.reserve(std::max(size_t{2}, weights));
+  }
+  writable->points_ = storage_->points_;
+  writable->verbs_ = storage_->verbs_;
+  writable->conic_weights_ = storage_->conic_weights_;
+  storage_->Unref();
+  storage_ = writable;
+}
 
 static bool arc_is_long_point(Rect const& oval, float start_angle,
                               float sweep_angle, Point* pt) {
@@ -285,10 +394,10 @@ Path::Verb Path::Iter::Next(Vec2 pts[4]) {
 }
 
 void Path::Iter::SetPath(Path const& path, bool forceClose) {
-  pts_ = path.points_.data();
-  verbs_ = path.verbs_.data();
-  verb_stop_ = path.verbs_.data() + path.CountVerbs();
-  conic_weights_ = path.conic_weights_.data();
+  pts_ = path.storage_->points_.data();
+  verbs_ = path.storage_->verbs_.data();
+  verb_stop_ = path.VerbsEnd();
+  conic_weights_ = path.storage_->conic_weights_.data();
   if (conic_weights_) {
     conic_weights_ -= 1;
   }
@@ -442,15 +551,15 @@ Path::RawIter::RawIter()
       conic_weights_(nullptr) {}
 
 void Path::RawIter::SetPath(const Path& path) {
-  pts_ = path.points_.data();
+  pts_ = path.storage_->points_.data();
   if (path.CountVerbs() > 0) {
-    verbs_ = path.verbs_.data();
-    verb_stop_ = path.verbs_.data() + path.CountVerbs();
+    verbs_ = path.storage_->verbs_.data();
+    verb_stop_ = path.VerbsEnd();
   } else {
     verbs_ = verb_stop_ = nullptr;
   }
 
-  conic_weights_ = path.conic_weights_.data();
+  conic_weights_ = path.storage_->conic_weights_.data();
   if (conic_weights_) {
     conic_weights_ -= 1;
   }
@@ -536,40 +645,47 @@ static int _pts_in_verb(Path::Verb verb) {
 }
 
 Path& Path::MoveTo(float x, float y) {
-  if (!verbs_.empty() && verbs_.back() == Verb::kMove) {
-    DEBUG_CHECK(!points_.empty());
-    points_.back() = {x, y, 0, 1};
+  bool replace_move =
+      !storage_->verbs_.empty() && storage_->verbs_.back() == Verb::kMove;
+  EnsureWritable(replace_move ? 0 : 1, replace_move ? 0 : 1);
+  if (replace_move) {
+    DEBUG_CHECK(!storage_->points_.empty());
+    storage_->points_.back() = {x, y, 0, 1};
   } else {
     last_move_to_index_ = CountPoints();
-    verbs_.emplace_back(Verb::kMove);
-    points_.emplace_back(Point{x, y, 0, 1});
+    storage_->verbs_.emplace_back(Verb::kMove);
+    storage_->points_.emplace_back(Point{x, y, 0, 1});
     type_ = IsAType::kGeneral;
   }
-  MarkBoundsDirty();
+  GeometryChanged();
   return *this;
 }
 
 Path& Path::LineTo(float x, float y) {
+  size_t move = last_move_to_index_ < 0 ? 1 : 0;
+  EnsureWritable(1 + move, 1 + move);
   InjectMoveToIfNeed();
 
-  verbs_.emplace_back(Verb::kLine);
-  points_.emplace_back(Point{x, y, 0, 1});
+  storage_->verbs_.emplace_back(Verb::kLine);
+  storage_->points_.emplace_back(Point{x, y, 0, 1});
   segment_masks_ |= SegmentMask::kLine;
   type_ = IsAType::kGeneral;
-  MarkBoundsDirty();
+  GeometryChanged();
 
   return *this;
 }
 
 Path& Path::QuadTo(float x1, float y1, float x2, float y2) {
+  size_t move = last_move_to_index_ < 0 ? 1 : 0;
+  EnsureWritable(2 + move, 1 + move);
   InjectMoveToIfNeed();
 
-  verbs_.emplace_back(Verb::kQuad);
-  points_.emplace_back(Point{x1, y1, 0, 1});
-  points_.emplace_back(Point{x2, y2, 0, 1});
+  storage_->verbs_.emplace_back(Verb::kQuad);
+  storage_->points_.emplace_back(Point{x1, y1, 0, 1});
+  storage_->points_.emplace_back(Point{x2, y2, 0, 1});
   segment_masks_ |= SegmentMask::kQuad;
   type_ = IsAType::kGeneral;
-  MarkBoundsDirty();
+  GeometryChanged();
 
   return *this;
 }
@@ -583,31 +699,35 @@ Path& Path::ConicTo(float x1, float y1, float x2, float y2, float weight) {
   } else if (weight == Float1) {
     this->QuadTo(x1, y1, x2, y2);
   } else {
+    size_t move = last_move_to_index_ < 0 ? 1 : 0;
+    EnsureWritable(2 + move, 1 + move, 1);
     InjectMoveToIfNeed();
 
-    verbs_.emplace_back(Verb::kConic);
-    conic_weights_.emplace_back(weight);
-    points_.emplace_back(Point{x1, y1, 0, 1});
-    points_.emplace_back(Point{x2, y2, 0, 1});
+    storage_->verbs_.emplace_back(Verb::kConic);
+    storage_->conic_weights_.emplace_back(weight);
+    storage_->points_.emplace_back(Point{x1, y1, 0, 1});
+    storage_->points_.emplace_back(Point{x2, y2, 0, 1});
     segment_masks_ |= SegmentMask::kConic;
     type_ = IsAType::kGeneral;
-    MarkBoundsDirty();
+    GeometryChanged();
   }
   return *this;
 }
 
 Path& Path::CubicTo(float x1, float y1, float x2, float y2, float x3,
                     float y3) {
+  size_t move = last_move_to_index_ < 0 ? 1 : 0;
+  EnsureWritable(3 + move, 1 + move);
   InjectMoveToIfNeed();
 
-  verbs_.emplace_back(Verb::kCubic);
+  storage_->verbs_.emplace_back(Verb::kCubic);
 
-  points_.emplace_back(Point{x1, y1, 0, 1});
-  points_.emplace_back(Point{x2, y2, 0, 1});
-  points_.emplace_back(Point{x3, y3, 0, 1});
+  storage_->points_.emplace_back(Point{x1, y1, 0, 1});
+  storage_->points_.emplace_back(Point{x2, y2, 0, 1});
+  storage_->points_.emplace_back(Point{x3, y3, 0, 1});
   segment_masks_ |= SegmentMask::kCubic;
   type_ = IsAType::kGeneral;
-  MarkBoundsDirty();
+  GeometryChanged();
 
   return *this;
 }
@@ -882,13 +1002,15 @@ Path& Path::AddRect(Rect const& rect, Direction dir, uint32_t start) {
 Path& Path::Close() {
   size_t count = CountVerbs();
   if (count > 0) {
-    switch (verbs_.back()) {
+    switch (storage_->verbs_.back()) {
       case Verb::kLine:
       case Verb::kQuad:
       case Verb::kConic:
       case Verb::kCubic:
       case Verb::kMove:
-        verbs_.emplace_back(Verb::kClose);
+        EnsureWritable(0, 1);
+        storage_->verbs_.emplace_back(Verb::kClose);
+        GeometryChanged();
         break;
       case Verb::kClose:
         break;
@@ -984,27 +1106,43 @@ Path& Path::AddRRect(RRect const& rrect, Direction dir, uint32_t start_index) {
 }
 
 Path& Path::Reset() {
-  points_.clear();
-  verbs_.clear();
-  conic_weights_.clear();
+  if (storage_->Unique()) {
+    storage_->points_.clear();
+    storage_->verbs_.clear();
+    storage_->conic_weights_.clear();
+    storage_->bounds_ = Rect{};
+    storage_->is_finite_ = true;
+    storage_->bounds_dirty_.store(false, std::memory_order_relaxed);
+  } else {
+    storage_->Unref();
+    storage_ = Storage::Empty();
+  }
   last_move_to_index_ = ~0;
-  convexity_ = ConvexityType::kUnknown;
-  first_direction_ = Direction::kCCW;
-  is_finite_ = true;
-  bounds_ = Rect{};
+  SetConvexityType(ConvexityType::kUnknown);
+  SetFirstDirection(Direction::kCCW);
   fill_type_ = PathFillType::kWinding;
   segment_masks_ = 0;
   type_ = IsAType::kGeneral;
   radii_ = Vec2{0.f, 0.f};
-  MarkBoundsDirty();
   return *this;
 }
 
 Path& Path::ReverseAddPath(const Path& src) {
-  auto verbs_begin = src.verbs_.data();
-  auto verbs = verbs_begin + src.verbs_.size();
-  auto pts = src.points_.data() + src.CountPoints();
-  auto conic_weights = src.conic_weights_.data() + src.conic_weights_.size();
+  if (src.IsEmpty()) {
+    return *this;
+  }
+  if (this == &src) {
+    Path snapshot(src);
+    return ReverseAddPath(snapshot);
+  }
+
+  auto verbs_begin = src.storage_->verbs_.data();
+  auto verbs = verbs_begin + src.storage_->verbs_.size();
+  auto pts = src.storage_->points_.data() + src.CountPoints();
+  auto conic_weights = src.ConicWeights();
+  if (conic_weights) {
+    conic_weights += src.storage_->conic_weights_.size();
+  }
 
   bool need_move = true;
   bool need_close = false;
@@ -1018,7 +1156,9 @@ Path& Path::ReverseAddPath(const Path& src) {
       need_move = false;
     }
 
-    pts -= n;
+    if (v != Verb::kMove) {
+      pts -= n;
+    }
 
     switch (v) {
       case Verb::kMove:
@@ -1027,7 +1167,6 @@ Path& Path::ReverseAddPath(const Path& src) {
           need_close = false;
         }
         need_move = true;
-        pts += 1;
         break;
       case Verb::kLine:
         LineTo(pts->x, pts->y);
@@ -1068,9 +1207,9 @@ Path& Path::AddOval(const Rect& oval, Direction dir) {
 Path& Path::AddOval(const Rect& oval, Direction dir, uint32_t start) {
   bool is_oval = HasOnlyMoveTos();
   if (is_oval) {
-    first_direction_ = dir;
+    SetFirstDirection(dir);
   } else {
-    first_direction_ = Direction::kUnknown;
+    SetFirstDirection(Direction::kUnknown);
   }
 
   AutoDisableDirectionCheck addc{this};
@@ -1094,23 +1233,32 @@ Path& Path::AddOval(const Rect& oval, Direction dir, uint32_t start) {
 }
 
 Path& Path::ReversePathTo(const Path& src) {
-  if (src.verbs_.empty()) {
+  if (this == &src) {
+    Path snapshot(src);
+    return ReversePathTo(snapshot);
+  }
+
+  if (src.storage_->verbs_.empty()) {
     return *this;
   }
 
-  auto verbs = src.verbs_.data() + src.verbs_.size();
-  auto verbs_begin = src.verbs_.data();
-  const Point* pts = src.points_.data() + src.points_.size() - 1;
-  const float* conic_weights =
-      src.conic_weights_.data() + src.conic_weights_.size();
+  auto verbs = src.storage_->verbs_.data() + src.storage_->verbs_.size();
+  auto verbs_begin = src.storage_->verbs_.data();
+  const Point* pts =
+      src.storage_->points_.data() + src.storage_->points_.size() - 1;
+  const float* conic_weights = src.ConicWeights();
+  if (conic_weights) {
+    conic_weights += src.storage_->conic_weights_.size();
+  }
 
   while (verbs > verbs_begin) {
     auto v = *--verbs;
+    // Stop before the move point; there is no preceding segment.
+    if (v == Verb::kMove) {
+      return *this;
+    }
     pts -= _pts_in_verb(v);
     switch (v) {
-      case Verb::kMove:
-        // if the path has multiple contours, stop after reversing the last
-        return *this;
       case Verb::kLine:
         LineTo(pts[0].x, pts[0].y);
         break;
@@ -1137,7 +1285,7 @@ bool Path::GetLastPt(Point* lastPt) const {
   size_t count = CountPoints();
   if (count > 0) {
     if (lastPt) {
-      *lastPt = points_.back();
+      *lastPt = storage_->points_.back();
     }
     return true;
   }
@@ -1150,14 +1298,14 @@ bool Path::GetLastPt(Point* lastPt) const {
 
 Point Path::GetPoint(int index) const {
   if (index < static_cast<int32_t>(CountPoints())) {
-    return points_[index];
+    return storage_->points_[index];
   }
   return Point{0, 0, 0, 1};
 }
 
 Path::Verb Path::GetVerb(int index) const {
   if (index < static_cast<int32_t>(CountVerbs())) {
-    return verbs_[index];
+    return storage_->verbs_[index];
   }
   return Path::Verb::kDone;
 }
@@ -1201,19 +1349,21 @@ size_t Path::CopyPoints2D(Vec2* dst, size_t capacity) const {
 }
 
 bool Path::IsFinite() const {
-  if (bounds_dirty_) {
-    ComputeBounds();
-    bounds_dirty_ = false;
-  }
-  return is_finite_;
+  ComputeBounds();
+  return storage_->is_finite_;
+}
+
+Rect Path::GetBounds() const {
+  ComputeBounds();
+  return storage_->bounds_;
 }
 
 bool Path::IsLine(Point* line) const {
   int verb_count = this->CountVerbs();
 
   if (2 == verb_count) {
-    assert(verbs_.front() == Verb::kMove);
-    if (verbs_[1] == Verb::kLine) {
+    assert(storage_->verbs_.front() == Verb::kMove);
+    if (storage_->verbs_[1] == Verb::kLine) {
       assert(2 == this->CountPoints());
       if (line) {
         const Point* pts = Points();
@@ -1246,26 +1396,31 @@ bool Path::operator==(const Path& other) const {
   return (this == std::addressof(other)) ||
          (last_move_to_index_ == other.last_move_to_index_ &&
           fill_type_ == other.fill_type_ &&
-          points_.size() == other.points_.size() &&
-          verbs_.size() == other.verbs_.size() &&
-          conic_weights_.size() == other.conic_weights_.size() &&
-          std::equal(verbs_.begin(), verbs_.end(), other.verbs_.begin()) &&
-          std::equal(points_.begin(), points_.end(), other.points_.begin()) &&
-          std::equal(conic_weights_.begin(), conic_weights_.end(),
-                     other.conic_weights_.begin()));
+          storage_->points_.size() == other.storage_->points_.size() &&
+          storage_->verbs_.size() == other.storage_->verbs_.size() &&
+          storage_->conic_weights_.size() ==
+              other.storage_->conic_weights_.size() &&
+          std::equal(storage_->verbs_.begin(), storage_->verbs_.end(),
+                     other.storage_->verbs_.begin()) &&
+          std::equal(storage_->points_.begin(), storage_->points_.end(),
+                     other.storage_->points_.begin()) &&
+          std::equal(storage_->conic_weights_.begin(),
+                     storage_->conic_weights_.end(),
+                     other.storage_->conic_weights_.begin()));
 }
 
 void Path::Swap(Path& that) {
   if (this != &that) {
+    std::swap(storage_, that.storage_);
     std::swap(last_move_to_index_, that.last_move_to_index_);
-    std::swap(convexity_, that.convexity_);
-    std::swap(points_, that.points_);
-    std::swap(verbs_, that.verbs_);
-    std::swap(conic_weights_, that.conic_weights_);
-    std::swap(is_finite_, that.is_finite_);
+    auto convexity = convexity_.load(std::memory_order_relaxed);
+    SetConvexityType(that.convexity_.load(std::memory_order_relaxed));
+    that.SetConvexityType(convexity);
+    auto direction = GetFirstDirection();
+    SetFirstDirection(that.GetFirstDirection());
+    that.SetFirstDirection(direction);
+    std::swap(fill_type_, that.fill_type_);
     std::swap(segment_masks_, that.segment_masks_);
-    std::swap(bounds_, that.bounds_);
-    std::swap(bounds_dirty_, that.bounds_dirty_);
     std::swap(type_, that.type_);
     std::swap(radii_, that.radii_);
   }
@@ -1281,11 +1436,18 @@ Path& Path::AddPath(const Path& src, AddMode mode) {
 }
 
 Path& Path::AddPath(const Path& src, const Matrix& matrix, AddMode mode) {
+  if (this == &src) {
+    Path snapshot(src);
+    return AddPath(snapshot, matrix, mode);
+  }
+
   if (src.IsEmpty()) {
     return *this;
   }
 
   if (mode == AddMode::kAppend) {
+    EnsureWritable(src.CountPoints(), src.CountVerbs(),
+                   src.storage_->conic_weights_.size());
     if (src.last_move_to_index_ >= 0) {
       last_move_to_index_ =
           src.last_move_to_index_ + static_cast<int32_t>(CountPoints());
@@ -1295,21 +1457,25 @@ Path& Path::AddPath(const Path& src, const Matrix& matrix, AddMode mode) {
     }
 
     // add verb
-    verbs_.insert(verbs_.end(), src.verbs_.begin(), src.verbs_.end());
+    storage_->verbs_.insert(storage_->verbs_.end(),
+                            src.storage_->verbs_.begin(),
+                            src.storage_->verbs_.end());
     segment_masks_ |= src.segment_masks_;
     // add weights
-    conic_weights_.insert(conic_weights_.end(), src.conic_weights_.begin(),
-                          src.conic_weights_.end());
-    // add points
-    //    points_.insert(points_.end(), src.points_.begin(), src.points_.end());
-    if (points_.capacity() < points_.size() + src.points_.size()) {
-      points_.reserve((points_.capacity() + src.points_.capacity()));
+    storage_->conic_weights_.insert(storage_->conic_weights_.end(),
+                                    src.storage_->conic_weights_.begin(),
+                                    src.storage_->conic_weights_.end());
+    // Grow from the destination's capacity, never the source's spare capacity.
+    size_t required = CountPoints() + src.CountPoints();
+    if (storage_->points_.capacity() < required) {
+      storage_->points_.reserve(
+          std::max(required, storage_->points_.capacity() * 2));
     }
 
-    for (const auto& p : src.points_) {
-      points_.emplace_back(matrix * p);
+    for (const auto& p : src.storage_->points_) {
+      storage_->points_.emplace_back(matrix * p);
     }
-    MarkBoundsDirty();
+    GeometryChanged();
     type_ = IsAType::kGeneral;
 
     return *this;
@@ -1369,62 +1535,37 @@ void Path::SetLastPt(float x, float y) {
   if (CountPoints() == 0) {
     MoveTo(x, y);
   } else {
-    PointSet(points_.back(), x, y);
-    MarkBoundsDirty();
+    EnsureWritable();
+    PointSet(storage_->points_.back(), x, y);
+    GeometryChanged();
     type_ = IsAType::kGeneral;
   }
 }
 
 Path Path::CopyWithMatrix(const Matrix& matrix) const {
   Path ret;
-
-  ret.last_move_to_index_ = last_move_to_index_;
-  ret.convexity_ = convexity_;
-  ret.first_direction_ = first_direction_;
   ret.fill_type_ = fill_type_;
-
-  ret.points_.reserve(this->points_.capacity());
-  for (const auto& p : this->points_) {
-    ret.points_.emplace_back(matrix * p);
-  }
-
-  ret.conic_weights_ = conic_weights_;
-  ret.verbs_ = verbs_;
-  ret.segment_masks_ = segment_masks_;
-
-  ret.is_finite_ = is_finite_;
-  ret.MarkBoundsDirty();
-  ret.type_ = IsAType::kGeneral;
-
+  ret.AddPath(*this, matrix);
   return ret;
 }
 
 Path Path::CopyWithScale(float scale) const {
   Path ret;
-
-  ret.last_move_to_index_ = last_move_to_index_;
-  ret.convexity_ = convexity_;
-  ret.first_direction_ = first_direction_;
   ret.fill_type_ = fill_type_;
-
-  ret.points_.reserve(this->points_.capacity());
-  for (auto p : this->points_) {
-    p.x *= scale;
-    p.y *= scale;
-    ret.points_.emplace_back(p);
+  if (!IsEmpty()) {
+    ret.EnsureWritable(CountPoints(), CountVerbs(),
+                       storage_->conic_weights_.size());
+    for (auto p : storage_->points_) {
+      p.x *= scale;
+      p.y *= scale;
+      ret.storage_->points_.emplace_back(p);
+    }
+    ret.storage_->verbs_ = storage_->verbs_;
+    ret.storage_->conic_weights_ = storage_->conic_weights_;
+    ret.last_move_to_index_ = last_move_to_index_;
+    ret.segment_masks_ = segment_masks_;
+    ret.GeometryChanged();
   }
-
-  ret.conic_weights_.resize(conic_weights_.size());
-  std::memcpy(ret.conic_weights_.data(), conic_weights_.data(),
-              conic_weights_.size() * sizeof(float));
-  ret.verbs_.resize(verbs_.size());
-  std::memcpy(ret.verbs_.data(), verbs_.data(), verbs_.size() * sizeof(Verb));
-  ret.segment_masks_ = segment_masks_;
-
-  ret.is_finite_ = is_finite_;
-  ret.MarkBoundsDirty();
-  ret.type_ = IsAType::kGeneral;
-
   return ret;
 }
 
@@ -1443,24 +1584,47 @@ void Path::InjectMoveToIfNeed() {
 }
 
 void Path::ComputeBounds() const {
-  is_finite_ = ComputePtBounds(std::addressof(bounds_), *this);
+  if (storage_->bounds_dirty_.load(std::memory_order_acquire)) {
+    std::lock_guard<std::mutex> lock(storage_->bounds_mutex_);
+    if (storage_->bounds_dirty_.load(std::memory_order_relaxed)) {
+      storage_->is_finite_ = ComputePtBounds(&storage_->bounds_, *this);
+      storage_->bounds_dirty_.store(false, std::memory_order_release);
+    }
+  }
+}
+
+Path::ConvexityType Path::GetConvexityType() const {
+  auto convexity = convexity_.load(std::memory_order_acquire);
+  if (convexity == ConvexityType::kUnknown) {
+    convexity = ComputeConvexity();
+    convexity_.store(convexity, std::memory_order_release);
+  }
+  return convexity;
+}
+
+void Path::GeometryChanged() {
+  DEBUG_CHECK(storage_->Unique());
+  storage_->bounds_dirty_.store(true, std::memory_order_relaxed);
+  convexity_.store(ConvexityType::kUnknown, std::memory_order_relaxed);
+  SetFirstDirection(Direction::kUnknown);
 }
 
 bool Path::HasOnlyMoveTos() const { return segment_masks_ == 0; }
 
 bool Path::ComputePtBounds(Rect* bounds, const Path& ref) {
   uint32_t point_count = ref.CountPoints();
-  if (ref.verbs_.size() > 1 && ref.verbs_.back() == Verb::kMove) {
+  if (ref.storage_->verbs_.size() > 1 &&
+      ref.storage_->verbs_.back() == Verb::kMove) {
     // While trailing moves do not contribute to the bounds, we still reject
     // them.
-    if (!PointIsFinite(ref.points_.back())) {
+    if (!PointIsFinite(ref.storage_->points_.back())) {
       bounds->SetEmpty();
       return false;
     }
     // Exclude the last move to point if it is not the first move to point
     point_count--;
   }
-  return bounds->SetBoundsCheck(ref.points_.data(), point_count);
+  return bounds->SetBoundsCheck(ref.storage_->points_.data(), point_count);
 }
 
 bool Path::IsZeroLengthSincePoint(int startPtIndex) const {
@@ -1469,7 +1633,7 @@ bool Path::IsZeroLengthSincePoint(int startPtIndex) const {
     return true;
   }
 
-  auto pts = points_.data() + startPtIndex;
+  auto pts = storage_->points_.data() + startPtIndex;
   Point const& first = *pts;
 
   for (int32_t index = 1; index < count; index++) {
@@ -1512,7 +1676,7 @@ bool Path::IsRect(Rect* rect, bool* is_closed, Direction* direction) const {
   const Point* last_pt = nullptr;
   Point first_corner;
   Point third_corner;
-  const Point* pts = points_.data();
+  const Point* pts = storage_->points_.data();
   Point line_start;
   Point close_xy;
 
@@ -1522,7 +1686,7 @@ bool Path::IsRect(Rect* rect, bool* is_closed, Direction* direction) const {
   std::array<int32_t, 5> directions{-1, -1, -1, -1, -1};
 
   while (curr_verb < verb_cnt && (!auto_close)) {
-    auto verb = verbs_[curr_verb];
+    auto verb = storage_->verbs_[curr_verb];
 
     switch (verb) {
       case Verb::kClose:
@@ -1736,9 +1900,9 @@ void Path::Dump() {
 }
 
 int Path::LeadingMoveToCount() const {
-  int count = verbs_.size();
+  int count = storage_->verbs_.size();
   for (int i = 0; i < count; i++) {
-    if (verbs_[i] != Verb::kMove) {
+    if (storage_->verbs_[i] != Verb::kMove) {
       return i;
     }
   }
@@ -1916,13 +2080,14 @@ constexpr static int PointsInVerb(Path::Verb verb) {
 }
 
 Path::ConvexityType Path::ComputeConvexity() const {
-  int point_count = this->points_.size();
+  int point_count = this->storage_->points_.size();
   int skip_count = LeadingMoveToCount() - 1;
 
   if (last_move_to_index_ >= 0) {
-    if (last_move_to_index_ == static_cast<int32_t>(points_.size() - 1)) {
-      for (int i = verbs_.size() - 1; i >= 0; i--) {
-        if (verbs_[i] == Verb::kMove) {
+    if (last_move_to_index_ ==
+        static_cast<int32_t>(storage_->points_.size() - 1)) {
+      for (int i = storage_->verbs_.size() - 1; i >= 0; i--) {
+        if (storage_->verbs_[i] == Verb::kMove) {
           point_count--;
         }
       }
@@ -1931,7 +2096,7 @@ Path::ConvexityType Path::ComputeConvexity() const {
     }
   }
 
-  const Point* points = points_.data();
+  const Point* points = storage_->points_.data();
   if (skip_count > 0) {
     points += skip_count;
     point_count -= skip_count;
@@ -1990,7 +2155,7 @@ Path::ConvexityType Path::ComputeConvexity() const {
   if (needs_close && !state.Close()) {
     return Path::ConvexityType::kConcave;
   }
-  first_direction_ = state.GetFirstDirection();
+  first_direction_.store(state.GetFirstDirection(), std::memory_order_relaxed);
   return Path::ConvexityType::kConvex;
 }
 

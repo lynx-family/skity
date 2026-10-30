@@ -148,7 +148,11 @@ TEST(GlyphImageTest, MovesPreservePathStorageAndPixelOwnership) {
   const auto* points = first.Get()->GetPath().Points();
   auto* pixels = first.Image().buffer;
   ASSERT_GT(first.Get()->GetPath().CountPoints(), 0u);
-  EXPECT_NE(points, cached->GetPath().Points());
+  EXPECT_EQ(points, cached->GetPath().Points());
+  Path edited = cached->GetPath();
+  edited.SetLastPt(99.f, 99.f);
+  EXPECT_NE(edited.Points(), points);
+  EXPECT_EQ(first.Get()->GetPath(), cached->GetPath());
   auto moved = std::move(first);
   EXPECT_EQ(first.Get(), nullptr);
   EXPECT_EQ(moved.Get()->GetPath().Points(), points);

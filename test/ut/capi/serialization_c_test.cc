@@ -14,6 +14,7 @@
 #include <skity/c/skity_recorder.h>
 #include <skity/c/skity_text.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -132,6 +133,25 @@ skity_canvas_delegate_callbacks SinkCallbacks() {
 
 }  // namespace
 
+TEST(CapiSerialization, PathCloneSurvivesSourceMutationAndDestruction) {
+  PathGuard clone;
+  {
+    PathGuard source;
+    skity_path_move_to(source.p, 1, 2);
+    skity_path_line_to(source.p, 3, 4);
+    skity_path_destroy(clone.p);
+    clone.p = skity_path_clone(source.p);
+    skity_path_set_last_pt(source.p, 30, 40);
+    skity_path_line_to(clone.p, 5, 6);
+    EXPECT_EQ(skity_path_count_points(source.p), 2u);
+  }
+  skity_point points[3];
+  ASSERT_EQ(skity_path_get_points(clone.p, points, 3), 3);
+  EXPECT_FLOAT_EQ(points[1].x, 3);
+  EXPECT_FLOAT_EQ(points[1].y, 4);
+  EXPECT_FLOAT_EQ(points[2].x, 5);
+}
+
 TEST(CapiSerialization, PathFlatDataExchange) {
   PathGuard path;
   skity_path_move_to(path.p, 10.f, 20.f);
@@ -169,11 +189,11 @@ TEST(CapiSerialization, PathFlatDataExchange) {
   EXPECT_FLOAT_EQ(weight, 0.5f);
 
   // Too-small buffers fill what fits and report how much was written.
-  std::memset(verbs, 0xFF, sizeof(verbs));
+  std::fill(std::begin(verbs), std::end(verbs), SKITY_PATH_VERB_DONE);
   EXPECT_EQ(skity_path_get_verbs(path.p, verbs, 3), 3);
   EXPECT_EQ(verbs[0], SKITY_PATH_VERB_MOVE);
   EXPECT_EQ(verbs[2], SKITY_PATH_VERB_QUAD);
-  EXPECT_EQ(verbs[3], static_cast<skity_path_verb>(-1));
+  EXPECT_EQ(verbs[3], SKITY_PATH_VERB_DONE);
 
   // A path without conics reports an empty weight array.
   PathGuard lines_only;
