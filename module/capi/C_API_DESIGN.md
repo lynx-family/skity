@@ -406,13 +406,13 @@ Priority tags: **P3** is deferred / low-value.
 | `Canvas` | full draw + state + clip + text/glyphs, `draw_image` sampling overloads, `draw_color4f`, per-corner-radii `draw_rrect`, `make_software_canvas` | **P3**: per-corner RRect clip/drrect, `get_global_clip_bounds` |
 | `DisplayList` | draw / cull-rect draw / bounds / op_count / properties / rtree search (+ non-overlapping rects) / per-op paint lookup, `begin_recording` with build options | `RecordedOpOffset` is exposed as a plain `int32_t` (round-trips through the public `RecordedOpOffset::Make`) — no opaque set type |
 | `GPUContext` | (see Fully covered) | **P3**: `create_texture_with_desc` (mipmap), `is_gpu_backend_supported`, `get_backend_type` |
-| `GPUNativeWindowVK` / `GPUPresenter` | Vulkan native-window creation, swapchain resize, surface acquire/present | complete |
+| `GPUPresenter` | presenter creation (neutral base info + `p_next` backend extension), swapchain resize, surface acquire/present | complete |
 
 ### Not yet covered (whole module missing)
 
 | Module | Purpose | Why deferred |
 |---|---|---|
-| `GPUPresenter` | Vulkan swapchain present (`acquire_next_surface` / `present` / `resize`) through `skity_native_window_vk` | C wrappers consume the acquired `unique_ptr` and explicitly invalidate the surface handle. |
+| `GPUPresenter` | swapchain present (`acquire_next_surface` / `present` / `resize`) through the neutral `skity_presenter` entries (`skity_presenter_vk.h` carries the Vulkan create-info extension only) | C wrappers consume the acquired `unique_ptr` and explicitly invalidate the surface handle. |
 | `GlyphData` | glyph bitmap / path query (used by `Font::LoadGlyph*`) | exposing it cleanly needs a richer query surface |
 | `gpu_context_mtl` / `gpu_context_web` | Metal / WebGPU context | platform backends (Stage 2) |
 | `utils` (settings / trace) | config / tracing | minor |

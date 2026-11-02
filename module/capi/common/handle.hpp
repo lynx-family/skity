@@ -83,7 +83,7 @@ typedef enum {
   SKITY_OBJECT_TYPE_DATA,
   SKITY_OBJECT_TYPE_TYPEFACE_DELEGATE,
   SKITY_OBJECT_TYPE_SEMAPHORE,
-  SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK,
+  SKITY_OBJECT_TYPE_PRESENTER,
   SKITY_OBJECT_TYPE_GLYPH_DATA,
   SKITY_OBJECT_TYPE_RENDER_TARGET,
   SKITY_OBJECT_TYPE_MULTI_FRAME_DECODER,
@@ -168,8 +168,7 @@ struct skity_multi_frame_decoder_s
 struct skity_picture_s : skity_handle_base<skity::Picture> {};
 struct skity_read_stream_s : skity_handle_base<skity::ReadStream> {};
 struct skity_write_stream_s : skity_handle_base<skity::WriteStream> {};
-struct skity_native_window_vk_s : skity_handle_base<skity::GPUNativeWindowVK> {
-};
+struct skity_presenter_s : skity_handle_base<skity::GPUNativeWindowVK> {};
 
 namespace skity {
 namespace capi {
