@@ -41,9 +41,20 @@ class GoldenTestEnv : public ::testing::Environment {
                            [dl](Canvas* canvas) { dl->Draw(canvas); });
   }
 
-  virtual std::shared_ptr<GoldenTexture> RenderToTexture(
+  std::shared_ptr<GoldenTexture> RenderToTexture(
       uint32_t width, uint32_t height,
-      const std::function<void(Canvas*)>& render) = 0;
+      const std::function<void(Canvas*)>& render) {
+    return RenderToSurface(width, height, [&](GPUSurface* surface) {
+      auto* canvas = surface->LockCanvas();
+      render(canvas);
+      canvas->Flush();
+      surface->Flush();
+    });
+  }
+
+  virtual std::shared_ptr<GoldenTexture> RenderToSurface(
+      uint32_t width, uint32_t height,
+      const std::function<void(GPUSurface*)>& render) = 0;
 
   void SetSampleCount(uint32_t sample_count) { sample_count_ = sample_count; }
 

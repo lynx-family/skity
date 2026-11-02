@@ -6,6 +6,7 @@
 
 #include "src/gpu/gl/gl_interface.hpp"
 #include "src/gpu/gl/gpu_buffer_gl.hpp"
+#include "src/gpu/gl/gpu_device_gl.hpp"
 #include "src/gpu/gl/gpu_texture_gl.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/gl/gl_root_layer.hpp"
@@ -49,6 +50,11 @@ HWRootLayer *DirectSurfaceGL::OnBeginNextFrame(bool clear) {
       static_cast<uint32_t>(std::floor(GetWidth() * ContentScale())),
       static_cast<uint32_t>(std::floor(GetHeight() * ContentScale())),
       Rect::MakeWH(GetWidth(), GetHeight()), GetVertexArray(), target_fbo_id_);
+
+  auto *device = static_cast<GPUDeviceGL *>(GetGPUContext()->GetGPUDevice());
+  if (!device->GetDriverWorkarounds().use_draw_for_clear) {
+    root_layer->EnableInitialClearPromotion();
+  }
 
   root_layer->SetClearSurface(clear);
   root_layer->SetArenaAllocator(GetArenaAllocator());

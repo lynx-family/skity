@@ -166,6 +166,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_CT_FONT)
   endif()
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_GL_BACKEND)
+  target_sources(skity_unit_test PRIVATE
+      gpu/gl/initial_clear_test.cc
+      ../bench/common/bench_gl_context_mac.mm)
+  set_source_files_properties(../bench/common/bench_gl_context_mac.mm
+      PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+  target_link_libraries(skity_unit_test PRIVATE "-framework AppKit" "-framework OpenGL")
+endif()
+
 target_include_directories(skity_unit_test
     PUBLIC
     ${CMAKE_SOURCE_DIR}

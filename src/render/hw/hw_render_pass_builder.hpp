@@ -30,8 +30,9 @@ class HWRenderPassBuilder final {
     return *this;
   }
 
-  HWRenderPassBuilder& SetLoadOp(GPULoadOp load_op) {
+  HWRenderPassBuilder& SetLoadOp(GPULoadOp load_op, GPUColor clear_color = {}) {
     load_op_ = load_op;
+    clear_color_ = clear_color;
     return *this;
   }
 
@@ -52,6 +53,7 @@ class HWRenderPassBuilder final {
   std::shared_ptr<GPUTexture> target_;
   uint32_t sample_count_ = 1;
   HWDrawState state_ = kDrawStateNone;
+  GPUColor clear_color_ = {};
   GPULoadOp load_op_ = GPULoadOp::kClear;
   GPUStoreOp store_op_ = GPUStoreOp::kStore;
 };

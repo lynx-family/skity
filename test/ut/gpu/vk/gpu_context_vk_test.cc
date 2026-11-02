@@ -1784,6 +1784,29 @@ TEST_F(VulkanSharedContextTest, BeginAndEndStencilRenderPassWithoutCommands) {
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 }
 
+TEST(VulkanProcLoaderTest, LegacyRootInitialColorClear) {
+  auto bundle = CreateLegacyGPUContextForTest();
+  ASSERT_NE(bundle.context, nullptr);
+  auto* ctx = static_cast<skity::GPUContextVK*>(bundle.context.get());
+  ASSERT_FALSE(ctx->GetState()->IsDynamicRenderingEnabled());
+
+  skity::GPURenderTargetDescriptor desc{};
+  desc.width = desc.height = 8;
+  auto target = ctx->CreateRenderTarget(desc);
+  ASSERT_NE(target, nullptr);
+  target->GetCanvas()->Clear(skity::Color4f{1.f, 0.f, 0.f, 128.f / 255});
+  auto image = ctx->MakeSnapshot(std::move(target));
+  ASSERT_NE(image, nullptr);
+  auto pixmap = image->ReadPixels(ctx);
+  ASSERT_NE(pixmap, nullptr);
+  auto rgba = pixmap->Addr8(7, 7);
+  ASSERT_NE(rgba, nullptr);
+  EXPECT_EQ(rgba[0], 128);
+  EXPECT_EQ(rgba[1], 0);
+  EXPECT_EQ(rgba[2], 0);
+  EXPECT_EQ(rgba[3], 128);
+}
+
 TEST(VulkanProcLoaderTest, BeginAndEndLegacyRenderPassWithoutCommands) {
   auto bundle = CreateLegacyGPUContextForTest();
   ASSERT_NE(bundle.context, nullptr);

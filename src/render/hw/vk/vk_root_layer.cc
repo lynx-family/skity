@@ -33,7 +33,8 @@ HWDrawState VKRootLayer::OnPrepare(HWDrawContext* context) {
   HWRenderPassBuilder builder(context, color_attachment_);
   builder.SetSampleCount(GetSampleCount())
       .SetDrawState(GetLayerDrawState())
-      .SetLoadOp(NeedClearSurface() ? GPULoadOp::kClear : GPULoadOp::kLoad)
+      .SetLoadOp(NeedClearSurface() ? GPULoadOp::kClear : GPULoadOp::kLoad,
+                 GetClearColor())
       .SetStoreOp(GPUStoreOp::kStore)
       .Build(render_pass_desc_);
 

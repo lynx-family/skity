@@ -133,6 +133,10 @@ class HWLayer : public HWDraw {
                               std::shared_ptr<GPUTexture> dst_texture,
                               GPURegion copy_region) const;
 
+  bool IsInitialPassEmpty() const {
+    return draw_passes_.size() == 1 && draw_passes_.front()->draw_ops.empty();
+  }
+
   HWDrawState GetLayerDrawState() const { return layer_state_; }
 
   GPUViewport GetViewport() const {

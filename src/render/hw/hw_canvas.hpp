@@ -103,6 +103,8 @@ class HWCanvas : public Canvas {
                           const float* position_y, const Font& font,
                           const Paint& paint, const Matrix& transform);
 
+  bool TryPromoteInitialClear(const Paint& paint, const Rect* rect = nullptr);
+
   void DrawShape(const Shape& shape, const Paint& paint, bool is_local = true);
 
   void DrawPathInternal(const Path& path, const Paint& paint,
@@ -138,6 +140,7 @@ class HWCanvas : public Canvas {
   GPUSurfaceImpl* surface_ = nullptr;
   float ctx_scale_ = 1.f;
   bool enable_msaa_ = false;
+  bool check_initial_clear_ = false;
   HWStageBuffer* gpu_buffer_ = {};
 
   HWPipelineLib* pipeline_lib_ = {};

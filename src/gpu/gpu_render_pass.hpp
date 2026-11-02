@@ -46,7 +46,7 @@ struct GPUAttachment {
 };
 
 struct GPUColorAttachment : public GPUAttachment {
-  GPUColor clear_value;
+  GPUColor clear_value = {};
 };
 
 struct GPUStencilAttachment : public GPUAttachment {

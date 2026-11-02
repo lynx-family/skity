@@ -20,10 +20,25 @@ class HWRootLayer : public HWLayer {
 
   bool NeedClearSurface() const { return clear_surface_; }
 
+  GPUColor GetClearColor() const { return clear_color_; }
+
+  void EnableInitialClearPromotion() { allow_clear_promotion_ = true; }
+
+  bool CanPromoteInitialClear() const {
+    return allow_clear_promotion_ && IsInitialPassEmpty();
+  }
+
+  void SetInitialClearColor(GPUColor color) {
+    clear_surface_ = true;
+    clear_color_ = color;
+  }
+
   virtual bool IsValid() const { return true; }
 
  private:
   bool clear_surface_ = true;
+  bool allow_clear_promotion_ = false;
+  GPUColor clear_color_ = {};
 };
 
 }  // namespace skity
