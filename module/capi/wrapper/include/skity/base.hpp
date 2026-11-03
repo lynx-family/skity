@@ -22,6 +22,7 @@
 #endif
 
 namespace skity {
+inline namespace raii {
 namespace detail {
 
 /**
@@ -84,6 +85,7 @@ class OwnHandle {
 };
 
 }  // namespace detail
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_BASE_HPP

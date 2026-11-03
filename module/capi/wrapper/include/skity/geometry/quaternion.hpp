@@ -10,7 +10,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * Rotation matrix from XYZ exterior Euler angles (radians). Angles should be
  * below 2π for a stable result (legacy Quaternion::EulerToMatrix).
@@ -30,7 +30,7 @@ inline Matrix QuaternionAxisAngleToMatrix(const Vec3& axis, float angle) {
   skity_quaternion_axis_angle_to_matrix(&axis, angle, &out);
   return out;
 }
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GEOMETRY_QUATERNION_HPP

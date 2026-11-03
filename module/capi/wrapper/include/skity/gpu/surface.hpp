@@ -17,6 +17,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
+inline namespace raii {
 namespace detail {
 struct SurfaceCreate;
 }  // namespace detail
@@ -105,7 +106,7 @@ inline std::unique_ptr<Surface> Context::CreateSurface(
   }
   return detail::SurfaceCreate::New(handle);
 }
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_SURFACE_HPP

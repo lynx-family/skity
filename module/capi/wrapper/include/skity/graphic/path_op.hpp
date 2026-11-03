@@ -11,7 +11,7 @@
 #include <skity/graphic/path.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /** Boolean operation kind between two paths (legacy skity::PathOp::Op). */
 enum class PathOp : uint32_t {
   kDifference = SKITY_PATH_OP_DIFFERENCE,
@@ -31,7 +31,7 @@ inline bool Op(const Path& one, const Path& two, PathOp op, Path* out) {
          skity_path_op_execute(one.get(), two.get(),
                                static_cast<skity_path_op>(op), out->get()) != 0;
 }
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GRAPHIC_PATH_OP_HPP

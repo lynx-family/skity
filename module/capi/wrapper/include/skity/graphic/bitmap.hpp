@@ -14,7 +14,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class Pixmap
  *
@@ -108,7 +108,7 @@ class Bitmap : public detail::OwnHandle<skity_bitmap, skity_bitmap_destroy> {
  private:
   explicit Bitmap(skity_bitmap h) : OwnHandle(h) {}
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GRAPHIC_BITMAP_HPP

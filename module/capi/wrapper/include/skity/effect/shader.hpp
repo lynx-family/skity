@@ -15,7 +15,7 @@
 #include <vector>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class Shader
  *
@@ -156,7 +156,7 @@ class Shader : public detail::OwnHandle<skity_shader, skity_shader_destroy> {
  private:
   explicit Shader(skity_shader h) : OwnHandle(h) {}
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_EFFECT_SHADER_HPP

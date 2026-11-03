@@ -11,7 +11,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class Camera
  *
@@ -55,7 +55,7 @@ class Camera : public detail::OwnHandle<skity_camera, skity_camera_destroy> {
     return out;
   }
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GEOMETRY_CAMERA_HPP

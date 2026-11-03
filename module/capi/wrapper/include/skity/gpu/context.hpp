@@ -17,7 +17,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 class Surface;
 class Texture;
 class Semaphore;
@@ -171,7 +171,7 @@ struct ContextCreate {
   }
 };
 }  // namespace detail
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_CONTEXT_HPP

@@ -11,7 +11,7 @@
 #include <skity/graphic/path.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * Append the stroke outline of src (per paint's width / cap / join /
  * miter; paint should be set to a stroke style) to dst.
@@ -29,7 +29,7 @@ inline void QuadPath(const Paint& paint, const Path& src, Path* dst,
   skity_stroke_quad_path(paint.get(), src.get(), dst ? dst->get() : nullptr,
                          keep_cubic ? 1u : 0u);
 }
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GEOMETRY_STROKE_HPP

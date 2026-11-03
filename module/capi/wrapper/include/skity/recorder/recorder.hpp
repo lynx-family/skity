@@ -16,7 +16,7 @@
 #include <vector>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class DisplayListBuildOptions
  *
@@ -201,7 +201,7 @@ class PictureRecorder
   /** Borrowed canvas view handed out by GetRecordingCanvas. */
   Canvas canvas_;
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_RECORDER_RECORDER_HPP

@@ -20,7 +20,7 @@
 #include <vector>
 
 namespace skity {
-
+inline namespace raii {
 /** Font style POD passthrough (weight / width / slant), mirroring the
  *  legacy skity::FontStyle default-constructible shape. */
 using FontStyle = skity_font_style;
@@ -638,7 +638,7 @@ class TextBlob
  private:
   explicit TextBlob(skity_text_blob h) : OwnHandle(h) {}
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_TEXT_TEXT_HPP

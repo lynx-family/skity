@@ -19,7 +19,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /** Clip combination operations, mirroring skity::Canvas::ClipOp. */
 enum class ClipOp : uint32_t {
   kDifference = SKITY_CLIP_OP_DIFFERENCE,
@@ -284,7 +284,7 @@ inline std::unique_ptr<Canvas> Canvas::MakeSoftwareCanvas(Bitmap* bitmap) {
   }
   return std::unique_ptr<Canvas>(new Canvas(handle, true));
 }
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_RENDER_CANVAS_HPP

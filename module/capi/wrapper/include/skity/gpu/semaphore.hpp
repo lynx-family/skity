@@ -11,7 +11,7 @@
 #include <skity/gpu/context.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class Semaphore
  *
@@ -62,7 +62,7 @@ inline std::shared_ptr<Semaphore> Context::CreateSemaphore() const {
   return handle != nullptr ? std::shared_ptr<Semaphore>(new Semaphore(handle))
                            : nullptr;
 }
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_SEMAPHORE_HPP

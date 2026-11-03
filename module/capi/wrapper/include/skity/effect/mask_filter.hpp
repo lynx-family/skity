@@ -12,7 +12,7 @@
 #include <skity/base.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /** Blur style, mirroring the legacy skity::BlurStyle enumerators. */
 enum class BlurStyle : uint32_t {
   kNormal = SKITY_BLUR_STYLE_NORMAL,
@@ -53,7 +53,7 @@ class MaskFilter
  private:
   explicit MaskFilter(skity_mask_filter h) : OwnHandle(h) {}
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_EFFECT_MASK_FILTER_HPP

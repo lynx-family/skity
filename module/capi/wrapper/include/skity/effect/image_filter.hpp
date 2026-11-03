@@ -14,7 +14,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class ImageFilter
  *
@@ -131,7 +131,7 @@ class ImageFilter
  private:
   explicit ImageFilter(skity_image_filter h) : OwnHandle(h) {}
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_EFFECT_IMAGE_FILTER_HPP

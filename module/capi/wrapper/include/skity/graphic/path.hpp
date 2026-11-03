@@ -12,7 +12,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class Path
  *
@@ -284,7 +284,7 @@ class Path : public detail::OwnHandle<skity_path, skity_path_destroy> {
   explicit Path(skity_path h) : OwnHandle(h) {}
   friend class GlyphData;
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GRAPHIC_PATH_HPP

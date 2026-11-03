@@ -13,7 +13,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class PathMeasure
  *
@@ -69,7 +69,7 @@ class PathMeasure
   /** Advance to the next contour; false at the end. */
   bool NextContour() { return skity_path_measure_next_contour(get()) != 0; }
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GRAPHIC_PATH_MEASURE_HPP

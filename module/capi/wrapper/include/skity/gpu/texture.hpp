@@ -15,7 +15,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class Texture
  *
@@ -94,7 +94,7 @@ inline std::shared_ptr<Texture> Context::WrapTexture(
   return handle != nullptr ? std::shared_ptr<Texture>(new Texture(handle))
                            : nullptr;
 }
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_TEXTURE_HPP

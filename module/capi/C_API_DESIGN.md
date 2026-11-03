@@ -331,6 +331,7 @@ ABI coupling — those types never enter `libskity.so`.
 ```cpp
 /* skity.hpp — header-only, compiled in the consumer's TU */
 namespace skity {
+inline namespace raii {
 class Canvas {  /* non-owning view, destructor does not delete */
  public:
   void DrawRect(const Rect& r, const Paint& p) {
@@ -348,8 +349,17 @@ class Paint {  /* owning, destructor calls skity_paint_destroy */
  private:
   skity_paint h_;
 };
+}  // namespace raii
 }  // namespace skity
 ```
+
+The wrapper classes live in `inline namespace skity::raii`: source code keeps
+writing `skity::Paint` (the inline namespace is transparent to name lookup),
+while the mangled symbols become `_ZN5skity4raii...` — distinct from the
+legacy C++ API's `_ZN5skity...`. During the migration period where the RAII
+wrapper and the legacy C++ API ship in parallel, the two can therefore
+coexist in one link unit without ODR collisions (a TU must still never
+include both header trees — that is a compile error, by design).
 
 ### 8.1 Why the wrapper is unified-build-only
 

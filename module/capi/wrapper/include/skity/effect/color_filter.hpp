@@ -13,7 +13,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class ColorFilter
  *
@@ -75,7 +75,7 @@ class ColorFilter
  private:
   explicit ColorFilter(skity_color_filter h) : OwnHandle(h) {}
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_EFFECT_COLOR_FILTER_HPP

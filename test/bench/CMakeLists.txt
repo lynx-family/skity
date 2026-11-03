@@ -67,14 +67,16 @@ target_include_directories(skity_hw_render_bench
 # C-API + RAII-wrapper twin of the CanvasMark case. Compiled as its own dylib
 # so its <skity/...> includes resolve to the wrapper header tree
 # (module/capi/wrapper) instead of the legacy headers the rest of the bench
-# compiles against — the two cannot share a translation unit, and they MUST
-# NOT share a link unit either: the wrapper's inline skity::Paint / skity::Path
-# members mangle to the same names as the legacy inline members (ODR
-# collision). A static library would win symbol resolution against
-# libskity.dylib and silently construct wrapper objects from legacy code
-# (observed: null-vtable crash in HWCanvas::DrawShape). Building a SHARED
-# library with -fvisibility=hidden exports only the four extern "C" entries
-# and keeps every wrapper symbol file-local.
+# compiles against — the two cannot share a translation unit. They also should
+# not share a link unit casually: before the wrapper moved into
+# `inline namespace skity::raii` its inline skity::Paint / skity::Path members
+# mangled to the same names as the legacy inline members, and a STATIC library
+# then won symbol resolution against libskity.dylib — legacy TUs silently
+# constructed wrapper objects and crashed on the first draw (null vtable in
+# HWCanvas::DrawShape). The raii namespace makes the symbols distinct
+# (_ZN5skity4raii...), so a static library is safe again; this target stays a
+# SHARED library with -fvisibility=hidden (only the extern "C" entries
+# exported) as defense in depth for the mixed-API executable.
 add_library(skity_bench_canvasmark_capi SHARED
     case/draw_canvasmark_capi.cc
     case/draw_canvasmark_capi.h

@@ -13,7 +13,7 @@
 #include <vector>
 
 namespace skity {
-
+inline namespace raii {
 /** Glyph raster format, mirroring skity::GlyphFormat. */
 enum class GlyphFormat : uint32_t {
   kA8 = SKITY_GLYPH_FORMAT_A8,
@@ -124,7 +124,7 @@ inline std::vector<GlyphData> AdoptGlyphHandles(
 }
 
 }  // namespace detail
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_TEXT_GLYPH_HPP

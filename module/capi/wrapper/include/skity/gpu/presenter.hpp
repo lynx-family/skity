@@ -13,7 +13,7 @@
 #include <skity/gpu/surface.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * Result status for acquire / present, mirroring the legacy
  * skity::GPUPresenterStatus; mapped from the C result codes.
@@ -136,7 +136,7 @@ inline std::unique_ptr<GPUPresenter> Context::CreatePresenter(
   }
   return std::unique_ptr<GPUPresenter>(new GPUPresenter(handle));
 }
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_PRESENTER_HPP

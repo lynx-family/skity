@@ -11,7 +11,7 @@
 #include <skity/gpu/context.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * Create a Vulkan GPUContext that creates and owns its own VkInstance /
  * VkDevice (it cannot be mixed with other Vulkan code). Mirrors the shape
@@ -40,7 +40,7 @@ inline std::unique_ptr<Context> CreateVkContext(
   }
   return detail::ContextCreate::New(handle);
 }
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GPU_CONTEXT_VK_HPP

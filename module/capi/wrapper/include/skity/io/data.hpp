@@ -12,7 +12,7 @@
 #include <skity/base.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class Data
  *
@@ -68,7 +68,7 @@ class Data : public detail::OwnHandle<skity_data, skity_data_destroy> {
   explicit Data(skity_data h) : OwnHandle(h) {}
   friend class Typeface;
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_IO_DATA_HPP

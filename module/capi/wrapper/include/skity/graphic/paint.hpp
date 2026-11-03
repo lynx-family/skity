@@ -24,7 +24,7 @@
 // header when using them.
 
 namespace skity {
-
+inline namespace raii {
 class Typeface;
 
 /**
@@ -265,7 +265,7 @@ class Paint : public detail::OwnHandle<skity_paint, skity_paint_destroy> {
     return out;
   }
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GRAPHIC_PAINT_HPP

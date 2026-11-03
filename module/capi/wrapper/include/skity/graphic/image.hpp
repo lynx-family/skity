@@ -17,7 +17,7 @@
 #include <skity/types.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class Image
  *
@@ -168,7 +168,7 @@ class Image : public detail::OwnHandle<skity_image, skity_image_destroy> {
  private:
   explicit Image(skity_image h) : OwnHandle(h) {}
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_GRAPHIC_IMAGE_HPP

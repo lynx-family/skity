@@ -12,7 +12,7 @@
 #include <skity/base.hpp>
 
 namespace skity {
-
+inline namespace raii {
 /**
  * @class PathEffect
  *
@@ -54,7 +54,7 @@ class PathEffect
  private:
   explicit PathEffect(skity_path_effect h) : OwnHandle(h) {}
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_EFFECT_PATH_EFFECT_HPP

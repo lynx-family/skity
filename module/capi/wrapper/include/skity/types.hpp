@@ -17,7 +17,7 @@
 #include <cstdint>
 
 namespace skity {
-
+inline namespace raii {
 using Color = skity_color;
 using Color4f = skity_color4f;
 using Point = skity_point;
@@ -504,7 +504,7 @@ class RRect {
   Rect bounds_;
   Vec2 radii_[4] = {};
 };
-
+}  // namespace raii
 }  // namespace skity
 
 #endif  // MODULE_CAPI_WRAPPER_INCLUDE_SKITY_TYPES_HPP
