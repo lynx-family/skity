@@ -78,7 +78,7 @@ Build it with `SKITY_CAPI_MODULE=ON`, `SKITY_VK_BACKEND=ON`, and
 #include <skity/c/skity_surface_vk.h>
 #include <skity/c/skity_texture_vk.h>
 #include <skity/c/skity_semaphore_vk.h>
-#include <skity/c/skity_native_window_vk.h>
+#include <skity/c/skity_presenter_vk.h>
 */
 
 skity_context ctx;

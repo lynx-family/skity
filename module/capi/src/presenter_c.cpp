@@ -2,7 +2,8 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <skity/c/skity_native_window_vk.h>
+#include <skity/c/skity_presenter.h>
+#include <skity/c/skity_presenter_vk.h>
 
 #include <skity/gpu/gpu_context.hpp>
 #include <skity/gpu/gpu_context_vk.hpp>
@@ -14,10 +15,10 @@
 
 namespace {
 
-skity::GPUNativeWindowVK* NativeWindowOf(skity_native_window_vk handle) {
+skity::GPUNativeWindowVK* NativeWindowOf(skity_presenter handle) {
   auto window =
-      skity::capi::get_impl<skity_native_window_vk_s, skity::GPUNativeWindowVK>(
-          handle, SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK);
+      skity::capi::get_impl<skity_presenter_s, skity::GPUNativeWindowVK>(
+          handle, SKITY_OBJECT_TYPE_PRESENTER);
   return window.get();
 }
 
@@ -25,62 +26,77 @@ skity::GPUNativeWindowVK* NativeWindowOf(skity_native_window_vk handle) {
 
 extern "C" {
 
-skity_native_window_vk skity_native_window_create_vk(
-    skity_context context, const skity_native_window_create_info_vk* info) {
-  if (info == nullptr) {
-    return nullptr;
+skity_result skity_presenter_create(skity_context context,
+                                    const skity_presenter_create_info* info,
+                                    skity_presenter* out_presenter) {
+  if (info == nullptr || out_presenter == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  *out_presenter = nullptr;
+  if (info->s_type != SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
   }
   auto context_impl = skity::capi::get_impl<skity_context_s, skity::GPUContext>(
       context, SKITY_OBJECT_TYPE_CONTEXT);
   if (context_impl == nullptr) {
-    return nullptr;
+    return SKITY_ERROR_INVALID_HANDLE;
+  }
+
+  // The p_next extension selects the backend; Vulkan is the only
+  // implementation today.
+  const auto* ext =
+      static_cast<const skity_presenter_create_info_vk*>(info->p_next);
+  if (ext == nullptr ||
+      ext->s_type != SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO_VK) {
+    return SKITY_ERROR_NOT_SUPPORTED;
   }
 
   skity::GPUNativeWindowInfoVK descriptor{};
   descriptor.native_window.type =
-      static_cast<skity::VKNativeWindowType>(info->native_window.type);
-  descriptor.native_window.handle = info->native_window.handle;
+      static_cast<skity::VKNativeWindowType>(ext->native_window.type);
+  descriptor.native_window.handle = ext->native_window.handle;
   descriptor.native_window.secondary_handle =
-      info->native_window.secondary_handle;
-  descriptor.native_window.window_id = info->native_window.window_id;
+      ext->native_window.secondary_handle;
+  descriptor.native_window.window_id = ext->native_window.window_id;
   descriptor.width = info->width;
   descriptor.height = info->height;
-  descriptor.present_queue = info->present_queue;
-  descriptor.present_queue_family_index = info->present_queue_family_index;
-  descriptor.min_image_count = info->min_image_count;
-  descriptor.format = info->format;
-  descriptor.color_space = info->color_space;
-  descriptor.present_mode = info->present_mode;
-  descriptor.composite_alpha = info->composite_alpha;
-  descriptor.pre_transform = info->pre_transform;
-  descriptor.clipped = info->clipped != 0;
+  descriptor.present_queue = ext->present_queue;
+  descriptor.present_queue_family_index = ext->present_queue_family_index;
+  descriptor.min_image_count = ext->min_image_count;
+  descriptor.format = ext->format;
+  descriptor.color_space = ext->color_space;
+  descriptor.present_mode = ext->present_mode;
+  descriptor.composite_alpha = ext->composite_alpha;
+  descriptor.pre_transform = ext->pre_transform;
+  descriptor.clipped = ext->clipped != 0;
 
   auto window = skity::CreateGPUNativeWindowVK(context_impl.get(), &descriptor);
   if (window == nullptr) {
-    return nullptr;
+    return SKITY_ERROR_INITIALIZATION_FAILED;
   }
   std::shared_ptr<skity::GPUNativeWindowVK> impl(window.release());
-  return skity::capi::alloc_handle<skity_native_window_vk_s>(
-      SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK, SKITY_HANDLE_OWNING, std::move(impl));
+  *out_presenter = skity::capi::alloc_handle<skity_presenter_s>(
+      SKITY_OBJECT_TYPE_PRESENTER, SKITY_HANDLE_OWNING, std::move(impl));
+  return SKITY_SUCCESS;
 }
 
-void skity_native_window_destroy_vk(skity_native_window_vk window) {
-  skity::capi::destroy_handle<skity_native_window_vk_s>(
-      window, SKITY_OBJECT_TYPE_NATIVE_WINDOW_VK);
+void skity_presenter_destroy(skity_presenter window) {
+  skity::capi::destroy_handle<skity_presenter_s>(window,
+                                                 SKITY_OBJECT_TYPE_PRESENTER);
 }
 
-uint32_t skity_native_window_get_width_vk(skity_native_window_vk window) {
+uint32_t skity_presenter_get_width(skity_presenter window) {
   auto* native_window = NativeWindowOf(window);
   return native_window != nullptr ? native_window->GetWidth() : 0u;
 }
 
-uint32_t skity_native_window_get_height_vk(skity_native_window_vk window) {
+uint32_t skity_presenter_get_height(skity_presenter window) {
   auto* native_window = NativeWindowOf(window);
   return native_window != nullptr ? native_window->GetHeight() : 0u;
 }
 
-skity_result skity_native_window_resize_vk(skity_native_window_vk window,
-                                           uint32_t width, uint32_t height) {
+skity_result skity_presenter_resize(skity_presenter window, uint32_t width,
+                                    uint32_t height) {
   auto* native_window = NativeWindowOf(window);
   if (native_window == nullptr) {
     return SKITY_ERROR_INVALID_HANDLE;
@@ -90,25 +106,26 @@ skity_result skity_native_window_resize_vk(skity_native_window_vk window,
              : SKITY_ERROR_INITIALIZATION_FAILED;
 }
 
-skity_result skity_native_window_acquire_next_surface_vk(
-    skity_native_window_vk window, uint32_t sample_count, float content_scale,
-    skity_surface* out_surface) {
+skity_result skity_presenter_acquire_next_surface(skity_presenter presenter,
+                                                  uint32_t sample_count,
+                                                  float content_scale,
+                                                  skity_surface* out_surface) {
   if (out_surface == nullptr) {
     return SKITY_ERROR_INVALID_ARGUMENT;
   }
-  auto* native_window = NativeWindowOf(window);
+  auto* native_window = NativeWindowOf(presenter);
   if (native_window == nullptr) {
     return SKITY_ERROR_INVALID_HANDLE;
   }
-  auto* presenter = native_window->GetPresenter();
-  if (presenter == nullptr) {
+  auto* gpu_presenter = native_window->GetPresenter();
+  if (gpu_presenter == nullptr) {
     return SKITY_ERROR_NOT_SUPPORTED;
   }
 
   skity::GPUSurfaceAcquireDescriptor descriptor{};
   descriptor.sample_count = sample_count ? sample_count : 1;
   descriptor.content_scale = content_scale != 0.f ? content_scale : 1.f;
-  auto result = presenter->AcquireNextSurface(descriptor);
+  auto result = gpu_presenter->AcquireNextSurface(descriptor);
   if (result.status == skity::GPUPresenterStatus::kNeedRecreate) {
     return SKITY_ERROR_NEED_RECREATE;
   }
@@ -130,19 +147,19 @@ skity_result skity_native_window_acquire_next_surface_vk(
   return SKITY_SUCCESS;
 }
 
-skity_result skity_native_window_present_vk(skity_native_window_vk window,
-                                            skity_surface* surface) {
+skity_result skity_presenter_present(skity_presenter presenter,
+                                     skity_surface* surface) {
   if (surface == nullptr) {
     return SKITY_ERROR_INVALID_ARGUMENT;
   }
-  auto* native_window = NativeWindowOf(window);
+  auto* native_window = NativeWindowOf(presenter);
   if (native_window == nullptr) {
     return SKITY_ERROR_INVALID_HANDLE;
   }
-  auto* presenter = native_window->GetPresenter();
+  auto* gpu_presenter = native_window->GetPresenter();
   auto* wrapper = skity::capi::resolve<skity_surface_s>(
       *surface, SKITY_OBJECT_TYPE_SURFACE);
-  if (presenter == nullptr || wrapper == nullptr) {
+  if (gpu_presenter == nullptr || wrapper == nullptr) {
     return SKITY_ERROR_INVALID_HANDLE;
   }
 
@@ -159,7 +176,7 @@ skity_result skity_native_window_present_vk(skity_native_window_vk window,
   *surface = nullptr;
 
   auto status =
-      presenter->Present(std::unique_ptr<skity::GPUSurface>(raw_surface));
+      gpu_presenter->Present(std::unique_ptr<skity::GPUSurface>(raw_surface));
   if (status == skity::GPUPresenterStatus::kSuccess) {
     return SKITY_SUCCESS;
   }
