@@ -35,9 +35,6 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
   {
     auto texture_bounds = GetLayerBackDrawBounds();
     auto draw_bounds = texture_bounds;
-    if (content_bounds_ && !draw_bounds.Intersect(*content_bounds_)) {
-      draw_bounds.SetEmpty();
-    }
     Path path;
     path.AddRect(draw_bounds);
 
