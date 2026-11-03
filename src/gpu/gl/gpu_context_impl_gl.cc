@@ -152,8 +152,57 @@ std::unique_ptr<GPURenderTarget> GPUContextImplGL::OnCreateRenderTarget(
   return std::make_unique<GPURenderTarget>(std::move(surface), texture);
 }
 
+namespace {
+
+// Saves the pixel-pack state and the framebuffer binding, normalizes them
+// for a tightly packed client-memory glReadPixels, and restores the
+// snapshot on destruction. Pack state is shared latched context state: a
+// stale GL_PACK_ROW_LENGTH left behind makes any later glReadPixels on the
+// context (e.g. a smaller window-resize readback) overrun its buffer.
+class PixelPackStateScope {
+ public:
+  PixelPackStateScope() {
+    GL_CALL(GetIntegerv, GL_PACK_ALIGNMENT, &pack_alignment_);
+    GLint framebuffer = 0;
+    GL_CALL(GetIntegerv, GL_FRAMEBUFFER_BINDING, &framebuffer);
+    framebuffer_ = static_cast<GLuint>(framebuffer);
+    GL_CALL(GetIntegerv, GL_PACK_ROW_LENGTH, &pack_row_length_);
+    GL_CALL(GetIntegerv, GL_PIXEL_PACK_BUFFER_BINDING, &pack_buffer_);
+
+    // Tightly packed destination: rows carry no padding (future R8 / RGB8
+    // readbacks are not 4-byte aligned) and no pack buffer is bound to
+    // redirect the read away from the client pointer.
+    GL_CALL(PixelStorei, GL_PACK_ROW_LENGTH, 0);
+    GL_CALL(BindBuffer, GL_PIXEL_PACK_BUFFER, 0);
+    GL_CALL(PixelStorei, GL_PACK_ALIGNMENT, 1);
+  }
+
+  ~PixelPackStateScope() {
+    GL_CALL(PixelStorei, GL_PACK_ROW_LENGTH, pack_row_length_);
+    GL_CALL(BindBuffer, GL_PIXEL_PACK_BUFFER, pack_buffer_);
+    GL_CALL(PixelStorei, GL_PACK_ALIGNMENT, pack_alignment_);
+    GL_CALL(BindFramebuffer, GL_FRAMEBUFFER, framebuffer_);
+  }
+
+  PixelPackStateScope(const PixelPackStateScope&) = delete;
+  PixelPackStateScope& operator=(const PixelPackStateScope&) = delete;
+
+ private:
+  // GL defaults, so a failed query still restores sane values. Every
+  // context skity renders on (GLES 3.0+, desktop GL) carries the full pack
+  // state in core — the GLSL ES 300 shaders already require GLES 3.0.
+  GLint pack_row_length_ = 0;
+  GLint pack_alignment_ = 4;
+  GLint pack_buffer_ = 0;
+  GLuint framebuffer_ = 0;
+};
+
+}  // namespace
+
 std::shared_ptr<Data> GPUContextImplGL::OnReadPixels(
     const std::shared_ptr<GPUTexture>& texture) const {
+  PixelPackStateScope pack_state_scope;
+
   auto gl_texture = static_cast<GPUTextureGL*>(texture.get());
 
   const auto& fbo = gl_texture->GetFramebuffer();
@@ -177,12 +226,9 @@ std::shared_ptr<Data> GPUContextImplGL::OnReadPixels(
 
   void* pixels = malloc(texture->GetBytes());
   auto data = Data::MakeFromMalloc(pixels, texture->GetBytes());
-  GL_CALL(PixelStorei, GL_PACK_ROW_LENGTH, desc.width);
-  GL_CALL(PixelStorei, GL_PACK_ALIGNMENT, 1);
   GL_CALL(ReadPixels, 0, 0, desc.width, desc.height,
           ExternalFormatFrom(desc.format), ExternalTypeFrom(desc.format),
           pixels);
-  GL_CALL(BindFramebuffer, GL_FRAMEBUFFER, 0);
 
   return data;
 }
