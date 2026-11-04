@@ -1201,20 +1201,22 @@ void AstPrinter::WriteUniformVariable(ast::Var* var) {
 
   auto* address_space =
       static_cast<ast::IdentifierExp*>(var->address_space)->ident;
-  // currently only support uniform block
-  if (address_space->name != "uniform") {
+  const bool storage = address_space->name == "storage";
+  if (address_space->name != "uniform" && !storage) {
     has_error_ = true;
     return;
   }
 
   ss_ << "layout ( ";
-  if (CanUseSlotBinding()) {
+  if (storage) {
+    ss_ << "binding = " << storage_index_++ << ", ";
+  } else if (CanUseSlotBinding()) {
     ss_ << "binding = " << ubo_index_++ << ", ";
   } else {
     ubo_index_++;  // for reflaction
   }
 
-  ss_ << "std140 ) uniform ";
+  ss_ << (storage ? "std430 ) readonly buffer " : "std140 ) uniform ");
 #ifdef WGX_OUTPUT_ORIGINAL_NAME
   ss_ << var->name->name << "block_ubo"
       << " {" << std::endl;
@@ -1224,7 +1226,7 @@ void AstPrinter::WriteUniformVariable(ast::Var* var) {
 
   WriteType(var->type);
 
-  ss_ << " inner ;" << std::endl;
+  ss_ << (storage ? " inner[] ;" : " inner ;") << std::endl;
 
   ss_ << "} ";
   var->name->Accept(this);
@@ -1559,7 +1561,9 @@ void AstPrinter::RegisterBindGroupEntry(ast::Var* var) {
     // Reflection names (bind_entry->name) remain as the original WGSL/source
     // so we can bind the uniform variable to the correct binding point in GPU
     // HAL.
-    bind_entry->index = ubo_index_;
+    bind_entry->index = bind_entry->type == BindingType::kStorageBuffer
+                            ? storage_index_
+                            : ubo_index_;
   } else if (var->type.expr->ident->name == "texture_2d") {
     bind_entry->index = texture_index_;
     // If target GLSL version not support binding slot in shader, we need to use

@@ -87,12 +87,12 @@ bool Type::IsArray() const {
 
   const auto& args = expr->ident->args;
 
-  if (args.size() != 2) {
+  if (args.size() != 1 && args.size() != 2) {
     return false;
   }
 
   if (args[0]->GetType() != ExpressionType::kIdentifier ||
-      args[1]->GetType() != ExpressionType::kIntLiteral) {
+      (args.size() == 2 && args[1]->GetType() != ExpressionType::kIntLiteral)) {
     return false;
   }
 
@@ -107,7 +107,7 @@ Array Type::AsArray() const {
   const auto& args = expr->ident->args;
 
   return {static_cast<IdentifierExp*>(args[0]),
-          static_cast<IntLiteralExp*>(args[1])};
+          args.size() == 2 ? static_cast<IntLiteralExp*>(args[1]) : nullptr};
 }
 
 }  // namespace ast

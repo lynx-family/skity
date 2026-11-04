@@ -238,6 +238,11 @@ void TypeEmitter::EmitMatrixType(const ir::Type* type, uint32_t spirv_id) {
 void TypeEmitter::EmitArrayType(const ir::Type* type, uint32_t spirv_id) {
   uint32_t element_id = EmitType(type->element_type);
   if (element_id == 0) return;
+  if (type->count == 0) {
+    AppendInstruction(&sections_->types_consts_globals, SpvOpTypeRuntimeArray,
+                      {spirv_id, element_id});
+    return;
+  }
   uint32_t size_const = ids_->Allocate();
   uint32_t u32_type = EmitType(type_table_->GetU32Type());
   AppendInstruction(&sections_->types_consts_globals, SpvOpConstant,

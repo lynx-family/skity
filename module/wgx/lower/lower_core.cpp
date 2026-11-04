@@ -573,9 +573,8 @@ ir::TypeId Lowerer::ResolveType(const ast::Type& type) {
 
     if (ident->ident->name == "array") {
       const auto& args = ident->ident->args;
-      if (args.size() != 2u || args[0] == nullptr || args[1] == nullptr ||
-          args[0]->GetType() != ast::ExpressionType::kIdentifier ||
-          args[1]->GetType() != ast::ExpressionType::kIntLiteral) {
+      if ((args.size() != 1u && args.size() != 2u) || args[0] == nullptr ||
+          args[0]->GetType() != ast::ExpressionType::kIdentifier) {
         return ir::kInvalidTypeId;
       }
 
@@ -586,6 +585,13 @@ ir::TypeId Lowerer::ResolveType(const ast::Type& type) {
         return ir::kInvalidTypeId;
       }
 
+      if (args.size() == 1u) {
+        return type_table_->GetArrayType(element_type, 0);
+      }
+      if (args[1] == nullptr ||
+          args[1]->GetType() != ast::ExpressionType::kIntLiteral) {
+        return ir::kInvalidTypeId;
+      }
       auto* count_lit = static_cast<ast::IntLiteralExp*>(args[1]);
       if (count_lit->value <= 0) {
         return ir::kInvalidTypeId;
