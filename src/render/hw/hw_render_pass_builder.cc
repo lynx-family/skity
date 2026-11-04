@@ -16,7 +16,7 @@ void HWRenderPassBuilder::Build(GPURenderPassDescriptor &desc) {
 }
 
 void HWRenderPassBuilder::BuildColorAttachment(GPURenderPassDescriptor &desc) {
-  desc.color_attachment.clear_value = {};
+  desc.color_attachment.clear_value = clear_color_;
   desc.color_attachment.load_op = load_op_;
   desc.color_attachment.store_op = store_op_;
 

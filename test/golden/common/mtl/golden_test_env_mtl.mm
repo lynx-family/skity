@@ -25,8 +25,8 @@ std::unique_ptr<skity::GPUContext> GoldenTestEnvMTL::CreateGPUContext() {
   return skity::MTLContextCreate(device_, command_queue_);
 }
 
-std::shared_ptr<GoldenTexture> GoldenTestEnvMTL::RenderToTexture(
-    uint32_t width, uint32_t height, const std::function<void(Canvas*)>& render) {
+std::shared_ptr<GoldenTexture> GoldenTestEnvMTL::RenderToSurface(
+    uint32_t width, uint32_t height, const std::function<void(GPUSurface*)>& render) {
   // create a Metal texture
   MTLTextureDescriptor* texture_descriptor =
       [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
@@ -56,12 +56,7 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvMTL::RenderToTexture(
     return {};
   }
 
-  auto canvas = surface->LockCanvas();
-
-  render(canvas);
-
-  canvas->Flush();
-  surface->Flush();
+  render(surface.get());
 
   skity::GPUBackendTextureInfoMTL backend_texture_info;
   backend_texture_info.backend = skity::GPUBackendType::kMetal;

@@ -79,6 +79,7 @@ std::shared_ptr<GPURenderPass> GLDirectRootLayer::OnBeginRenderPass(
   GPURenderPassDescriptor render_pass_desc{};
 
   render_pass_desc.color_attachment.texture = mock_texture;
+  render_pass_desc.color_attachment.clear_value = GetClearColor();
   render_pass_desc.stencil_attachment.texture = mock_texture;
   render_pass_desc.depth_attachment.texture = mock_texture;
 

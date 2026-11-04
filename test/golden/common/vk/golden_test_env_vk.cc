@@ -174,9 +174,9 @@ static bool ReadPixelsFromVulkanImage(const VulkanContextState* state,
   return true;
 }
 
-std::shared_ptr<GoldenTexture> GoldenTestEnvVK::RenderToTexture(
+std::shared_ptr<GoldenTexture> GoldenTestEnvVK::RenderToSurface(
     uint32_t width, uint32_t height,
-    const std::function<void(Canvas*)>& render) {
+    const std::function<void(GPUSurface*)>& render) {
   auto* vk_context = static_cast<GPUContextVK*>(GetGPUContext());
   auto* state = vk_context->GetState();
   auto* device = static_cast<GPUContextImpl*>(vk_context)->GetGPUDevice();
@@ -241,10 +241,7 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvVK::RenderToTexture(
     return {};
   }
 
-  auto canvas = surface->LockCanvas();
-  render(canvas);
-  canvas->Flush();
-  surface->Flush();
+  render(surface.get());
 
   // Wait for rendering to complete
   state->CollectPendingSubmissions(true);

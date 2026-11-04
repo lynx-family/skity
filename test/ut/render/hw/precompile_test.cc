@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <skity/effect/color_filter.hpp>
+#include <skity/effect/path_effect.hpp>
 #include <skity/effect/shader.hpp>
 #include <skity/geometry/rrect.hpp>
 #include <skity/graphic/image.hpp>
@@ -115,7 +116,7 @@ class FakeCommandBuffer : public GPUCommandBuffer {
  public:
   std::shared_ptr<GPURenderPass> BeginRenderPass(
       const GPURenderPassDescriptor& desc) override {
-    render_pass_count_++;
+    colors_.push_back(desc.color_attachment);
     return std::make_shared<FakeRenderPass>(desc, instance_counts_);
   }
 
@@ -125,14 +126,14 @@ class FakeCommandBuffer : public GPUCommandBuffer {
 
   bool Submit(const GPUSubmitInfo* = nullptr) override { return true; }
 
-  uint32_t render_pass_count() const { return render_pass_count_; }
+  const std::vector<GPUColorAttachment>& colors() const { return colors_; }
 
   const std::vector<uint32_t>& instance_counts() const {
     return instance_counts_;
   }
 
  private:
-  uint32_t render_pass_count_ = 0;
+  std::vector<GPUColorAttachment> colors_;
   std::vector<uint32_t> instance_counts_;
 };
 
@@ -250,7 +251,11 @@ class FakeGPUDevice : public GPUDevice {
   uint32_t last_render_pass_count() const {
     return last_command_buffer_ == nullptr
                ? 0u
-               : last_command_buffer_->render_pass_count();
+               : last_command_buffer_->colors().size();
+  }
+
+  const std::vector<GPUColorAttachment>& last_colors() const {
+    return last_command_buffer_->colors();
   }
 
   std::vector<uint32_t> last_instance_counts() const {
@@ -366,6 +371,7 @@ class FakeRootLayer : public HWRootLayer {
                                         : GPULoadOp::kClear;
     desc.stencil_attachment.load_op = GPULoadOp::kClear;
     desc.depth_attachment.load_op = GPULoadOp::kClear;
+    desc.color_attachment.clear_value = GetClearColor();
     desc.label = "FakeRootLayer";
     return cmd->BeginRenderPass(desc);
   }
@@ -385,8 +391,10 @@ class FakeRootLayer : public HWRootLayer {
 class FakeGPUSurface : public GPUSurfaceImpl {
  public:
   FakeGPUSurface(const GPUSurfaceDescriptor& desc, GPUContextImpl* ctx,
-                 GPUTextureFormat format)
-      : GPUSurfaceImpl(desc, ctx), format_(format) {}
+                 GPUTextureFormat format, bool allow_clear_promotion = false)
+      : GPUSurfaceImpl(desc, ctx),
+        format_(format),
+        allow_clear_promotion_(allow_clear_promotion) {}
 
   GPUTextureFormat GetGPUFormat() const override { return format_; }
 
@@ -401,8 +409,13 @@ class FakeGPUSurface : public GPUSurfaceImpl {
  protected:
   HWRootLayer* OnBeginNextFrame(bool clear) override {
     auto* root_layer = GetArenaAllocator()->Make<FakeRootLayer>(
-        GetWidth(), GetHeight(), Rect::MakeWH(GetWidth(), GetHeight()),
-        GetGPUFormat(), &last_draw_state_, supports_texture_copy_dst_read_);
+        static_cast<uint32_t>(GetWidth() * ContentScale()),
+        static_cast<uint32_t>(GetHeight() * ContentScale()),
+        Rect::MakeWH(GetWidth(), GetHeight()), GetGPUFormat(),
+        &last_draw_state_, supports_texture_copy_dst_read_);
+    if (allow_clear_promotion_) {
+      root_layer->EnableInitialClearPromotion();
+    }
     root_layer->SetClearSurface(clear);
     root_layer->SetSampleCount(GetSampleCount());
     root_layer->SetArenaAllocator(GetArenaAllocator());
@@ -413,6 +426,7 @@ class FakeGPUSurface : public GPUSurfaceImpl {
 
  private:
   GPUTextureFormat format_;
+  bool allow_clear_promotion_;
   HWDrawState last_draw_state_ = HWDrawState::kDrawStateNone;
   bool supports_texture_copy_dst_read_ = true;
 };
@@ -539,6 +553,188 @@ void ExpectRealDrawHitsPrecompiledPipeline(FakeGPUContext& context,
 }
 
 }  // namespace
+
+TEST(InitialColorClear, ConsecutiveClearsAndSplitPass) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 32;
+  FakeGPUSurface surface(desc, &context, GPUTextureFormat::kRGBA8Unorm, true);
+  for (bool split : {false, true}) {
+    auto* canvas = surface.LockCanvas(false);
+    // Inverse-mapping and mapping back would round the right edge below 32.
+    canvas->Save();
+    canvas->Translate(0.5f, 0);
+    canvas->Scale(1.1f, 1.f);
+    canvas->Clear(Color_WHITE);
+    canvas->Restore();
+    canvas->Save();
+    canvas->Rotate(35, 16, 16);
+    canvas->Clear(Color4f{0.5f, 1.f, 0.f, 0.5f});
+    canvas->Restore();
+    if (split) {
+      Paint paint;
+      paint.SetBlendMode(BlendMode::kOverlay);
+      canvas->DrawRect(Rect::MakeWH(8, 8), paint);
+    }
+    canvas->Flush();
+    surface.Flush();
+    const auto& colors = context.device()->last_colors();
+    ASSERT_EQ(colors.size(), split ? 2u : 1u);
+    EXPECT_EQ(colors[0].load_op, GPULoadOp::kClear);
+    EXPECT_EQ(colors[0].clear_value.r, 0.25);
+    EXPECT_EQ(colors[0].clear_value.g, 0.5);
+    EXPECT_EQ(colors[0].clear_value.b, 0);
+    EXPECT_EQ(colors[0].clear_value.a, 0.5);
+    if (split) {
+      EXPECT_EQ(colors[1].load_op, GPULoadOp::kLoad);
+    } else {
+      EXPECT_TRUE(context.device()->last_instance_counts().empty());
+    }
+  }
+}
+
+TEST(InitialColorClear, ClearBlendProducesTransparentBlackForThisFrameOnly) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 32;
+  FakeGPUSurface surface(desc, &context, GPUTextureFormat::kRGBA8Unorm, true);
+  auto* canvas = surface.LockCanvas(false);
+  canvas->DrawColor(Color_RED, BlendMode::kClear);
+  canvas->Flush();
+  surface.Flush();
+
+  auto colors = context.device()->last_colors();
+  ASSERT_EQ(colors.size(), 1u);
+  EXPECT_EQ(colors[0].load_op, GPULoadOp::kClear);
+  EXPECT_EQ(colors[0].clear_value.r, 0.);
+  EXPECT_EQ(colors[0].clear_value.g, 0.);
+  EXPECT_EQ(colors[0].clear_value.b, 0.);
+  EXPECT_EQ(colors[0].clear_value.a, 0.);
+  EXPECT_TRUE(context.device()->last_instance_counts().empty());
+
+  canvas = surface.LockCanvas(false);
+  canvas->Flush();
+  surface.Flush();
+  ASSERT_EQ(context.device()->last_colors().size(), 1u);
+  EXPECT_EQ(context.device()->last_colors()[0].load_op, GPULoadOp::kLoad);
+}
+
+TEST(InitialColorClear, OversizedTransformedRectAfterRestoredClip) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 32;
+  desc.content_scale = 1.5f;
+  desc.sample_count = 4;
+  FakeGPUSurface surface(desc, &context, GPUTextureFormat::kRGBA8Unorm, true);
+  auto* canvas = surface.LockCanvas(true);
+  canvas->Save();
+  canvas->ClipPath(MakeTestPath());
+  canvas->Restore();
+  canvas->Translate(32, 0);
+  canvas->Scale(-2, 2);
+  Paint paint;
+  paint.SetAntiAlias(true);
+  paint.SetColor(Color_RED);
+  canvas->DrawRect(Rect::MakeLTRB(-1, -1, 17, 17), paint);
+  canvas->Flush();
+  surface.Flush();
+  const auto& colors = context.device()->last_colors();
+  ASSERT_EQ(colors.size(), 1u);
+  EXPECT_EQ(colors[0].load_op, GPULoadOp::kClear);
+  EXPECT_EQ(colors[0].clear_value.r, 1.);
+  EXPECT_TRUE(context.device()->last_instance_counts().empty());
+}
+
+TEST(InitialColorClear, FullRectPathReplacesRetainedColor) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 32;
+  FakeGPUSurface surface(desc, &context, GPUTextureFormat::kRGBA8Unorm, true);
+  auto* canvas = surface.LockCanvas(false);
+  Path path;
+  path.AddRect(Rect::MakeWH(32, 32));
+  Paint paint;
+  paint.SetBlendMode(BlendMode::kSrc);
+  paint.SetFillColor(Color4f{1, 0, 0, 0.5f});
+  canvas->DrawPath(path, paint);
+  canvas->Flush();
+  surface.Flush();
+  const auto& colors = context.device()->last_colors();
+  ASSERT_EQ(colors.size(), 1u);
+  EXPECT_EQ(colors[0].load_op, GPULoadOp::kClear);
+  EXPECT_EQ(colors[0].clear_value.r, 0.5);
+  EXPECT_EQ(colors[0].clear_value.a, 0.5);
+  EXPECT_TRUE(context.device()->last_instance_counts().empty());
+}
+
+TEST(InitialColorClear, RetainsDestinationWhenPromotionIsUnsafe) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto expect_load = [&](auto draw) {
+    GPUSurfaceDescriptor desc{};
+    desc.width = desc.height = 32;
+    FakeGPUSurface surface(desc, &context, GPUTextureFormat::kRGBA8Unorm, true);
+    auto* canvas = surface.LockCanvas(false);
+    draw(canvas);
+    canvas->Flush();
+    surface.Flush();
+    const auto& colors = context.device()->last_colors();
+    ASSERT_FALSE(colors.empty());
+    EXPECT_EQ(colors.front().load_op, GPULoadOp::kLoad);
+    EXPECT_FALSE(context.device()->last_instance_counts().empty());
+  };
+  expect_load([](Canvas* c) {
+    Paint p;
+    p.SetAntiAlias(true);
+    c->DrawRect(Rect::MakeWH(31.99f, 32), p);
+  });
+  expect_load([](Canvas* c) { c->DrawColor(Color4f{1, 0, 0, 0.9999f}); });
+  expect_load([](Canvas* c) {
+    c->DrawRect(Rect::MakeWH(8, 8), Paint{});
+    c->Clear(Color_RED);
+  });
+  expect_load([](Canvas* c) {
+    c->ClipRect(Rect::MakeWH(16, 16));
+    c->Clear(Color_RED);
+  });
+  expect_load([](Canvas* c) {
+    c->ClipPath(MakeTestPath(), Canvas::ClipOp::kDifference);
+    c->Clear(Color_RED);
+  });
+  expect_load([](Canvas* c) {
+    Paint p;
+    p.SetPathEffect(PathEffect::MakeDiscretePathEffect(4, 2));
+    c->DrawRect(Rect::MakeWH(32, 32), p);
+  });
+  expect_load([](Canvas* c) {
+    c->Rotate(45, 16, 16);
+    c->DrawRect(Rect::MakeWH(32, 32), Paint{});
+  });
+  expect_load([](Canvas* c) { c->DrawPaint(MakeImagePaint(MakeTestImage())); });
+  expect_load([](Canvas* c) {
+    c->SaveLayer(Rect::MakeWH(32, 32), Paint{});
+    c->Clear(Color_RED);
+    c->Restore();
+  });
+  expect_load([](Canvas* c) {
+    Path path;
+    path.SetFillType(Path::PathFillType::kEvenOdd);
+    path.AddRect(Rect::MakeWH(32, 32));
+    path.AddRect(Rect::MakeLTRB(8, 8, 24, 24));
+    c->DrawPath(path, Paint{});
+  });
+  expect_load([](Canvas* c) {
+    Path path;
+    path.MoveTo(0, 0);
+    path.Close();
+    path.AddRect(Rect::MakeLTRB(8, 8, 32, 32));
+    c->DrawPath(path, Paint{});
+  });
+}
 
 TEST(PrecompileDrawTest, ReturnsBeforeContextInit) {
   FakeGPUContext context;

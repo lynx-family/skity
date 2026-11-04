@@ -23,6 +23,13 @@ PFNGLGETSTRINGPROC g_real_get_string = nullptr;
 PFNGLDRAWARRAYSPROC g_real_draw_arrays = nullptr;
 uint32_t g_gl_clear_call_count = 0;
 uint32_t g_gl_draw_arrays_call_count = 0;
+PFNGLCLEARPROC g_real_clear = nullptr;
+GLbitfield g_clear_mask = 0;
+
+void GLAD_API_PTR RecordClearMask(GLbitfield mask) {
+  g_clear_mask |= mask;
+  g_real_clear(mask);
+}
 
 const GLubyte* GLAD_API_PTR ForcedPowerVRGetString(GLenum name) {
   if (name == GL_RENDERER) {
@@ -77,6 +84,42 @@ class ScopedPowerVRWorkaround final {
 
 float UnpackDepth(uint32_t value) {
   return static_cast<float>(value >> 8) / 0xFFFFFF;
+}
+
+TEST(InitialColorClearGL, OnlyLeadingReplacementClearsTheColorBuffer) {
+  auto* env = GoldenTestEnv::GetInstance();
+  if (env->GetBackend() != Backend::kGL) {
+    GTEST_SKIP() << "Requires the GL golden environment";
+  }
+  const auto samples = env->GetSampleCount();
+  const auto mode = env->GetGLSurfaceMode();
+  const auto stencil = env->GetGLHasStencilAttachment();
+  env->SetSampleCount(1);
+  env->SetGLSurfaceMode(GLSurfaceMode::kDirect);
+  env->SetGLHasStencilAttachment(true);
+  auto texture = env->RenderToSurface(8, 8, [](GPUSurface* surface) {
+    auto* gl = GLInterface::GlobalInterface();
+    g_real_clear = gl->fClear;
+    gl->fClear = RecordClearMask;
+    Paint paint;
+    paint.SetColor(Color_RED);
+    for (bool draw_first : {false, true, false}) {
+      g_clear_mask = 0;
+      auto* canvas = surface->LockCanvas(false);
+      if (draw_first) {
+        canvas->DrawRect(Rect::MakeWH(4, 4), paint);
+      }
+      canvas->DrawRect(Rect::MakeWH(8, 8), paint);
+      canvas->Flush();
+      surface->Flush();
+      EXPECT_EQ((g_clear_mask & GL_COLOR_BUFFER_BIT) != 0, !draw_first);
+    }
+    gl->fClear = g_real_clear;
+  });
+  env->SetSampleCount(samples);
+  env->SetGLSurfaceMode(mode);
+  env->SetGLHasStencilAttachment(stencil);
+  ASSERT_NE(texture, nullptr);
 }
 
 TEST(GLClearDrawGLIntegrationTest,
@@ -312,6 +355,16 @@ TEST(GLClearDrawGLIntegrationTest,
                     outside_color.data());
     EXPECT_EQ(inside_color, (std::array<uint8_t, 4>{255, 0, 0, 255}));
     EXPECT_EQ(outside_color, (std::array<uint8_t, 4>{0, 0, 0, 0}));
+    if (mode == GLSurfaceMode::kDirect) {
+      canvas = surface->LockCanvas(false);
+      canvas->Clear(Color_GREEN);
+      canvas->Flush();
+      surface->Flush();
+      gl->fBindFramebuffer(GL_FRAMEBUFFER, fbo);
+      gl->fReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                      outside_color.data());
+      EXPECT_EQ(outside_color, (std::array<uint8_t, 4>{0, 255, 0, 255}));
+    }
     EXPECT_GT(workaround.GetDrawArraysCallCount(), clear_draw_count);
     EXPECT_EQ(workaround.GetClearCallCount(), 0u);
     EXPECT_EQ(gl->fGetError(), GL_NO_ERROR);

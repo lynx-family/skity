@@ -64,6 +64,7 @@ void HWCanvas::BeginNewFrame(HWRootLayer* root_layer) {
   SKITY_TRACE_EVENT(HWCanvas_BeginNewFrame);
 
   root_layer_ = root_layer;
+  check_initial_clear_ = root_layer_->CanPromoteInitialClear();
 
   layer_stack_.clear();
 
@@ -150,6 +151,14 @@ void HWCanvas::OnDrawLine(float x0, float y0, float x1, float y1,
 
 void HWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
   SKITY_TRACE_EVENT(HWCanvas_OnDrawPath);
+  // Empty contours before AddRect can enlarge the path bounds.
+  if (check_initial_clear_ && path.GetIsAType() == Path::IsAType::kRect &&
+      path.CountPoints() == 4) {
+    const Rect rect = path.GetBounds();
+    if (TryPromoteInitialClear(paint, &rect)) {
+      return;
+    }
+  }
   if (surface_->GetGPUContext()->IsEnableSimpleShapePipeline() &&
       path.GetIsAType() != Path::IsAType::kGeneral) {
     RRect rrect;
@@ -237,6 +246,10 @@ void HWCanvas::OnDrawPaint(const Paint& paint) {
     return;
   }
 
+  if (check_initial_clear_ && TryPromoteInitialClear(paint)) {
+    return;
+  }
+
   auto rect = CurrentLayer()->GetBounds();
   Matrix layer_to_local;
   bool has_layer_to_local = CurrentMatrix().InvertZ0Plane(&layer_to_local);
@@ -254,7 +267,7 @@ void HWCanvas::OnDrawPaint(const Paint& paint) {
 
   if (has_layer_to_local) {
     layer_to_local.MapRect(&rect, rect);
-    this->OnDrawRect(rect, paint);
+    OnDrawRRect(RRect::MakeRect(rect), paint);
     return;
   }
 
@@ -283,9 +296,58 @@ void HWCanvas::OnSaveLayer(const Rect& bounds, const Paint& paint) {
   layer_stack_.emplace_back(layer);
 }
 
+bool HWCanvas::TryPromoteInitialClear(const Paint& paint, const Rect* rect) {
+  // Once a draw is recorded, later rectangles skip promotion for this frame.
+  if (!root_layer_->CanPromoteInitialClear()) {
+    check_initial_clear_ = false;
+    return false;
+  }
+  if (layer_stack_.size() != 1 || paint.GetStyle() != Paint::kFill_Style ||
+      paint.GetShader() || paint.GetPathEffect() || paint.GetColorFilter() ||
+      paint.GetMaskFilter() || paint.GetImageFilter()) {
+    return false;
+  }
+
+  auto* state = root_layer_->GetState();
+  const auto& bounds = root_layer_->GetBounds();
+  const Rect target =
+      Rect::MakeWH(root_layer_->GetWidth(), root_layer_->GetHeight());
+  if (state->LastClipDraw() || !state->CurrentClipBounds().Contains(target) ||
+      !GetGlobalClipBounds().Contains(bounds)) {
+    return false;
+  }
+
+  if (rect) {
+    Rect mapped;
+    if (!rect->IsFinite() || !CurrentMatrix().MapRect(&mapped, *rect) ||
+        !mapped.Contains(bounds)) {
+      return false;
+    }
+  } else if (CurrentMatrix().HasPersp()) {
+    return false;
+  }
+
+  const auto mode = paint.GetBlendMode();
+  if (mode == BlendMode::kClear) {
+    root_layer_->SetInitialClearColor({});
+    return true;
+  }
+  const auto color = paint.GetFillColor();
+  if (mode == BlendMode::kSrc ||
+      (mode == BlendMode::kSrcOver && color.a == 1.f)) {
+    root_layer_->SetInitialClearColor(
+        {color.r * color.a, color.g * color.a, color.b * color.a, color.a});
+    return true;
+  }
+  return false;
+}
+
 void HWCanvas::OnDrawRect(Rect const& rect, Paint const& paint) {
   SKITY_TRACE_EVENT(HWCanvas_OnDrawRect);
 
+  if (check_initial_clear_ && TryPromoteInitialClear(paint, &rect)) {
+    return;
+  }
   RRect rrect = RRect::MakeRect(rect);
   this->OnDrawRRect(rrect, paint);
 }
@@ -789,6 +851,7 @@ void HWCanvas::OnFlush() {
     }
   }
 
+  check_initial_clear_ = false;
   layer_stack_.clear();
 }
 

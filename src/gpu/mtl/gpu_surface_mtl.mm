@@ -22,6 +22,7 @@ HWRootLayer *GPUSurfaceMTL::OnBeginNextFrame(bool clear) {
       static_cast<uint32_t>(GetHeight() * ContentScale()), Rect::MakeWH(GetWidth(), GetHeight()),
       GetGPUFormat(), target);
 
+  root_layer->EnableInitialClearPromotion();
   root_layer->SetClearSurface(clear);
   root_layer->SetSampleCount(GetSampleCount());
   root_layer->SetArenaAllocator(GetArenaAllocator());

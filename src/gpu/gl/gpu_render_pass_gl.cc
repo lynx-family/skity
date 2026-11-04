@@ -257,7 +257,8 @@ void GPURenderPassGL::Clear() {
   if (desc.color_attachment.load_op == GPULoadOp::kClear) {
     clear_mask |= GL_COLOR_BUFFER_BIT;
 
-    GL_CALL(ClearColor, 0, 0, 0, 0);
+    const auto& color = desc.color_attachment.clear_value;
+    GL_CALL(ClearColor, color.r, color.g, color.b, color.a);
   }
 
   if (desc.stencil_attachment.load_op == GPULoadOp::kClear) {
