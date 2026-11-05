@@ -2,6 +2,9 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#ifndef SRC_GPU_WEB_GPU_BLIT_PASS_WEB_HPP
+#define SRC_GPU_WEB_GPU_BLIT_PASS_WEB_HPP
+
 #include <webgpu/webgpu.h>
 
 #include <vector>
@@ -31,9 +34,12 @@ class GPUBlitPassWEB : public GPUBlitPass {
 
  private:
   WGPUDevice device_;
+  WGPUQueue queue_;
   WGPUCommandEncoder encoder_;
 
   GPUCommandBufferWEB* command_buffer_;
 };
 
 }  // namespace skity
+
+#endif  // SRC_GPU_WEB_GPU_BLIT_PASS_WEB_HPP
