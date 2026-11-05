@@ -5,6 +5,7 @@
 #include "src/gpu/web/gpu_blit_pass_web.hpp"
 
 #include <cstring>
+#include <vector>
 
 #include "src/gpu/web/gpu_buffer_web.hpp"
 #include "src/gpu/web/gpu_command_buffer_web.hpp"
@@ -17,9 +18,15 @@ GPUBlitPassWEB::GPUBlitPassWEB(WGPUDevice device, WGPUCommandEncoder encoder,
     : device_(device), encoder_(encoder), command_buffer_(command_buffer) {
   // Add ref to encoder_ to make sure it is not destroyed
   wgpuCommandEncoderAddRef(encoder_);
+  // Queue writes are used instead of mappedAtCreation staging below, so the
+  // blit pass needs its own queue reference.
+  queue_ = wgpuDeviceGetQueue(device_);
 }
 
-GPUBlitPassWEB::~GPUBlitPassWEB() { wgpuCommandEncoderRelease(encoder_); }
+GPUBlitPassWEB::~GPUBlitPassWEB() {
+  wgpuCommandEncoderRelease(encoder_);
+  wgpuQueueRelease(queue_);
+}
 
 void GPUBlitPassWEB::UploadTextureData(std::shared_ptr<GPUTexture> texture,
                                        uint32_t offset_x, uint32_t offset_y,
@@ -40,30 +47,19 @@ void GPUBlitPassWEB::UploadTextureData(std::shared_ptr<GPUTexture> texture,
   auto bytes_per_pixel =
       GetTextureFormatBytesPerPixel(texture->GetDescriptor().format);
   auto size = buffer_width * height * bytes_per_pixel;
-  // create a stage buffer
-  WGPUBufferDescriptor desc = {};
-  desc.size = size;
-  desc.usage = WGPUBufferUsage_CopySrc | WGPUBufferUsage_MapWrite;
-  desc.mappedAtCreation = true;
 
-  WGPUBuffer stage_buffer = wgpuDeviceCreateBuffer(device_, &desc);
-
-  if (!stage_buffer) {
-    // check stage buffer is valid
-    return;
-  }
-
-  auto ptr = wgpuBufferGetMappedRange(stage_buffer, 0, size);
-
-  if (!ptr) {
-    // check mapped range is valid
-    wgpuBufferRelease(stage_buffer);
-    wgpuBufferDestroy(stage_buffer);
-    return;
-  }
+  // Build the (possibly padded) staging data in linear memory and upload it
+  // with a queue write.
+  //
+  // mappedAtCreation + wgpuBufferGetMappedRange must be avoided here: the
+  // emdawnwebgpu port (as shipped with emsdk 4.0.18) zero-fills out of
+  // bounds in emwgpuBufferGetMappedRange (HEAPU8.fill(0, data, byteLength)
+  // treats the length as an absolute end address), which corrupts the wasm
+  // heap whenever the mapping is larger than the allocated address.
+  std::vector<uint8_t> staging(size, 0);
 
   if (buffer_width != width) {
-    auto buffer_ptr = static_cast<uint8_t*>(ptr);
+    auto buffer_ptr = staging.data();
     auto data_ptr = static_cast<const uint8_t*>(data);
 
     for (uint32_t y = 0; y < height; y++) {
@@ -73,10 +69,22 @@ void GPUBlitPassWEB::UploadTextureData(std::shared_ptr<GPUTexture> texture,
     }
 
   } else {
-    std::memcpy(ptr, data, size);
+    std::memcpy(staging.data(), data, size);
   }
 
-  wgpuBufferUnmap(stage_buffer);
+  // create a stage buffer
+  WGPUBufferDescriptor desc = {};
+  desc.size = size;
+  desc.usage = WGPUBufferUsage_CopySrc;
+
+  WGPUBuffer stage_buffer = wgpuDeviceCreateBuffer(device_, &desc);
+
+  if (!stage_buffer) {
+    // check stage buffer is valid
+    return;
+  }
+
+  wgpuQueueWriteBuffer(queue_, stage_buffer, 0, staging.data(), size);
 
   WGPUTexelCopyBufferInfo src_info{};
   src_info.buffer = stage_buffer;
@@ -111,43 +119,16 @@ void GPUBlitPassWEB::UploadBufferData(GPUBuffer* buffer, void* data,
 
   buffer_web->ResizeIfNeeded(device_, size);
 
-  // using encoder to make sure data update sync with other commands
-
-  // create a stage buffer
-  WGPUBufferDescriptor desc = {};
-  desc.size = size;
-  desc.usage = WGPUBufferUsage_CopySrc | WGPUBufferUsage_MapWrite;
-  desc.mappedAtCreation = true;
-
-  WGPUBuffer stage_buffer = wgpuDeviceCreateBuffer(device_, &desc);
-
-  if (!stage_buffer) {
-    // check stage buffer is valid
-    return;
-  }
-
-  auto ptr = wgpuBufferGetMappedRange(stage_buffer, 0, size);
-
-  if (!ptr) {
-    // check mapped range is valid
-    wgpuBufferRelease(stage_buffer);
-    wgpuBufferDestroy(stage_buffer);
-    return;
-  }
-
-  std::memcpy(ptr, data, size);
-
-  wgpuBufferUnmap(stage_buffer);
-
-  wgpuCommandEncoderCopyBufferToBuffer(encoder_, stage_buffer, 0,
-                                       buffer_web->GetBuffer(), 0, size);
-
-  command_buffer_->RecordStageBuffer(stage_buffer);
+  // Upload with a queue write; it happens before any later submit, so the
+  // encoded commands observe the new contents just like the previous
+  // stage-buffer copy did. See UploadTextureData for why the mapped staging
+  // path must not be used.
+  wgpuQueueWriteBuffer(queue_, buffer_web->GetBuffer(), 0, data, size);
 }
 
 void GPUBlitPassWEB::GenerateMipmaps(
     const std::shared_ptr<GPUTexture>& texture) {
-  // TODO: generate mipmaps manually
+  // TODO(skity): generate mipmaps manually
 }
 
 void GPUBlitPassWEB::End() {}

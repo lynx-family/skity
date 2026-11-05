@@ -31,15 +31,25 @@ struct PendingData {
 
   std::vector<WGPUBuffer> stage_buffers;
   std::vector<WGPUBindGroup> bind_groups;
+  // The emdawnwebgpu event dispatcher can deliver a callback a second time
+  // while the first invocation is still running; used to keep PendingData
+  // owned by exactly one delivery.
+  bool released = false;
 };
 
 void OnQueueSubmittedWorkDone(WGPUQueueWorkDoneStatus status,
                               WGPUStringView message, void* userdata1,
                               void* userdata2) {
-  LOGI("OnQueueSubmittedWorkDone: {} ",
-       std::string(message.data, message.length));
+  LOGI(
+      "OnQueueSubmittedWorkDone: {} ",
+      message.data ? std::string(message.data, message.length) : std::string());
 
   auto data = reinterpret_cast<PendingData*>(userdata1);
+  if (data == nullptr || data->released) {
+    // Duplicate delivery of this callback; PendingData was already deleted.
+    return;
+  }
+  data->released = true;
 
   delete data;
 }
