@@ -123,6 +123,8 @@ endif()
 
 option(SKITY_ENABLE_FONT_HARNESS "option for building font harness CLI and tests" OFF)
 
+option(SKITY_ENABLE_WEB_HARNESS "option for building the wasm web harness (requires emcmake)" OFF)
+
 option(SKITY_USE_SELF_LIBCXX "option to force skity use self libcxx" OFF)
 option(SKITY_TRACE "option for enable skity tracing" OFF)
 option(SKITY_BENCH_ENABLE_PERFETTO "option for enable perfetto tracing for benchmark" OFF)
