@@ -477,44 +477,48 @@ void HWCanvas::DrawGlyphsInternal(uint32_t count, const GlyphID* glyphs,
     glyph_transform = layer_to_glyph * transform;
   }
 
-  GlyphRunList glyph_runs = GlyphRun::Make(
-      count, glyphs, origin, position_x, position_y, font, paint, ctx_scale_,
-      glyph_transform, surface_->GetGPUContext()->GetAtlasManager(),
-      arena_allocator_,
-      [this, transform](const Path& path, const Paint& paint) {
-        this->DrawPathInternal(path, paint, transform);
-      });
-  for (auto& glyph_run : glyph_runs) {
-    const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
-    auto plan =
-        ResolveHWBlendPlan(paint.GetBlendMode(), glyph_run->HasCoverageMask(),
-                           glyph_run->IsSourceOpaque(), caps,
-                           CurrentLayer()->SupportsTextureCopyDstRead());
-    if (!plan.has_value()) {
-      plan = ResolveLegacyCoverageBlendPlan(
-          paint.GetBlendMode(), caps,
-          CurrentLayer()->SupportsTextureCopyDstRead());
-    }
-    const bool requires_non_overlapping_draws =
-        !glyph_run->HasCoverageMask() &&
-        plan->dst_read_strategy == DstReadStrategy::kNativeBlend &&
-        !caps.supports_native_advanced_blend_coherent;
-    // Keep one draw per glyph run to avoid per-glyph overlap checks and
-    // splitting. Overlapping glyphs within a run may blend incorrectly when
-    // using texture-copy destination reads or non-coherent native advanced
-    // blending. These combinations are uncommon in practice, so handling such
-    // overlaps is deferred until required.
-    auto draw = glyph_run->Draw(
-        glyph_transform, glyph_to_layer, arena_allocator_, ctx_scale_,
-        surface_->GetGPUContext()->IsEnableTextLinearFilter());
-    if (draw) {
-      draw->SetSampleCount(GetCanvasSampleCount());
-      SetupLayerSpaceBoundsForDraw(draw, glyph_run->GetBounds(), Matrix{});
-      draw->SetBlendPlan(*plan);
-      draw->SetRequiresNonOverlappingDraws(requires_non_overlapping_draws);
-      CurrentLayer()->AddDraw(draw);
-    }
+  const GlyphRunInput input{count,      glyphs,     origin,
+                            position_x, position_y, font};
+  const GlyphRunBuildContext build_context{
+      *surface_->GetGPUContext()->GetAtlasManager(), *arena_allocator_,
+      ctx_scale_, glyph_transform};
+  const GlyphDrawContext draw_context{
+      *arena_allocator_, glyph_to_layer, transform,
+      surface_->GetGPUContext()->IsEnableTextLinearFilter()};
+  auto glyph_runs = GlyphRunBuilder::Build(input, paint, build_context);
+  for (const auto* run : glyph_runs) {
+    run->Record(draw_context, *this);
   }
+}
+
+void HWCanvas::SubmitAtlas(const GlyphAtlasDraw& operation) {
+  const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
+  auto plan = ResolveHWBlendPlan(operation.blend_mode, operation.has_coverage,
+                                 operation.source_opaque, caps,
+                                 CurrentLayer()->SupportsTextureCopyDstRead());
+  if (!plan.has_value()) {
+    plan = ResolveLegacyCoverageBlendPlan(
+        operation.blend_mode, caps,
+        CurrentLayer()->SupportsTextureCopyDstRead());
+  }
+  const bool requires_non_overlapping_draws =
+      !operation.has_coverage &&
+      plan->dst_read_strategy == DstReadStrategy::kNativeBlend &&
+      !caps.supports_native_advanced_blend_coherent;
+  // Keep one draw per atlas batch. Overlapping glyphs within a batch may blend
+  // incorrectly with texture-copy destination reads or non-coherent native
+  // advanced blending. Per-glyph overlap splitting remains deferred.
+  auto* draw = operation.draw;
+  draw->SetSampleCount(GetCanvasSampleCount());
+  SetupLayerSpaceBoundsForDraw(draw, operation.layer_bounds, Matrix{});
+  draw->SetBlendPlan(*plan);
+  draw->SetRequiresNonOverlappingDraws(requires_non_overlapping_draws);
+  CurrentLayer()->AddDraw(draw);
+}
+
+void HWCanvas::SubmitPath(const Path& path, const Paint& paint,
+                          const Matrix& local_to_layer) {
+  DrawPathInternal(path, paint, local_to_layer);
 }
 
 void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
