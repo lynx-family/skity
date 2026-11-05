@@ -233,6 +233,10 @@ if(${SKITY_ENABLE_FONT_HARNESS})
   add_subdirectory(harness/font)
 endif()
 
+if(${SKITY_ENABLE_WEB_HARNESS})
+  add_subdirectory(harness/web)
+endif()
+
 if(${SKITY_TEST})
   add_subdirectory(test)
 endif()

@@ -97,13 +97,14 @@ class TestRunner:
         env["AGENT_OUT_DIR"] = os.path.abspath(self.golden_failures_dir)
 
         vk_test_loader = os.environ.get("SKITY_VK_TEST_USE_SYSTEM_LOADER", "")
-        use_vulkan_system_loader = vk_test_loader.upper() not in (
-            "",
-            "0",
-            "OFF",
-            "FALSE",
-            "NO",
-        )
+        use_vulkan_system_loader = (self.suite != "web-harness" and
+                                    vk_test_loader.upper() not in (
+                                        "",
+                                        "0",
+                                        "OFF",
+                                        "FALSE",
+                                        "NO",
+                                    ))
         uses_vulkan_backend = self.suite == "unit" or (
             self.suite.startswith("golden") and self.backend == "vulkan"
         )
@@ -161,6 +162,17 @@ class TestRunner:
             cmd = ["cmake", "-S", self.repo_root, "-B", self.build_dir,
                    "-DSKITY_TEST=ON", "-DSKITY_ENABLE_FONT_HARNESS=ON",
                    "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"]
+        if self.suite == "web-harness":
+            if shutil.which("emcmake") is None:
+                self.print_status(Colors.RED, "❌ emcmake not found in PATH!")
+                return False, ("emcmake not found in PATH; install emscripten "
+                               "and source emsdk_env.sh before running the "
+                               "web-harness suite")
+            cmd = ["emcmake", "cmake", "-S", self.repo_root, "-B", self.build_dir,
+                   "-DSKITY_TEST=OFF", "-DSKITY_EXAMPLE=OFF",
+                   "-DSKITY_CODEC_MODULE=OFF", "-DSKITY_LOG=ON",
+                   "-DSKITY_ENABLE_WEB_HARNESS=ON",
+                   "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"]
         vk_test_loader = os.environ.get("SKITY_VK_TEST_USE_SYSTEM_LOADER", "")
         if vk_test_loader.upper() not in ("", "0", "OFF", "FALSE", "NO"):
             cmd.append("-DSKITY_VK_TEST_USE_SYSTEM_LOADER=ON")
@@ -186,6 +198,10 @@ class TestRunner:
         cmd = ["cmake", "--build", self.build_dir, "--parallel", str(self.parallel_jobs)]
         if self.suite == "font-harness":
             cmd.extend(["--target", "skity-font"])
+        if self.suite == "web-harness":
+            cmd = ["emmake", "cmake", "--build", self.build_dir,
+                   "--parallel", str(self.parallel_jobs),
+                   "--target", "skity-web"]
         exit_code, stdout, stderr = self.run_command(cmd)
         if exit_code != 0:
             self.print_status(Colors.RED, "❌ Build failed!")
@@ -522,6 +538,9 @@ class TestRunner:
         elif self.suite == "font-harness":
             from font_harness_runner import run_suite
             report = run_suite(self, self.args)
+        elif self.suite == "web-harness":
+            from web_harness_runner import run_suite
+            report = run_suite(self, self.args)
         else:
             report = self._create_infra_error("usage_error", f"Suite '{self.suite}' is not implemented yet.", EXIT_USAGE_ERROR)
             self.print_agent_report(report)
@@ -543,7 +562,7 @@ class TestRunner:
 
 def main():
     parser = argparse.ArgumentParser(description='Skity Test Runner with AI Agent feedback loop')
-    parser.add_argument('--suite', default='unit', choices=['unit', 'golden-shape', 'golden-text', 'font-harness'], help='Test suite to run')
+    parser.add_argument('--suite', default='unit', choices=['unit', 'golden-shape', 'golden-text', 'font-harness', 'web-harness'], help='Test suite to run')
     parser.add_argument('--build-dir', default='build', help='Build directory (default: build)')
     parser.add_argument('--backend', default='metal', choices=['metal', 'gl', 'vulkan'], help='Golden test backend to run (default: metal)')
     parser.add_argument('--filter', default='', help='Run only tests matching pattern (e.g. for gtest)')
@@ -557,6 +576,8 @@ def main():
 
     from font_harness_runner import add_arguments
     add_arguments(parser)
+    from web_harness_runner import add_arguments as add_web_arguments
+    add_web_arguments(parser)
     args = parser.parse_args()
     if args.parallel <= 0:
         print("Error: --parallel must be > 0", file=sys.stderr)
