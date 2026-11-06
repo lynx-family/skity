@@ -377,13 +377,14 @@ These modules have complete (or near-complete) C coverage of their core:
   precompile, `create_texture`, `wrap_texture`, `set_resource_cache_limit`)
 - `Bitmap` / `Pixmap` (pixel access, buffer wrapping via
   `data_make_with_proc` + `pixmap_create` + `bitmap_create_from_pixmap`,
-  `set_color_info`), `image_read_pixels`
+  `set_color_info`, color space get/set via the `skity_color_space_info`
+  POD), `image_read_pixels`
 - 3D / misc: [`Camera`](./include/skity/c/skity_camera.h),
   [`Quaternion`](./include/skity/c/skity_quaternion.h),
   [`Stroke`](./include/skity/c/skity_stroke.h),
   [`Data`](./include/skity/c/skity_data.h)
 - POD types: `color`, `blend_mode`, `tile_mode`, `sampling_options`,
-  `alpha_type`, `color_type`, `font_style`, `font_metrics`
+  `alpha_type`, `color_type`, `color_space_info`, `font_style`, `font_metrics`
 
 `Paint`, `Path`, `Shader`, `Font`, `Typeface`, `TextBlob`, `Image`,
 `GPUSurface`, `Canvas` all have working core coverage but carry functional

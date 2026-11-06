@@ -25,6 +25,7 @@ set(SKITY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/alpha_type.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/bitmap.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/color.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/color_space.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/image.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/paint.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/path.hpp

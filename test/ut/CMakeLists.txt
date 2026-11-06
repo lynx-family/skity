@@ -12,6 +12,7 @@ if (${SKITY_UNIFIED_LIB})
     # dedicated binary: the C ABI tests that need no legacy surface (the
     # header-only wrapper tests join here once they land).
     add_executable(skity_wrapper_unit_test
+        capi/bitmap_c_test.cc
         capi/text_delegate_c_test.cc
         capi/serialization_c_test.cc
         capi/path_2d_c_test.cc
@@ -68,6 +69,7 @@ add_executable(skity_unit_test
     geometry/scalar_test.cc
     geometry/vector_test.cc
     graphic/bitmap_test.cc
+    graphic/color_space_test.cc
     graphic/color_test.cc
     graphic/image_test.cc
     graphic/path_measure_test.cc
@@ -217,6 +219,7 @@ endif()
 if (${SKITY_CAPI_MODULE})
     target_sources(skity_unit_test PRIVATE
         capi/bridge_c_test.cc
+        capi/bitmap_c_test.cc
         capi/recorder_c_test.cc
         capi/text_delegate_c_test.cc
         capi/serialization_c_test.cc

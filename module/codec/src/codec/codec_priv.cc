@@ -5,6 +5,7 @@
 #include "src/codec/codec_priv.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <vector>
@@ -317,6 +318,96 @@ std::shared_ptr<Pixmap> ResamplePixmapToTarget(
   }
 
   return ResamplePixmapToSize(src, target_width, target_height);
+}
+
+namespace {
+
+// Adjugate / determinant inversion of a row-major 3x3 matrix.
+bool Invert3x3(const float m[9], float inv[9]) {
+  float det = m[0] * (m[4] * m[8] - m[5] * m[7]) -
+              m[1] * (m[3] * m[8] - m[5] * m[6]) +
+              m[2] * (m[3] * m[7] - m[4] * m[6]);
+  if (det == 0.f || !std::isfinite(det)) {
+    return false;
+  }
+  float inv_det = 1.f / det;
+  inv[0] = (m[4] * m[8] - m[5] * m[7]) * inv_det;
+  inv[1] = (m[2] * m[7] - m[1] * m[8]) * inv_det;
+  inv[2] = (m[1] * m[5] - m[2] * m[4]) * inv_det;
+  inv[3] = (m[5] * m[6] - m[3] * m[8]) * inv_det;
+  inv[4] = (m[0] * m[8] - m[2] * m[6]) * inv_det;
+  inv[5] = (m[2] * m[3] - m[0] * m[5]) * inv_det;
+  inv[6] = (m[3] * m[7] - m[4] * m[6]) * inv_det;
+  inv[7] = (m[1] * m[6] - m[0] * m[7]) * inv_det;
+  inv[8] = (m[0] * m[4] - m[1] * m[3]) * inv_det;
+  return true;
+}
+
+// CIE xy chromaticity (x, y) to XYZ with Y scaled to 1.
+void XYZFromXY(float x, float y, float* xyz) {
+  xyz[0] = x / y;
+  xyz[1] = 1.f;
+  xyz[2] = (1.f - x - y) / y;
+}
+
+}  // namespace
+
+bool CodecGamutFromChromaticities(const float chromaticities[8],
+                                  float gamut_xyz[9]) {
+  const float* c = chromaticities;
+  for (int i = 0; i < 8; i++) {
+    // Values are ratios; x + y must stay below 1 for a physical color.
+    if (!(c[i] > 0.f) || c[i] >= 1.f || !std::isfinite(c[i])) {
+      return false;
+    }
+  }
+  for (int i = 0; i < 4; i++) {
+    // x + y == 1 is legal (z == 0, e.g. the Display P3 red primary); only
+    // a negative z component makes the chromaticity unphysical.
+    if (c[i * 2] + c[i * 2 + 1] > 1.f) {
+      return false;
+    }
+  }
+
+  // Row-major primaries matrix (rows X/Y/Z, columns R/G/B, each column with
+  // Y == 1) and the white point XYZ.
+  float red[3], green[3], blue[3], white[3];
+  XYZFromXY(c[2], c[3], red);
+  XYZFromXY(c[4], c[5], green);
+  XYZFromXY(c[6], c[7], blue);
+  XYZFromXY(c[0], c[1], white);
+
+  float primaries[9] = {
+      red[0], green[0], blue[0],  //
+      red[1], green[1], blue[1],  //
+      red[2], green[2], blue[2],
+  };
+
+  // Scale each primary column so that RGB (1, 1, 1) maps to the white point:
+  // scale = primaries^-1 * white.
+  float inv[9];
+  if (!Invert3x3(primaries, inv)) {
+    return false;
+  }
+  float scale[3];
+  for (int row = 0; row < 3; row++) {
+    scale[row] = inv[row * 3] * white[0] + inv[row * 3 + 1] * white[1] +
+                 inv[row * 3 + 2] * white[2];
+  }
+  if (!(scale[0] > 0.f) || !(scale[1] > 0.f) || !(scale[2] > 0.f)) {
+    return false;
+  }
+
+  for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 3; col++) {
+      float value = primaries[row * 3 + col] * scale[col];
+      if (!std::isfinite(value)) {
+        return false;
+      }
+      gamut_xyz[row * 3 + col] = value;
+    }
+  }
+  return true;
 }
 
 }  // namespace codec_priv

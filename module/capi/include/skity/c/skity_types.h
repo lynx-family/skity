@@ -162,6 +162,32 @@ typedef enum {
 } skity_color_type;
 
 /**
+ * @brief Color space kind. Values aligned with skity::ColorSpace::Kind.
+ */
+typedef enum {
+  SKITY_COLOR_SPACE_SRGB = 0,    /**< sRGB transfer curve and primaries */
+  SKITY_COLOR_SPACE_SRGB_LINEAR, /**< linear transfer, sRGB primaries */
+  SKITY_COLOR_SPACE_DISPLAY_P3,  /**< sRGB curve, Display P3 primaries */
+  SKITY_COLOR_SPACE_PARAMETRIC,  /**< described by transfer_fn/gamut_xyz */
+} skity_color_space_kind;
+
+/**
+ * @brief Plain description of a color space, mirroring skity::ColorSpace.
+ *
+ * transfer_fn holds 7 skcms-style parameters {g, a, b, c, d, e, f}:
+ *   linear(x) = c * x + f               for x <  d
+ *   linear(x) = pow(a * x + b, g) + e   for x >= d
+ * gamut_xyz holds a row-major 3x3 RGB->XYZ matrix.
+ * For kinds other than SKITY_COLOR_SPACE_PARAMETRIC the arrays are ignored
+ * and the canonical values of that kind are used.
+ */
+typedef struct skity_color_space_info {
+  skity_color_space_kind kind;
+  float transfer_fn[7];
+  float gamut_xyz[9];
+} skity_color_space_info;
+
+/**
  * @brief Filter mode for image sampling. Values aligned with skity::FilterMode.
  */
 typedef enum {

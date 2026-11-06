@@ -92,6 +92,11 @@ void Pixmap::Reset() {
 bool Pixmap::SetAlphaType(AlphaType alpha_type) { return false; }
 
 bool Pixmap::SetColorInfo(AlphaType alpha_type, ColorType color_type) {
+  return SetColorInfo(alpha_type, color_type, ColorSpace{});
+}
+
+bool Pixmap::SetColorInfo(AlphaType alpha_type, ColorType color_type,
+                          ColorSpace color_space) {
   if (!IsAlphaMatchColorType(alpha_type, color_type)) {
     return false;
   }
@@ -115,6 +120,7 @@ bool Pixmap::SetColorInfo(AlphaType alpha_type, ColorType color_type) {
 
   alpha_type_ = alpha_type;
   color_type_ = color_type;
+  color_space_ = color_space;
 
   return true;
 }
