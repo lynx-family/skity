@@ -128,9 +128,11 @@ void WGSLTextGeometry::WriteVSMain(std::stringstream& ss) const {
   let pos: vec2<f32> = vec2<f32>(
       input.a_offset.x * input.a_pos.x + input.a_offset.z * input.a_pos.z,
       input.a_offset.y * input.a_pos.y + input.a_offset.w * input.a_pos.w);
-  let uv: vec2<f32> = vec2<f32>(
-      input.a_offset.x * input.a_uv.x + input.a_offset.z * input.a_uv.z,
-      input.a_offset.y * input.a_uv.y + input.a_offset.w * input.a_uv.w);
+  // Interpolate only glyph-local texels. Adding a large atlas origin before
+  // interpolation loses fractional precision and changes coverage after packing.
+  let uv_lt: vec2<f32> = get_texture_uv(input.a_uv.xy);
+  let uv_rb: vec2<f32> = get_texture_uv(input.a_uv.zw);
+  let uv: vec2<f32> = input.a_offset.zw * (uv_rb - uv_lt);
 )";
   if (data_.layer_to_local) {
     ss << R"(
@@ -140,8 +142,9 @@ void WGSLTextGeometry::WriteVSMain(std::stringstream& ss) const {
   }
   ss << R"(
   output.pos = get_vertex_position(pos, common_slot);
-  output.v_txt_index = get_texture_index(uv.x);
-  output.v_uv = get_texture_uv(uv);
+  output.v_txt_index = get_texture_index(input.a_uv.x);
+  output.v_uv = uv;
+  output.v_atlas_origin = vec2<i32>(i32(uv_lt.x), i32(uv_lt.y));
 )";
 }
 
@@ -149,42 +152,61 @@ std::optional<std::vector<std::string>> WGSLTextGeometry::GetVarings() const {
   return std::vector<std::string>{
       "@interpolate(flat) v_txt_index: i32",
       "v_uv: vec2<f32>",
+      "@interpolate(flat) v_atlas_origin: vec2<i32>",
   };
 }
 
 void WGSLTextGeometry::WriteFSFunctionsAndStructs(std::stringstream& ss) const {
   ss << R"(
-fn get_text_atlas_color(font_index: i32, uv: vec2<f32>) -> vec4<f32> {
-  var dimensions: vec2<u32> = vec2<u32>(textureDimensions(uTextAtlas0));
-  var texture_uv: vec2<f32> =
-      vec2<f32>(uv.x / f32(dimensions.x), uv.y / f32(dimensions.y));
-  var color0: vec4<f32> =
-      textureSample(uTextAtlas0, uTextSampler, texture_uv);
-  var color1: vec4<f32> =
-      textureSample(uTextAtlas1, uTextSampler, texture_uv);
-  var color2: vec4<f32> =
-      textureSample(uTextAtlas2, uTextSampler, texture_uv);
-  var color3: vec4<f32> =
-      textureSample(uTextAtlas3, uTextSampler, texture_uv);
+// Integer addressing keeps the origin out of fractional filter arithmetic.
+// Text atlases have one mip level and identical min/mag filter modes.
+fn clamp_text_texel(p: vec2<i32>, dimensions: vec2<u32>) -> vec2<i32> {
+  var x: i32 = p.x;
+  var y: i32 = p.y;
+  if x < 0 { x = 0; }
+  if y < 0 { y = 0; }
+  if x >= i32(dimensions.x) { x = i32(dimensions.x) - 1; }
+  if y >= i32(dimensions.y) { y = i32(dimensions.y) - 1; }
+  return vec2<i32>(x, y);
+}
 
-  if font_index == 0 {
-    return color0;
-  } else if font_index == 1 {
-    return color1;
+fn load_text_texel(font_index: i32, p: vec2<i32>) -> vec4<f32> {
+  if font_index == 1 {
+    return textureLoad(uTextAtlas1,
+        clamp_text_texel(p, textureDimensions(uTextAtlas1)), 0);
   } else if font_index == 2 {
-    return color2;
+    return textureLoad(uTextAtlas2,
+        clamp_text_texel(p, textureDimensions(uTextAtlas2)), 0);
   } else if font_index == 3 {
-    return color3;
+    return textureLoad(uTextAtlas3,
+        clamp_text_texel(p, textureDimensions(uTextAtlas3)), 0);
   } else {
-    return color0;
+    return textureLoad(uTextAtlas0,
+        clamp_text_texel(p, textureDimensions(uTextAtlas0)), 0);
   }
 }
+
+fn get_text_atlas_color(font_index: i32, uv: vec2<f32>,
+                        origin: vec2<i32>) -> vec4<f32> {
+  if uTextLinearFilter == u32(0) {
+    return load_text_texel(font_index, origin + vec2<i32>(i32(floor(uv.x)), i32(floor(uv.y))));
+  }
+  let p: vec2<f32> = uv - vec2<f32>(0.5);
+  let base: vec2<i32> = origin + vec2<i32>(i32(floor(p.x)), i32(floor(p.y)));
+  let weight: vec2<f32> = fract(p);
+  let top: vec4<f32> = mix(load_text_texel(font_index, base),
+      load_text_texel(font_index, base + vec2<i32>(1, 0)), weight.x);
+  let bottom: vec4<f32> = mix(load_text_texel(font_index, base + vec2<i32>(0, 1)),
+      load_text_texel(font_index, base + vec2<i32>(1, 1)), weight.x);
+  return mix(top, bottom, weight.y);
+}
+
 )";
 }
 
 void WGSLTextGeometry::WriteFSUniforms(std::stringstream& ss) const {
   ss << R"(
-@group(3) @binding(0) var uTextSampler: sampler;
+@group(3) @binding(0) var<uniform> uTextLinearFilter: u32;
 @group(3) @binding(1) var uTextAtlas0: texture_2d<f32>;
 @group(3) @binding(2) var uTextAtlas1: texture_2d<f32>;
 @group(3) @binding(3) var uTextAtlas2: texture_2d<f32>;
@@ -200,7 +222,7 @@ void WGSLTextGeometry::WriteFSColor(std::stringstream& ss) const {
 
   ss << R"(
   let text_paint_alpha: f32 = color.a;
-  color = get_text_atlas_color(input.v_txt_index, input.v_uv);
+  color = get_text_atlas_color(input.v_txt_index, input.v_uv, input.v_atlas_origin);
 )";
   if (data_.effect == TextAtlasEffect::kColorSwizzleRB) {
     ss << "  color = color.bgra;\n";
@@ -211,11 +233,11 @@ void WGSLTextGeometry::WriteFSColor(std::stringstream& ss) const {
 void WGSLTextGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
   if (data_.effect == TextAtlasEffect::kA8Coverage) {
     ss << R"(
-  mask_alpha = get_text_atlas_color(input.v_txt_index, input.v_uv).r;
+  mask_alpha = get_text_atlas_color(input.v_txt_index, input.v_uv, input.v_atlas_origin).r;
 )";
   } else if (data_.effect == TextAtlasEffect::kSDFCoverage) {
     ss << R"(
-  var distance: f32 = get_text_atlas_color(input.v_txt_index, input.v_uv).r;
+  var distance: f32 = get_text_atlas_color(input.v_txt_index, input.v_uv, input.v_atlas_origin).r;
   distance = 7.96875 * (distance - 0.5019608);
 
   var dist_grad:vec2<f32> = vec2<f32>(dFdx(distance), dFdy(distance));
@@ -294,12 +316,19 @@ void WGSLTextGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
   if (data_.textures[0] == nullptr) {
     return;
   }
-  auto sampler_entry = geometry_group->GetEntry(0);
-  if (sampler_entry == nullptr ||
-      sampler_entry->type != wgx::BindingType::kSampler) {
+  auto filter_entry = geometry_group->GetEntry(0);
+  if (filter_entry == nullptr || filter_entry->type_definition == nullptr ||
+      filter_entry->type_definition->name != "u32") {
     return;
   }
-  UploadBindGroup(geometry_group->group, sampler_entry, cmd, data_.sampler);
+  uint32_t linear_filter = 0;
+  if (data_.sampler) {
+    const auto& descriptor = data_.sampler->GetDescriptor();
+    DEBUG_CHECK(descriptor.min_filter == descriptor.mag_filter);
+    linear_filter = descriptor.mag_filter == GPUFilterMode::kLinear ? 1u : 0u;
+  }
+  filter_entry->type_definition->SetData(&linear_filter, sizeof(linear_filter));
+  UploadBindGroup(geometry_group->group, filter_entry, cmd, context);
 
   std::shared_ptr<GPUTexture> last_texture;
   for (size_t i = 0; i < data_.textures.size(); ++i) {

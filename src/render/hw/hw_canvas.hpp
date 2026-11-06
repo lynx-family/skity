@@ -32,6 +32,8 @@ class CoverageAARenderer;
  *  Base class for all hardware canvas implementation, use MSAA for anti-alias
  */
 class HWCanvas : public Canvas {
+  friend class HWTextSamplingTestPeer;
+
  public:
   explicit HWCanvas(GPUSurfaceImpl* surface);
 
