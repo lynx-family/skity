@@ -137,7 +137,8 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
 endif()
 
 target_compile_definitions(skity_unit_test PRIVATE
-    -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/")
+    -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/"
+    -DSKITY_TEST_CT_FONT=$<BOOL:${SKITY_CT_FONT}>)
 
 # Place the cases that depend on specific fonts here.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT SKITY_CT_FONT))
@@ -179,6 +180,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_GL_BACKEND)
   set_source_files_properties(../bench/common/bench_gl_context_mac.mm
       PROPERTIES COMPILE_FLAGS "-fobjc-arc")
   target_link_libraries(skity_unit_test PRIVATE "-framework AppKit" "-framework OpenGL")
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_MTL_BACKEND)
+  target_sources(skity_unit_test PRIVATE render/hw/transformed_text_test.mm)
+  set_source_files_properties(render/hw/transformed_text_test.mm
+      PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+  target_link_libraries(skity_unit_test PRIVATE "-framework Metal")
 endif()
 
 target_include_directories(skity_unit_test

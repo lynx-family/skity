@@ -347,10 +347,6 @@ void AppendGlyphRuns(const GlyphRunInput& input, const Paint& paint,
         context.device_scale, creation_matrix);
   }
 
-  // Load bitmap placement after atlas requests have populated raster data.
-  // This is done once per input span, not once per texture group at recording.
-  input.font.LoadGlyphBitmapInfo(input.glyphs, input.count, glyph_info.data(),
-                                 paint, context.device_scale, creation_matrix);
   AtlasGlyphBatchBuilder batches(atlas);
   for (uint32_t index = 0; index < input.count; ++index) {
     if (glyph_info[index] == nullptr) {
@@ -359,11 +355,10 @@ void AppendGlyphRuns(const GlyphRunInput& input, const Paint& paint,
     const Vec2 position{input.position_x[index], input.position_y[index]};
     Vec2 creation_position{};
     creation_matrix.MapPoints(&creation_position, &position, 1);
-    const auto& image = glyph_info[index]->Image();
     const auto& region = regions[index];
     batches.Append(region, formats[index],
-                   Rect::MakeXYWH(creation_position.x + image.origin_x,
-                                  creation_position.y - image.origin_y,
+                   Rect::MakeXYWH(creation_position.x + region.origin_x,
+                                  creation_position.y - region.origin_y,
                                   region.loc.z / context.device_scale,
                                   region.loc.w / context.device_scale));
   }
