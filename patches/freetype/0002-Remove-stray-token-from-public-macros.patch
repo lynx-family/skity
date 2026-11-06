@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Lynxtron Scripts <scripts@lynxtron>
+Date: Tue, 9 Jun 2026 17:08:00 +0800
+Subject: [PATCH] Remove stray token from public macros
+
+---
+ include/freetype/config/public-macros.h | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/include/freetype/config/public-macros.h b/include/freetype/config/public-macros.h
+index 66ad5e0..4912e52 100644
+--- a/include/freetype/config/public-macros.h
++++ b/include/freetype/config/public-macros.h
+@@ -63,7 +63,6 @@ FT_BEGIN_HEADER
+    */
+
+ #if !FREETYPE_STATIC_LIB
+-aaa
+ /* Visual C, mingw */
+ #if defined( _WIN32 )
+
+--
+2.50.1 (Apple Git-155)
