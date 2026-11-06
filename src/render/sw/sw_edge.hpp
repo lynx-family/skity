@@ -88,6 +88,7 @@ class SWEdgeBuilder {
  private:
   void AddLine(const Point pts[], const Rect& scan_bounds);
   void AddQuad(const Point pts[], const Rect& scan_bounds);
+  void AddClippedLine(const Point& p0, const Point& p1, const Rect& bounds);
 
   std::vector<std::unique_ptr<SWEdge>> edges_;
 };
