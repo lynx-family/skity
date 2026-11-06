@@ -395,3 +395,143 @@ TEST(BlockCacheAllocator, DontCacheBigBlock) {
 }
 
 }  // namespace
+
+TEST(Arena, AllocateAfterReset) {
+  int live_blocks = 0;
+  auto allocator = std::make_shared<TestAllocator>(
+      [&live_blocks] { ++live_blocks; }, [&live_blocks] { --live_blocks; });
+  {
+    skity::Arena arena(32, allocator);
+    ASSERT_NE(arena.Allocate(7, 1), nullptr);
+    EXPECT_EQ(live_blocks, 1);
+    arena.Reset();
+    EXPECT_EQ(live_blocks, 0);
+    EXPECT_TRUE(arena.GetBlocks().empty());
+    EXPECT_EQ(arena.GetCursor(), nullptr);
+    EXPECT_EQ(arena.GetEnd(), nullptr);
+
+    uint8_t* result = arena.Allocate(9, 1);
+    ASSERT_NE(result, nullptr);
+    ASSERT_EQ(arena.GetBlocks().size(), static_cast<size_t>(1));
+    EXPECT_EQ(result, arena.GetBlocks()[0].head);
+    EXPECT_EQ(arena.GetCursor(), result + 9);
+    EXPECT_EQ(arena.GetEnd(), result + 32);
+    EXPECT_EQ(live_blocks, 1);
+  }
+  EXPECT_EQ(live_blocks, 0);
+}
+
+TEST(Arena, AllocateExactlyConsumesAlignedTail) {
+  constexpr size_t alignment = alignof(std::max_align_t);
+  constexpr size_t block_size = 2 * alignment;
+  skity::Arena arena(block_size);
+  uint8_t* head = arena.Allocate(1, 1);
+  ASSERT_NE(head, nullptr);
+  ASSERT_EQ(reinterpret_cast<uintptr_t>(head) % alignment,
+            static_cast<size_t>(0));
+  head[0] = 0x31;
+  uint8_t* result = arena.Allocate(alignment, alignment);
+  ASSERT_EQ(arena.GetBlocks().size(), static_cast<size_t>(1));
+  ASSERT_EQ(result, head + alignment);
+  EXPECT_EQ(arena.GetCursor(), head + block_size);
+  EXPECT_EQ(arena.GetCursor(), arena.GetEnd());
+  for (size_t i = 0; i < alignment; ++i) result[i] = 0x52;
+  EXPECT_EQ(head[0], 0x31);
+
+  uint8_t* next = arena.Allocate(1, 1);
+  ASSERT_EQ(arena.GetBlocks().size(), static_cast<size_t>(2));
+  EXPECT_EQ(next, arena.GetBlocks()[1].head);
+  EXPECT_EQ(arena.GetCursor(), next + 1);
+  EXPECT_EQ(result[alignment - 1], 0x52);
+}
+
+TEST(Arena, RequestedBytesExceedRemainingTail) {
+  skity::Arena arena(16);
+  uint8_t* head = arena.Allocate(8, 1);
+  ASSERT_NE(head, nullptr);
+  for (size_t i = 0; i < 8; ++i) head[i] = 0x31;
+  uint8_t* result = arena.Allocate(9, 1);
+  ASSERT_EQ(arena.GetBlocks().size(), static_cast<size_t>(2));
+  ASSERT_EQ(result, arena.GetBlocks()[1].head);
+  EXPECT_EQ(arena.GetCursor(), result + 9);
+  EXPECT_EQ(arena.GetEnd(), result + 16);
+  for (size_t i = 0; i < 9; ++i) result[i] = 0x52;
+  for (size_t i = 0; i < 8; ++i) EXPECT_EQ(head[i], 0x31);
+}
+
+TEST(Arena, AlignmentReachesEndWithoutSpaceForBytes) {
+  constexpr size_t alignment = alignof(std::max_align_t);
+  constexpr size_t block_size = 2 * alignment;
+  skity::Arena arena(block_size);
+  uint8_t* head = arena.Allocate(block_size - 1, 1);
+  ASSERT_NE(head, nullptr);
+  ASSERT_EQ(reinterpret_cast<uintptr_t>(head) % alignment,
+            static_cast<size_t>(0));
+  head[block_size - 2] = 0x31;
+  // Rounding cursor_ up reaches exactly end_, but the requested byte cannot
+  // fit.
+  uint8_t* result = arena.Allocate(1, alignment);
+  ASSERT_EQ(arena.GetBlocks().size(), static_cast<size_t>(2));
+  ASSERT_EQ(result, arena.GetBlocks()[1].head);
+  EXPECT_EQ(arena.GetCursor(), result + 1);
+  EXPECT_EQ(head[block_size - 2], 0x31);
+}
+
+TEST(Arena, AlignmentPaddingExceedsRemainingTail) {
+  constexpr size_t alignment = alignof(std::max_align_t);
+  ASSERT_GT(alignment, static_cast<size_t>(2));
+  const size_t block_size = alignment - 1;
+  skity::Arena arena(block_size);
+  uint8_t* head = arena.Allocate(block_size - 1, 1);
+  ASSERT_NE(head, nullptr);
+  ASSERT_EQ(reinterpret_cast<uintptr_t>(head) % alignment,
+            static_cast<size_t>(0));
+  head[block_size - 2] = 0x31;
+  // One byte remains, but the next aligned address would be beyond end_.
+  uint8_t* result = arena.Allocate(1, alignment);
+  ASSERT_EQ(arena.GetBlocks().size(), static_cast<size_t>(2));
+  ASSERT_EQ(result, arena.GetBlocks()[1].head);
+  EXPECT_EQ(arena.GetCursor(), result + 1);
+  EXPECT_EQ(arena.GetEnd(), result + block_size);
+  EXPECT_EQ(head[block_size - 2], 0x31);
+}
+
+TEST(Arena, OversizedFirstAllocationLeavesNoActiveBlock) {
+  skity::Arena arena(32);
+  uint8_t* oversized = arena.Allocate(32, 8);
+  ASSERT_NE(oversized, nullptr);
+  ASSERT_EQ(arena.GetBlocks().size(), static_cast<size_t>(1));
+  EXPECT_EQ(arena.GetBlocks()[0].size, static_cast<size_t>(32));
+  EXPECT_EQ(arena.GetCursor(), nullptr);
+  EXPECT_EQ(arena.GetEnd(), nullptr);
+  oversized[31] = 0x31;
+
+  uint8_t* small = arena.Allocate(1, 1);
+  ASSERT_NE(small, nullptr);
+  ASSERT_EQ(arena.GetBlocks().size(), static_cast<size_t>(2));
+  EXPECT_EQ(small, arena.GetBlocks()[1].head);
+  EXPECT_EQ(arena.GetCursor(), small + 1);
+  EXPECT_EQ(arena.GetEnd(), small + 32);
+  EXPECT_EQ(oversized[31], 0x31);
+}
+
+TEST(Arena, OversizedAllocationPreservesCurrentTail) {
+  skity::Arena arena(32);
+  uint8_t* head = arena.Allocate(24, 1);
+  ASSERT_NE(head, nullptr);
+  head[23] = 0x31;
+  uint8_t* oversized = arena.Allocate(40, 8);
+  ASSERT_NE(oversized, nullptr);
+  ASSERT_EQ(arena.GetBlocks().size(), static_cast<size_t>(2));
+  EXPECT_EQ(arena.GetCursor(), head + 24);
+  EXPECT_EQ(arena.GetEnd(), head + 32);
+  oversized[39] = 0x52;
+
+  uint8_t* tail = arena.Allocate(8, 1);
+  EXPECT_EQ(tail, head + 24);
+  EXPECT_EQ(arena.GetBlocks().size(), static_cast<size_t>(2));
+  EXPECT_EQ(arena.GetCursor(), head + 32);
+  EXPECT_EQ(arena.GetCursor(), arena.GetEnd());
+  EXPECT_EQ(head[23], 0x31);
+  EXPECT_EQ(oversized[39], 0x52);
+}
