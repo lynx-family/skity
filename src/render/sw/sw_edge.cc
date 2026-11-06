@@ -69,22 +69,17 @@ bool SWEdge::UpdateLine(SWFixed x0, SWFixed y0, SWFixed x1, SWFixed y1,
   return true;
 }
 
-bool SWEdge::CanBeIgnored(const Rect& scan_bounds, SWFixed y0,
-                          SWFixed y1) const {
+bool SWEdge::CanBeIgnored(const Rect& scan_bounds, SWFixed y0) const {
   const int accuracy = kDefaultAccuracy;
   const int multiplier = (1 << kDefaultAccuracy);
-  SWFixed start_y =
-      SnapY(SWFDot6ToFixed(SkScalarToFDot6(scan_bounds.Top() * multiplier)) >>
-            accuracy);
   SWFixed stop_y = SnapY(
       SWFDot6ToFixed(SkScalarToFDot6(scan_bounds.Bottom() * multiplier)) >>
       accuracy);
 
-  if (y0 >= stop_y || y1 <= start_y) {
-    return true;
-  }
-
-  return false;
+  // An edge above the scan bounds stays. WalkEdges splits a row where any edge
+  // ends and every active edge then rounds through that split, so dropping it
+  // would move the others by a coverage level inside the bounds.
+  return y0 >= stop_y;
 }
 
 /*  We store 1<<shift in a (signed) byte, so its maximum value is 1<<6 == 64.
@@ -325,15 +320,14 @@ int SWEdgeBuilder::BuildEdges(const Path& path, const Rect& scan_bounds) {
 void SWEdgeBuilder::AddLine(const Point pts[], const Rect& scan_bounds) {
   auto edge = std::make_unique<SWEdge>();
   if (edge->SetLine(pts[0], pts[1]) &&
-      !edge->CanBeIgnored(scan_bounds, edge->upper_y, edge->lower_y)) {
+      !edge->CanBeIgnored(scan_bounds, edge->upper_y)) {
     edges_.push_back(std::move(edge));
   }
 }
 
 void SWEdgeBuilder::AddQuad(const Point pts[], const Rect& scan_bounds) {
   auto edge = std::make_unique<SWQuadEdge>();
-  if (edge->SetQuad(pts) &&
-      !edge->CanBeIgnored(scan_bounds, edge->q_first_y, edge->q_last_y)) {
+  if (edge->SetQuad(pts) && !edge->CanBeIgnored(scan_bounds, edge->q_first_y)) {
     edges_.push_back(std::move(edge));
   }
 }
