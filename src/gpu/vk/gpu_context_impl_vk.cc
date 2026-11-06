@@ -1045,17 +1045,9 @@ std::unique_ptr<GPURenderTarget> GPUContextVK::OnCreateRenderTarget(
     return nullptr;
   }
 
-  // Wrap the existing Vulkan handles without taking ownership. The original
-  // GPUTextureVK (managed by TextureManager) owns the handles and controls
-  // their lifecycle.
-  auto wrapped_texture = GPUTextureVK::Wrap(
-      state_, texture_desc, vk_texture->GetImage(), vk_texture->GetImageView(),
-      vk_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      vk_texture->GetVkFormat(), false, false);
-  if (wrapped_texture == nullptr) {
-    return nullptr;
-  }
-
+  // The render surface and snapshot must share one texture object. A second
+  // non-owning wrapper tracks layout changes independently and leaves the
+  // snapshot's layout at UNDEFINED, discarding rendered content on readback.
   GPUSurfaceDescriptorVK surface_desc = {};
   surface_desc.backend = GPUBackendType::kVulkan;
   surface_desc.width = desc.width;
@@ -1066,7 +1058,7 @@ std::unique_ptr<GPURenderTarget> GPUContextVK::OnCreateRenderTarget(
   surface_desc.surface_type = VKSurfaceType::kTexture;
 
   auto surface = std::make_unique<GPUSurfaceVK>(surface_desc, this, nullptr,
-                                                std::move(wrapped_texture),
+                                                std::move(gpu_texture),
                                                 texture_desc.format, nullptr);
 
   return std::make_unique<GPURenderTarget>(std::move(surface), texture);
