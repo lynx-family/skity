@@ -75,7 +75,10 @@ void GPUBlitPassWEB::UploadTextureData(std::shared_ptr<GPUTexture> texture,
   // create a stage buffer
   WGPUBufferDescriptor desc = {};
   desc.size = size;
-  desc.usage = WGPUBufferUsage_CopySrc;
+  // CopyDst: written via wgpuQueueWriteBuffer below; CopySrc: read back out
+  // by the CopyBufferToTexture. Missing CopyDst makes the queue write a
+  // validation no-op, silently leaving the stage buffer zeroed.
+  desc.usage = WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst;
 
   WGPUBuffer stage_buffer = wgpuDeviceCreateBuffer(device_, &desc);
 
