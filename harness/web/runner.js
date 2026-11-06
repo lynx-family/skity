@@ -12,6 +12,10 @@
 
 'use strict';
 
+// Uncaptured WebGPU validation errors collected for the case in flight;
+// cleared by runCase() so each report entry maps to exactly one case.
+const validationMessages = [];
+
 function harnessFatal(message) {
   window.__harnessFatal = String(message);
   window.__harnessDone = true;
@@ -35,7 +39,9 @@ async function runCase(module, index) {
     nonEmptyPixels: 0,
     pixels: null,
     error: null,
+    validation: null,
   };
+  validationMessages.length = 0;
   try {
     if (module._smoke_render_case(index) !== 0) {
       throw new Error(module.UTF8ToString(module._smoke_last_error()));
@@ -62,6 +68,9 @@ async function runCase(module, index) {
     }
     entry.nonEmptyPixels = nonEmpty;
     entry.pixels = bytesToBase64(bytes);
+    if (validationMessages.length > 0) {
+      entry.validation = validationMessages.join('\n');
+    }
     // A fully transparent frame means the render or readback silently failed.
     entry.ok = nonEmpty > 0;
     if (!entry.ok) {
@@ -86,6 +95,14 @@ async function runHarness() {
     return;
   }
   const device = await adapter.requestDevice();
+  // Uncaptured WebGPU validation errors are the silent-render killer: Dawn
+  // turns API misuse into a validation no-op (nothing draws) and only the
+  // uncapturederror event carries the reason. Collect them per case.
+  device.addEventListener('uncapturederror', (event) => {
+    const message = event.error && event.error.message ?
+        event.error.message : String(event.message || 'unknown error');
+    validationMessages.push(message);
+  });
   // noExitRuntime: after the async map callback completes, emscripten's
   // maybeExit() would otherwise tear the runtime down implicitly (atexit +
   // teardown), leaving every later exported call running on a dead heap.

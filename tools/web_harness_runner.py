@@ -241,7 +241,15 @@ def run_suite(runner, args):
         metrics = {}
 
         baseline_path = baselines_dir / (_to_snake(name) + ".png")
-        if not item["ok"]:
+        validation = item.get("validation")
+        if validation:
+            # Validation no-ops are silent render killers; report the Dawn
+            # message even when the pixels happen to match.
+            record.update(status="FAIL", exit_code=1,
+                          reason_code="webgpu_validation",
+                          error=f"WebGPU validation error: "
+                                f"{validation[:500]}")
+        elif not item["ok"]:
             record.update(status="FAIL", exit_code=1, reason_code="runtime_error",
                           error=item["error"] or "case failed in the browser")
         elif not baseline_path.is_file():
