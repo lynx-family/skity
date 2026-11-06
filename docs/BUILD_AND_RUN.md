@@ -149,3 +149,29 @@ ctest --test-dir <build_dir>/test/ut
 
 > Note: the golden test is only available on MacOS since it uses Metal backend.
 > The detail of golden test can be found in [golden/README.md](../test/golden/README.md).
+
+
+## Verify a relocated installed C++ package
+
+Sync core, dev and module dependencies first. This test uses the existing
+GoogleTest dependency only for its external consumer; installed core/codec
+headers and libraries are the consumer's only Skity inputs.
+
+```sh
+cmake -S . -B build-product -G Ninja -DSKITY_TEST=OFF \
+  -DSKITY_CAPI_MODULE=ON -DSKITY_CODEC_MODULE=ON -DSKITY_BUILD_INSTALL=ON \
+  -DSKITY_CT_FONT=ON
+python3 tools/test-installed-package.py --producer-build-dir build-product \
+  --work-dir build-installed-package-default
+python3 tools/test-installed-package.py --producer-build-dir build-product \
+  --work-dir build-installed-package-custom --includedir include/skity-sdk
+```
+
+Each work directory must be new. The tool configures the producer's installation
+prefix, builds and installs it, moves the prefix, verifies the old path is absent,
+and configures a separate consumer through find_package. The public consumer
+checks caller canvas state and exact PNG round-trip pixels through the unified
+unit runner. Commands, logs, the runner's structured reports and result.json
+stay in the work directory. A failed configure/build, missing case or skipped
+case is not a passing installed-package test. Private IO is not an installed
+SDK input and is outside this fixture's scope.
