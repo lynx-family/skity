@@ -151,6 +151,32 @@ skity_pixmap_set_color_info(skity_pixmap pixmap, skity_alpha_type alpha_type,
                             skity_color_type color_type);
 
 /**
+ * @brief Update the color space the pixels are encoded in.
+ *
+ * Metadata only: the pixel buffer is not converted. Non-parametric kinds use
+ * their canonical values and ignore the arrays in the info struct.
+ *
+ * @param pixmap  the pixmap to update
+ * @param info    the color space description
+ * @return        SKITY_SUCCESS, SKITY_ERROR_INVALID_ARGUMENT when the
+ *                parametric description is invalid, or
+ *                SKITY_ERROR_INVALID_HANDLE
+ */
+SKITY_C_API skity_result skity_pixmap_set_color_space(
+    skity_pixmap pixmap, const skity_color_space_info* info);
+
+/**
+ * @brief Query the color space the pixels are encoded in.
+ *
+ * @param pixmap  the pixmap to query
+ * @param info    output description (always filled on success; canonical
+ *                values for named kinds)
+ * @return        SKITY_SUCCESS or SKITY_ERROR_INVALID_HANDLE
+ */
+SKITY_C_API skity_result
+skity_pixmap_get_color_space(skity_pixmap pixmap, skity_color_space_info* info);
+
+/**
  * @brief Borrow the writable pixel view of a bitmap. The returned pixmap
  *        shares the bitmap's pixel memory (writes through it are visible to
  *        the bitmap), so it can be used as a destination for e.g.

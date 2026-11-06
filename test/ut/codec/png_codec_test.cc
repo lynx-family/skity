@@ -4,11 +4,18 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <cstring>
 #include <skity/codec/codec.hpp>
 #include <skity/graphic/bitmap.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/io/data.hpp>
 #include <skity/io/pixmap.hpp>
 #include <skity/render/canvas.hpp>
+#include <utility>
+#include <vector>
+
+#include "module/codec/src/codec/codec_priv.hpp"
 
 TEST(PNGCodecTest, Create) {
   // create directly
@@ -183,4 +190,342 @@ TEST(PNGCodecTest, EncodeBGRA) {
 
   auto decode_color = reinterpret_cast<const uint32_t*>(decode_pixmap->Addr());
   EXPECT_EQ(*decode_color, skity::ColorSetARGB(128, 0, 0, 255));
+}
+
+namespace {
+
+// Primary xy chromaticity extracted from a gamut matrix column / white point
+// from the row sums.
+std::pair<float, float> XYOfColumn(const float* gamut, int col) {
+  float x = gamut[col];
+  float y = gamut[3 + col];
+  float z = gamut[6 + col];
+  float sum = x + y + z;
+  return {x / sum, y / sum};
+}
+
+uint32_t Crc32(const uint8_t* data, size_t size) {
+  uint32_t crc = 0xFFFFFFFFu;
+  for (size_t i = 0; i < size; i++) {
+    crc ^= data[i];
+    for (int k = 0; k < 8; k++) {
+      uint32_t mask = static_cast<uint32_t>(-static_cast<int32_t>(crc & 1));
+      crc = (crc >> 1) ^ (0xEDB88320u & mask);
+    }
+  }
+  return crc ^ 0xFFFFFFFFu;
+}
+
+uint32_t ReadBE32(const uint8_t* p) {
+  return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) |
+         (uint32_t(p[2]) << 8) | uint32_t(p[3]);
+}
+
+// Splices an sRGB chunk (perceptual intent) right before the first IDAT.
+std::shared_ptr<skity::Data> InsertSRGBChunkBeforeIDAT(const skity::Data* png) {
+  const uint8_t* bytes = static_cast<const uint8_t*>(png->RawData());
+  size_t size = png->Size();
+  size_t pos = 8;
+  while (pos + 12 <= size) {
+    uint32_t length = ReadBE32(bytes + pos);
+    if (std::memcmp(bytes + pos + 4, "IDAT", 4) == 0) {
+      std::vector<uint8_t> out(bytes, bytes + pos);
+      const uint8_t chunk[] = {'s', 'R', 'G', 'B', 0};
+      uint32_t crc = Crc32(chunk, sizeof(chunk));
+      uint8_t header[4] = {0, 0, 0, 1};
+      out.insert(out.end(), header, header + 4);
+      out.insert(out.end(), chunk, chunk + sizeof(chunk));
+      out.push_back(static_cast<uint8_t>(crc >> 24));
+      out.push_back(static_cast<uint8_t>(crc >> 16));
+      out.push_back(static_cast<uint8_t>(crc >> 8));
+      out.push_back(static_cast<uint8_t>(crc));
+      out.insert(out.end(), bytes + pos, bytes + size);
+      return skity::Data::MakeWithCopy(out.data(), out.size());
+    }
+    pos += 12 + length;
+  }
+  return nullptr;
+}
+
+// Removes a chunk of the given type (first occurrence).
+std::shared_ptr<skity::Data> RemoveChunkFromPNG(const skity::Data* png,
+                                                const char type[5]) {
+  const uint8_t* bytes = static_cast<const uint8_t*>(png->RawData());
+  size_t size = png->Size();
+  size_t pos = 8;
+  while (pos + 12 <= size) {
+    uint32_t length = ReadBE32(bytes + pos);
+    if (std::memcmp(bytes + pos + 4, type, 4) == 0) {
+      std::vector<uint8_t> out(bytes, bytes + pos);
+      out.insert(out.end(), bytes + pos + 12 + length, bytes + size);
+      return skity::Data::MakeWithCopy(out.data(), out.size());
+    }
+    pos += 12 + length;
+  }
+  return nullptr;
+}
+
+// Replaces the cHRM payload with the given fixed point values.
+std::shared_ptr<skity::Data> MutateCHRMInPNG(const skity::Data* png,
+                                             const uint32_t values[8]) {
+  const uint8_t* bytes = static_cast<const uint8_t*>(png->RawData());
+  size_t size = png->Size();
+  size_t pos = 8;
+  while (pos + 12 <= size) {
+    uint32_t length = ReadBE32(bytes + pos);
+    if (std::memcmp(bytes + pos + 4, "cHRM", 4) == 0) {
+      std::vector<uint8_t> out(bytes, bytes + pos + 8);
+      std::vector<uint8_t> chunk(4 + 32);
+      std::memcpy(chunk.data(), "cHRM", 4);
+      for (int i = 0; i < 8; i++) {
+        chunk[4 + i * 4] = static_cast<uint8_t>(values[i] >> 24);
+        chunk[5 + i * 4] = static_cast<uint8_t>(values[i] >> 16);
+        chunk[6 + i * 4] = static_cast<uint8_t>(values[i] >> 8);
+        chunk[7 + i * 4] = static_cast<uint8_t>(values[i]);
+      }
+      // The CRC covers type + payload, but the prefix above already wrote
+      // the chunk type, so only the payload bytes are appended.
+      uint32_t crc = Crc32(chunk.data(), chunk.size());
+      out.insert(out.end(), chunk.begin() + 4, chunk.end());
+      out.push_back(static_cast<uint8_t>(crc >> 24));
+      out.push_back(static_cast<uint8_t>(crc >> 16));
+      out.push_back(static_cast<uint8_t>(crc >> 8));
+      out.push_back(static_cast<uint8_t>(crc));
+      out.insert(out.end(), bytes + pos + 12 + length, bytes + size);
+      return skity::Data::MakeWithCopy(out.data(), out.size());
+    }
+    pos += 12 + length;
+  }
+  return nullptr;
+}
+
+}  // namespace
+
+TEST(PNGCodecTest, EncodeDecodeColorSpaceRoundTrip) {
+  // Gamma 2.2 transfer + Display P3 primaries: expressible exactly through
+  // the gAMA / cHRM chunks.
+  float tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  float p3_gamut[9];
+  std::memcpy(p3_gamut, skity::ColorSpace::DisplayP3().gamut_xyz,
+              sizeof(p3_gamut));
+  auto space = skity::ColorSpace::MakeRGB(tf, p3_gamut);
+  ASSERT_TRUE(space.has_value());
+
+  skity::Pixmap pixmap(4, 4);
+  ASSERT_TRUE(pixmap.SetColorInfo(skity::kUnpremul_AlphaType,
+                                  skity::ColorType::kRGBA, *space));
+
+  auto codec = skity::Codec::MakePngCodec();
+  auto data = codec->Encode(&pixmap);
+  ASSERT_TRUE(data != nullptr);
+
+  codec->SetData(data);
+  auto decoded = codec->Decode();
+  ASSERT_TRUE(decoded != nullptr);
+
+  auto out_space = decoded->GetColorSpace();
+  EXPECT_EQ(out_space.kind, skity::ColorSpace::Kind::kParametric);
+  // gAMA stores gamma * 100000, so 2.2 comes back within 1e-5.
+  EXPECT_NEAR(out_space.transfer_fn[0], 2.2f, 1e-5f);
+  EXPECT_EQ(out_space.transfer_fn[1], 1.f);
+  // cHRM stores chromaticities * 100000; the primaries survive the
+  // extraction -> chunk -> solve roundtrip.
+  auto [rx, ry] = XYOfColumn(out_space.gamut_xyz, 0);
+  auto [gx, gy] = XYOfColumn(out_space.gamut_xyz, 1);
+  auto [bx, by] = XYOfColumn(out_space.gamut_xyz, 2);
+  EXPECT_NEAR(rx, 0.680f, 2e-5f);
+  EXPECT_NEAR(ry, 0.320f, 2e-5f);
+  EXPECT_NEAR(gx, 0.265f, 2e-5f);
+  EXPECT_NEAR(gy, 0.695f, 2e-5f);
+  EXPECT_NEAR(bx, 0.150f, 2e-5f);
+  EXPECT_NEAR(by, 0.060f, 2e-5f);
+}
+
+TEST(PNGCodecTest, EncodeDecodeDefaultsToSRGBWithoutChunks) {
+  skity::Pixmap pixmap(4, 4);
+  auto codec = skity::Codec::MakePngCodec();
+  auto data = codec->Encode(&pixmap);
+  ASSERT_TRUE(data != nullptr);
+
+  codec->SetData(data);
+  auto decoded = codec->Decode();
+  ASSERT_TRUE(decoded != nullptr);
+  // No color chunks written: the decode keeps the default sRGB tag.
+  EXPECT_EQ(decoded->GetColorSpace().kind, skity::ColorSpace::Kind::kSRGB);
+}
+
+TEST(PNGCodecTest, SRGBChunkOverridesGamma) {
+  // Encode with a gamma-tagged pixmap so the file carries gAMA, then splice
+  // an sRGB chunk: per the PNG spec sRGB wins and the decode falls back to
+  // the default sRGB tag.
+  float tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  float p3_gamut[9];
+  std::memcpy(p3_gamut, skity::ColorSpace::DisplayP3().gamut_xyz,
+              sizeof(p3_gamut));
+  auto space = skity::ColorSpace::MakeRGB(tf, p3_gamut);
+  ASSERT_TRUE(space.has_value());
+  skity::Pixmap pixmap(4, 4);
+  ASSERT_TRUE(pixmap.SetColorInfo(skity::kUnpremul_AlphaType,
+                                  skity::ColorType::kRGBA, *space));
+
+  auto codec = skity::Codec::MakePngCodec();
+  auto data = codec->Encode(&pixmap);
+  ASSERT_TRUE(data != nullptr);
+
+  auto spliced = InsertSRGBChunkBeforeIDAT(data.get());
+  ASSERT_TRUE(spliced != nullptr);
+  ASSERT_TRUE(codec->RecognizeFileType(
+      reinterpret_cast<const char*>(spliced->RawData()), spliced->Size()));
+
+  codec->SetData(spliced);
+  auto decoded = codec->Decode();
+  ASSERT_TRUE(decoded != nullptr);
+  EXPECT_EQ(decoded->GetColorSpace().kind, skity::ColorSpace::Kind::kSRGB);
+  EXPECT_TRUE(decoded->GetColorSpace().IsSRGB());
+}
+
+TEST(PNGCodecTest, GammaOnlyColorSpaceRoundTrip) {
+  // Gamma 2.2 with sRGB primaries: only gAMA is written; the decode must
+  // fill the gamut from the sRGB defaults.
+  float tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  auto space =
+      skity::ColorSpace::MakeRGB(tf, skity::ColorSpace::SRGB().gamut_xyz);
+  ASSERT_TRUE(space.has_value());
+
+  skity::Pixmap pixmap(4, 4);
+  ASSERT_TRUE(pixmap.SetColorInfo(skity::kUnpremul_AlphaType,
+                                  skity::ColorType::kRGBA, *space));
+  auto codec = skity::Codec::MakePngCodec();
+  auto data = codec->Encode(&pixmap);
+  ASSERT_TRUE(data != nullptr);
+
+  codec->SetData(data);
+  auto decoded = codec->Decode();
+  ASSERT_TRUE(decoded != nullptr);
+  auto out_space = decoded->GetColorSpace();
+  EXPECT_EQ(out_space.kind, skity::ColorSpace::Kind::kParametric);
+  EXPECT_NEAR(out_space.transfer_fn[0], 2.2f, 1e-5f);
+  // The gamut falls back to the sRGB constants (exact memcpy).
+  auto srgb = skity::ColorSpace::SRGB();
+  EXPECT_EQ(std::memcmp(out_space.gamut_xyz, srgb.gamut_xyz,
+                        sizeof(out_space.gamut_xyz)),
+            0);
+}
+
+TEST(PNGCodecTest, ChromaOnlyDefaultsTransferToSRGBCurve) {
+  // Strip gAMA from a gamma+primaries encode: the decode must keep the P3
+  // gamut but fall back to the sRGB transfer curve.
+  float tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  float p3_gamut[9];
+  std::memcpy(p3_gamut, skity::ColorSpace::DisplayP3().gamut_xyz,
+              sizeof(p3_gamut));
+  auto space = skity::ColorSpace::MakeRGB(tf, p3_gamut);
+  ASSERT_TRUE(space.has_value());
+  skity::Pixmap pixmap(4, 4);
+  ASSERT_TRUE(pixmap.SetColorInfo(skity::kUnpremul_AlphaType,
+                                  skity::ColorType::kRGBA, *space));
+  auto codec = skity::Codec::MakePngCodec();
+  auto data = codec->Encode(&pixmap);
+  ASSERT_TRUE(data != nullptr);
+
+  auto chroma_only = RemoveChunkFromPNG(data.get(), "gAMA");
+  ASSERT_TRUE(chroma_only != nullptr);
+
+  codec->SetData(chroma_only);
+  auto decoded = codec->Decode();
+  ASSERT_TRUE(decoded != nullptr);
+  auto out_space = decoded->GetColorSpace();
+  EXPECT_EQ(out_space.kind, skity::ColorSpace::Kind::kParametric);
+  auto srgb = skity::ColorSpace::SRGB();
+  EXPECT_EQ(std::memcmp(out_space.transfer_fn, srgb.transfer_fn,
+                        sizeof(out_space.transfer_fn)),
+            0);
+  auto [rx, ry] = XYOfColumn(out_space.gamut_xyz, 0);
+  EXPECT_NEAR(rx, 0.680f, 2e-5f);
+  EXPECT_NEAR(ry, 0.320f, 2e-5f);
+}
+
+TEST(PNGCodecTest, TamperedChromaLayering) {
+  // Well-formed replacement primaries decode into the tagged parametric
+  // space; unphysical ones are dropped by the parser-level validation with
+  // the decode still succeeding (the math behind the rejection is covered
+  // directly by GamutFromChromaticitiesMatchesDisplayP3).
+  float tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  float p3_gamut[9];
+  std::memcpy(p3_gamut, skity::ColorSpace::DisplayP3().gamut_xyz,
+              sizeof(p3_gamut));
+  auto space = skity::ColorSpace::MakeRGB(tf, p3_gamut);
+  ASSERT_TRUE(space.has_value());
+  skity::Pixmap pixmap(4, 4);
+  ASSERT_TRUE(pixmap.SetColorInfo(skity::kUnpremul_AlphaType,
+                                  skity::ColorType::kRGBA, *space));
+  auto codec = skity::Codec::MakePngCodec();
+  auto data = codec->Encode(&pixmap);
+  ASSERT_TRUE(data != nullptr);
+
+  // Well-formed replacement primaries (sRGB / BT.709): decode succeeds and
+  // the resulting gamut carries those primaries.
+  uint32_t bt704_chrm[8] = {31270, 32900, 64000, 33000,
+                            30000, 60000, 15000, 6000};
+  auto retagged = MutateCHRMInPNG(data.get(), bt704_chrm);
+  ASSERT_TRUE(retagged != nullptr);
+  codec->SetData(retagged);
+  auto decoded = codec->Decode();
+  ASSERT_TRUE(decoded != nullptr);
+  auto out_space = decoded->GetColorSpace();
+  EXPECT_EQ(out_space.kind, skity::ColorSpace::Kind::kParametric);
+  EXPECT_NEAR(out_space.transfer_fn[0], 2.2f, 1e-5f);
+  auto [rx, ry] = XYOfColumn(out_space.gamut_xyz, 0);
+  EXPECT_NEAR(rx, 0.640f, 2e-5f);
+  EXPECT_NEAR(ry, 0.330f, 2e-5f);
+
+  // Unphysical primaries (red x + y > 1): libpng still decodes the pixels,
+  // and the parser-level validation drops the bad chroma — gAMA keeps
+  // applying while the gamut falls back to the sRGB defaults.
+  uint32_t bad_chrm[8] = {31270, 32900, 90000, 95000,
+                          26500, 69500, 15000, 6000};
+  auto tampered = MutateCHRMInPNG(data.get(), bad_chrm);
+  ASSERT_TRUE(tampered != nullptr);
+  codec->SetData(tampered);
+  auto degraded = codec->Decode();
+  ASSERT_TRUE(degraded != nullptr);
+  auto degraded_space = degraded->GetColorSpace();
+  EXPECT_EQ(degraded_space.kind, skity::ColorSpace::Kind::kParametric);
+  EXPECT_NEAR(degraded_space.transfer_fn[0], 2.2f, 1e-5f);
+  auto srgb = skity::ColorSpace::SRGB();
+  EXPECT_EQ(std::memcmp(degraded_space.gamut_xyz, srgb.gamut_xyz,
+                        sizeof(degraded_space.gamut_xyz)),
+            0);
+}
+
+TEST(PNGCodecTest, GamutFromChromaticitiesMatchesDisplayP3) {
+  // Direct check of the chromaticity solve: the P3 cHRM values reproduce
+  // the Display P3 gamut table.
+  float p3[8] = {0.3127f, 0.3290f, 0.680f, 0.320f,
+                 0.265f,  0.695f,  0.150f, 0.060f};
+  float gamut[9];
+  ASSERT_TRUE(skity::codec_priv::CodecGamutFromChromaticities(p3, gamut));
+  auto display_p3 = skity::ColorSpace::DisplayP3();
+  for (int i = 0; i < 9; i++) {
+    EXPECT_NEAR(gamut[i], display_p3.gamut_xyz[i], 2e-4f);
+  }
+
+  // x + y == 1 is legal (z == 0, like the P3 red primary itself).
+  float zero_z[8] = {0.3127f, 0.3290f, 0.7f,   0.3f,
+                     0.265f,  0.695f,  0.150f, 0.060f};
+  EXPECT_TRUE(skity::codec_priv::CodecGamutFromChromaticities(zero_z, gamut));
+
+  // Degenerate inputs are rejected: out of range, x + y > 1 and coincident
+  // primaries (singular matrix).
+  float bad_range[8] = {0.3127f, 0.3290f, 1.5f,   0.320f,
+                        0.265f,  0.695f,  0.150f, 0.060f};
+  EXPECT_FALSE(
+      skity::codec_priv::CodecGamutFromChromaticities(bad_range, gamut));
+  float bad_sum[8] = {0.3127f, 0.3290f, 0.9f,   0.9f,
+                      0.265f,  0.695f,  0.150f, 0.060f};
+  EXPECT_FALSE(skity::codec_priv::CodecGamutFromChromaticities(bad_sum, gamut));
+  float singular[8] = {0.3127f, 0.3290f, 0.680f, 0.320f,
+                       0.680f,  0.320f,  0.680f, 0.320f};
+  EXPECT_FALSE(
+      skity::codec_priv::CodecGamutFromChromaticities(singular, gamut));
 }

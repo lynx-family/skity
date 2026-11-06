@@ -30,6 +30,7 @@
 #include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/blend_mode.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/color_type.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/graphic/path.hpp>
