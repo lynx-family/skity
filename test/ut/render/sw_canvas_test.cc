@@ -31,7 +31,115 @@ void DrawRotatedSaveLayerScene(skity::Bitmap* bitmap,
   canvas->Restore();
 }
 
+// Stripes one device pixel apart show any shift or stretch of a layer.
+void DrawPixelGridStripes(skity::Canvas* canvas) {
+  skity::Paint paint;
+  paint.SetColor(skity::Color_RED);
+  for (int row = 8; row < 56; row += 2) {
+    canvas->DrawRect(
+        skity::Rect::MakeXYWH(8.f, static_cast<float>(row), 48.f, 1.f), paint);
+  }
+  paint.SetColor(skity::Color_BLUE);
+  for (int column = 8; column < 56; column += 4) {
+    canvas->DrawRect(
+        skity::Rect::MakeXYWH(static_cast<float>(column), 8.f, 1.f, 48.f),
+        paint);
+  }
+}
+
+void ExpectSamePixels(skity::Bitmap& actual, skity::Bitmap& expected) {
+  ASSERT_EQ(actual.Width(), expected.Width());
+  ASSERT_EQ(actual.Height(), expected.Height());
+  for (uint32_t y = 0; y < actual.Height(); ++y) {
+    for (uint32_t x = 0; x < actual.Width(); ++x) {
+      ASSERT_EQ(actual.GetPixel(x, y), expected.GetPixel(x, y))
+          << "pixel " << x << "," << y;
+    }
+  }
+}
+
+skity::Bitmap MakeGridBitmap() {
+  return skity::Bitmap(64, 64, skity::AlphaType::kPremul_AlphaType,
+                       skity::ColorType::kRGBA);
+}
+
 }  // namespace
+
+TEST(SWCanvas, SaveLayerWithFractionalBoundsKeepsThePixelGrid) {
+  auto direct = MakeGridBitmap();
+  DrawPixelGridStripes(skity::Canvas::MakeSoftwareCanvas(&direct).get());
+
+  auto layered = MakeGridBitmap();
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&layered);
+  canvas->SaveLayer(skity::Rect::MakeLTRB(3.5f, 5.25f, 60.25f, 59.6f),
+                    skity::Paint{});
+  DrawPixelGridStripes(canvas.get());
+  canvas->Restore();
+
+  ExpectSamePixels(layered, direct);
+}
+
+TEST(SWCanvas, NestedSaveLayersKeepThePixelGrid) {
+  auto direct = MakeGridBitmap();
+  DrawPixelGridStripes(skity::Canvas::MakeSoftwareCanvas(&direct).get());
+
+  auto layered = MakeGridBitmap();
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&layered);
+  canvas->SaveLayer(skity::Rect::MakeLTRB(1.75f, 2.5f, 62.5f, 61.75f),
+                    skity::Paint{});
+  canvas->SaveLayer(skity::Rect::MakeLTRB(3.5f, 5.25f, 60.25f, 59.6f),
+                    skity::Paint{});
+  DrawPixelGridStripes(canvas.get());
+  canvas->Restore();
+  canvas->Restore();
+
+  ExpectSamePixels(layered, direct);
+}
+
+TEST(SWCanvas, ScaledSaveLayerKeepsThePixelGrid) {
+  constexpr float kScale = 2.625f;
+  const auto draw = [](skity::Canvas* canvas) {
+    skity::Paint paint;
+    paint.SetColor(skity::Color_RED);
+    for (int row = 3; row < 21; row += 2) {
+      canvas->DrawRect(
+          skity::Rect::MakeXYWH(3.f, static_cast<float>(row), 18.f, 0.75f),
+          paint);
+    }
+  };
+  auto direct = MakeGridBitmap();
+  auto direct_canvas = skity::Canvas::MakeSoftwareCanvas(&direct);
+  direct_canvas->Scale(kScale, kScale);
+  draw(direct_canvas.get());
+
+  auto layered = MakeGridBitmap();
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&layered);
+  canvas->Scale(kScale, kScale);
+  canvas->SaveLayer(skity::Rect::MakeLTRB(1.3f, 1.7f, 23.1f, 22.9f),
+                    skity::Paint{});
+  draw(canvas.get());
+  canvas->Restore();
+
+  ExpectSamePixels(layered, direct);
+}
+
+TEST(SWCanvas, ClippedSaveLayerKeepsThePixelGrid) {
+  const skity::Rect clip = skity::Rect::MakeLTRB(0.f, 16.f, 64.f, 40.f);
+  auto direct = MakeGridBitmap();
+  auto direct_canvas = skity::Canvas::MakeSoftwareCanvas(&direct);
+  direct_canvas->ClipRect(clip);
+  DrawPixelGridStripes(direct_canvas.get());
+
+  auto layered = MakeGridBitmap();
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&layered);
+  canvas->ClipRect(clip);
+  canvas->SaveLayer(skity::Rect::MakeLTRB(3.5f, 5.25f, 60.25f, 59.6f),
+                    skity::Paint{});
+  DrawPixelGridStripes(canvas.get());
+  canvas->Restore();
+
+  ExpectSamePixels(layered, direct);
+}
 
 TEST(SWCanvas, SaveLayerClipsHugeBoundsToDevice) {
   skity::Bitmap bitmap(16, 16, skity::AlphaType::kPremul_AlphaType,
