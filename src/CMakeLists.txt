@@ -257,7 +257,7 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Windows")
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/win/typeface_win.cc
   )
 elseif(SKITY_FONTCONFIG)
-  find_package(Fontconfig 2.13.1 REQUIRED)
+  include(${SKITY_ROOT}/cmake/Fontconfig.cmake)
   set(SKITY_FONTCONFIG_CJK_RULES_FILE
     "${CMAKE_CURRENT_LIST_DIR}/text/ports/linux/fontconfig_cjk_rules.conf")
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
@@ -270,7 +270,7 @@ elseif(SKITY_FONTCONFIG)
   target_sources(skity PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/linux/font_manager_fontconfig.cc
     ${CMAKE_CURRENT_LIST_DIR}/text/ports/linux/font_manager_fontconfig.hpp)
-  target_link_libraries(skity PRIVATE Fontconfig::Fontconfig)
+  target_link_libraries(skity PRIVATE skity_fontconfig)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR EMSCRIPTEN)
   target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/text/ports/test/font_manager_test.cc)
   target_sources(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/text/ports/test/font_manager_test.hpp)

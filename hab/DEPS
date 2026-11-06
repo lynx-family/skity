@@ -1,6 +1,25 @@
 import os
+import platform
+
+system = platform.system().lower()
 
 deps = {
+    "third_party/fontconfig": {
+        "type": "git",
+        "url": "https://github.com/fontconfig/fontconfig.git",
+        # Fontconfig 2.17.1.
+        "commit": "6d0a98982ec351c165c9224c8b7dbdfca3010e47",
+        "ignore_in_git": True,
+        "condition": system == "linux",
+    },
+    "third_party/expat": {
+        "type": "git",
+        "url": "https://github.com/libexpat/libexpat.git",
+        # Expat 2.10.0.
+        "commit": "a70841d9ffa64ddde29ab824ed6305035ebe4c47",
+        "ignore_in_git": True,
+        "condition": system == "linux",
+    },
     "third_party/freetype2": {
         "type": "git",
         "url": "https://github.com/freetype/freetype.git",
