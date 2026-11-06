@@ -141,8 +141,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AN
 
   target_sources(skity_unit_test PRIVATE text/typeface_test.cc)
   if(SKITY_FONTCONFIG)
-    find_package(Fontconfig 2.13.1 REQUIRED)
-    target_link_libraries(skity_unit_test PRIVATE Fontconfig::Fontconfig)
+    target_link_libraries(skity_unit_test PRIVATE skity_fontconfig)
     target_sources(skity_unit_test PRIVATE
       text/font_manager_fontconfig_test.cc
       ${CMAKE_SOURCE_DIR}/src/text/ports/test/font_manager_test.cc)

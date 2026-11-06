@@ -8,6 +8,13 @@ The third-party libraries used by Skity is managed by [habitat](https://github.c
 
 The Skity project use [CMake](https://cmake.org/) as the build system. Make sure you have CMake version 3.15 or higher installed on your system.
 
+On Linux, the default Fontconfig backend additionally requires CMake 3.17 or
+newer, Meson 1.6.1 or newer, Ninja, pkg-config, Python 3, and gperf. Habitat
+provides the Fontconfig and Expat sources; system Fontconfig/Expat development
+packages are not required. Install Ninja, pkg-config and gperf with your
+distribution's package manager, and install a sufficiently recent Meson with
+`python3 -m pip install 'meson>=1.6.1,<2'` in your build environment.
+
 Although Skity supports CPU rendering, it is recommended to ensure that the GPU environment currently supported by Skity is installed.
 This is the support GPU backends on different platforms:
 * Windows and Linux:
@@ -77,7 +84,7 @@ There are several options you can use to configure the build:
     * `SKITY_MTL_BACKEND` - Option for Metal backend. Not available on Windows and Linux but open by default on Apple platform.
     * `SKITY_VK_BACKEND` - Option for Vulkan backend (experimental). Default is OFF. Pass `-DSKITY_VK_BACKEND=ON` in command line to enable it. Requires Vulkan at least version 1.1. Skity will attempt to create the highest available Vulkan version and leverage extensions such as dynamic rendering when supported.
     * `WGX_SPIRV_BACKEND` - Option for WGX SPIR-V generation. Defaults to the value of `SKITY_VK_BACKEND`, but can be enabled independently without a Vulkan runtime by passing `-DWGX_SPIRV_BACKEND=ON`.
-    * `SKITY_FONTCONFIG` - Option for the native Linux Fontconfig font manager. Default is ON on Linux with the FreeType backend and OFF on other platforms. Requires Fontconfig development files, version 2.13.1 or newer. Pass `-DSKITY_FONTCONFIG=OFF` to disable it.
+    * `SKITY_FONTCONFIG` - Option for the native Linux Fontconfig font manager. Default is ON on Linux with the FreeType backend and OFF on other platforms. Fontconfig and Expat are built from Habitat-managed sources and linked statically into Skity, reusing its FreeType library. Runtime font discovery still reads `/etc/fonts/fonts.conf`, its includes and user configuration, and the configured system font directories. The build does not install or overwrite system font configuration or caches. Pass `-DSKITY_FONTCONFIG=OFF` to disable it.
     * `SKITY_LOG` - Option for logging. Default is OFF since print log may slow down the performance. Pass `-DSKITY_LOG=ON` in command line to enable it.
 
 * Options for build optional modules:
