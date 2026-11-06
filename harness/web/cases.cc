@@ -262,6 +262,33 @@ void DrawSaveLayerTwoCircleWithTranslate(Canvas* canvas) {
   canvas->Restore();
 }
 
+// New case (no golden counterpart): guards the texture upload path, which
+// no other case exercises. Two procedurally built solid images (no codec,
+// no image files) drawn through DrawImageRect; a broken upload renders
+// them as nothing (the stage buffer lands zeroed).
+void DrawImageRect(Canvas* canvas) {
+  auto make_solid_image = [](uint32_t w, uint32_t h, Color color) {
+    auto pixmap = std::make_shared<Pixmap>(w, h);
+    Bitmap bitmap(pixmap, false);
+    for (uint32_t y = 0; y < h; y++) {
+      for (uint32_t x = 0; x < w; x++) {
+        bitmap.SetPixel(x, y, color);
+      }
+    }
+    return Image::MakeImage(pixmap);
+  };
+
+  canvas->Clear(Color_WHITE);
+  auto red = make_solid_image(32, 64, ColorSetARGB(255, 200, 40, 20));
+  canvas->DrawImageRect(red, Rect::MakeWH(32.f, 64.f),
+                        Rect::MakeXYWH(0.f, 0.f, 32.f, 64.f),
+                        SamplingOptions{});
+  auto blue = make_solid_image(32, 64, ColorSetARGB(255, 20, 80, 200));
+  canvas->DrawImageRect(blue, Rect::MakeWH(32.f, 64.f),
+                        Rect::MakeXYWH(32.f, 0.f, 32.f, 64.f),
+                        SamplingOptions{});
+}
+
 const GeometryCase kGeometryCases[] = {
     {"DrawFilledRect", 400, 400, &DrawFilledRect},
     {"DrawStrokeRect", 400, 400, &DrawStrokeRect},
@@ -273,6 +300,7 @@ const GeometryCase kGeometryCases[] = {
     {"SaveLayerThreeCircle", 400, 400, &DrawSaveLayerThreeCircle},
     {"SaveLayerTwoCircleWithTranslate", 400, 400,
      &DrawSaveLayerTwoCircleWithTranslate},
+    {"DrawImageRect", 64, 64, &DrawImageRect},
 };
 
 }  // namespace
