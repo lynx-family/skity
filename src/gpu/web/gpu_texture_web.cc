@@ -50,7 +50,7 @@ WGPUTextureDescriptor ConvertToWGPUTextureDescriptor(
 
   wgpu_desc.format = ToWGPUTextureFormat(desc.format);
   // hardcode mipLevelCount to 1
-  // TODO: support generate mipmap in the future
+  // TODO(RuiwenTang): support generate mipmap in the future
   wgpu_desc.mipLevelCount = 1;
   wgpu_desc.sampleCount = desc.sample_count;
 
