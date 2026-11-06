@@ -110,10 +110,15 @@ OwnedGlyphImage ScalerContextContainer::PrepareOwnedImage(
       static_cast<double>(image.height) >
           std::numeric_limits<uint32_t>::max()) {
     image = {};
+    result.status_ = OwnedGlyphImage::Status::kInvalidImage;
     return result;
   }
-  if (!image.buffer || image.width == 0.f || image.height == 0.f) {
+  if (image.width == 0.f || image.height == 0.f) {
     image.buffer = nullptr;
+    return result;
+  }
+  if (!image.buffer) {
+    result.status_ = OwnedGlyphImage::Status::kInvalidImage;
     return result;
   }
   const size_t width = static_cast<size_t>(image.width);
@@ -133,12 +138,14 @@ OwnedGlyphImage ScalerContextContainer::PrepareOwnedImage(
   if (bytes_per_pixel == 0 ||
       width > std::numeric_limits<size_t>::max() / bytes_per_pixel) {
     image = {};
+    result.status_ = OwnedGlyphImage::Status::kInvalidImage;
     return result;
   }
   const size_t row_bytes = image.RowBytes();
   if (row_bytes < width * bytes_per_pixel ||
       row_bytes > std::numeric_limits<size_t>::max() / height) {
     image = {};
+    result.status_ = OwnedGlyphImage::Status::kInvalidImage;
     return result;
   }
   if (!result.pixels_) {
@@ -148,6 +155,7 @@ OwnedGlyphImage ScalerContextContainer::PrepareOwnedImage(
         static_cast<uint8_t *>(std::malloc(height * row_bytes)));
     if (!result.pixels_) {
       image = {};
+      result.status_ = OwnedGlyphImage::Status::kInvalidImage;
       return result;
     }
     const size_t pixel_row_bytes = width * bytes_per_pixel;
@@ -164,6 +172,7 @@ OwnedGlyphImage ScalerContextContainer::PrepareOwnedImage(
     }
     image.buffer = result.pixels_.get();
   }
+  result.status_ = OwnedGlyphImage::Status::kReady;
   return result;
 }
 

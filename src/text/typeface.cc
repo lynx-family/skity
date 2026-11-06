@@ -9,6 +9,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <atomic>
 #include <glm/gtc/matrix_transform.hpp>
 #include <skity/text/font_manager.hpp>
 
@@ -16,6 +17,12 @@
 #include "src/text/scaler_context_desc.hpp"
 
 namespace skity {
+
+TypefaceID Typeface::NewTypefaceID() {
+  // Keep one counter in the library, including for client-defined typefaces.
+  static std::atomic<int32_t> next_id{1};
+  return next_id.fetch_add(1, std::memory_order_relaxed);
+}
 
 std::shared_ptr<Typeface> Typeface::GetDefaultTypeface(
     class FontStyle font_style) {

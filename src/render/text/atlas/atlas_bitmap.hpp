@@ -26,8 +26,8 @@ class AtlasBitmap {
   GlyphRegion GetGlyphRegion(const GlyphKey& key);
 
   // add one glyph to memory atlas
-  GlyphRegion GenerateGlyphRegion(GlyphKey const& key,
-                                  const GlyphBitmapData& bitmap);
+  AtlasGlyphResult GenerateGlyphRegion(GlyphKey const& key,
+                                       const GlyphBitmapData& bitmap);
 
   std::optional<glm::ivec4> DirtyRect() const { return dirty_rect_; }
 

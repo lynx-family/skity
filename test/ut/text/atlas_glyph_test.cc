@@ -151,7 +151,7 @@ TEST(AtlasBitmapTest, KeepsBitwiseDistinctGlyphKeysSeparate) {
 
   AtlasBitmap atlas(16, 16, 1);
   const GlyphRegion inserted =
-      atlas.GenerateGlyphRegion(GlyphKey(7, positive_zero), bitmap);
+      atlas.GenerateGlyphRegion(GlyphKey(7, positive_zero), bitmap).region;
   ASSERT_NE(inserted.loc, INVALID_LOC);
   EXPECT_EQ(atlas.GetGlyphRegion(GlyphKey(7, positive_zero)).loc, inserted.loc);
   EXPECT_EQ(atlas.GetGlyphRegion(GlyphKey(7, negative_zero)).loc, INVALID_LOC);
@@ -169,7 +169,8 @@ TEST(AtlasBitmapTest, DoesNotReuseDifferentPackedGlyphPhase) {
   AtlasBitmap atlas(16, 16, 1);
   const GlyphKey first_phase(PackedGlyphID(7, 1, 0), desc);
   const GlyphKey second_phase(PackedGlyphID(7, 2, 0), desc);
-  const GlyphRegion inserted = atlas.GenerateGlyphRegion(first_phase, bitmap);
+  const GlyphRegion inserted =
+      atlas.GenerateGlyphRegion(first_phase, bitmap).region;
 
   ASSERT_NE(inserted.loc, INVALID_LOC);
   EXPECT_EQ(atlas.GetGlyphRegion(first_phase).loc, inserted.loc);
@@ -374,7 +375,7 @@ TEST(AtlasBitmapTest, CopiesGlyphWithPaddedRows) {
   AtlasBitmap atlas(kAtlasWidth, kAtlasWidth, 1);
   ScalerContextDesc desc{};
   GlyphKey key(7, desc);
-  const GlyphRegion region = atlas.GenerateGlyphRegion(key, bitmap);
+  const GlyphRegion region = atlas.GenerateGlyphRegion(key, bitmap).region;
   ASSERT_NE(region.loc, INVALID_LOC);
   EXPECT_FLOAT_EQ(region.origin_x, bitmap.origin_x);
   EXPECT_FLOAT_EQ(region.origin_y, bitmap.origin_y);
@@ -392,6 +393,68 @@ TEST(AtlasBitmapTest, CopiesGlyphWithPaddedRows) {
     }
     EXPECT_EQ(atlas_row[region.loc.x + kGlyphWidth], 0u);
   }
+}
+
+TEST(AtlasBitmapTest, ReportsExactTileLimitsIncludingPadding) {
+  for (auto format : {AtlasFormat::A8, AtlasFormat::RGBA32}) {
+    for (bool large : {false, true}) {
+      const AtlasConfig config(format, false, large);
+      const uint32_t limit = config.max_bitmap_size - 4;
+      const uint32_t bpp = format == AtlasFormat::A8 ? 1 : 4;
+      std::vector<uint8_t> pixels(size_t(limit + 1) * (limit + 1) * bpp, 255);
+      for (bool over_width : {false, true}) {
+        AtlasBitmap atlas(config.max_bitmap_size, config.max_bitmap_size, bpp);
+        GlyphBitmapData bitmap;
+        bitmap.format = bpp == 1 ? BitmapFormat::kGray8 : BitmapFormat::kBGRA8;
+        bitmap.buffer = pixels.data();
+        bitmap.width = limit + (over_width ? 1 : 0);
+        bitmap.height = limit + (over_width ? 0 : 1);
+        GlyphKey key(0, ScalerContextDesc{});
+        auto rejected = atlas.GenerateGlyphRegion(key, bitmap);
+        EXPECT_EQ(rejected.status, AtlasGlyphStatus::kTooLarge);
+        EXPECT_EQ(rejected.width, bitmap.width);
+        EXPECT_EQ(rejected.height, bitmap.height);
+        EXPECT_EQ(atlas.GetGlyphRegion(key).loc, INVALID_LOC);
+        bitmap.width = bitmap.height = limit;
+        auto accepted = atlas.GenerateGlyphRegion(key, bitmap);
+        ASSERT_TRUE(accepted.IsReady());
+        EXPECT_EQ(accepted.region.loc.z, limit);
+        EXPECT_EQ(accepted.region.loc.w, limit);
+        EXPECT_EQ(
+            atlas.GenerateGlyphRegion(GlyphKey(1, ScalerContextDesc{}), bitmap)
+                .status,
+            AtlasGlyphStatus::kPageFull);
+      }
+    }
+  }
+}
+
+TEST(AtlasBitmapTest, DistinguishesEmptyAndInvalidImagesFromSizeRejection) {
+  AtlasBitmap atlas(16, 16, 1);
+  GlyphKey key(0, ScalerContextDesc{});
+  GlyphBitmapData bitmap;
+  EXPECT_EQ(atlas.GenerateGlyphRegion(key, bitmap).status,
+            AtlasGlyphStatus::kNoImage);
+  bitmap.width = bitmap.height = 3;
+  bitmap.format = BitmapFormat::kGray8;
+  EXPECT_EQ(atlas.GenerateGlyphRegion(key, bitmap).status,
+            AtlasGlyphStatus::kInvalidImage);
+  std::array<uint8_t, 36> pixels{};
+  bitmap.buffer = pixels.data();
+  bitmap.row_bytes = 2;
+  EXPECT_EQ(atlas.GenerateGlyphRegion(key, bitmap).status,
+            AtlasGlyphStatus::kInvalidImage);
+  bitmap.row_bytes = 0;
+  bitmap.width = -1.f;
+  EXPECT_EQ(atlas.GenerateGlyphRegion(key, bitmap).status,
+            AtlasGlyphStatus::kInvalidImage);
+  bitmap.width = std::numeric_limits<float>::infinity();
+  EXPECT_EQ(atlas.GenerateGlyphRegion(key, bitmap).status,
+            AtlasGlyphStatus::kInvalidImage);
+  bitmap.width = 3;
+  bitmap.format = BitmapFormat::kRGBA8;
+  EXPECT_EQ(atlas.GenerateGlyphRegion(key, bitmap).status,
+            AtlasGlyphStatus::kInvalidImage);
 }
 
 }  // namespace skity

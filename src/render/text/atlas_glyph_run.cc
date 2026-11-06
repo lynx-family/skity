@@ -88,15 +88,6 @@ void AtlasGlyphRun::Record(const GlyphDrawContext& context,
                       has_coverage && IsPaintSourceOpaque(paint_)});
 }
 
-GlyphFormat ResolveAtlasGlyphFormat(AtlasFormat format,
-                                    const GlyphData& glyph) {
-  if (format == AtlasFormat::A8) {
-    return GlyphFormat::A8;
-  }
-  return glyph.GetFormat() == GlyphFormat::BGRA32 ? GlyphFormat::BGRA32
-                                                  : GlyphFormat::RGBA32;
-}
-
 TextAtlasEffect MaskAtlasEffect(GlyphFormat format) {
   switch (format) {
     case GlyphFormat::A8:

@@ -22,16 +22,23 @@ class RecordingGlyphDrawTarget : public GlyphDrawTarget {
   };
 
   void SubmitAtlas(const GlyphAtlasDraw& operation) override {
+    events.push_back({true, atlas_draws.size()});
     atlas_draws.push_back(operation);
   }
 
   void SubmitPath(const Path& path, const Paint& paint,
                   const Matrix& local_to_layer) override {
+    events.push_back({false, path_draws.size()});
     path_draws.push_back({path, paint, local_to_layer});
   }
 
   std::vector<GlyphAtlasDraw> atlas_draws;
   std::vector<PathDraw> path_draws;
+  struct Event {
+    bool atlas;
+    size_t index;
+  };
+  std::vector<Event> events;
 };
 
 inline GlyphAtlasDraw RecordAtlasGlyphRun(const GlyphSubRun& run,

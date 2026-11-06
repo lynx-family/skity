@@ -69,11 +69,31 @@ struct AtlasConfig {
 };
 
 struct GlyphRegion {
-  uint32_t index_in_group;
-  glm::ivec4 loc;
-  float scale;
+  uint32_t index_in_group = 0;
+  glm::ivec4 loc{0, 0, 0, 0};
+  float scale = 1.f;
   float origin_x = 0.f;
   float origin_y = 0.f;
+  GlyphFormat format = GlyphFormat::A8;
+};
+
+enum class AtlasGlyphStatus {
+  kReady,
+  kTooLarge,
+  kNoImage,
+  kInvalidImage,
+  kPageFull
+};
+
+struct AtlasGlyphResult {
+  AtlasGlyphStatus status = AtlasGlyphStatus::kNoImage;
+  GlyphRegion region;
+  // Actual physical bitmap dimensions, before atlas padding. They remain
+  // available when a valid image is too large for a tile.
+  uint32_t width = 0;
+  uint32_t height = 0;
+
+  bool IsReady() const { return status == AtlasGlyphStatus::kReady; }
 };
 
 struct GlyphKey {
