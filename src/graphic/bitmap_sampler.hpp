@@ -24,7 +24,7 @@ class BitmapSampler {
  private:
   Vec4 SampleUnitNearest(Vec2 uv) const;
 
-  Vec4 SampleUnitLinear(Vec2 uv) const;
+  Color SampleUnitLinear(Vec2 uv) const;
 
   Vec4 SampleXY(Vec2 xy) const;
 
