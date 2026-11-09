@@ -154,9 +154,23 @@ class SKITY_API Paint {
   Color4f GetColor4f() const;
 
   /**
+   * The color space GetColor4f() / GetStrokeColor() / GetFillColor() are
+   * recorded in; defaults to sRGB.
+   */
+  ColorSpace GetColorSpace() const { return color_space_; }
+
+  /**
+   * Returns the stroke/fill color resolved into the target (render surface)
+   * color space. This is the draw-time entry point: recorded colors stay in
+   * their original space and convert once the target space is known.
+   */
+  Color4f GetColor4f(const ColorSpace& target_space) const;
+
+  /**
    * Sets the alpha and RGB used when stroking and filling. The color is
-   * interpreted in color_space and converted to the pipeline working space
-   * (sRGB) on the way in; the default space leaves it untouched.
+   * recorded in color_space as-is; it converts to the render target's space
+   * at draw time (see GetColor4f(target_space)). The default space leaves
+   * the value untouched.
    */
   void SetColor4f(Color4f color, ColorSpace color_space = {});
   /**
@@ -289,6 +303,9 @@ class SKITY_API Paint {
   float font_fill_threshold_ = DEFAULT_FONT_FILL_THRESHOLD;
   Vector fill_color_ = Colors::kBlack;
   Vector stroke_color_ = Colors::kBlack;
+  // The space the recorded colors are interpreted in; resolved to the render
+  // target space at draw time.
+  ColorSpace color_space_{};
   bool is_anti_alias_ = false;
   BlendMode blend_mode_ = BlendMode::kDefault;
   std::shared_ptr<PathEffect> path_effect_;

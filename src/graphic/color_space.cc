@@ -7,6 +7,7 @@
 #include <skity/graphic/color_space.hpp>
 
 #include "src/graphic/color_space_priv.hpp"
+#include "src/graphic/color_xform.hpp"
 
 namespace skity {
 
@@ -48,30 +49,6 @@ bool IsValidGamut(const float m[9]) {
   return std::isfinite(det) && det != 0.f;
 }
 
-// Evaluates the parametric curve. The power branch clamps its base instead of
-// the input so out-of-gamut (negative) linear values encode to slightly
-// negative signals rather than NaN; the linear branch extrapolates naturally.
-float EvalTransferFn(const float tf[7], float x) {
-  if (x < tf[4]) {
-    return tf[3] * x + tf[6];
-  }
-  float base = std::fmax(tf[1] * x + tf[2], 0.f);
-  return std::pow(base, tf[0]) + tf[5];
-}
-
-// The parametric family is closed under inversion (same closed-form flip
-// skcms uses): the result evaluates the linear -> signal direction.
-void InvertTransferFn(const float tf[7], float inv[7]) {
-  const float inv_a_pow_g = std::pow(tf[1], -tf[0]);
-  inv[0] = 1.f / tf[0];
-  inv[1] = inv_a_pow_g;
-  inv[2] = -tf[5] * inv_a_pow_g;
-  inv[3] = tf[3] > 0.f ? 1.f / tf[3] : 0.f;
-  inv[4] = tf[3] * tf[4] + tf[6];
-  inv[5] = -tf[2] / tf[1];
-  inv[6] = tf[3] > 0.f ? -tf[6] / tf[3] : 0.f;
-}
-
 bool SameTransferFn(const float lhs[7], const float rhs[7]) {
   return std::memcmp(lhs, rhs, sizeof(float) * 7) == 0;
 }
@@ -111,6 +88,25 @@ bool ColorSpaceInvert3x3(const float m[9], float inv[9]) {
   inv[7] = (m[1] * m[6] - m[0] * m[7]) * inv_det;
   inv[8] = (m[0] * m[4] - m[1] * m[3]) * inv_det;
   return true;
+}
+
+float ColorSpaceEvalTransferFn(const float tf[7], float x) {
+  if (x < tf[4]) {
+    return tf[3] * x + tf[6];
+  }
+  float base = std::fmax(tf[1] * x + tf[2], 0.f);
+  return std::pow(base, tf[0]) + tf[5];
+}
+
+void ColorSpaceInvertTransferFn(const float tf[7], float inv[7]) {
+  const float inv_a_pow_g = std::pow(tf[1], -tf[0]);
+  inv[0] = 1.f / tf[0];
+  inv[1] = inv_a_pow_g;
+  inv[2] = -tf[5] * inv_a_pow_g;
+  inv[3] = tf[3] > 0.f ? 1.f / tf[3] : 0.f;
+  inv[4] = tf[3] * tf[4] + tf[6];
+  inv[5] = -tf[2] / tf[1];
+  inv[6] = tf[3] > 0.f ? -tf[6] / tf[3] : 0.f;
 }
 
 ColorSpace ColorSpace::SRGBLinear() {
@@ -163,51 +159,14 @@ bool ColorSpace::operator==(const ColorSpace& other) const {
 }
 
 Color4f ColorSpace::Convert(Color4f color, const ColorSpace& dst) const {
-  if (*this == dst) {
-    return color;
-  }
-
-  float rgb[3] = {color.r, color.g, color.b};
-
-  // Signal -> linear in the source space.
-  if (!IsLinear()) {
-    for (int i = 0; i < 3; i++) {
-      rgb[i] = EvalTransferFn(transfer_fn, rgb[i]);
-    }
-  }
-
-  // Linear source gamut -> linear destination gamut.
-  if (!SameGamut(gamut_xyz, dst.gamut_xyz)) {
-    float inv_dst[9];
-    float src_to_dst[9];
-    if (ColorSpaceInvert3x3(dst.gamut_xyz, inv_dst)) {
-      ColorSpaceMultiply3x3(inv_dst, gamut_xyz, src_to_dst);
-      float out[3] = {rgb[0], rgb[1], rgb[2]};
-      for (int row = 0; row < 3; row++) {
-        rgb[row] = src_to_dst[row * 3] * out[0] +
-                   src_to_dst[row * 3 + 1] * out[1] +
-                   src_to_dst[row * 3 + 2] * out[2];
-      }
-    }
-  }
-
-  // Linear -> signal in the destination space.
-  if (!dst.IsLinear()) {
-    float encode_tf[7];
-    InvertTransferFn(dst.transfer_fn, encode_tf);
-    for (int i = 0; i < 3; i++) {
-      rgb[i] = EvalTransferFn(encode_tf, rgb[i]);
-    }
-  }
-
-  return Color4f{rgb[0], rgb[1], rgb[2], color.a};
+  // Delegates to the folded stage pipeline so every conversion boundary
+  // (CPU, GPU uniform setup, buffer kernels) shares one implementation.
+  return ColorXformSteps::Resolve(*this, dst).Apply(color);
 }
 
 void ColorSpace::ConvertColors(Color4f colors[], int count,
                                const ColorSpace& dst) const {
-  for (int i = 0; i < count; i++) {
-    colors[i] = Convert(colors[i], dst);
-  }
+  ColorXformSteps::Resolve(*this, dst).ApplyColors(colors, count);
 }
 
 }  // namespace skity

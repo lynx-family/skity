@@ -104,10 +104,10 @@ Color BitmapSampler::GetColor(Vec2 uv) const {
         break;
     }
   }
-  // Decode the source-space color to the working space after filtering, the
+  // Convert the sampled color into the target space after filtering, the
   // same semantics as the GPU texture decode (filter in the stored space).
-  if (!color_space_.IsSRGB()) {
-    sampled = color_space_.Convert(sampled, ColorSpace{});
+  if (!steps_.IsNoop()) {
+    sampled = steps_.Apply(sampled);
   }
   return Color4fToColor(sampled);
 }

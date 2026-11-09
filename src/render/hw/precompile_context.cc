@@ -159,7 +159,8 @@ HWWGSLFragment* MakeTextureFragment(HWDrawStepContext* ctx, const Paint& paint,
                                     const Matrix& matrix,
                                     bool has_fragment_mask = false) {
   auto* fragment = ctx->context->arena_allocator->Make<WGSLTextureFragment>(
-      std::move(shader), nullptr, nullptr, 1.f, matrix, 1.f, 1.f);
+      std::move(shader), nullptr, nullptr, 1.f, matrix, 1.f, 1.f,
+      ctx->context->target_space);
   return ApplyPaintEffects(fragment, paint, ctx->context, has_fragment_mask);
 }
 
@@ -317,9 +318,9 @@ void PrecompileTextStep(HWDrawStepContext* ctx, const Paint& paint, bool sdf,
   if (paint.GetShader() != nullptr &&
       paint.GetShader()->AsGradient(nullptr) == Shader::GradientType::kNone) {
     auto shader = std::static_pointer_cast<PixmapShader>(paint.GetShader());
-    fragment =
-        arena->Make<WGSLTextureFragment>(std::move(shader), nullptr, nullptr,
-                                         paint.GetAlphaF(), Matrix{}, 1.f, 1.f);
+    fragment = arena->Make<WGSLTextureFragment>(
+        std::move(shader), nullptr, nullptr, paint.GetAlphaF(), Matrix{}, 1.f,
+        1.f, ctx->context->target_space);
   } else {
     fragment = GenShadingFragment(
         ctx->context, paint, paint.GetStyle() == Paint::kStroke_Style, false);

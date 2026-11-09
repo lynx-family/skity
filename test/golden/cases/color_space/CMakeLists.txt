@@ -5,4 +5,5 @@
 add_golden_test_shape(
   NAME color_space
   SOURCES ${CMAKE_CURRENT_LIST_DIR}/color_space.cc
+  INCLUDES ${SKITY_ROOT}
 )

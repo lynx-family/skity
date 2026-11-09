@@ -5,10 +5,12 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color_space.hpp>
 #include <skity/graphic/image.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/io/pixmap.hpp>
+#include <skity/render/canvas.hpp>
 
 #include "gtest/gtest.h"
 
@@ -250,31 +252,92 @@ TEST(ColorSpace, PixmapImageCarriesColorSpace) {
   EXPECT_TRUE(plain->GetColorSpace().IsSRGB());
 }
 
-TEST(ColorSpace, PaintSetColor4fConvertsToWorkingSpace) {
+TEST(ColorSpace, PaintColorSpaceRecordedAndResolvedToTarget) {
   skity::Paint paint;
   paint.SetColor4f(skity::Color4f{0.5f, 0.5f, 0.5f, 1.f},
                    skity::ColorSpace::SRGBLinear());
-  // Linear 0.5 gray drawn as working-space sRGB is 0.73536.
-  auto color = paint.GetColor4f();
+  // The color records in its own space; GetColor4f() returns it untouched.
+  EXPECT_EQ(paint.GetColor4f().r, 0.5f);
+  EXPECT_TRUE(paint.GetColorSpace().IsLinear());
+
+  // Resolved into the default (sRGB) target: linear 0.5 gray is 0.73536.
+  auto color = paint.GetColor4f(skity::ColorSpace{});
   EXPECT_NEAR(color.r, 0.73535698f, 1e-4f);
   EXPECT_NEAR(color.g, 0.73535698f, 1e-4f);
   EXPECT_NEAR(color.b, 0.73535698f, 1e-4f);
   EXPECT_NEAR(color.a, 1.f, 1e-6f);
 
-  // The default space leaves the color untouched.
+  // The default space leaves the color untouched, resolved or not.
   paint.SetColor4f(skity::Color4f{0.5f, 0.25f, 0.125f, 1.f});
-  color = paint.GetColor4f();
+  color = paint.GetColor4f(skity::ColorSpace{});
   EXPECT_EQ(color.r, 0.5f);
   EXPECT_EQ(color.g, 0.25f);
   EXPECT_EQ(color.b, 0.125f);
 
-  // An sRGB color declared through a P3 tag converts through the gamut.
+  // A P3-tagged color resolves through the gamut into an sRGB target and
+  // returns bit-identically for a same-space target.
   paint.SetColor4f(skity::Color4f{0.5f, 0.25f, 0.125f, 1.f},
                    skity::ColorSpace::DisplayP3());
-  color = paint.GetColor4f();
+  color = paint.GetColor4f(skity::ColorSpace{});
   auto expected = skity::ColorSpace::DisplayP3().Convert(
       skity::Color4f{0.5f, 0.25f, 0.125f, 1.f}, skity::ColorSpace{});
   EXPECT_NEAR(color.r, expected.r, 1e-6f);
   EXPECT_NEAR(color.g, expected.g, 1e-6f);
   EXPECT_NEAR(color.b, expected.b, 1e-6f);
+  color = paint.GetColor4f(skity::ColorSpace::DisplayP3());
+  EXPECT_EQ(color.r, 0.5f);
+  EXPECT_EQ(color.g, 0.25f);
+  EXPECT_EQ(color.b, 0.125f);
+
+  // Legacy component setters have no space parameter; they record in sRGB.
+  paint.SetColor(skity::ColorSetARGB(255, 255, 0, 0));
+  EXPECT_TRUE(paint.GetColorSpace().IsSRGB());
+}
+
+TEST(ColorSpace, SWCanvasResolvesColorsIntoBitmapSpace) {
+  // A P3-tagged destination bitmap is the SW working space: paint colors
+  // resolve into it and same-space images pass through byte exactly.
+  skity::Bitmap bitmap(16, 16, skity::AlphaType::kPremul_AlphaType);
+  ASSERT_TRUE(bitmap.GetPixmap()->SetColorInfo(skity::kPremul_AlphaType,
+                                               skity::ColorType::kRGBA,
+                                               skity::ColorSpace::DisplayP3()));
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+
+  // An sRGB-recorded paint color resolves into the P3 bitmap space.
+  skity::Paint paint;
+  paint.SetStyle(skity::Paint::kFill_Style);
+  paint.SetColor4f(skity::Color4f{1.f, 0.f, 0.f, 1.f}, skity::ColorSpace{});
+  canvas->DrawRect(skity::Rect::MakeWH(16.f, 16.f), paint);
+  canvas->Flush();
+
+  auto expected = skity::ColorSpace{}.Convert(
+      skity::Color4f{1.f, 0.f, 0.f, 1.f}, skity::ColorSpace::DisplayP3());
+  auto result = skity::Color4fFromColor(bitmap.GetPixel(8, 8));
+  EXPECT_NEAR(result.r, expected.r, 2.f / 255.f);
+  EXPECT_NEAR(result.g, expected.g, 2.f / 255.f);
+  EXPECT_NEAR(result.b, expected.b, 2.f / 255.f);
+  EXPECT_NEAR(result.a, 1.f, 1.f / 255.f);
+
+  // A P3-tagged image on the P3 bitmap: zero conversion, zero clipping.
+  canvas->Clear(skity::Color_WHITE);
+  auto pixmap = std::make_shared<skity::Pixmap>(8, 8);
+  skity::Bitmap src_bitmap(pixmap, false);
+  for (uint32_t y = 0; y < 8; y++) {
+    for (uint32_t x = 0; x < 8; x++) {
+      src_bitmap.SetPixel(x, y, skity::ColorSetARGB(255, 255, 0, 0));
+    }
+  }
+  pixmap->SetColorInfo(skity::kUnpremul_AlphaType, skity::ColorType::kRGBA,
+                       skity::ColorSpace::DisplayP3());
+  auto image = skity::Image::MakeImage(pixmap);
+  canvas->DrawImageRect(image, skity::Rect::MakeWH(8.f, 8.f),
+                        skity::Rect::MakeWH(16.f, 16.f),
+                        skity::SamplingOptions{});
+  canvas->Flush();
+
+  auto passthrough = skity::Color4fFromColor(bitmap.GetPixel(8, 8));
+  EXPECT_EQ(passthrough.r, 1.f);
+  EXPECT_EQ(passthrough.g, 0.f);
+  EXPECT_EQ(passthrough.b, 0.f);
+  EXPECT_EQ(passthrough.a, 1.f);
 }

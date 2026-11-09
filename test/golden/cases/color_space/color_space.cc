@@ -4,15 +4,19 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <memory>
+#include <skity/effect/shader.hpp>
 #include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color_space.hpp>
 #include <skity/graphic/image.hpp>
+#include <skity/graphic/paint.hpp>
 #include <skity/io/pixmap.hpp>
 
 #include "common/golden_test_check.hpp"
 #include "common/golden_test_env.hpp"
+#include "src/graphic/color_xform.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
 
@@ -63,6 +67,13 @@ void DrawDecodingImages(skity::Canvas* canvas) {
                         skity::SamplingOptions{});
 }
 
+// Pure gamma 2.2 transfer over the sRGB gamut; only the curve differs from
+// sRGB, so conversions exercise the parametric encode path.
+skity::ColorSpace Gamma22TargetSpace() {
+  const float tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  return *skity::ColorSpace::MakeRGB(tf, skity::ColorSpace{}.gamut_xyz);
+}
+
 }  // namespace
 
 // The GPU texture decode must land back on the original sRGB colors: the P3
@@ -99,4 +110,276 @@ TEST(ColorSpaceGolden, DisplayP3AndLinearSRGBDecode) {
   SCOPED_TRACE(expected.string());
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(64, 64, expected.c_str(),
                                                    config, DrawDecodingImages));
+}
+
+// Target-space semantics: on a Display P3 surface a P3-tagged image passes
+// through byte exactly (no sRGB round trip, so the P3 red primary survives
+// unclipped), while an sRGB-tagged image converts into its P3 representation.
+// Halves are full height so the assertions are readback-orientation safe.
+TEST(ColorSpaceGolden, P3TargetSpaceImagePassthrough) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  env->SetTargetColorSpace(skity::ColorSpace::DisplayP3());
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+
+    auto p3_red = MakeSolidImage(32, 64, skity::Color4f{1.f, 0.f, 0.f, 1.f},
+                                 skity::ColorSpace::DisplayP3());
+    canvas->DrawImageRect(p3_red, skity::Rect::MakeWH(32.f, 64.f),
+                          skity::Rect::MakeXYWH(0.f, 0.f, 32.f, 64.f),
+                          skity::SamplingOptions{});
+
+    auto srgb_red = MakeSolidImage(32, 64, skity::Color4f{1.f, 0.f, 0.f, 1.f},
+                                   skity::ColorSpace{});
+    canvas->DrawImageRect(srgb_red, skity::Rect::MakeWH(32.f, 64.f),
+                          skity::Rect::MakeXYWH(32.f, 0.f, 32.f, 64.f),
+                          skity::SamplingOptions{});
+  });
+  env->SetTargetColorSpace(skity::ColorSpace{});
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  // The P3 red primary (outside sRGB) must land byte exactly; a pipeline
+  // that routed it through an sRGB working space would return it muted
+  // (approximately 234/255, 51/255, 36/255 in P3 bytes).
+  auto p3_result = skity::Color4fFromColor(bitmap.GetPixel(10, 32));
+  EXPECT_EQ(p3_result.r, 1.f);
+  EXPECT_EQ(p3_result.g, 0.f);
+  EXPECT_EQ(p3_result.b, 0.f);
+  EXPECT_EQ(p3_result.a, 1.f);
+
+  auto expected = skity::ColorSpace{}.Convert(
+      skity::Color4f{1.f, 0.f, 0.f, 1.f}, skity::ColorSpace::DisplayP3());
+  auto srgb_result = skity::Color4fFromColor(bitmap.GetPixel(54, 32));
+  EXPECT_NEAR(srgb_result.r, expected.r, 3.f / 255.f);
+  EXPECT_NEAR(srgb_result.g, expected.g, 3.f / 255.f);
+  EXPECT_NEAR(srgb_result.b, expected.b, 3.f / 255.f);
+  EXPECT_NEAR(srgb_result.a, 1.f, 1.f / 255.f);
+}
+
+// A paint color recorded in the target space resolves without conversion;
+// the whole-canvas fill is orientation safe.
+TEST(ColorSpaceGolden, P3TargetSpacePaintColor) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  env->SetTargetColorSpace(skity::ColorSpace::DisplayP3());
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    skity::Paint paint;
+    paint.SetStyle(skity::Paint::kFill_Style);
+    paint.SetColor4f(skity::Color4f{0.f, 1.f, 0.f, 1.f},
+                     skity::ColorSpace::DisplayP3());
+    canvas->DrawRect(skity::Rect::MakeWH(64.f, 64.f), paint);
+  });
+  env->SetTargetColorSpace(skity::ColorSpace{});
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto result = skity::Color4fFromColor(bitmap.GetPixel(32, 32));
+  EXPECT_NEAR(result.r, 0.f, 1.f / 255.f);
+  EXPECT_NEAR(result.g, 1.f, 1.f / 255.f);
+  EXPECT_NEAR(result.b, 0.f, 1.f / 255.f);
+  EXPECT_NEAR(result.a, 1.f, 1.f / 255.f);
+}
+
+// A linear sRGB target folds the encode stage away entirely (GPU flags:
+// decode only), so an sRGB 0.5 gray stores its linear value.
+TEST(ColorSpaceGolden, LinearTargetFoldsEncode) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  env->SetTargetColorSpace(skity::ColorSpace::SRGBLinear());
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+    auto image = MakeSolidImage(64, 64, skity::Color4f{0.5f, 0.5f, 0.5f, 1.f},
+                                skity::ColorSpace{});
+    canvas->DrawImageRect(image, skity::Rect::MakeWH(64.f, 64.f),
+                          skity::Rect::MakeWH(64.f, 64.f),
+                          skity::SamplingOptions{});
+  });
+  env->SetTargetColorSpace(skity::ColorSpace{});
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto result = skity::Color4fFromColor(bitmap.GetPixel(32, 32));
+  EXPECT_NEAR(result.r, 0.21404114f, 3.f / 255.f);
+  EXPECT_NEAR(result.g, 0.21404114f, 3.f / 255.f);
+  EXPECT_NEAR(result.b, 0.21404114f, 3.f / 255.f);
+  EXPECT_NEAR(result.a, 1.f, 1.f / 255.f);
+}
+
+// A gamma 2.2 target has no closed constant curve: the shader must take the
+// parametric encode branch (cs_enc_tf uniforms).
+TEST(ColorSpaceGolden, Gamma22TargetParametricEncode) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  auto target = Gamma22TargetSpace();
+  env->SetTargetColorSpace(target);
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+    auto image = MakeSolidImage(64, 64, skity::Color4f{0.5f, 0.5f, 0.5f, 1.f},
+                                skity::ColorSpace{});
+    canvas->DrawImageRect(image, skity::Rect::MakeWH(64.f, 64.f),
+                          skity::Rect::MakeWH(64.f, 64.f),
+                          skity::SamplingOptions{});
+  });
+  env->SetTargetColorSpace(skity::ColorSpace{});
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto expected = skity::ColorSpace{}.Convert(
+      skity::Color4f{0.5f, 0.5f, 0.5f, 1.f}, target);
+  auto result = skity::Color4fFromColor(bitmap.GetPixel(32, 32));
+  EXPECT_NEAR(result.r, expected.r, 3.f / 255.f);
+  EXPECT_NEAR(result.g, expected.g, 3.f / 255.f);
+  EXPECT_NEAR(result.b, expected.b, 3.f / 255.f);
+  EXPECT_NEAR(result.a, 1.f, 1.f / 255.f);
+}
+
+// saveLayer content renders into an offscreen texture tagged with the
+// surface space; compositing back must pass the P3 red primary through byte
+// exactly (no accidental sRGB reinterpretation of the layer texture).
+TEST(ColorSpaceGolden, P3TargetSaveLayerComposite) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  env->SetTargetColorSpace(skity::ColorSpace::DisplayP3());
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+
+    skity::Paint layer_paint;
+    canvas->SaveLayer(skity::Rect::MakeWH(64.f, 64.f), layer_paint);
+
+    auto p3_red = MakeSolidImage(32, 64, skity::Color4f{1.f, 0.f, 0.f, 1.f},
+                                 skity::ColorSpace::DisplayP3());
+    canvas->DrawImageRect(p3_red, skity::Rect::MakeWH(32.f, 64.f),
+                          skity::Rect::MakeXYWH(0.f, 0.f, 32.f, 64.f),
+                          skity::SamplingOptions{});
+    canvas->Restore();
+  });
+  env->SetTargetColorSpace(skity::ColorSpace{});
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto result = skity::Color4fFromColor(bitmap.GetPixel(10, 32));
+  EXPECT_EQ(result.r, 1.f);
+  EXPECT_EQ(result.g, 0.f);
+  EXPECT_EQ(result.b, 0.f);
+  EXPECT_EQ(result.a, 1.f);
+}
+
+// Gradient stops are recorded in sRGB and resolve into the target space; the
+// clamped regions outside the gradient segment sample the resolved stop
+// colors exactly, independent of any interpolation convention.
+TEST(ColorSpaceGolden, P3TargetGradientStopsResolve) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  env->SetTargetColorSpace(skity::ColorSpace::DisplayP3());
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+
+    const skity::Point pts[2] = {{16.f, 0.f, 0.f, 1.f}, {48.f, 0.f, 0.f, 1.f}};
+    const skity::Vec4 stops[2] = {{1.f, 0.f, 0.f, 1.f}, {0.f, 0.f, 1.f, 1.f}};
+    auto shader = skity::Shader::MakeLinear(pts, stops, nullptr, 2);
+
+    skity::Paint paint;
+    paint.SetShader(shader);
+    canvas->DrawRect(skity::Rect::MakeWH(64.f, 64.f), paint);
+  });
+  env->SetTargetColorSpace(skity::ColorSpace{});
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto red_p3 = skity::ColorSpace{}.Convert(skity::Color4f{1.f, 0.f, 0.f, 1.f},
+                                            skity::ColorSpace::DisplayP3());
+  auto blue_p3 = skity::ColorSpace{}.Convert(skity::Color4f{0.f, 0.f, 1.f, 1.f},
+                                             skity::ColorSpace::DisplayP3());
+
+  // Left of the segment start: the resolved red stop, byte exactly.
+  auto left = skity::Color4fFromColor(bitmap.GetPixel(8, 32));
+  EXPECT_NEAR(left.r, red_p3.r, 3.f / 255.f);
+  EXPECT_NEAR(left.g, red_p3.g, 3.f / 255.f);
+  EXPECT_NEAR(left.b, red_p3.b, 3.f / 255.f);
+  EXPECT_NEAR(left.a, 1.f, 1.f / 255.f);
+
+  // Right of the segment end: the resolved blue stop.
+  auto right = skity::Color4fFromColor(bitmap.GetPixel(56, 32));
+  EXPECT_NEAR(right.r, blue_p3.r, 3.f / 255.f);
+  EXPECT_NEAR(right.g, blue_p3.g, 3.f / 255.f);
+  EXPECT_NEAR(right.b, blue_p3.b, 3.f / 255.f);
+  EXPECT_NEAR(right.a, 1.f, 1.f / 255.f);
+}
+
+// Blending stays in the target's encoded space: a P3 red fill at half alpha
+// over white composites to (1, 0.5, 0.5) in P3 bytes. The P3 readback then
+// converts back to sRGB through the CPU kernel and lands on the original
+// sRGB red, closing the GPU-encode <-> CPU-decode loop.
+TEST(ColorSpaceGolden, P3TargetAlphaCompositingAndReadbackRoundTrip) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  env->SetTargetColorSpace(skity::ColorSpace::DisplayP3());
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+    skity::Paint paint;
+    paint.SetStyle(skity::Paint::kFill_Style);
+    paint.SetColor4f(skity::Color4f{1.f, 0.f, 0.f, 0.5f},
+                     skity::ColorSpace::DisplayP3());
+    canvas->DrawRect(skity::Rect::MakeWH(64.f, 64.f), paint);
+  });
+  env->SetTargetColorSpace(skity::ColorSpace{});
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto blended = skity::Color4fFromColor(bitmap.GetPixel(32, 32));
+  EXPECT_NEAR(blended.r, 1.f, 2.f / 255.f);
+  EXPECT_NEAR(blended.g, 0.5f, 2.f / 255.f);
+  EXPECT_NEAR(blended.b, 0.5f, 2.f / 255.f);
+  EXPECT_NEAR(blended.a, 1.f, 1.f / 255.f);
+
+  // CPU round trip: the readback bytes are P3-encoded (the surface's
+  // space); decode them through the CPU kernel with explicit steps and land
+  // back on the sRGB view of the blended color.
+  auto dst = std::make_shared<skity::Pixmap>(64, 64, skity::kPremul_AlphaType,
+                                             skity::ColorType::kRGBA);
+  auto steps = skity::ColorXformSteps::Resolve(skity::ColorSpace::DisplayP3(),
+                                               skity::ColorSpace{});
+  ASSERT_TRUE(skity::TransformPixels(*pixels, dst.get(), steps));
+
+  skity::Bitmap round_bitmap(dst, false);
+  auto round = skity::Color4fFromColor(round_bitmap.GetPixel(32, 32));
+  // Convert() keeps out-of-gamut values unclamped by contract; the byte
+  // round trip clamps them at quantization (the blended color's red is
+  // 1.037 in sRGB), so clamp the expectation the same way.
+  auto round_expected = skity::ColorSpace::DisplayP3().Convert(
+      skity::Color4f{1.f, 0.5f, 0.5f, 1.f}, skity::ColorSpace{});
+  auto clamp01 = [](float v) { return std::max(0.f, std::min(1.f, v)); };
+  EXPECT_NEAR(round.r, clamp01(round_expected.r), 4.f / 255.f);
+  EXPECT_NEAR(round.g, clamp01(round_expected.g), 4.f / 255.f);
+  EXPECT_NEAR(round.b, clamp01(round_expected.b), 4.f / 255.f);
+  EXPECT_NEAR(round.a, 1.f, 1.f / 255.f);
 }

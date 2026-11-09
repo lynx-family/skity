@@ -194,8 +194,9 @@ class PixmapImage : public Image {
   std::shared_ptr<Pixmap> pixmap_;
 };
 
-std::shared_ptr<Image> Image::MakeHWImage(std::shared_ptr<Texture> texture) {
-  return std::shared_ptr<Image>(new TextureImage(texture));
+std::shared_ptr<Image> Image::MakeHWImage(std::shared_ptr<Texture> texture,
+                                          ColorSpace color_space) {
+  return std::shared_ptr<Image>(new TextureImage(texture, color_space));
 }
 
 std::shared_ptr<Image> Image::MakeImage(std::shared_ptr<Pixmap> pixmap,
