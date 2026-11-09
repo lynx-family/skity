@@ -833,13 +833,15 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
   } else {
     if (is_stroke) {
       if (has_color) {
-        return arena_allocator->Make<WGSLSolidColor>(paint.GetStrokeColor());
+        return arena_allocator->Make<WGSLSolidColor>(
+            paint.GetStrokeColor(context->target_space));
       } else {
         return arena_allocator->Make<WGSLSolidVertexColor>();
       }
     } else {
       if (has_color) {
-        return arena_allocator->Make<WGSLSolidColor>(paint.GetFillColor());
+        return arena_allocator->Make<WGSLSolidColor>(
+            paint.GetFillColor(context->target_space));
       } else {
         return arena_allocator->Make<WGSLSolidVertexColor>();
       }

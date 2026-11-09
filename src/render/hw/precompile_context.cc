@@ -148,7 +148,8 @@ HWWGSLFragment* MakeColorFragment(HWDrawStepContext* ctx, const Paint& paint,
   if (!has_color) {
     fragment = arena->Make<WGSLSolidVertexColor>();
   } else {
-    fragment = arena->Make<WGSLSolidColor>(paint.GetFillColor());
+    fragment = arena->Make<WGSLSolidColor>(
+        paint.GetFillColor(ctx->context->target_space));
   }
 
   return ApplyPaintEffects(fragment, paint, ctx->context, has_fragment_mask);

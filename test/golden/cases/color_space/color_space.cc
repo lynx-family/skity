@@ -189,6 +189,45 @@ TEST(ColorSpaceGolden, P3TargetSpacePaintColor) {
   EXPECT_NEAR(result.a, 1.f, 1.f / 255.f);
 }
 
+// A paint color recorded in a DIFFERENT space than the target must actually
+// convert at draw time on the GPU (the no-op case above cannot detect a
+// missing resolution). sRGB green {0.2, 0.9, 0.2} rendered into a P3 target
+// stores the P3 encoding of that sRGB color (~131, 224, 73), visibly
+// different from the raw bytes (51, 229, 51).
+TEST(ColorSpaceGolden, P3TargetSpaceResolvesSRGBPaintColor) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  env->SetTargetColorSpace(skity::ColorSpace::DisplayP3());
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+    skity::Paint paint;
+    paint.SetStyle(skity::Paint::kFill_Style);
+    paint.SetColor4f(skity::Color4f{0.2f, 0.9f, 0.2f, 1.f},
+                     skity::ColorSpace{});
+    // Half width: a full-screen opaque SrcOver would be promoted to the
+    // initial clear (which resolves separately) and never exercise the
+    // rasterize path this case guards.
+    canvas->DrawRect(skity::Rect::MakeWH(32.f, 64.f), paint);
+  });
+  env->SetTargetColorSpace(skity::ColorSpace{});
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto expected = skity::ColorSpace{}.Convert(
+      skity::Color4f{0.2f, 0.9f, 0.2f, 1.f}, skity::ColorSpace::DisplayP3());
+  auto result = skity::Color4fFromColor(bitmap.GetPixel(16, 32));
+  EXPECT_NEAR(result.r, expected.r, 3.f / 255.f);
+  EXPECT_NEAR(result.g, expected.g, 3.f / 255.f);
+  EXPECT_NEAR(result.b, expected.b, 3.f / 255.f);
+  EXPECT_NEAR(result.a, 1.f, 1.f / 255.f);
+  // Guard against a missing resolution: the raw bytes would keep r at ~0.2.
+  EXPECT_GT(result.r, 0.4f);
+}
+
 // A linear sRGB target folds the encode stage away entirely (GPU flags:
 // decode only), so an sRGB 0.5 gray stores its linear value.
 TEST(ColorSpaceGolden, LinearTargetFoldsEncode) {
@@ -356,9 +395,20 @@ TEST(ColorSpaceGolden, P3TargetAlphaCompositingAndReadbackRoundTrip) {
 
   skity::Bitmap bitmap(pixels);
   auto blended = skity::Color4fFromColor(bitmap.GetPixel(32, 32));
-  EXPECT_NEAR(blended.r, 1.f, 2.f / 255.f);
-  EXPECT_NEAR(blended.g, 0.5f, 2.f / 255.f);
-  EXPECT_NEAR(blended.b, 0.5f, 2.f / 255.f);
+  // The clear white also resolves into the P3 target. skity's sRGB gamut
+  // constants are the ICC profile's (D50-adapted), so sRGB white lands
+  // slightly off the P3 white point (~255, 252, 224) and the blended
+  // channels fold that background in: out = dst * (1 - 0.5).
+  auto bg = skity::ColorSpace{}.Convert(skity::Color4f{1.f, 1.f, 1.f, 1.f},
+                                        skity::ColorSpace::DisplayP3());
+  auto q = [](float v) {
+    return static_cast<float>(
+               static_cast<uint8_t>(std::clamp(v * 255.f, 0.f, 255.f))) /
+           255.f;
+  };
+  EXPECT_NEAR(blended.r, 1.f, 2.f / 255.f);  // Saturates.
+  EXPECT_NEAR(blended.g, q(bg.g) * 0.5f, 2.f / 255.f);
+  EXPECT_NEAR(blended.b, q(bg.b) * 0.5f, 2.f / 255.f);
   EXPECT_NEAR(blended.a, 1.f, 1.f / 255.f);
 
   // CPU round trip: the readback bytes are P3-encoded (the surface's
@@ -373,10 +423,11 @@ TEST(ColorSpaceGolden, P3TargetAlphaCompositingAndReadbackRoundTrip) {
   skity::Bitmap round_bitmap(dst, false);
   auto round = skity::Color4fFromColor(round_bitmap.GetPixel(32, 32));
   // Convert() keeps out-of-gamut values unclamped by contract; the byte
-  // round trip clamps them at quantization (the blended color's red is
-  // 1.037 in sRGB), so clamp the expectation the same way.
-  auto round_expected = skity::ColorSpace::DisplayP3().Convert(
-      skity::Color4f{1.f, 0.5f, 0.5f, 1.f}, skity::ColorSpace{});
+  // round trip clamps them at quantization, so clamp the expectation the
+  // same way.
+  auto blended_p3 = skity::Color4f{1.f, q(bg.g) * 0.5f, q(bg.b) * 0.5f, 1.f};
+  auto round_expected =
+      skity::ColorSpace::DisplayP3().Convert(blended_p3, skity::ColorSpace{});
   auto clamp01 = [](float v) { return std::max(0.f, std::min(1.f, v)); };
   EXPECT_NEAR(round.r, clamp01(round_expected.r), 4.f / 255.f);
   EXPECT_NEAR(round.g, clamp01(round_expected.g), 4.f / 255.f);

@@ -126,6 +126,11 @@ class SKITY_API Paint {
   Vector GetStrokeColor() const;
 
   /**
+   * The stroke color resolved into the target (render surface) color space.
+   */
+  Vector GetStrokeColor(const ColorSpace& target_space) const;
+
+  /**
    *  @deprecated, use SetFillColor(Color color) instead
    */
   void SetFillColor(float r, float g, float b, float a);
@@ -136,6 +141,11 @@ class SKITY_API Paint {
   void SetFillColor(Vector const& color);
 
   Vector GetFillColor() const;
+
+  /**
+   * The fill color resolved into the target (render surface) color space.
+   */
+  Vector GetFillColor(const ColorSpace& target_space) const;
 
   void SetStrokeColor(Color color);
 
@@ -158,6 +168,12 @@ class SKITY_API Paint {
    * recorded in; defaults to sRGB.
    */
   ColorSpace GetColorSpace() const { return color_space_; }
+
+  /**
+   * Re-declares the color space of the recorded colors without touching the
+   * values; useful when copying colors between paints.
+   */
+  void SetColorSpace(ColorSpace color_space) { color_space_ = color_space; }
 
   /**
    * Returns the stroke/fill color resolved into the target (render surface)

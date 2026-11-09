@@ -100,6 +100,16 @@ Color4f Paint::GetColor4f(const ColorSpace& target_space) const {
   return ColorXformSteps::Resolve(color_space_, target_space).Apply(color);
 }
 
+Color4f Paint::GetFillColor(const ColorSpace& target_space) const {
+  Color4f color = GetFillColor();
+  return ColorXformSteps::Resolve(color_space_, target_space).Apply(color);
+}
+
+Color4f Paint::GetStrokeColor(const ColorSpace& target_space) const {
+  Color4f color = GetStrokeColor();
+  return ColorXformSteps::Resolve(color_space_, target_space).Apply(color);
+}
+
 void Paint::SetColor4f(Color4f color, ColorSpace color_space) {
   stroke_color_ = color;
   fill_color_ = color;

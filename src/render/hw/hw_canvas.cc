@@ -333,7 +333,7 @@ bool HWCanvas::TryPromoteInitialClear(const Paint& paint, const Rect* rect) {
     root_layer_->SetInitialClearColor({});
     return true;
   }
-  const auto color = paint.GetFillColor();
+  const auto color = paint.GetFillColor(surface_->GetColorSpace());
   if (mode == BlendMode::kSrc ||
       (mode == BlendMode::kSrcOver && color.a == 1.f)) {
     root_layer_->SetInitialClearColor(

@@ -292,6 +292,16 @@ TEST(ColorSpace, PaintColorSpaceRecordedAndResolvedToTarget) {
   // Legacy component setters have no space parameter; they record in sRGB.
   paint.SetColor(skity::ColorSetARGB(255, 255, 0, 0));
   EXPECT_TRUE(paint.GetColorSpace().IsSRGB());
+
+  // Explicit fill/stroke getters resolve on request.
+  paint.SetColor4f(skity::Color4f{0.2f, 0.9f, 0.2f, 1.f}, skity::ColorSpace{});
+  paint.SetStyle(skity::Paint::kStroke_Style);
+  auto stroke_resolved = paint.GetStrokeColor(skity::ColorSpace::DisplayP3());
+  auto stroke_expected = skity::ColorSpace{}.Convert(
+      skity::Color4f{0.2f, 0.9f, 0.2f, 1.f}, skity::ColorSpace::DisplayP3());
+  EXPECT_NEAR(stroke_resolved.r, stroke_expected.r, 1e-6f);
+  EXPECT_NEAR(stroke_resolved.g, stroke_expected.g, 1e-6f);
+  EXPECT_NEAR(stroke_resolved.b, stroke_expected.b, 1e-6f);
 }
 
 TEST(ColorSpace, SWCanvasResolvesColorsIntoBitmapSpace) {
