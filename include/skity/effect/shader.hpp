@@ -74,12 +74,12 @@ class SKITY_API Shader : public Flattenable {
   /**
    * Declares the color space of the colors this shader emits; gradient
    * shaders use it for their stop colors (all stops share one space, the
-   * default is sRGB). Image shaders take the space from their pixmap
-   * instead and ignore this call.
+   * default is sRGB). Image shaders take the space from their pixmap and
+   * ignore this value.
    */
-  virtual void SetColorSpace(ColorSpace color_space) {}
+  void SetColorSpace(ColorSpace color_space) { color_space_ = color_space; }
 
-  virtual ColorSpace GetColorSpace() const { return ColorSpace{}; }
+  ColorSpace GetColorSpace() const { return color_space_; }
 
   virtual const std::shared_ptr<Image>* AsImage() const;
 
@@ -169,6 +169,7 @@ class SKITY_API Shader : public Flattenable {
 
  private:
   Matrix local_matrix_ = Matrix(1.f);
+  ColorSpace color_space_{};
 };
 
 }  // namespace skity
