@@ -75,8 +75,7 @@ void DrawPaintSpaceSwatches(Canvas* canvas) {
   // A pure power curve over the sRGB gamut: only the transfer function
   // differs from sRGB.
   const float gamma22_tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
-  auto gamma22 =
-      ColorSpace::MakeRGB(gamma22_tf, ColorSpace::SRGB()->gamut_xyz);
+  auto gamma22 = ColorSpace::MakeRGB(gamma22_tf, ColorSpace::SRGB()->gamut_xyz);
 
   std::shared_ptr<const ColorSpace> spaces[4] = {
       ColorSpace::SRGB(), ColorSpace::SRGBLinear(), ColorSpace::DisplayP3(),
