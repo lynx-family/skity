@@ -125,6 +125,19 @@ SKITY_C_API void skity_shader_set_local_matrix(skity_shader shader,
                                                const skity_matrix* matrix);
 
 /**
+ * @brief Declare the color space of the shader's colors.
+ *
+ * Gradient shaders use it for their stop colors (all stops share one
+ * space); the default is sRGB. Image shaders take the space from their
+ * pixmap and ignore this call. Mirrors skity::Shader::SetColorSpace.
+ *
+ * @param shader  shader handle
+ * @param info    color space descriptor, NULL resets to sRGB
+ */
+SKITY_C_API void skity_shader_set_color_space(
+    skity_shader shader, const skity_color_space_info* info);
+
+/**
  * @brief Read the shader's current local matrix.
  *
  * Mirrors skity::Shader::GetLocalMatrix.

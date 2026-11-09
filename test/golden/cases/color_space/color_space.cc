@@ -434,3 +434,49 @@ TEST(ColorSpaceGolden, P3TargetAlphaCompositingAndReadbackRoundTrip) {
   EXPECT_NEAR(round.b, clamp01(round_expected.b), 4.f / 255.f);
   EXPECT_NEAR(round.a, 1.f, 1.f / 255.f);
 }
+
+// Gradient stops declared in a non-sRGB space resolve into the target: a
+// gradient whose stops are the P3 encodings of sRGB red/blue, declared in
+// P3, lands back on the original sRGB colors on an sRGB target (sampled in
+// the clamped regions outside the gradient segment).
+TEST(ColorSpaceGolden, P3DeclaredStopsResolveIntoSRGBTarget) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+
+    const skity::Color4f srgb_red{1.f, 0.f, 0.f, 1.f};
+    const skity::Color4f srgb_blue{0.f, 0.f, 1.f, 1.f};
+    const skity::Vec4 stops[2] = {
+        skity::ColorSpace::SRGB().Convert(srgb_red,
+                                          skity::ColorSpace::DisplayP3()),
+        skity::ColorSpace::SRGB().Convert(srgb_blue,
+                                          skity::ColorSpace::DisplayP3())};
+    const skity::Point pts[2] = {{16.f, 0.f, 0.f, 1.f}, {48.f, 0.f, 0.f, 1.f}};
+
+    auto shader = skity::Shader::MakeLinear(pts, stops, nullptr, 2);
+    shader->SetColorSpace(skity::ColorSpace::DisplayP3());
+
+    skity::Paint paint;
+    paint.SetShader(shader);
+    canvas->DrawRect(skity::Rect::MakeWH(64.f, 64.f), paint);
+  });
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto left = skity::Color4fFromColor(bitmap.GetPixel(8, 32));
+  EXPECT_NEAR(left.r, 1.f, 3.f / 255.f);
+  EXPECT_NEAR(left.g, 0.f, 3.f / 255.f);
+  EXPECT_NEAR(left.b, 0.f, 3.f / 255.f);
+  EXPECT_NEAR(left.a, 1.f, 1.f / 255.f);
+
+  auto right = skity::Color4fFromColor(bitmap.GetPixel(56, 32));
+  EXPECT_NEAR(right.r, 0.f, 3.f / 255.f);
+  EXPECT_NEAR(right.g, 0.f, 3.f / 255.f);
+  EXPECT_NEAR(right.b, 1.f, 3.f / 255.f);
+  EXPECT_NEAR(right.a, 1.f, 1.f / 255.f);
+}

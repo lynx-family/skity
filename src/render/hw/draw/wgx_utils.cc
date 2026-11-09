@@ -809,14 +809,16 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
       paint.GetShader()->AsGradient(&info);
       info.local_matrix = local_matrix;
 
-      // Gradient stops are recorded in sRGB; resolve them into the target
-      // space so interpolation happens in the space the surface encodes
-      // (stop-level color spaces are a future extension).
-      if (!context->target_space.IsSRGB()) {
+      // Gradient stops resolve from their declared space (all stops share
+      // one, default sRGB) into the target space, so interpolation happens
+      // in the space the surface encodes.
+      {
         ColorXformSteps stop_steps =
-            ColorXformSteps::Resolve(ColorSpace{}, context->target_space);
-        for (auto& stop : info.colors) {
-          stop = stop_steps.Apply(stop);
+            ColorXformSteps::Resolve(info.color_space, context->target_space);
+        if (!stop_steps.IsNoop()) {
+          for (auto& stop : info.colors) {
+            stop = stop_steps.Apply(stop);
+          }
         }
       }
 

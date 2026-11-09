@@ -741,14 +741,16 @@ std::unique_ptr<SWSpanBrush> SWCanvas::GenerateBrush(
     Shader::GradientInfo info{};
     Shader::GradientType type = shader->AsGradient(&info);
 
-    // Gradient stops are recorded in sRGB; resolve them into the target
-    // (bitmap) color space so interpolation happens in the space the
-    // surface encodes (stop-level color spaces are a future extension).
-    if (!bitmap_->GetPixmap()->GetColorSpace().IsSRGB()) {
+    // Gradient stops resolve from their declared space (all stops share
+    // one, default sRGB) into the target (bitmap) color space, so
+    // interpolation happens in the space the surface encodes.
+    {
       ColorXformSteps stop_steps = ColorXformSteps::Resolve(
-          ColorSpace{}, bitmap_->GetPixmap()->GetColorSpace());
-      for (auto& stop : info.colors) {
-        stop = stop_steps.Apply(stop);
+          info.color_space, bitmap_->GetPixmap()->GetColorSpace());
+      if (!stop_steps.IsNoop()) {
+        for (auto& stop : info.colors) {
+          stop = stop_steps.Apply(stop);
+        }
       }
     }
 

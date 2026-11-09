@@ -57,6 +57,7 @@ endif()
 add_executable(skity_unit_test
     base/lru_cache_test.cc
     effect/color_filter_test.cc
+    effect/gradient_color_space_test.cc
     effect/image_filter_test.cc
     effect/mask_filter_test.cc
     effect/shader_test.cc

@@ -45,7 +45,9 @@ void GradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
     flags |= kHasPosition_GSF;
   }
 
-  // we do not have color space
+  if (!info_.color_space.IsSRGB()) {
+    flags |= kHasColorSpace_GSF;
+  }
 
   // premul alpha
   if (info_.gradientFlags != 0) {
@@ -64,6 +66,15 @@ void GradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
       info_.color_offsets.empty() ? nullptr : info_.color_offsets.data();
 
   buffer.WriteColor4fArray(colors, color_count);
+
+  if (flags & kHasColorSpace_GSF) {
+    // 16 floats: the transfer function (7) + the gamut matrix (9).
+    float space[16];
+    std::memcpy(space, info_.color_space.transfer_fn, sizeof(float) * 7);
+    std::memcpy(space + 7, info_.color_space.gamut_xyz, sizeof(float) * 9);
+    buffer.WriteByteArray(reinterpret_cast<const uint8_t *>(space),
+                          sizeof(space));
+  }
 
   if (positions) {
     buffer.WriteFloatArray(positions, color_count);
@@ -91,6 +102,7 @@ void GradientShader::CopyInfo(GradientInfo *info) const {
   info->local_matrix = GetLocalMatrix();
   info->tile_mode = info_.tile_mode;
   info->gradientFlags = info_.gradientFlags;
+  info->color_space = info_.color_space;
 }
 
 LinearGradientShader::LinearGradientShader(const Point *pts, const Vec4 *colors,

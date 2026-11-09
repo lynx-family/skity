@@ -114,7 +114,8 @@ void SWSpanBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
     }
 
     if (color_filter_) {
-      color = color_filter_->FilterColor(color);
+      color = color_filter_->FilterColor(color,
+                                         bitmap_->GetPixmap()->GetColorSpace());
     }
     render_target_.BlendPixelH(x, y, color, length, blend_);
   } else {
@@ -127,7 +128,8 @@ void SWSpanBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
       }
 
       if (color_filter_) {
-        color = color_filter_->FilterColor(color);
+        color = color_filter_->FilterColor(
+            color, bitmap_->GetPixmap()->GetColorSpace());
       }
 
       pm_colors[l] = color;

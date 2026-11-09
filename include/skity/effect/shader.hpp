@@ -9,6 +9,7 @@
 #include <memory>
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/point.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/image.hpp>
 #include <skity/graphic/sampling_options.hpp>
 #include <skity/graphic/tile_mode.hpp>
@@ -62,9 +63,23 @@ class SKITY_API Shader : public Flattenable {
      *
      */
     int32_t gradientFlags;
+    /**
+     * The color space the stop colors are recorded in; defaults to sRGB.
+     */
+    ColorSpace color_space;
   };
 
   virtual GradientType AsGradient(GradientInfo* info) const;
+
+  /**
+   * Declares the color space of the colors this shader emits; gradient
+   * shaders use it for their stop colors (all stops share one space, the
+   * default is sRGB). Image shaders take the space from their pixmap
+   * instead and ignore this call.
+   */
+  virtual void SetColorSpace(ColorSpace color_space) {}
+
+  virtual ColorSpace GetColorSpace() const { return ColorSpace{}; }
 
   virtual const std::shared_ptr<Image>* AsImage() const;
 

@@ -20,6 +20,22 @@ skity::Shader* shader_of(skity_shader handle) {
   return w ? static_cast<skity::Shader*>(w->impl.get()) : nullptr;
 }
 
+skity::ColorSpace ColorSpaceFromCInfo(const skity_color_space_info* info) {
+  switch (info->kind) {
+    case SKITY_COLOR_SPACE_SRGB:
+      return skity::ColorSpace::SRGB();
+    case SKITY_COLOR_SPACE_SRGB_LINEAR:
+      return skity::ColorSpace::SRGBLinear();
+    case SKITY_COLOR_SPACE_DISPLAY_P3:
+      return skity::ColorSpace::DisplayP3();
+    case SKITY_COLOR_SPACE_PARAMETRIC:
+      break;
+  }
+  auto parametric =
+      skity::ColorSpace::MakeRGB(info->transfer_fn, info->gamut_xyz);
+  return parametric.value_or(skity::ColorSpace::SRGB());
+}
+
 }  // namespace
 
 extern "C" {
@@ -122,6 +138,17 @@ void skity_shader_set_local_matrix(skity_shader shader,
                         ? *reinterpret_cast<const skity::Matrix*>(matrix)
                         : skity::Matrix{};
   s->SetLocalMatrix(m);
+}
+
+void skity_shader_set_color_space(skity_shader shader,
+                                  const skity_color_space_info* info) {
+  auto* s = shader_of(shader);
+  if (s == nullptr) return;
+  skity::ColorSpace cs;
+  if (info != nullptr) {
+    cs = ColorSpaceFromCInfo(info);
+  }
+  s->SetColorSpace(cs);
 }
 
 void skity_shader_get_local_matrix(skity_shader shader, skity_matrix* out) {

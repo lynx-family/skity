@@ -11,6 +11,7 @@
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/point.hpp>
 #include <skity/graphic/blend_mode.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/color_type.hpp>
 #include <tuple>
 #include <vector>
@@ -29,7 +30,10 @@ enum class ColorFilterType : int32_t {
 class ColorFilterBase : public ColorFilter {
  public:
 #ifdef SKITY_CPU
-  virtual PMColor OnFilterColor(PMColor c) const { return c; }
+  virtual PMColor OnFilterColor(PMColor c,
+                                const ColorSpace& target_space) const {
+    return c;
+  }
 #endif
 
   virtual ~ColorFilterBase() = default;
@@ -55,11 +59,17 @@ bool operator==(const ColorFilterBase& a, const ColorFilterBase& b);
 class BlendColorFilter : public ColorFilterBase {
  public:
 #ifdef SKITY_CPU
-  PMColor OnFilterColor(PMColor c) const override;
+  PMColor OnFilterColor(PMColor c,
+                        const ColorSpace& target_space) const override;
 #endif
+  // Records the color in sRGB.
   BlendColorFilter(Color c, BlendMode m);
+  // Records the unpremultiplied color in color_space.
+  BlendColorFilter(Color4f c, BlendMode m, ColorSpace color_space);
 
-  Color GetColor() const { return color_; }
+  Color GetColor() const { return Color4fToColor(color_); }
+  Color4f GetColor4f() const { return color_; }
+  const ColorSpace& GetColorSpace() const { return color_space_; }
   BlendMode GetBlendMode() const { return mode_; }
 
   ColorFilterType GetType() const override { return ColorFilterType::kBlend; }
@@ -73,15 +83,20 @@ class BlendColorFilter : public ColorFilterBase {
   void FlattenToBuffer(WriteBuffer& buffer) const override;
 
  private:
-  Color color_;
-  Color pm_color_;
+  PMColor ResolvedPMColor(const ColorSpace& target_space) const;
+
+  Color4f color_;
+  ColorSpace color_space_{};
+  mutable PMColor cached_pm_ = 0;
+  mutable ColorSpace cached_target_{};
+  mutable bool cached_valid_ = false;
   BlendMode mode_;
 };
 
 class MatrixColorFilter : public ColorFilterBase {
  public:
 #ifdef SKITY_CPU
-  PMColor OnFilterColor(PMColor c) const override;
+  PMColor OnFilterColor(PMColor c, const ColorSpace&) const override;
 #endif
 
   explicit MatrixColorFilter(const float row_major[20]) {
@@ -131,7 +146,7 @@ class SRGBGammaColorFilter : public ColorFilterBase {
  public:
   explicit SRGBGammaColorFilter(ColorFilterType type) : type_(type) {}
 #ifdef SKITY_CPU
-  PMColor OnFilterColor(PMColor c) const override;
+  PMColor OnFilterColor(PMColor c, const ColorSpace&) const override;
 #endif
   ColorFilterType GetType() const override { return type_; }
 
@@ -148,7 +163,7 @@ class SRGBGammaColorFilter : public ColorFilterBase {
 class ComposeColorFilter : public ColorFilterBase {
  public:
 #ifdef SKITY_CPU
-  PMColor OnFilterColor(PMColor c) const override;
+  PMColor OnFilterColor(PMColor c, const ColorSpace&) const override;
 #endif
 
   ComposeColorFilter(std::shared_ptr<ColorFilter> outer,

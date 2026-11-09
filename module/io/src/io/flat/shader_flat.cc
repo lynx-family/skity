@@ -2,6 +2,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <cstring>
 #include <skity/effect/shader.hpp>
 #include <skity/geometry/scalar.hpp>
 #include <vector>
@@ -68,7 +69,13 @@ bool ReadGradientInfo(ReadBuffer& buffer, Shader::GradientInfo& info) {
   }
 
   if (flags & kHasColorSpace_GSF) {
-    (void)buffer.ReadByteArrayAsData();  // skip color space
+    auto data = buffer.ReadByteArrayAsData();
+    if (!buffer.Validate(data && data->Size() == sizeof(float) * 16)) {
+      return false;
+    }
+    auto space = static_cast<const float*>(data->RawData());
+    std::memcpy(info.color_space.transfer_fn, space, sizeof(float) * 7);
+    std::memcpy(info.color_space.gamut_xyz, space + 7, sizeof(float) * 9);
   }
 
   if (flags & kHasPosition_GSF) {
@@ -204,6 +211,10 @@ std::shared_ptr<Shader> ReadConicalGradient(ReadBuffer& buffer) {
     core_bridge::SetShaderLocalMatrix(shader, info.local_matrix);
   }
 
+  if (!info.color_space.IsSRGB()) {
+    core_bridge::SetShaderColorSpace(shader, info.color_space);
+  }
+
   return shader;
 }
 
@@ -244,6 +255,10 @@ std::shared_ptr<Shader> ReadLinearGradient(ReadBuffer& buffer) {
     core_bridge::SetShaderLocalMatrix(shader, info.local_matrix);
   }
 
+  if (!info.color_space.IsSRGB()) {
+    core_bridge::SetShaderColorSpace(shader, info.color_space);
+  }
+
   return shader;
 }
 
@@ -269,6 +284,10 @@ std::shared_ptr<Shader> ReadRadialGradient(ReadBuffer& buffer) {
 
   if (!core_bridge::MatrixIsIdentity(info.local_matrix)) {
     core_bridge::SetShaderLocalMatrix(shader, info.local_matrix);
+  }
+
+  if (!info.color_space.IsSRGB()) {
+    core_bridge::SetShaderColorSpace(shader, info.color_space);
   }
 
   return shader;
@@ -301,6 +320,10 @@ std::shared_ptr<Shader> ReadSweepGradient(ReadBuffer& buffer) {
 
   if (!core_bridge::MatrixIsIdentity(info.local_matrix)) {
     core_bridge::SetShaderLocalMatrix(shader, info.local_matrix);
+  }
+
+  if (!info.color_space.IsSRGB()) {
+    core_bridge::SetShaderColorSpace(shader, info.color_space);
   }
 
   return shader;

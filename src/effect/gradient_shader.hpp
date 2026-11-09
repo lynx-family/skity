@@ -44,6 +44,13 @@ class GradientShader : public Shader {
 
   GradientType AsGradient(GradientInfo* info) const override;
 
+  // Declares the color space of the stop colors; see Shader::SetColorSpace.
+  void SetColorSpace(ColorSpace color_space) override {
+    info_.color_space = color_space;
+  }
+
+  ColorSpace GetColorSpace() const override { return info_.color_space; }
+
   void FlattenToBuffer(WriteBuffer& buffer) const override;
 
  protected:
