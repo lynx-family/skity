@@ -142,6 +142,7 @@ struct GlobalVarInfo {
   std::optional<uint32_t> group;
   std::optional<uint32_t> binding;
   bool is_wrapped_buffer = false;
+  bool read_only = false;
 };
 
 struct ValueInfo {

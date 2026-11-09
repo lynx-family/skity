@@ -81,6 +81,8 @@ class AstPrinter : public ast::AstVisitor {
 
   void WriteType(const ast::Type& type);
 
+  void WriteResourceParameter(ast::Var* variable);
+
   void WriteAttributes(const std::vector<ast::Attribute*>& attributes,
                        const ast::Type& type, AttrTarget target,
                        bool entry_point_input, bool entry_point_output);

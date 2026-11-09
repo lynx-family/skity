@@ -381,27 +381,7 @@ void AstPrinter::Visit(ast::Function* function) {
         ss_ << ",";
       }
 
-      bool is_const = true;
-
-      if (input->type.expr) {
-        const auto& type_name = input->type.expr->ident->name;
-        if (type_name == "sampler" || type_name == "texture_1d" ||
-            type_name == "texture_2d" || type_name == "texture_3d") {
-          is_const = false;
-        }
-      }
-
-      if (is_const) {
-        ss_ << "constant ";
-      }
-
-      WriteType(input->type);
-      if (is_const) {
-        ss_ << "&";
-      }
-      ss_ << " ";
-
-      input->name->Accept(this);
+      WriteResourceParameter(input);
 
       auto attrs = GetAttributes(input->attributes, input->type,
                                  AttrTarget::kParameter, true, false);
@@ -421,29 +401,10 @@ void AstPrinter::Visit(ast::Function* function) {
     const auto& uniforms = function_inputs_[function->name->name];
 
     for (auto& uniform : uniforms) {
-      ss_ << ",";
-
-      bool is_const = true;
-
-      if (uniform->type.expr) {
-        const auto& type_name = uniform->type.expr->ident->name;
-        if (type_name == "sampler" || type_name == "texture_1d" ||
-            type_name == "texture_2d" || type_name == "texture_3d") {
-          is_const = false;
-        }
+      if (param_index++ != 0) {
+        ss_ << ",";
       }
-
-      if (is_const) {
-        ss_ << "constant ";
-      }
-
-      WriteType(uniform->type);
-      if (is_const) {
-        ss_ << "&";
-      }
-      ss_ << " ";
-
-      uniform->name->Accept(this);
+      WriteResourceParameter(uniform);
     }
   }
 
@@ -774,6 +735,41 @@ bool AstPrinter::Write() {
   func_->GetFunction()->Accept(this);
 
   return !has_error_;
+}
+
+void AstPrinter::WriteResourceParameter(ast::Var* variable) {
+  auto* address_space = variable->address_space;
+  const bool storage =
+      address_space &&
+      address_space->GetType() == ast::ExpressionType::kIdentifier &&
+      static_cast<ast::IdentifierExp*>(address_space)->ident->name == "storage";
+  if (storage) {
+    // Reflection restricts storage bindings to root runtime arrays.
+    ss_ << "const device ";
+    WriteType(ast::Type{variable->type.AsArray().type});
+    ss_ << "* ";
+  } else {
+    bool is_const = true;
+
+    if (variable->type.expr) {
+      const auto& type_name = variable->type.expr->ident->name;
+      if (type_name == "sampler" || type_name == "texture_1d" ||
+          type_name == "texture_2d" || type_name == "texture_3d") {
+        is_const = false;
+      }
+    }
+
+    if (is_const) {
+      ss_ << "constant ";
+    }
+
+    WriteType(variable->type);
+    if (is_const) {
+      ss_ << "&";
+    }
+    ss_ << " ";
+  }
+  variable->name->Accept(this);
 }
 
 void AstPrinter::WriteType(const ast::Type& type) {

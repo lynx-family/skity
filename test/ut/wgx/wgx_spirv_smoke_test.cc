@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -146,7 +147,8 @@ bool ContainsDecorationValue(const std::vector<uint32_t>& words,
 }
 
 bool ContainsMemberDecoration(const std::vector<uint32_t>& words,
-                              SpvDecoration decoration) {
+                              SpvDecoration decoration,
+                              std::optional<uint32_t> value = std::nullopt) {
   size_t offset = 5u;
   while (offset < words.size()) {
     const uint32_t inst = words[offset];
@@ -159,7 +161,8 @@ bool ContainsMemberDecoration(const std::vector<uint32_t>& words,
     }
 
     if (opcode == SpvOpMemberDecorate && word_count >= 4u &&
-        words[offset + 3u] == static_cast<uint32_t>(decoration)) {
+        words[offset + 3u] == static_cast<uint32_t>(decoration) &&
+        (!value || (word_count >= 5u && words[offset + 4u] == *value))) {
       return true;
     }
 
@@ -2955,6 +2958,45 @@ fn vs_main() -> @builtin(position) vec4<f32> {
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationDescriptorSet));
   EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBinding));
   EXPECT_TRUE(ContainsBuiltInDecoration(words, SpvBuiltInPosition));
+}
+
+TEST(WgxSpirvSmokeTest, ReadOnlyRuntimeMatricesHaveStorageLayout) {
+  for (bool record : {false, true}) {
+    std::string source =
+        "struct Record { pad: f32, transform: mat4x4<f32>, };\n";
+    source += "@group(3) @binding(6) var<storage, read> transforms: array<";
+    source += record ? "Record>;\n" : "mat4x4<f32>>;\n";
+    source += R"(
+fn position(index: u32) -> vec4<f32> { return transforms[index])";
+    source += record ? ".transform" : "";
+    source += R"( * vec4<f32>(1.0, 2.0, 0.0, 1.0); }
+@vertex fn vs_main(@location(0) index: u32) -> @builtin(position) vec4<f32> {
+  return position(index);
+})";
+    auto program = wgx::Program::Parse(source);
+    ASSERT_FALSE(program->GetDiagnosis().has_value());
+    auto result = program->WriteToSpirv("vs_main", {});
+    ASSERT_TRUE(result.success);
+    const auto& words = result.spirv;
+    EXPECT_TRUE(ContainsInstruction(words, SpvOpTypeRuntimeArray));
+    EXPECT_TRUE(
+        ContainsVariableWithStorageClass(words, SpvStorageClassStorageBuffer));
+    EXPECT_TRUE(ContainsDecorationValue(words, SpvDecorationDescriptorSet, 3));
+    EXPECT_TRUE(ContainsDecorationValue(words, SpvDecorationBinding, 6));
+    EXPECT_TRUE(ContainsDecoration(words, SpvDecorationNonWritable));
+    EXPECT_TRUE(ContainsDecoration(words, SpvDecorationBlock));
+    EXPECT_TRUE(ContainsDecorationValue(words, SpvDecorationArrayStride,
+                                        record ? 80 : 64));
+    EXPECT_TRUE(ContainsMemberDecoration(words, SpvDecorationMatrixStride, 16));
+    EXPECT_TRUE(ContainsMemberDecoration(words, SpvDecorationColMajor));
+    if (record) {
+      EXPECT_TRUE(ContainsMemberDecoration(words, SpvDecorationOffset, 16));
+    }
+    EXPECT_FALSE(
+        ContainsStoreToStorageClass(words, SpvStorageClassStorageBuffer));
+    DumpSpirvBinary(
+        record ? "wgx_storage_record.spv" : "wgx_storage_matrix.spv", words);
+  }
 }
 
 /**

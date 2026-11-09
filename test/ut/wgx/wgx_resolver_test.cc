@@ -328,17 +328,17 @@ fn vs_main() -> @builtin(position) vec4<f32> {
             std::string::npos);
 }
 
-TEST_F(ResolverTest, ReportsInvalidArrayDeclaration) {
+TEST_F(ResolverTest, ReportsInvalidArrayTemplateArgCount) {
   auto result = Resolve(R"(
 @vertex
 fn vs_main() -> @builtin(position) vec4<f32> {
-  var bad: array<f32>;
+  var bad: array<f32, 4, 8>;
   return vec4<f32>(0.0, 0.0, 0.0, 1.0);
 }
 )");
 
   ASSERT_FALSE(result.diagnostics.empty());
-  EXPECT_NE(result.diagnostics.front().message.find("array expects 2"),
+  EXPECT_NE(result.diagnostics.front().message.find("array expects 1 or 2"),
             std::string::npos);
 }
 

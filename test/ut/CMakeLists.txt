@@ -92,6 +92,7 @@ add_executable(skity_unit_test
     wgx/wgx_parser_test.cc
     wgx/wgx_resolver_test.cc
     wgx/wgx_uniform_layout_test.cc
+    wgx/wgx_runtime_array_test.cc
     render/resource_cache_test.cc
     render/shape_test.cc
     recorder/display_list_test.cc
@@ -283,6 +284,13 @@ endif()
 
 target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
 target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_MTL_BACKEND)
+  target_sources(skity_unit_test PRIVATE wgx/wgx_metal_storage_test.mm)
+  set_source_files_properties(wgx/wgx_metal_storage_test.mm
+      PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+  target_link_libraries(skity_unit_test PRIVATE "-framework Metal")
+endif()
 
 if (${WGX_SPIRV_BACKEND})
     target_sources(skity_unit_test PRIVATE
