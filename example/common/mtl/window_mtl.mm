@@ -57,7 +57,12 @@ GLFWwindow* WindowMTL::CreateWindowHandler() {
   } else {
     metal_layer.contentsScale = [[NSScreen mainScreen] backingScaleFactor];
   }
-  metal_layer.colorspace = oc_window.colorSpace.CGColorSpace;
+  // skity renders sRGB-encoded bytes into this layer (the example surface
+  // uses the default color space), so the layer must declare sRGB to the
+  // compositor. Inheriting the window's space makes wide gamut displays
+  // reinterpret the bytes as Display P3: everything presents oversaturated
+  // and swatch differences get perceptually compressed.
+  metal_layer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
   metal_layer.framebufferOnly = NO;
 
   oc_window.contentView.layer = metal_layer;
