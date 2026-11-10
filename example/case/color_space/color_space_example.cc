@@ -48,6 +48,7 @@ void DrawTaggedSwatchRows(Canvas* canvas) {
   } rows[] = {
       {"sRGB", ColorSpace{}},
       {"Display P3", ColorSpace::DisplayP3()},
+      {"Adobe RGB", ColorSpace::AdobeRGB()},
       {"linear sRGB", ColorSpace::SRGBLinear()},
   };
 
@@ -76,8 +77,8 @@ void DrawPaintSpaceSwatches(Canvas* canvas) {
   const float gamma22_tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
   auto gamma22 = ColorSpace::MakeRGB(gamma22_tf, ColorSpace{}.gamut_xyz);
 
-  ColorSpace spaces[4] = {ColorSpace{}, ColorSpace::SRGBLinear(),
-                          ColorSpace::DisplayP3(),
+  ColorSpace spaces[5] = {ColorSpace{}, ColorSpace::SRGBLinear(),
+                          ColorSpace::DisplayP3(), ColorSpace::AdobeRGB(),
                           gamma22 ? *gamma22 : ColorSpace{}};
   const Color4f row_colors[2] = {
       Color4f{1.f, 0.25f, 0.1f, 1.f},  // moderate orange
@@ -85,29 +86,34 @@ void DrawPaintSpaceSwatches(Canvas* canvas) {
   };
 
   for (size_t row = 0; row < 2; row++) {
-    float y = 248.f + row * 80.f;
+    float y = 320.f + row * 80.f;
     float x = 16.f;
     for (const auto& space : spaces) {
       Paint paint;
       paint.SetColor4f(row_colors[row], space);
-      canvas->DrawRect(Rect::MakeXYWH(x, y, 180.f, 72.f), paint);
-      x += 196.f;
+      canvas->DrawRect(Rect::MakeXYWH(x, y, 144.f, 72.f), paint);
+      x += 156.f;
     }
   }
 }
 
-// Panel 3: the Display P3 red primary is outside the sRGB gamut. The left
-// swatch records P3 red and shows the closest sRGB rendering after the
-// decode; the right swatch is sRGB red itself. The visible gap between
-// them is exactly the part of P3 that sRGB cannot represent.
+// Panel 3: wide gamut green primaries against sRGB green. The Adobe RGB
+// green primary is the farthest outside sRGB of the built-in spaces, so
+// the left swatch shows the most muted sRGB rendering, Display P3 sits in
+// between, and the right swatch is sRGB green itself; the gaps are exactly
+// the parts of each gamut that sRGB cannot represent.
 void DrawPrimaryComparison(Canvas* canvas) {
-  Paint p3_red;
-  p3_red.SetColor4f(Color4f{1.f, 0.f, 0.f, 1.f}, ColorSpace::DisplayP3());
-  canvas->DrawRect(Rect::MakeXYWH(16.f, 416.f, 372.f, 152.f), p3_red);
+  Paint adobe_green;
+  adobe_green.SetColor4f(Color4f{0.f, 1.f, 0.f, 1.f}, ColorSpace::AdobeRGB());
+  canvas->DrawRect(Rect::MakeXYWH(16.f, 488.f, 244.f, 112.f), adobe_green);
 
-  Paint srgb_red;
-  srgb_red.SetColor4f(Color4f{1.f, 0.f, 0.f, 1.f}, ColorSpace{});
-  canvas->DrawRect(Rect::MakeXYWH(412.f, 416.f, 372.f, 152.f), srgb_red);
+  Paint p3_green;
+  p3_green.SetColor4f(Color4f{0.f, 1.f, 0.f, 1.f}, ColorSpace::DisplayP3());
+  canvas->DrawRect(Rect::MakeXYWH(272.f, 488.f, 244.f, 112.f), p3_green);
+
+  Paint srgb_green;
+  srgb_green.SetColor4f(Color4f{0.f, 1.f, 0.f, 1.f}, ColorSpace{});
+  canvas->DrawRect(Rect::MakeXYWH(528.f, 488.f, 256.f, 112.f), srgb_green);
 }
 
 // Panel 4: hues sampled around the Display P3 gamut. Every swatch is
@@ -126,7 +132,7 @@ void DrawP3HueStrip(Canvas* canvas) {
   for (size_t i = 0; i < kHueCount; i++) {
     Paint paint;
     paint.SetColor4f(hues[i], ColorSpace::DisplayP3());
-    canvas->DrawRect(Rect::MakeXYWH(x, 600.f, 89.f, 184.f), paint);
+    canvas->DrawRect(Rect::MakeXYWH(x, 616.f, 89.f, 168.f), paint);
     x += 96.f;
   }
 }
@@ -147,10 +153,11 @@ void DrawExportScene(Canvas* canvas) {
 void draw_color_space_example(Canvas* canvas) {
   canvas->Clear(Color_WHITE);
 
-  // Top three rows: identical bytes tagged sRGB / Display P3 / linear.
+  // Top four rows: identical bytes tagged sRGB / Display P3 / Adobe RGB /
+  // linear.
   DrawTaggedSwatchRows(canvas);
-  // Two paint colors recorded in sRGB / linear / P3 / gamma 2.2 spaces:
-  // transfer-function differences dominate the orange row, gamut
+  // Two paint colors recorded in sRGB / linear / P3 / Adobe RGB / gamma 2.2
+  // spaces: transfer-function differences dominate the orange row, gamut
   // differences dominate the green row.
   DrawPaintSpaceSwatches(canvas);
   // P3 red primary vs sRGB red: the visible gap is the wide gamut part.

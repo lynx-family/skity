@@ -480,3 +480,86 @@ TEST(ColorSpaceGolden, P3DeclaredStopsResolveIntoSRGBTarget) {
   EXPECT_NEAR(right.b, 1.f, 3.f / 255.f);
   EXPECT_NEAR(right.a, 1.f, 1.f / 255.f);
 }
+
+// Adobe RGB (1998): a gamma 2.2 space whose green primary sits well outside
+// the sRGB gamut. An AdobeRGB-tagged image storing the CPU-converted
+// representation of an sRGB color decodes back to that color on an sRGB
+// target (parametric decode + gamut both active; the encode folds because
+// the target curve is sRGB).
+TEST(ColorSpaceGolden, AdobeRGBImageDecode) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+
+    const skity::Color4f source{0.3f, 0.6f, 0.2f, 1.f};
+    auto image = MakeSolidImage(64, 64,
+                                skity::ColorSpace::SRGB().Convert(
+                                    source, skity::ColorSpace::AdobeRGB()),
+                                skity::ColorSpace::AdobeRGB());
+    canvas->DrawImageRect(image, skity::Rect::MakeWH(64.f, 64.f),
+                          skity::Rect::MakeWH(64.f, 64.f),
+                          skity::SamplingOptions{});
+  });
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto result = skity::Color4fFromColor(bitmap.GetPixel(32, 32));
+  EXPECT_NEAR(result.r, 0.3f, 3.f / 255.f);
+  EXPECT_NEAR(result.g, 0.6f, 3.f / 255.f);
+  EXPECT_NEAR(result.b, 0.2f, 3.f / 255.f);
+  EXPECT_NEAR(result.a, 1.f, 1.f / 255.f);
+}
+
+// On an AdobeRGB target, an AdobeRGB-tagged image passes through byte
+// exactly and an sRGB-recorded paint color resolves into its AdobeRGB
+// encoding (a different gamut AND a different transfer curve than the
+// previous golden targets).
+TEST(ColorSpaceGolden, AdobeRGBTargetPassthroughAndPaint) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  env->SetTargetColorSpace(skity::ColorSpace::AdobeRGB());
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+
+    auto green = MakeSolidImage(32, 64, skity::Color4f{0.f, 1.f, 0.f, 1.f},
+                                skity::ColorSpace::AdobeRGB());
+    canvas->DrawImageRect(green, skity::Rect::MakeWH(32.f, 64.f),
+                          skity::Rect::MakeXYWH(0.f, 0.f, 32.f, 64.f),
+                          skity::SamplingOptions{});
+
+    // Half width keeps the paint fill on the rasterize path (a full-screen
+    // opaque fill would be promoted to the initial clear).
+    skity::Paint paint;
+    paint.SetStyle(skity::Paint::kFill_Style);
+    paint.SetColor4f(skity::Color4f{1.f, 0.f, 0.f, 1.f}, skity::ColorSpace{});
+    canvas->DrawRect(skity::Rect::MakeXYWH(32.f, 0.f, 32.f, 64.f), paint);
+  });
+  env->SetTargetColorSpace(skity::ColorSpace{});
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  // AdobeRGB green stores byte exactly (its primary is representable).
+  auto green = skity::Color4fFromColor(bitmap.GetPixel(16, 32));
+  EXPECT_EQ(green.g, 1.f);
+  EXPECT_EQ(green.r, 0.f);
+  EXPECT_EQ(green.b, 0.f);
+  EXPECT_EQ(green.a, 1.f);
+
+  // sRGB red resolves into its AdobeRGB encoding.
+  auto expected = skity::ColorSpace{}.Convert(
+      skity::Color4f{1.f, 0.f, 0.f, 1.f}, skity::ColorSpace::AdobeRGB());
+  auto red = skity::Color4fFromColor(bitmap.GetPixel(48, 32));
+  EXPECT_NEAR(red.r, expected.r, 3.f / 255.f);
+  EXPECT_NEAR(red.g, expected.g, 3.f / 255.f);
+  EXPECT_NEAR(red.b, expected.b, 3.f / 255.f);
+  EXPECT_NEAR(red.a, 1.f, 1.f / 255.f);
+}

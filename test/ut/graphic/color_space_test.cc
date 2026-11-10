@@ -69,6 +69,44 @@ TEST(ColorSpace, DisplayP3GamutMatchesPrimariesAndWhitePoint) {
   EXPECT_NEAR(y / sum, 0.320f, 1e-4f);
 }
 
+TEST(ColorSpace, AdobeRGBGamutMatchesPrimariesAndWhitePoint) {
+  auto adobe = skity::ColorSpace::AdobeRGB();
+  EXPECT_FALSE(adobe.IsSRGB());
+  EXPECT_FALSE(adobe.IsLinear());
+  EXPECT_EQ(adobe.kind, skity::ColorSpace::Kind::kAdobeRGB);
+
+  // Rows sum to the D65 white point.
+  for (int row = 0; row < 3; row++) {
+    float sum = adobe.gamut_xyz[row * 3] + adobe.gamut_xyz[row * 3 + 1] +
+                adobe.gamut_xyz[row * 3 + 2];
+    float d65 = row == 0 ? 0.950456f : (row == 1 ? 1.f : 1.089058f);
+    EXPECT_NEAR(sum, d65, 1e-4f);
+  }
+
+  // Column ratios recover the standard primaries R(0.640, 0.330)
+  // G(0.210, 0.710) B(0.150, 0.060).
+  const float expected_xy[3][2] = {
+      {0.640f, 0.330f}, {0.210f, 0.710f}, {0.150f, 0.060f}};
+  for (int i = 0; i < 3; i++) {
+    float x = adobe.gamut_xyz[i], y = adobe.gamut_xyz[3 + i],
+          z = adobe.gamut_xyz[6 + i];
+    float sum = x + y + z;
+    EXPECT_NEAR(x / sum, expected_xy[i][0], 1e-4f);
+    EXPECT_NEAR(y / sum, expected_xy[i][1], 1e-4f);
+  }
+
+  // Equal to the equivalent parametric space (pure 2.2 curve + gamut).
+  float tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  auto parametric = skity::ColorSpace::MakeRGB(tf, adobe.gamut_xyz);
+  ASSERT_TRUE(parametric.has_value());
+  EXPECT_EQ(*parametric, adobe);
+
+  // The AdobeRGB green primary is outside sRGB; conversion is unclamped.
+  auto green_in_srgb =
+      adobe.Convert(skity::Color4f{0.f, 1.f, 0.f, 1.f}, skity::ColorSpace{});
+  EXPECT_GT(green_in_srgb.g, 1.f);
+}
+
 TEST(ColorSpace, ConvertSameSpaceIsIdentity) {
   skity::Color4f color{0.25f, 0.5f, 0.75f, 0.6f};
   for (auto space : {skity::ColorSpace{}, skity::ColorSpace::SRGBLinear(),

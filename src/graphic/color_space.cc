@@ -24,6 +24,15 @@ constexpr float kDisplayP3Gamut[9] = {
     0.f,        0.0397542f, 1.0493037f,
 };
 
+// Adobe RGB (1998) gamut (D65 white), from the standard primaries
+// R(0.640, 0.330) G(0.210, 0.710) B(0.150, 0.060); rows sum to D65 and the
+// column ratios recover the primaries (see the unit test anchors).
+constexpr float kAdobeRGBGamut[9] = {
+    0.5766690f, 0.1855582f, 0.1882286f,  //
+    0.2973450f, 0.6273636f, 0.0752915f,  //
+    0.0270314f, 0.0706889f, 0.9913375f,
+};
+
 bool IsValidTransferFn(const float tf[7]) {
   for (int i = 0; i < 7; i++) {
     if (!std::isfinite(tf[i])) {
@@ -120,6 +129,21 @@ ColorSpace ColorSpace::DisplayP3() {
   ColorSpace cs{};
   std::memcpy(cs.gamut_xyz, kDisplayP3Gamut, sizeof(cs.gamut_xyz));
   cs.kind = Kind::kDisplayP3;
+  return cs;
+}
+
+ColorSpace ColorSpace::AdobeRGB() {
+  ColorSpace cs{};
+  // Pure gamma 2.2 power curve (single segment, d == 0).
+  cs.transfer_fn[0] = 2.2f;
+  cs.transfer_fn[1] = 1.f;
+  cs.transfer_fn[2] = 0.f;
+  cs.transfer_fn[3] = 0.f;
+  cs.transfer_fn[4] = 0.f;
+  cs.transfer_fn[5] = 0.f;
+  cs.transfer_fn[6] = 0.f;
+  std::memcpy(cs.gamut_xyz, kAdobeRGBGamut, sizeof(cs.gamut_xyz));
+  cs.kind = Kind::kAdobeRGB;
   return cs;
 }
 
