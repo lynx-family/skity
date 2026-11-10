@@ -1446,3 +1446,25 @@ TEST(DisplayList, CheckPropertiesWithDrawPaint) {
   auto display_list = recorder.FinishRecording();
   EXPECT_TRUE(display_list->HasShader());
 }
+
+TEST(DisplayList, RecordedPathsSurviveMutationResetAndSourceDestruction) {
+  skity::DisplayListBuilder builder;
+  skity::RecordingCanvas canvas;
+  canvas.BindDisplayListBuilder(&builder);
+  skity::Path expected;
+  expected.MoveTo(1, 2).LineTo(30, 4).LineTo(10, 40).Close();
+  {
+    skity::Path path;
+    path.AddPath(expected);
+    canvas.ClipPath(path, skity::Canvas::ClipOp::kIntersect);
+    canvas.DrawPath(path, skity::Paint{});
+    path.SetLastPt(200, 300);
+    path.Reset().AddRect(0, 0, 100, 100);
+  }
+  auto list = builder.GetDisplayList();
+  testing::NiceMock<MockCanvas> target;
+  EXPECT_CALL(target, OnClipPath(expected, skity::Canvas::ClipOp::kIntersect))
+      .Times(1);
+  EXPECT_CALL(target, OnDrawPath(expected, _)).Times(1);
+  list->Draw(&target);
+}

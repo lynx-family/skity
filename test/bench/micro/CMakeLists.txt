@@ -6,6 +6,7 @@ add_executable(skity_micro_bench
     array_list_benchmarks.cc
     hw_path_raster_benchmarks.cc
     matrix_benchmarks.cc
+    path_benchmarks.cc
     micro_bench_main.cc
     sw_benchmarks.cc
     ${CMAKE_SOURCE_DIR}/example/case/basic/example.cc
