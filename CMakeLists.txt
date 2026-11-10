@@ -113,13 +113,27 @@ target_include_directories(skity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(skity PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 set_property(TARGET skity PROPERTY CXX_STANDARD 17)
 
-target_include_directories(
-  skity
-  PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-  $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>
-)
+if (${SKITY_UNIFIED_LIB})
+  # The legacy C++ headers stay build-private in the unified shape: the
+  # consumer C++ surface is the header-only wrapper (module/capi/wrapper),
+  # whose include paths spell EXACTLY like the legacy headers
+  # (<skity/skity.hpp>, <skity/graphic/paint.hpp>, ...) so consumer code
+  # moves between the shapes without touching its include lines. With both
+  # roots public the legacy tree would shadow the wrapper (order-dependent),
+  # so only the wrapper root joins the public interface there.
+  target_include_directories(skity PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+  )
+else()
+  target_include_directories(
+    skity
+    PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include>
+  )
+endif()
 
 target_compile_features(skity PUBLIC cxx_std_17)
 

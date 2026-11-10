@@ -3,16 +3,16 @@
 // LICENSE file in the root directory of this source tree.
 
 // Unit tests for the C++ -> C bridge entry points declared in
-// include/skity/hpp/skity_bridge.hpp: wrapping a native skity::Typeface* as an
+// include/skity/hpp/bridge.hpp: wrapping a native skity::Typeface* as an
 // owning skity_typeface handle (strong reference via enable_shared_from_this).
-// Unlike wrapper_hpp_test.cc, this TU includes the legacy headers under
-// include/skity/ on purpose — the bridge consumes native C++ objects — and
-// includes no skity/hpp RAII wrapper, so the namespace collision documented in
-// skity/hpp/skity.hpp cannot occur.
+// This TU includes the legacy headers under include/skity/ on purpose — the
+// bridge consumes native C++ objects, so it belongs to the normal build's
+// skity_unit_test — and includes nothing from the header-only wrapper, which
+// is unified-build-only (see skity/hpp/skity.hpp).
 
 #include <gtest/gtest.h>
 
-#include <skity/hpp/skity_bridge.hpp>
+#include <skity/hpp/bridge.hpp>
 #include <skity/text/typeface.hpp>
 
 // Font fixture root per platform: SKITY_FONT_DIR (Linux / macOS FreeType and

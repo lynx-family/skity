@@ -137,7 +137,9 @@ static void StopPerfettoSession(perfetto::TracingSession* session,
 #define SKITY_TRACE_EVENT(name)
 #endif
 
+#include "test/bench/case/canvasmark_scene.hpp"
 #include "test/bench/case/draw_canvasmark.hpp"
+#include "test/bench/case/draw_canvasmark_capi.h"
 #include "test/bench/case/draw_circle.hpp"
 #include "test/bench/case/draw_skp.hpp"
 #include "test/bench/common/bench_context.hpp"
@@ -288,8 +290,9 @@ bool IsNumber(const std::string& s) {
 
 static void RunBenchmark(benchmark::State& state,
                          skity::GPUBackendType backend_type,
-                         skity::BenchTarget::AAType aa,
-                         BenchmarkProvider provider) {
+                         skity::BenchTarget::AAType aa, const std::string& name,
+                         const skity::Benchmark::Size& size,
+                         const std::function<void(skity::Canvas*)>& draw) {
   state.SetLabel(GetLabel(backend_type, aa));
   auto context = skity::BenchContext::Create(backend_type);
   if (!context) {
@@ -301,17 +304,15 @@ static void RunBenchmark(benchmark::State& state,
   } else if (aa == skity::BenchTarget::AAType::kCoverageAA) {
     context->GetGPUContext()->SetEnableCoverageAA(true);
   }
-  auto benchmark = provider();
   skity::BenchTarget::Options options;
-  options.width = benchmark->GetSize().width;
-  options.height = benchmark->GetSize().height;
+  options.width = size.width;
+  options.height = size.height;
   options.aa = aa;
   auto target = context->CreateTarget(options);
 
 #ifdef SKITY_BENCH_ENABLE_PERFETTO
   // Trace the entire benchmark session
-  std::string bench_label =
-      benchmark->GetName() + "_" + GetLabel(backend_type, aa);
+  std::string bench_label = name + "_" + GetLabel(backend_type, aa);
   SKITY_TRACE_EVENT(perfetto::DynamicString(bench_label));
 #endif
 
@@ -335,7 +336,7 @@ static void RunBenchmark(benchmark::State& state,
     auto canvas = target->LockCanvas();
     {
       SKITY_TRACE_EVENT("Benchmark_Draw");
-      benchmark->Draw(canvas, 0);
+      draw(canvas);
     }
     {
       SKITY_TRACE_EVENT("Target_Flush");
@@ -350,10 +351,20 @@ static void RunBenchmark(benchmark::State& state,
   }
 
 #if SKITY_BENCH_WRITE_PNG
-  context->WriteToFile(target, (kOutputDir / (benchmark->GetName() + "_" +
-                                              GetLabel(backend_type, aa)))
-                                   .string());
+  context->WriteToFile(
+      target,
+      (kOutputDir / (name + "_" + GetLabel(backend_type, aa))).string());
 #endif
+}
+
+static void RunBenchmark(benchmark::State& state,
+                         skity::GPUBackendType backend_type,
+                         skity::BenchTarget::AAType aa,
+                         BenchmarkProvider provider) {
+  auto benchmark = provider();
+  RunBenchmark(
+      state, backend_type, aa, benchmark->GetName(), benchmark->GetSize(),
+      [benchmark](skity::Canvas* canvas) { benchmark->Draw(canvas, 0); });
 }
 
 static void RegisterBenchmark(std::shared_ptr<skity::Benchmark> benchmark,
@@ -542,8 +553,68 @@ static void RegisterCanvasMarkBenchmarks() {
   }
 }
 
+// C-API twins of the CanvasMark cases: same harness, same scene data
+// (canvasmark_scene.hpp), same surface — the only difference is that the draw
+// loop crosses the C ABI. Two variants: _CAPI goes through the RAII wrapper
+// classes, _RawC calls the bare skity_* entries with manual create/destroy,
+// which splits the measured cost between the C ABI layer itself and the
+// wrapper veneer on top of it.
+static void RegisterCanvasMarkCAPIBenchmarks() {
+  struct SceneSpec {
+    const char* name;
+    bool suits;
+  };
+  struct VariantSpec {
+    const char* suffix;
+    bool raw;  // true: bare skity_* entries; false: RAII wrapper objects
+  };
+  const SceneSpec scenes[] = {
+      {"CanvasMark_Paths_4096_Seed42_Frame120", false},
+      {"CanvasMark_Suits_2048_Seed42_Frame599", true},
+  };
+  const VariantSpec variants[] = {
+      {"_CAPI", false},
+      {"_RawC", true},
+  };
+  for (auto backend : GetGPUBackendTypes()) {
+    for (auto aa : GetAATypes()) {
+      for (const auto& scene : scenes) {
+        for (const auto& variant : variants) {
+          std::string name = std::string(scene.name) + variant.suffix;
+          benchmark::RegisterBenchmark(
+              (name + "_" + GetLabel(GetGPUBackendType(backend), GetAAType(aa)))
+                  .c_str(),
+              [name, suits = scene.suits, raw = variant.raw,
+               backend = GetGPUBackendType(backend),
+               aa = GetAAType(aa)](benchmark::State& state) {
+                if (suits) {
+                  CanvasMarkCAPI_PrepareSuits();
+                } else {
+                  CanvasMarkCAPI_PreparePaths();
+                }
+                RunBenchmark(
+                    state, backend, aa, name,
+                    skity::Benchmark::Size{uint32_t(skity::canvasmark::width),
+                                           uint32_t(skity::canvasmark::height)},
+                    [suits, raw](skity::Canvas* canvas) {
+                      if (suits) {
+                        raw ? CanvasMarkCAPI_DrawSuitsRaw(canvas)
+                            : CanvasMarkCAPI_DrawSuits(canvas);
+                      } else {
+                        raw ? CanvasMarkCAPI_DrawPathsRaw(canvas)
+                            : CanvasMarkCAPI_DrawPaths(canvas);
+                      }
+                    });
+              });
+        }
+      }
+    }
+  }
+}
+
 static void RegisterAllBenchmarks() {
   RegisterCanvasMarkBenchmarks();
+  RegisterCanvasMarkCAPIBenchmarks();
   RegisterTigerSKPBenchmark();
   RegisterGUIBenchmark();
   RegisterFillCircleBenchmark();
