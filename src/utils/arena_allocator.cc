@@ -69,13 +69,18 @@ uint8_t* Arena::Allocate(size_t bytes, size_t align) {
   DEBUG_CHECK(bytes > 0);
   DEBUG_CHECK((align & (align - 1)) == 0);
 
-  uint8_t* aligned_cursor = reinterpret_cast<uint8_t*>(
-      ((reinterpret_cast<uintptr_t>(cursor_) + align - 1) & ~(align - 1)));
-
-  if (aligned_cursor + bytes <= end_) {
-    uint8_t* result = aligned_cursor;
-    cursor_ = aligned_cursor + bytes;
-    return result;
+  if (cursor_ != nullptr) {
+    const size_t remaining = static_cast<size_t>(end_ - cursor_);
+    const size_t misalignment =
+        reinterpret_cast<uintptr_t>(cursor_) & (align - 1);
+    const size_t padding = misalignment == 0 ? 0 : align - misalignment;
+    // Check capacity before forming either pointer: alignment can cross the
+    // block's end, and the requested bytes can exceed an otherwise valid tail.
+    if (padding <= remaining && bytes <= remaining - padding) {
+      uint8_t* result = cursor_ + padding;
+      cursor_ = result + bytes;
+      return result;
+    }
   }
 
   if (bytes >= block_size_) {
