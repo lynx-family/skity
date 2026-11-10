@@ -85,6 +85,7 @@ There are several options you can use to configure the build:
     * `SKITY_VK_BACKEND` - Option for Vulkan backend (experimental). Default is OFF. Pass `-DSKITY_VK_BACKEND=ON` in command line to enable it. Requires Vulkan at least version 1.1. Skity will attempt to create the highest available Vulkan version and leverage extensions such as dynamic rendering when supported.
     * `WGX_SPIRV_BACKEND` - Option for WGX SPIR-V generation. Defaults to the value of `SKITY_VK_BACKEND`, but can be enabled independently without a Vulkan runtime by passing `-DWGX_SPIRV_BACKEND=ON`.
     * `SKITY_FONTCONFIG` - Option for the native Linux Fontconfig font manager. Default is ON on Linux with the FreeType backend and OFF on other platforms. Fontconfig and Expat are built from Habitat-managed sources and linked statically into Skity, reusing its FreeType library. Runtime font discovery still reads `/etc/fonts/fonts.conf`, its includes and user configuration, and the configured system font directories. The build does not install or overwrite system font configuration or caches. Pass `-DSKITY_FONTCONFIG=OFF` to disable it.
+    * `SKITY_FONT_DEPS_CMAKE_DIR` - Directory containing alternative `Expat.cmake` and `Fontconfig.cmake` build adapters. Defaults to Skity's `cmake/font_deps/`, which builds the sources pinned by Habitat. Set an absolute path to use dependencies with another layout or build system.
     * `SKITY_LOG` - Option for logging. Default is OFF since print log may slow down the performance. Pass `-DSKITY_LOG=ON` in command line to enable it.
 
 * Options for build optional modules:
@@ -100,6 +101,16 @@ There are several options you can use to configure the build:
     * `SKITY_TEST_GOLDEN` - Option for building golden tests when `SKITY_TEST=ON`. Default is ON.
 
 > Note: Other options not mentioned above are used internally and may be changed or removed in the future.
+
+Font dependency adapters are loaded in order inside a function scope.
+`Expat.cmake` must create the static `expat` target and set
+`SKITY_EXPAT_INCLUDE_DIR` to the directory containing `expat.h`.
+`Fontconfig.cmake` must create `skity_fontconfig`, including its public include
+paths, transitive link libraries and build dependencies. It can use the shared
+`skity_add_fontconfig(SOURCE_DIR ... LIBRARY_TARGET ... [GENERATED_HEADER]
+[MESON_OPTIONS ...])` helper to build a static Meson library with Skity's
+compiler, flags and dependency archives. Use separate build directories when
+switching between providers.
 
 ## Run Examples
 
