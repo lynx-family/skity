@@ -40,6 +40,12 @@ class GPUSurfaceImpl : public GPUSurface {
 
   CoverageAAMode GetCoverageAAMode() const { return coverage_aa_mode_; }
 
+  /**
+   * The color space this surface's pixels are encoded in; the draw pipeline
+   * resolves every color and image into this space.
+   */
+  const ColorSpace& GetColorSpace() const { return color_space_; }
+
   bool IsCoverageAAEnabled() const {
     return coverage_aa_mode_ != CoverageAAMode::kDisabled;
   }
@@ -71,6 +77,7 @@ class GPUSurfaceImpl : public GPUSurface {
   uint32_t sample_count_;
   float content_scale_;
   CoverageAAMode coverage_aa_mode_;
+  ColorSpace color_space_{};
 
   GPUContextImpl* ctx_;
   std::unique_ptr<HWStageBuffer> stage_buffer_;

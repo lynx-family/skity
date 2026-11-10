@@ -8,6 +8,7 @@
 #include <skity/text/typeface.hpp>
 
 #include "src/geometry/math.hpp"
+#include "src/graphic/color_xform.hpp"
 
 namespace skity {
 
@@ -50,6 +51,9 @@ void Paint::SetStrokeColor(float r, float g, float b, float a) {
   stroke_color_[1] = g;
   stroke_color_[2] = b;
   stroke_color_[3] = a;
+  // The component setters have no color space parameter; their values are
+  // sRGB, so reset any space left by SetColor4f.
+  color_space_ = ColorSpace{};
 }
 
 void Paint::SetStrokeColor(const Vector& color) {
@@ -67,6 +71,7 @@ void Paint::SetFillColor(float r, float g, float b, float a) {
   fill_color_[1] = g;
   fill_color_[2] = b;
   fill_color_[3] = a;
+  color_space_ = ColorSpace{};
 }
 
 void Paint::SetFillColor(const Vector& color) {
@@ -81,12 +86,34 @@ void Paint::SetColor(Color color) {
   auto color4f = Color4fFromColor(color);
   stroke_color_ = color4f;
   fill_color_ = color4f;
+  color_space_ = ColorSpace{};
 }
 
 Color Paint::GetColor() const { return Color4fToColor(GetColor4f()); }
 
 Color4f Paint::GetColor4f() const {
   return kStroke_Style == style_ ? stroke_color_ : fill_color_;
+}
+
+Color4f Paint::GetColor4f(const ColorSpace& target_space) const {
+  Color4f color = GetColor4f();
+  return ColorXformSteps::Resolve(color_space_, target_space).Apply(color);
+}
+
+Color4f Paint::GetFillColor(const ColorSpace& target_space) const {
+  Color4f color = GetFillColor();
+  return ColorXformSteps::Resolve(color_space_, target_space).Apply(color);
+}
+
+Color4f Paint::GetStrokeColor(const ColorSpace& target_space) const {
+  Color4f color = GetStrokeColor();
+  return ColorXformSteps::Resolve(color_space_, target_space).Apply(color);
+}
+
+void Paint::SetColor4f(Color4f color, ColorSpace color_space) {
+  stroke_color_ = color;
+  fill_color_ = color;
+  color_space_ = color_space;
 }
 
 void Paint::SetAntiAlias(bool aa) { is_anti_alias_ = aa; }
@@ -154,6 +181,7 @@ bool Paint::operator==(const Paint& other) const {
          font_fill_threshold_ == other.font_fill_threshold_ &&  //
          fill_color_ == other.fill_color_ &&                    //
          stroke_color_ == other.stroke_color_ &&                //
+         color_space_ == other.color_space_ &&                  //
          is_anti_alias_ == other.is_anti_alias_ &&              //
          blend_mode_ == other.blend_mode_ &&                    //
          path_effect_ == other.path_effect_ &&                  //

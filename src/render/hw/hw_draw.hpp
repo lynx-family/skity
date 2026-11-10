@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <skity/geometry/matrix.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <utility>
 #include <vector>
 
@@ -52,6 +53,12 @@ struct HWDrawContext {
   Vec2 scale = {1.f, 1.f};
   HWStaticBuffer* static_buffer = nullptr;
   const DstTextureCopyInfo* dst_read_texture_copy_info = nullptr;
+  /**
+   * The color space of the render target the draws are encoded for; every
+   * color and image converts into this space at draw time (the target space
+   * is the working space). Defaults to sRGB.
+   */
+  ColorSpace target_space{};
 };
 
 enum HWDrawState : uint32_t {
@@ -91,6 +98,15 @@ class HWDraw {
   void SetColorFormat(GPUTextureFormat format) { target_format_ = format; }
 
   GPUTextureFormat GetColorFormat() const { return target_format_; }
+
+  /**
+   * The color space this draw's render target is encoded in; layer textures
+   * and resolve images are tagged with it so re-drawing them into the same
+   * target passes through without conversion.
+   */
+  void SetColorSpace(ColorSpace space) { target_space_ = space; }
+
+  const ColorSpace& GetColorSpace() const { return target_space_; }
 
   HWDrawState Prepare(HWDrawContext* context);
 
@@ -182,6 +198,7 @@ class HWDraw {
   uint32_t sample_count_ = 1;
   float clip_value_ = 0.f;
   GPUTextureFormat target_format_ = GPUTextureFormat::kRGBA8Unorm;
+  ColorSpace target_space_{};
   bool anti_alias_ = false;
   bool prepared_ = false;
   bool generated_ = false;

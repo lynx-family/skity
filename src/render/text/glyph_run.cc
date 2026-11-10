@@ -150,6 +150,9 @@ HWDraw* DirectGlyphRun::Draw(Matrix transform, const Matrix& glyph_to_layer,
   Paint paint_copy = paint_;
   paint_copy.SetFillColor(color);
   paint_copy.SetStrokeColor(color);
+  // The Set*Color calls reset the recorded color space to sRGB; the copied
+  // values are still in the paint's own space.
+  paint_copy.SetColorSpace(paint_.GetColorSpace());
   std::optional<Matrix> layer_to_local;
   if (effect == TextAtlasEffect::kA8Coverage && paint_.GetShader()) {
     Matrix inverse;

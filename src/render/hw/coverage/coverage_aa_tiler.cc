@@ -73,8 +73,9 @@ class CoverageAAPathTiler::PathTilingVisitor final : public PathVisitor {
 CoverageAATiledPath CoverageAAPathTiler::Tile(const Path& path,
                                               const Matrix& local_to_global,
                                               const Rect* scissor) {
-  // TODO: Transforming control points before flattening is only equivalent
-  // for affine transforms. Handle perspective before Coverage AA supports it.
+  // TODO(ColdPaleLight): Transforming control points before flattening is only
+  // equivalent for affine transforms. Handle perspective before Coverage AA
+  // supports it.
   auto transformed_path = path.CopyWithMatrix(local_to_global);
   auto bounds = transformed_path.GetBounds();
   if (bounds.IsEmpty()) {
