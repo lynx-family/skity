@@ -18,6 +18,7 @@
 #include "src/effect/image_filter_base.hpp"
 #include "src/effect/mask_filter_priv.hpp"
 #include "src/effect/pixmap_shader.hpp"
+#include "src/graphic/color_xform.hpp"
 #include "src/render/paint_order.hpp"
 #include "src/render/sw/sw_raster.hpp"
 #include "src/render/sw/sw_span_brush.hpp"
@@ -740,6 +741,19 @@ std::unique_ptr<SWSpanBrush> SWCanvas::GenerateBrush(
     Shader::GradientInfo info{};
     Shader::GradientType type = shader->AsGradient(&info);
 
+    // Gradient stops resolve from their declared space (all stops share
+    // one, default sRGB) into the target (bitmap) color space, so
+    // interpolation happens in the space the surface encodes.
+    {
+      ColorXformSteps stop_steps = ColorXformSteps::Resolve(
+          info.color_space, bitmap_->GetPixmap()->GetColorSpace());
+      if (!stop_steps.IsNoop()) {
+        for (auto& stop : info.colors) {
+          stop = stop_steps.Apply(stop);
+        }
+      }
+    }
+
     if (type == Shader::kLinear || type == Shader::kRadial ||
         type == Shader::kConical || type == Shader::kSweep) {
       Matrix device_to_local;
@@ -790,11 +804,16 @@ std::unique_ptr<SWSpanBrush> SWCanvas::GenerateBrush(
           spans, bitmap_, paint.GetColorFilter().get(), paint.GetBlendMode(),
           paint.GetAlphaF(), std::move(pixmap), matrix,
           *pixmap_shader->GetSamplingOptions(), pixmap_shader->GetXTileMode(),
-          pixmap_shader->GetYTileMode());
+          pixmap_shader->GetYTileMode(), bitmap_->GetPixmap()->GetColorSpace());
     }
   }
 
   Color4f color = stroke ? paint.GetStrokeColor() : paint.GetFillColor();
+  // Recorded paint colors resolve into the target (bitmap) color space at
+  // draw time, mirroring the GPU geometry uniform resolution.
+  color = ColorXformSteps::Resolve(paint.GetColorSpace(),
+                                   bitmap_->GetPixmap()->GetColorSpace())
+              .Apply(color);
 
   return std::make_unique<SolidColorBrush>(spans, bitmap_,
                                            paint.GetColorFilter().get(),

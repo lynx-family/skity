@@ -64,6 +64,7 @@ void HWCanvas::BeginNewFrame(HWRootLayer* root_layer) {
   SKITY_TRACE_EVENT(HWCanvas_BeginNewFrame);
 
   root_layer_ = root_layer;
+  root_layer_->SetColorSpace(surface_->GetColorSpace());
   check_initial_clear_ = root_layer_->CanPromoteInitialClear();
 
   layer_stack_.clear();
@@ -332,7 +333,7 @@ bool HWCanvas::TryPromoteInitialClear(const Paint& paint, const Rect* rect) {
     root_layer_->SetInitialClearColor({});
     return true;
   }
-  const auto color = paint.GetFillColor();
+  const auto color = paint.GetFillColor(surface_->GetColorSpace());
   if (mode == BlendMode::kSrc ||
       (mode == BlendMode::kSrcOver && color.a == 1.f)) {
     root_layer_->SetInitialClearColor(
@@ -819,6 +820,7 @@ void HWCanvas::OnFlush() {
     draw_context.index_vector_cache = index_vector_cache_.get();
     draw_context.total_clip_depth = root_layer_->GetState()->GetDrawDepth() + 1;
     draw_context.arena_allocator = arena_allocator_;
+    draw_context.target_space = surface_->GetColorSpace();
     root_layer_->SetScale(Vec2{ctx_scale_, ctx_scale_});
     draw_context.scale = root_layer_->GetScale();
 
@@ -1023,6 +1025,9 @@ HWLayer* HWCanvas::GenLayer(const Paint& paint, Rect layer_bounds,
   }
   layer->SetArenaAllocator(arena_allocator_);
   layer->SetColorFormat(surface_->GetGPUFormat());
+  // Offscreen layers inherit the surface's color space (the working space);
+  // per-layer space overrides are a future extension.
+  layer->SetColorSpace(surface_->GetColorSpace());
   layer->SetAlpha(paint.GetAlphaF());
 
   if (surface_->GetGPUContext()->GetGPUDevice()->CanUseMSAA()) {

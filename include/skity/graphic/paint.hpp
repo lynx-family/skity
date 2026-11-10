@@ -11,6 +11,7 @@
 #include <skity/geometry/rect.hpp>
 #include <skity/graphic/blend_mode.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/macros.hpp>
 #include <utility>
 
@@ -125,6 +126,11 @@ class SKITY_API Paint {
   Vector GetStrokeColor() const;
 
   /**
+   * The stroke color resolved into the target (render surface) color space.
+   */
+  Vector GetStrokeColor(const ColorSpace& target_space) const;
+
+  /**
    *  @deprecated, use SetFillColor(Color color) instead
    */
   void SetFillColor(float r, float g, float b, float a);
@@ -135,6 +141,11 @@ class SKITY_API Paint {
   void SetFillColor(Vector const& color);
 
   Vector GetFillColor() const;
+
+  /**
+   * The fill color resolved into the target (render surface) color space.
+   */
+  Vector GetFillColor(const ColorSpace& target_space) const;
 
   void SetStrokeColor(Color color);
 
@@ -151,6 +162,33 @@ class SKITY_API Paint {
   Color GetColor() const;
 
   Color4f GetColor4f() const;
+
+  /**
+   * The color space GetColor4f() / GetStrokeColor() / GetFillColor() are
+   * recorded in; defaults to sRGB.
+   */
+  ColorSpace GetColorSpace() const { return color_space_; }
+
+  /**
+   * Re-declares the color space of the recorded colors without touching the
+   * values; useful when copying colors between paints.
+   */
+  void SetColorSpace(ColorSpace color_space) { color_space_ = color_space; }
+
+  /**
+   * Returns the stroke/fill color resolved into the target (render surface)
+   * color space. This is the draw-time entry point: recorded colors stay in
+   * their original space and convert once the target space is known.
+   */
+  Color4f GetColor4f(const ColorSpace& target_space) const;
+
+  /**
+   * Sets the alpha and RGB used when stroking and filling. The color is
+   * recorded in color_space as-is; it converts to the render target's space
+   * at draw time (see GetColor4f(target_space)). The default space leaves
+   * the value untouched.
+   */
+  void SetColor4f(Color4f color, ColorSpace color_space = {});
   /**
    * Requests, but does not require, that edge pixels draw opaque or with
    * partial transparency.
@@ -281,6 +319,9 @@ class SKITY_API Paint {
   float font_fill_threshold_ = DEFAULT_FONT_FILL_THRESHOLD;
   Vector fill_color_ = Colors::kBlack;
   Vector stroke_color_ = Colors::kBlack;
+  // The space the recorded colors are interpreted in; resolved to the render
+  // target space at draw time.
+  ColorSpace color_space_{};
   bool is_anti_alias_ = false;
   BlendMode blend_mode_ = BlendMode::kDefault;
   std::shared_ptr<PathEffect> path_effect_;

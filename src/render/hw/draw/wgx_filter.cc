@@ -8,6 +8,7 @@
 
 #include "src/effect/color_filter_base.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
+#include "src/graphic/color_xform.hpp"
 #include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
@@ -31,10 +32,14 @@ std::string WGXFilterFragment::GenFunctionSignature() const {
 class WGXBlendFilter : public WGXFilterFragment {
  public:
   WGXBlendFilter(Color color, BlendMode mode)
-      : WGXFilterFragment(""), color_(color), mode_(mode) {}
+      : WGXBlendFilter("", Color4fFromColor(color), ColorSpace{}, mode) {}
 
-  WGXBlendFilter(std::string suffix, Color color, BlendMode mode)
-      : WGXFilterFragment(std::move(suffix)), color_(color), mode_(mode) {}
+  WGXBlendFilter(std::string suffix, Color4f color, ColorSpace color_space,
+                 BlendMode mode)
+      : WGXFilterFragment(std::move(suffix)),
+        color_(color),
+        color_space_(color_space),
+        mode_(mode) {}
 
   ~WGXBlendFilter() override = default;
 
@@ -135,7 +140,10 @@ class WGXBlendFilter : public WGXFilterFragment {
       return;
     }
 
-    auto color4f = Color4fFromColor(color_);
+    // The blend color resolves into the render target's space before it
+    // premultiplies into the uniform.
+    auto color4f = ColorXformSteps::Resolve(color_space_, context->target_space)
+                       .Apply(color_);
     color4f[0] *= color4f[3];
     color4f[1] *= color4f[3];
     color4f[2] *= color4f[3];
@@ -145,7 +153,8 @@ class WGXBlendFilter : public WGXFilterFragment {
   }
 
  private:
-  Color color_;
+  Color4f color_;
+  ColorSpace color_space_{};
   BlendMode mode_;
   mutable uint32_t binding_ = 0;
 };
@@ -419,7 +428,8 @@ std::unique_ptr<WGXFilterFragment> WGXFilterFragment::Make(ColorFilter* filter,
 
   if (filter_base->GetType() == ColorFilterType::kBlend) {
     auto blend_filter = static_cast<BlendColorFilter*>(filter_base);
-    return std::make_unique<WGXBlendFilter>(suffix, blend_filter->GetColor(),
+    return std::make_unique<WGXBlendFilter>(suffix, blend_filter->GetColor4f(),
+                                            blend_filter->GetColorSpace(),
                                             blend_filter->GetBlendMode());
   } else if (filter_base->GetType() == ColorFilterType::kLinearToSRGBGamma ||
              filter_base->GetType() == ColorFilterType::kSRGBToLinearGamma) {

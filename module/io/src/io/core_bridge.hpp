@@ -365,6 +365,35 @@ inline std::shared_ptr<Shader> MakeShaderImage(
       out, &skity_shader_destroy, SKITY_OBJECT_TYPE_SHADER);
 }
 
+inline void SetShaderColorSpace(const std::shared_ptr<Shader>& shader,
+                                const ColorSpace& color_space) {
+  auto h = wrap_handle<skity_shader_s, skity_shader>(SKITY_OBJECT_TYPE_SHADER,
+                                                     shader);
+  if (h != nullptr) {
+    skity_color_space_info info{};
+    switch (color_space.kind) {
+      case ColorSpace::Kind::kSRGB:
+        info.kind = SKITY_COLOR_SPACE_SRGB;
+        break;
+      case ColorSpace::Kind::kSRGBLinear:
+        info.kind = SKITY_COLOR_SPACE_SRGB_LINEAR;
+        break;
+      case ColorSpace::Kind::kDisplayP3:
+        info.kind = SKITY_COLOR_SPACE_DISPLAY_P3;
+        break;
+      case ColorSpace::Kind::kParametric:
+        info.kind = SKITY_COLOR_SPACE_PARAMETRIC;
+        std::memcpy(info.transfer_fn, color_space.transfer_fn,
+                    sizeof(info.transfer_fn));
+        std::memcpy(info.gamut_xyz, color_space.gamut_xyz,
+                    sizeof(info.gamut_xyz));
+        break;
+    }
+    skity_shader_set_color_space(h, &info);
+    skity_shader_destroy(h);
+  }
+}
+
 inline void SetShaderLocalMatrix(const std::shared_ptr<Shader>& shader,
                                  const Matrix& matrix) {
   auto h = wrap_handle<skity_shader_s, skity_shader>(SKITY_OBJECT_TYPE_SHADER,

@@ -3,38 +3,18 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <cstring>
+#include <skity/graphic/color_space.hpp>
 #include <skity/io/pixmap.hpp>
 
 #include "src/effect/color_filter_base.hpp"
 #include "src/graphic/blend_mode_priv.hpp"
 #include "src/graphic/color_priv.hpp"
+#include "src/graphic/color_xform.hpp"
 #include "src/logging.hpp"
 
 namespace skity {
 
 namespace {
-
-static constexpr float transfer_fn_SRGB[] = {
-    2.4f,
-    static_cast<float>(1 / 1.055),
-    static_cast<float>(0.055 / 1.055),
-    static_cast<float>(1 / 12.92),
-    0.04045f,
-    0.0f,
-    0.0f,
-};
-
-static constexpr float transfer_fn_LINEAR[] = {
-    1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-};
-
-#define FixedToFloat(x) ((x) * 1.52587890625e-5f)
-
-static constexpr float named_gamut_SRGB[3][3] = {
-    {FixedToFloat(0x6FA2), FixedToFloat(0x6299), FixedToFloat(0x24A0)},
-    {FixedToFloat(0x38F5), FixedToFloat(0xB785), FixedToFloat(0x0F84)},
-    {FixedToFloat(0x0390), FixedToFloat(0x18DA), FixedToFloat(0xB6CF)},
-};
 
 enum Version {
   k0_Version,  // Initial (deprecated) version, no longer supported
@@ -54,9 +34,15 @@ struct ColorSpaceHeader {
 }  // namespace
 
 PMColor ColorFilter::FilterColor(PMColor c) const {
+  return FilterColor(c, ColorSpace{});
+}
+
+PMColor ColorFilter::FilterColor(PMColor c,
+                                 const ColorSpace& target_space) const {
 #ifdef SKITY_CPU
-  return As_CFB(this)->OnFilterColor(c);
+  return As_CFB(this)->OnFilterColor(c, target_space);
 #else
+  (void)target_space;
   return c;
 #endif
 }
@@ -71,6 +57,19 @@ std::shared_ptr<ColorFilter> ColorFilters::Blend(Color color, BlendMode mode) {
     return nullptr;
   }
   return std::make_shared<BlendColorFilter>(color, mode);
+}
+
+std::shared_ptr<ColorFilter> ColorFilters::Blend(Color4f color, BlendMode mode,
+                                                 ColorSpace color_space) {
+  if ((mode == BlendMode::kDst) ||  // r = d
+      ((mode == BlendMode::kDstIn) &&
+       (ColorGetA(Color4fToColor(color)) == 0xFF)) ||
+      ((mode == BlendMode::kDstOut) &&
+       (ColorGetA(Color4fToColor(color)) == 0x00))) {
+    // r = d, when a = 1 r = d, and when a = 0 r = 0
+    return nullptr;
+  }
+  return std::make_shared<BlendColorFilter>(color, mode, color_space);
 }
 
 std::shared_ptr<ColorFilter> ColorFilters::Matrix(const float row_major[20]) {
@@ -106,24 +105,13 @@ std::shared_ptr<ColorFilter> ColorFilters::Compose(
 }
 
 BlendColorFilter::BlendColorFilter(Color c, BlendMode m)
-    : color_(c), pm_color_(ColorToPMColor(c)), mode_(m) {}
+    : BlendColorFilter(Color4fFromColor(c), m, ColorSpace{}) {}
+
+BlendColorFilter::BlendColorFilter(Color4f c, BlendMode m,
+                                   ColorSpace color_space)
+    : color_(c), color_space_(color_space), mode_(m) {}
 
 #ifdef SKITY_CPU
-
-PMColor MatrixColorFilter::OnFilterColor(PMColor src_pm) const {
-  Color src = PMColorToColor(src_pm);
-  int32_t src_u32[4] = {int32_t(ColorGetR(src)), int32_t(ColorGetG(src)),
-                        int32_t(ColorGetB(src)), int32_t(ColorGetA(src))};
-  uint8_t dst_u8[4];
-  for (size_t i = 0; i < 4; ++i) {
-    int32_t mul_u32 =
-        src_u32[0] * matrix_i16_[i][0] + src_u32[1] * matrix_i16_[i][1] +
-        src_u32[2] * matrix_i16_[i][2] + src_u32[3] * matrix_i16_[i][3];
-    dst_u8[i] = std::clamp(mul_u32 / 255 + matrix_i16_[i][4], 0, 255);
-  }
-  return ColorToPMColor(
-      ColorSetARGB(dst_u8[3], dst_u8[0], dst_u8[1], dst_u8[2]));
-}
 
 static constexpr uint8_t linear_to_srgb_table[256] = {
     0,   12,  21,  28,  33,  38,  42,  46,  49,  52,  55,  58,  61,  63,  66,
@@ -165,7 +153,24 @@ static constexpr uint8_t srgb_to_linear_table[256] = {
     222, 224, 226, 228, 230, 232, 235, 237, 239, 241, 243, 245, 248, 250, 252,
     255};
 
-PMColor SRGBGammaColorFilter::OnFilterColor(PMColor src_pm) const {
+PMColor MatrixColorFilter::OnFilterColor(PMColor src_pm,
+                                         const ColorSpace&) const {
+  Color src = PMColorToColor(src_pm);
+  int32_t src_u32[4] = {int32_t(ColorGetR(src)), int32_t(ColorGetG(src)),
+                        int32_t(ColorGetB(src)), int32_t(ColorGetA(src))};
+  uint8_t dst_u8[4];
+  for (size_t i = 0; i < 4; ++i) {
+    int32_t mul_u32 =
+        src_u32[0] * matrix_i16_[i][0] + src_u32[1] * matrix_i16_[i][1] +
+        src_u32[2] * matrix_i16_[i][2] + src_u32[3] * matrix_i16_[i][3];
+    dst_u8[i] = std::clamp(mul_u32 / 255 + matrix_i16_[i][4], 0, 255);
+  }
+  return ColorToPMColor(
+      ColorSetARGB(dst_u8[3], dst_u8[0], dst_u8[1], dst_u8[2]));
+}
+
+PMColor SRGBGammaColorFilter::OnFilterColor(PMColor src_pm,
+                                            const ColorSpace&) const {
   Color src = PMColorToColor(src_pm);
   auto* table = type_ == ColorFilterType::kLinearToSRGBGamma
                     ? linear_to_srgb_table
@@ -175,11 +180,27 @@ PMColor SRGBGammaColorFilter::OnFilterColor(PMColor src_pm) const {
                                      table[ColorGetB(src)]));
 }
 
-PMColor BlendColorFilter::OnFilterColor(PMColor src) const {
-  return PorterDuffBlend(pm_color_, src, mode_);
+PMColor BlendColorFilter::OnFilterColor(PMColor src,
+                                        const ColorSpace& target_space) const {
+  return PorterDuffBlend(ResolvedPMColor(target_space), src, mode_);
 }
 
-PMColor ComposeColorFilter::OnFilterColor(PMColor src) const {
+PMColor BlendColorFilter::ResolvedPMColor(
+    const ColorSpace& target_space) const {
+  // The recorded color resolves once per target space; filtering is called
+  // per pixel on the CPU path.
+  if (!cached_valid_ || !(cached_target_ == target_space)) {
+    Color4f resolved =
+        ColorXformSteps::Resolve(color_space_, target_space).Apply(color_);
+    cached_pm_ = ColorToPMColor(Color4fToColor(resolved));
+    cached_target_ = target_space;
+    cached_valid_ = true;
+  }
+  return cached_pm_;
+}
+
+PMColor ComposeColorFilter::OnFilterColor(PMColor src,
+                                          const ColorSpace&) const {
   // TODO(zhangzhijian): Fix it.
   return src;
 }
@@ -191,7 +212,12 @@ std::string_view BlendColorFilter::ProcName() const {
 }
 
 void BlendColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
-  buffer.WriteColor4f(Color4fFromColor(color_));
+  // The serialized form carries the color converted to sRGB (the recorded
+  // color space itself is not serialized yet); the deserializer reads the
+  // value with sRGB semantics, so converting keeps the displayed color
+  // truthful.
+  buffer.WriteColor4f(
+      ColorXformSteps::Resolve(color_space_, ColorSpace{}).Apply(color_));
   buffer.WriteUint32(static_cast<uint32_t>(mode_));
 }
 
@@ -212,15 +238,17 @@ std::string_view SRGBGammaColorFilter::ProcName() const {
 }
 
 void SRGBGammaColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  const ColorSpace srgb = ColorSpace::SRGB();
+  const ColorSpace linear = ColorSpace::SRGBLinear();
   const float* src_fn = nullptr;
   const float* dst_fn = nullptr;
 
   if (type_ == ColorFilterType::kLinearToSRGBGamma) {
-    src_fn = transfer_fn_LINEAR;
-    dst_fn = transfer_fn_SRGB;
+    src_fn = linear.transfer_fn;
+    dst_fn = srgb.transfer_fn;
   } else {
-    src_fn = transfer_fn_SRGB;
-    dst_fn = transfer_fn_LINEAR;
+    src_fn = srgb.transfer_fn;
+    dst_fn = linear.transfer_fn;
   }
 
   ColorSpaceHeader header{};
@@ -229,7 +257,7 @@ void SRGBGammaColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
                             9 * sizeof(float));
   std::memcpy(data.data(), &header, sizeof(ColorSpaceHeader));
   std::memcpy(data.data() + sizeof(ColorSpaceHeader) + 7 * sizeof(float),
-              named_gamut_SRGB, 9 * sizeof(float));
+              srgb.gamut_xyz, 9 * sizeof(float));
 
   // write src
   std::memcpy(data.data() + sizeof(ColorSpaceHeader), src_fn,

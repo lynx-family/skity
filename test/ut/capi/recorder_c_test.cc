@@ -331,3 +331,18 @@ TEST(CapiRecorder, GetOpPaintByOffset) {
   EXPECT_EQ(skity_display_list_get_op_paint_by_offset(list.l, 1 << 30),
             nullptr);
 }
+
+TEST(CapiRecorder, ShaderSetColorSpaceDeclaresStopSpace) {
+  skity_point pts[2] = {{{0.f, 0.f, 0.f, 1.f}}, {{100.f, 0.f, 0.f, 1.f}}};
+  skity_color4f red = {{1.f, 0.f, 0.f, 1.f}};
+  ShaderGuard shader{skity_shader_create_linear(pts, &red, nullptr, 2,
+                                                SKITY_TILE_MODE_CLAMP, 0)};
+  ASSERT_NE(shader.s, nullptr);
+
+  skity_color_space_info info{};
+  info.kind = SKITY_COLOR_SPACE_DISPLAY_P3;
+  skity_shader_set_color_space(shader.s, &info);
+
+  // NULL resets the declared space to sRGB.
+  skity_shader_set_color_space(shader.s, nullptr);
+}

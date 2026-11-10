@@ -64,7 +64,10 @@ baselines (the comparison tolerances absorb small drift).
 
 1. Add an entry to the `kGeometryCases` table in `cases.cc` - copy the draw
    logic between `BeginRecording`/`FinishRecording` of the source golden case
-   and keep the golden case name for traceability.
+   and keep the golden case name for traceability. Set the trailing
+   `target_space` field when the case renders into a non-sRGB surface
+   (see the `ColorSpace*` cases); it is passed to the surface's render
+   options in `main.cc`.
 2. Rebuild and generate the baseline with `SKITY_UPDATE_MISSING_GOLDEN=1`,
    review the PNG, commit it.
 

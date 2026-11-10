@@ -358,6 +358,9 @@ HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
   Paint paint_copy = paint_;
   paint_copy.SetFillColor(color);
   paint_copy.SetStrokeColor(color);
+  // The Set*Color calls reset the recorded color space to sRGB; the copied
+  // values are still in the paint's own space.
+  paint_copy.SetColorSpace(paint_.GetColorSpace());
   std::optional<Matrix> layer_to_local;
   if (effect == TextAtlasEffect::kA8Coverage && paint_.GetShader()) {
     Matrix inverse;
@@ -386,6 +389,9 @@ Paint MakeBitmapOnlyFillPaint(const Paint& paint) {
   Paint fill_paint = paint;
   if (paint.GetStyle() == Paint::kStroke_Style) {
     fill_paint.SetFillColor(paint.GetStrokeColor());
+    // SetFillColor resets the recorded color space to sRGB; the copied
+    // stroke color is still in the paint's own space.
+    fill_paint.SetColorSpace(paint.GetColorSpace());
   }
   fill_paint.SetStyle(Paint::kFill_Style);
   return fill_paint;

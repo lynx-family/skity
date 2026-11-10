@@ -137,6 +137,16 @@ std::shared_ptr<Pixmap> ResamplePixmapToSize(const std::shared_ptr<Pixmap>& src,
 std::shared_ptr<Pixmap> ResamplePixmapToTarget(
     const std::shared_ptr<Pixmap>& src, const DecodeOptions& options);
 
+/**
+ * Builds a row-major RGB->XYZ gamut matrix from image-metadata chromaticities
+ * {wx, wy, rx, ry, gx, gy, bx, by} (the layout of a PNG cHRM chunk): each
+ * primary contributes an XYZ column with Y == 1 and the columns are scaled so
+ * the matrix maps RGB white to the white point. Returns false when the values
+ * are degenerate (out of range or a singular primary matrix).
+ */
+bool CodecGamutFromChromaticities(const float chromaticities[8],
+                                  float gamut_xyz[9]);
+
 }  // namespace codec_priv
 }  // namespace skity
 

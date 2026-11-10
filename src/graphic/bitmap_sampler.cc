@@ -90,21 +90,26 @@ Color BitmapSampler::GetColor(Vec2 uv) const {
 
   uv = Vec2{RemapFloatTile(uv.x, x_tile_mode_),
             RemapFloatTile(uv.y, y_tile_mode_)};
-  Color color;
+  Vec4 sampled{};
   // The SW backend does not implement cubic resampling; fall back to bilinear.
   if (sampling_options_.UseCubic()) {
-    color = Color4fToColor(SampleUnitLinear(uv));
-    return color;
+    sampled = SampleUnitLinear(uv);
+  } else {
+    switch (sampling_options_.filter) {
+      case FilterMode::kNearest:
+        sampled = SampleUnitNearest(uv);
+        break;
+      case FilterMode::kLinear:
+        sampled = SampleUnitLinear(uv);
+        break;
+    }
   }
-  switch (sampling_options_.filter) {
-    case FilterMode::kNearest:
-      color = Color4fToColor(SampleUnitNearest(uv));
-      break;
-    case FilterMode::kLinear:
-      color = Color4fToColor(SampleUnitLinear(uv));
-      break;
+  // Convert the sampled color into the target space after filtering, the
+  // same semantics as the GPU texture decode (filter in the stored space).
+  if (!steps_.IsNoop()) {
+    sampled = steps_.Apply(sampled);
   }
-  return color;
+  return Color4fToColor(sampled);
 }
 
 }  // namespace skity

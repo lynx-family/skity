@@ -142,6 +142,39 @@ inline bool SetPixmapColorInfo(Pixmap* pixmap, AlphaType alpha_type,
   return result == SKITY_SUCCESS;
 }
 
+// Color space metadata only, no pixel conversion.
+inline bool SetPixmapColorSpace(Pixmap* pixmap,
+                                const skity_color_space_info& info) {
+  if (pixmap == nullptr) {
+    return false;
+  }
+  std::shared_ptr<Pixmap> view(pixmap, [](Pixmap*) {});
+  skity_pixmap pm_handle = skity::capi::alloc_handle<skity_pixmap_s>(
+      SKITY_OBJECT_TYPE_PIXMAP, 0, std::move(view));
+  if (pm_handle == nullptr) {
+    return false;
+  }
+  skity_result result = skity_pixmap_set_color_space(pm_handle, &info);
+  skity_pixmap_destroy(pm_handle);
+  return result == SKITY_SUCCESS;
+}
+
+inline bool GetPixmapColorSpace(Pixmap* pixmap,
+                                skity_color_space_info* out_info) {
+  if (pixmap == nullptr || out_info == nullptr) {
+    return false;
+  }
+  std::shared_ptr<Pixmap> view(pixmap, [](Pixmap*) {});
+  skity_pixmap pm_handle = skity::capi::alloc_handle<skity_pixmap_s>(
+      SKITY_OBJECT_TYPE_PIXMAP, 0, std::move(view));
+  if (pm_handle == nullptr) {
+    return false;
+  }
+  skity_result result = skity_pixmap_get_color_space(pm_handle, out_info);
+  skity_pixmap_destroy(pm_handle);
+  return result == SKITY_SUCCESS;
+}
+
 //
 // Pixel addressing — inline equivalents of the out-of-line core methods.
 // Built exclusively from the header-inline Pixmap accessors.
