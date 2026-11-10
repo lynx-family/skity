@@ -145,7 +145,7 @@ TEST(ColorSpaceGolden, P3TargetSpaceImagePassthrough) {
   skity::Bitmap bitmap(pixels);
   // The P3 red primary (outside sRGB) must land byte exactly; a pipeline
   // that routed it through an sRGB working space would return it muted
-  // (approximately 234/255, 51/255, 36/255 in P3 bytes).
+  // (approximately 240/255, 49/255, 28/255 in P3 bytes).
   auto p3_result = skity::Color4fFromColor(bitmap.GetPixel(10, 32));
   EXPECT_EQ(p3_result.r, 1.f);
   EXPECT_EQ(p3_result.g, 0.f);
