@@ -229,3 +229,42 @@ TEST_F(SaveLayerPixelGridTest, ReflectedLayersPreserveParentClipWithMultisamplin
 
 }  // namespace
 }  // namespace skity
+
+namespace skity {
+TEST(GPUSurfaceLifetime, DestroysUnflushedCanvasBeforeArenaStorage) {
+  @autoreleasepool {
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    if (device == nil) GTEST_SKIP() << "A Metal device is required";
+    id<MTLCommandQueue> queue = [device newCommandQueue];
+    auto context = MTLContextCreate(device, queue);
+    ASSERT_NE(context, nullptr);
+    for (int nesting : {0, 7, 15}) {
+      SCOPED_TRACE(nesting);
+      auto descriptor =
+          [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                             width:32
+                                                            height:32
+                                                         mipmapped:NO];
+      descriptor.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+      descriptor.storageMode = MTLStorageModeShared;
+      id<MTLTexture> texture = [device newTextureWithDescriptor:descriptor];
+      ASSERT_NE(texture, nil);
+      GPUSurfaceDescriptorMTL target;
+      target.backend = GPUBackendType::kMetal;
+      target.width = target.height = 32;
+      target.sample_count = 1;
+      target.content_scale = 1.f;
+      target.texture = texture;
+      target.surface_type = MTLSurfaceType::kTexture;
+      auto surface = context->CreateSurface(&target);
+      ASSERT_NE(surface, nullptr);
+      auto* canvas = surface->LockCanvas();
+      ASSERT_NE(canvas, nullptr);
+      for (int i = 0; i < nesting; ++i) canvas->SaveLayer(Rect::MakeWH(16, 16), Paint{});
+      EXPECT_EQ(canvas->GetSaveCount(), 1 + nesting);
+      // An abandoned frame is valid: do not flush or clear the live stack.
+      surface.reset();
+    }
+  }
+}
+}  // namespace skity
