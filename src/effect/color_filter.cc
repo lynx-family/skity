@@ -3,6 +3,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <cstring>
+#include <skity/graphic/color_space.hpp>
 #include <skity/io/pixmap.hpp>
 
 #include "src/effect/color_filter_base.hpp"
@@ -13,28 +14,6 @@
 namespace skity {
 
 namespace {
-
-static constexpr float transfer_fn_SRGB[] = {
-    2.4f,
-    static_cast<float>(1 / 1.055),
-    static_cast<float>(0.055 / 1.055),
-    static_cast<float>(1 / 12.92),
-    0.04045f,
-    0.0f,
-    0.0f,
-};
-
-static constexpr float transfer_fn_LINEAR[] = {
-    1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-};
-
-#define FixedToFloat(x) ((x) * 1.52587890625e-5f)
-
-static constexpr float named_gamut_SRGB[3][3] = {
-    {FixedToFloat(0x6FA2), FixedToFloat(0x6299), FixedToFloat(0x24A0)},
-    {FixedToFloat(0x38F5), FixedToFloat(0xB785), FixedToFloat(0x0F84)},
-    {FixedToFloat(0x0390), FixedToFloat(0x18DA), FixedToFloat(0xB6CF)},
-};
 
 enum Version {
   k0_Version,  // Initial (deprecated) version, no longer supported
@@ -212,15 +191,17 @@ std::string_view SRGBGammaColorFilter::ProcName() const {
 }
 
 void SRGBGammaColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
+  const auto srgb = ColorSpace::SRGB();
+  const auto linear = ColorSpace::SRGBLinear();
   const float* src_fn = nullptr;
   const float* dst_fn = nullptr;
 
   if (type_ == ColorFilterType::kLinearToSRGBGamma) {
-    src_fn = transfer_fn_LINEAR;
-    dst_fn = transfer_fn_SRGB;
+    src_fn = linear->transfer_fn;
+    dst_fn = srgb->transfer_fn;
   } else {
-    src_fn = transfer_fn_SRGB;
-    dst_fn = transfer_fn_LINEAR;
+    src_fn = srgb->transfer_fn;
+    dst_fn = linear->transfer_fn;
   }
 
   ColorSpaceHeader header{};
@@ -229,7 +210,7 @@ void SRGBGammaColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
                             9 * sizeof(float));
   std::memcpy(data.data(), &header, sizeof(ColorSpaceHeader));
   std::memcpy(data.data() + sizeof(ColorSpaceHeader) + 7 * sizeof(float),
-              named_gamut_SRGB, 9 * sizeof(float));
+              srgb->gamut_xyz, 9 * sizeof(float));
 
   // write src
   std::memcpy(data.data() + sizeof(ColorSpaceHeader), src_fn,

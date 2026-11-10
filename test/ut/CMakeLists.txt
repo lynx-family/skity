@@ -68,6 +68,7 @@ add_executable(skity_unit_test
     geometry/scalar_test.cc
     geometry/vector_test.cc
     graphic/bitmap_test.cc
+    graphic/color_space_test.cc
     graphic/color_test.cc
     graphic/image_test.cc
     graphic/path_measure_test.cc
