@@ -5,6 +5,7 @@
 #ifndef SRC_RENDER_HW_DRAW_FRAGMENT_WGSL_TEXTURE_FRAGMENT_HPP
 #define SRC_RENDER_HW_DRAW_FRAGMENT_WGSL_TEXTURE_FRAGMENT_HPP
 
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/sampling_options.hpp>
 
 #include "src/effect/pixmap_shader.hpp"
@@ -65,6 +66,12 @@ class WGSLTextureFragment : public HWWGSLFragment {
   float width_;
   float height_;
   CubicResampler cubic_;
+  std::shared_ptr<ColorSpace> color_space_;
+  // Non-sRGB images generate a decode variant of the texture shader; sRGB
+  // images produce the plain (pre-color-space) shader byte for byte.
+  bool has_color_space_decode_ = false;
+  // Precombined source -> working (sRGB) gamut matrix for the shader decode.
+  Matrix gamut_to_working_{};
 };
 
 }  // namespace skity

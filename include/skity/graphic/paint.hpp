@@ -11,6 +11,7 @@
 #include <skity/geometry/rect.hpp>
 #include <skity/graphic/blend_mode.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/macros.hpp>
 #include <utility>
 
@@ -151,6 +152,14 @@ class SKITY_API Paint {
   Color GetColor() const;
 
   Color4f GetColor4f() const;
+
+  /**
+   * Sets the alpha and RGB used when stroking and filling. The color is
+   * interpreted in color_space and converted to the pipeline working space
+   * (sRGB) on the way in; a null space (the default) leaves it untouched.
+   */
+  void SetColor4f(Color4f color,
+                  std::shared_ptr<ColorSpace> color_space = nullptr);
   /**
    * Requests, but does not require, that edge pixels draw opaque or with
    * partial transparency.

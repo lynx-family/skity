@@ -89,6 +89,12 @@ Color4f Paint::GetColor4f() const {
   return kStroke_Style == style_ ? stroke_color_ : fill_color_;
 }
 
+void Paint::SetColor4f(Color4f color, std::shared_ptr<ColorSpace> color_space) {
+  Color4f working = ColorSpace::Convert(std::move(color_space), color, nullptr);
+  stroke_color_ = working;
+  fill_color_ = working;
+}
+
 void Paint::SetAntiAlias(bool aa) { is_anti_alias_ = aa; }
 
 bool Paint::IsAntiAlias() const { return is_anti_alias_; }

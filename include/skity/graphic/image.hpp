@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <skity/gpu/texture.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/sampling_options.hpp>
 #include <skity/io/pixmap.hpp>
 #include <skity/macros.hpp>
@@ -72,6 +73,13 @@ class SKITY_API Image {
   virtual size_t Height() const = 0;
 
   virtual AlphaType GetAlphaType() const = 0;
+
+  /**
+   * The color space the image pixels are encoded in. The default (null)
+   * means undeclared, which equals the sRGB working space contract for raw
+   * hardware images.
+   */
+  virtual std::shared_ptr<ColorSpace> GetColorSpace() const { return nullptr; }
 
   virtual std::shared_ptr<Pixmap> ReadPixels(GPUContext* context) const {
     return nullptr;

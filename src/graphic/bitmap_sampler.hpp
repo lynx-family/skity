@@ -6,6 +6,7 @@
 #define SRC_GRAPHIC_BITMAP_SAMPLER_HPP
 
 #include <skity/graphic/bitmap.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/sampling_options.hpp>
 #include <skity/graphic/tile_mode.hpp>
 
@@ -17,7 +18,8 @@ class BitmapSampler {
       : bitmap_(bitmap),
         sampling_options_(sampling_options),
         x_tile_mode_(x_tile_mode),
-        y_tile_mode_(y_tile_mode) {}
+        y_tile_mode_(y_tile_mode),
+        color_space_(bitmap.GetPixmap()->GetColorSpace()) {}
 
   Color GetColor(Vec2 uv) const;
 
@@ -32,6 +34,7 @@ class BitmapSampler {
   const SamplingOptions sampling_options_;
   TileMode x_tile_mode_ = TileMode::kClamp;
   TileMode y_tile_mode_ = TileMode::kClamp;
+  std::shared_ptr<ColorSpace> color_space_;
 };
 }  // namespace skity
 
