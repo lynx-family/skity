@@ -30,6 +30,7 @@ class ImageFilter;
 class MaskFilter;
 class Paint;
 class Path;
+class PathBuilder;
 class PathEffect;
 class PathMeasure;
 class PictureRecorder;
@@ -92,6 +93,7 @@ typedef enum {
   SKITY_OBJECT_TYPE_WRITE_STREAM,
   SKITY_OBJECT_TYPE_PATH_ITER,
   SKITY_OBJECT_TYPE_PATH_RAW_ITER,
+  SKITY_OBJECT_TYPE_PATH_BUILDER,
 } skity_object_type;
 
 /* When set, the wrapper owns the underlying object and releases it on destroy.
@@ -132,6 +134,7 @@ struct skity_surface_s : skity_handle_base<skity::GPUSurface> {
 struct skity_canvas_s : skity_handle_base<skity::Canvas> {};
 struct skity_paint_s : skity_handle_base<skity::Paint> {};
 struct skity_path_s : skity_handle_base<skity::Path> {};
+struct skity_path_builder_s : skity_handle_base<skity::PathBuilder> {};
 struct skity_shader_s : skity_handle_base<skity::Shader> {};
 struct skity_color_filter_s : skity_handle_base<skity::ColorFilter> {};
 struct skity_image_filter_s : skity_handle_base<skity::ImageFilter> {};

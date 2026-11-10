@@ -98,6 +98,19 @@ uint32_t skity_path_measure_get_segment(skity_path_measure measure,
                                                                           : 0u;
 }
 
+uint32_t skity_path_measure_get_segment_to_builder(
+    skity_path_measure measure, float start_d, float stop_d,
+    skity_path_builder dst, uint32_t start_with_move_to) {
+  auto* m = measure_of(measure);
+  auto* b = skity::capi::resolve<skity_path_builder_s>(
+      dst, SKITY_OBJECT_TYPE_PATH_BUILDER);
+  if (!m || !b) return 0u;
+  return m->GetSegmentToBuilder(start_d, stop_d, b->impl.get(),
+                                start_with_move_to != 0)
+             ? 1u
+             : 0u;
+}
+
 uint32_t skity_path_measure_is_closed(skity_path_measure measure) {
   auto* m = measure_of(measure);
   return (m != nullptr && m->IsClosed()) ? 1u : 0u;

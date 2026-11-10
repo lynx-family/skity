@@ -12,6 +12,7 @@ namespace skity {
 
 class ContourMeasure;
 class ContourMeasureIter;
+class PathBuilder;
 
 /**
  * @class PathMeasure
@@ -83,6 +84,14 @@ class SKITY_API PathMeasure final {
    * @return false          If segment is zero-length, or startD > stopD
    */
   bool GetSegment(float startD, float stopD, Path* dst, bool startWithMoveTo);
+
+  /**
+   * @brief Appends the segment of the current contour to dst with the same
+   *        distance and MoveTo rules as GetSegment().
+   * @return False on failure, leaving dst unchanged.
+   */
+  bool GetSegmentToBuilder(float startD, float stopD, PathBuilder* dst,
+                           bool startWithMoveTo);
 
   /**
    *

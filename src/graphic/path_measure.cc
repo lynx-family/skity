@@ -2,6 +2,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <skity/graphic/path_builder.hpp>
 #include <skity/graphic/path_measure.hpp>
 
 #include "src/graphic/contour_measure.hpp"
@@ -58,6 +59,11 @@ bool PathMeasure::GetPosTan2D(float distance, Vec2* position, Vec2* tangent) {
 bool PathMeasure::GetSegment(float startD, float stopD, Path* dst,
                              bool startWithMoveTo) {
   return contour_ && contour_->getSegment(startD, stopD, dst, startWithMoveTo);
+}
+
+bool PathMeasure::GetSegmentToBuilder(float startD, float stopD,
+                                      PathBuilder* dst, bool startWithMoveTo) {
+  return dst && GetSegment(startD, stopD, &dst->path_, startWithMoveTo);
 }
 
 bool PathMeasure::IsClosed() { return contour_ && contour_->isClosed(); }

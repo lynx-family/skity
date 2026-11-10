@@ -7,6 +7,7 @@
 
 #include <skity/c/skity_base.h>
 #include <skity/c/skity_path.h>
+#include <skity/c/skity_path_builder.h>
 #include <skity/c/skity_types.h>
 
 #ifdef __cplusplus
@@ -90,6 +91,15 @@ SKITY_C_API uint32_t skity_path_measure_get_pos_tan_2d(
 SKITY_C_API uint32_t skity_path_measure_get_segment(
     skity_path_measure measure, float start_d, float stop_d, skity_path dst,
     uint32_t start_with_move_to);
+
+/**
+ * @brief Appends the segment to @p dst with the same distance and MoveTo
+ *        rules as skity_path_measure_get_segment().
+ * @return 1 on success, 0 on failure, leaving @p dst unchanged.
+ */
+SKITY_C_API uint32_t skity_path_measure_get_segment_to_builder(
+    skity_path_measure measure, float start_d, float stop_d,
+    skity_path_builder dst, uint32_t start_with_move_to);
 
 /** @brief Return 1 if the current contour is closed, 0 otherwise. */
 SKITY_C_API uint32_t skity_path_measure_is_closed(skity_path_measure measure);
