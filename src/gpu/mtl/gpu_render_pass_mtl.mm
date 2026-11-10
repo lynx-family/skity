@@ -183,6 +183,10 @@ void GPURenderPassMTL::EncodeCommands(std::optional<GPUViewport> viewport,
                                             .height = command_scissor.height}];
     SetStencilReference(command->stencil_reference);
     SetPipeline(cache, command->pipeline);
+    if (!command->storage_bindings.empty() &&
+        !SetStorageBindings(cache, command->storage_bindings)) {
+      continue;
+    }
     SetUniformBindings(cache, command->uniform_bindings);
 
     // handle texture and sampler bindings separately
@@ -216,6 +220,18 @@ void GPURenderPassMTL::EncodeCommands(std::optional<GPUViewport> viewport,
   }
 
   [encoder_ endEncoding];
+}
+
+bool GPURenderPassMTL::SetStorageBindings(BindingsCache& cache,
+                                          const ArrayList<StorageBinding, 1>& bindings) {
+  for (const auto& binding : bindings) {
+    id<MTLBuffer> buffer = static_cast<GPUBufferMTL*>(binding.buffer.get())->GetMTLBuffer();
+    if (buffer.length != binding.range) {
+      return false;
+    }
+    cache.SetBuffer(GPUShaderStage::kVertex, binding.index, 0, buffer);
+  }
+  return true;
 }
 
 void GPURenderPassMTL::SetUniformBindings(BindingsCache& cache,

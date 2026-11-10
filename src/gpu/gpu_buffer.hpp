@@ -23,6 +23,7 @@ enum GPUBufferUsage : uint32_t {
   kVertexBuffer = 0x1,
   kUniformBuffer = (0x1 << 1),
   kIndexBuffer = (0x1 << 2),
+  kStorageBuffer = (0x1 << 3),
 
   kDefaultBufferUsage = (kVertexBuffer | kUniformBuffer | kIndexBuffer),
 };

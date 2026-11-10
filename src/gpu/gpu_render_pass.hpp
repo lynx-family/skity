@@ -126,6 +126,15 @@ struct UniformBinding {
   GPUBufferView buffer;
 };
 
+struct StorageBinding {
+  uint32_t index;
+  uint32_t group;
+  uint32_t binding;
+  // Whole buffer at offset zero, owned through command encoding.
+  std::shared_ptr<GPUBuffer> buffer;
+  uint32_t range;
+};
+
 /**
  * Represent the `sampler2D` in GLSL shader. which is a combination of texture
  * and sampler.
@@ -230,6 +239,7 @@ struct Command {
   GPUBufferView vertex_buffer;
   GPUBufferView instance_buffer;
   ArrayList<UniformBinding, 4> uniform_bindings;
+  ArrayList<StorageBinding, 1> storage_bindings;
   ArrayList<TextureBinding, 4> texture_bindings;
   ArrayList<SamplerBinding, 4> sampler_bindings;
   uint32_t stencil_reference = 0u;
@@ -266,6 +276,39 @@ struct Command {
     for (const auto& uniform : uniform_bindings) {
       if (uniform.buffer.buffer == nullptr) {
         return false;
+      }
+    }
+
+    if (storage_bindings.size() != pipeline->GetStorageBindingCount()) {
+      return false;
+    }
+    if (storage_bindings.empty()) {
+      return true;
+    }
+
+    for (const auto& group : pipeline->GetBindGroups()) {
+      for (const auto& entry : group.entries) {
+        if (entry.type != wgx::BindingType::kStorageBuffer) {
+          continue;
+        }
+        if (entry.stage != wgx::ShaderStage_kVertex) {
+          return false;
+        }
+
+        bool bound = false;
+        for (const auto& storage : storage_bindings) {
+          if (storage.group == group.group &&
+              storage.binding == entry.binding &&
+              storage.index == entry.index) {
+            bound =
+                storage.buffer && storage.range > 0 &&
+                (storage.buffer->GetUsage() & GPUBufferUsage::kStorageBuffer);
+            break;
+          }
+        }
+        if (!bound) {
+          return false;
+        }
       }
     }
 
