@@ -213,6 +213,9 @@ int32_t smoke_render_case(uint32_t index) {
   // single-sample resolve-less target; the smoke baselines are captured with
   // sample_count 1.
   surface_desc.sample_count = 1;
+  // Color-space cases render into a surface tagged with the case's target
+  // space; the default-constructed sRGB keeps the legacy behavior.
+  surface_desc.render_options.color_space = test_case.target_space;
   surface_desc.texture = g_texture;
   g_surface = g_context->CreateSurface(&surface_desc);
   if (g_surface == nullptr) {

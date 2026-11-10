@@ -289,25 +289,28 @@ void DrawImageRect(Canvas* canvas) {
                         SamplingOptions{});
 }
 
-void DrawColorSpaceDecode(Canvas* canvas) {
-  auto make_solid_image = [](uint32_t w, uint32_t h, Color4f color,
-                             ColorSpace color_space) {
-    auto pixmap = std::make_shared<Pixmap>(w, h);
-    Bitmap bitmap(pixmap, false);
-    auto stored = Color4fToColor(color);
-    for (uint32_t y = 0; y < h; y++) {
-      for (uint32_t x = 0; x < w; x++) {
-        bitmap.SetPixel(x, y, stored);
-      }
+// Builds a w x h unpremul RGBA image whose every pixel is `color`, tagged
+// with `color_space` (same helper as the color-space golden cases).
+std::shared_ptr<Image> MakeColorSpaceImage(uint32_t w, uint32_t h,
+                                           Color4f color,
+                                           ColorSpace color_space) {
+  auto pixmap = std::make_shared<Pixmap>(w, h);
+  Bitmap bitmap(pixmap, false);
+  auto stored = Color4fToColor(color);
+  for (uint32_t y = 0; y < h; y++) {
+    for (uint32_t x = 0; x < w; x++) {
+      bitmap.SetPixel(x, y, stored);
     }
-    pixmap->SetColorInfo(kUnpremul_AlphaType, ColorType::kRGBA, color_space);
-    return Image::MakeImage(pixmap);
-  };
+  }
+  pixmap->SetColorInfo(kUnpremul_AlphaType, ColorType::kRGBA, color_space);
+  return Image::MakeImage(pixmap);
+}
 
+void DrawColorSpaceDecode(Canvas* canvas) {
   canvas->Clear(Color_WHITE);
 
   const Color4f p3_source{0.9f, 0.5f, 0.1f, 1.f};
-  auto p3_image = make_solid_image(
+  auto p3_image = MakeColorSpaceImage(
       32, 64, ColorSpace::SRGB().Convert(p3_source, ColorSpace::DisplayP3()),
       ColorSpace::DisplayP3());
   canvas->DrawImageRect(p3_image, Rect::MakeWH(32.f, 64.f),
@@ -315,13 +318,134 @@ void DrawColorSpaceDecode(Canvas* canvas) {
                         SamplingOptions{});
 
   const Color4f linear_source{0.25f, 0.5f, 0.75f, 1.f};
-  auto linear_image = make_solid_image(
+  auto linear_image = MakeColorSpaceImage(
       32, 64,
       ColorSpace::SRGB().Convert(linear_source, ColorSpace::SRGBLinear()),
       ColorSpace::SRGBLinear());
   canvas->DrawImageRect(linear_image, Rect::MakeWH(32.f, 64.f),
                         Rect::MakeXYWH(32.f, 0.f, 32.f, 64.f),
                         SamplingOptions{});
+}
+
+// Draw logic extracted from ColorSpaceGolden.P3TargetSpaceImagePassthrough;
+// the case table renders this on a Display P3 surface.
+void DrawColorSpaceP3TargetPassthrough(Canvas* canvas) {
+  canvas->Clear(Color_WHITE);
+
+  auto p3_red = MakeColorSpaceImage(32, 64, Color4f{1.f, 0.f, 0.f, 1.f},
+                                    ColorSpace::DisplayP3());
+  canvas->DrawImageRect(p3_red, Rect::MakeWH(32.f, 64.f),
+                        Rect::MakeXYWH(0.f, 0.f, 32.f, 64.f),
+                        SamplingOptions{});
+
+  auto srgb_red =
+      MakeColorSpaceImage(32, 64, Color4f{1.f, 0.f, 0.f, 1.f}, ColorSpace{});
+  canvas->DrawImageRect(srgb_red, Rect::MakeWH(32.f, 64.f),
+                        Rect::MakeXYWH(32.f, 0.f, 32.f, 64.f),
+                        SamplingOptions{});
+}
+
+// Draw logic extracted from
+// ColorSpaceGolden.P3TargetSpaceResolvesSRGBPaintColor (left half) and
+// P3TargetSpacePaintColor (right half): an sRGB-recorded paint color must
+// convert into the P3 target at draw time, while a P3-recorded one passes
+// through byte exactly. Half-width fills keep the draws on the rasterize path
+// instead of the initial clear.
+void DrawColorSpaceP3TargetPaintColor(Canvas* canvas) {
+  canvas->Clear(Color_WHITE);
+
+  Paint resolve_paint;
+  resolve_paint.SetStyle(Paint::kFill_Style);
+  resolve_paint.SetColor4f(Color4f{0.2f, 0.9f, 0.2f, 1.f}, ColorSpace{});
+  canvas->DrawRect(Rect::MakeWH(32.f, 64.f), resolve_paint);
+
+  Paint passthrough_paint;
+  passthrough_paint.SetStyle(Paint::kFill_Style);
+  passthrough_paint.SetColor4f(Color4f{0.4666f, 0.2f, 0.75f, 1.f},
+                               ColorSpace::DisplayP3());
+  canvas->DrawRect(Rect::MakeXYWH(32.f, 0.f, 32.f, 64.f), passthrough_paint);
+}
+
+// Draw logic extracted from ColorSpaceGolden.LinearTargetFoldsEncode; the
+// case table renders this on a linear sRGB surface, so the encode stage
+// folds away and an sRGB 0.5 gray stores its linear value.
+void DrawColorSpaceLinearTargetFoldsEncode(Canvas* canvas) {
+  canvas->Clear(Color_WHITE);
+  auto image =
+      MakeColorSpaceImage(64, 64, Color4f{0.5f, 0.5f, 0.5f, 1.f}, ColorSpace{});
+  canvas->DrawImageRect(image, Rect::MakeWH(64.f, 64.f),
+                        Rect::MakeWH(64.f, 64.f), SamplingOptions{});
+}
+
+// Draw logic extracted from ColorSpaceGolden.Gamma22TargetParametricEncode;
+// a pure gamma 2.2 target has no closed-form constant curve, so the shader
+// must take the parametric encode branch.
+void DrawColorSpaceGamma22TargetParametricEncode(Canvas* canvas) {
+  canvas->Clear(Color_WHITE);
+  auto image =
+      MakeColorSpaceImage(64, 64, Color4f{0.5f, 0.5f, 0.5f, 1.f}, ColorSpace{});
+  canvas->DrawImageRect(image, Rect::MakeWH(64.f, 64.f),
+                        Rect::MakeWH(64.f, 64.f), SamplingOptions{});
+}
+
+// Draw logic extracted from ColorSpaceGolden.P3TargetGradientStopsResolve:
+// sRGB-recorded stops resolve into the P3 target; the clamped regions
+// outside the gradient segment sample the resolved stop colors exactly.
+void DrawColorSpaceP3TargetGradientStops(Canvas* canvas) {
+  canvas->Clear(Color_WHITE);
+
+  const Point pts[2] = {{16.f, 0.f, 0.f, 1.f}, {48.f, 0.f, 0.f, 1.f}};
+  const Vec4 stops[2] = {{1.f, 0.f, 0.f, 1.f}, {0.f, 0.f, 1.f, 1.f}};
+  auto shader = Shader::MakeLinear(pts, stops, nullptr, 2);
+
+  Paint paint;
+  paint.SetShader(shader);
+  canvas->DrawRect(Rect::MakeWH(64.f, 64.f), paint);
+}
+
+// Draw logic extracted from
+// ColorSpaceGolden.P3DeclaredStopsResolveIntoSRGBTarget: stops carrying the P3
+// encodings of sRGB red/blue, declared in P3, land back on the original sRGB
+// colors on the default sRGB surface.
+void DrawColorSpaceP3StopsIntoSRGBTarget(Canvas* canvas) {
+  canvas->Clear(Color_WHITE);
+
+  const Color4f srgb_red{1.f, 0.f, 0.f, 1.f};
+  const Color4f srgb_blue{0.f, 0.f, 1.f, 1.f};
+  const Vec4 stops[2] = {
+      ColorSpace::SRGB().Convert(srgb_red, ColorSpace::DisplayP3()),
+      ColorSpace::SRGB().Convert(srgb_blue, ColorSpace::DisplayP3())};
+  const Point pts[2] = {{16.f, 0.f, 0.f, 1.f}, {48.f, 0.f, 0.f, 1.f}};
+
+  auto shader = Shader::MakeLinear(pts, stops, nullptr, 2);
+  shader->SetColorSpace(ColorSpace::DisplayP3());
+
+  Paint paint;
+  paint.SetShader(shader);
+  canvas->DrawRect(Rect::MakeWH(64.f, 64.f), paint);
+}
+
+// No golden counterpart: guards the blend color filter's recorded color
+// space on the GPU (the blend color resolves at bind-group setup). A white
+// source under a kSrcOver blend with an sRGB-recorded green {0.2, 0.9, 0.2}
+// must land on the P3-resolved green on the P3 target.
+void DrawColorSpaceP3TargetBlendFilter(Canvas* canvas) {
+  canvas->Clear(Color_WHITE);
+
+  Paint paint;
+  paint.SetStyle(Paint::kFill_Style);
+  paint.SetColor4f(Color4f{1.f, 1.f, 1.f, 1.f}, ColorSpace{});
+  paint.SetColorFilter(ColorFilters::Blend(Color4f{0.2f, 0.9f, 0.2f, 1.f},
+                                           BlendMode::kSrcOver, ColorSpace{}));
+  // Half width keeps the fill on the rasterize path.
+  canvas->DrawRect(Rect::MakeWH(32.f, 64.f), paint);
+}
+
+// Pure gamma 2.2 transfer over the sRGB gamut (same target space as the
+// Gamma22TargetParametricEncode golden case).
+ColorSpace Gamma22TargetSpace() {
+  const float tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  return *ColorSpace::MakeRGB(tf, ColorSpace{}.gamut_xyz);
 }
 
 const GeometryCase kGeometryCases[] = {
@@ -337,6 +461,20 @@ const GeometryCase kGeometryCases[] = {
      &DrawSaveLayerTwoCircleWithTranslate},
     {"DrawImageRect", 64, 64, &DrawImageRect},
     {"ColorSpaceDecode", 64, 64, &DrawColorSpaceDecode},
+    {"ColorSpaceP3TargetPassthrough", 64, 64,
+     &DrawColorSpaceP3TargetPassthrough, ColorSpace::DisplayP3()},
+    {"ColorSpaceP3TargetPaintColor", 64, 64, &DrawColorSpaceP3TargetPaintColor,
+     ColorSpace::DisplayP3()},
+    {"ColorSpaceLinearTargetFoldsEncode", 64, 64,
+     &DrawColorSpaceLinearTargetFoldsEncode, ColorSpace::SRGBLinear()},
+    {"ColorSpaceGamma22TargetParametricEncode", 64, 64,
+     &DrawColorSpaceGamma22TargetParametricEncode, Gamma22TargetSpace()},
+    {"ColorSpaceP3TargetGradientStops", 64, 64,
+     &DrawColorSpaceP3TargetGradientStops, ColorSpace::DisplayP3()},
+    {"ColorSpaceP3StopsIntoSRGBTarget", 64, 64,
+     &DrawColorSpaceP3StopsIntoSRGBTarget},
+    {"ColorSpaceP3TargetBlendFilter", 64, 64,
+     &DrawColorSpaceP3TargetBlendFilter, ColorSpace::DisplayP3()},
 };
 
 }  // namespace
