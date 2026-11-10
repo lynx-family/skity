@@ -50,6 +50,15 @@ GPURenderPipeline::GPURenderPipeline(const GPURenderPipelineDescriptor& desc)
 
   if (!merge_groups(vs_groups, fs_groups)) {
     valid_ = false;
+    return;
+  }
+
+  for (const auto& group : bind_groups_) {
+    for (const auto& entry : group.entries) {
+      if (entry.type == wgx::BindingType::kStorageBuffer) {
+        ++storage_binding_count_;
+      }
+    }
   }
 }
 

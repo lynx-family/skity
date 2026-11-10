@@ -68,6 +68,9 @@ class GPURenderPassMTL : public GPURenderPass {
 
   void SetPipeline(BindingsCache& cache, GPURenderPipeline* pipeline);
 
+  bool SetStorageBindings(BindingsCache& cache,
+                          const ArrayList<StorageBinding, 1>& bindings);
+
   void SetUniformBindings(BindingsCache& cache,
                           const ArrayList<UniformBinding, 4>& uniform_bindings);
 

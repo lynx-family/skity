@@ -212,6 +212,8 @@ class GPURenderPipeline {
     return bind_groups_;
   }
 
+  size_t GetStorageBindingCount() const { return storage_binding_count_; }
+
   const wgx::BindGroup* GetBindingGroup(uint32_t index) const {
     for (size_t i = 0; i < bind_groups_.size(); i++) {
       if (bind_groups_[i].group == index) {
@@ -226,6 +228,7 @@ class GPURenderPipeline {
   GPURenderPipelineDescriptor desc_;
   // Merged bind groups from vertex and fragment shader functions.
   std::vector<wgx::BindGroup> bind_groups_;
+  size_t storage_binding_count_ = 0;
   bool valid_ = true;
 };
 

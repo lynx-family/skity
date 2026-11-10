@@ -286,8 +286,12 @@ target_link_libraries(skity_unit_test PRIVATE glm::glm-header-only)
 target_link_libraries(skity_unit_test PRIVATE wgsl-cross)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_MTL_BACKEND)
-  target_sources(skity_unit_test PRIVATE wgx/wgx_metal_storage_test.mm)
-  set_source_files_properties(wgx/wgx_metal_storage_test.mm
+  target_sources(skity_unit_test PRIVATE
+      gpu/mtl/gpu_storage_mtl_test.mm
+      wgx/wgx_metal_storage_test.mm)
+  set_source_files_properties(
+      gpu/mtl/gpu_storage_mtl_test.mm
+      wgx/wgx_metal_storage_test.mm
       PROPERTIES COMPILE_FLAGS "-fobjc-arc")
   target_link_libraries(skity_unit_test PRIVATE "-framework Metal")
 endif()

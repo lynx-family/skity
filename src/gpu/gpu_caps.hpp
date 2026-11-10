@@ -21,6 +21,7 @@ struct GPUCaps {
   // purely through pipeline blend state, so their native-blend fragment shader
   // is identical to the plain one and must NOT occupy a separate cache slot.
   bool native_blend_shader_variant = false;
+  uint32_t max_vertex_storage_buffer_range = 0;
 };
 
 // Features a shader function may request at CreateShaderFunction time.
