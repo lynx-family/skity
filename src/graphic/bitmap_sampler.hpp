@@ -10,18 +10,25 @@
 #include <skity/graphic/sampling_options.hpp>
 #include <skity/graphic/tile_mode.hpp>
 
-#include "src/graphic/color_space_priv.hpp"
+#include "src/graphic/color_transform.hpp"
 
 namespace skity {
 class BitmapSampler {
  public:
-  // `output_space` is the space the caller wants GetColor() to return
+  // `target_space` is the space the caller wants GetColor() to return
   // colors in: null (the default) means the working space (sRGB), and a
   // caller resampling into a pixmap tagged with the source's own space
   // passes that space to skip the conversion entirely.
   BitmapSampler(Bitmap& bitmap, const SamplingOptions& sampling_options,
                 TileMode x_tile_mode, TileMode y_tile_mode,
-                std::shared_ptr<const ColorSpace> output_space = nullptr);
+                const std::shared_ptr<const ColorSpace>& target_space = {})
+      : bitmap_(bitmap),
+        sampling_options_(sampling_options),
+        x_tile_mode_(x_tile_mode),
+        y_tile_mode_(y_tile_mode),
+        steps_(ColorTransformSteps::Resolve(bitmap.GetPixmap()->GetColorSpace(),
+                                            target_space)),
+        alpha_type_(bitmap.GetPixmap()->GetAlphaType()) {}
 
   Color GetColor(Vec2 uv) const;
 
@@ -33,16 +40,14 @@ class BitmapSampler {
   Vec4 SampleXY(Vec2 xy) const;
 
   Bitmap& bitmap_;
+  // Held by value: constructors routinely receive a temporary
+  // SamplingOptions, and a reference member would dangle after the call.
   const SamplingOptions sampling_options_;
   TileMode x_tile_mode_ = TileMode::kClamp;
   TileMode y_tile_mode_ = TileMode::kClamp;
-  std::shared_ptr<const ColorSpace> color_space_;
+  // Folded sampled-bitmap space -> target space transform.
+  ColorTransformSteps steps_{};
   AlphaType alpha_type_ = kUnpremul_AlphaType;
-  std::shared_ptr<const ColorSpace> output_space_;
-  // Conversion invariants prepared once per sampler (matrix inversion,
-  // curve flips); per-pixel work only applies them.
-  bool needs_conversion_ = false;
-  PreparedConversion prepared_{};
 };
 }  // namespace skity
 

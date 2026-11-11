@@ -52,6 +52,7 @@ HWDrawState HWSubLayer::OnPrepare(HWDrawContext* context) {
   layer_back_draw_->SetClipDepth(GetClipDepth());
   layer_back_draw_->SetSampleCount(GetSampleCount());
   layer_back_draw_->SetColorFormat(GetColorFormat());
+  layer_back_draw_->SetColorSpace(GetColorSpace());
   layer_back_draw_->SetScissorBox(GetScissorBox());
 
   layer_back_draw_->SetBlendPlan(GetBlendPlan());

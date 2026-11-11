@@ -11,6 +11,7 @@
 #include <skity/gpu/gpu_context.hpp>
 #include <skity/gpu/gpu_context_gl.hpp>
 #include <skity/gpu/texture.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/recorder/display_list.hpp>
 
 #include "common/golden_texture.hpp"
@@ -60,6 +61,19 @@ class GoldenTestEnv : public ::testing::Environment {
 
   uint32_t GetSampleCount() const { return sample_count_; }
 
+  /**
+   * Declares the color space of the surfaces this env creates (the render
+   * target space); defaults to sRGB. Color-space golden cases set this
+   * before rendering and restore it afterwards.
+   */
+  void SetTargetColorSpace(std::shared_ptr<const ColorSpace> color_space) {
+    target_color_space_ = color_space;
+  }
+
+  const std::shared_ptr<const ColorSpace>& GetTargetColorSpace() const {
+    return target_color_space_;
+  }
+
   virtual void SetGLSurfaceMode(std::optional<GLSurfaceMode> mode) {}
 
   virtual std::optional<GLSurfaceMode> GetGLSurfaceMode() const {
@@ -87,6 +101,7 @@ class GoldenTestEnv : public ::testing::Environment {
  private:
   std::unique_ptr<skity::GPUContext> gpu_context_ = nullptr;
   uint32_t sample_count_ = 4;
+  std::shared_ptr<const ColorSpace> target_color_space_;
 };
 
 }  // namespace testing

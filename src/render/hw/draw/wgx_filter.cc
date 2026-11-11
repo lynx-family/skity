@@ -8,6 +8,7 @@
 
 #include "src/effect/color_filter_base.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
+#include "src/graphic/color_transform.hpp"
 #include "src/render/hw/draw/wgx_programmable_blending.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
@@ -135,7 +136,12 @@ class WGXBlendFilter : public WGXFilterFragment {
       return;
     }
 
-    auto color4f = Color4fFromColor(color_);
+    // The blend constant is an sRGB color by convention; resolve it into
+    // the target space once per draw (bind time), the same resolution the
+    // paint color already got, before premultiplying.
+    Color4f color4f =
+        ColorTransformSteps::Resolve(nullptr, context->target_space)
+            .Apply(Color4fFromColor(color_));
     color4f[0] *= color4f[3];
     color4f[1] *= color4f[3];
     color4f[2] *= color4f[3];

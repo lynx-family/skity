@@ -21,24 +21,14 @@ void ColorSpaceMultiply3x3(const float lhs[9], const float rhs[9],
 // Adjugate / determinant inversion; returns false when m is singular.
 bool ColorSpaceInvert3x3(const float m[9], float inv[9]);
 
-// Per-pair conversion invariants: the decode curve, the combined gamut
-// matrix and the encode curve. Converting many colors prepares this once
-// instead of redoing the matrix inversion and curve flip per pixel; the
-// pointers reference the caller's spaces and must outlive the value.
-struct PreparedConversion {
-  const ColorSpace* decode_from = nullptr;
-  float gamut[9] = {};
-  bool needs_gamut = false;
-  float encode_tf[7] = {};
-  const ColorSpace* encode_to = nullptr;
-};
+// Evaluates a parametric transfer function (the signal -> linear direction):
+//   linear(x) = c * x + f               for x <  d
+//   linear(x) = pow(a * x + b, g) + e   for x >= d
+float ColorSpaceEvalTransferFn(const float tf[7], float x);
 
-PreparedConversion PrepareConversion(const ColorSpace& from,
-                                     const ColorSpace& to);
-
-// Applies a prepared conversion to one rgb triple in place. Extended-range
-// inputs/outputs are preserved; clamping belongs to the quantizing caller.
-void ApplyConversion(const PreparedConversion& prepared, float rgb[3]);
+// Closed-form inverse (the linear -> signal direction); the parametric family
+// is closed under inversion.
+void ColorSpaceInvertTransferFn(const float tf[7], float inv[7]);
 
 }  // namespace skity
 

@@ -18,6 +18,7 @@
 #include "src/effect/image_filter_base.hpp"
 #include "src/effect/mask_filter_priv.hpp"
 #include "src/effect/pixmap_shader.hpp"
+#include "src/graphic/color_transform.hpp"
 #include "src/render/paint_order.hpp"
 #include "src/render/sw/sw_raster.hpp"
 #include "src/render/sw/sw_span_brush.hpp"
@@ -740,6 +741,17 @@ std::unique_ptr<SWSpanBrush> SWCanvas::GenerateBrush(
     Shader::GradientInfo info{};
     Shader::GradientType type = shader->AsGradient(&info);
 
+    // Gradient stops are recorded in sRGB; resolve them into the target
+    // (bitmap) color space so interpolation happens in the space the
+    // surface encodes (stop-level color spaces are a future extension).
+    if (!ColorSpaceIsSRGB(bitmap_->GetPixmap()->GetColorSpace())) {
+      ColorTransformSteps stop_steps = ColorTransformSteps::Resolve(
+          nullptr, bitmap_->GetPixmap()->GetColorSpace());
+      for (auto& stop : info.colors) {
+        stop = stop_steps.Apply(stop);
+      }
+    }
+
     if (type == Shader::kLinear || type == Shader::kRadial ||
         type == Shader::kConical || type == Shader::kSweep) {
       Matrix device_to_local;
@@ -790,11 +802,17 @@ std::unique_ptr<SWSpanBrush> SWCanvas::GenerateBrush(
           spans, bitmap_, paint.GetColorFilter().get(), paint.GetBlendMode(),
           paint.GetAlphaF(), std::move(pixmap), matrix,
           *pixmap_shader->GetSamplingOptions(), pixmap_shader->GetXTileMode(),
-          pixmap_shader->GetYTileMode());
+          pixmap_shader->GetYTileMode(), bitmap_->GetPixmap()->GetColorSpace());
     }
   }
 
-  Color4f color = stroke ? paint.GetStrokeColor() : paint.GetFillColor();
+  // Recorded paint colors resolve into the target (bitmap) color space at
+  // draw time, mirroring the GPU geometry uniform resolution. The per-slot
+  // getters resolve each color with its OWN recorded space: a stroke pass of
+  // a stroke-and-fill paint must not resolve through the fill color's space.
+  const auto& bitmap_space = bitmap_->GetPixmap()->GetColorSpace();
+  Color4f color = stroke ? paint.GetStrokeColor(bitmap_space)
+                         : paint.GetFillColor(bitmap_space);
 
   return std::make_unique<SolidColorBrush>(spans, bitmap_,
                                            paint.GetColorFilter().get(),
