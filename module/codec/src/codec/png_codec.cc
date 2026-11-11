@@ -4,6 +4,7 @@
 
 #include "src/codec/png_codec.hpp"
 
+#include <csetjmp>
 #include <cstdlib>
 #include <cstring>
 #include <skity/graphic/color_space.hpp>
@@ -20,80 +21,64 @@ namespace skity {
 
 namespace {
 
-constexpr size_t kPNGSignatureSize = 8;
 // PNG stores gAMA / cHRM values scaled by this factor.
 constexpr uint32_t kPNGFixedPointScale = 100000;
 
-struct PngColorChunkInfo {
-  bool has_srgb = false;
-  bool has_gama = false;
-  bool has_chrm = false;
-  // gAMA / cHRM carry ICC-based color descriptions skity cannot reduce yet
-  // (see docs/COLOR_SPACE_DESIGN.md); their presence falls back to sRGB.
-  bool has_icc_description = false;
-  uint32_t gama = 0;
-  uint32_t chrm[8] = {};
+// Cursor feeding libpng from the source data; libpng pulls bytes from it
+// through the read callback below.
+struct PngReadSource {
+  const uint8_t* data;
+  size_t size;
+  size_t pos;
 };
 
-uint32_t ReadBE32(const uint8_t* p) {
-  return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) |
-         (uint32_t(p[2]) << 8) | uint32_t(p[3]);
+void png_read_callback(png_structp png_ptr, png_bytep out, png_size_t length) {
+  auto* source = static_cast<PngReadSource*>(png_get_io_ptr(png_ptr));
+  if (length > source->size - source->pos) {
+    png_error(png_ptr, "unexpected end of PNG data");
+    return;
+  }
+  std::memcpy(out, source->data + source->pos, length);
+  source->pos += length;
 }
 
-// Walks the PNG chunk stream up to the first IDAT and collects the color
-// description chunks. CRCs are not validated here; the actual decode reads
-// the same data through libpng, which rejects corrupt files anyway.
-bool ParsePNGColorChunks(const uint8_t* data, size_t size,
-                         PngColorChunkInfo* out) {
-  static const uint8_t kPNGSignature[kPNGSignatureSize] = {
-      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
-  if (size < kPNGSignatureSize ||
-      std::memcmp(data, kPNGSignature, kPNGSignatureSize) != 0) {
-    return false;
-  }
-
-  size_t pos = kPNGSignatureSize;
-  while (pos + 12 <= size) {
-    uint32_t length = ReadBE32(data + pos);
-    const uint8_t* type = data + pos + 4;
-    if (length > size - pos - 12) {
-      break;  // truncated chunk table; stop scanning
-    }
-    const uint8_t* payload = data + pos + 8;
-
-    if (std::memcmp(type, "IDAT", 4) == 0) {
-      break;  // color chunks must precede the image data
-    } else if (std::memcmp(type, "sRGB", 4) == 0 && length >= 1) {
-      out->has_srgb = true;
-    } else if (std::memcmp(type, "gAMA", 4) == 0 && length >= 4) {
-      out->gama = ReadBE32(payload);
-      out->has_gama = out->gama > 0 && out->gama < 10 * kPNGFixedPointScale;
-    } else if (std::memcmp(type, "cHRM", 4) == 0 && length >= 32) {
-      for (int i = 0; i < 8; i++) {
-        out->chrm[i] = ReadBE32(payload + i * 4);
-      }
-      out->has_chrm = true;
-    } else if (std::memcmp(type, "iCCP", 4) == 0 ||
-               std::memcmp(type, "cICP", 4) == 0) {
-      out->has_icc_description = true;
-    }
-
-    pos += 12 + length;
-  }
-  return true;
-}
-
-// Turns the collected chunks into a parametric color space description.
+// Turns libpng's color description chunks into a parametric color space
+// description. Reading them from the info struct (instead of rescanning the
+// byte stream) keeps metadata and pixels under one set of rules: libpng
+// validates every chunk CRC and discards ancillary chunks (gAMA, cHRM, ...)
+// with a bad one, and it already ran its checks on the data it decoded.
 // Returns false when the file carries no (supported) color description and
 // the pixmap should keep the default sRGB tag.
-bool BuildColorSpaceInfo(const PngColorChunkInfo& chunks,
+bool BuildColorSpaceInfo(png_structp png_ptr, png_infop info_ptr,
                          skity_color_space_info* out) {
-  if (chunks.has_srgb || chunks.has_icc_description) {
-    // sRGB overrides gAMA/cHRM per the PNG spec; ICC profiles cannot be
-    // reduced to the parametric form yet, so both fall back to sRGB.
+  // sRGB overrides gAMA/cHRM per the PNG spec; ICC profiles cannot be
+  // reduced to the parametric form yet, so both fall back to sRGB.
+  if (png_get_valid(png_ptr, info_ptr, PNG_INFO_sRGB) != 0) {
     return false;
   }
-  if (!chunks.has_gama && !chunks.has_chrm) {
+  {
+    png_charp profile_name = nullptr;
+    int compression = 0;
+    png_bytep profile = nullptr;
+    png_uint_32 profile_len = 0;
+    if (png_get_iCCP(png_ptr, info_ptr, &profile_name, &compression, &profile,
+                     &profile_len) != 0) {
+      return false;
+    }
+  }
+
+  png_fixed_point gama_fixed = 0;
+  png_fixed_point chrm_fixed[8] = {};
+  bool has_gama = png_get_gAMA_fixed(png_ptr, info_ptr, &gama_fixed) != 0;
+  bool has_chrm =
+      png_get_cHRM_fixed(png_ptr, info_ptr, &chrm_fixed[0], &chrm_fixed[1],
+                         &chrm_fixed[2], &chrm_fixed[3], &chrm_fixed[4],
+                         &chrm_fixed[5], &chrm_fixed[6], &chrm_fixed[7]) != 0;
+  if (has_gama &&
+      (gama_fixed <= 0 || gama_fixed >= 10 * (int32_t)kPNGFixedPointScale)) {
+    has_gama = false;
+  }
+  if (!has_gama && !has_chrm) {
     return false;
   }
 
@@ -102,18 +87,21 @@ bool BuildColorSpaceInfo(const PngColorChunkInfo& chunks,
   out->kind = SKITY_COLOR_SPACE_PARAMETRIC;
   // No gAMA: the PNG spec lets viewers assume sRGB-like encoding.
   std::memcpy(out->transfer_fn, srgb.transfer_fn, sizeof(out->transfer_fn));
-  if (chunks.has_gama) {
-    float gamma = static_cast<float>(chunks.gama) / kPNGFixedPointScale;
-    float tf[7] = {gamma, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  if (has_gama) {
+    // gAMA stores the encoding gamma (45455 means 1/2.2) while transfer_fn
+    // holds the decode (signal -> linear) exponent, so the reciprocal is
+    // what lands in the tag.
+    float encode_gamma = static_cast<float>(gama_fixed) / kPNGFixedPointScale;
+    float tf[7] = {1.f / encode_gamma, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
     std::memcpy(out->transfer_fn, tf, sizeof(tf));
   }
 
   std::memcpy(out->gamut_xyz, srgb.gamut_xyz, sizeof(out->gamut_xyz));
-  if (chunks.has_chrm) {
+  if (has_chrm) {
     float chromaticities[8];
     for (int i = 0; i < 8; i++) {
       chromaticities[i] =
-          static_cast<float>(chunks.chrm[i]) / kPNGFixedPointScale;
+          static_cast<float>(chrm_fixed[i]) / kPNGFixedPointScale;
     }
     if (!codec_priv::CodecGamutFromChromaticities(chromaticities,
                                                   out->gamut_xyz)) {
@@ -141,7 +129,9 @@ void WritePNGColorSpaceChunks(png_structp png_ptr, png_infop info_ptr,
                     tf[4] == 0.f && tf[5] == 0.f && tf[6] == 0.f &&
                     tf[0] > 0.f && tf[0] < 10.f;
   if (pure_power) {
-    png_set_gAMA(png_ptr, info_ptr, tf[0]);
+    // transfer_fn[0] is the decode (signal -> linear) exponent while gAMA
+    // stores the encoding gamma, so the chunk carries the reciprocal.
+    png_set_gAMA(png_ptr, info_ptr, 1.f / tf[0]);
   }
 
   ColorSpace srgb{};
@@ -171,14 +161,6 @@ static void png_write_callback(png_structp png_ptr, png_bytep data,
   }
 }
 
-struct PNGImage {
-  png_image image = {};
-
-  PNGImage() : image() { image.version = PNG_IMAGE_VERSION; }
-
-  ~PNGImage() { png_image_free(&image); }
-};
-
 PNGCodec::PNGCodec() = default;
 
 PNGCodec::~PNGCodec() {}
@@ -193,42 +175,102 @@ std::shared_ptr<Pixmap> skity::PNGCodec::DecodeIntrinsic() {
     return nullptr;
   }
 
-  PNGImage png_image{};
-  if (!png_image_begin_read_from_memory(&png_image.image, data_->RawData(),
-                                        data_->Size())) {
+  png_structp png_read_ptr =
+      png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+  if (!png_read_ptr) {
+    return nullptr;
+  }
+  png_infop read_info_ptr = png_create_info_struct(png_read_ptr);
+  if (!read_info_ptr) {
+    png_destroy_read_struct(&png_read_ptr, nullptr, nullptr);
     return nullptr;
   }
 
-  png_bytep buffer;
-  png_image.image.format = PNG_FORMAT_RGBA;
-  size_t raw_data_size = PNG_IMAGE_SIZE(png_image.image);
-  buffer = static_cast<png_bytep>(std::malloc(raw_data_size));
-  if (!buffer) {
-    // out of memory
-    return nullptr;
-  }
+  // A png_error longjmp below lands back here. C++ destructors are skipped
+  // by longjmp, so the raw pointers must be released by hand on that path.
+  uint8_t* buffer = nullptr;
+  png_bytep* rows = nullptr;
 
-  if (!png_image_finish_read(&png_image.image, nullptr, buffer, 0, nullptr)) {
+  if (setjmp(png_jmpbuf(png_read_ptr)) != 0) {
     std::free(buffer);
+    std::free(rows);
+    png_destroy_read_struct(&png_read_ptr, &read_info_ptr, nullptr);
     return nullptr;
   }
+
+  PngReadSource source{static_cast<const uint8_t*>(data_->RawData()),
+                       data_->Size(), 0};
+  png_set_read_fn(png_read_ptr, &source, png_read_callback);
+
+  // The low-level reader decodes the file's own encoding into the row
+  // buffers: no gamma transform is requested, so the output bytes are what
+  // the color description chunks describe and the conversion happens later,
+  // at sampling time. (The simplified png_image API would have handed out
+  // sRGB-encoded pixels instead, double-converting once tagged.)
+  png_read_info(png_read_ptr, read_info_ptr);
+
+  png_uint_32 width = png_get_image_width(png_read_ptr, read_info_ptr);
+  png_uint_32 height = png_get_image_height(png_read_ptr, read_info_ptr);
+  png_uint_32 color_type = png_get_color_type(png_read_ptr, read_info_ptr);
+  png_uint_32 bit_depth = png_get_bit_depth(png_read_ptr, read_info_ptr);
+
+  // Normalize every input layout to 8-bit RGBA.
+  if (color_type == PNG_COLOR_TYPE_PALETTE) {
+    png_set_palette_to_rgb(png_read_ptr);
+  }
+  if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8) {
+    png_set_expand_gray_1_2_4_to_8(png_read_ptr);
+  }
+  if (png_get_valid(png_read_ptr, read_info_ptr, PNG_INFO_tRNS) != 0) {
+    png_set_tRNS_to_alpha(png_read_ptr);
+  }
+  if (bit_depth == 16) {
+    png_set_strip_16(png_read_ptr);
+  }
+  if ((color_type & PNG_COLOR_MASK_COLOR) == 0) {
+    png_set_gray_to_rgb(png_read_ptr);
+  }
+  bool has_alpha =
+      (color_type & PNG_COLOR_MASK_ALPHA) != 0 ||
+      png_get_valid(png_read_ptr, read_info_ptr, PNG_INFO_tRNS) != 0;
+  if (!has_alpha) {
+    png_set_filler(png_read_ptr, 0xff, PNG_FILLER_AFTER);
+  }
+
+  png_set_interlace_handling(png_read_ptr);
+  png_read_update_info(png_read_ptr, read_info_ptr);
+
+  size_t row_bytes = png_get_rowbytes(png_read_ptr, read_info_ptr);
+  size_t raw_data_size = row_bytes * height;
+  buffer = static_cast<uint8_t*>(std::malloc(raw_data_size));
+  rows = static_cast<png_bytep*>(std::malloc(sizeof(png_bytep) * height));
+  if (!buffer || !rows) {
+    // out of memory
+    std::free(buffer);
+    std::free(rows);
+    png_destroy_read_struct(&png_read_ptr, &read_info_ptr, nullptr);
+    return nullptr;
+  }
+  for (png_uint_32 y = 0; y < height; y++) {
+    rows[y] = buffer + static_cast<size_t>(y) * row_bytes;
+  }
+  // png_read_image walks all interlace passes into the packed rows.
+  png_read_image(png_read_ptr, rows);
+  png_read_end(png_read_ptr, nullptr);
+  std::free(rows);
 
   auto raw_data = core_bridge::MakeDataFromMalloc(buffer, raw_data_size);
-  uint32_t width = png_image.image.width;
-  uint32_t height = png_image.image.height;
 
   auto pixmap =
-      core_bridge::MakePixmap(raw_data, width * 4, width, height,
+      core_bridge::MakePixmap(raw_data, row_bytes, width, height,
                               AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
   if (pixmap) {
-    PngColorChunkInfo chunks{};
     skity_color_space_info info{};
-    if (ParsePNGColorChunks(static_cast<const uint8_t*>(data_->RawData()),
-                            data_->Size(), &chunks) &&
-        BuildColorSpaceInfo(chunks, &info)) {
+    if (BuildColorSpaceInfo(png_read_ptr, read_info_ptr, &info)) {
       core_bridge::SetPixmapColorSpace(pixmap.get(), info);
     }
   }
+  png_destroy_read_struct(&png_read_ptr, &read_info_ptr, nullptr);
   return pixmap;
 }
 
