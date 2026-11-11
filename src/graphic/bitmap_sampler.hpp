@@ -19,7 +19,8 @@ class BitmapSampler {
         sampling_options_(sampling_options),
         x_tile_mode_(x_tile_mode),
         y_tile_mode_(y_tile_mode),
-        color_space_(bitmap.GetPixmap()->GetColorSpace()) {}
+        color_space_(bitmap.GetPixmap()->GetColorSpace()),
+        alpha_type_(bitmap.GetPixmap()->GetAlphaType()) {}
 
   Color GetColor(Vec2 uv) const;
 
@@ -35,6 +36,7 @@ class BitmapSampler {
   TileMode x_tile_mode_ = TileMode::kClamp;
   TileMode y_tile_mode_ = TileMode::kClamp;
   std::shared_ptr<ColorSpace> color_space_;
+  AlphaType alpha_type_ = kUnpremul_AlphaType;
 };
 }  // namespace skity
 

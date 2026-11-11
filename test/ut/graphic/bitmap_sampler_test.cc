@@ -4,11 +4,81 @@
 
 #include "src/graphic/bitmap_sampler.hpp"
 
+#include <cmath>
 #include <memory>
+#include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color_space.hpp>
 #include <skity/io/pixmap.hpp>
+#include <skity/render/canvas.hpp>
 
 #include "gtest/gtest.h"
+
+namespace {
+
+float EncodeSRGB(float x) {
+  return x <= 0.0031308f ? 12.92f * x
+                         : 1.055f * std::pow(x, 1.f / 2.4f) - 0.055f;
+}
+
+}  // namespace
+
+TEST(BitmapSamplerColorSpace, PremultipliedLinearSampling) {
+  // Transfer functions are defined on unpremultiplied values. A premultiplied
+  // linear sample (RGB=64, A=128) must convert through the unpremultiplied
+  // domain and scale back: EncodeSRGB(64/128) * 128 is ~94, and no channel
+  // may exceed the alpha after the conversion.
+  auto pixmap = std::make_shared<skity::Pixmap>(1, 1, skity::kPremul_AlphaType,
+                                                skity::ColorType::kRGBA);
+  ASSERT_TRUE(pixmap->SetColorInfo(skity::kPremul_AlphaType,
+                                   skity::ColorType::kRGBA,
+                                   skity::ColorSpace::SRGBLinear()));
+  auto addr = pixmap->WritableAddr8(0, 0);
+  addr[0] = addr[1] = addr[2] = 64;
+  addr[3] = 128;
+  skity::Bitmap bitmap(pixmap, false);
+
+  skity::BitmapSampler sampler(bitmap, skity::SamplingOptions{},
+                               skity::TileMode::kClamp,
+                               skity::TileMode::kClamp);
+  skity::Color color = sampler.GetColor(skity::Vec2{0.5f, 0.5f});
+
+  EXPECT_EQ(ColorGetA(color), 128);
+  EXPECT_NEAR(ColorGetR(color), EncodeSRGB(64.f / 128.f) * 128.f, 1.f);
+  EXPECT_LE(ColorGetR(color), ColorGetA(color));
+}
+
+TEST(BitmapSamplerColorSpace, SoftwareNearestConvertsEntireSpan) {
+  // A 9-pixel-wide linear gray bitmap drawn through the software canvas:
+  // the span must convert uniformly. The ARM NEON fast path samples raw
+  // texels, so without the scalar fallback the first 8 pixels stay
+  // unconverted (64) while the remainder pixel converts (~137).
+  auto pixmap = std::make_shared<skity::Pixmap>(
+      9, 1, skity::kUnpremul_AlphaType, skity::ColorType::kRGBA);
+  ASSERT_TRUE(pixmap->SetColorInfo(skity::kUnpremul_AlphaType,
+                                   skity::ColorType::kRGBA,
+                                   skity::ColorSpace::SRGBLinear()));
+  for (uint32_t x = 0; x < 9; x++) {
+    auto addr = pixmap->WritableAddr8(x, 0);
+    addr[0] = addr[1] = addr[2] = 64;
+    addr[3] = 255;
+  }
+  skity::Bitmap bitmap(pixmap, false);
+
+  skity::Bitmap output(9, 1, skity::kPremul_AlphaType);
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&output);
+  canvas->DrawImage(skity::Image::MakeImage(bitmap.GetPixmap()), 0.f, 0.f,
+                    skity::SamplingOptions{skity::FilterMode::kNearest,
+                                           skity::MipmapMode::kNone},
+                    nullptr);
+
+  // Every pixel converts the same way: EncodeSRGB(64/255) * 255 is ~137.
+  auto expected = skity::ColorSetARGB(255, 137, 137, 137);
+  for (uint32_t x = 0; x < 9; x++) {
+    auto pixel = output.GetPixel(x, 0);
+    // Allow +-1 for the conversion rounding against the fixed expectation.
+    EXPECT_NEAR(ColorGetR(pixel), ColorGetR(expected), 1) << "pixel " << x;
+  }
+}
 
 TEST(BitmapSamplerColorSpace, DecodesNonSRGBTaggedBitmap) {
   // Store an sRGB color pre-converted into Display P3 in a tagged bitmap;

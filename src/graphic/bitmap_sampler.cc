@@ -107,7 +107,23 @@ Color BitmapSampler::GetColor(Vec2 uv) const {
   // Decode the source-space color to the working space after filtering, the
   // same semantics as the GPU texture decode (filter in the stored space).
   if (!ColorSpaceIsSRGB(color_space_)) {
-    sampled = ColorSpace::Convert(color_space_, sampled, nullptr);
+    if (alpha_type_ == kPremul_AlphaType) {
+      // Transfer functions are defined on unpremultiplied values; feeding
+      // premultiplied ones scales the curve by alpha and can push channels
+      // above their alpha. Convert in the unpremultiplied domain and scale
+      // back; a zero-alpha sample keeps its exact zeros.
+      if (sampled.w > 0.f) {
+        Color4f unpremul = ColorSpace::Convert(
+            color_space_,
+            Color4f{sampled.x / sampled.w, sampled.y / sampled.w,
+                    sampled.z / sampled.w, sampled.w},
+            nullptr);
+        sampled = Color4f{unpremul.x * sampled.w, unpremul.y * sampled.w,
+                          unpremul.z * sampled.w, sampled.w};
+      }
+    } else {
+      sampled = ColorSpace::Convert(color_space_, sampled, nullptr);
+    }
   }
   return Color4fToColor(sampled);
 }
