@@ -372,6 +372,14 @@ TEST(ColorSpace, PaintSetColor4fConvertsToWorkingSpace) {
   EXPECT_NEAR(color.b, 0.73535698f, 1e-4f);
   EXPECT_NEAR(color.a, 1.f, 1e-6f);
 
+  // The 8-bit overload converts the same way.
+  paint.SetColor(skity::ColorSetARGB(255, 128, 128, 128),
+                 skity::ColorSpace::SRGBLinear());
+  auto gray = paint.GetColor4f();
+  EXPECT_NEAR(gray.r, 0.73535698f, 2e-3f);
+  EXPECT_NEAR(gray.g, 0.73535698f, 2e-3f);
+  EXPECT_NEAR(gray.b, 0.73535698f, 2e-3f);
+
   // The default (null) space leaves the color untouched.
   paint.SetColor4f(skity::Color4f{0.5f, 0.25f, 0.125f, 1.f});
   color = paint.GetColor4f();

@@ -77,10 +77,10 @@ void Paint::SetFillColor(Color color) { SetFillColor(Color4fFromColor(color)); }
 
 Vector Paint::GetFillColor() const { return fill_color_; }
 
-void Paint::SetColor(Color color) {
-  auto color4f = Color4fFromColor(color);
-  stroke_color_ = color4f;
-  fill_color_ = color4f;
+void Paint::SetColor(Color color) { SetColor4f(Color4fFromColor(color)); }
+
+void Paint::SetColor(Color color, std::shared_ptr<ColorSpace> color_space) {
+  SetColor4f(Color4fFromColor(color), std::move(color_space));
 }
 
 Color Paint::GetColor() const { return Color4fToColor(GetColor4f()); }

@@ -149,6 +149,13 @@ class SKITY_API Paint {
    */
   void SetColor(Color color);
 
+  /**
+   * Same as SetColor(Color), but the value is interpreted in color_space and
+   * converted to the pipeline working space (sRGB) on the way in; a null
+   * space means the default working space and leaves it untouched.
+   */
+  void SetColor(Color color, std::shared_ptr<ColorSpace> color_space);
+
   Color GetColor() const;
 
   Color4f GetColor4f() const;
