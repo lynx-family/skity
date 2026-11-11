@@ -43,18 +43,25 @@ class FakeGPUTexture : public GPUTexture {
 class FakeRenderPass : public GPURenderPass {
  public:
   FakeRenderPass(const GPURenderPassDescriptor& desc,
-                 std::vector<uint32_t>& instance_counts)
-      : GPURenderPass(desc), instance_counts_(instance_counts) {}
+                 std::vector<uint32_t>& instance_counts,
+                 std::vector<uint32_t>* index_counts = nullptr)
+      : GPURenderPass(desc),
+        instance_counts_(instance_counts),
+        index_counts_(index_counts) {}
 
   void EncodeCommands(std::optional<GPUViewport> = std::nullopt,
                       std::optional<GPUScissorRect> = std::nullopt) override {
     for (const auto* command : GetCommands()) {
       instance_counts_.push_back(command->instance_count);
+      if (index_counts_) {
+        index_counts_->push_back(command->index_count);
+      }
     }
   }
 
  private:
   std::vector<uint32_t>& instance_counts_;
+  std::vector<uint32_t>* index_counts_;
 };
 
 class FakeGPUDevice : public GPUDevice {
@@ -108,6 +115,8 @@ class FakeGPUDevice : public GPUDevice {
   const std::vector<GPUColorAttachment>& last_colors() const;
 
   std::vector<uint32_t> last_instance_counts() const;
+
+  std::vector<uint32_t> last_index_counts() const;
 
   uint32_t disallowed_shader_function_count() const {
     return disallowed_shader_function_count_;

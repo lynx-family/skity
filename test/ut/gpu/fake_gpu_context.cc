@@ -44,7 +44,8 @@ class FakeGPUDevice::FakeCommandBuffer : public GPUCommandBuffer {
   std::shared_ptr<GPURenderPass> BeginRenderPass(
       const GPURenderPassDescriptor& desc) override {
     colors_.push_back(desc.color_attachment);
-    return std::make_shared<FakeRenderPass>(desc, instance_counts_);
+    return std::make_shared<FakeRenderPass>(desc, instance_counts_,
+                                            &index_counts_);
   }
 
   std::shared_ptr<GPUBlitPass> BeginBlitPass() override {
@@ -59,9 +60,12 @@ class FakeGPUDevice::FakeCommandBuffer : public GPUCommandBuffer {
     return instance_counts_;
   }
 
+  const std::vector<uint32_t>& index_counts() const { return index_counts_; }
+
  private:
   std::vector<GPUColorAttachment> colors_;
   std::vector<uint32_t> instance_counts_;
+  std::vector<uint32_t> index_counts_;
 };
 
 FakeGPUDevice::FakeGPUDevice() {
@@ -165,6 +169,11 @@ std::vector<uint32_t> FakeGPUDevice::last_instance_counts() const {
   return last_command_buffer_ == nullptr
              ? std::vector<uint32_t>{}
              : last_command_buffer_->instance_counts();
+}
+
+std::vector<uint32_t> FakeGPUDevice::last_index_counts() const {
+  return last_command_buffer_ == nullptr ? std::vector<uint32_t>{}
+                                         : last_command_buffer_->index_counts();
 }
 
 bool FakeGPUDevice::HasFragmentFunctionLabelContaining(

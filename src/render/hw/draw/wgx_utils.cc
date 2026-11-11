@@ -145,6 +145,26 @@ bool SetupCommonInfo(const wgx::BindGroupEntry* entry, const Matrix& mvp,
   return true;
 }
 
+bool UploadCommonInfo(Command* cmd, HWDrawContext* context,
+                      const Matrix& transform, float clip_depth) {
+  if (cmd->pipeline == nullptr) {
+    return false;
+  }
+
+  auto* group = cmd->pipeline->GetBindingGroup(0);
+  if (group == nullptr) {
+    return false;
+  }
+
+  auto* entry = group->GetEntry(0);
+  if (!SetupCommonInfo(entry, context->mvp, transform, clip_depth)) {
+    return false;
+  }
+
+  UploadBindGroup(group->group, entry, cmd, context);
+  return true;
+}
+
 bool SetupInvMatrix(const wgx::BindGroupEntry* inv_matrix_entry,
                     const Matrix& local_matrix) {
   if (inv_matrix_entry == nullptr ||

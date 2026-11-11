@@ -582,7 +582,7 @@ TEST(PrecompileDrawTest, SurfaceCanDisableCoverageAADefault) {
   ASSERT_NE(canvas, nullptr);
 
   Path path;
-  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  path.AddRect(Rect::MakeLTRB(8.25f, 8, 56, 56));
   Paint paint;
   paint.SetAntiAlias(true);
   canvas->DrawPath(path, paint);
@@ -608,7 +608,7 @@ TEST(PrecompileDrawTest, SurfaceCanEnableCoverageAAWithoutContextDefault) {
   ASSERT_NE(canvas, nullptr);
 
   Path path;
-  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  path.AddRect(Rect::MakeLTRB(8.25f, 8, 56, 56));
   Paint paint;
   paint.SetAntiAlias(true);
   canvas->DrawPath(path, paint);
@@ -667,7 +667,7 @@ TEST(PrecompileDrawTest, SurfaceCanSelectConflationCorrection) {
   ASSERT_NE(canvas, nullptr);
 
   Path path;
-  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  path.AddRect(Rect::MakeLTRB(8.25f, 8, 56, 56));
   Paint paint;
   paint.SetAntiAlias(true);
   canvas->DrawPath(path, paint);
@@ -694,7 +694,7 @@ TEST(PrecompileDrawTest, RenderTargetUsesSurfaceCoverageAAOptions) {
   ASSERT_NE(target, nullptr);
 
   Path path;
-  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  path.AddRect(Rect::MakeLTRB(8.25f, 8, 56, 56));
   Paint paint;
   paint.SetAntiAlias(true);
   target->GetCanvas()->DrawPath(path, paint);
@@ -1172,6 +1172,159 @@ TEST(PrecompileDrawTest, PrecompiledRRectPipelineIsHitByRealDraw) {
       [&](Canvas* canvas) { canvas->DrawRRect(rrect, paint); });
 }
 
+TEST(RectGeometry, SelectsFromPhysicalBoundsAndSampleCount) {
+  const auto aligned = Rect::MakeLTRB(2, 2, 14, 14);
+  const auto fractional = Rect::MakeLTRB(2.5f, 2.5f, 14, 14);
+  const struct {
+    Rect rect;
+    float content_scale;
+    uint32_t sample_count;
+    bool anti_alias;
+    bool uses_quad;
+  } cases[] = {
+      {aligned, 1.f, 1, true, true},     {fractional, 1.f, 1, true, false},
+      {fractional, 1.f, 1, false, true}, {fractional, 1.f, 4, true, true},
+      {aligned, 1.25f, 1, true, false},  {fractional, 2.f, 1, true, true},
+  };
+  for (const auto& test : cases) {
+    SCOPED_TRACE(::testing::Message() << "left=" << test.rect.Left()
+                                      << " content_scale=" << test.content_scale
+                                      << " samples=" << test.sample_count
+                                      << " AA=" << test.anti_alias);
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    context.SetEnableContourAA(true);
+
+    GPUSurfaceDescriptor desc{};
+    desc.width = desc.height = 32;
+    desc.content_scale = test.content_scale;
+    desc.sample_count = test.sample_count;
+    auto surface = context.CreateSurface(&desc);
+    auto* canvas = surface->LockCanvas();
+    Paint paint;
+    paint.SetAntiAlias(test.anti_alias);
+    canvas->DrawRect(test.rect, paint);
+    canvas->Flush();
+
+    const auto* device = context.device();
+    EXPECT_EQ(device->HasVertexFunctionLabelContaining("VS_Rect"),
+              test.uses_quad);
+    if (test.uses_quad) {
+      EXPECT_EQ(device->last_index_counts(), std::vector<uint32_t>{6u});
+      EXPECT_EQ(device->last_instance_counts(), std::vector<uint32_t>{1u});
+    } else {
+      EXPECT_TRUE(device->HasVertexFunctionLabelContaining("PathAA"));
+    }
+  }
+}
+
+TEST(RectGeometry, RectPathWithExtraContourKeepsPathGeometry) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableSimpleShapePipeline(true);
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 32;
+  auto surface = context.CreateSurface(&desc);
+  auto* canvas = surface->LockCanvas();
+  Path path;
+  path.MoveTo(1.f, 1.f);
+  path.Close();
+  path.AddRect(Rect::MakeLTRB(8, 8, 16, 16));
+  ASSERT_EQ(path.GetIsAType(), Path::IsAType::kGeneral);
+  canvas->DrawPath(path, Paint{});
+  canvas->Flush();
+
+  EXPECT_FALSE(context.device()->HasVertexFunctionLabelContaining("VS_Rect"));
+  EXPECT_TRUE(context.device()->HasVertexFunctionLabelContaining("Path"));
+}
+
+TEST(RectGeometry, NonCoherentNativeBlendKeepsOverlappingDrawsSeparate) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto caps = std::make_unique<GPUCaps>(context.device()->GetCaps());
+  caps->supports_native_advanced_blend = true;
+  caps->supports_native_advanced_blend_coherent = false;
+  context.device()->InitCaps(std::move(caps));
+
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 32;
+  auto surface = context.CreateSurface(&desc);
+  auto* canvas = surface->LockCanvas();
+  Paint paint;
+  paint.SetBlendMode(BlendMode::kOverlay);
+  canvas->DrawRect(Rect::MakeLTRB(1, 1, 8, 8), paint);
+  canvas->DrawRect(Rect::MakeLTRB(4, 4, 12, 12), paint);
+  canvas->DrawRect(Rect::MakeLTRB(16, 16, 24, 24), paint);
+  canvas->Flush();
+
+  EXPECT_EQ(context.device()->last_render_pass_count(), 1u);
+  EXPECT_EQ(context.device()->last_instance_counts(),
+            (std::vector<uint32_t>{1u, 2u}));
+}
+
+TEST(PrecompileDrawTest, PrecompiledRectPipelineIsHitByBatch) {
+  for (bool msaa : {false, true}) {
+    SCOPED_TRACE(msaa);
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    Paint paint;
+    paint.SetAntiAlias(true);
+    paint.SetColor(Color_RED);
+    auto rect = Rect::MakeLTRB(msaa ? 1.25f : 1.f, 1.f, 9.f, 9.f);
+    ExpectRealDrawHitsPrecompiledPipeline(
+        context, PrecompileDrawType::kDrawRect, paint, msaa,
+        [&](Canvas* canvas) {
+          canvas->DrawRect(rect, paint);
+          Path source;
+          source.AddRect(rect).MoveTo(0.f, 0.f);
+          Path path;
+          path.AddPath(source);
+          Paint second = paint;
+          second.SetColor(ColorSetARGB(128, 0, 0, 255));
+          canvas->Translate(24.f, 5.f);
+          canvas->Scale(-1.f, 2.f);
+          canvas->DrawPath(path, second);
+        });
+    EXPECT_TRUE(context.device()->HasVertexFunctionLabelContaining("VS_Rect"));
+    EXPECT_EQ(context.device()->last_index_counts(), std::vector<uint32_t>{6u});
+    EXPECT_EQ(context.device()->last_instance_counts(),
+              std::vector<uint32_t>{2u});
+  }
+}
+
+TEST(PrecompileDrawTest, PrecompiledImageRectPipelinesAreHitByRealDraw) {
+  for (auto type :
+       {PrecompileDrawType::kDrawImage, PrecompileDrawType::kDrawRect}) {
+    SCOPED_TRACE(static_cast<int>(type));
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    auto image = MakeTestImage();
+    Paint paint;
+    if (type == PrecompileDrawType::kDrawRect) {
+      SamplingOptions sampling;
+      sampling.cubic = {1.f / 3.f, 1.f / 3.f};
+      paint.SetShader(Shader::MakeShader(image, sampling, TileMode::kRepeat,
+                                         TileMode::kRepeat, Matrix{}));
+    }
+    ExpectRealDrawHitsPrecompiledPipeline(
+        context, type, paint, false, [&](Canvas* canvas) {
+          const Rect rect = Rect::MakeLTRB(2, 2, 18, 18);
+          for (int i = 0; i < 2; ++i) {
+            if (type == PrecompileDrawType::kDrawImage) {
+              canvas->DrawImageRect(image, Rect::MakeWH(1, 1), rect,
+                                    SamplingOptions{}, &paint);
+            } else {
+              canvas->DrawRect(rect, paint);
+            }
+          }
+        });
+    EXPECT_TRUE(
+        context.device()->HasVertexFunctionLabelContaining("VS_Rect_Texture"));
+    EXPECT_EQ(context.device()->last_instance_counts(),
+              (std::vector<uint32_t>{1u, 1u}));
+  }
+}
+
 TEST(SimpleShapeDrawTest, AffinePathsUseRRectPipelineAndMerge) {
   Path paths[3];
   const Rect bounds = Rect::MakeLTRB(-8.f, -6.f, 8.f, 6.f);
@@ -1283,12 +1436,14 @@ TEST(PrecompileDrawTest, ClearsFailedPipelineCacheAfterPrecompileFailure) {
   device->set_fail_render_pipeline_creation(true);
   PrecompileDraw(context, false, PrecompileDrawType::kDrawImage, paint);
 
-  EXPECT_EQ(device->render_pipeline_count(), 1u);
+  EXPECT_EQ(device->render_pipeline_count(), 2u);
 
   device->set_fail_render_pipeline_creation(false);
   PrecompileDraw(context, false, PrecompileDrawType::kDrawImage, paint);
 
-  EXPECT_EQ(device->render_pipeline_count(), 2u);
+  EXPECT_EQ(device->render_pipeline_count(), 4u);
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("VS_Rect"));
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("VS_Path"));
 }
 
 TEST(PrecompileDrawTest, ImagePrecompileDoesNotCreateTextureResources) {

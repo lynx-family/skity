@@ -30,6 +30,8 @@ std::string HWGeometryKeyTypeToName(HWGeometryKeyType::Value value) {
       return "CommonFilterVertexWGSL";
     case HWGeometryKeyType::kCoverageAA:
       return "CoverageAA";
+    case HWGeometryKeyType::kRect:
+      return "Rect";
     default:
       return "UnknownGeometry";
   }

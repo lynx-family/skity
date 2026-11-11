@@ -36,6 +36,7 @@ enum class HWDrawType {
   kStencil,
   kLayer,
   kClip,
+  kRect,
 };
 
 struct HWDrawContext {
@@ -126,6 +127,7 @@ class HWDraw {
     requires_non_overlapping_draws_ = requires_non_overlapping_draws;
   }
 
+  // The incoming draw has not been merged or added to the pass.
   bool MergeIfPossible(HWDraw* draw) {
     if (GetDrawType() != draw->GetDrawType() ||
         GetDrawType() == HWDrawType::kUnknow) {

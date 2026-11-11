@@ -4,7 +4,8 @@
 
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 
-#include "src/render/hw/draw/hw_wgsl_geometry.hpp"
+#include <cstddef>
+
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
@@ -27,67 +28,6 @@ constexpr static float kRegionCenter = 1.f;
 constexpr static float kOutside = 1.f;
 constexpr static float kInside = 0.f;
 
-std::vector<GPUVertexBufferLayout> InitVertexBufferLayout() {
-  std::vector<GPUVertexBufferLayout> layout = {
-      // vertex buffer
-      GPUVertexBufferLayout{
-          4 * sizeof(float),
-          GPUVertexStepMode::kVertex,
-          {
-              GPUVertexAttribute{
-                  GPUVertexFormat::kFloat32x4,
-                  0,
-                  0,
-              },
-          },
-      },
-      // instance buffer
-      GPUVertexBufferLayout{
-          22 * sizeof(float),
-          GPUVertexStepMode::kInstance,
-          {
-              GPUVertexAttribute{
-                  GPUVertexFormat::kFloat32x4,
-                  0,
-                  1,
-              },
-              GPUVertexAttribute{
-                  GPUVertexFormat::kFloat32x2,
-                  4 * sizeof(float),
-                  2,
-              },
-              GPUVertexAttribute{
-                  GPUVertexFormat::kFloat32x2,
-                  6 * sizeof(float),
-                  3,
-              },
-              GPUVertexAttribute{
-                  GPUVertexFormat::kFloat32x4,
-                  8 * sizeof(float),
-                  4,
-              },
-              GPUVertexAttribute{
-                  GPUVertexFormat::kFloat32x4,
-                  12 * sizeof(float),
-                  5,
-              },
-              GPUVertexAttribute{
-                  GPUVertexFormat::kFloat32x2,
-                  16 * sizeof(float),
-                  6,
-              },
-              GPUVertexAttribute{
-                  GPUVertexFormat::kFloat32x4,
-                  18 * sizeof(float),
-                  7,
-              },
-          },
-      },
-  };
-
-  return layout;
-}
-
 struct Instance {
   Vec4 rect;
   Vec2 radii;
@@ -108,7 +48,20 @@ WGSLRRectGeometry::WGSLRRectGeometry(
       batch_group_(batch_group) {}
 
 std::vector<GPUVertexBufferLayout> WGSLRRectGeometry::GetBufferLayout() {
-  return InitVertexBufferLayout();
+  return {
+      {sizeof(Vec4),
+       GPUVertexStepMode::kVertex,
+       {{GPUVertexFormat::kFloat32x4, 0, 0}}},
+      {sizeof(Instance),
+       GPUVertexStepMode::kInstance,
+       {{GPUVertexFormat::kFloat32x4, offsetof(Instance, rect), 1},
+        {GPUVertexFormat::kFloat32x2, offsetof(Instance, radii), 2},
+        {GPUVertexFormat::kFloat32x2, offsetof(Instance, stroke), 3},
+        {GPUVertexFormat::kFloat32x4, offsetof(Instance, m), 4},
+        {GPUVertexFormat::kFloat32x4, offsetof(Instance, transform0), 5},
+        {GPUVertexFormat::kFloat32x2, offsetof(Instance, transform1), 6},
+        {GPUVertexFormat::kFloat32x4, offsetof(Instance, color), 7}}},
+  };
 }
 
 void WGSLRRectGeometry::WriteVSFunctionsAndStructs(
@@ -346,22 +299,21 @@ void WGSLRRectGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
 
 void WGSLRRectGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
                                    const Matrix& transform, float clip_depth,
-                                   Command* stencil_cmd) {
-  SKITY_TRACE_EVENT(WGSLOvalGeometry_PrepareCMD);
+                                   Command*) {
+  SKITY_TRACE_EVENT(WGSLRRectGeometry_PrepareCMD);
 
-  if (cmd->pipeline == nullptr) {
+  if (!UploadCommonInfo(cmd, context, transform, clip_depth)) {
     return;
   }
 
   cmd->vertex_buffer = context->static_buffer->GetRRectVertexBufferView();
-
   cmd->index_buffer = context->static_buffer->GetRRectIndexBufferView();
-
   cmd->index_count = cmd->index_buffer.range / sizeof(uint32_t);
 
-  context->stageBuffer->BeginWritingInstance(
-      batch_group_.size() * sizeof(Instance), alignof(Instance));
-  for (auto& element : batch_group_) {
+  auto* stage_buffer = context->stageBuffer;
+  stage_buffer->BeginWritingInstance(batch_group_.size() * sizeof(Instance),
+                                     alignof(Instance));
+  for (const auto& element : batch_group_) {
     const RRect& rrect = element.item;
     const Paint& paint = element.paint;
     const Matrix& transform = element.transform;
@@ -403,28 +355,10 @@ void WGSLRRectGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
              transform.GetScaleY()},
         Vec2{transform.GetTranslateX(), transform.GetTranslateY()},
         Vec4{paint.GetColor4f()}};
-    context->stageBuffer->AppendInstance<Instance>(instance);
+    stage_buffer->AppendInstance<Instance>(instance);
   }
-  auto instance_buffer_view = context->stageBuffer->EndWritingInstance();
-  cmd->instance_count = instance_buffer_view.range / sizeof(Instance);
-  cmd->instance_buffer = instance_buffer_view;
-
-  auto pipeline = cmd->pipeline;
-
-  auto group = pipeline->GetBindingGroup(0);
-
-  if (group == nullptr) {
-    return;
-  }
-
-  // bind CommonSlot
-  auto common_slot = group->GetEntry(0);
-
-  if (!SetupCommonInfo(common_slot, context->mvp, transform, clip_depth)) {
-    return;
-  }
-
-  UploadBindGroup(group->group, common_slot, cmd, context);
+  cmd->instance_buffer = stage_buffer->EndWritingInstance();
+  cmd->instance_count = cmd->instance_buffer.range / sizeof(Instance);
 }
 
 namespace {
