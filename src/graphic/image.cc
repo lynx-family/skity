@@ -54,6 +54,7 @@ bool ScalePixelsForPixmap(std::shared_ptr<Pixmap> dst,
 
 bool ScalePixelsForTexture(std::shared_ptr<Pixmap> dst, GPUContext* context,
                            std::shared_ptr<Texture> texture,
+                           const std::shared_ptr<ColorSpace>& color_space,
                            const SamplingOptions& sampling_options) {
   if (context == nullptr) {
     return false;
@@ -73,7 +74,9 @@ bool ScalePixelsForTexture(std::shared_ptr<Pixmap> dst, GPUContext* context,
     return false;
   }
   auto canvas = render_target->GetCanvas();
-  canvas->DrawImageRect(Image::MakeHWImage(texture),
+  // The raw texture keeps source-space encoded bytes; the image must carry
+  // the source space or the scaling draw interprets them as sRGB.
+  canvas->DrawImageRect(Image::MakeHWImage(texture, color_space),
                         Rect::MakeWH(texture->Width(), texture->Height()),
                         Rect::MakeWH(dst->Width(), dst->Height()),
                         sampling_options);
@@ -150,7 +153,8 @@ class TextureImage : public Image {
 
   bool ScalePixels(std::shared_ptr<Pixmap> dst, GPUContext* context,
                    const SamplingOptions& sampling_options) const override {
-    return ScalePixelsForTexture(dst, context, texture_, sampling_options);
+    return ScalePixelsForTexture(dst, context, texture_, color_space_,
+                                 sampling_options);
   }
 
   ImageType GetImageType() const override { return ImageType::kTexture; }
@@ -198,8 +202,9 @@ class PixmapImage : public Image {
   std::shared_ptr<Pixmap> pixmap_;
 };
 
-std::shared_ptr<Image> Image::MakeHWImage(std::shared_ptr<Texture> texture) {
-  return std::shared_ptr<Image>(new TextureImage(texture));
+std::shared_ptr<Image> Image::MakeHWImage(
+    std::shared_ptr<Texture> texture, std::shared_ptr<ColorSpace> color_space) {
+  return std::shared_ptr<Image>(new TextureImage(texture, color_space));
 }
 
 std::shared_ptr<Image> Image::MakeImage(std::shared_ptr<Pixmap> pixmap,

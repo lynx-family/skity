@@ -880,7 +880,10 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
     cs_rgb = vec3<f32>(cs_srgb_encode_channel(cs_rgb.r),
                        cs_srgb_encode_channel(cs_rgb.g),
                        cs_srgb_encode_channel(cs_rgb.b));
-    if (image_color_info.infos.x != 3 && color.w > 0.0) {
+    // Re-premultiplying needs no divide guard: multiplying by alpha is
+    // safe at zero, and curves with a non-zero black point would
+    // otherwise leak their offset into fully transparent pixels.
+    if (image_color_info.infos.x != 3) {
       cs_rgb = cs_rgb * color.w;
     }
     color = vec4<f32>(cs_rgb, color.w);

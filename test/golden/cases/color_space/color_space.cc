@@ -101,3 +101,38 @@ TEST(ColorSpaceGolden, DisplayP3AndLinearSRGBDecode) {
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(64, 64, expected.c_str(),
                                                    config, DrawDecodingImages));
 }
+
+// GPU ScalePixels must go through the same color space decode as a draw:
+// the source texture holds linear-encoded bytes, and scaling them to 1x1
+// without the source tag would hand back the raw 64 instead of the
+// sRGB-encoded ~137.
+TEST(ColorSpaceGolden, TextureScalePreservesSourceColorSpace) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  auto* context = env->GetGPUContext();
+
+  auto pixmap = std::make_shared<skity::Pixmap>(
+      8, 8, skity::kUnpremul_AlphaType, skity::ColorType::kRGBA);
+  ASSERT_TRUE(pixmap->SetColorInfo(skity::kUnpremul_AlphaType,
+                                   skity::ColorType::kRGBA,
+                                   skity::ColorSpace::SRGBLinear()));
+  for (uint32_t y = 0; y < 8; y++) {
+    for (uint32_t x = 0; x < 8; x++) {
+      auto addr = pixmap->WritableAddr8(x, y);
+      addr[0] = addr[1] = addr[2] = 64;
+      addr[3] = 255;
+    }
+  }
+  auto image = skity::Image::MakeImage(pixmap, context);
+  ASSERT_NE(image, nullptr);
+
+  auto dst = std::make_shared<skity::Pixmap>(1, 1, skity::kUnpremul_AlphaType,
+                                             skity::ColorType::kRGBA);
+  ASSERT_TRUE(image->ScalePixels(dst, context, skity::SamplingOptions{}));
+
+  auto pixel = static_cast<const uint8_t*>(dst->Addr());
+  EXPECT_EQ(pixel[3], 255);
+  EXPECT_NEAR(pixel[0], 137, 2);
+  EXPECT_NEAR(pixel[1], 137, 2);
+  EXPECT_NEAR(pixel[2], 137, 2);
+}

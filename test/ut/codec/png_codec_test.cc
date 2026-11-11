@@ -665,6 +665,60 @@ TEST(PNGCodecTest, CorruptGammaChunkIsIgnored) {
   EXPECT_EQ(pixel[0], 128);
 }
 
+TEST(PNGCodecTest, ScaledDecodePreservesColorTag) {
+  // A P3 solid color decodes to the same display color whether decoded at
+  // intrinsic size or scaled down: the resampled pixmap keeps the source
+  // tag instead of silently falling back to sRGB.
+  auto p3 = skity::ColorSpace::DisplayP3();
+  skity::Pixmap pixmap(8, 8, skity::kUnpremul_AlphaType,
+                       skity::ColorType::kRGBA);
+  ASSERT_TRUE(pixmap.SetColorInfo(skity::kUnpremul_AlphaType,
+                                  skity::ColorType::kRGBA, p3));
+  for (uint32_t y = 0; y < 8; y++) {
+    for (uint32_t x = 0; x < 8; x++) {
+      auto addr = pixmap.WritableAddr8(x, y);
+      addr[0] = 192;
+      addr[1] = 64;
+      addr[2] = 64;
+      addr[3] = 255;
+    }
+  }
+  auto codec = skity::Codec::MakePngCodec();
+  auto data = codec->Encode(&pixmap);
+  ASSERT_TRUE(data != nullptr);
+
+  codec->SetData(data);
+  auto full = codec->Decode();
+  ASSERT_TRUE(full != nullptr);
+  ASSERT_TRUE(full->GetColorSpace() != nullptr);
+
+  skity::DecodeOptions options;
+  options.target_width = 1;
+  options.target_height = 1;
+  auto scaled = codec->Decode(options);
+  ASSERT_TRUE(scaled != nullptr);
+  ASSERT_TRUE(scaled->GetColorSpace() != nullptr);
+  EXPECT_TRUE(
+      skity::ColorSpaceEquals(scaled->GetColorSpace(), full->GetColorSpace()));
+
+  // Same source encoding, same conversion: the display color matches.
+  auto full_pixel = static_cast<const uint8_t*>(full->Addr());
+  auto scaled_pixel = static_cast<const uint8_t*>(scaled->Addr());
+  auto shown_full = skity::ColorSpace::Convert(
+      full->GetColorSpace(),
+      skity::Color4f{full_pixel[0] / 255.f, full_pixel[1] / 255.f,
+                     full_pixel[2] / 255.f, 1.f},
+      nullptr);
+  auto shown_scaled = skity::ColorSpace::Convert(
+      scaled->GetColorSpace(),
+      skity::Color4f{scaled_pixel[0] / 255.f, scaled_pixel[1] / 255.f,
+                     scaled_pixel[2] / 255.f, 1.f},
+      nullptr);
+  EXPECT_NEAR(shown_full.r, shown_scaled.r, 2.f / 255.f);
+  EXPECT_NEAR(shown_full.g, shown_scaled.g, 2.f / 255.f);
+  EXPECT_NEAR(shown_full.b, shown_scaled.b, 2.f / 255.f);
+}
+
 TEST(PNGCodecTest, GamutFromChromaticitiesMatchesDisplayP3) {
   // Direct check of the chromaticity solve: the P3 cHRM values reproduce
   // the Display P3 gamut table.

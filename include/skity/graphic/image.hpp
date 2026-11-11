@@ -35,7 +35,14 @@ enum class SKITY_API ImageType {
 
 class SKITY_API Image {
  public:
-  static std::shared_ptr<Image> MakeHWImage(std::shared_ptr<Texture> texture);
+  /**
+   * Wraps a raw texture as an image. The texture holds source-space encoded
+   * bytes; pass its color space so draws decode it, or leave the default
+   * null to treat the bytes as the sRGB working space.
+   */
+  static std::shared_ptr<Image> MakeHWImage(
+      std::shared_ptr<Texture> texture,
+      std::shared_ptr<ColorSpace> color_space = nullptr);
 
   static std::shared_ptr<Image> MakeImage(std::shared_ptr<Pixmap> pixmap,
                                           GPUContext* context = nullptr);
