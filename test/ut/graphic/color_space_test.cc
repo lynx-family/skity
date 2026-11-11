@@ -255,6 +255,35 @@ TEST(ColorSpace, ConvertOutOfGamutIsNotClamped) {
   EXPECT_LT(out.b, 0.f);
 }
 
+TEST(ColorSpace, PureGammaPreservesExtendedNegatives) {
+  // Pure power curves (c == f == 0) must not collapse negative components
+  // to zero: the P3 red primary leaves the sRGB + gamma 2.2 gamut negative,
+  // and collapsing there breaks the round trip (it used to come back as
+  // (1.0033, 0.2227, 0.1556) instead of (1, 0, 0)).
+  float gamma22[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  auto gamma_space =
+      skity::ColorSpace::MakeRGB(gamma22, skity::ColorSpace::SRGB()->gamut_xyz);
+  ASSERT_NE(gamma_space, nullptr);
+  auto p3 = skity::ColorSpace::DisplayP3();
+
+  auto to_gamma = skity::ColorSpace::Convert(
+      p3, skity::Color4f{1.f, 0.f, 0.f, 1.f}, gamma_space);
+  auto back = skity::ColorSpace::Convert(gamma_space, to_gamma, p3);
+  EXPECT_NEAR(back.r, 1.f, 1e-4f);
+  EXPECT_NEAR(back.g, 0.f, 1e-4f);
+  EXPECT_NEAR(back.b, 0.f, 1e-4f);
+
+  // Direct negative linear round trip: -0.1 must survive the gamma encode
+  // and decode with its sign.
+  auto encoded = skity::ColorSpace::Convert(
+      skity::ColorSpace::SRGBLinear(), skity::Color4f{-0.1f, 0.f, 0.f, 1.f},
+      gamma_space);
+  EXPECT_LT(encoded.r, 0.f);
+  auto decoded = skity::ColorSpace::Convert(gamma_space, encoded,
+                                            skity::ColorSpace::SRGBLinear());
+  EXPECT_NEAR(decoded.r, -0.1f, 1e-4f);
+}
+
 TEST(ColorSpace, MakeRGBValidation) {
   float identity_gamut[9] = {
       1.f, 0.f, 0.f,  //

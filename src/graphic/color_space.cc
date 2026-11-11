@@ -57,8 +57,14 @@ bool IsValidGamut(const float m[9]) {
 // Evaluates the parametric curve. The power branch clamps its base instead of
 // the input so out-of-gamut (negative) linear values encode to slightly
 // negative signals rather than NaN; the linear branch extrapolates naturally.
+// A degenerate linear segment (pure power curve, c == f == 0) would collapse
+// negative inputs to zero; those mirror the power branch instead so
+// extended-range colors keep their sign and the curve stays invertible.
 float EvalTransferFn(const float tf[7], float x) {
   if (x < tf[4]) {
+    if (tf[3] == 0.f && tf[6] == 0.f) {
+      return -std::pow(-x, tf[0]);
+    }
     return tf[3] * x + tf[6];
   }
   float base = std::fmax(tf[1] * x + tf[2], 0.f);

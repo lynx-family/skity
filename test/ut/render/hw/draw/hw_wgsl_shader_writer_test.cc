@@ -831,6 +831,11 @@ struct ImageColorInfo {
 // functions in the generated shader.
 fn cs_linearize_channel(x: f32, tf0: vec4<f32>, tf1: vec3<f32>) -> f32 {
     if (x < tf1.x) {
+        if (tf0.w == 0.0 && tf1.z == 0.0) {
+            // Pure power curve: mirror the power branch for negative
+            // inputs so extended-range colors keep their sign.
+            return -pow(-x, tf0.x);
+        }
         return tf0.w * x + tf1.z;
     }
     return pow(max(tf0.y * x + tf0.z, 0.0), tf0.x) + tf1.y;
