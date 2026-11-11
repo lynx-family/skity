@@ -92,6 +92,13 @@ Color4f Paint::GetColor4f() const {
 void Paint::SetColor4f(Color4f color) { SetColor4f(color, nullptr); }
 
 void Paint::SetColor4f(Color4f color, std::shared_ptr<ColorSpace> color_space) {
+  // The pipeline currently has one fixed working space (sRGB) and the paint
+  // stores only the working-space value, so a declared color space must be
+  // honored right here: the color converts on the way in. A null source
+  // space folds to a no-op, keeping the plain setters byte-identical with
+  // the pre-color-space behavior. The per-target working-space follow-up
+  // (surfaces declaring their own space) replaces this with recording the
+  // original {value, space} and converting once the render target is known.
   Color4f working = ColorSpace::Convert(std::move(color_space), color, nullptr);
   stroke_color_ = working;
   fill_color_ = working;

@@ -162,9 +162,10 @@ class SKITY_API Paint {
 
   /**
    * Sets the alpha and RGB used when stroking and filling. The color is
-   * interpreted in color_space and converted to the pipeline working space
-   * (sRGB) on the way in; a null space means the default working space and
-   * leaves the value untouched.
+   * interpreted in color_space and converted at set time: the paint stores
+   * only the working-space value, because the pipeline currently has a
+   * single fixed working space (sRGB). A null space means the default
+   * working space and leaves the value untouched.
    */
   void SetColor4f(Color4f color, std::shared_ptr<ColorSpace> color_space);
 
