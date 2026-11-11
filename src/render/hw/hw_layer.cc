@@ -109,6 +109,7 @@ void HWLayer::AddDraw(HWDraw* draw) {
   FlushPendingClip();
 
   draw->SetColorFormat(GetColorFormat());
+  draw->SetColorSpace(GetColorSpace());
 
   const auto& clip_bounds = state_.CurrentClipBounds();
   draw->SetScissorBox(clip_bounds);
@@ -198,6 +199,7 @@ void HWLayer::AddClip(HWDraw* draw) {
 
   draw->SetScissorBox(clip_bounds);
   draw->SetColorFormat(GetColorFormat());
+  draw->SetColorSpace(GetColorSpace());
   pending_clip_.emplace_back(draw);
   state_.SaveClipOp(draw);
 }
@@ -241,6 +243,7 @@ HWDrawState HWLayer::OnPrepare(HWDrawContext* context) {
   sub_context.total_clip_depth = state_.GetDrawDepth() + 1;
   sub_context.arena_allocator = context->arena_allocator;
   sub_context.scale = scale_;
+  sub_context.target_space = context->target_space;
 
   for (auto pass : draw_passes_) {
     CollectClipReplayDraws(pass);
@@ -313,6 +316,7 @@ void HWLayer::OnGenerateCommand(HWDrawContext* context, HWDrawState state) {
   sub_context.total_clip_depth = state_.GetDrawDepth() + 1;
   sub_context.arena_allocator = context->arena_allocator;
   sub_context.scale = scale_;
+  sub_context.target_space = context->target_space;
 
   for (auto pass : draw_passes_) {
     const HWDraw* emulated_load_draw =
@@ -382,7 +386,7 @@ std::shared_ptr<Shader> HWLayer::CreateDrawLayerShader(
   auto texture = std::make_shared<InternalTexture>(
       gpu_texture, AlphaType::kPremul_AlphaType);
 
-  auto image = Image::MakeHWImage(texture);
+  auto image = Image::MakeHWImage(texture, GetColorSpace());
   return CreateDrawLayerShader(image, bounds);
 }
 
@@ -415,6 +419,8 @@ EmulatedLoadInfo HWLayer::CreateEmulatedLoadInfo() {
       DeferredTextureImage::MakeDeferredTextureImage(
           FromGPUTextureFormat(GetColorFormat()), width_, height_,
           AlphaType::kPremul_AlphaType);
+  // The resolve texture holds target-space encoded pixels.
+  image->SetColorSpace(GetColorSpace());
   paint.SetShader(CreateDrawLayerShader(image, bounds));
   paint.SetBlendMode(BlendMode::kSrc);
   // Restore the resolved color in this layer's local coordinate system.
@@ -427,6 +433,7 @@ EmulatedLoadInfo HWLayer::CreateEmulatedLoadInfo() {
 
   draw->SetSampleCount(GetSampleCount());
   draw->SetColorFormat(GetColorFormat());
+  draw->SetColorSpace(GetColorSpace());
 
   EmulatedLoadInfo load_info;
   load_info.draw = draw;

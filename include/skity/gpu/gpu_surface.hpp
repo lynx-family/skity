@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <skity/gpu/gpu_backend_type.hpp>
 #include <skity/gpu/gpu_semaphore.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/macros.hpp>
 #include <skity/render/canvas.hpp>
 
@@ -43,6 +44,13 @@ enum class CoverageAAMode : uint8_t {
 
 struct GPUSurfaceRenderOptions {
   CoverageAAMode coverage_aa = CoverageAAMode::kAuto;
+  /**
+   * The color space the surface's pixels are encoded in; it is also the
+   * working space of every draw into this surface (images and paint colors
+   * convert into it, blending and storage stay in it). The default (sRGB)
+   * keeps rendering bit identical to an unmanaged surface.
+   */
+  std::shared_ptr<const ColorSpace> color_space;
 };
 
 /**

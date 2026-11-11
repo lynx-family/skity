@@ -10,16 +10,20 @@
 #include <skity/graphic/sampling_options.hpp>
 #include <skity/graphic/tile_mode.hpp>
 
+#include "src/graphic/color_xform.hpp"
+
 namespace skity {
 class BitmapSampler {
  public:
   BitmapSampler(Bitmap& bitmap, const SamplingOptions& sampling_options,
-                TileMode x_tile_mode, TileMode y_tile_mode)
+                TileMode x_tile_mode, TileMode y_tile_mode,
+                const std::shared_ptr<const ColorSpace>& target_space = {})
       : bitmap_(bitmap),
         sampling_options_(sampling_options),
         x_tile_mode_(x_tile_mode),
         y_tile_mode_(y_tile_mode),
-        color_space_(bitmap.GetPixmap()->GetColorSpace()),
+        steps_(ColorXformSteps::Resolve(bitmap.GetPixmap()->GetColorSpace(),
+                                        target_space)),
         alpha_type_(bitmap.GetPixmap()->GetAlphaType()) {}
 
   Color GetColor(Vec2 uv) const;
@@ -32,10 +36,11 @@ class BitmapSampler {
   Vec4 SampleXY(Vec2 xy) const;
 
   Bitmap& bitmap_;
-  const SamplingOptions sampling_options_;
+  const SamplingOptions& sampling_options_;
   TileMode x_tile_mode_ = TileMode::kClamp;
   TileMode y_tile_mode_ = TileMode::kClamp;
-  std::shared_ptr<const ColorSpace> color_space_;
+  // Folded sampled-bitmap space -> target space transform.
+  ColorXformSteps steps_{};
   AlphaType alpha_type_ = kUnpremul_AlphaType;
 };
 }  // namespace skity

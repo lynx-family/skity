@@ -4,7 +4,6 @@
 
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 
-#include "src/graphic/color_space_priv.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/hw_draw.hpp"
 #include "src/render/hw/hw_stage_buffer.hpp"
@@ -14,10 +13,11 @@ namespace skity {
 
 namespace {
 
-// Emits the color space decode block: unpremultiply, linearize with the
-// parametric transfer function, move to the working (sRGB) gamut, encode
-// with the fixed sRGB curve, premultiply again. Only generated for the
-// non-sRGB shader variant, so it runs unconditionally.
+// Emits the color space conversion block: unpremultiply, then the folded
+// image-space -> target-space stages selected by uniform flags (decode /
+// gamut / encode, the encode being the constant sRGB curve or parametric),
+// then premultiply again. Only generated for the decode variant, so the
+// flags only skip stages, never the whole block.
 void WriteColorSpaceDecode(std::stringstream& ss) {
   ss << R"(
       {
@@ -25,14 +25,25 @@ void WriteColorSpaceDecode(std::stringstream& ss) {
         if (image_color_info.infos.x != 3 && color.w > 0.0) {
           cs_rgb = cs_rgb / color.w;
         }
-        cs_rgb = vec3<f32>(
-            cs_linearize_channel(cs_rgb.r, image_color_info.tf0, image_color_info.tf1),
-            cs_linearize_channel(cs_rgb.g, image_color_info.tf0, image_color_info.tf1),
-            cs_linearize_channel(cs_rgb.b, image_color_info.tf0, image_color_info.tf1));
-        cs_rgb = (image_color_info.gamut * vec4<f32>(cs_rgb, 1.0)).xyz;
-        cs_rgb = vec3<f32>(cs_srgb_encode_channel(cs_rgb.r),
-                           cs_srgb_encode_channel(cs_rgb.g),
-                           cs_srgb_encode_channel(cs_rgb.b));
+        if (image_color_info.cs_flags.x == 1) {
+          cs_rgb = vec3<f32>(
+              cs_eval_tf_channel(cs_rgb.r, image_color_info.cs_tf0, image_color_info.cs_tf1),
+              cs_eval_tf_channel(cs_rgb.g, image_color_info.cs_tf0, image_color_info.cs_tf1),
+              cs_eval_tf_channel(cs_rgb.b, image_color_info.cs_tf0, image_color_info.cs_tf1));
+        }
+        if (image_color_info.cs_flags.y == 1) {
+          cs_rgb = (image_color_info.cs_gamut * vec4<f32>(cs_rgb, 1.0)).xyz;
+        }
+        if (image_color_info.cs_flags.z == 1) {
+          cs_rgb = vec3<f32>(cs_srgb_encode_channel(cs_rgb.r),
+                             cs_srgb_encode_channel(cs_rgb.g),
+                             cs_srgb_encode_channel(cs_rgb.b));
+        } else if (image_color_info.cs_flags.z == 2) {
+          cs_rgb = vec3<f32>(
+              cs_eval_tf_channel(cs_rgb.r, image_color_info.cs_enc_tf0, image_color_info.cs_enc_tf1),
+              cs_eval_tf_channel(cs_rgb.g, image_color_info.cs_enc_tf0, image_color_info.cs_enc_tf1),
+              cs_eval_tf_channel(cs_rgb.b, image_color_info.cs_enc_tf0, image_color_info.cs_enc_tf1));
+        }
         // Re-premultiplying needs no divide guard: multiplying by alpha is
         // safe at zero, and curves with a non-zero black point would
         // otherwise leak their offset into fully transparent pixels.
@@ -46,12 +57,11 @@ void WriteColorSpaceDecode(std::stringstream& ss) {
 
 }  // namespace
 
-WGSLTextureFragment::WGSLTextureFragment(std::shared_ptr<PixmapShader> shader,
-                                         std::shared_ptr<GPUTexture> texture,
-                                         std::shared_ptr<GPUSampler> sampler,
-                                         float global_alpha,
-                                         const Matrix& local_matrix,
-                                         float width, float height)
+WGSLTextureFragment::WGSLTextureFragment(
+    std::shared_ptr<PixmapShader> shader, std::shared_ptr<GPUTexture> texture,
+    std::shared_ptr<GPUSampler> sampler, float global_alpha,
+    const Matrix& local_matrix, float width, float height,
+    const std::shared_ptr<const ColorSpace>& target_space)
     : HWWGSLFragment(Flags::kSnippet | Flags::kAffectsVertex),
       x_tile_mode_(shader->GetXTileMode()),
       y_tile_mode_(shader->GetYTileMode()),
@@ -68,22 +78,13 @@ WGSLTextureFragment::WGSLTextureFragment(std::shared_ptr<PixmapShader> shader,
   }
 
   alpha_type_ = (*image)->GetAlphaType();
-  color_space_ = (*image)->GetColorSpace();
-  if (!ColorSpaceIsSRGB(color_space_)) {
-    // The GPU texture keeps the source-space encoded bytes; a decode
-    // variant of the shader converts them, so precombine the src -> working
-    // (sRGB) gamut matrix. sRGB images generate the plain shader instead.
-    has_color_space_decode_ = true;
-    float inv_working[9];
-    float to_working[9];
-    ColorSpaceInvert3x3(ColorSpace{}.gamut_xyz, inv_working);
-    ColorSpaceMultiply3x3(inv_working, color_space_->gamut_xyz, to_working);
-    gamut_to_working_ =
-        Matrix{to_working[0], to_working[3], to_working[6], 0.f,  //
-               to_working[1], to_working[4], to_working[7], 0.f,  //
-               to_working[2], to_working[5], to_working[8], 0.f,  //
-               0.f,           0.f,           0.f,           1.f};
-  }
+  // The GPU texture keeps the source-space encoded bytes; the decode variant
+  // of the shader converts them after sampling. Resolve the folded
+  // image-space -> target-space stages once; an image already in the target
+  // space folds to a no-op and keeps the plain shader (raw bytes, no
+  // conversion, no gamut clipping).
+  steps_ = ColorXformSteps::Resolve((*image)->GetColorSpace(), target_space);
+  has_color_space_decode_ = !steps_.IsNoop();
 }
 
 WGSLTextureFragment::WGSLTextureFragment(
@@ -161,17 +162,21 @@ void WGSLTextureFragment::WriteFSFunctionsAndStructs(
   }
   if (has_color_space_decode_) {
     ss << R"(
-        tf0             : vec4<f32>,
-        tf1             : vec3<f32>,
-        gamut           : mat4x4<f32>,
+        cs_flags        : vec3<i32>,
+        cs_tf0          : vec4<f32>,
+        cs_tf1          : vec3<f32>,
+        cs_gamut        : mat4x4<f32>,
+        cs_enc_tf0      : vec4<f32>,
+        cs_enc_tf1      : vec3<f32>,
     };
 
-    // Color space decode: linearize with the parametric transfer function
-    // (tf0 = {g, a, b, c}, tf1 = {d, e, f}), move to the working-space
-    // (sRGB) gamut, then encode with the fixed sRGB curve. The parameters
-    // are passed as arguments because the uniforms are declared after the
-    // functions in the generated shader.
-    fn cs_linearize_channel(x: f32, tf0: vec4<f32>, tf1: vec3<f32>) -> f32 {
+    // Color space conversion stages, selected at runtime by cs_flags:
+    // x: decode the source signal to linear, y: move between gamuts,
+    // z: encode to the target signal (1 = the constant sRGB curve,
+    // 2 = parametric). The parametric curve evaluates either direction;
+    // the parameters are passed as arguments because the uniforms are
+    // declared after the functions in the generated shader.
+    fn cs_eval_tf_channel(x: f32, tf0: vec4<f32>, tf1: vec3<f32>) -> f32 {
         if (x < tf1.x) {
             if (tf0.w == 0.0 && tf1.z == 0.0) {
                 // Pure power curve: mirror the power branch for negative
@@ -390,16 +395,50 @@ void WGSLTextureFragment::PrepareCMD(Command* cmd, HWDrawContext* context) {
         ->type->SetData(&global_alpha_, sizeof(float));
 
     if (has_color_space_decode_) {
-      // Color space decode parameters for the non-sRGB shader variant.
-      const float* tf = color_space_->transfer_fn;
-      std::array<float, 4> tf0{tf[0], tf[1], tf[2], tf[3]};
-      std::array<float, 3> tf1{tf[4], tf[5], tf[6]};
-      image_color_info_struct->GetMember("tf0")->type->SetData(
+      // Color space conversion uniforms for the decode variant; the flags
+      // select which stages the shader runs. Absent stages upload the
+      // zero-initialized params, which the flags never reach.
+      int32_t encode_mode =
+          steps_.encode ? (steps_.encode_is_srgb_curve ? 1 : 2) : 0;
+      std::array<int32_t, 3> cs_flags{steps_.decode ? 1 : 0,
+                                      steps_.gamut ? 1 : 0, encode_mode};
+      std::array<float, 4> tf0{steps_.decode_fn[0], steps_.decode_fn[1],
+                               steps_.decode_fn[2], steps_.decode_fn[3]};
+      std::array<float, 3> tf1{steps_.decode_fn[4], steps_.decode_fn[5],
+                               steps_.decode_fn[6]};
+      // Row-major 3x3 gamut into the shader's mat4x4 column layout.
+      Matrix gamut = Matrix{steps_.gamut_matrix[0],
+                            steps_.gamut_matrix[3],
+                            steps_.gamut_matrix[6],
+                            0.f,  //
+                            steps_.gamut_matrix[1],
+                            steps_.gamut_matrix[4],
+                            steps_.gamut_matrix[7],
+                            0.f,  //
+                            steps_.gamut_matrix[2],
+                            steps_.gamut_matrix[5],
+                            steps_.gamut_matrix[8],
+                            0.f,  //
+                            0.f,
+                            0.f,
+                            0.f,
+                            1.f};
+      std::array<float, 4> enc_tf0{steps_.encode_fn[0], steps_.encode_fn[1],
+                                   steps_.encode_fn[2], steps_.encode_fn[3]};
+      std::array<float, 3> enc_tf1{steps_.encode_fn[4], steps_.encode_fn[5],
+                                   steps_.encode_fn[6]};
+      image_color_info_struct->GetMember("cs_flags")
+          ->type->SetData(cs_flags.data(), cs_flags.size() * sizeof(int32_t));
+      image_color_info_struct->GetMember("cs_tf0")->type->SetData(
           tf0.data(), tf0.size() * sizeof(float));
-      image_color_info_struct->GetMember("tf1")->type->SetData(
+      image_color_info_struct->GetMember("cs_tf1")->type->SetData(
           tf1.data(), tf1.size() * sizeof(float));
-      image_color_info_struct->GetMember("gamut")->type->SetData(
-          &gamut_to_working_, sizeof(Matrix));
+      image_color_info_struct->GetMember("cs_gamut")
+          ->type->SetData(&gamut, sizeof(Matrix));
+      image_color_info_struct->GetMember("cs_enc_tf0")
+          ->type->SetData(enc_tf0.data(), enc_tf0.size() * sizeof(float));
+      image_color_info_struct->GetMember("cs_enc_tf1")
+          ->type->SetData(enc_tf1.data(), enc_tf1.size() * sizeof(float));
     }
 
     if (cubic_.UseCubic()) {

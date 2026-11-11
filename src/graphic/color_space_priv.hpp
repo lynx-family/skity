@@ -18,6 +18,15 @@ void ColorSpaceMultiply3x3(const float lhs[9], const float rhs[9],
 // Adjugate / determinant inversion; returns false when m is singular.
 bool ColorSpaceInvert3x3(const float m[9], float inv[9]);
 
+// Evaluates a parametric transfer function (the signal -> linear direction):
+//   linear(x) = c * x + f               for x <  d
+//   linear(x) = pow(a * x + b, g) + e   for x >= d
+float ColorSpaceEvalTransferFn(const float tf[7], float x);
+
+// Closed-form inverse (the linear -> signal direction); the parametric family
+// is closed under inversion.
+void ColorSpaceInvertTransferFn(const float tf[7], float inv[7]);
+
 }  // namespace skity
 
 #endif  // SRC_GRAPHIC_COLOR_SPACE_PRIV_HPP

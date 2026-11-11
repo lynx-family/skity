@@ -52,6 +52,8 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_priv_neon.hpp
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_space.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_space_priv.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/graphic/color_xform.cc
+  ${CMAKE_CURRENT_LIST_DIR}/graphic/color_xform.hpp
   ${CMAKE_CURRENT_LIST_DIR}/graphic/contour_measure.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/contour_measure.hpp
   ${CMAKE_CURRENT_LIST_DIR}/graphic/image.cc

@@ -819,17 +819,21 @@ fn remap_float_tile(t: f32, tile_mode: i32) -> f32 {
 struct ImageColorInfo {
   infos           : vec3<i32>,
   global_alpha    : f32,
-  tf0             : vec4<f32>,
-  tf1             : vec3<f32>,
-  gamut           : mat4x4<f32>,
+  cs_flags        : vec3<i32>,
+  cs_tf0          : vec4<f32>,
+  cs_tf1          : vec3<f32>,
+  cs_gamut        : mat4x4<f32>,
+  cs_enc_tf0      : vec4<f32>,
+  cs_enc_tf1      : vec3<f32>,
 };
 
-// Color space decode: linearize with the parametric transfer function
-// (tf0 = {g, a, b, c}, tf1 = {d, e, f}), move to the working-space
-// (sRGB) gamut, then encode with the fixed sRGB curve. The parameters
-// are passed as arguments because the uniforms are declared after the
-// functions in the generated shader.
-fn cs_linearize_channel(x: f32, tf0: vec4<f32>, tf1: vec3<f32>) -> f32 {
+// Color space conversion stages, selected at runtime by cs_flags:
+// x: decode the source signal to linear, y: move between gamuts,
+// z: encode to the target signal (1 = the constant sRGB curve,
+// 2 = parametric). The parametric curve evaluates either direction;
+// the parameters are passed as arguments because the uniforms are
+// declared after the functions in the generated shader.
+fn cs_eval_tf_channel(x: f32, tf0: vec4<f32>, tf1: vec3<f32>) -> f32 {
     if (x < tf1.x) {
         if (tf0.w == 0.0 && tf1.z == 0.0) {
             // Pure power curve: mirror the power branch for negative
@@ -877,14 +881,25 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
     if (image_color_info.infos.x != 3 && color.w > 0.0) {
       cs_rgb = cs_rgb / color.w;
     }
-    cs_rgb = vec3<f32>(
-        cs_linearize_channel(cs_rgb.r, image_color_info.tf0, image_color_info.tf1),
-        cs_linearize_channel(cs_rgb.g, image_color_info.tf0, image_color_info.tf1),
-        cs_linearize_channel(cs_rgb.b, image_color_info.tf0, image_color_info.tf1));
-    cs_rgb = (image_color_info.gamut * vec4<f32>(cs_rgb, 1.0)).xyz;
-    cs_rgb = vec3<f32>(cs_srgb_encode_channel(cs_rgb.r),
-                       cs_srgb_encode_channel(cs_rgb.g),
-                       cs_srgb_encode_channel(cs_rgb.b));
+    if (image_color_info.cs_flags.x == 1) {
+      cs_rgb = vec3<f32>(
+          cs_eval_tf_channel(cs_rgb.r, image_color_info.cs_tf0, image_color_info.cs_tf1),
+          cs_eval_tf_channel(cs_rgb.g, image_color_info.cs_tf0, image_color_info.cs_tf1),
+          cs_eval_tf_channel(cs_rgb.b, image_color_info.cs_tf0, image_color_info.cs_tf1));
+    }
+    if (image_color_info.cs_flags.y == 1) {
+      cs_rgb = (image_color_info.cs_gamut * vec4<f32>(cs_rgb, 1.0)).xyz;
+    }
+    if (image_color_info.cs_flags.z == 1) {
+      cs_rgb = vec3<f32>(cs_srgb_encode_channel(cs_rgb.r),
+                         cs_srgb_encode_channel(cs_rgb.g),
+                         cs_srgb_encode_channel(cs_rgb.b));
+    } else if (image_color_info.cs_flags.z == 2) {
+      cs_rgb = vec3<f32>(
+          cs_eval_tf_channel(cs_rgb.r, image_color_info.cs_enc_tf0, image_color_info.cs_enc_tf1),
+          cs_eval_tf_channel(cs_rgb.g, image_color_info.cs_enc_tf0, image_color_info.cs_enc_tf1),
+          cs_eval_tf_channel(cs_rgb.b, image_color_info.cs_enc_tf0, image_color_info.cs_enc_tf1));
+    }
     // Re-premultiplying needs no divide guard: multiplying by alpha is
     // safe at zero, and curves with a non-zero black point would
     // otherwise leak their offset into fully transparent pixels.

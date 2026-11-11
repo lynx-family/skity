@@ -356,8 +356,11 @@ HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
   const Vector color =
       is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
   Paint paint_copy = paint_;
-  paint_copy.SetFillColor(color);
-  paint_copy.SetStrokeColor(color);
+  // The copied color carries its recorded space with it: every setter
+  // states the space explicitly.
+  paint_copy.SetColor4f(
+      Color4f{color.x, color.y, color.z, color.w},
+      is_stroke_ ? paint_.GetStrokeColorSpace() : paint_.GetFillColorSpace());
   std::optional<Matrix> layer_to_local;
   if (effect == TextAtlasEffect::kA8Coverage && paint_.GetShader()) {
     Matrix inverse;
@@ -385,7 +388,11 @@ GlyphRegionGroup* GetOrAppendContiguousGroup(
 Paint MakeBitmapOnlyFillPaint(const Paint& paint) {
   Paint fill_paint = paint;
   if (paint.GetStyle() == Paint::kStroke_Style) {
-    fill_paint.SetFillColor(paint.GetStrokeColor());
+    // The copied stroke color carries its recorded space with it: every
+    // setter states the space explicitly.
+    const Vector color = paint.GetStrokeColor();
+    fill_paint.SetColor4f(Color4f{color.x, color.y, color.z, color.w},
+                          paint.GetStrokeColorSpace());
   }
   fill_paint.SetStyle(Paint::kFill_Style);
   return fill_paint;

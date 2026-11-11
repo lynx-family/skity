@@ -148,8 +148,11 @@ HWDraw* DirectGlyphRun::Draw(Matrix transform, const Matrix& glyph_to_layer,
   const Vector color =
       is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
   Paint paint_copy = paint_;
-  paint_copy.SetFillColor(color);
-  paint_copy.SetStrokeColor(color);
+  // The copied color carries its recorded space with it: every setter
+  // states the space explicitly.
+  paint_copy.SetColor4f(
+      Color4f{color.x, color.y, color.z, color.w},
+      is_stroke_ ? paint_.GetStrokeColorSpace() : paint_.GetFillColorSpace());
   std::optional<Matrix> layer_to_local;
   if (effect == TextAtlasEffect::kA8Coverage && paint_.GetShader()) {
     Matrix inverse;

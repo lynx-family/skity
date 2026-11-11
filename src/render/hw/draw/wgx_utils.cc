@@ -9,6 +9,7 @@
 #include "src/effect/pixmap_shader.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
+#include "src/graphic/color_xform.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
@@ -792,7 +793,7 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
         return arena_allocator->Make<WGSLTextureFragment>(
             pixmap_shader, texture, sampler, paint.GetAlphaF(),
             inv_local_matrix, static_cast<float>(image->Width()),
-            static_cast<float>(image->Height()));
+            static_cast<float>(image->Height()), context->target_space);
 
       } else {
         if (has_color) {
@@ -808,6 +809,17 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
       paint.GetShader()->AsGradient(&info);
       info.local_matrix = local_matrix;
 
+      // Gradient stops are recorded in sRGB; resolve them into the target
+      // space so interpolation happens in the space the surface encodes
+      // (stop-level color spaces are a future extension).
+      if (!ColorSpaceIsSRGB(context->target_space)) {
+        ColorXformSteps stop_steps =
+            ColorXformSteps::Resolve(nullptr, context->target_space);
+        for (auto& stop : info.colors) {
+          stop = stop_steps.Apply(stop);
+        }
+      }
+
       Color4f fallback_color;
       if (NeedsFallbackToSolidColor(type, info, fallback_color)) {
         // Vertex colors still contain the paint color, not the gradient color.
@@ -821,13 +833,15 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
   } else {
     if (is_stroke) {
       if (has_color) {
-        return arena_allocator->Make<WGSLSolidColor>(paint.GetStrokeColor());
+        return arena_allocator->Make<WGSLSolidColor>(
+            paint.GetStrokeColor(context->target_space));
       } else {
         return arena_allocator->Make<WGSLSolidVertexColor>();
       }
     } else {
       if (has_color) {
-        return arena_allocator->Make<WGSLSolidColor>(paint.GetFillColor());
+        return arena_allocator->Make<WGSLSolidColor>(
+            paint.GetFillColor(context->target_space));
       } else {
         return arena_allocator->Make<WGSLSolidVertexColor>();
       }

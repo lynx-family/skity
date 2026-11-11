@@ -36,9 +36,10 @@ enum class SKITY_API ImageType {
 class SKITY_API Image {
  public:
   /**
-   * Wraps a raw texture as an image. The texture holds source-space encoded
-   * bytes; pass its color space so draws decode it, or leave the default
-   * null to treat the bytes as the sRGB working space.
+   * Wraps an existing GPU-resident texture. The pixels are declared to be
+   * encoded in color_space (default sRGB); textures that back a render
+   * target should pass the target space so re-drawing them converts, or
+   * passes through, correctly.
    */
   static std::shared_ptr<Image> MakeHWImage(
       std::shared_ptr<Texture> texture,
@@ -130,6 +131,19 @@ class SKITY_API DeferredTextureImage : public Image {
 
   void SetAlphaType(AlphaType alpha_type) { alpha_type_ = alpha_type; }
 
+  /**
+   * Declares the color space the texture's pixels are encoded in (default
+   * sRGB). Render-target-backed deferred textures (e.g. MSAA resolve images)
+   * should declare the target space so re-drawing them is conversion free.
+   */
+  void SetColorSpace(std::shared_ptr<const ColorSpace> color_space) {
+    color_space_ = std::move(color_space);
+  }
+
+  std::shared_ptr<const ColorSpace> GetColorSpace() const override {
+    return color_space_;
+  }
+
   ImageType GetImageType() const override {
     return ImageType::kDeferredTexture;
   }
@@ -146,6 +160,7 @@ class SKITY_API DeferredTextureImage : public Image {
   size_t width_;
   size_t height_;
   AlphaType alpha_type_;
+  std::shared_ptr<const ColorSpace> color_space_;
   std::shared_ptr<Texture> texture_;
 
   friend class Image;
