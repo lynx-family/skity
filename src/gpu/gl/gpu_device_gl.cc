@@ -88,11 +88,12 @@ GPUDeviceGL::GPUDeviceGL() {
   ApplyGLDriverWorkarounds(driver_workarounds_, *gpu_caps);
   LOGW(
       "GPUDeviceGL effective_blend_caps=[fb_fetch={},native={},coherent={},"
-      "dual_src={}]",
+      "dual_src={},retain_last_index_buffer={}]",
       gpu_caps->supports_framebuffer_fetch,
       gpu_caps->supports_native_advanced_blend,
       gpu_caps->supports_native_advanced_blend_coherent,
-      gpu_caps->supports_dual_source_blending);
+      gpu_caps->supports_dual_source_blending,
+      driver_workarounds_.retain_last_index_buffer);
   InitCaps(std::move(gpu_caps));
 
   if (driver_workarounds_.use_draw_for_clear) {
@@ -112,6 +113,16 @@ GPUDeviceGL::~GPUDeviceGL() {
 std::unique_ptr<GPUBuffer> GPUDeviceGL::CreateBuffer(
     const GPUBufferDescriptor& desc) {
   return std::make_unique<GPUBufferGL>(desc);
+}
+
+void GPUDeviceGL::DidDrawIndexedBuffer(std::shared_ptr<GPUBuffer> buffer) {
+  if (!driver_workarounds_.retain_last_index_buffer) {
+    return;
+  }
+  // Old VirGL caches the last drawn index resource by wire handle alone.
+  // Keep it alive to prevent reuse of that handle, until a different resource
+  // has actually been drawn and has replaced the driver's cached reference.
+  last_index_buffer_ = std::move(buffer);
 }
 
 std::shared_ptr<GPUShaderFunction> GPUDeviceGL::CreateShaderFunction(

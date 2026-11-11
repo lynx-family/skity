@@ -53,6 +53,9 @@ class GPUDeviceGL : public GPUDevice {
     return driver_workarounds_;
   }
 
+  // Call after issuing an indexed draw with at least one complete triangle.
+  void DidDrawIndexedBuffer(std::shared_ptr<GPUBuffer> buffer);
+
   std::shared_ptr<GPUShaderFunction> CreateShaderFunctionFromModule(
       const GPUShaderFunctionDescriptor& desc);
 
@@ -69,6 +72,7 @@ class GPUDeviceGL : public GPUDevice {
   uint32_t clear_draw_program_ = 0;
   GLDriverInfo driver_info_ = {};
   GLDriverWorkarounds driver_workarounds_ = {};
+  std::shared_ptr<GPUBuffer> last_index_buffer_;
 };
 
 }  // namespace skity

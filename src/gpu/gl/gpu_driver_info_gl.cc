@@ -30,6 +30,23 @@ int32_t ParseAdrenoModel(std::string_view renderer) {
   return -1;
 }
 
+bool NeedsIndexResourceRetention(const GLDriverInfo& info) {
+  if (info.vendor_name != "Mesa/X.org" || info.renderer != "virgl") {
+    return false;
+  }
+  // These GLES versions on Mesa 20.2.3 have reproduced stale index resources.
+  // Match a complete version token, allowing the optional build identifier.
+  const std::string_view version = info.version;
+  for (std::string_view prefix :
+       {"OpenGL ES 3.1 Mesa 20.2.3", "OpenGL ES 3.2 Mesa 20.2.3"}) {
+    if (StartsWith(version, prefix) &&
+        (version.size() == prefix.size() || version[prefix.size()] == ' ')) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 GLDriverInfo GLDriverInfo::FromStrings(std::string vendor, std::string renderer,
@@ -69,6 +86,8 @@ GLDriverWorkarounds ResolveGLDriverWorkarounds(
   workarounds.disable_native_advanced_blend =
       (is_adreno && model >= 400 && model < 600) ||
       driver_info.vendor == GLVendor::kARM;
+  workarounds.retain_last_index_buffer =
+      NeedsIndexResourceRetention(driver_info);
   return workarounds;
 }
 

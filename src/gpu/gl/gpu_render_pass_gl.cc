@@ -5,6 +5,7 @@
 #include "src/gpu/gl/gpu_render_pass_gl.hpp"
 
 #include <cstdint>
+#include <utility>
 
 #include "src/gpu/gl/formats_gl.h"
 #include "src/gpu/gl/gpu_buffer_gl.hpp"
@@ -75,6 +76,8 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
     after_cleanup_action_();
   }
 
+  const bool retain_last_index_buffer =
+      device_->GetDriverWorkarounds().retain_last_index_buffer;
   for (auto command : GetCommands()) {
     SKITY_TRACE_EVENT(GPURenderPassGL_Drawcommand);
     if (!command->IsValid()) {
@@ -193,9 +196,9 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
       }
     }
 
-    BindBuffer(
-        GL_ELEMENT_ARRAY_BUFFER,
-        static_cast<GPUBufferGL*>(command->index_buffer.buffer)->GetBufferId());
+    auto* index_buffer = command->index_buffer.buffer;
+    BindBuffer(GL_ELEMENT_ARRAY_BUFFER,
+               static_cast<GPUBufferGL*>(index_buffer)->GetBufferId());
 
     // Non-coherent advanced blend needs a barrier so the next draw/blit reads
     // the blended result. Coherent mode issues no barrier.
@@ -216,6 +219,12 @@ void GPURenderPassGL::EncodeCommands(std::optional<GPUViewport> viewport,
     } else {
       GL_CALL(DrawElements, GL_TRIANGLES, command->index_count, GL_UNSIGNED_INT,
               reinterpret_cast<void*>(command->index_buffer.offset));
+    }
+    // VirGL skips incomplete triangles before updating its index buffer.
+    if (retain_last_index_buffer && command->index_count >= 3) {
+      if (auto owner = index_buffer->weak_from_this().lock()) {
+        device_->DidDrawIndexedBuffer(std::move(owner));
+      }
     }
   }
 
