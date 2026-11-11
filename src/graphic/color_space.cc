@@ -197,6 +197,59 @@ const ColorSpace& DerefOrSRGB(const std::shared_ptr<ColorSpace>& color_space) {
   return color_space ? *color_space : kSRGBInstance;
 }
 
+// The conversion for one space pair with every per-pixel invariant folded
+// up front: the decode curve, the combined gamut matrix and the encode
+// curve. Converting a batch prepares this once instead of redoing the
+// matrix inversion and curve flip per pixel.
+struct PreparedConversion {
+  const ColorSpace* decode_from = nullptr;
+  float gamut[9] = {};
+  bool needs_gamut = false;
+  float encode_tf[7] = {};
+  const ColorSpace* encode_to = nullptr;
+};
+
+PreparedConversion PrepareConversion(const ColorSpace& from,
+                                     const ColorSpace& to) {
+  PreparedConversion prepared;
+  if (!from.IsLinear()) {
+    prepared.decode_from = &from;
+  }
+  if (!SameGamut(from.gamut_xyz, to.gamut_xyz)) {
+    float inv_dst[9];
+    if (ColorSpaceInvert3x3(to.gamut_xyz, inv_dst)) {
+      ColorSpaceMultiply3x3(inv_dst, from.gamut_xyz, prepared.gamut);
+      prepared.needs_gamut = true;
+    }
+  }
+  if (!to.IsLinear()) {
+    InvertTransferFn(to.transfer_fn, prepared.encode_tf);
+    prepared.encode_to = &to;
+  }
+  return prepared;
+}
+
+void ApplyConversion(const PreparedConversion& prepared, float rgb[3]) {
+  if (prepared.decode_from != nullptr) {
+    for (int i = 0; i < 3; i++) {
+      rgb[i] = EvalTransferFn(prepared.decode_from->transfer_fn, rgb[i]);
+    }
+  }
+  if (prepared.needs_gamut) {
+    float out[3] = {rgb[0], rgb[1], rgb[2]};
+    for (int row = 0; row < 3; row++) {
+      rgb[row] = prepared.gamut[row * 3] * out[0] +
+                 prepared.gamut[row * 3 + 1] * out[1] +
+                 prepared.gamut[row * 3 + 2] * out[2];
+    }
+  }
+  if (prepared.encode_to != nullptr) {
+    for (int i = 0; i < 3; i++) {
+      rgb[i] = EvalTransferFn(prepared.encode_tf, rgb[i]);
+    }
+  }
+}
+
 }  // namespace
 
 Color4f ColorSpace::Convert(std::shared_ptr<ColorSpace> src, Color4f color,
@@ -207,47 +260,27 @@ Color4f ColorSpace::Convert(std::shared_ptr<ColorSpace> src, Color4f color,
 
   const ColorSpace& from = DerefOrSRGB(src);
   const ColorSpace& to = DerefOrSRGB(dst);
+  PreparedConversion prepared = PrepareConversion(from, to);
+
   float rgb[3] = {color.r, color.g, color.b};
-
-  // Signal -> linear in the source space.
-  if (!from.IsLinear()) {
-    for (int i = 0; i < 3; i++) {
-      rgb[i] = EvalTransferFn(from.transfer_fn, rgb[i]);
-    }
-  }
-
-  // Linear source gamut -> linear destination gamut.
-  if (!SameGamut(from.gamut_xyz, to.gamut_xyz)) {
-    float inv_dst[9];
-    float src_to_dst[9];
-    if (ColorSpaceInvert3x3(to.gamut_xyz, inv_dst)) {
-      ColorSpaceMultiply3x3(inv_dst, from.gamut_xyz, src_to_dst);
-      float out[3] = {rgb[0], rgb[1], rgb[2]};
-      for (int row = 0; row < 3; row++) {
-        rgb[row] = src_to_dst[row * 3] * out[0] +
-                   src_to_dst[row * 3 + 1] * out[1] +
-                   src_to_dst[row * 3 + 2] * out[2];
-      }
-    }
-  }
-
-  // Linear -> signal in the destination space.
-  if (!to.IsLinear()) {
-    float encode_tf[7];
-    InvertTransferFn(to.transfer_fn, encode_tf);
-    for (int i = 0; i < 3; i++) {
-      rgb[i] = EvalTransferFn(encode_tf, rgb[i]);
-    }
-  }
-
+  ApplyConversion(prepared, rgb);
   return Color4f{rgb[0], rgb[1], rgb[2], color.a};
 }
 
 void ColorSpace::ConvertColors(std::shared_ptr<ColorSpace> src,
                                Color4f colors[], int count,
                                std::shared_ptr<ColorSpace> dst) {
+  if (ColorSpaceEquals(src, dst)) {
+    return;
+  }
+  // The per-pair invariants are prepared once for the whole batch; only
+  // the per-color math runs inside the loop.
+  PreparedConversion prepared =
+      PrepareConversion(DerefOrSRGB(src), DerefOrSRGB(dst));
   for (int i = 0; i < count; i++) {
-    colors[i] = Convert(src, colors[i], dst);
+    float rgb[3] = {colors[i].r, colors[i].g, colors[i].b};
+    ApplyConversion(prepared, rgb);
+    colors[i] = Color4f{rgb[0], rgb[1], rgb[2], colors[i].a};
   }
 }
 
