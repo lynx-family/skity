@@ -2,9 +2,11 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <limits>
 #include <random>
 #include <skity/geometry/stroke.hpp>
 #include <skity/graphic/path.hpp>
+#include <utility>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -1354,6 +1356,136 @@ TEST(Path, AddClosedPathAfterCurveKeepsLastMovePoint) {
   EXPECT_EQ(path, expected);
 }
 
+TEST(Path, AddPathPreservesRectAndOval) {
+  using IsAType = skity::Path::IsAType;
+  const auto bounds = skity::Rect::MakeXYWH(10, 20, 100, 50);
+  const auto matrix =
+      skity::Matrix::Translate(4, 8) * skity::Matrix::Scale(2, 3);
+  for (auto type : {IsAType::kRect, IsAType::kOval}) {
+    SCOPED_TRACE(static_cast<int>(type));
+    skity::Path source;
+    if (type == IsAType::kRect) {
+      source.AddRect(bounds);
+    } else {
+      source.AddOval(bounds);
+    }
+
+    skity::Path path;
+    EXPECT_EQ(path.AddPath(source).GetIsAType(), type);
+    EXPECT_EQ(source.MoveTo(-10, -20).GetIsAType(), type);
+
+    path.Reset().AddPath(source, matrix);
+    EXPECT_EQ(path.GetIsAType(), type);
+    EXPECT_EQ(path.GetBounds(), skity::Rect::MakeLTRB(24, 68, 224, 218));
+    EXPECT_EQ(path.GetLastMovePt2D(), skity::Vec2(-16, -52));
+    EXPECT_EQ(skity::Path(path).Close().GetIsAType(), IsAType::kGeneral);
+    EXPECT_EQ(path.AddPath(source).GetIsAType(), IsAType::kGeneral);
+  }
+}
+
+TEST(Path, AddPathPreservesClosedSimpleRRect) {
+  const auto bounds = skity::Rect::MakeXYWH(10, 20, 100, 50);
+  skity::Path source;
+  source.AddRoundRect(bounds, 3, 5, skity::Path::Direction::kCCW);
+
+  skity::Path path;
+  path.AddPath(source);
+  skity::RRect result;
+  ASSERT_TRUE(path.IsSimpleRRect(&result));
+  EXPECT_EQ(result.GetBounds(), bounds);
+  EXPECT_EQ(result.GetSimpleRadii(), skity::Vec2(3, 5));
+  EXPECT_EQ(path, source);
+}
+
+TEST(Path, SimpleShapesRequireEmptyPathOrSingleMoveTo) {
+  using IsAType = skity::Path::IsAType;
+  const auto bounds = skity::Rect::MakeXYWH(10, 20, 100, 50);
+  const std::pair<skity::RRect, IsAType> shapes[] = {
+      {skity::RRect::MakeRect(bounds), IsAType::kRect},
+      {skity::RRect::MakeOval(bounds), IsAType::kOval},
+      {skity::RRect::MakeRectXY(bounds, 3, 5), IsAType::kSimpleRRect},
+  };
+  skity::Path extra_move;
+  extra_move.MoveTo(-30, -40);
+  for (const auto& [shape, type] : shapes) {
+    SCOPED_TRACE(static_cast<int>(type));
+    skity::Path path;
+    path.MoveTo(-10, -20).AddRRect(shape);
+    EXPECT_EQ(path.GetIsAType(), type);
+    EXPECT_EQ(path.GetBounds(), bounds);
+
+    path.Reset().MoveTo(-10, -20).Close().AddRRect(shape);
+    EXPECT_EQ(path.GetIsAType(), IsAType::kGeneral);
+
+    path.Reset().MoveTo(-10, -20).AddPath(extra_move).AddRRect(shape);
+    EXPECT_EQ(path.GetIsAType(), IsAType::kGeneral);
+  }
+}
+
+TEST(Path, AddPathKeepsUnsupportedAppendsGeneral) {
+  using IsAType = skity::Path::IsAType;
+  skity::Path source;
+  source.AddRoundRect(skity::Rect::MakeXYWH(10, 20, 100, 50), 3, 5);
+  ASSERT_TRUE(source.IsSimpleRRect(nullptr));
+
+  const float infinity = std::numeric_limits<float>::infinity();
+  const std::pair<const char*, skity::Matrix> transforms[] = {
+      {"skew", skity::Matrix::Skew(0.25f, 0)},
+      {"reflect x", skity::Matrix::Scale(-1, 1)},
+      {"reflect y", skity::Matrix::Scale(1, -1)},
+      {"collapse x", skity::Matrix::Scale(0, 1)},
+      {"collapse y", skity::Matrix::Scale(1, 0)},
+      {"non-finite translation", skity::Matrix::Translate(infinity, 0)},
+  };
+  skity::Path path;
+  for (const auto& [label, matrix] : transforms) {
+    SCOPED_TRACE(label);
+    EXPECT_EQ(path.Reset().AddPath(source, matrix).GetIsAType(),
+              IsAType::kGeneral);
+  }
+  EXPECT_EQ(
+      path.Reset().AddPath(source, skity::Path::AddMode::kExtend).GetIsAType(),
+      IsAType::kGeneral);
+}
+
+TEST(Path, AddPathPreservesSimpleRRectWithTrailingMove) {
+  const auto bounds = skity::Rect::MakeXYWH(10, 20, 100, 50);
+  const skity::Vec2 radius{10, 10};
+  const skity::Vec2 radii[] = {radius, radius, radius, radius};
+  skity::RRect rrect;
+  rrect.SetRectRadii(bounds, radii);
+  skity::Path local;
+  local.AddRRect(rrect);
+  local.MoveTo(10, 20);
+
+  skity::Path path;
+  path.AddPath(local);
+  skity::RRect result;
+  ASSERT_TRUE(path.IsSimpleRRect(&result));
+  EXPECT_EQ(result.GetBounds(), bounds);
+  EXPECT_EQ(result.GetSimpleRadii(), radius);
+  EXPECT_EQ(path.GetLastMovePt2D(), skity::Vec2(10, 20));
+
+  skity::Path transformed;
+  transformed.AddPath(path, skity::Matrix::Scale(2, 3));
+  ASSERT_TRUE(transformed.IsSimpleRRect(&result));
+  EXPECT_EQ(result.GetBounds(), skity::Rect::MakeXYWH(20, 60, 200, 150));
+  EXPECT_EQ(result.GetSimpleRadii(), skity::Vec2(20, 30));
+  EXPECT_EQ(transformed.GetLastMovePt2D(), skity::Vec2(20, 60));
+
+  auto updated = path;
+  EXPECT_TRUE(updated.MoveTo(-10, -20).IsSimpleRRect(nullptr));
+  EXPECT_EQ(updated.CountVerbs(), path.CountVerbs());
+  EXPECT_EQ(updated.GetBounds(), bounds);
+  updated.MoveTo(std::numeric_limits<float>::infinity(), 20);
+  EXPECT_FALSE(updated.IsSimpleRRect(nullptr));
+  EXPECT_FALSE(updated.IsFinite());
+
+  EXPECT_FALSE(skity::Path(path).Close().IsSimpleRRect(nullptr));
+  path.LineTo(120, 90);
+  EXPECT_FALSE(path.IsSimpleRRect(nullptr));
+}
+
 TEST(Path, StrokePath) {
   skity::Path src;
   src.MoveTo(30, 30);
@@ -1890,6 +2022,32 @@ TEST(Path, GetType_AfterModifications) {
   EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
   path.AddRoundRect(skity::Rect::MakeLTRB(10, 20, 100, 200), 10, 10);
   EXPECT_EQ(path.GetIsAType(), skity::Path::IsAType::kGeneral);
+}
+
+TEST(Path, MoveConstructorResetsSource) {
+  const auto bounds = skity::Rect::MakeXYWH(10, 20, 100, 50);
+  skity::Path source;
+  source.AddRoundRect(bounds, 3, 5).MoveTo(10, 20);
+  source.SetFillType(skity::Path::PathFillType::kEvenOdd);
+  ASSERT_EQ(source.GetBounds(), bounds);
+  const skity::Path expected = source;
+
+  skity::Path moved(std::move(source));
+  EXPECT_EQ(moved, expected);
+  EXPECT_EQ(moved.GetFirstDirection(), expected.GetFirstDirection());
+  EXPECT_EQ(moved.GetSegmentMasks(), expected.GetSegmentMasks());
+  skity::RRect rrect;
+  ASSERT_TRUE(moved.IsSimpleRRect(&rrect));
+  EXPECT_EQ(rrect.GetBounds(), bounds);
+  EXPECT_EQ(rrect.GetSimpleRadii(), skity::Vec2(3, 5));
+
+  const skity::Path empty;
+  EXPECT_EQ(source, empty);
+  EXPECT_EQ(source.GetFirstDirection(), empty.GetFirstDirection());
+  EXPECT_EQ(source.GetSegmentMasks(), 0u);
+  EXPECT_TRUE(source.GetBounds().IsEmpty());
+  EXPECT_FALSE(source.IsSimpleRRect(nullptr));
+  EXPECT_FALSE(source.MoveTo(1, 2).IsSimpleRRect(nullptr));
 }
 
 TEST(Path, ResetClearsStateAndRetainsStorage) {
