@@ -113,6 +113,12 @@ class HWCanvas : public Canvas, private GlyphDrawTarget {
 
   void DrawShape(const Shape& shape, const Paint& paint, bool is_local = true);
 
+  void DrawRectShape(const Rect& rect, const Paint& paint,
+                     bool is_local = true);
+
+  void DrawRectInternal(const Rect& rect, const Paint& paint,
+                        const Matrix& transform);
+
   void DrawPathInternal(const Path& path, const Paint& paint,
                         const Matrix& transform);
 

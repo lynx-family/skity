@@ -7,25 +7,22 @@
 
 #include <skity/geometry/rrect.hpp>
 #include <skity/graphic/paint.hpp>
-#include <skity/graphic/path.hpp>
+#include <vector>
 
 #include "src/render/hw/draw/hw_dynamic_draw.hpp"
-#include "src/render/hw/draw/hw_wgsl_geometry.hpp"
 #include "src/utils/batch_group.hpp"
 
 namespace skity {
 
 class HWDynamicRRectDraw : public HWDynamicDraw {
  public:
-  HWDynamicRRectDraw(Matrix transform, RRect rrect, Paint paint);
-
-  ~HWDynamicRRectDraw() override = default;
+  HWDynamicRRectDraw(const Matrix& transform, const RRect& rrect,
+                     const Paint& paint);
 
   HWDrawType GetDrawType() const override { return HWDrawType::kRRect; }
 
-  bool OnMergeIfPossible(HWDraw* draw) override;
-
  protected:
+  bool OnMergeIfPossible(HWDraw* draw) override;
   void OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                           HWDrawContext* context) override;
 

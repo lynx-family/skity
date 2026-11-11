@@ -90,9 +90,6 @@ Matrix HWDynamicTextDraw::CalcTransform(const Matrix& canvas_transform,
 }
 
 bool HWDynamicTextDraw::OnMergeIfPossible(HWDraw* draw) {
-  if (!HWDynamicDraw::OnMergeIfPossible(draw)) {
-    return false;
-  }
   auto other = static_cast<HWDynamicTextDraw*>(draw);
   auto& data = geometry_data_;
   auto& other_data = other->geometry_data_;

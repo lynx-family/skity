@@ -76,9 +76,10 @@ std::shared_ptr<Image> MakeTestImage() {
   return Image::MakeImage(std::move(pixmap));
 }
 
-Paint MakeImagePaint(const std::shared_ptr<Image>& image) {
+Paint MakeImagePaint(const std::shared_ptr<Image>& image,
+                     const SamplingOptions& sampling = {}) {
   Paint paint;
-  paint.SetShader(Shader::MakeShader(image, SamplingOptions{}, TileMode::kDecal,
+  paint.SetShader(Shader::MakeShader(image, sampling, TileMode::kDecal,
                                      TileMode::kDecal, Matrix{}));
   return paint;
 }
@@ -152,6 +153,32 @@ TEST(InitialColorClear, ConsecutiveClearsAndSplitPass) {
       EXPECT_TRUE(context.device()->last_instance_counts().empty());
     }
   }
+}
+
+TEST(InitialColorClear, ConsecutiveFullRectsUseLastColorWithoutDraws) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 32;
+  FakeGPUSurface surface(desc, &context, GPUTextureFormat::kRGBA8Unorm, true);
+  auto* canvas = surface.LockCanvas(false);
+  Paint paint;
+  paint.SetBlendMode(BlendMode::kSrcOver);
+  for (auto color : {Color_RED, Color_GREEN, Color_BLUE}) {
+    paint.SetColor(color);
+    canvas->DrawRect(Rect::MakeWH(32, 32), paint);
+  }
+  canvas->Flush();
+  surface.Flush();
+
+  const auto& colors = context.device()->last_colors();
+  ASSERT_EQ(colors.size(), 1u);
+  EXPECT_EQ(colors[0].load_op, GPULoadOp::kClear);
+  EXPECT_EQ(colors[0].clear_value.r, 0.);
+  EXPECT_EQ(colors[0].clear_value.g, 0.);
+  EXPECT_EQ(colors[0].clear_value.b, 1.);
+  EXPECT_EQ(colors[0].clear_value.a, 1.);
+  EXPECT_TRUE(context.device()->last_instance_counts().empty());
 }
 
 TEST(InitialColorClear, ClearBlendProducesTransparentBlackForThisFrameOnly) {
@@ -386,6 +413,7 @@ TEST(PrecompileDrawTest, PrecompileDefaultShadersCoversExplicitDefaultDraws) {
   auto shader_function_count = device->shader_function_count();
   auto render_pipeline_count = device->render_pipeline_count();
 
+  PrecompileDraw(context, false, PrecompileDrawType::kDrawRect, paint);
   PrecompileDraw(context, false, PrecompileDrawType::kDrawPath, paint);
   PrecompileDraw(context, false, PrecompileDrawType::kDrawRRect, paint);
   PrecompileDraw(context, false, PrecompileDrawType::kDrawText, paint);
@@ -394,6 +422,8 @@ TEST(PrecompileDrawTest, PrecompileDefaultShadersCoversExplicitDefaultDraws) {
 
   EXPECT_EQ(device->shader_function_count(), shader_function_count);
   EXPECT_EQ(device->render_pipeline_count(), render_pipeline_count);
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("VS_Rect_Texture"));
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("VS_Path_Texture"));
 }
 
 TEST(PrecompileDrawTest, PrecompileDefaultShadersCoversGPUTessellationPath) {
@@ -409,7 +439,7 @@ TEST(PrecompileDrawTest, PrecompileDefaultShadersCoversGPUTessellationPath) {
 }
 
 TEST(PrecompileDrawTest,
-     PrecompileDefaultShadersCoversTwoColorLinearGradientPath) {
+     PrecompileDefaultShadersCoversTwoColorLinearGradientRects) {
   FakeGPUContext context;
   ASSERT_TRUE(context.Init());
   auto* device = context.device();
@@ -430,16 +460,50 @@ TEST(PrecompileDrawTest,
   Vec4 colors[] = {Colors::kRed, Colors::kBlue};
   paint.SetShader(Shader::MakeLinear(pts, colors, nullptr, 2));
 
-  PrecompileDraw(context, false, PrecompileDrawType::kDrawPath, paint);
+  PrecompileDraw(context, false, PrecompileDrawType::kDrawRect, paint);
   float color_fast_pos[] = {0.f, 1.f};
   paint.SetShader(Shader::MakeLinear(pts, colors, color_fast_pos, 2));
-  PrecompileDraw(context, false, PrecompileDrawType::kDrawPath, paint);
+  PrecompileDraw(context, false, PrecompileDrawType::kDrawRect, paint);
   float pos[] = {0.25f, 0.75f};
   paint.SetShader(Shader::MakeLinear(pts, colors, pos, 2));
-  PrecompileDraw(context, false, PrecompileDrawType::kDrawPath, paint);
+  PrecompileDraw(context, false, PrecompileDrawType::kDrawRect, paint);
 
   EXPECT_EQ(device->shader_function_count(), shader_function_count);
   EXPECT_EQ(device->render_pipeline_count(), render_pipeline_count);
+}
+
+TEST(PrecompileDrawTest, PrecompilesOnlyExplicitShapeType) {
+  for (auto type :
+       {PrecompileDrawType::kDrawRect, PrecompileDrawType::kDrawRRect,
+        PrecompileDrawType::kDrawPath}) {
+    for (bool msaa : {false, true}) {
+      for (bool image_shader : {false, true}) {
+        SCOPED_TRACE(::testing::Message()
+                     << "type=" << static_cast<int>(type) << " msaa=" << msaa
+                     << " image_shader=" << image_shader);
+        FakeGPUContext context;
+        ASSERT_TRUE(context.Init());
+        context.SetEnableSimpleShapePipeline(true);
+        context.SetEnableContourAA(true);
+
+        Paint paint = image_shader ? MakeImagePaint(MakeTestImage()) : Paint{};
+        paint.SetAntiAlias(true);
+        PrecompileDraw(context, msaa, type, paint);
+
+        auto* device = context.device();
+        EXPECT_EQ(device->HasVertexFunctionLabelContaining("VS_Rect"),
+                  type == PrecompileDrawType::kDrawRect);
+        EXPECT_EQ(device->HasVertexFunctionLabelContaining("RRect"),
+                  type == PrecompileDrawType::kDrawRRect);
+        EXPECT_EQ(device->HasVertexFunctionLabelContaining("Path"),
+                  type == PrecompileDrawType::kDrawPath);
+        EXPECT_EQ(device->HasFragmentFunctionLabelContaining("Texture"),
+                  image_shader);
+        EXPECT_EQ(device->texture_count(), 0u);
+        EXPECT_EQ(device->sampler_count(), 0u);
+      }
+    }
+  }
 }
 
 TEST(PrecompileDrawTest, PrecompilePathUsesContourAAWhenEnabled) {
@@ -582,7 +646,7 @@ TEST(PrecompileDrawTest, SurfaceCanDisableCoverageAADefault) {
   ASSERT_NE(canvas, nullptr);
 
   Path path;
-  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  path.AddRect(Rect::MakeLTRB(8.25f, 8, 56, 56));
   Paint paint;
   paint.SetAntiAlias(true);
   canvas->DrawPath(path, paint);
@@ -608,7 +672,7 @@ TEST(PrecompileDrawTest, SurfaceCanEnableCoverageAAWithoutContextDefault) {
   ASSERT_NE(canvas, nullptr);
 
   Path path;
-  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  path.AddRect(Rect::MakeLTRB(8.25f, 8, 56, 56));
   Paint paint;
   paint.SetAntiAlias(true);
   canvas->DrawPath(path, paint);
@@ -667,7 +731,7 @@ TEST(PrecompileDrawTest, SurfaceCanSelectConflationCorrection) {
   ASSERT_NE(canvas, nullptr);
 
   Path path;
-  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  path.AddRect(Rect::MakeLTRB(8.25f, 8, 56, 56));
   Paint paint;
   paint.SetAntiAlias(true);
   canvas->DrawPath(path, paint);
@@ -694,7 +758,7 @@ TEST(PrecompileDrawTest, RenderTargetUsesSurfaceCoverageAAOptions) {
   ASSERT_NE(target, nullptr);
 
   Path path;
-  path.AddRect(Rect::MakeLTRB(8, 8, 56, 56));
+  path.AddRect(Rect::MakeLTRB(8.25f, 8, 56, 56));
   Paint paint;
   paint.SetAntiAlias(true);
   target->GetCanvas()->DrawPath(path, paint);
@@ -824,20 +888,29 @@ TEST(PrecompileDrawTest, PrecompileRRectUsesSolidVertexColor) {
   EXPECT_FALSE(device->HasVertexFunctionLabelContaining("TessPath"));
 }
 
-TEST(PrecompileDrawTest, PrecompileStrokeRectUsesRRectPipeline) {
+TEST(PrecompileDrawTest, PrecompiledStrokeRectPipelineIsHitByRealDraw) {
   FakeGPUContext context;
   ASSERT_TRUE(context.Init());
   context.SetEnableSimpleShapePipeline(true);
+  context.SetEnableMergingDrawCall(true);
   auto* device = context.device();
   ASSERT_NE(device, nullptr);
 
   Paint paint;
   paint.SetStyle(Paint::kStroke_Style);
-  PrecompileDraw(context, false, PrecompileDrawType::kDrawRect, paint);
+  paint.SetStrokeWidth(2.f);
+  const Rect rect = Rect::MakeLTRB(4.f, 4.f, 16.f, 16.f);
+  ExpectRealDrawHitsPrecompiledPipeline(
+      context, PrecompileDrawType::kDrawRect, paint, false,
+      [&](Canvas* canvas) {
+        canvas->DrawRect(rect, paint);
+        canvas->DrawRRect(RRect::MakeRect(rect.MakeOffset(12.f, 0.f)), paint);
+      });
 
   EXPECT_TRUE(device->HasVertexFunctionLabelContaining("RRect"));
   EXPECT_TRUE(device->HasFragmentFunctionLabelContaining("SolidVertexColor"));
   EXPECT_FALSE(device->HasVertexFunctionLabelContaining("TessPath"));
+  EXPECT_EQ(device->last_instance_counts(), std::vector<uint32_t>{2u});
 }
 
 TEST(PrecompileDrawTest, PrecompileDrawIncludesColorFilterPipeline) {
@@ -1172,6 +1245,230 @@ TEST(PrecompileDrawTest, PrecompiledRRectPipelineIsHitByRealDraw) {
       [&](Canvas* canvas) { canvas->DrawRRect(rrect, paint); });
 }
 
+TEST(RectGeometry, SelectsFromPhysicalBoundsAndAAMode) {
+  const auto aligned = Rect::MakeLTRB(2, 2, 14, 14);
+  const auto fractional = Rect::MakeLTRB(2.5f, 2.5f, 14, 14);
+  const auto near_aligned = Rect::MakeLTRB(0.9999f, 2, 14, 14);
+  const auto near_fractional = Rect::MakeLTRB(0.999f, 2, 14, 14);
+  constexpr float kRoundoffScale = 1.375f;
+  // The left edge maps to one representable float below 13.
+  const auto roundoff = Rect::MakeLTRB(13.f / kRoundoffScale, 8, 16, 16);
+  // This skew leaves an integer bounding box but produces slanted edges.
+  const Matrix skew = Matrix::Skew(0.5f, 0.f);
+  Matrix quarter_turn = Matrix::Scale(0.f, 0.f);
+  quarter_turn.SetSkewX(-1.f);
+  quarter_turn.SetSkewY(1.f);
+  quarter_turn.SetTranslateX(24.f);
+  const struct {
+    Rect rect;
+    float content_scale;
+    uint32_t sample_count;
+    bool anti_alias;
+    bool uses_quad;
+    Matrix transform{};
+    bool contour_aa = true;
+  } cases[] = {
+      {aligned, 1.f, 1, true, true},
+      {fractional, 1.f, 1, true, false},
+      {fractional, 1.f, 1, false, true},
+      {fractional, 1.f, 4, true, true},
+      {aligned, 1.25f, 1, true, false},
+      {fractional, 2.f, 1, true, true},
+      {roundoff, kRoundoffScale, 1, true, true},
+      {near_aligned, 1.f, 1, true, true},
+      {near_fractional, 1.f, 1, true, false},
+      {aligned, 1.f, 1, true, false, skew},
+      {aligned, 1.f, 1, true, true, skew, false},
+      {aligned, 1.f, 1, false, true, skew},
+      {aligned, 1.f, 4, true, true, Matrix::RotateDeg(17.f)},
+      {aligned, 1.f, 1, true, true, quarter_turn},
+  };
+  for (const auto& test : cases) {
+    SCOPED_TRACE(::testing::Message() << "left=" << test.rect.Left()
+                                      << " content_scale=" << test.content_scale
+                                      << " samples=" << test.sample_count
+                                      << " AA=" << test.anti_alias
+                                      << " contour=" << test.contour_aa);
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    context.SetEnableContourAA(test.contour_aa);
+
+    GPUSurfaceDescriptor desc{};
+    desc.width = desc.height = 32;
+    desc.content_scale = test.content_scale;
+    desc.sample_count = test.sample_count;
+    auto surface = context.CreateSurface(&desc);
+    auto* canvas = surface->LockCanvas();
+    canvas->SetMatrix(test.transform);
+    Paint paint;
+    paint.SetAntiAlias(test.anti_alias);
+    canvas->DrawRect(test.rect, paint);
+    canvas->Flush();
+
+    const auto* device = context.device();
+    EXPECT_EQ(device->HasVertexFunctionLabelContaining("VS_Rect"),
+              test.uses_quad);
+    if (test.uses_quad) {
+      EXPECT_EQ(device->last_index_counts(), std::vector<uint32_t>{6u});
+      EXPECT_EQ(device->last_instance_counts(), std::vector<uint32_t>{1u});
+    } else {
+      EXPECT_TRUE(device->HasVertexFunctionLabelContaining("PathAA"));
+    }
+  }
+}
+
+TEST(RectGeometry, RectPathWithExtraContourKeepsPathGeometry) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableSimpleShapePipeline(true);
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 32;
+  auto surface = context.CreateSurface(&desc);
+  auto* canvas = surface->LockCanvas();
+  Path path;
+  path.MoveTo(1.f, 1.f);
+  path.Close();
+  path.AddRect(Rect::MakeLTRB(8, 8, 16, 16));
+  ASSERT_EQ(path.GetIsAType(), Path::IsAType::kGeneral);
+  canvas->DrawPath(path, Paint{});
+  canvas->Flush();
+
+  EXPECT_FALSE(context.device()->HasVertexFunctionLabelContaining("VS_Rect"));
+  EXPECT_TRUE(context.device()->HasVertexFunctionLabelContaining("Path"));
+}
+
+TEST(RectGeometry, NonCoherentNativeBlendKeepsOverlappingDrawsSeparate) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto caps = std::make_unique<GPUCaps>(context.device()->GetCaps());
+  caps->supports_native_advanced_blend = true;
+  caps->supports_native_advanced_blend_coherent = false;
+  context.device()->InitCaps(std::move(caps));
+
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 32;
+  auto surface = context.CreateSurface(&desc);
+  auto* canvas = surface->LockCanvas();
+  Paint paint;
+  paint.SetBlendMode(BlendMode::kOverlay);
+  canvas->DrawRect(Rect::MakeLTRB(1, 1, 8, 8), paint);
+  canvas->DrawRect(Rect::MakeLTRB(4, 4, 12, 12), paint);
+  canvas->DrawRect(Rect::MakeLTRB(16, 16, 24, 24), paint);
+  canvas->Flush();
+
+  EXPECT_EQ(context.device()->last_render_pass_count(), 1u);
+  EXPECT_EQ(context.device()->last_instance_counts(),
+            (std::vector<uint32_t>{1u, 2u}));
+}
+
+TEST(RectGeometry, RectAndRRectBatchesRespectOverlap) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  context.SetEnableMergingDrawCall(true);
+  context.SetEnableSimpleShapePipeline(true);
+  context.SetEnableContourAA(true);
+
+  GPUSurfaceDescriptor desc{};
+  desc.width = desc.height = 32;
+  auto surface = context.CreateSurface(&desc);
+  auto* canvas = surface->LockCanvas();
+  Paint paint;
+  paint.SetAntiAlias(true);
+  paint.SetColor(ColorSetARGB(128, 255, 0, 0));
+
+  canvas->DrawRRect(RRect::MakeRectXY({2, 2, 16, 16}, 4, 4), paint);
+  canvas->DrawRect(Rect::MakeLTRB(4, 4, 18, 18), paint);
+  canvas->DrawRect(Rect::MakeLTRB(6, 6, 20, 20), paint);
+  canvas->DrawRRect(RRect::MakeRectXY({8, 8, 22, 22}, 4, 4), paint);
+  canvas->DrawRRect(RRect::MakeRectXY({10, 10, 24, 24}, 5, 3), paint);
+  canvas->DrawRect(Rect::MakeLTRB(12, 12, 26, 26), paint);
+  canvas->Flush();
+
+  const auto* device = context.device();
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("VS_Rect"));
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("RRect"));
+  EXPECT_EQ(device->last_instance_counts(),
+            (std::vector<uint32_t>{1, 2, 2, 1}));
+}
+
+TEST(PrecompileDrawTest, PrecompiledRectPipelineIsHitByBatch) {
+  for (bool msaa : {false, true}) {
+    SCOPED_TRACE(msaa);
+    FakeGPUContext context;
+    ASSERT_TRUE(context.Init());
+    Paint paint;
+    paint.SetAntiAlias(true);
+    paint.SetColor(Color_RED);
+    auto rect = Rect::MakeLTRB(msaa ? 1.25f : 1.f, 1.f, 9.f, 9.f);
+    ExpectRealDrawHitsPrecompiledPipeline(
+        context, PrecompileDrawType::kDrawRect, paint, msaa,
+        [&](Canvas* canvas) {
+          canvas->DrawRect(rect, paint);
+          Path source;
+          source.AddRect(rect).MoveTo(0.f, 0.f);
+          Path path;
+          path.AddPath(source);
+          Paint second = paint;
+          second.SetColor(ColorSetARGB(128, 0, 0, 255));
+          canvas->Translate(24.f, 5.f);
+          canvas->Scale(-1.f, 2.f);
+          if (msaa) {
+            canvas->Concat(Matrix::Skew(0.25f, 0.f));
+          }
+          canvas->DrawPath(path, second);
+        });
+    EXPECT_TRUE(context.device()->HasVertexFunctionLabelContaining("VS_Rect"));
+    EXPECT_EQ(context.device()->last_index_counts(), std::vector<uint32_t>{6u});
+    EXPECT_EQ(context.device()->last_instance_counts(),
+              std::vector<uint32_t>{2u});
+  }
+}
+
+TEST(PrecompileDrawTest, PrecompiledGradientRectPipelinesAreHitByRealDraw) {
+  const Point pts[] = {{0.f, 0.f, 0.f, 1.f}, {32.f, 32.f, 0.f, 1.f}};
+  const Vec4 colors[] = {Colors::kRed, Colors::kBlue};
+  const float color_fast_pos[] = {0.f, 1.f};
+  const float pos[] = {0.25f, 0.75f};
+  const float* positions[] = {nullptr, color_fast_pos, pos};
+  for (const auto* stops : positions) {
+    for (bool msaa : {false, true}) {
+      SCOPED_TRACE(msaa);
+      FakeGPUContext context;
+      ASSERT_TRUE(context.Init());
+      Paint paint;
+      paint.SetAntiAlias(true);
+      paint.SetShader(Shader::MakeLinear(pts, colors, stops, 2));
+      ExpectRealDrawHitsPrecompiledPipeline(
+          context, PrecompileDrawType::kDrawRect, paint, msaa,
+          [&](Canvas* canvas) {
+            canvas->DrawRect(Rect::MakeLTRB(2, 2, 24, 24), paint);
+          });
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, PrecompiledImageRectPipelineIsHitByRealDraw) {
+  FakeGPUContext context;
+  ASSERT_TRUE(context.Init());
+  auto image = MakeTestImage();
+  Paint paint;
+  paint.SetAntiAlias(false);
+  ExpectRealDrawHitsPrecompiledPipeline(
+      context, PrecompileDrawType::kDrawImage, paint, false,
+      [&](Canvas* canvas) {
+        canvas->Concat(Matrix::Skew(0.25f, 0.f));
+        const Rect rect = Rect::MakeLTRB(2, 2, 18, 18);
+        for (int i = 0; i < 2; ++i) {
+          canvas->DrawImageRect(image, Rect::MakeWH(1, 1), rect,
+                                SamplingOptions{}, &paint);
+        }
+      });
+  EXPECT_TRUE(
+      context.device()->HasVertexFunctionLabelContaining("VS_Rect_Texture"));
+  EXPECT_EQ(context.device()->last_instance_counts(),
+            (std::vector<uint32_t>{1u, 1u}));
+}
+
 TEST(SimpleShapeDrawTest, AffinePathsUseRRectPipelineAndMerge) {
   Path paths[3];
   const Rect bounds = Rect::MakeLTRB(-8.f, -6.f, 8.f, 6.f);
@@ -1248,16 +1545,113 @@ TEST(PrecompileDrawTest,
   }
 }
 
-TEST(PrecompileDrawTest, PrecompiledImagePathPipelineIsHitByRealDraw) {
+TEST(PrecompileDrawTest, PrecompiledImageShaderShapePipelinesAreHitByRealDraw) {
+  for (auto type :
+       {PrecompileDrawType::kDrawRect, PrecompileDrawType::kDrawRRect}) {
+    for (bool msaa : {false, true}) {
+      for (auto style : {Paint::kFill_Style, Paint::kStroke_Style}) {
+        for (bool cubic : {false, true}) {
+          SCOPED_TRACE(::testing::Message()
+                       << "type=" << static_cast<int>(type) << " msaa=" << msaa
+                       << " style=" << static_cast<int>(style)
+                       << " cubic=" << cubic);
+          FakeGPUContext context;
+          ASSERT_TRUE(context.Init());
+          context.SetEnableSimpleShapePipeline(true);
+          context.SetEnableContourAA(true);
+          SamplingOptions sampling;
+          if (cubic) {
+            sampling.cubic = {1.f / 3.f, 1.f / 3.f};
+          }
+          auto paint = MakeImagePaint(MakeTestImage(), sampling);
+          paint.SetStyle(style);
+          paint.SetStrokeWidth(2.f);
+          paint.SetAntiAlias(true);
+          paint.SetAlphaF(0.5f);
+          paint.SetBlendMode(BlendMode::kDstOver);
+          paint.SetColorFilter(
+              ColorFilters::Blend(0xFF00FF00, BlendMode::kSrcATop));
+          ExpectRealDrawHitsPrecompiledPipeline(
+              context, type, paint, msaa, [&](Canvas* canvas) {
+                if (msaa) {
+                  canvas->Concat(Matrix::Skew(0.25f, 0.f));
+                }
+                const Rect rect = Rect::MakeLTRB(2, 2, 24, 24);
+                if (type == PrecompileDrawType::kDrawRect) {
+                  canvas->DrawRect(rect, paint);
+                } else {
+                  canvas->DrawRRect(RRect::MakeRectXY(rect, 4, 4), paint);
+                }
+              });
+          EXPECT_FALSE(context.device()->last_instance_counts().empty());
+          EXPECT_FALSE(
+              context.device()->HasVertexFunctionLabelContaining("Path"));
+        }
+      }
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, PrecompiledImageShaderPathPipelinesAreHitByRealDraw) {
+  const struct {
+    bool gpu_tessellation;
+    bool msaa;
+    bool anti_alias;
+  } cases[] = {{false, false, false},
+               {false, false, true},
+               {false, true, true},
+               {true, false, false},
+               {true, true, true}};
+  for (const auto& test : cases) {
+    for (auto style : {Paint::kFill_Style, Paint::kStroke_Style}) {
+      for (bool cubic : {false, true}) {
+        SCOPED_TRACE(::testing::Message()
+                     << "gpu=" << test.gpu_tessellation << " msaa=" << test.msaa
+                     << " AA=" << test.anti_alias << " style="
+                     << static_cast<int>(style) << " cubic=" << cubic);
+        FakeGPUContext context;
+        ASSERT_TRUE(context.Init());
+        context.SetEnableGPUTessellation(test.gpu_tessellation);
+        context.SetEnableContourAA(true);
+        SamplingOptions sampling;
+        if (cubic) {
+          sampling.cubic = {1.f / 3.f, 1.f / 3.f};
+        }
+        auto paint = MakeImagePaint(MakeTestImage(), sampling);
+        paint.SetStyle(style);
+        paint.SetStrokeWidth(2.f);
+        paint.SetAntiAlias(test.anti_alias);
+        paint.SetAlphaF(0.5f);
+        paint.SetBlendMode(BlendMode::kDstOver);
+        paint.SetColorFilter(
+            ColorFilters::Blend(0xFF00FF00, BlendMode::kSrcATop));
+        ExpectRealDrawHitsPrecompiledPipeline(
+            context, PrecompileDrawType::kDrawPath, paint, test.msaa,
+            [&](Canvas* canvas) {
+              canvas->DrawPath(MakeTestPath(), paint);
+              canvas->DrawPath(MakeConvexTestPath(), paint);
+            });
+        EXPECT_FALSE(context.device()->last_instance_counts().empty());
+        EXPECT_FALSE(
+            context.device()->HasVertexFunctionLabelContaining("VS_Rect"));
+        EXPECT_FALSE(
+            context.device()->HasVertexFunctionLabelContaining("RRect"));
+      }
+    }
+  }
+}
+
+TEST(PrecompileDrawTest, PrecompiledImageShaderRectPipelineIsHitByRealDraw) {
   FakeGPUContext context;
   ASSERT_TRUE(context.Init());
-  context.SetEnableGPUTessellation(false);
 
   auto image = MakeTestImage();
   auto paint = MakeImagePaint(image);
   ExpectRealDrawHitsPrecompiledPipeline(
       context, PrecompileDrawType::kDrawImage, paint, false,
-      [&](Canvas* canvas) { canvas->DrawPath(MakeConvexTestPath(), paint); });
+      [&](Canvas* canvas) {
+        canvas->DrawRect(Rect::MakeLTRB(2, 2, 24, 24), paint);
+      });
 }
 
 TEST(PrecompileDrawTest, PrecompiledImageRRectPipelineIsHitByRealDraw) {
@@ -1289,6 +1683,8 @@ TEST(PrecompileDrawTest, ClearsFailedPipelineCacheAfterPrecompileFailure) {
   PrecompileDraw(context, false, PrecompileDrawType::kDrawImage, paint);
 
   EXPECT_EQ(device->render_pipeline_count(), 2u);
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("VS_Rect"));
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("VS_Path"));
 }
 
 TEST(PrecompileDrawTest, ImagePrecompileDoesNotCreateTextureResources) {
@@ -1309,7 +1705,7 @@ TEST(PrecompileDrawTest, ImagePrecompileDoesNotCreateTextureResources) {
   EXPECT_TRUE(device->HasFragmentFunctionLabelContaining("Texture"));
 }
 
-TEST(PrecompileDrawTest, ImagePrecompileUsesTexturePipeline) {
+TEST(PrecompileDrawTest, ImagePrecompileUsesTextureRectPipeline) {
   FakeGPUContext context;
   ASSERT_TRUE(context.Init());
   auto* device = context.device();
@@ -1321,7 +1717,8 @@ TEST(PrecompileDrawTest, ImagePrecompileUsesTexturePipeline) {
   EXPECT_GT(device->render_pipeline_count(), 0u);
   EXPECT_TRUE(device->HasFragmentFunctionLabelContaining("Texture"));
   EXPECT_FALSE(device->HasFragmentFunctionLabelContaining("Solid"));
-  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("Path"));
+  EXPECT_TRUE(device->HasVertexFunctionLabelContaining("VS_Rect"));
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("Path"));
   EXPECT_FALSE(device->HasVertexFunctionLabelContaining("RRect"));
   EXPECT_EQ(device->texture_count(), 0u);
   EXPECT_EQ(device->sampler_count(), 0u);
@@ -1339,6 +1736,8 @@ TEST(PrecompileDrawTest, ImageRRectPrecompileUsesTextureRRectPipeline) {
   EXPECT_GT(device->render_pipeline_count(), 0u);
   EXPECT_TRUE(device->HasFragmentFunctionLabelContaining("Texture"));
   EXPECT_TRUE(device->HasVertexFunctionLabelContaining("RRect"));
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("VS_Rect"));
+  EXPECT_FALSE(device->HasVertexFunctionLabelContaining("Path"));
   EXPECT_EQ(device->texture_count(), 0u);
   EXPECT_EQ(device->sampler_count(), 0u);
 }

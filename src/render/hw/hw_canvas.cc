@@ -4,12 +4,16 @@
 
 #include "src/render/hw/hw_canvas.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <optional>
 #include <skity/effect/mask_filter.hpp>
 #include <skity/effect/path_effect.hpp>
 #include <skity/effect/shader.hpp>
 #include <skity/geometry/matrix.hpp>
+#include <skity/geometry/scalar.hpp>
 #include <skity/geometry/stroke.hpp>
+#include <skity/graphic/path.hpp>
 #include <skity/text/font.hpp>
 #include <skity/text/text_blob.hpp>
 
@@ -21,6 +25,7 @@
 #include "src/render/hw/draw/hw_dynamic_coverage_path_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_clip.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
+#include "src/render/hw/draw/hw_dynamic_rect_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/filters/hw_filters.hpp"
@@ -31,10 +36,26 @@
 #include "src/render/text/glyph_run.hpp"
 #include "src/tracing.hpp"
 #include "src/utils/arena_allocator.hpp"
+#include "src/utils/array_list.hpp"
 
 namespace skity {
 
 namespace {
+
+bool IsFillWithoutPathEffect(const Paint& paint) {
+  return paint.GetStyle() == Paint::kFill_Style && !paint.GetPathEffect();
+}
+
+bool IsPixelAlignedEdge(float edge) {
+  return std::abs(edge - std::round(edge)) <= kNearlyZero;
+}
+
+bool IsPixelAligned(const Rect& physical_rect) {
+  return IsPixelAlignedEdge(physical_rect.Left()) &&
+         IsPixelAlignedEdge(physical_rect.Top()) &&
+         IsPixelAlignedEdge(physical_rect.Right()) &&
+         IsPixelAlignedEdge(physical_rect.Bottom());
+}
 
 LayerRTOrigin ResolveLayerRTOrigin(GPUBackendType backend_type) {
   if (backend_type == GPUBackendType::kOpenGL ||
@@ -152,22 +173,28 @@ void HWCanvas::OnDrawLine(float x0, float y0, float x1, float y1,
 
 void HWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
   SKITY_TRACE_EVENT(HWCanvas_OnDrawPath);
-  // Empty contours before AddRect can enlarge the path bounds.
-  if (check_initial_clear_ && path.GetIsAType() == Path::IsAType::kRect &&
-      path.CountPoints() == 4) {
+  const auto type = path.GetIsAType();
+  const bool simple_shapes =
+      surface_->GetGPUContext()->IsEnableSimpleShapePipeline();
+  if (type == Path::IsAType::kRect) {
     const Rect rect = path.GetBounds();
-    if (TryPromoteInitialClear(paint, &rect)) {
+    // Empty contours before AddRect can enlarge the path bounds.
+    if (check_initial_clear_ && path.CountPoints() == 4 &&
+        TryPromoteInitialClear(paint, &rect)) {
       return;
     }
+
+    DrawRectShape(rect, paint);
+    return;
   }
-  if (surface_->GetGPUContext()->IsEnableSimpleShapePipeline() &&
-      path.GetIsAType() != Path::IsAType::kGeneral) {
+
+  DEBUG_ASSERT(type != Path::IsAType::kRect);
+  if (simple_shapes &&
+      (type == Path::IsAType::kOval || type == Path::IsAType::kSimpleRRect)) {
     RRect rrect;
-    if (path.GetIsAType() == Path::IsAType::kRect) {
-      rrect.SetRect(path.GetBounds());
-    } else if (path.GetIsAType() == Path::IsAType::kOval) {
+    if (type == Path::IsAType::kOval) {
       rrect.SetOval(path.GetBounds());
-    } else if (path.GetIsAType() == Path::IsAType::kSimpleRRect) {
+    } else {
       path.IsSimpleRRect(&rrect);
     }
     DrawShape(Shape(&rrect), paint);
@@ -178,7 +205,24 @@ void HWCanvas::OnDrawPath(const Path& path, const Paint& paint) {
 
 void HWCanvas::OnDrawRRect(RRect const& rrect, Paint const& paint) {
   SKITY_TRACE_EVENT(HWCanvas_OnDrawRRect);
+  const bool draw_as_rect = rrect.IsRect() && IsFillWithoutPathEffect(paint);
+  if (draw_as_rect) {
+    DrawShape(Shape(&rrect.GetRect()), paint);
+    return;
+  }
   DrawShape(Shape(&rrect), paint);
+}
+
+void HWCanvas::DrawRectShape(const Rect& rect, const Paint& paint,
+                             bool is_local) {
+  if (IsFillWithoutPathEffect(paint)) {
+    const Rect sorted = rect.MakeSorted();
+    DrawShape(Shape(&sorted), paint, is_local);
+    return;
+  }
+
+  const RRect rrect = RRect::MakeRect(rect);
+  DrawShape(Shape(&rrect), paint, is_local);
 }
 
 void HWCanvas::DrawShape(const Shape& shape, const Paint& paint,
@@ -229,10 +273,12 @@ void HWCanvas::DrawShape(const Shape& shape, const Paint& paint,
     working_paint.SetBlendMode(BlendMode::kSrcOver);
   }
 
-  if (shape.IsPath()) {
-    DrawPathInternal(*shape.GetPath(), working_paint, current_matrix);
+  if (shape.IsRect()) {
+    DrawRectInternal(*shape.GetRect(), working_paint, current_matrix);
   } else if (shape.IsRRect()) {
     DrawRRectInternal(*shape.GetRRect(), working_paint, current_matrix);
+  } else {
+    DrawPathInternal(*shape.GetPath(), working_paint, current_matrix);
   }
 
   if (has_layer) {
@@ -268,12 +314,11 @@ void HWCanvas::OnDrawPaint(const Paint& paint) {
 
   if (has_layer_to_local) {
     layer_to_local.MapRect(&rect, rect);
-    OnDrawRRect(RRect::MakeRect(rect), paint);
+    DrawRectShape(rect, paint);
     return;
   }
 
-  auto rrect = RRect::MakeRect(rect);
-  DrawShape(Shape(&rrect), paint, /*is_local=*/false);
+  DrawRectShape(rect, paint, /*is_local=*/false);
 }
 
 void HWCanvas::OnSaveLayer(const Rect& bounds, const Paint& paint) {
@@ -346,11 +391,13 @@ bool HWCanvas::TryPromoteInitialClear(const Paint& paint, const Rect* rect) {
 void HWCanvas::OnDrawRect(Rect const& rect, Paint const& paint) {
   SKITY_TRACE_EVENT(HWCanvas_OnDrawRect);
 
+  if (!rect.IsFinite()) {
+    return;
+  }
   if (check_initial_clear_ && TryPromoteInitialClear(paint, &rect)) {
     return;
   }
-  RRect rrect = RRect::MakeRect(rect);
-  this->OnDrawRRect(rrect, paint);
+  DrawRectShape(rect, paint);
 }
 
 void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
@@ -528,6 +575,7 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
 
   bool need_fill = paint.GetStyle() != Paint::kStroke_Style;
   bool need_stroke = paint.GetStyle() != Paint::kFill_Style;
+  auto* layer = CurrentLayer();
   auto analytical_aa = SelectAnalyticalAA(paint, transform);
   bool needs_stroke_outline = analytical_aa != AnalyticalAAMode::kNone;
   bool enable_gpu_tessellation =
@@ -542,8 +590,7 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
       // physical pixels. A save layer records draws in logical coordinates
       // but may render to a scaled texture, so tile in physical space and map
       // the tile quads back to layer space for projection.
-      Matrix layer_to_physical =
-          CurrentLayer()->GetLayerPhysicalMatrix(Matrix{});
+      Matrix layer_to_physical = layer->GetLayerPhysicalMatrix(Matrix{});
       Matrix physical_to_layer;
       layer_to_physical.Invert(&physical_to_layer);
       auto* coverage_draw = arena_allocator_->Make<HWDynamicCoveragePathDraw>(
@@ -562,14 +609,17 @@ void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,
     draw->SetSampleCount(GetCanvasSampleCount());
     auto bounds = is_stroke ? paint.ComputeFastBounds(path.GetBounds())
                             : path.GetBounds();
-    SetupLayerSpaceBoundsForDraw(draw, bounds, transform);
+    Rect layer_bounds = layer->CalculateLayerSpaceBounds(bounds, transform);
     if (analytical_aa == AnalyticalAAMode::kContour) {
-      draw->SetLayerSpaceBounds(
-          draw->GetLayerSpaceBounds().MakeOutset(1.f, 1.f));
+      layer_bounds = layer_bounds.MakeOutset(1.f, 1.f);
+    } else if (analytical_aa == AnalyticalAAMode::kCoverage) {
+      // Coverage can write to every pixel intersecting the geometry bounds.
+      layer_bounds.RoundOut();
     }
+    draw->SetLayerSpaceBounds(layer_bounds);
     SetupBlendPlanForDraw(draw, paint,
                           analytical_aa != AnalyticalAAMode::kNone);
-    CurrentLayer()->AddDraw(draw);
+    layer->AddDraw(draw);
   };
 
   auto draw_fill = [&]() {
@@ -639,6 +689,47 @@ HWCanvas::AnalyticalAAMode HWCanvas::SelectAnalyticalAA(
   return AnalyticalAAMode::kNone;
 }
 
+void HWCanvas::DrawRectInternal(const Rect& rect, const Paint& paint,
+                                const Matrix& transform) {
+  SKITY_TRACE_EVENT(HWCanvas_DrawRectInternal);
+  DEBUG_ASSERT(IsFillWithoutPathEffect(paint));
+  if (rect.IsEmpty()) {
+    return;
+  }
+
+  bool fallback_to_path = transform.HasPersp();
+
+  auto* layer = CurrentLayer();
+  const Matrix to_physical = layer->GetLayerPhysicalMatrix(transform);
+  Rect physical_rect;
+  const bool rect_stays_rect = to_physical.MapRect(&physical_rect, rect);
+  const auto analytical_aa = SelectAnalyticalAA(paint, transform);
+  if (analytical_aa != AnalyticalAAMode::kNone &&
+      (!rect_stays_rect || !IsPixelAligned(physical_rect))) {
+    fallback_to_path = true;
+  }
+
+  if (fallback_to_path) {
+    Path path;
+    path.AddRect(rect);
+    path.SetConvexityType(Path::ConvexityType::kConvex);
+    DrawPathInternal(path, paint, transform);
+    return;
+  }
+
+  auto* draw = arena_allocator_->Make<HWDynamicRectDraw>(
+      transform, rect, paint, layer->GetColorSpace());
+  draw->SetSampleCount(GetCanvasSampleCount());
+  draw->SetLayerSpaceBounds(physical_rect);
+  SetupBlendPlanForDraw(draw, paint);
+  if (draw->GetDstReadStrategy() == DstReadStrategy::kNativeBlend) {
+    const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
+    draw->SetRequiresNonOverlappingDraws(
+        !caps.supports_native_advanced_blend_coherent);
+  }
+  layer->AddDraw(draw);
+}
+
 bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
                                        const Matrix& transform) const {
   if (!surface_->GetGPUContext()->IsEnableSimpleShapePipeline()) {
@@ -680,6 +771,7 @@ bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
 
 void HWCanvas::DrawRRectInternal(const RRect& rrect, const Paint& paint,
                                  const Matrix& transform) {
+  DEBUG_ASSERT(!rrect.IsRect() || !IsFillWithoutPathEffect(paint));
   if (NeedsFallbackToPathDraw(rrect, paint, transform)) {
     Path path;
     path.AddRRect(rrect);
@@ -766,7 +858,7 @@ void HWCanvas::OnDrawImageRect(std::shared_ptr<Image> image, const Rect& src,
                                    TileMode::kDecal, local_matrix);
   work_paint.SetShader(std::move(shader));
 
-  OnDrawRRect(RRect::MakeRect(dst), work_paint);
+  OnDrawRect(dst, work_paint);
 }
 
 void HWCanvas::OnRestore() {
@@ -1073,8 +1165,9 @@ bool HWCanvas::NeesOffScreenLayer(const Paint& paint) const {
 void HWCanvas::SetupBlendPlanForDraw(HWDraw* draw, const Paint& paint,
                                      bool has_fragment_mask) {
   const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
+  const bool source_is_opaque = has_fragment_mask && IsPaintSourceOpaque(paint);
   auto plan = ResolveHWBlendPlan(paint.GetBlendMode(), has_fragment_mask,
-                                 IsPaintSourceOpaque(paint), caps,
+                                 source_is_opaque, caps,
                                  CurrentLayer()->SupportsTextureCopyDstRead());
   DEBUG_CHECK(plan.has_value());
   draw->SetBlendPlan(*plan);
