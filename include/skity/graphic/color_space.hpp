@@ -14,12 +14,14 @@ namespace skity {
 
 /**
  * A descriptive color space: a transfer function plus an RGB->XYZ gamut
- * matrix. Spaces are passed around as std::shared_ptr<ColorSpace> (like the
- * other reference-typed effects); a null pointer means "no color space
+ * matrix. Spaces are passed around as std::shared_ptr<const ColorSpace>
+ * (like the other reference-typed effects, but immutable: the named
+ * factories return interned singletons shared by every holder, so nothing
+ * may write through the pointer). A null pointer means "no color space
  * declared", which equals the sRGB pipeline working space, so entry points
- * accept nullptr as the default and treat it as sRGB. The named factories
- * return interned singletons (pointer comparison is a valid fast path, but
- * ColorSpaceEquals stays numeric for deserialized spaces).
+ * accept nullptr as the default and treat it as sRGB. Pointer comparison is
+ * a valid fast path for the singletons, but ColorSpaceEquals stays numeric
+ * for deserialized spaces.
  */
 struct SKITY_API ColorSpace {
   enum class Kind : uint8_t {
@@ -70,14 +72,14 @@ struct SKITY_API ColorSpace {
   Kind kind = Kind::kSRGB;
 
   /// The sRGB color space; identical bytes to the default-constructed value.
-  static std::shared_ptr<ColorSpace> SRGB();
+  static std::shared_ptr<const ColorSpace> SRGB();
 
   /// Linear transfer function with the sRGB gamut.
-  static std::shared_ptr<ColorSpace> SRGBLinear();
+  static std::shared_ptr<const ColorSpace> SRGBLinear();
 
   /// Display P3 color space (sRGB transfer curve, P3 primaries with a D65
   /// native white, stored D50-adapted like every gamut).
-  static std::shared_ptr<ColorSpace> DisplayP3();
+  static std::shared_ptr<const ColorSpace> DisplayP3();
 
   /**
    * Creates a parametric space from a skcms-style transfer function and a
@@ -86,8 +88,8 @@ struct SKITY_API ColorSpace {
    * native white point need a Bradford adaptation first. Returns nullptr
    * when the parameters cannot describe a valid space.
    */
-  static std::shared_ptr<ColorSpace> MakeRGB(const float transfer_fn[7],
-                                             const float gamut_xyz[9]);
+  static std::shared_ptr<const ColorSpace> MakeRGB(const float transfer_fn[7],
+                                                   const float gamut_xyz[9]);
 
   /// Returns true if both the transfer function and the gamut are sRGB.
   bool IsSRGB() const;
@@ -104,22 +106,25 @@ struct SKITY_API ColorSpace {
    * sRGB (the pipeline working space). Alpha passes through untouched;
    * out-of-gamut RGB values are not clamped (quantization clamps).
    */
-  static Color4f Convert(std::shared_ptr<ColorSpace> src, Color4f color,
-                         std::shared_ptr<ColorSpace> dst);
+  static Color4f Convert(const std::shared_ptr<const ColorSpace>& src,
+                         Color4f color,
+                         const std::shared_ptr<const ColorSpace>& dst);
 
   /// Bulk in-place variant of Convert().
-  static void ConvertColors(std::shared_ptr<ColorSpace> src, Color4f colors[],
-                            int count, std::shared_ptr<ColorSpace> dst);
+  static void ConvertColors(const std::shared_ptr<const ColorSpace>& src,
+                            Color4f colors[], int count,
+                            const std::shared_ptr<const ColorSpace>& dst);
 };
 
 /// Null-tolerant sRGB check: an undeclared space (nullptr) is sRGB.
-inline bool ColorSpaceIsSRGB(const std::shared_ptr<ColorSpace>& color_space) {
+inline bool ColorSpaceIsSRGB(
+    const std::shared_ptr<const ColorSpace>& color_space) {
   return !color_space || color_space->IsSRGB();
 }
 
 /// Null-tolerant equality: nullptr compares equal to sRGB, otherwise numeric.
-inline bool ColorSpaceEquals(const std::shared_ptr<ColorSpace>& lhs,
-                             const std::shared_ptr<ColorSpace>& rhs) {
+inline bool ColorSpaceEquals(const std::shared_ptr<const ColorSpace>& lhs,
+                             const std::shared_ptr<const ColorSpace>& rhs) {
   if (lhs == rhs) {
     return true;
   }

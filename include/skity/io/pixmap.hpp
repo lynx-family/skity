@@ -86,10 +86,10 @@ class SKITY_API Pixmap final {
    * pixels are encoded in. A null space means undeclared, which equals sRGB.
    */
   bool SetColorInfo(AlphaType alpha_type, ColorType color_type,
-                    std::shared_ptr<ColorSpace> color_space);
+                    std::shared_ptr<const ColorSpace> color_space);
 
   /// The declared space, or nullptr when undeclared (sRGB).
-  const std::shared_ptr<ColorSpace>& GetColorSpace() const {
+  const std::shared_ptr<const ColorSpace>& GetColorSpace() const {
     return color_space_;
   }
 
@@ -123,7 +123,7 @@ class SKITY_API Pixmap final {
   uint32_t height_;
   AlphaType alpha_type_;
   ColorType color_type_;
-  std::shared_ptr<ColorSpace> color_space_;
+  std::shared_ptr<const ColorSpace> color_space_;
 
   std::vector<std::weak_ptr<PixelsChangeListener>> pixels_change_listeners_;
 };

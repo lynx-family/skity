@@ -9,6 +9,7 @@
 #include <skity/graphic/image.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/io/pixmap.hpp>
+#include <type_traits>
 
 #include "gtest/gtest.h"
 #include "test/ut/graphic/color_space_test_util.hpp"
@@ -34,6 +35,27 @@ TEST(ColorSpace, DefaultsAreSRGB) {
   EXPECT_EQ(cs.kind, skity::ColorSpace::Kind::kSRGB);
   EXPECT_EQ(cs, *skity::ColorSpace::SRGB());
   EXPECT_TRUE(skity::ColorSpaceIsSRGB(nullptr));
+}
+
+TEST(ColorSpace, NamedSpacesAreImmutable) {
+  // The named factories hand out interned singletons shared by every
+  // holder, so the handle type must make the object unwritable: a caller
+  // must not be able to redefine, say, Display P3 for everyone else.
+  static_assert(std::is_same_v<decltype(skity::ColorSpace::SRGB()),
+                               std::shared_ptr<const skity::ColorSpace>>,
+                "named factories must return immutable spaces");
+  static_assert(
+      std::is_same_v<decltype(skity::ColorSpace::MakeRGB(nullptr, nullptr)),
+                     std::shared_ptr<const skity::ColorSpace>>,
+      "custom spaces are handed out immutable too");
+  auto p3 = skity::ColorSpace::DisplayP3();
+  static_assert(!std::is_assignable_v<decltype(p3->transfer_fn[0]), float>,
+                "transfer function parameters must be read-only");
+  static_assert(!std::is_assignable_v<decltype(p3->gamut_xyz[0]), float>,
+                "gamut matrix parameters must be read-only");
+  static_assert(
+      !std::is_assignable_v<decltype(p3->kind), skity::ColorSpace::Kind>,
+      "kind must be read-only");
 }
 
 TEST(ColorSpace, NamedFactories) {
@@ -161,8 +183,8 @@ TEST(ColorSpace, LinearP3ToSRGBMatchesPublishedMatrix) {
 TEST(ColorSpace, ConvertSameSpaceIsIdentity) {
   skity::Color4f color{0.25f, 0.5f, 0.75f, 0.6f};
   for (auto space :
-       {std::shared_ptr<skity::ColorSpace>{}, skity::ColorSpace::SRGBLinear(),
-        skity::ColorSpace::DisplayP3()}) {
+       {std::shared_ptr<const skity::ColorSpace>{},
+        skity::ColorSpace::SRGBLinear(), skity::ColorSpace::DisplayP3()}) {
     auto out = skity::ColorSpace::Convert(space, color, space);
     EXPECT_EQ(out.r, color.r);
     EXPECT_EQ(out.g, color.g);

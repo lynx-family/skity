@@ -66,7 +66,7 @@ class WGSLTextureFragment : public HWWGSLFragment {
   float width_;
   float height_;
   CubicResampler cubic_;
-  std::shared_ptr<ColorSpace> color_space_;
+  std::shared_ptr<const ColorSpace> color_space_;
   // Non-sRGB images generate a decode variant of the texture shader; sRGB
   // images produce the plain (pre-color-space) shader byte for byte.
   bool has_color_space_decode_ = false;

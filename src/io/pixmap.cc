@@ -96,7 +96,7 @@ bool Pixmap::SetColorInfo(AlphaType alpha_type, ColorType color_type) {
 }
 
 bool Pixmap::SetColorInfo(AlphaType alpha_type, ColorType color_type,
-                          std::shared_ptr<ColorSpace> color_space) {
+                          std::shared_ptr<const ColorSpace> color_space) {
   if (!IsAlphaMatchColorType(alpha_type, color_type)) {
     return false;
   }

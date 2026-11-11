@@ -35,7 +35,7 @@ class BitmapSampler {
   const SamplingOptions sampling_options_;
   TileMode x_tile_mode_ = TileMode::kClamp;
   TileMode y_tile_mode_ = TileMode::kClamp;
-  std::shared_ptr<ColorSpace> color_space_;
+  std::shared_ptr<const ColorSpace> color_space_;
   AlphaType alpha_type_ = kUnpremul_AlphaType;
 };
 }  // namespace skity

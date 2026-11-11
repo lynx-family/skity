@@ -27,7 +27,7 @@ skity::Pixmap* pixmap_of(skity_pixmap handle) {
   return w ? static_cast<skity::Pixmap*>(w->impl.get()) : nullptr;
 }
 
-std::shared_ptr<skity::ColorSpace> ColorSpaceFromCInfo(
+std::shared_ptr<const skity::ColorSpace> ColorSpaceFromCInfo(
     const skity_color_space_info* info) {
   switch (info->kind) {
     case SKITY_COLOR_SPACE_SRGB:

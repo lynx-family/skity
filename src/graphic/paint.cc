@@ -79,7 +79,8 @@ Vector Paint::GetFillColor() const { return fill_color_; }
 
 void Paint::SetColor(Color color) { SetColor4f(Color4fFromColor(color)); }
 
-void Paint::SetColor(Color color, std::shared_ptr<ColorSpace> color_space) {
+void Paint::SetColor(Color color,
+                     std::shared_ptr<const ColorSpace> color_space) {
   SetColor4f(Color4fFromColor(color), std::move(color_space));
 }
 
@@ -91,7 +92,8 @@ Color4f Paint::GetColor4f() const {
 
 void Paint::SetColor4f(Color4f color) { SetColor4f(color, nullptr); }
 
-void Paint::SetColor4f(Color4f color, std::shared_ptr<ColorSpace> color_space) {
+void Paint::SetColor4f(Color4f color,
+                       std::shared_ptr<const ColorSpace> color_space) {
   // The pipeline currently has one fixed working space (sRGB) and the paint
   // stores only the working-space value, so a declared color space must be
   // honored right here: the color converts on the way in. A null source
@@ -99,7 +101,7 @@ void Paint::SetColor4f(Color4f color, std::shared_ptr<ColorSpace> color_space) {
   // the pre-color-space behavior. The per-target working-space follow-up
   // (surfaces declaring their own space) replaces this with recording the
   // original {value, space} and converting once the render target is known.
-  Color4f working = ColorSpace::Convert(std::move(color_space), color, nullptr);
+  Color4f working = ColorSpace::Convert(color_space, color, nullptr);
   stroke_color_ = working;
   fill_color_ = working;
 }

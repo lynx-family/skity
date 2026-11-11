@@ -42,7 +42,7 @@ class SKITY_API Image {
    */
   static std::shared_ptr<Image> MakeHWImage(
       std::shared_ptr<Texture> texture,
-      std::shared_ptr<ColorSpace> color_space = nullptr);
+      std::shared_ptr<const ColorSpace> color_space = nullptr);
 
   static std::shared_ptr<Image> MakeImage(std::shared_ptr<Pixmap> pixmap,
                                           GPUContext* context = nullptr);
@@ -86,7 +86,9 @@ class SKITY_API Image {
    * means undeclared, which equals the sRGB working space contract for raw
    * hardware images.
    */
-  virtual std::shared_ptr<ColorSpace> GetColorSpace() const { return nullptr; }
+  virtual std::shared_ptr<const ColorSpace> GetColorSpace() const {
+    return nullptr;
+  }
 
   virtual std::shared_ptr<Pixmap> ReadPixels(GPUContext* context) const {
     return nullptr;

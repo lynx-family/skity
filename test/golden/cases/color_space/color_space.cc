@@ -22,7 +22,7 @@ namespace {
 // with `color_space`.
 std::shared_ptr<skity::Image> MakeSolidImage(
     uint32_t w, uint32_t h, skity::Color4f color,
-    std::shared_ptr<skity::ColorSpace> color_space) {
+    std::shared_ptr<const skity::ColorSpace> color_space) {
   auto pixmap = std::make_shared<skity::Pixmap>(w, h);
   skity::Bitmap bitmap(pixmap, false);
   auto stored = skity::Color4fToColor(color);

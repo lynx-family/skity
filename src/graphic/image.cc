@@ -54,7 +54,7 @@ bool ScalePixelsForPixmap(std::shared_ptr<Pixmap> dst,
 
 bool ScalePixelsForTexture(std::shared_ptr<Pixmap> dst, GPUContext* context,
                            std::shared_ptr<Texture> texture,
-                           const std::shared_ptr<ColorSpace>& color_space,
+                           const std::shared_ptr<const ColorSpace>& color_space,
                            const SamplingOptions& sampling_options) {
   if (context == nullptr) {
     return false;
@@ -99,7 +99,7 @@ bool ScalePixelsForTexture(std::shared_ptr<Pixmap> dst, GPUContext* context,
 class TextureImage : public Image {
  public:
   explicit TextureImage(std::shared_ptr<Texture> texture,
-                        std::shared_ptr<ColorSpace> color_space = nullptr)
+                        std::shared_ptr<const ColorSpace> color_space = nullptr)
       : texture_(std::move(texture)), color_space_(std::move(color_space)) {
     assert(texture_ != nullptr);
   }
@@ -120,7 +120,7 @@ class TextureImage : public Image {
 
   AlphaType GetAlphaType() const override { return texture_->GetAlphaType(); }
 
-  std::shared_ptr<ColorSpace> GetColorSpace() const override {
+  std::shared_ptr<const ColorSpace> GetColorSpace() const override {
     return color_space_;
   }
 
@@ -161,7 +161,7 @@ class TextureImage : public Image {
 
  private:
   std::shared_ptr<Texture> texture_;
-  std::shared_ptr<ColorSpace> color_space_;
+  std::shared_ptr<const ColorSpace> color_space_;
 };
 
 class PixmapImage : public Image {
@@ -187,7 +187,7 @@ class PixmapImage : public Image {
 
   AlphaType GetAlphaType() const override { return pixmap_->GetAlphaType(); }
 
-  std::shared_ptr<ColorSpace> GetColorSpace() const override {
+  std::shared_ptr<const ColorSpace> GetColorSpace() const override {
     return pixmap_->GetColorSpace();
   }
 
@@ -203,7 +203,8 @@ class PixmapImage : public Image {
 };
 
 std::shared_ptr<Image> Image::MakeHWImage(
-    std::shared_ptr<Texture> texture, std::shared_ptr<ColorSpace> color_space) {
+    std::shared_ptr<Texture> texture,
+    std::shared_ptr<const ColorSpace> color_space) {
   return std::shared_ptr<Image>(new TextureImage(texture, color_space));
 }
 

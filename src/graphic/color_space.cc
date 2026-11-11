@@ -125,16 +125,17 @@ bool ColorSpaceInvert3x3(const float m[9], float inv[9]) {
   return true;
 }
 
-std::shared_ptr<ColorSpace> ColorSpace::SRGB() {
+std::shared_ptr<const ColorSpace> ColorSpace::SRGB() {
   // Interned singleton: pointer comparison is a valid fast path for the
   // working-space default, and repeated conversions never re-allocate.
-  static const std::shared_ptr<ColorSpace> kSRGB =
+  // The const pointee keeps the shared object immutable for every holder.
+  static const std::shared_ptr<const ColorSpace> kSRGB =
       std::make_shared<ColorSpace>();
   return kSRGB;
 }
 
-std::shared_ptr<ColorSpace> ColorSpace::SRGBLinear() {
-  static const std::shared_ptr<ColorSpace> kSRGBLinear = [] {
+std::shared_ptr<const ColorSpace> ColorSpace::SRGBLinear() {
+  static const std::shared_ptr<const ColorSpace> kSRGBLinear = [] {
     auto cs = std::make_shared<ColorSpace>();
     std::memcpy(cs->transfer_fn, kLinearTransferFn, sizeof(cs->transfer_fn));
     cs->kind = Kind::kSRGBLinear;
@@ -143,8 +144,8 @@ std::shared_ptr<ColorSpace> ColorSpace::SRGBLinear() {
   return kSRGBLinear;
 }
 
-std::shared_ptr<ColorSpace> ColorSpace::DisplayP3() {
-  static const std::shared_ptr<ColorSpace> kDisplayP3 = [] {
+std::shared_ptr<const ColorSpace> ColorSpace::DisplayP3() {
+  static const std::shared_ptr<const ColorSpace> kDisplayP3 = [] {
     auto cs = std::make_shared<ColorSpace>();
     std::memcpy(cs->gamut_xyz, kDisplayP3Gamut, sizeof(cs->gamut_xyz));
     cs->kind = Kind::kDisplayP3;
@@ -153,8 +154,8 @@ std::shared_ptr<ColorSpace> ColorSpace::DisplayP3() {
   return kDisplayP3;
 }
 
-std::shared_ptr<ColorSpace> ColorSpace::MakeRGB(const float transfer_fn[7],
-                                                const float gamut_xyz[9]) {
+std::shared_ptr<const ColorSpace> ColorSpace::MakeRGB(
+    const float transfer_fn[7], const float gamut_xyz[9]) {
   if (transfer_fn == nullptr || gamut_xyz == nullptr) {
     return nullptr;
   }
@@ -192,7 +193,8 @@ namespace {
 
 // Null spaces mean the sRGB working space; dereference through the interned
 // sRGB bytes so the math below always sees concrete parameters.
-const ColorSpace& DerefOrSRGB(const std::shared_ptr<ColorSpace>& color_space) {
+const ColorSpace& DerefOrSRGB(
+    const std::shared_ptr<const ColorSpace>& color_space) {
   static const ColorSpace kSRGBInstance{};
   return color_space ? *color_space : kSRGBInstance;
 }
@@ -252,8 +254,9 @@ void ApplyConversion(const PreparedConversion& prepared, float rgb[3]) {
 
 }  // namespace
 
-Color4f ColorSpace::Convert(std::shared_ptr<ColorSpace> src, Color4f color,
-                            std::shared_ptr<ColorSpace> dst) {
+Color4f ColorSpace::Convert(const std::shared_ptr<const ColorSpace>& src,
+                            Color4f color,
+                            const std::shared_ptr<const ColorSpace>& dst) {
   if (ColorSpaceEquals(src, dst)) {
     return color;
   }
@@ -267,9 +270,9 @@ Color4f ColorSpace::Convert(std::shared_ptr<ColorSpace> src, Color4f color,
   return Color4f{rgb[0], rgb[1], rgb[2], color.a};
 }
 
-void ColorSpace::ConvertColors(std::shared_ptr<ColorSpace> src,
+void ColorSpace::ConvertColors(const std::shared_ptr<const ColorSpace>& src,
                                Color4f colors[], int count,
-                               std::shared_ptr<ColorSpace> dst) {
+                               const std::shared_ptr<const ColorSpace>& dst) {
   if (ColorSpaceEquals(src, dst)) {
     return;
   }

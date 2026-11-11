@@ -291,7 +291,7 @@ void DrawImageRect(Canvas* canvas) {
 
 void DrawColorSpaceDecode(Canvas* canvas) {
   auto make_solid_image = [](uint32_t w, uint32_t h, Color4f color,
-                             std::shared_ptr<ColorSpace> color_space) {
+                             std::shared_ptr<const ColorSpace> color_space) {
     auto pixmap = std::make_shared<Pixmap>(w, h);
     Bitmap bitmap(pixmap, false);
     auto stored = Color4fToColor(color);
