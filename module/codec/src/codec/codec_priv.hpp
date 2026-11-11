@@ -141,11 +141,26 @@ std::shared_ptr<Pixmap> ResamplePixmapToTarget(
  * Builds a row-major RGB->XYZ gamut matrix from image-metadata chromaticities
  * {wx, wy, rx, ry, gx, gy, bx, by} (the layout of a PNG cHRM chunk): each
  * primary contributes an XYZ column with Y == 1 and the columns are scaled so
- * the matrix maps RGB white to the white point. Returns false when the values
- * are degenerate (out of range or a singular primary matrix).
+ * the matrix maps RGB white to the white point. The result is then
+ * Bradford-adapted from that native white point to the D50 connection space,
+ * the reference white every skity gamut uses (see ColorSpace::gamut_xyz).
+ * Returns false when the values are degenerate (out of range or a singular
+ * primary matrix).
  */
 bool CodecGamutFromChromaticities(const float chromaticities[8],
                                   float gamut_xyz[9]);
+
+/**
+ * Inverse of CodecGamutFromChromaticities: recovers the cHRM-layout
+ * chromaticities {wx, wy, rx, ry, gx, gy, bx, by} from a D50-adapted gamut
+ * matrix. The D50 adaptation is undone towards D65, the native white point
+ * of nearly every RGB display space, so the chunk describes the familiar
+ * primaries; reading it back adapts D65 to D50 again and reproduces the same
+ * matrix. Returns false when the matrix does not describe physical
+ * chromaticities.
+ */
+bool CodecChromaticitiesFromGamut(const float gamut_xyz[9],
+                                  float chromaticities[8]);
 
 }  // namespace codec_priv
 }  // namespace skity

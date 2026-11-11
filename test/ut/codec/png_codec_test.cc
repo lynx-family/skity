@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "module/codec/src/codec/codec_priv.hpp"
+#include "test/ut/graphic/color_space_test_util.hpp"
 
 TEST(PNGCodecTest, Create) {
   // create directly
@@ -196,14 +197,6 @@ namespace {
 
 // Primary xy chromaticity extracted from a gamut matrix column / white point
 // from the row sums.
-std::pair<float, float> XYOfColumn(const float* gamut, int col) {
-  float x = gamut[col];
-  float y = gamut[3 + col];
-  float z = gamut[6 + col];
-  float sum = x + y + z;
-  return {x / sum, y / sum};
-}
-
 uint32_t Crc32(const uint8_t* data, size_t size) {
   uint32_t crc = 0xFFFFFFFFu;
   for (size_t i = 0; i < size; i++) {
@@ -329,16 +322,24 @@ TEST(PNGCodecTest, EncodeDecodeColorSpaceRoundTrip) {
   EXPECT_NEAR(out_space.transfer_fn[0], 2.2f, 1e-5f);
   EXPECT_EQ(out_space.transfer_fn[1], 1.f);
   // cHRM stores chromaticities * 100000; the primaries survive the
-  // extraction -> chunk -> solve roundtrip.
-  auto [rx, ry] = XYOfColumn(out_space.gamut_xyz, 0);
-  auto [gx, gy] = XYOfColumn(out_space.gamut_xyz, 1);
-  auto [bx, by] = XYOfColumn(out_space.gamut_xyz, 2);
-  EXPECT_NEAR(rx, 0.680f, 2e-5f);
-  EXPECT_NEAR(ry, 0.320f, 2e-5f);
-  EXPECT_NEAR(gx, 0.265f, 2e-5f);
-  EXPECT_NEAR(gy, 0.695f, 2e-5f);
-  EXPECT_NEAR(bx, 0.150f, 2e-5f);
-  EXPECT_NEAR(by, 0.060f, 2e-5f);
+  // extraction -> chunk -> solve roundtrip. The decoded matrix is
+  // D50-adapted, so the native chromaticities come from undoing the
+  // adaptation with the reference implementation, not from its columns.
+  auto native =
+      color_space_test_util::NativeChromaticities(out_space.gamut_xyz);
+  EXPECT_NEAR(native.wx, 0.3127, 3e-5);
+  EXPECT_NEAR(native.wy, 0.3290, 3e-5);
+  EXPECT_NEAR(native.rx, 0.680, 3e-5);
+  EXPECT_NEAR(native.ry, 0.320, 3e-5);
+  EXPECT_NEAR(native.gx, 0.265, 3e-5);
+  EXPECT_NEAR(native.gy, 0.690, 3e-5);
+  EXPECT_NEAR(native.bx, 0.150, 3e-5);
+  EXPECT_NEAR(native.by, 0.060, 3e-5);
+  // The adapted matrix itself reproduces the built-in Display P3 table.
+  auto p3_reference = skity::ColorSpace::DisplayP3();
+  for (int i = 0; i < 9; i++) {
+    EXPECT_NEAR(out_space.gamut_xyz[i], p3_reference->gamut_xyz[i], 2e-4f);
+  }
 }
 
 TEST(PNGCodecTest, EncodeDecodeDefaultsToSRGBWithoutChunks) {
@@ -444,9 +445,10 @@ TEST(PNGCodecTest, ChromaOnlyDefaultsTransferToSRGBCurve) {
   EXPECT_EQ(std::memcmp(out_space.transfer_fn, srgb->transfer_fn,
                         sizeof(out_space.transfer_fn)),
             0);
-  auto [rx, ry] = XYOfColumn(out_space.gamut_xyz, 0);
-  EXPECT_NEAR(rx, 0.680f, 2e-5f);
-  EXPECT_NEAR(ry, 0.320f, 2e-5f);
+  auto native =
+      color_space_test_util::NativeChromaticities(out_space.gamut_xyz);
+  EXPECT_NEAR(native.rx, 0.680, 3e-5);
+  EXPECT_NEAR(native.ry, 0.320, 3e-5);
 }
 
 TEST(PNGCodecTest, TamperedChromaLayering) {
@@ -479,9 +481,10 @@ TEST(PNGCodecTest, TamperedChromaLayering) {
   const auto& out_space = *decoded->GetColorSpace();
   EXPECT_EQ(out_space.kind, skity::ColorSpace::Kind::kParametric);
   EXPECT_NEAR(out_space.transfer_fn[0], 2.2f, 1e-5f);
-  auto [rx, ry] = XYOfColumn(out_space.gamut_xyz, 0);
-  EXPECT_NEAR(rx, 0.640f, 2e-5f);
-  EXPECT_NEAR(ry, 0.330f, 2e-5f);
+  auto native =
+      color_space_test_util::NativeChromaticities(out_space.gamut_xyz);
+  EXPECT_NEAR(native.rx, 0.640, 3e-5);
+  EXPECT_NEAR(native.ry, 0.330, 3e-5);
 
   // Unphysical primaries (red x + y > 1): libpng still decodes the pixels,
   // and the parser-level validation drops the bad chroma — gAMA keeps
@@ -506,7 +509,7 @@ TEST(PNGCodecTest, GamutFromChromaticitiesMatchesDisplayP3) {
   // Direct check of the chromaticity solve: the P3 cHRM values reproduce
   // the Display P3 gamut table.
   float p3[8] = {0.3127f, 0.3290f, 0.680f, 0.320f,
-                 0.265f,  0.695f,  0.150f, 0.060f};
+                 0.265f,  0.690f,  0.150f, 0.060f};
   float gamut[9];
   ASSERT_TRUE(skity::codec_priv::CodecGamutFromChromaticities(p3, gamut));
   auto display_p3 = skity::ColorSpace::DisplayP3();
@@ -516,20 +519,54 @@ TEST(PNGCodecTest, GamutFromChromaticitiesMatchesDisplayP3) {
 
   // x + y == 1 is legal (z == 0, like the P3 red primary itself).
   float zero_z[8] = {0.3127f, 0.3290f, 0.7f,   0.3f,
-                     0.265f,  0.695f,  0.150f, 0.060f};
+                     0.265f,  0.690f,  0.150f, 0.060f};
   EXPECT_TRUE(skity::codec_priv::CodecGamutFromChromaticities(zero_z, gamut));
 
   // Degenerate inputs are rejected: out of range, x + y > 1 and coincident
   // primaries (singular matrix).
   float bad_range[8] = {0.3127f, 0.3290f, 1.5f,   0.320f,
-                        0.265f,  0.695f,  0.150f, 0.060f};
+                        0.265f,  0.690f,  0.150f, 0.060f};
   EXPECT_FALSE(
       skity::codec_priv::CodecGamutFromChromaticities(bad_range, gamut));
   float bad_sum[8] = {0.3127f, 0.3290f, 0.9f,   0.9f,
-                      0.265f,  0.695f,  0.150f, 0.060f};
+                      0.265f,  0.690f,  0.150f, 0.060f};
   EXPECT_FALSE(skity::codec_priv::CodecGamutFromChromaticities(bad_sum, gamut));
   float singular[8] = {0.3127f, 0.3290f, 0.680f, 0.320f,
                        0.680f,  0.320f,  0.680f, 0.320f};
   EXPECT_FALSE(
       skity::codec_priv::CodecGamutFromChromaticities(singular, gamut));
+}
+TEST(PNGCodecTest, ChromaticitiesFromGamutUndoesTheAdaptation) {
+  // The write-side inverse: the built-in Display P3 matrix (D50-adapted)
+  // describes its own published chromaticities, and
+  // gamut -> chromaticities -> gamut round trips.
+  float c[8];
+  auto p3 = skity::ColorSpace::DisplayP3();
+  ASSERT_TRUE(
+      skity::codec_priv::CodecChromaticitiesFromGamut(p3->gamut_xyz, c));
+  EXPECT_NEAR(c[0], 0.3127, 1e-5);
+  EXPECT_NEAR(c[1], 0.3290, 1e-5);
+  EXPECT_NEAR(c[2], 0.680, 1e-5);
+  EXPECT_NEAR(c[3], 0.320, 1e-5);
+  EXPECT_NEAR(c[4], 0.265, 1e-5);
+  EXPECT_NEAR(c[5], 0.690, 1e-5);
+  EXPECT_NEAR(c[6], 0.150, 1e-5);
+  EXPECT_NEAR(c[7], 0.060, 1e-5);
+  float gamut[9];
+  ASSERT_TRUE(skity::codec_priv::CodecGamutFromChromaticities(c, gamut));
+  for (int i = 0; i < 9; i++) {
+    EXPECT_NEAR(gamut[i], p3->gamut_xyz[i], 1e-5f);
+  }
+
+  // The sRGB matrix describes the published sRGB chromaticities; the 16-bit
+  // rounding of its ICC constants bounds the accuracy.
+  skity::ColorSpace srgb{};
+  ASSERT_TRUE(
+      skity::codec_priv::CodecChromaticitiesFromGamut(srgb.gamut_xyz, c));
+  EXPECT_NEAR(c[2], 0.640, 2e-4);
+  EXPECT_NEAR(c[3], 0.330, 2e-4);
+  EXPECT_NEAR(c[4], 0.300, 2e-4);
+  EXPECT_NEAR(c[5], 0.600, 2e-4);
+  EXPECT_NEAR(c[6], 0.150, 2e-4);
+  EXPECT_NEAR(c[7], 0.060, 2e-4);
 }

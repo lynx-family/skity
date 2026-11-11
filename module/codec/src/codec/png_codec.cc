@@ -147,20 +147,15 @@ void WritePNGColorSpaceChunks(png_structp png_ptr, png_infop info_ptr,
   ColorSpace srgb{};
   if (std::memcmp(info.gamut_xyz, srgb.gamut_xyz, sizeof(info.gamut_xyz)) !=
       0) {
-    // Primary xy: each gamut column is the primary's scaled XYZ.
-    auto xy_of = [](float x, float y, float z, double* out_x, double* out_y) {
-      double sum = static_cast<double>(x) + y + z;
-      *out_x = x / sum;
-      *out_y = y / sum;
-    };
-    const float* m = info.gamut_xyz;
-    double rx, ry, gx, gy, bx, by, wx, wy;
-    xy_of(m[0], m[3], m[6], &rx, &ry);
-    xy_of(m[1], m[4], m[7], &gx, &gy);
-    xy_of(m[2], m[5], m[8], &bx, &by);
-    // White point: the matrix maps RGB white (1, 1, 1) to the row sums.
-    xy_of(m[0] + m[1] + m[2], m[3] + m[4] + m[5], m[6] + m[7] + m[8], &wx, &wy);
-    png_set_cHRM(png_ptr, info_ptr, wx, wy, rx, ry, gx, gy, bx, by);
+    // gamut_xyz is D50-adapted (see ColorSpace::gamut_xyz) while a cHRM chunk
+    // stores the native primaries and white point, so the chunk values come
+    // from the matrix with the adaptation undone (towards D65), not from its
+    // columns directly.
+    float c[8];
+    if (codec_priv::CodecChromaticitiesFromGamut(info.gamut_xyz, c)) {
+      png_set_cHRM(png_ptr, info_ptr, c[0], c[1], c[2], c[3], c[4], c[5], c[6],
+                   c[7]);
+    }
   }
 }
 

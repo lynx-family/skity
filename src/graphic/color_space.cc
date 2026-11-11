@@ -15,13 +15,18 @@ namespace {
 
 constexpr float kLinearTransferFn[7] = {1.f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
 
-// Display P3 gamut (D65 white), derived from the standard primaries
-// R(0.680, 0.320) G(0.265, 0.695) B(0.150, 0.060): each column scales the
-// primary's XYZ, so the rows sum to the D65 white point (0.95046, 1, 1.08906).
+// Display P3 gamut in the D50 connection space (see ColorSpace::gamut_xyz).
+// Derived from the standard primaries R(0.680, 0.320) G(0.265, 0.690)
+// B(0.150, 0.060) under the P3 native white D65 (0.3127, 0.3290): the
+// native RGB->XYZ matrix (white scaled into the columns) is
+// Bradford-adapted from D65 to CIE D50 XYZ (0.96422, 1, 0.82521), so the
+// rows sum to that D50 white exactly as the sRGB constants above do. The
+// unit tests re-derive this matrix independently from the primaries and
+// verify the adaptation cancels on neutral grays.
 constexpr float kDisplayP3Gamut[9] = {
-    0.4878489f, 0.2633719f, 0.1992349f,  //
-    0.2295760f, 0.6907301f, 0.0796940f,  //
-    0.f,        0.0397542f, 1.0493037f,
+    0.5151021f,  0.2919648f, 0.1571531f,  //
+    0.2411818f,  0.6922363f, 0.0665819f,  //
+    -0.0010494f, 0.0418818f, 0.7843776f,
 };
 
 bool IsValidTransferFn(const float tf[7]) {

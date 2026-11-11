@@ -47,9 +47,18 @@ struct SKITY_API ColorSpace {
   };
 
   /**
-   * Row-major RGB->XYZ (D65) gamut matrix. Defaults to the sRGB primaries,
-   * kept as 16-bit fixed point constants so the color filter serialization
-   * and this value stay bit-identical.
+   * Row-major RGB->XYZ gamut matrix, Bradford-adapted to the D50 connection
+   * space (CIE illuminant D50, XYZ = (0.96422, 1, 0.82521)) - the convention
+   * ICC profiles use for their colorants. Every gamut in skity shares this
+   * one reference white, whatever the space's native white point is, so a
+   * src -> dst conversion composes as inverse(dst.gamut_xyz) * src.gamut_xyz
+   * with the adaptations cancelling out. A matrix left in its native white
+   * (e.g. D65) must not be stored here: mixing reference whites tints every
+   * cross-gamut conversion, neutral grays included.
+   *
+   * Defaults to the sRGB primaries as adapted by the standard ICC sRGB
+   * profile, kept as 16-bit fixed point constants so the color filter
+   * serialization and this value stay bit-identical.
    */
   float gamut_xyz[9] = {
       0x6FA2 / 65536.f, 0x6299 / 65536.f, 0x24A0 / 65536.f,  //
@@ -66,13 +75,16 @@ struct SKITY_API ColorSpace {
   /// Linear transfer function with the sRGB gamut.
   static std::shared_ptr<ColorSpace> SRGBLinear();
 
-  /// Display P3 color space (sRGB transfer curve, P3 D65 gamut).
+  /// Display P3 color space (sRGB transfer curve, P3 primaries with a D65
+  /// native white, stored D50-adapted like every gamut).
   static std::shared_ptr<ColorSpace> DisplayP3();
 
   /**
    * Creates a parametric space from a skcms-style transfer function and a
-   * row-major RGB->XYZ gamut matrix. Returns nullptr when the parameters
-   * cannot describe a valid space.
+   * row-major RGB->XYZ gamut matrix. The matrix must already be adapted to
+   * the D50 connection space (see gamut_xyz); primaries given in their
+   * native white point need a Bradford adaptation first. Returns nullptr
+   * when the parameters cannot describe a valid space.
    */
   static std::shared_ptr<ColorSpace> MakeRGB(const float transfer_fn[7],
                                              const float gamut_xyz[9]);

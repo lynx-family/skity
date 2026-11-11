@@ -11,6 +11,7 @@
 #include <skity/io/pixmap.hpp>
 
 #include "gtest/gtest.h"
+#include "test/ut/graphic/color_space_test_util.hpp"
 
 namespace {
 
@@ -53,20 +54,108 @@ TEST(ColorSpace, NamedFactories) {
   EXPECT_NE(skity::ColorSpace::SRGB(), p3);
 }
 
-TEST(ColorSpace, DisplayP3GamutMatchesPrimariesAndWhitePoint) {
+TEST(ColorSpace, DisplayP3GamutIsD50AdaptedFromItsPrimaries) {
+  namespace util = color_space_test_util;
   auto p3 = skity::ColorSpace::DisplayP3();
-  // Each row of an RGB->XYZ matrix sums to the white point (D65 for P3).
+  // Gamut matrices live in the D50 connection space, so RGB white maps to
+  // the D50 white point, not to the P3 native D65 white.
   for (int row = 0; row < 3; row++) {
     float sum = p3->gamut_xyz[row * 3] + p3->gamut_xyz[row * 3 + 1] +
                 p3->gamut_xyz[row * 3 + 2];
-    float d65 = row == 0 ? 0.950456f : (row == 1 ? 1.f : 1.089058f);
-    EXPECT_NEAR(sum, d65, 1e-4f);
+    EXPECT_NEAR(sum, static_cast<float>(util::kD50[row]), 1e-5f);
   }
-  // The red primary column converts back to xy (0.680, 0.320).
-  float x = p3->gamut_xyz[0], y = p3->gamut_xyz[3], z = p3->gamut_xyz[6];
-  float sum = x + y + z;
-  EXPECT_NEAR(x / sum, 0.680f, 1e-4f);
-  EXPECT_NEAR(y / sum, 0.320f, 1e-4f);
+  // The matrix matches an independent derivation from the published
+  // chromaticities plus a Bradford adaptation to D50.
+  auto reference = util::D50Gamut(util::kDisplayP3Chromaticities);
+  for (int i = 0; i < 9; i++) {
+    EXPECT_NEAR(p3->gamut_xyz[i], static_cast<float>(reference[i]), 1e-6f);
+  }
+  // Undoing the adaptation recovers the published primaries and white.
+  auto native = util::NativeChromaticities(p3->gamut_xyz);
+  EXPECT_NEAR(native.wx, 0.3127, 1e-5);
+  EXPECT_NEAR(native.wy, 0.3290, 1e-5);
+  EXPECT_NEAR(native.rx, 0.680, 1e-5);
+  EXPECT_NEAR(native.ry, 0.320, 1e-5);
+  EXPECT_NEAR(native.gx, 0.265, 1e-5);
+  EXPECT_NEAR(native.gy, 0.690, 1e-5);
+  EXPECT_NEAR(native.bx, 0.150, 1e-5);
+  EXPECT_NEAR(native.by, 0.060, 1e-5);
+}
+
+TEST(ColorSpace, SRGBGamutIsD50AdaptedFromItsPrimaries) {
+  namespace util = color_space_test_util;
+  // The default sRGB constants come from the standard ICC sRGB profile,
+  // whose colorants are already D50-adapted. Verifying that claim is what
+  // makes the D50 convention trustworthy: the same adaptation that builds
+  // Display P3 above must recover the published sRGB primaries here.
+  skity::ColorSpace srgb{};
+  for (int row = 0; row < 3; row++) {
+    float sum = srgb.gamut_xyz[row * 3] + srgb.gamut_xyz[row * 3 + 1] +
+                srgb.gamut_xyz[row * 3 + 2];
+    EXPECT_NEAR(sum, static_cast<float>(util::kD50[row]), 2e-4f);
+  }
+  auto reference = util::D50Gamut(util::kSRGBChromaticities);
+  for (int i = 0; i < 9; i++) {
+    // The 16-bit fixed constants round the reference values slightly.
+    EXPECT_NEAR(srgb.gamut_xyz[i], static_cast<float>(reference[i]), 2e-4f);
+  }
+  auto native = util::NativeChromaticities(srgb.gamut_xyz);
+  EXPECT_NEAR(native.wx, 0.3127, 1e-4);
+  EXPECT_NEAR(native.wy, 0.3290, 1e-4);
+  EXPECT_NEAR(native.rx, 0.640, 1e-4);
+  EXPECT_NEAR(native.ry, 0.330, 1e-4);
+  EXPECT_NEAR(native.gx, 0.300, 1e-4);
+  EXPECT_NEAR(native.gy, 0.600, 1e-4);
+  EXPECT_NEAR(native.bx, 0.150, 1e-4);
+  EXPECT_NEAR(native.by, 0.060, 1e-4);
+}
+
+TEST(ColorSpace, CrossGamutNeutralsStayNeutral) {
+  // sRGB and Display P3 share the transfer curve and the native white point,
+  // so neutral colors are the same values in both spaces. A reference-white
+  // mix-up between the gamut matrices shows up here as a color cast on every
+  // gray, which round-trip tests built on the same conversion cannot see.
+  auto srgb = skity::ColorSpace::SRGB();
+  auto p3 = skity::ColorSpace::DisplayP3();
+  for (float v : {0.f, 0.25f, 0.5f, 0.75f, 1.f}) {
+    skity::Color4f gray{v, v, v, 1.f};
+    auto to_srgb = skity::ColorSpace::Convert(p3, gray, srgb);
+    EXPECT_NEAR(to_srgb.r, v, 2e-4f);
+    EXPECT_NEAR(to_srgb.g, v, 2e-4f);
+    EXPECT_NEAR(to_srgb.b, v, 2e-4f);
+    auto to_p3 = skity::ColorSpace::Convert(srgb, gray, p3);
+    EXPECT_NEAR(to_p3.r, v, 2e-4f);
+    EXPECT_NEAR(to_p3.g, v, 2e-4f);
+    EXPECT_NEAR(to_p3.b, v, 2e-4f);
+  }
+}
+
+TEST(ColorSpace, LinearP3ToSRGBMatchesPublishedMatrix) {
+  // Linear transfer functions on both sides leave the pure gamut matrices,
+  // so the P3 primaries convert through the published linear P3 -> sRGB
+  // matrix. The residual (under 2e-4) comes from the ICC 16-bit rounding of
+  // the sRGB constants.
+  namespace util = color_space_test_util;
+  const float linear_tf[7] = {1.f, 1.f, 0.f, 1.f, 0.f, 0.f, 0.f};
+  auto linear_p3 = skity::ColorSpace::MakeRGB(
+      linear_tf, skity::ColorSpace::DisplayP3()->gamut_xyz);
+  ASSERT_NE(linear_p3, nullptr);
+  const float kPublishedP3ToSRGB[9] = {
+      1.2249402f,  -0.2249402f, 0.f,  //
+      -0.042057f,  1.042057f,   0.f,  //
+      -0.0196376f, -0.078636f,  1.0982736f,
+  };
+  const skity::Color4f primaries[3] = {
+      {1.f, 0.f, 0.f, 1.f}, {0.f, 1.f, 0.f, 1.f}, {0.f, 0.f, 1.f, 1.f}};
+  for (int i = 0; i < 3; i++) {
+    auto out = skity::ColorSpace::Convert(linear_p3, primaries[i],
+                                          skity::ColorSpace::SRGBLinear());
+    for (int row = 0; row < 3; row++) {
+      float expected = kPublishedP3ToSRGB[row * 3 + i];
+      float actual = row == 0 ? out.r : (row == 1 ? out.g : out.b);
+      EXPECT_NEAR(actual, expected, 2.5e-4f);
+    }
+  }
 }
 
 TEST(ColorSpace, ConvertSameSpaceIsIdentity) {

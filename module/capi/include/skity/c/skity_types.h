@@ -177,7 +177,11 @@ typedef enum {
  * transfer_fn holds 7 skcms-style parameters {g, a, b, c, d, e, f}:
  *   linear(x) = c * x + f               for x <  d
  *   linear(x) = pow(a * x + b, g) + e   for x >= d
- * gamut_xyz holds a row-major 3x3 RGB->XYZ matrix.
+ * gamut_xyz holds a row-major 3x3 RGB->XYZ matrix that is Bradford-adapted
+ * to the D50 connection space (CIE D50, XYZ = (0.96422, 1, 0.82521)), as ICC
+ * profile colorants are. Primaries known in their native white point (D65
+ * for most display spaces) must be adapted to D50 before being passed in;
+ * a matrix left in its native white tints conversions against other spaces.
  * For kinds other than SKITY_COLOR_SPACE_PARAMETRIC the arrays are ignored
  * and the canonical values of that kind are used.
  */
