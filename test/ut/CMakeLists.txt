@@ -114,6 +114,7 @@ if(${SKITY_GL_BACKEND})
         ${CMAKE_SOURCE_DIR}/third_party/glad/include
     )
     target_sources(skity_unit_test PRIVATE
+        gpu/gl/gpu_buffer_gl_test.cc
         gpu/gl/gpu_driver_info_gl_test.cc
         gpu/gl/gpu_render_pass_gl_test.cc
     )

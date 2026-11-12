@@ -32,6 +32,7 @@ struct GLDriverWorkarounds {
   bool use_draw_for_clear = false;
   bool disable_framebuffer_fetch = false;
   bool disable_native_advanced_blend = false;
+  bool retain_last_index_buffer = false;
 };
 
 GLDriverWorkarounds ResolveGLDriverWorkarounds(const GLDriverInfo& driver_info);

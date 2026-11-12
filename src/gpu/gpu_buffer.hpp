@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 namespace skity {
 
@@ -37,7 +38,7 @@ struct GPUBufferDescriptor {
   GPUBufferStorageMode storage_mode = GPUBufferStorageMode::kPrivate;
 };
 
-class GPUBuffer {
+class GPUBuffer : public std::enable_shared_from_this<GPUBuffer> {
  public:
   explicit GPUBuffer(const GPUBufferDescriptor& desc)
       : usage_(desc.usage), storage_mode_(desc.storage_mode) {}

@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "src/gpu/gl/gl_interface.hpp"
@@ -34,6 +36,8 @@ class TestShaderFunction : public GPUShaderFunction {
   TestShaderFunction() : GPUShaderFunction({}) {}
   bool IsValid() const override { return true; }
 };
+
+enum class IndexEvent { kDraw, kDelete };
 
 class GPURenderPassGLTest : public testing::TestWithParam<bool> {
  protected:
@@ -79,14 +83,20 @@ class GPURenderPassGLTest : public testing::TestWithParam<bool> {
   GLInterface* saved_interface_ = nullptr;
   static std::array<GLuint, 8> samplers_;
   static std::vector<std::array<GLuint, 8>> draws_;
+  static std::vector<std::pair<IndexEvent, GLuint>> index_events_;
+  static GLuint bound_index_;
+  static GLuint next_buffer_;
 };
 
 std::array<GLuint, 8> GPURenderPassGLTest::samplers_;
 std::vector<std::array<GLuint, 8>> GPURenderPassGLTest::draws_;
+std::vector<std::pair<IndexEvent, GLuint>> GPURenderPassGLTest::index_events_;
+GLuint GPURenderPassGLTest::bound_index_;
+GLuint GPURenderPassGLTest::next_buffer_;
 
 TEST_P(GPURenderPassGLTest, TextureOnlyDrawClearsPreviousSampler) {
   GPUDeviceGL device;
-  GPUBufferGL buffer({});
+  auto buffer = device.CreateBuffer({});
   std::vector<GPUVertexBufferLayout> layouts;
   GPURenderPipelineDescriptor pipeline_desc;
   pipeline_desc.vertex_function = std::make_shared<TestShaderFunction>();
@@ -105,8 +115,8 @@ TEST_P(GPURenderPassGLTest, TextureOnlyDrawClearsPreviousSampler) {
 
   Command pattern;
   pattern.pipeline = &pipeline;
-  pattern.vertex_buffer.buffer = &buffer;
-  pattern.index_buffer.buffer = &buffer;
+  pattern.vertex_buffer.buffer = buffer.get();
+  pattern.index_buffer.buffer = buffer.get();
   pattern.index_count = 6;
   // Cover both the direct index and WGSL's shared-sampler unit list.
   for (uint32_t unit : {0u, 3u}) {
@@ -125,9 +135,9 @@ TEST_P(GPURenderPassGLTest, TextureOnlyDrawClearsPreviousSampler) {
 
   Command circle;
   circle.pipeline = &pipeline;
-  circle.vertex_buffer.buffer = &buffer;
-  circle.index_buffer.buffer = &buffer;
-  circle.instance_buffer.buffer = &buffer;
+  circle.vertex_buffer.buffer = buffer.get();
+  circle.index_buffer.buffer = buffer.get();
+  circle.instance_buffer.buffer = buffer.get();
   circle.index_count = 6;
   circle.instance_count = 1;
   for (uint32_t unit : {0u, 3u}) {
@@ -192,6 +202,107 @@ TEST_F(GPURenderPassGLTest, InvalidatesDiscardedDepthStencilBeforeUnbinding) {
   gl_.fInvalidateFramebuffer = nullptr;
   GPURenderPassGL(desc, 7, &device).EncodeCommands(std::nullopt, std::nullopt);
   EXPECT_EQ(bound_fbo, 0u);
+}
+
+TEST_P(GPURenderPassGLTest,
+       ReleasesPreviousIndexOnlyAfterDifferentIndexedDraw) {
+  gl_.fGetString = [](GLenum name) {
+    const char* value = name == GL_VENDOR     ? "Mesa/X.org"
+                        : name == GL_RENDERER ? "virgl"
+                                              : "OpenGL ES 3.2 Mesa 20.2.3";
+    return reinterpret_cast<const GLubyte*>(value);
+  };
+  next_buffer_ = 1;
+  bound_index_ = 0;
+  index_events_.clear();
+  gl_.fGenBuffers = [](GLsizei count, GLuint* ids) {
+    for (GLsizei i = 0; i < count; ++i) {
+      ids[i] = next_buffer_++;
+    }
+  };
+  gl_.fBindBuffer = [](GLenum target, GLuint buffer) {
+    if (target == GL_ELEMENT_ARRAY_BUFFER) {
+      bound_index_ = buffer;
+    }
+  };
+  gl_.fDeleteBuffers = [](GLsizei count, const GLuint* ids) {
+    for (GLsizei i = 0; i < count; ++i) {
+      index_events_.emplace_back(IndexEvent::kDelete, ids[i]);
+    }
+  };
+  gl_.fDrawElements = [](GLenum, GLsizei, GLenum, const void*) {
+    index_events_.emplace_back(IndexEvent::kDraw, bound_index_);
+  };
+  gl_.fDrawElementsInstanced = [](GLenum, GLsizei, GLenum, const void*,
+                                  GLsizei) {
+    index_events_.emplace_back(IndexEvent::kDraw, bound_index_);
+  };
+  auto device = std::make_unique<GPUDeviceGL>();
+  GPUBufferDescriptor vertex_desc;
+  vertex_desc.usage = GPUBufferUsage::kVertexBuffer;
+  auto vertex = device->CreateBuffer(vertex_desc);
+  std::shared_ptr<GPUBuffer> first = device->CreateBuffer({});
+  const auto first_id = static_cast<GPUBufferGL*>(first.get())->GetBufferId();
+  std::vector<GPUVertexBufferLayout> layouts;
+  GPURenderPipelineDescriptor desc;
+  desc.vertex_function = std::make_shared<TestShaderFunction>();
+  desc.fragment_function = std::make_shared<TestShaderFunction>();
+  desc.buffers = &layouts;
+  GPURenderPipelineGL pipeline(std::make_shared<GLProgram>(1, true), desc);
+  auto draw = [&](GPUBuffer* buffer, uint32_t count, uint32_t instances = 1) {
+    Command command;
+    command.pipeline = &pipeline;
+    command.vertex_buffer.buffer = vertex.get();
+    command.index_buffer.buffer = buffer;
+    command.index_count = count;
+    if (GetParam()) {
+      command.instance_buffer.buffer = vertex.get();
+      command.instance_count = instances;
+    }
+    GPURenderPassGL pass({}, 0, device.get());
+    pass.AddCommand(&command);
+    pass.EncodeCommands(std::nullopt, std::nullopt);
+  };
+
+  // A buffer owned only by a unique_ptr can still be drawn and released.
+  auto unshared = device->CreateBuffer({});
+  const auto unshared_id =
+      static_cast<GPUBufferGL*>(unshared.get())->GetBufferId();
+  draw(unshared.get(), 6);
+  unshared.reset();
+
+  draw(first.get(), 6);
+  draw(first.get(), 6);
+  first.reset();
+  std::vector<std::pair<IndexEvent, GLuint>> expected_events = {
+      {IndexEvent::kDraw, unshared_id},
+      {IndexEvent::kDelete, unshared_id},
+      {IndexEvent::kDraw, first_id},
+      {IndexEvent::kDraw, first_id}};
+  EXPECT_EQ(index_events_, expected_events);
+  std::shared_ptr<GPUBuffer> second = device->CreateBuffer({});
+  const auto second_id = static_cast<GPUBufferGL*>(second.get())->GetBufferId();
+  // Allocation, binding and empty commands do not replace the driver cache.
+  gl_.fBindBuffer(GL_ELEMENT_ARRAY_BUFFER, second_id);
+  draw(second.get(), 0);
+  if (GetParam()) {
+    draw(second.get(), 6, 0);
+  }
+  EXPECT_EQ(index_events_, expected_events);
+
+  // The GL call is issued, but VirGL skips it before updating the index buffer.
+  draw(second.get(), 2);
+  expected_events.emplace_back(IndexEvent::kDraw, second_id);
+  EXPECT_EQ(index_events_, expected_events);
+
+  draw(second.get(), 6);
+  second.reset();
+  expected_events.emplace_back(IndexEvent::kDraw, second_id);
+  expected_events.emplace_back(IndexEvent::kDelete, first_id);
+  EXPECT_EQ(index_events_, expected_events);
+  device.reset();
+  expected_events.emplace_back(IndexEvent::kDelete, second_id);
+  EXPECT_EQ(index_events_, expected_events);
 }
 
 INSTANTIATE_TEST_SUITE_P(SamplerBindings, GPURenderPassGLTest, testing::Bool());

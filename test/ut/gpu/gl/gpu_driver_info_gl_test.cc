@@ -102,5 +102,39 @@ TEST(GLDriverInfoTest, RejectsMissingAndInvalidModels) {
   }
 }
 
+TEST(GLDriverInfoTest, LimitsIndexRetentionToReproducedVirGLVersions) {
+  const struct {
+    const char* vendor;
+    const char* renderer;
+    const char* version;
+    bool enabled;
+  } cases[] = {
+      {"Mesa/X.org", "virgl", "OpenGL ES 3.1 Mesa 20.2.3", true},
+      {"Mesa/X.org", "virgl", "OpenGL ES 3.1 Mesa 20.2.3 (git-ab4ea04c4e)",
+       true},
+      {"Mesa/X.org", "virgl", "OpenGL ES 3.2 Mesa 20.2.3", true},
+      {"Mesa/X.org", "virgl", "OpenGL ES 3.2 Mesa 20.2.3 (git-c3023f5837)",
+       true},
+      {"Mesa/X.org", "virgl", "OpenGL ES 3.2 Mesa 20.2.30", false},
+      {"Mesa/X.org", "virgl", "OpenGL ES 3.2 Mesa 20.2.3-devel", false},
+      {"Mesa/X.org", "virgl", "OpenGL ES 3.1 Mesa 20.2.4", false},
+      {"Mesa/X.org", "virgl", "4.5 (Core Profile) Mesa 20.2.3", false},
+      {"Mesa/X.org", "llvmpipe", "OpenGL ES 3.2 Mesa 20.2.3", false},
+      {"Mesa/X.org", "virgl-unknown", "OpenGL ES 3.2 Mesa 20.2.3", false},
+      {"Mesa/X.org", "virgl", "", false},
+      {"ARM", "Mali-G72", "OpenGL ES 3.2 Mesa 20.2.3", false},
+      {"Unknown", "virgl", "OpenGL ES 3.2 Mesa 20.2.3", false},
+      {"", "", "", false},
+  };
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.vendor);
+    SCOPED_TRACE(test.renderer);
+    SCOPED_TRACE(test.version);
+    const auto workarounds = ResolveGLDriverWorkarounds(
+        GLDriverInfo::FromStrings(test.vendor, test.renderer, test.version));
+    EXPECT_EQ(workarounds.retain_last_index_buffer, test.enabled);
+  }
+}
+
 }  // namespace
 }  // namespace skity
