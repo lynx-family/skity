@@ -4,7 +4,9 @@
 
 #include <skity/c/skity_bitmap.h>
 
+#include <cstring>
 #include <skity/graphic/bitmap.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/io/data.hpp>
 #include <skity/io/pixmap.hpp>
 #include <utility>
@@ -23,6 +25,37 @@ skity::Pixmap* pixmap_of(skity_pixmap handle) {
   auto* w =
       skity::capi::resolve<skity_pixmap_s>(handle, SKITY_OBJECT_TYPE_PIXMAP);
   return w ? static_cast<skity::Pixmap*>(w->impl.get()) : nullptr;
+}
+
+std::shared_ptr<const skity::ColorSpace> ColorSpaceFromCInfo(
+    const skity_color_space_info* info) {
+  switch (info->kind) {
+    case SKITY_COLOR_SPACE_SRGB:
+      return skity::ColorSpace::SRGB();
+    case SKITY_COLOR_SPACE_SRGB_LINEAR:
+      return skity::ColorSpace::SRGBLinear();
+    case SKITY_COLOR_SPACE_DISPLAY_P3:
+      return skity::ColorSpace::DisplayP3();
+    case SKITY_COLOR_SPACE_PARAMETRIC:
+      break;
+  }
+  auto parametric =
+      skity::ColorSpace::MakeRGB(info->transfer_fn, info->gamut_xyz);
+  return parametric ? parametric : skity::ColorSpace::SRGB();
+}
+
+skity_color_space_kind KindToC(const skity::ColorSpace& cs) {
+  switch (cs.kind) {
+    case skity::ColorSpace::Kind::kSRGB:
+      return SKITY_COLOR_SPACE_SRGB;
+    case skity::ColorSpace::Kind::kSRGBLinear:
+      return SKITY_COLOR_SPACE_SRGB_LINEAR;
+    case skity::ColorSpace::Kind::kDisplayP3:
+      return SKITY_COLOR_SPACE_DISPLAY_P3;
+    case skity::ColorSpace::Kind::kParametric:
+      return SKITY_COLOR_SPACE_PARAMETRIC;
+  }
+  return SKITY_COLOR_SPACE_SRGB;
 }
 
 }  // namespace
@@ -177,6 +210,44 @@ skity_result skity_pixmap_set_color_info(skity_pixmap pixmap,
   bool ok = p->SetColorInfo(static_cast<skity::AlphaType>(alpha_type),
                             static_cast<skity::ColorType>(color_type));
   return ok ? SKITY_SUCCESS : SKITY_ERROR_INVALID_ARGUMENT;
+}
+
+skity_result skity_pixmap_set_color_space(skity_pixmap pixmap,
+                                          const skity_color_space_info* info) {
+  auto* p = pixmap_of(pixmap);
+  if (p == nullptr) {
+    return SKITY_ERROR_INVALID_HANDLE;
+  }
+  if (info == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  if (info->kind == SKITY_COLOR_SPACE_PARAMETRIC &&
+      !skity::ColorSpace::MakeRGB(info->transfer_fn, info->gamut_xyz)) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  auto cs = ColorSpaceFromCInfo(info);
+  // Color space metadata only: keep the current alpha/color interpretation.
+  bool ok =
+      p->SetColorInfo(p->GetAlphaType(), p->GetColorType(), std::move(cs));
+  return ok ? SKITY_SUCCESS : SKITY_ERROR_INVALID_ARGUMENT;
+}
+
+skity_result skity_pixmap_get_color_space(skity_pixmap pixmap,
+                                          skity_color_space_info* info) {
+  auto* p = pixmap_of(pixmap);
+  if (p == nullptr) {
+    return SKITY_ERROR_INVALID_HANDLE;
+  }
+  if (info == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  // An undeclared pixmap space reads back as the canonical sRGB values.
+  const auto& cs =
+      p->GetColorSpace() ? p->GetColorSpace() : skity::ColorSpace::SRGB();
+  info->kind = KindToC(*cs);
+  std::memcpy(info->transfer_fn, cs->transfer_fn, sizeof(info->transfer_fn));
+  std::memcpy(info->gamut_xyz, cs->gamut_xyz, sizeof(info->gamut_xyz));
+  return SKITY_SUCCESS;
 }
 
 }  // extern "C"
