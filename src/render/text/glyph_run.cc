@@ -67,7 +67,8 @@ class DirectGlyphRun : public GlyphRun {
       const float* position_x, const float* position_y, const Font& font,
       const Paint& paint, AtlasFormat format, float context_scale,
       const Matrix& transform, const bool is_stroke,
-      AtlasManager* atlas_manager, ArenaAllocator* arena_allocator);
+      AtlasManager* atlas_manager, ArenaAllocator* arena_allocator,
+      bool* complete = nullptr);
 
  private:
   const Point origin_;
@@ -167,7 +168,8 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
     const float* position_x, const float* position_y, const Font& font,
     const Paint& paint, AtlasFormat format, float context_scale,
     const Matrix& transform, const bool is_stroke, AtlasManager* atlas_manager,
-    ArenaAllocator* arena_allocator) {
+    ArenaAllocator* arena_allocator, bool* complete) {
+  if (complete) *complete = true;
   GlyphRunList run_list;
   run_list.SetArenaAllocator(arena_allocator);
   std::vector<GlyphRegionWithIndex> glyph_regions;
@@ -217,6 +219,7 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
                                             glyph_position.y_phase),
                               paint, false, context_scale, transform);
     if (glyph_region.loc.z == 0 || glyph_region.loc.w == 0) {
+      if (complete && !info.IsEmpty()) *complete = false;
       k++;
       continue;
     }
@@ -229,6 +232,9 @@ GlyphRunList DirectGlyphRun::SubRunListByTexture(
         {k, glyph_region, glyph_position.position - origin_offset});
     k++;
   }
+
+  // Refuse the whole attempted direct group before creating any arena draw.
+  if (complete && !*complete) return run_list;
 
   uint32_t draw_count =
       max_index / atlas->GetConfig().max_num_bitmap_per_atlas + 1;
@@ -666,10 +672,21 @@ GlyphRunList GlyphRun::MakeInternal(
         }
       }
     }
-  } else if (transform.HasPersp()) {
+  } else if (transform.HasPersp() || format == AtlasFormat::RGBA32) {
+    // Intrinsic-color glyphs may have no outline. Preserve complete direct
+    // affine geometry/sampling; use bounded transformed fitting when the
+    // direct atlas cannot represent the whole group.
     if (format == AtlasFormat::RGBA32) {
       Paint working_paint = paint;
       working_paint.SetStyle(Paint::kFill_Style);
+      if (!transform.HasPersp()) {
+        bool complete = false;
+        auto direct = DirectGlyphRun::SubRunListByTexture(
+            count, glyphs, origin, position_x, position_y, font, working_paint,
+            format, context_scale, transform, false, atlas_manager,
+            arena_allocator, &complete);
+        if (complete) return direct;
+      }
       run_list = transformed_mask::MakeGlyphRunList(
           count, glyphs, origin, position_x, position_y, font, working_paint,
           format, context_scale, transform, false, atlas_manager,

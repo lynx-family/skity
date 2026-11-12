@@ -163,6 +163,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_CT_FONT)
 
   if(SKITY_MTL_BACKEND)
     target_sources(skity_unit_test PRIVATE render/hw/save_layer_pixel_grid_test.mm)
+    target_sources(skity_unit_test PRIVATE render/hw/color_glyph_threshold_test.mm)
+    set_source_files_properties(render/hw/color_glyph_threshold_test.mm
+        PROPERTIES COMPILE_FLAGS "-fobjc-arc")
     set_source_files_properties(render/hw/save_layer_pixel_grid_test.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
     target_link_libraries(skity_unit_test PRIVATE "-framework AppKit" "-framework Metal")
