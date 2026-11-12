@@ -4,8 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <skity/effect/color_filter.hpp>
 #include <skity/graphic/paint.hpp>
+#include <vector>
 
 #include "src/effect/color_filter_base.hpp"
 #include "src/graphic/color_priv.hpp"
@@ -228,4 +230,87 @@ TEST(ColorFilterOpacityTest, IncludesPaintAlphaAndColorFilter) {
       skity::ColorFilters::SRGBToLinearGamma(),
       skity::ColorFilters::Matrix(alpha_reducing_matrix)));
   EXPECT_FALSE(skity::IsPaintSourceOpaque(paint));
+}
+
+namespace {
+
+// Captures the byte array payloads; the gamma filter flatten path writes
+// nothing else.
+class CaptureBuffer : public skity::WriteBuffer {
+ public:
+  std::vector<std::vector<uint8_t>> chunks;
+
+  void WriteByteArray(const uint8_t* data, size_t size) override {
+    chunks.emplace_back(data, data + size);
+  }
+  void WriteBool(bool) override {}
+  void WriteFloat(float) override {}
+  void WriteFloatArray(float const*, size_t) override {}
+  void WriteInt32(int32_t) override {}
+  void WriteUint32(uint32_t) override {}
+  void WriteColor(skity::Color) override {}
+  void WriteColorArray(skity::Color const*, size_t) override {}
+  void WriteColor4f(const skity::Color4f&) override {}
+  void WriteColor4fArray(const skity::Color4f*, size_t) override {}
+  void WritePoint(const skity::Vec2&) override {}
+  void WritePointArray(const skity::Vec2*, size_t) override {}
+  void WriteSampling(const skity::SamplingOptions&) override {}
+  void WriteMatrix(const skity::Matrix&) override {}
+  void WriteRect(const skity::Rect&) override {}
+  void WriteImage(const skity::Image*) override {}
+  void WriteTypeface(const std::shared_ptr<skity::Typeface>&) override {}
+  void WriteFlattenable(const skity::Flattenable*) override {}
+};
+
+}  // namespace
+
+TEST(SRGBGammaColorFilterFlattenTest, WireMatchesLegacyConstants) {
+  // FlattenToBuffer reads its constants from the ColorSpace factories now;
+  // the wire must stay byte-identical with the legacy tables it replaced,
+  // because buffers written by older builds are still read. The expected
+  // values below are spelled with the legacy literals.
+  const float srgb_fn[7] = {
+      2.4f,
+      static_cast<float>(1 / 1.055),
+      static_cast<float>(0.055 / 1.055),
+      static_cast<float>(1 / 12.92),
+      0.04045f,
+      0.f,
+      0.f,
+  };
+  const float linear_fn[7] = {1.f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  const float srgb_gamut[9] = {
+      0x6FA2 * 1.52587890625e-5f, 0x6299 * 1.52587890625e-5f,
+      0x24A0 * 1.52587890625e-5f,  //
+      0x38F5 * 1.52587890625e-5f, 0xB785 * 1.52587890625e-5f,
+      0x0F84 * 1.52587890625e-5f,  //
+      0x0390 * 1.52587890625e-5f, 0x18DA * 1.52587890625e-5f,
+      0xB6CF * 1.52587890625e-5f,
+  };
+
+  auto expected_chunk = [&](const float* fn) {
+    std::vector<uint8_t> expected(4 + 16 * sizeof(float));
+    const uint8_t header[4] = {1, 0, 0, 0};  // k1_Version + reserved
+    std::memcpy(expected.data(), header, sizeof(header));
+    std::memcpy(expected.data() + sizeof(header), fn, 7 * sizeof(float));
+    std::memcpy(expected.data() + sizeof(header) + 7 * sizeof(float),
+                srgb_gamut, 9 * sizeof(float));
+    return expected;
+  };
+
+  CaptureBuffer linear_to_srgb_buffer;
+  auto linear_to_srgb = skity::ColorFilters::LinearToSRGBGamma();
+  ASSERT_TRUE(linear_to_srgb != nullptr);
+  linear_to_srgb->FlattenToBuffer(linear_to_srgb_buffer);
+  ASSERT_EQ(linear_to_srgb_buffer.chunks.size(), 2u);
+  EXPECT_EQ(linear_to_srgb_buffer.chunks[0], expected_chunk(linear_fn));
+  EXPECT_EQ(linear_to_srgb_buffer.chunks[1], expected_chunk(srgb_fn));
+
+  CaptureBuffer srgb_to_linear_buffer;
+  auto srgb_to_linear = skity::ColorFilters::SRGBToLinearGamma();
+  ASSERT_TRUE(srgb_to_linear != nullptr);
+  srgb_to_linear->FlattenToBuffer(srgb_to_linear_buffer);
+  ASSERT_EQ(srgb_to_linear_buffer.chunks.size(), 2u);
+  EXPECT_EQ(srgb_to_linear_buffer.chunks[0], expected_chunk(srgb_fn));
+  EXPECT_EQ(srgb_to_linear_buffer.chunks[1], expected_chunk(linear_fn));
 }
