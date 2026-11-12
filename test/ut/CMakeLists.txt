@@ -178,6 +178,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_GL_BACKEND)
   target_link_libraries(skity_unit_test PRIVATE "-framework AppKit" "-framework OpenGL")
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_MTL_BACKEND)
+  target_sources(skity_unit_test PRIVATE render/hw/text_atlas_sampling_test.mm)
+  set_source_files_properties(render/hw/text_atlas_sampling_test.mm
+      PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+  target_link_libraries(skity_unit_test PRIVATE "-framework Metal")
+endif()
+
 target_include_directories(skity_unit_test
     PUBLIC
     ${CMAKE_SOURCE_DIR}
