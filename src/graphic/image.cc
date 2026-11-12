@@ -54,6 +54,7 @@ bool ScalePixelsForPixmap(std::shared_ptr<Pixmap> dst,
 
 bool ScalePixelsForTexture(std::shared_ptr<Pixmap> dst, GPUContext* context,
                            std::shared_ptr<Texture> texture,
+                           const std::shared_ptr<const ColorSpace>& color_space,
                            const SamplingOptions& sampling_options) {
   if (context == nullptr) {
     return false;
@@ -73,7 +74,9 @@ bool ScalePixelsForTexture(std::shared_ptr<Pixmap> dst, GPUContext* context,
     return false;
   }
   auto canvas = render_target->GetCanvas();
-  canvas->DrawImageRect(Image::MakeHWImage(texture),
+  // The raw texture keeps source-space encoded bytes; the image must carry
+  // the source space or the scaling draw interprets them as sRGB.
+  canvas->DrawImageRect(Image::MakeHWImage(texture, color_space),
                         Rect::MakeWH(texture->Width(), texture->Height()),
                         Rect::MakeWH(dst->Width(), dst->Height()),
                         sampling_options);
@@ -95,8 +98,9 @@ bool ScalePixelsForTexture(std::shared_ptr<Pixmap> dst, GPUContext* context,
 
 class TextureImage : public Image {
  public:
-  explicit TextureImage(std::shared_ptr<Texture> texture)
-      : texture_(std::move(texture)) {
+  explicit TextureImage(std::shared_ptr<Texture> texture,
+                        std::shared_ptr<const ColorSpace> color_space)
+      : Image(std::move(color_space)), texture_(std::move(texture)) {
     assert(texture_ != nullptr);
   }
 
@@ -131,14 +135,22 @@ class TextureImage : public Image {
       return nullptr;
     }
 
-    return std::make_shared<Pixmap>(
-        data, Width(), Height(), AlphaType::kPremul_AlphaType,
-        Texture::FormatToColorType(texture_image->GetFormat()));
+    auto color_type = Texture::FormatToColorType(texture_image->GetFormat());
+    // The GPU texture still holds source-space encoded bytes; the readback
+    // pixmap is tagged with that source space.
+    auto pixmap = std::make_shared<Pixmap>(
+        data, Width(), Height(), AlphaType::kPremul_AlphaType, color_type);
+    if (GetColorSpace() && !GetColorSpace()->IsSRGB()) {
+      pixmap->SetColorInfo(AlphaType::kPremul_AlphaType, color_type,
+                           GetColorSpace());
+    }
+    return pixmap;
   }
 
   bool ScalePixels(std::shared_ptr<Pixmap> dst, GPUContext* context,
                    const SamplingOptions& sampling_options) const override {
-    return ScalePixelsForTexture(dst, context, texture_, sampling_options);
+    return ScalePixelsForTexture(dst, context, texture_, GetColorSpace(),
+                                 sampling_options);
   }
 
   ImageType GetImageType() const override { return ImageType::kTexture; }
@@ -150,7 +162,7 @@ class TextureImage : public Image {
 class PixmapImage : public Image {
  public:
   explicit PixmapImage(std::shared_ptr<Pixmap> pixmap)
-      : pixmap_(std::move(pixmap)) {
+      : Image(pixmap->GetColorSpace()), pixmap_(std::move(pixmap)) {
     assert(pixmap_ != nullptr);
   }
 
@@ -182,17 +194,25 @@ class PixmapImage : public Image {
 };
 
 std::shared_ptr<Image> Image::MakeHWImage(std::shared_ptr<Texture> texture) {
-  return std::shared_ptr<Image>(new TextureImage(texture));
+  return MakeHWImage(std::move(texture), nullptr);
+}
+
+std::shared_ptr<Image> Image::MakeHWImage(
+    std::shared_ptr<Texture> texture,
+    std::shared_ptr<const ColorSpace> color_space) {
+  return std::shared_ptr<Image>(
+      new TextureImage(std::move(texture), std::move(color_space)));
 }
 
 std::shared_ptr<Image> Image::MakeImage(std::shared_ptr<Pixmap> pixmap,
                                         GPUContext* context) {
   if (context) {
+    auto color_space = pixmap->GetColorSpace();
     auto texture = context->CreateTexture(
         Texture::FormatFromColorType(pixmap->GetColorType()), pixmap->Width(),
         pixmap->Height(), pixmap->GetAlphaType());
     texture->DeferredUploadImage(std::move(pixmap));
-    return std::shared_ptr<Image>(new TextureImage(texture));
+    return std::shared_ptr<Image>(new TextureImage(texture, color_space));
   } else {
     return std::shared_ptr<Image>(new PixmapImage(pixmap));
   }

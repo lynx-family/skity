@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <skity/gpu/texture.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/sampling_options.hpp>
 #include <skity/io/pixmap.hpp>
 #include <skity/macros.hpp>
@@ -34,7 +35,16 @@ enum class SKITY_API ImageType {
 
 class SKITY_API Image {
  public:
+  /// Wraps a raw texture as an image treated as the sRGB working space.
   static std::shared_ptr<Image> MakeHWImage(std::shared_ptr<Texture> texture);
+
+  /**
+   * Wraps a raw texture as an image. The texture holds source-space encoded
+   * bytes; pass its color space so draws decode it.
+   */
+  static std::shared_ptr<Image> MakeHWImage(
+      std::shared_ptr<Texture> texture,
+      std::shared_ptr<const ColorSpace> color_space);
 
   static std::shared_ptr<Image> MakeImage(std::shared_ptr<Pixmap> pixmap,
                                           GPUContext* context = nullptr);
@@ -73,6 +83,15 @@ class SKITY_API Image {
 
   virtual AlphaType GetAlphaType() const = 0;
 
+  /**
+   * The color space the image pixels are encoded in. The default (null)
+   * means undeclared, which equals the sRGB working space contract for raw
+   * hardware images.
+   */
+  std::shared_ptr<const ColorSpace> GetColorSpace() const {
+    return color_space_;
+  }
+
   virtual std::shared_ptr<Pixmap> ReadPixels(GPUContext* context) const {
     return nullptr;
   }
@@ -85,6 +104,16 @@ class SKITY_API Image {
   bool IsLazy() const { return GetImageType() == ImageType::kPromiseTexture; }
 
   virtual ImageType GetImageType() const { return ImageType::kUnknown; }
+
+ protected:
+  explicit Image(
+      std::shared_ptr<const ColorSpace> color_space = nullptr) noexcept
+      : color_space_(std::move(color_space)) {}
+
+ private:
+  // Declared once at the base instead of per subclass: every image either
+  // carries the space it was created with or leaves it undeclared (null).
+  std::shared_ptr<const ColorSpace> color_space_;
 };
 
 class SKITY_API DeferredTextureImage : public Image {
