@@ -77,16 +77,33 @@ void Paint::SetFillColor(Color color) { SetFillColor(Color4fFromColor(color)); }
 
 Vector Paint::GetFillColor() const { return fill_color_; }
 
-void Paint::SetColor(Color color) {
-  auto color4f = Color4fFromColor(color);
-  stroke_color_ = color4f;
-  fill_color_ = color4f;
+void Paint::SetColor(Color color) { SetColor4f(Color4fFromColor(color)); }
+
+void Paint::SetColor(Color color,
+                     std::shared_ptr<const ColorSpace> color_space) {
+  SetColor4f(Color4fFromColor(color), std::move(color_space));
 }
 
 Color Paint::GetColor() const { return Color4fToColor(GetColor4f()); }
 
 Color4f Paint::GetColor4f() const {
   return kStroke_Style == style_ ? stroke_color_ : fill_color_;
+}
+
+void Paint::SetColor4f(Color4f color) { SetColor4f(color, nullptr); }
+
+void Paint::SetColor4f(Color4f color,
+                       std::shared_ptr<const ColorSpace> color_space) {
+  // The pipeline currently has one fixed working space (sRGB) and the paint
+  // stores only the working-space value, so a declared color space must be
+  // honored right here: the color converts on the way in. A null source
+  // space folds to a no-op, keeping the plain setters byte-identical with
+  // the pre-color-space behavior. The per-target working-space follow-up
+  // (surfaces declaring their own space) replaces this with recording the
+  // original {value, space} and converting once the render target is known.
+  Color4f working = ColorSpace::Convert(color_space, color, nullptr);
+  stroke_color_ = working;
+  fill_color_ = working;
 }
 
 void Paint::SetAntiAlias(bool aa) { is_anti_alias_ = aa; }
