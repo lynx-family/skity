@@ -416,18 +416,11 @@ const ColorSpace& DerefOrSRGB(
   return color_space ? *color_space : kSRGBInstance;
 }
 
-// The conversion for one space pair with every per-pixel invariant folded
-// up front: the decode curve, the combined gamut matrix and the encode
-// curve. Converting a batch prepares this once instead of redoing the
-// matrix inversion and curve flip per pixel.
-struct PreparedConversion {
-  const ColorSpace* decode_from = nullptr;
-  float gamut[9] = {};
-  bool needs_gamut = false;
-  float encode_tf[7] = {};
-  const ColorSpace* encode_to = nullptr;
-};
+}  // namespace
 
+// PreparedConversion / PrepareConversion / ApplyConversion are declared in
+// color_space_priv.hpp and shared with the CPU bitmap sampler, which
+// prepares once per sampler instead of once per pixel.
 PreparedConversion PrepareConversion(const ColorSpace& from,
                                      const ColorSpace& to) {
   PreparedConversion prepared;
@@ -468,8 +461,6 @@ void ApplyConversion(const PreparedConversion& prepared, float rgb[3]) {
     }
   }
 }
-
-}  // namespace
 
 Color4f ColorSpace::Convert(const std::shared_ptr<const ColorSpace>& src,
                             Color4f color,

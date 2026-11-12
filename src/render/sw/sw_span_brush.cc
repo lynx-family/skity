@@ -660,7 +660,12 @@ void PixmapBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
   SKITY_TRACE_EVENT(PixmapBrush_BrushH);
 
 #ifdef SKITY_ARM_NEON
-  if (filter_mode_ == FilterMode::kLinear) {
+  // The NEON fast path below samples raw texels with no color space
+  // conversion; a bitmap tagged with a non-sRGB space must use the scalar
+  // sampler for the whole span, or its converted pixels would disagree with
+  // the remainder pixels at the 8-pixel boundary.
+  if (filter_mode_ == FilterMode::kLinear ||
+      !ColorSpaceIsSRGB(texture_->GetPixmap()->GetColorSpace())) {
     // TODO(zhangzhijian): Accelerate it via neon
     SWSpanBrush::BrushH(x, y, length, alpha);
     return;
