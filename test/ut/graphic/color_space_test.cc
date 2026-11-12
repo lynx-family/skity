@@ -376,3 +376,76 @@ TEST(ColorSpace, ConvertColorsBulk) {
   EXPECT_NEAR(colors[1].r, 0.21404114f, 1e-5f);
   EXPECT_NEAR(colors[2].r, 1.f, 1e-6f);
 }
+
+TEST(ColorSpace, PixmapColorSpaceMetadata) {
+  skity::Pixmap pixmap(4, 4);
+  // No space declared: the pixmap starts out null (= sRGB).
+  EXPECT_EQ(pixmap.GetColorSpace(), nullptr);
+
+  auto p3 = skity::ColorSpace::DisplayP3();
+  EXPECT_TRUE(pixmap.SetColorInfo(skity::kUnpremul_AlphaType,
+                                  skity::ColorType::kRGBA, p3));
+  EXPECT_EQ(pixmap.GetColorSpace(), p3);
+
+  // The two parameter variant keeps working and resets the space back to
+  // undeclared (sRGB).
+  EXPECT_TRUE(
+      pixmap.SetColorInfo(skity::kUnpremul_AlphaType, skity::ColorType::kRGBA));
+  EXPECT_EQ(pixmap.GetColorSpace(), nullptr);
+  EXPECT_TRUE(skity::ColorSpaceIsSRGB(pixmap.GetColorSpace()));
+
+  // Invalid alpha/color type combinations are still rejected.
+  EXPECT_FALSE(pixmap.SetColorInfo(skity::kUnknown_AlphaType,
+                                   skity::ColorType::kRGBA, p3));
+}
+
+TEST(ColorSpace, PixmapImageCarriesColorSpace) {
+  auto pixmap = std::make_shared<skity::Pixmap>(2, 2);
+  ASSERT_TRUE(pixmap->SetColorInfo(skity::kUnpremul_AlphaType,
+                                   skity::ColorType::kRGBA,
+                                   skity::ColorSpace::SRGBLinear()));
+  auto image = skity::Image::MakeImage(pixmap);
+  EXPECT_TRUE(image->GetColorSpace()->IsLinear());
+
+  auto plain = skity::Image::MakeImage(std::make_shared<skity::Pixmap>(2, 2));
+  EXPECT_EQ(plain->GetColorSpace(), nullptr);
+  EXPECT_TRUE(skity::ColorSpaceIsSRGB(plain->GetColorSpace()));
+}
+
+TEST(ColorSpace, PaintSetColor4fConvertsToWorkingSpace) {
+  skity::Paint paint;
+  paint.SetColor4f(skity::Color4f{0.5f, 0.5f, 0.5f, 1.f},
+                   skity::ColorSpace::SRGBLinear());
+  // Linear 0.5 gray drawn as working-space sRGB is 0.73536.
+  auto color = paint.GetColor4f();
+  EXPECT_NEAR(color.r, 0.73535698f, 1e-4f);
+  EXPECT_NEAR(color.g, 0.73535698f, 1e-4f);
+  EXPECT_NEAR(color.b, 0.73535698f, 1e-4f);
+  EXPECT_NEAR(color.a, 1.f, 1e-6f);
+
+  // The 8-bit overload converts the same way.
+  paint.SetColor(skity::ColorSetARGB(255, 128, 128, 128),
+                 skity::ColorSpace::SRGBLinear());
+  auto gray = paint.GetColor4f();
+  EXPECT_NEAR(gray.r, 0.73535698f, 2e-3f);
+  EXPECT_NEAR(gray.g, 0.73535698f, 2e-3f);
+  EXPECT_NEAR(gray.b, 0.73535698f, 2e-3f);
+
+  // The default (null) space leaves the color untouched.
+  paint.SetColor4f(skity::Color4f{0.5f, 0.25f, 0.125f, 1.f});
+  color = paint.GetColor4f();
+  EXPECT_EQ(color.r, 0.5f);
+  EXPECT_EQ(color.g, 0.25f);
+  EXPECT_EQ(color.b, 0.125f);
+
+  // An sRGB color declared through a P3 tag converts through the gamut.
+  paint.SetColor4f(skity::Color4f{0.5f, 0.25f, 0.125f, 1.f},
+                   skity::ColorSpace::DisplayP3());
+  color = paint.GetColor4f();
+  auto expected = skity::ColorSpace::Convert(
+      skity::ColorSpace::DisplayP3(), skity::Color4f{0.5f, 0.25f, 0.125f, 1.f},
+      nullptr);
+  EXPECT_NEAR(color.r, expected.r, 1e-6f);
+  EXPECT_NEAR(color.g, expected.g, 1e-6f);
+  EXPECT_NEAR(color.b, expected.b, 1e-6f);
+}
