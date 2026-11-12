@@ -5,6 +5,7 @@
 #include "src/codec/codec_priv.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <vector>
@@ -265,6 +266,12 @@ std::shared_ptr<Pixmap> ResamplePixmap(const std::shared_ptr<Pixmap>& src,
   auto dst = core_bridge::MakePixmapAlloc(
       static_cast<uint32_t>(dst_width), static_cast<uint32_t>(dst_height),
       AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
+  if (dst && src->GetColorSpace() != nullptr) {
+    // The resampled bytes stay in the source encoding; keep the source tag
+    // or a scaled decode displays differently than a full decode.
+    dst->SetColorInfo(AlphaType::kUnpremul_AlphaType, ColorType::kRGBA,
+                      src->GetColorSpace());
+  }
 
   std::vector<int64_t> acc(mid_row_bytes);
   for (int32_t y = 0; y < dst_height; y++) {
@@ -317,6 +324,210 @@ std::shared_ptr<Pixmap> ResamplePixmapToTarget(
   }
 
   return ResamplePixmapToSize(src, target_width, target_height);
+}
+
+namespace {
+
+// Adjugate / determinant inversion of a row-major 3x3 matrix.
+bool Invert3x3(const float m[9], float inv[9]) {
+  float det = m[0] * (m[4] * m[8] - m[5] * m[7]) -
+              m[1] * (m[3] * m[8] - m[5] * m[6]) +
+              m[2] * (m[3] * m[7] - m[4] * m[6]);
+  if (det == 0.f || !std::isfinite(det)) {
+    return false;
+  }
+  float inv_det = 1.f / det;
+  inv[0] = (m[4] * m[8] - m[5] * m[7]) * inv_det;
+  inv[1] = (m[2] * m[7] - m[1] * m[8]) * inv_det;
+  inv[2] = (m[1] * m[5] - m[2] * m[4]) * inv_det;
+  inv[3] = (m[5] * m[6] - m[3] * m[8]) * inv_det;
+  inv[4] = (m[0] * m[8] - m[2] * m[6]) * inv_det;
+  inv[5] = (m[2] * m[3] - m[0] * m[5]) * inv_det;
+  inv[6] = (m[3] * m[7] - m[4] * m[6]) * inv_det;
+  inv[7] = (m[1] * m[6] - m[0] * m[7]) * inv_det;
+  inv[8] = (m[0] * m[4] - m[1] * m[3]) * inv_det;
+  return true;
+}
+
+// CIE xy chromaticity (x, y) to XYZ with Y scaled to 1.
+void XYZFromXY(float x, float y, float* xyz) {
+  xyz[0] = x / y;
+  xyz[1] = 1.f;
+  xyz[2] = (1.f - x - y) / y;
+}
+
+// Row-major 3x3 product: out = lhs * rhs.
+void Multiply3x3(const float lhs[9], const float rhs[9], float out[9]) {
+  for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 3; col++) {
+      out[row * 3 + col] = lhs[row * 3] * rhs[col] +
+                           lhs[row * 3 + 1] * rhs[3 + col] +
+                           lhs[row * 3 + 2] * rhs[6 + col];
+    }
+  }
+}
+
+// Bradford cone response matrix (row-major): the standard basis for
+// chromatic adaptation between reference whites.
+constexpr float kBradford[9] = {
+    0.8951f,  0.2664f,  -0.1614f,  //
+    -0.7502f, 1.7135f,  0.0367f,   //
+    0.0389f,  -0.0685f, 1.0296f,
+};
+
+// CIE illuminant D50 as XYZ with Y == 1: the reference white every skity
+// gamut matrix is adapted to (see ColorSpace::gamut_xyz).
+constexpr float kD50XYZ[3] = {0.96422f, 1.f, 0.82521f};
+
+// D65 chromaticity: the native white point of sRGB, Display P3 and nearly
+// every other RGB display space. cHRM chunks are written relative to it.
+constexpr float kD65X = 0.3127f;
+constexpr float kD65Y = 0.3290f;
+
+// Builds the Bradford chromatic adaptation matrix mapping XYZ values relative
+// to src_white onto XYZ values relative to dst_white:
+//   adaptation = bradford^-1 * diag(dst_cone / src_cone) * bradford
+// where the cone responses are bradford * white. Returns false for a
+// degenerate white point.
+bool BradfordAdaptation(const float src_white[3], const float dst_white[3],
+                        float adaptation[9]) {
+  float inv_bradford[9];
+  if (!Invert3x3(kBradford, inv_bradford)) {
+    return false;
+  }
+  float scaled[9];
+  for (int row = 0; row < 3; row++) {
+    const float* cone = kBradford + row * 3;
+    float src_cone = cone[0] * src_white[0] + cone[1] * src_white[1] +
+                     cone[2] * src_white[2];
+    float dst_cone = cone[0] * dst_white[0] + cone[1] * dst_white[1] +
+                     cone[2] * dst_white[2];
+    if (!(src_cone > 0.f) || !(dst_cone > 0.f) || !std::isfinite(src_cone) ||
+        !std::isfinite(dst_cone)) {
+      return false;
+    }
+    float gain = dst_cone / src_cone;
+    for (int col = 0; col < 3; col++) {
+      scaled[row * 3 + col] = cone[col] * gain;
+    }
+  }
+  Multiply3x3(inv_bradford, scaled, adaptation);
+  return true;
+}
+
+}  // namespace
+
+bool CodecGamutFromChromaticities(const float chromaticities[8],
+                                  float gamut_xyz[9]) {
+  const float* c = chromaticities;
+  for (int i = 0; i < 8; i++) {
+    // Values are ratios; x + y must stay below 1 for a physical color.
+    if (!(c[i] > 0.f) || c[i] >= 1.f || !std::isfinite(c[i])) {
+      return false;
+    }
+  }
+  for (int i = 0; i < 4; i++) {
+    // x + y == 1 is legal (z == 0, e.g. the Display P3 red primary); only
+    // a negative z component makes the chromaticity unphysical.
+    if (c[i * 2] + c[i * 2 + 1] > 1.f) {
+      return false;
+    }
+  }
+
+  // Row-major primaries matrix (rows X/Y/Z, columns R/G/B, each column with
+  // Y == 1) and the white point XYZ.
+  float red[3], green[3], blue[3], white[3];
+  XYZFromXY(c[2], c[3], red);
+  XYZFromXY(c[4], c[5], green);
+  XYZFromXY(c[6], c[7], blue);
+  XYZFromXY(c[0], c[1], white);
+
+  float primaries[9] = {
+      red[0], green[0], blue[0],  //
+      red[1], green[1], blue[1],  //
+      red[2], green[2], blue[2],
+  };
+
+  // Scale each primary column so that RGB (1, 1, 1) maps to the white point:
+  // scale = primaries^-1 * white.
+  float inv[9];
+  if (!Invert3x3(primaries, inv)) {
+    return false;
+  }
+  float scale[3];
+  for (int row = 0; row < 3; row++) {
+    scale[row] = inv[row * 3] * white[0] + inv[row * 3 + 1] * white[1] +
+                 inv[row * 3 + 2] * white[2];
+  }
+  if (!(scale[0] > 0.f) || !(scale[1] > 0.f) || !(scale[2] > 0.f)) {
+    return false;
+  }
+
+  // Native gamut: RGB -> XYZ relative to the file's own white point.
+  float native[9];
+  for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 3; col++) {
+      native[row * 3 + col] = primaries[row * 3 + col] * scale[col];
+    }
+  }
+
+  // skity keeps every gamut in the D50 connection space (see
+  // ColorSpace::gamut_xyz), so the native white point is adapted to D50
+  // here. Skipping this would combine e.g. a D65-referenced file with the
+  // D50-adapted built-in spaces and tint every conversion.
+  float adaptation[9];
+  if (!BradfordAdaptation(white, kD50XYZ, adaptation)) {
+    return false;
+  }
+  Multiply3x3(adaptation, native, gamut_xyz);
+  for (int i = 0; i < 9; i++) {
+    if (!std::isfinite(gamut_xyz[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool CodecChromaticitiesFromGamut(const float gamut_xyz[9],
+                                  float chromaticities[8]) {
+  // The white of a gamut matrix is where it maps RGB (1, 1, 1): its row
+  // sums, which are D50 by contract.
+  const float* m = gamut_xyz;
+  float white[3] = {m[0] + m[1] + m[2], m[3] + m[4] + m[5], m[6] + m[7] + m[8]};
+
+  // Undo the D50 adaptation towards D65, so the chunk carries the familiar
+  // native primaries. A reader adapting D65 back to D50 lands on the same
+  // matrix again, whatever white point the description originally had.
+  float d65[3];
+  XYZFromXY(kD65X, kD65Y, d65);
+  float adaptation[9];
+  if (!BradfordAdaptation(white, d65, adaptation)) {
+    return false;
+  }
+  float native[9];
+  Multiply3x3(adaptation, gamut_xyz, native);
+
+  // xy of an XYZ triple; rejects anything the reader above would reject, so
+  // a written chunk always parses back. The epsilon admits primaries sitting
+  // on the x + y == 1 boundary (z == 0, like the Display P3 red), whose
+  // un-adapted z is only zero up to float noise; the chunk values themselves
+  // quantize to exactly 1.
+  auto xy_of = [](float x, float y, float z, float* out) {
+    float sum = x + y + z;
+    if (!(sum > 0.f) || !std::isfinite(sum)) {
+      return false;
+    }
+    out[0] = x / sum;
+    out[1] = y / sum;
+    return out[0] > 0.f && out[0] < 1.f && out[1] > 0.f && out[1] < 1.f &&
+           out[0] + out[1] <= 1.f + 1e-4f;
+  };
+  const float* n = native;
+  return xy_of(n[0] + n[1] + n[2], n[3] + n[4] + n[5], n[6] + n[7] + n[8],
+               chromaticities) &&
+         xy_of(n[0], n[3], n[6], chromaticities + 2) &&
+         xy_of(n[1], n[4], n[7], chromaticities + 4) &&
+         xy_of(n[2], n[5], n[8], chromaticities + 6);
 }
 
 }  // namespace codec_priv
