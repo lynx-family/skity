@@ -27,10 +27,11 @@ Vec4 BitmapSampler::SampleXY(Vec2 xy) const {
   uint32_t w = bitmap_.Width();
   uint32_t h = bitmap_.Height();
 
-  xy.x = glm::clamp<uint32_t>(xy.x, 0, w - 1);
-  xy.y = glm::clamp<uint32_t>(xy.y, 0, h - 1);
+  xy.x = glm::clamp(xy.x, 0.0f, static_cast<float>(w - 1));
+  xy.y = glm::clamp(xy.y, 0.0f, static_cast<float>(h - 1));
 
-  return Color4fFromColor(bitmap_.GetPixel(xy.x, xy.y));
+  return Color4fFromColor(bitmap_.GetPixel(static_cast<uint32_t>(xy.x),
+                                           static_cast<uint32_t>(xy.y)));
 }
 
 Vec4 BitmapSampler::SampleUnitNearest(Vec2 uv) const {

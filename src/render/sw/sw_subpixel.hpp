@@ -40,8 +40,6 @@ static inline SWFixed SWFixedMul(SWFixed a, SWFixed b) {
   return (SWFixed)((int64_t)a * b >> 16);
 }
 
-inline SWFixed SWFDot6ToFixed(SWFDot6 x) { return x << 10; }
-
 static inline constexpr int32_t SWLeftShift(int32_t value, int32_t shift) {
   return (int32_t)((uint32_t)value << shift);
 }
@@ -49,6 +47,8 @@ static inline constexpr int32_t SWLeftShift(int32_t value, int32_t shift) {
 static inline constexpr int64_t SWLeftShift(int64_t value, int32_t shift) {
   return (int64_t)((uint64_t)value << shift);
 }
+
+inline SWFixed SWFDot6ToFixed(SWFDot6 x) { return SWLeftShift(x, 10); }
 
 static inline SWFixed SWFDot6ToFixedDiv2(SWFDot6 value) {
   // we want to return SWFDot6ToFixed(value >> 1), but we don't want to throw
