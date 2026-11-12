@@ -5,6 +5,7 @@
 #include "src/codec/codec_priv.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <vector>
@@ -265,6 +266,16 @@ std::shared_ptr<Pixmap> ResamplePixmap(const std::shared_ptr<Pixmap>& src,
   auto dst = core_bridge::MakePixmapAlloc(
       static_cast<uint32_t>(dst_width), static_cast<uint32_t>(dst_height),
       AlphaType::kUnpremul_AlphaType, ColorType::kRGBA);
+  if (dst && src->GetColorSpace() != nullptr) {
+    // The resampled bytes stay in the source encoding; keep the source tag
+    // or a scaled decode displays differently than a full decode. Pixmap::
+    // GetColorSpace is header-inline, but SetColorInfo is an out-of-line
+    // core symbol, so the write goes through the C ABI bridge.
+    skity_color_space_info info{};
+    if (core_bridge::GetPixmapColorSpace(src.get(), &info)) {
+      core_bridge::SetPixmapColorSpace(dst.get(), info);
+    }
+  }
 
   std::vector<int64_t> acc(mid_row_bytes);
   for (int32_t y = 0; y < dst_height; y++) {

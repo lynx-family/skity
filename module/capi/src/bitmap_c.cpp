@@ -250,4 +250,24 @@ skity_result skity_pixmap_get_color_space(skity_pixmap pixmap,
   return SKITY_SUCCESS;
 }
 
+skity_result skity_color_space_gamut_from_chromaticities(
+    const float* chromaticities, float* gamut_xyz) {
+  if (chromaticities == nullptr || gamut_xyz == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  return skity::ColorSpace::GamutFromChromaticities(chromaticities, gamut_xyz)
+             ? SKITY_SUCCESS
+             : SKITY_ERROR_INVALID_ARGUMENT;
+}
+
+skity_result skity_color_space_chromaticities_from_gamut(
+    const float* gamut_xyz, float* chromaticities) {
+  if (gamut_xyz == nullptr || chromaticities == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  return skity::ColorSpace::ChromaticitiesFromGamut(gamut_xyz, chromaticities)
+             ? SKITY_SUCCESS
+             : SKITY_ERROR_INVALID_ARGUMENT;
+}
+
 }  // extern "C"

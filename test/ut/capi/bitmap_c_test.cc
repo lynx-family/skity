@@ -124,3 +124,31 @@ TEST(CapiPixmapColorSpace, SetColorInfoResetsToSRGB) {
 
   skity_pixmap_destroy(pixmap);
 }
+
+TEST(CapiColorSpaceMath, ChromaticityGamutRoundTrip) {
+  // Display P3 primaries in their native D65 white point.
+  const float p3[8] = {0.3127f, 0.3290f, 0.680f, 0.320f,
+                       0.265f,  0.690f,  0.150f, 0.060f};
+  float gamut[9];
+  ASSERT_EQ(skity_color_space_gamut_from_chromaticities(p3, gamut),
+            SKITY_SUCCESS);
+  float back[8];
+  ASSERT_EQ(skity_color_space_chromaticities_from_gamut(gamut, back),
+            SKITY_SUCCESS);
+  // The un-adaptation towards D65 undoes the Bradford step, so the native
+  // primaries come back (exact for a D65-native space).
+  for (int i = 0; i < 8; i++) {
+    EXPECT_NEAR(back[i], p3[i], 3e-5f);
+  }
+
+  // Unphysical primaries and null arguments are rejected.
+  const float bad[8] = {0.3127f, 0.3290f, 0.90f,  0.95f,
+                        0.265f,  0.690f,  0.150f, 0.060f};
+  float unused[9];
+  EXPECT_EQ(skity_color_space_gamut_from_chromaticities(bad, unused),
+            SKITY_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(skity_color_space_gamut_from_chromaticities(nullptr, unused),
+            SKITY_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(skity_color_space_chromaticities_from_gamut(gamut, nullptr),
+            SKITY_ERROR_INVALID_ARGUMENT);
+}
