@@ -69,6 +69,8 @@ add_executable(skity_unit_test
     geometry/scalar_test.cc
     geometry/vector_test.cc
     gpu/fake_gpu_context.cc
+    graphic/bitmap_sampler_test.cc
+    graphic/color_space_decode_review_test.cc
     graphic/bitmap_test.cc
     graphic/color_space_test.cc
     graphic/color_test.cc
