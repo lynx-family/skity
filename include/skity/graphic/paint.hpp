@@ -11,6 +11,7 @@
 #include <skity/geometry/rect.hpp>
 #include <skity/graphic/blend_mode.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/macros.hpp>
 #include <utility>
 
@@ -124,6 +125,15 @@ class SKITY_API Paint {
 
   Vector GetStrokeColor() const;
 
+  /// The space the stroke color is recorded in (see GetColorSpace()).
+  std::shared_ptr<const ColorSpace> GetStrokeColorSpace() const;
+
+  /**
+   * The stroke color resolved into the target (render surface) color space.
+   */
+  Vector GetStrokeColor(
+      const std::shared_ptr<const ColorSpace>& target_space) const;
+
   /**
    *  @deprecated, use SetFillColor(Color color) instead
    */
@@ -136,21 +146,81 @@ class SKITY_API Paint {
 
   Vector GetFillColor() const;
 
+  /// The space the fill color is recorded in (see GetColorSpace()).
+  std::shared_ptr<const ColorSpace> GetFillColorSpace() const;
+
+  /**
+   * The fill color resolved into the target (render surface) color space.
+   */
+  Vector GetFillColor(
+      const std::shared_ptr<const ColorSpace>& target_space) const;
+
+  /**
+   * Records the stroke color in color_space (see SetColor(color,
+   * color_space)).
+   */
+  void SetStrokeColor(Color color,
+                      std::shared_ptr<const ColorSpace> color_space);
+
+  /// Records the stroke color in the default working space (sRGB).
   void SetStrokeColor(Color color);
 
+  /**
+   * Records the fill color in color_space (see SetColor(color, color_space)).
+   */
+  void SetFillColor(Color color, std::shared_ptr<const ColorSpace> color_space);
+
+  /// Records the fill color in the default working space (sRGB).
   void SetFillColor(Color color);
 
   /**
    * Sets alpha and RGB used when stroking and filling. The color is a 32-bit
    * value, unpremultiplied, packing 8-bit components for alpha, red, blue, and
-   * green.
-   * @param color   unpremultiplied ARGB
+   * green, recorded in color_space; it converts to the render target's space
+   * at draw time (see GetColor4f(target_space)). The default color_space is
+   * the working space (sRGB) and leaves the value untouched.
+   * @param color        unpremultiplied ARGB
+   * @param color_space  the space the color value is stated in; a null
+   *                     space means the default working space (sRGB)
    */
+  void SetColor(Color color, std::shared_ptr<const ColorSpace> color_space);
+
+  /// Records the color in the default working space (sRGB).
   void SetColor(Color color);
 
   Color GetColor() const;
 
   Color4f GetColor4f() const;
+
+  /**
+   * The color space GetColor4f() / GetStrokeColor() / GetFillColor() are
+   * recorded in. It is a property of the last Set*Color call: every setter
+   * states its space and the plain overloads record in the default working
+   * space (sRGB), so a color never silently inherits the space of an
+   * earlier call.
+   */
+  std::shared_ptr<const ColorSpace> GetColorSpace() const {
+    return kStroke_Style == style_ ? stroke_color_space_ : fill_color_space_;
+  }
+
+  /**
+   * Returns the stroke/fill color resolved into the target (render surface)
+   * color space. This is the draw-time entry point: recorded colors stay in
+   * their original space and convert once the target space is known.
+   */
+  Color4f GetColor4f(
+      const std::shared_ptr<const ColorSpace>& target_space) const;
+
+  /**
+   * Sets the alpha and RGB used when stroking and filling. The color is
+   * recorded in color_space as-is; it converts to the render target's space
+   * at draw time (see GetColor4f(target_space)). A null space means the
+   * default working space (sRGB) and leaves the value untouched.
+   */
+  void SetColor4f(Color4f color, std::shared_ptr<const ColorSpace> color_space);
+
+  /// Records the color in the default working space (sRGB).
+  void SetColor4f(Color4f color);
   /**
    * Requests, but does not require, that edge pixels draw opaque or with
    * partial transparency.
@@ -281,6 +351,12 @@ class SKITY_API Paint {
   float font_fill_threshold_ = DEFAULT_FONT_FILL_THRESHOLD;
   Vector fill_color_ = Colors::kBlack;
   Vector stroke_color_ = Colors::kBlack;
+  // The space the recorded colors are interpreted in; resolved to the render
+  // target space at draw time.
+  // Each recorded color states its own space: the stroke and fill colors
+  // never share (or silently re-declare) a color space.
+  std::shared_ptr<const ColorSpace> stroke_color_space_;
+  std::shared_ptr<const ColorSpace> fill_color_space_;
   bool is_anti_alias_ = false;
   BlendMode blend_mode_ = BlendMode::kDefault;
   std::shared_ptr<PathEffect> path_effect_;

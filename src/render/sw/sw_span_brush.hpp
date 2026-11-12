@@ -9,6 +9,7 @@
 #include <skity/effect/shader.hpp>
 #include <skity/geometry/matrix.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/sampling_options.hpp>
 #include <skity/graphic/tile_mode.hpp>
 #include <vector>
@@ -114,7 +115,8 @@ class PixmapBrush : public SWSpanBrush {
               ColorFilter* color_filter, BlendMode mode, float global_alpha,
               std::shared_ptr<Pixmap> pixmap, const Matrix& points_to_unit,
               const SamplingOptions& sampling, TileMode x_tile_mode,
-              TileMode y_tile_mode);
+              TileMode y_tile_mode,
+              const std::shared_ptr<const ColorSpace>& target_space = {});
 
   ~PixmapBrush() override = default;
 

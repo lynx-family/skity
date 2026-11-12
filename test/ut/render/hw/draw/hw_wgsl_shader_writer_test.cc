@@ -800,6 +800,127 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
 )";
 }
 
+std::string GetTextureColorSpaceDecodeFS() {
+  return R"(
+fn remap_float_tile(t: f32, tile_mode: i32) -> f32 {
+  if tile_mode == 0 {
+    return clamp(t, 0.0, 1.0);
+  } else if tile_mode == 1 {
+    return fract(t);
+  } else if tile_mode == 2 {
+    var t1: f32 = t - 1.0;
+    var t2: f32 = t1 - 2.0 * floor(t1 / 2.0) - 1.0;
+
+    return abs(t2);
+  }
+  return t;
+}
+
+struct ImageColorInfo {
+  infos           : vec3<i32>,
+  global_alpha    : f32,
+  cs_flags        : vec3<i32>,
+  cs_tf0          : vec4<f32>,
+  cs_tf1          : vec3<f32>,
+  cs_gamut        : mat4x4<f32>,
+  cs_enc_tf0      : vec4<f32>,
+  cs_enc_tf1      : vec3<f32>,
+};
+
+// Color space conversion stages, selected at runtime by cs_flags:
+// x: decode the source signal to linear, y: move between gamuts,
+// z: encode to the target signal (1 = the constant sRGB curve,
+// 2 = parametric). The parametric curve evaluates either direction;
+// the parameters are passed as arguments because the uniforms are
+// declared after the functions in the generated shader.
+fn cs_eval_tf_channel(x: f32, tf0: vec4<f32>, tf1: vec3<f32>) -> f32 {
+    if (x < tf1.x) {
+        if (tf0.w == 0.0 && tf1.z == 0.0) {
+            // Pure power curve: mirror the power branch for negative
+            // inputs so extended-range colors keep their sign.
+            return -pow(-x, tf0.x);
+        }
+        return tf0.w * x + tf1.z;
+    }
+    return pow(max(tf0.y * x + tf0.z, 0.0), tf0.x) + tf1.y;
+}
+
+fn cs_srgb_encode_channel(x: f32) -> f32 {
+    if (x <= 0.0031308) {
+        return x * 12.92;
+    }
+    return 1.055 * pow(x, 1.0 / 2.4) - 0.055;
+}
+
+@group(1) @binding(0) var<uniform>  image_color_info    : ImageColorInfo;
+@group(1) @binding(1) var           uSampler            : sampler;
+@group(1) @binding(2) var           uTexture            : texture_2d<f32>;
+
+struct FSInput {
+  @location(0) f_frag_coord: vec2<f32>,
+};
+
+@fragment
+fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
+  var color : vec4<f32>;
+  var frag_coord: vec2<f32> = input.f_frag_coord;
+  var uv  : vec2<f32> = frag_coord;
+
+  uv.x = remap_float_tile(uv.x, image_color_info.infos.y);
+  uv.y = remap_float_tile(uv.y, image_color_info.infos.z);
+
+  color = textureSample(uTexture, uSampler, uv);
+
+  if (image_color_info.infos.y == 3 && (frag_coord.x < 0.0 || frag_coord.x >= 1.0)) || (image_color_info.infos.z == 3 && (frag_coord.y < 0.0 || frag_coord.y >= 1.0))
+  {
+    color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  }
+
+  {
+    var cs_rgb: vec3<f32> = color.xyz;
+    if (image_color_info.infos.x != 3 && color.w > 0.0) {
+      cs_rgb = cs_rgb / color.w;
+    }
+    if (image_color_info.cs_flags.x == 1) {
+      cs_rgb = vec3<f32>(
+          cs_eval_tf_channel(cs_rgb.r, image_color_info.cs_tf0, image_color_info.cs_tf1),
+          cs_eval_tf_channel(cs_rgb.g, image_color_info.cs_tf0, image_color_info.cs_tf1),
+          cs_eval_tf_channel(cs_rgb.b, image_color_info.cs_tf0, image_color_info.cs_tf1));
+    }
+    if (image_color_info.cs_flags.y == 1) {
+      cs_rgb = (image_color_info.cs_gamut * vec4<f32>(cs_rgb, 1.0)).xyz;
+    }
+    if (image_color_info.cs_flags.z == 1) {
+      cs_rgb = vec3<f32>(cs_srgb_encode_channel(cs_rgb.r),
+                         cs_srgb_encode_channel(cs_rgb.g),
+                         cs_srgb_encode_channel(cs_rgb.b));
+    } else if (image_color_info.cs_flags.z == 2) {
+      cs_rgb = vec3<f32>(
+          cs_eval_tf_channel(cs_rgb.r, image_color_info.cs_enc_tf0, image_color_info.cs_enc_tf1),
+          cs_eval_tf_channel(cs_rgb.g, image_color_info.cs_enc_tf0, image_color_info.cs_enc_tf1),
+          cs_eval_tf_channel(cs_rgb.b, image_color_info.cs_enc_tf0, image_color_info.cs_enc_tf1));
+    }
+    // Re-premultiplying needs no divide guard: multiplying by alpha is
+    // safe at zero, and curves with a non-zero black point would
+    // otherwise leak their offset into fully transparent pixels.
+    if (image_color_info.infos.x != 3) {
+      cs_rgb = cs_rgb * color.w;
+    }
+    color = vec4<f32>(cs_rgb, color.w);
+  }
+
+  if image_color_info.infos.x == 3 {
+    color = vec4<f32>(color.xyz * color.w, color.w);
+  }
+
+  color *= image_color_info.global_alpha;
+
+  var mask_alpha: f32 = 1.0;
+  return color;
+}
+)";
+}
+
 std::string GetTextureAAFS() {
   return R"(
 fn remap_float_tile(t: f32, tile_mode: i32) -> f32 {
@@ -844,6 +965,8 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
   {
     color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
+
+
 
   if image_color_info.infos.x == 3 {
     color = vec4<f32>(color.xyz * color.w, color.w);
@@ -1727,6 +1850,8 @@ fn fs_main(input: FSInput) -> @location(0) vec4<f32> {
     color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
 
+
+
   if image_color_info.infos.x == 3 {
     color = vec4<f32>(color.xyz * color.w, color.w);
   }
@@ -2205,6 +2330,32 @@ TEST(ShaderWriter, PathWithTexture) {
             skity::MakeFunctionBaseKey(skity::HWFragmentKeyType::kTexture));
   ASSERT_TRUE(CompareShader(vs, GetPathTextureVS()));
   ASSERT_TRUE(CompareShader(fs, GetTextureFS()));
+}
+
+// A non-sRGB tagged image generates the color space decode variant; sRGB
+// images (PathWithTexture above) produce the plain shader byte for byte.
+TEST(ShaderWriter, PathWithTextureColorSpaceDecode) {
+  auto path = MakePath();
+  skity::Paint paint;
+  skity::WGSLPathGeometry geometry{path, paint, false};
+  std::shared_ptr<skity::Pixmap> pixmap = std::make_shared<skity::Pixmap>(
+      500, 500, skity::AlphaType::kUnpremul_AlphaType, skity::ColorType::kRGBA);
+  pixmap->SetColorInfo(skity::kUnpremul_AlphaType, skity::ColorType::kRGBA,
+                       skity::ColorSpace::DisplayP3());
+  auto image = skity::Image::MakeImage(pixmap);
+  auto shader = std::make_shared<skity::PixmapShader>(
+      image, skity::SamplingOptions{}, skity::TileMode::kClamp,
+      skity::TileMode::kClamp, skity::Matrix{});
+  skity::WGSLTextureFragment fragment{shader,          nullptr, nullptr, 1.0f,
+                                      skity::Matrix{}, 500,     500};
+  skity::HWWGSLShaderWriter shader_writer{&geometry, &fragment};
+
+  std::string fs = shader_writer.GenFSSourceWGSL();
+  ASSERT_EQ(shader_writer.GetFSShaderName(), "FS_Texture");
+  EXPECT_EQ(shader_writer.GetFSKey(),
+            skity::MakeFunctionBaseKey(
+                skity::MakeMainKey(skity::HWFragmentKeyType::kTexture, 2)));
+  ASSERT_TRUE(CompareShader(fs, GetTextureColorSpaceDecodeFS()));
 }
 
 TEST(ShaderWriter, PathAAWithTexture) {

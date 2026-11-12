@@ -8,6 +8,7 @@
 #include <atomic>
 #include <memory>
 #include <skity/graphic/alpha_type.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/color_type.hpp>
 #include <skity/macros.hpp>
 #include <vector>
@@ -80,6 +81,18 @@ class SKITY_API Pixmap final {
 
   bool SetColorInfo(AlphaType alpha_type, ColorType color_type);
 
+  /**
+   * Same as the two parameter variant, but also declares the color space the
+   * pixels are encoded in. A null space means undeclared, which equals sRGB.
+   */
+  bool SetColorInfo(AlphaType alpha_type, ColorType color_type,
+                    std::shared_ptr<const ColorSpace> color_space);
+
+  /// The declared space, or nullptr when undeclared (sRGB).
+  const std::shared_ptr<const ColorSpace>& GetColorSpace() const {
+    return color_space_;
+  }
+
   /** Returns a non-zero, unique value corresponding to the pixels in this
       pixmap. Each time the pixels are changed (and NotifyPixelsChanged is
       called), a different generation ID will be returned.
@@ -110,6 +123,7 @@ class SKITY_API Pixmap final {
   uint32_t height_;
   AlphaType alpha_type_;
   ColorType color_type_;
+  std::shared_ptr<const ColorSpace> color_space_;
 
   std::vector<std::weak_ptr<PixelsChangeListener>> pixels_change_listeners_;
 };

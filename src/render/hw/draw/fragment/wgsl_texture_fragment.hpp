@@ -5,9 +5,11 @@
 #ifndef SRC_RENDER_HW_DRAW_FRAGMENT_WGSL_TEXTURE_FRAGMENT_HPP
 #define SRC_RENDER_HW_DRAW_FRAGMENT_WGSL_TEXTURE_FRAGMENT_HPP
 
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/sampling_options.hpp>
 
 #include "src/effect/pixmap_shader.hpp"
+#include "src/graphic/color_xform.hpp"
 #include "src/render/hw/draw/hw_wgsl_fragment.hpp"
 #include "src/render/hw/hw_pipeline_key.hpp"
 
@@ -15,10 +17,11 @@ namespace skity {
 
 class WGSLTextureFragment : public HWWGSLFragment {
  public:
-  WGSLTextureFragment(std::shared_ptr<PixmapShader> shader,
-                      std::shared_ptr<GPUTexture> texture,
-                      std::shared_ptr<GPUSampler> sampler, float global_alpha,
-                      const Matrix& local_matrix, float width, float height);
+  WGSLTextureFragment(
+      std::shared_ptr<PixmapShader> shader, std::shared_ptr<GPUTexture> texture,
+      std::shared_ptr<GPUSampler> sampler, float global_alpha,
+      const Matrix& local_matrix, float width, float height,
+      const std::shared_ptr<const ColorSpace>& target_space = {});
 
   WGSLTextureFragment(AlphaType alpha_type, TileMode x_tile_mode,
                       TileMode y_tile_mode, std::shared_ptr<GPUTexture> texture,
@@ -65,6 +68,13 @@ class WGSLTextureFragment : public HWWGSLFragment {
   float width_;
   float height_;
   CubicResampler cubic_;
+  // Folded image-space -> target-space transform; drives the decode
+  // variant's uniforms and shader emission.
+  ColorXformSteps steps_{};
+  // A transform that cannot fold to a no-op generates a decode variant of
+  // the texture shader; images already in the target space produce the plain
+  // shader byte for byte.
+  bool has_color_space_decode_ = false;
 };
 
 }  // namespace skity
