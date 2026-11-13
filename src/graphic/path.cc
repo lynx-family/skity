@@ -536,14 +536,18 @@ static int _pts_in_verb(Path::Verb verb) {
 }
 
 Path& Path::MoveTo(float x, float y) {
+  const Point point{x, y, 0, 1};
+  // Bounds exclude a finite trailing move.
+  if (type_ != IsAType::kGeneral && !PointIsFinite(point)) {
+    type_ = IsAType::kGeneral;
+  }
   if (!verbs_.empty() && verbs_.back() == Verb::kMove) {
     DEBUG_CHECK(!points_.empty());
-    points_.back() = {x, y, 0, 1};
+    points_.back() = point;
   } else {
     last_move_to_index_ = CountPoints();
     verbs_.emplace_back(Verb::kMove);
-    points_.emplace_back(Point{x, y, 0, 1});
-    type_ = IsAType::kGeneral;
+    points_.emplace_back(point);
   }
   MarkBoundsDirty();
   return *this;
@@ -883,11 +887,13 @@ Path& Path::Close() {
   size_t count = CountVerbs();
   if (count > 0) {
     switch (verbs_.back()) {
+      case Verb::kMove:
+        type_ = IsAType::kGeneral;
+        [[fallthrough]];
       case Verb::kLine:
       case Verb::kQuad:
       case Verb::kConic:
       case Verb::kCubic:
-      case Verb::kMove:
         verbs_.emplace_back(Verb::kClose);
         break;
       case Verb::kClose:
@@ -1255,6 +1261,12 @@ bool Path::operator==(const Path& other) const {
                      other.conic_weights_.begin()));
 }
 
+Path::Path(Path&& other) noexcept
+    : first_direction_(other.first_direction_), fill_type_(other.fill_type_) {
+  Swap(other);
+  other.Reset();
+}
+
 void Path::Swap(Path& that) {
   if (this != &that) {
     std::swap(last_move_to_index_, that.last_move_to_index_);
@@ -1286,6 +1298,7 @@ Path& Path::AddPath(const Path& src, const Matrix& matrix, AddMode mode) {
   }
 
   if (mode == AddMode::kAppend) {
+    const bool was_empty = IsEmpty();
     if (src.last_move_to_index_ >= 0) {
       last_move_to_index_ =
           src.last_move_to_index_ + static_cast<int32_t>(CountPoints());
@@ -1311,6 +1324,14 @@ Path& Path::AddPath(const Path& src, const Matrix& matrix, AddMode mode) {
     }
     MarkBoundsDirty();
     type_ = IsAType::kGeneral;
+    if (was_empty && src.type_ != IsAType::kGeneral &&
+        matrix.OnlyScaleAndTranslate() && matrix.GetScaleX() > 0.f &&
+        matrix.GetScaleY() > 0.f && matrix.IsFinite()) {
+      type_ = src.type_;
+      if (type_ == IsAType::kSimpleRRect) {
+        radii_ = src.radii_ * Vec2{matrix.GetScaleX(), matrix.GetScaleY()};
+      }
+    }
 
     return *this;
   }
@@ -1446,7 +1467,9 @@ void Path::ComputeBounds() const {
   is_finite_ = ComputePtBounds(std::addressof(bounds_), *this);
 }
 
-bool Path::HasOnlyMoveTos() const { return segment_masks_ == 0; }
+bool Path::HasOnlyMoveTos() const {
+  return IsEmpty() || (verbs_.size() == 1 && verbs_.front() == Verb::kMove);
+}
 
 bool Path::ComputePtBounds(Rect* bounds, const Path& ref) {
   uint32_t point_count = ref.CountPoints();

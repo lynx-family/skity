@@ -308,7 +308,7 @@ class SKITY_API Path {
 
   Path(Path const&) = default;
   Path& operator=(Path const&) = default;
-  Path(Path&&) = default;
+  Path(Path&& other) noexcept;
 
   inline size_t CountPoints() const { return points_.size(); }
   inline size_t CountVerbs() const { return verbs_.size(); }

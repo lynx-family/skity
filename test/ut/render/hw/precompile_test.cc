@@ -1628,6 +1628,10 @@ TEST(SimpleShapeDrawTest, AffinePathsUseRRectPipelineAndMerge) {
       Matrix::Skew(0.4f, -0.2f),
       Matrix::RotateDeg(30.f) * Matrix::Scale(-2.f, 0.5f)};
   for (size_t shape = 0; shape < 3; ++shape) {
+    Path source = paths[shape];
+    source.MoveTo(bounds.Left(), bounds.Top());
+    Path appended;
+    appended.AddPath(source);
     for (size_t transform = 0; transform < 5; ++transform) {
       for (auto style : {Paint::kFill_Style, Paint::kStroke_Style}) {
         if (shape == 0 && style == Paint::kFill_Style) continue;
@@ -1652,7 +1656,7 @@ TEST(SimpleShapeDrawTest, AffinePathsUseRRectPipelineAndMerge) {
           canvas->SetMatrix(
               Matrix::Translate(32.f + i * 64.f, 32.f + i * 64.f) *
               transforms[transform]);
-          canvas->DrawPath(paths[shape], paint);
+          canvas->DrawPath(i == 0 ? paths[shape] : appended, paint);
         }
         canvas->Flush();
         surface->Flush();
