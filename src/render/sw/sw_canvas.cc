@@ -265,6 +265,26 @@ std::vector<Span> SWCanvas::State::FindSpan(Span const& span) {
   return ret;
 }
 
+namespace {
+
+// Ordinary axis-aligned layers stay on their target's pixel grid, as the
+// hardware canvas keeps them. A fractional origin shifts what a layer rasters,
+// and rounding only the bitmap size stretches it on the way back.
+bool AlignLayerToPixelGrid(Paint const& paint, Matrix const& matrix,
+                           Rect* device_bounds) {
+  if (paint.GetImageFilter() || paint.GetMaskFilter() ||
+      paint.GetColorFilter() || !matrix.OnlyScaleAndTranslate() ||
+      device_bounds->IsEmpty()) {
+    return false;
+  }
+  *device_bounds = Rect::MakeLTRB(
+      std::floor(device_bounds->Left()), std::floor(device_bounds->Top()),
+      std::ceil(device_bounds->Right()), std::ceil(device_bounds->Bottom()));
+  return true;
+}
+
+}  // namespace
+
 void SWCanvas::LayerState::Init(SWCanvas* parent_canvas, Vec2 offset) {
   this->bitmap = std::make_unique<Bitmap>(
       static_cast<uint32_t>(std::ceil(rel_bounds.Width())),
@@ -477,11 +497,13 @@ void SWCanvas::OnSaveLayer(const Rect& bounds, const Paint& paint) {
 
   Rect rel_bounds{};
   canvas_matrix.MapRect(&rel_bounds, layer_bounds);
+  const bool aligned = AlignLayerToPixelGrid(paint, canvas_matrix, &rel_bounds);
 
   auto layer =
       GenerateLayer(rel_bounds, layer_bounds, target_canvas->global_offset_);
 
   layer->paint = paint;
+  layer->pixel_aligned = aligned;
 }
 
 void SWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
@@ -902,10 +924,39 @@ void SWCanvas::OnLayerRestore() {
     PeekLayerStack()->canvas->OnRestore();
   }
 
+  SWCanvas* target =
+      PeekLayerStack() ? static_cast<SWCanvas*>(PeekLayerStack()->canvas.get())
+                       : this;
   SetDrawingLayer(layer->paint.GetMaskFilter() == nullptr);
-  this->DrawImage(Image::MakeImage(layer->bitmap->GetPixmap()),
-                  layer->log_bounds, &layer->paint);
+  if (layer->pixel_aligned) {
+    target->DrawAlignedLayer(*layer);
+  } else {
+    this->DrawImage(Image::MakeImage(layer->bitmap->GetPixmap()),
+                    layer->log_bounds, &layer->paint);
+  }
   SetDrawingLayer(false);
+}
+
+// Draws in the target's own pixels, not through the local matrix, whose inverse
+// would move the bounds off the grid by a rounding error.
+void SWCanvas::DrawAlignedLayer(LayerState const& layer) {
+  if (layer.rel_bounds.IsEmpty()) {
+    return;
+  }
+  Paint work_paint = layer.paint;
+  work_paint.SetStyle(Paint::kFill_Style);
+  const float width = layer.rel_bounds.Width();
+  const float height = layer.rel_bounds.Height();
+  work_paint.SetShader(
+      Shader::MakeShader(Image::MakeImage(layer.bitmap->GetPixmap()),
+                         SamplingOptions(), TileMode::kDecal, TileMode::kDecal,
+                         Matrix::Scale(1.f / width, 1.f / height)));
+
+  Path path;
+  path.AddRect(layer.rel_bounds);
+  SWRaster raster;
+  raster.RastePath(path, Matrix{}, GetScanClipBounds());
+  DoBrush(raster, work_paint, false);
 }
 
 std::unique_ptr<SWCanvas> SWCanvas::CreateSubCanvas(Bitmap* bitmap,
