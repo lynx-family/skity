@@ -4,6 +4,7 @@
 
 #include "src/render/hw/hw_canvas.hpp"
 
+#include <cmath>
 #include <optional>
 #include <skity/effect/mask_filter.hpp>
 #include <skity/effect/path_effect.hpp>
@@ -21,6 +22,7 @@
 #include "src/render/hw/draw/hw_dynamic_coverage_path_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_clip.hpp"
 #include "src/render/hw/draw/hw_dynamic_path_draw.hpp"
+#include "src/render/hw/draw/hw_dynamic_rect_draw.hpp"
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/render/hw/filters/hw_filters.hpp"
@@ -35,6 +37,13 @@
 namespace skity {
 
 namespace {
+
+bool IsPixelAligned(const Rect& physical_rect) {
+  return std::trunc(physical_rect.Left()) == physical_rect.Left() &&
+         std::trunc(physical_rect.Top()) == physical_rect.Top() &&
+         std::trunc(physical_rect.Right()) == physical_rect.Right() &&
+         std::trunc(physical_rect.Bottom()) == physical_rect.Bottom();
+}
 
 LayerRTOrigin ResolveLayerRTOrigin(GPUBackendType backend_type) {
   if (backend_type == GPUBackendType::kOpenGL ||
@@ -229,7 +238,11 @@ void HWCanvas::DrawShape(const Shape& shape, const Paint& paint,
   }
 
   if (shape.IsPath()) {
-    DrawPathInternal(*shape.GetPath(), working_paint, current_matrix);
+    const Path& path = *shape.GetPath();
+    if (path.GetIsAType() != Path::IsAType::kRect ||
+        !TryDrawRect(path.GetBounds(), working_paint, current_matrix)) {
+      DrawPathInternal(path, working_paint, current_matrix);
+    }
   } else if (shape.IsRRect()) {
     DrawRRectInternal(*shape.GetRRect(), working_paint, current_matrix);
   }
@@ -635,6 +648,47 @@ HWCanvas::AnalyticalAAMode HWCanvas::SelectAnalyticalAA(
   return AnalyticalAAMode::kNone;
 }
 
+bool HWCanvas::TryDrawRect(const Rect& rect, const Paint& paint,
+                           const Matrix& transform) {
+  if (paint.GetStyle() != Paint::kFill_Style || paint.GetPathEffect() ||
+      rect.IsEmpty() || !rect.IsFinite() ||
+      !transform.OnlyScaleAndTranslate()) {
+    return false;
+  }
+
+  auto* layer = CurrentLayer();
+  // The layer's raster matrix is also scale and translation.
+  const Matrix to_physical = layer->GetLayerPhysicalMatrix(transform);
+  if (!to_physical.IsFinite()) {
+    return false;
+  }
+  Rect physical_rect = to_physical.MapRect(rect);
+  if (physical_rect.IsEmpty() || !physical_rect.IsFinite()) {
+    return false;
+  }
+
+  const uint32_t sample_count = layer->GetSampleCount();
+  if (sample_count == 1 && paint.IsAntiAlias() &&
+      !IsPixelAligned(physical_rect)) {
+    return false;
+  }
+
+  auto* draw =
+      arena_allocator_->Make<HWDynamicRectDraw>(transform, rect, paint);
+  draw->SetSampleCount(sample_count);
+  // Disjoint geometry can contribute to the same pixel with coverage AA.
+  physical_rect.RoundOut();
+  draw->SetLayerSpaceBounds(physical_rect);
+  SetupBlendPlanForDraw(draw, paint);
+  if (draw->GetDstReadStrategy() == DstReadStrategy::kNativeBlend) {
+    const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
+    draw->SetRequiresNonOverlappingDraws(
+        !caps.supports_native_advanced_blend_coherent);
+  }
+  layer->AddDraw(draw);
+  return true;
+}
+
 bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
                                        const Matrix& transform) const {
   if (!surface_->GetGPUContext()->IsEnableSimpleShapePipeline()) {
@@ -676,6 +730,10 @@ bool HWCanvas::NeedsFallbackToPathDraw(const RRect& rrect, const Paint& paint,
 
 void HWCanvas::DrawRRectInternal(const RRect& rrect, const Paint& paint,
                                  const Matrix& transform) {
+  if (rrect.IsRect() && TryDrawRect(rrect.GetRect(), paint, transform)) {
+    return;
+  }
+
   if (NeedsFallbackToPathDraw(rrect, paint, transform)) {
     Path path;
     path.AddRRect(rrect);
@@ -1065,8 +1123,9 @@ bool HWCanvas::NeesOffScreenLayer(const Paint& paint) const {
 void HWCanvas::SetupBlendPlanForDraw(HWDraw* draw, const Paint& paint,
                                      bool has_fragment_mask) {
   const auto& caps = surface_->GetGPUContext()->GetGPUDevice()->GetCaps();
+  const bool source_is_opaque = has_fragment_mask && IsPaintSourceOpaque(paint);
   auto plan = ResolveHWBlendPlan(paint.GetBlendMode(), has_fragment_mask,
-                                 IsPaintSourceOpaque(paint), caps,
+                                 source_is_opaque, caps,
                                  CurrentLayer()->SupportsTextureCopyDstRead());
   DEBUG_CHECK(plan.has_value());
   draw->SetBlendPlan(*plan);

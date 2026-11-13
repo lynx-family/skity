@@ -10,6 +10,8 @@
 
 namespace skity {
 
+class Paint;
+
 class HWDynamicDraw : public HWDraw {
  public:
   explicit HWDynamicDraw(Matrix transform)
@@ -23,8 +25,6 @@ class HWDynamicDraw : public HWDraw {
     }
   }
 
-  bool OnMergeIfPossible(HWDraw* draw) override;
-
   const ArrayList<HWDrawStep*, 2>& GetSteps() const { return steps_; }
 
  protected:
@@ -34,6 +34,12 @@ class HWDynamicDraw : public HWDraw {
 
   virtual void OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                                   HWDrawContext* context) = 0;
+
+  static bool CanMergeSolidPaints(const Paint& paint, const Paint& other);
+
+  HWDrawStep* MakeShapeColorStep(HWDrawContext* context,
+                                 HWWGSLGeometry* geometry,
+                                 const Paint& paint) const;
 
  private:
   ArrayList<HWDrawStep*, 2> steps_;

@@ -4,62 +4,35 @@
 
 #include "src/render/hw/draw/hw_dynamic_rrect_draw.hpp"
 
-#include "src/effect/pixmap_shader.hpp"
+#include "src/logging.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
-#include "src/render/hw/draw/step/color_step.hpp"
-#include "src/render/hw/draw/wgx_utils.hpp"
 
 namespace skity {
 
-HWDynamicRRectDraw::HWDynamicRRectDraw(Matrix transform, RRect rrect,
-                                       Paint paint)
+HWDynamicRRectDraw::HWDynamicRRectDraw(const Matrix& transform,
+                                       const RRect& rrect, const Paint& paint)
     : HWDynamicDraw(transform) {
-  batch_group_.emplace_back(BatchGroup<RRect>{
-      std::move(rrect),
-      std::move(paint),
-      std::move(transform),
-  });
+  batch_group_.push_back({rrect, paint, transform});
 }
 
 bool HWDynamicRRectDraw::OnMergeIfPossible(HWDraw* draw) {
-  if (!HWDynamicDraw::OnMergeIfPossible(draw)) {
-    return false;
-  }
-  auto rrect_draw = static_cast<HWDynamicRRectDraw*>(draw);
-  auto& rrect_group = rrect_draw->batch_group_;
-  auto& merge_paint = rrect_group.front().paint;
-  auto& paint = batch_group_.front().paint;
-
-  if (paint.GetShader() != nullptr || merge_paint.GetShader() != nullptr) {
+  const auto& other = *static_cast<const HWDynamicRRectDraw*>(draw);
+  if (!CanMergeSolidPaints(batch_group_.front().paint,
+                           other.batch_group_.front().paint)) {
     return false;
   }
 
-  if (paint.GetColorFilter() != merge_paint.GetColorFilter()) {
-    return false;
-  }
-
-  for (size_t i = 0; i < rrect_group.size(); i++) {
-    batch_group_.emplace_back(BatchGroup<RRect>{
-        std::move(rrect_group[i].item),
-        std::move(rrect_group[i].paint),
-        std::move(rrect_group[i].transform),
-    });
-  }
-
+  DEBUG_CHECK(other.batch_group_.size() == 1);
+  batch_group_.push_back(other.batch_group_.front());
   return true;
 }
 
 void HWDynamicRRectDraw::OnGenerateDrawStep(ArrayList<HWDrawStep*, 2>& steps,
                                             HWDrawContext* context) {
-  auto arena_allocator = context->arena_allocator;
-  auto paint = batch_group_.front().paint;
-  auto geom = arena_allocator->Make<WGSLRRectGeometry>(batch_group_);
-  auto frag = GenShadingFragment(
-      context, paint, paint.GetStyle() == Paint::kStroke_Style, false);
-  ConfigureShadingFragment(context, paint, GetBlendPlan(), frag);
-
-  steps.emplace_back(context->arena_allocator->Make<ColorStep>(
-      std::move(geom), std::move(frag), CoverageType::kNone));
+  auto* geometry =
+      context->arena_allocator->Make<WGSLRRectGeometry>(batch_group_);
+  steps.emplace_back(
+      MakeShapeColorStep(context, geometry, batch_group_.front().paint));
 }
 
 }  // namespace skity

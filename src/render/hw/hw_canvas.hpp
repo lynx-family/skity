@@ -121,6 +121,8 @@ class HWCanvas : public Canvas, private GlyphDrawTarget {
 
   void DrawRRectInternal(const RRect& rrect, const Paint& paint,
                          const Matrix& transform);
+  bool TryDrawRect(const Rect& rect, const Paint& paint,
+                   const Matrix& transform);
 
   const Matrix& CurrentMatrix() const {
     return GetCanvasState()->CurrentLayerMatrix();
