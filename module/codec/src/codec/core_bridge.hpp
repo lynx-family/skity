@@ -142,6 +142,54 @@ inline bool SetPixmapColorInfo(Pixmap* pixmap, AlphaType alpha_type,
   return result == SKITY_SUCCESS;
 }
 
+// Color space metadata only, no pixel conversion.
+inline bool SetPixmapColorSpace(Pixmap* pixmap,
+                                const skity_color_space_info& info) {
+  if (pixmap == nullptr) {
+    return false;
+  }
+  std::shared_ptr<Pixmap> view(pixmap, [](Pixmap*) {});
+  skity_pixmap pm_handle = skity::capi::alloc_handle<skity_pixmap_s>(
+      SKITY_OBJECT_TYPE_PIXMAP, 0, std::move(view));
+  if (pm_handle == nullptr) {
+    return false;
+  }
+  skity_result result = skity_pixmap_set_color_space(pm_handle, &info);
+  skity_pixmap_destroy(pm_handle);
+  return result == SKITY_SUCCESS;
+}
+
+inline bool GetPixmapColorSpace(Pixmap* pixmap,
+                                skity_color_space_info* out_info) {
+  if (pixmap == nullptr || out_info == nullptr) {
+    return false;
+  }
+  std::shared_ptr<Pixmap> view(pixmap, [](Pixmap*) {});
+  skity_pixmap pm_handle = skity::capi::alloc_handle<skity_pixmap_s>(
+      SKITY_OBJECT_TYPE_PIXMAP, 0, std::move(view));
+  if (pm_handle == nullptr) {
+    return false;
+  }
+  skity_result result = skity_pixmap_get_color_space(pm_handle, out_info);
+  skity_pixmap_destroy(pm_handle);
+  return result == SKITY_SUCCESS;
+}
+
+// Chromaticity <-> gamut math over the C ABI. The math itself stays in the
+// core color module; these wrappers are how the codec reaches it without
+// importing a core C++ symbol (see the file comment for the boundary).
+inline bool GamutFromChromaticities(const float chromaticities[8],
+                                    float gamut_xyz[9]) {
+  return skity_color_space_gamut_from_chromaticities(
+             chromaticities, gamut_xyz) == SKITY_SUCCESS;
+}
+
+inline bool ChromaticitiesFromGamut(const float gamut_xyz[9],
+                                    float chromaticities[8]) {
+  return skity_color_space_chromaticities_from_gamut(
+             gamut_xyz, chromaticities) == SKITY_SUCCESS;
+}
+
 //
 // Pixel addressing — inline equivalents of the out-of-line core methods.
 // Built exclusively from the header-inline Pixmap accessors.

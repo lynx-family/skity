@@ -177,6 +177,37 @@ SKITY_C_API skity_result
 skity_pixmap_get_color_space(skity_pixmap pixmap, skity_color_space_info* info);
 
 /**
+ * @brief Derive the D50-adapted RGB->XYZ gamut from CIE xy chromaticities.
+ *
+ * Same math as skity::ColorSpace::GamutFromChromaticities: the primaries are
+ * solved in the space's native white point first, then Bradford-adapted to
+ * the D50 connection space (see skity_color_space_info.gamut_xyz).
+ *
+ * @param chromaticities  8 floats: white_x, white_y, red_x, red_y, green_x,
+ *                        green_y, blue_x, blue_y
+ * @param gamut_xyz       output row-major 3x3 matrix (9 floats)
+ * @return                SKITY_SUCCESS, or SKITY_ERROR_INVALID_ARGUMENT when
+ *                        the values cannot describe a physical space
+ */
+SKITY_C_API skity_result skity_color_space_gamut_from_chromaticities(
+    const float* chromaticities, float* gamut_xyz);
+
+/**
+ * @brief Recover the chromaticities a gamut matrix describes.
+ *
+ * Inverse of skity_color_space_gamut_from_chromaticities (same layout):
+ * un-adapts D50 towards D65 so the values match the published native
+ * primaries of the space.
+ *
+ * @param gamut_xyz       row-major 3x3 D50-adapted matrix (9 floats)
+ * @param chromaticities  output 8 floats (white and RGB xy pairs)
+ * @return                SKITY_SUCCESS, or SKITY_ERROR_INVALID_ARGUMENT when
+ *                        the matrix cannot be inverted
+ */
+SKITY_C_API skity_result skity_color_space_chromaticities_from_gamut(
+    const float* gamut_xyz, float* chromaticities);
+
+/**
  * @brief Borrow the writable pixel view of a bitmap. The returned pixmap
  *        shares the bitmap's pixel memory (writes through it are visible to
  *        the bitmap), so it can be used as a destination for e.g.
