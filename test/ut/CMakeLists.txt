@@ -68,6 +68,7 @@ add_executable(skity_unit_test
     geometry/rrect_test.cc
     geometry/scalar_test.cc
     geometry/vector_test.cc
+    gpu/fake_gpu_context.cc
     graphic/bitmap_test.cc
     graphic/color_space_test.cc
     graphic/color_test.cc
@@ -86,6 +87,7 @@ add_executable(skity_unit_test
     render/hw/hw_pipeline_key_test.cc
     render/hw/hw_sub_layer_discard_test.cc
     render/hw/precompile_test.cc
+    render/hw/text_draw_test.cc
     render/hw/dst_read_strategy_test.cc
     render/hw/hw_blend_plan_test.cc
     render/hw/hw_texture_copy_info_test.cc
@@ -102,6 +104,7 @@ add_executable(skity_unit_test
     recorder/display_list_rtree_test.cc
     text/atlas_glyph_test.cc
     text/glyph_image_test.cc
+    text/glyph_run_test.cc
     text/scaler_context_cache_test.cc
     text/text_blob_test.cc
     text/text_run_test.cc

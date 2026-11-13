@@ -18,6 +18,7 @@
 #include "src/render/hw/hw_static_buffer.hpp"
 #include "src/render/hw/layer/hw_root_layer.hpp"
 #include "src/render/shape.hpp"
+#include "src/render/text/glyph_run.hpp"
 #include "src/utils/arena_allocator.hpp"
 #include "src/utils/vector_cache.hpp"
 
@@ -31,7 +32,7 @@ class CoverageAARenderer;
  * @class HWCanvas
  *  Base class for all hardware canvas implementation, use MSAA for anti-alias
  */
-class HWCanvas : public Canvas {
+class HWCanvas : public Canvas, private GlyphDrawTarget {
  public:
   explicit HWCanvas(GPUSurfaceImpl* surface);
 
@@ -104,6 +105,11 @@ class HWCanvas : public Canvas {
                           const Paint& paint, const Matrix& transform);
 
   bool TryPromoteInitialClear(const Paint& paint, const Rect* rect = nullptr);
+
+  void SubmitAtlas(const GlyphAtlasDraw& operation) override;
+
+  void SubmitPath(const Path& path, const Paint& paint,
+                  const Matrix& local_to_layer) override;
 
   void DrawShape(const Shape& shape, const Paint& paint, bool is_local = true);
 

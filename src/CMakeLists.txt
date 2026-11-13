@@ -98,6 +98,14 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_manager.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_texture.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas/atlas_texture.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas_glyph_run.cc
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/atlas_glyph_run.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/direct_glyph_run.cc
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/direct_glyph_run.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/path_glyph_run.cc
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/path_glyph_run.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/sdf_glyph_run.cc
+  ${CMAKE_CURRENT_LIST_DIR}/render/text/sdf_glyph_run.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_position.hpp
   ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_run.cc
   ${CMAKE_CURRENT_LIST_DIR}/render/text/glyph_run.hpp

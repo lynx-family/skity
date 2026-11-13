@@ -5,63 +5,90 @@
 #ifndef SRC_RENDER_TEXT_GLYPH_RUN_HPP
 #define SRC_RENDER_TEXT_GLYPH_RUN_HPP
 
-#include <assert.h>
-
-#include <memory>
+#include <cassert>
+#include <skity/graphic/paint.hpp>
+#include <skity/graphic/path.hpp>
 #include <skity/text/font.hpp>
-#include <vector>
 
-#include "src/render/text/atlas/atlas_manager.hpp"
 #include "src/utils/arena_allocator.hpp"
 #include "src/utils/array_list.hpp"
 
 namespace skity {
 
-class GlyphRun;
-class HWPathRaster;
+class AtlasManager;
 class HWDraw;
-class HWDrawHeap;
-class HWFontTexture;
-class HWFontTextureGroup;
-class HWStageBuffer;
-using GlyphRunList = ArrayList<GlyphRun*, 16>;
-using DrawPathFunc = std::function<void(const Path& path, const Paint& paint)>;
 
-class GlyphRun {
+// Borrowed input, used only during Build(). Subruns own their prepared data.
+struct GlyphRunInput {
+  uint32_t count;
+  const GlyphID* glyphs;
+  Point origin;
+  const float* position_x;
+  const float* position_y;
+  const Font& font;
+
+  GlyphRunInput Slice(uint32_t offset, uint32_t length) const {
+    assert(offset <= count && length <= count - offset);
+    return {length,
+            glyphs + offset,
+            origin,
+            position_x + offset,
+            position_y + offset,
+            font};
+  }
+};
+
+struct GlyphRunBuildContext {
+  AtlasManager& atlas_manager;
+  ArenaAllocator& arena;
+  float device_scale;
+  Matrix local_to_raster;
+};
+
+// Prepared atlas geometry is tied to the build transform and device scale.
+// Recording may map it into a different layer, but cannot rerasterize it.
+struct GlyphDrawContext {
+  ArenaAllocator& arena;
+  Matrix raster_to_layer;
+  Matrix local_to_layer;
+  bool linear_filter;
+};
+
+// All metadata describes this operation, including paint-expanded layer bounds.
+struct GlyphAtlasDraw {
+  HWDraw* draw;
+  Rect layer_bounds;
+  BlendMode blend_mode;
+  bool has_coverage;
+  bool source_opaque;
+};
+
+// A subrun can submit zero or more operations. The target owns layer, clip,
+// blending and submission policy; subruns own glyph representation and
+// geometry.
+class GlyphDrawTarget {
  public:
-  static GlyphRunList Make(const uint32_t count, const GlyphID* glyphs,
-                           const Point& origin, const float* position_x,
-                           const float* position_y, const Font& font,
-                           const Paint& paint, float context_scale,
-                           const Matrix& transform, AtlasManager* atlas_manager,
-                           ArenaAllocator* arena_allocator,
-                           DrawPathFunc draw_path_func);
+  virtual ~GlyphDrawTarget() = default;
+  virtual void SubmitAtlas(const GlyphAtlasDraw& operation) = 0;
+  virtual void SubmitPath(const Path& path, const Paint& paint,
+                          const Matrix& local_to_layer) = 0;
+};
 
-  virtual ~GlyphRun();
+class GlyphSubRun {
+ public:
+  virtual ~GlyphSubRun() = default;
+  virtual void Record(const GlyphDrawContext& context,
+                      GlyphDrawTarget& target) const = 0;
+};
 
-  // Returns one atlas draw, or nullptr for empty/failed runs and path draws
-  // handled by the callback. The caller sets the draw's render-target bounds.
-  virtual HWDraw* Draw(Matrix transform, const Matrix& glyph_to_layer,
-                       ArenaAllocator* arena_allocator, float canvas_scale,
-                       bool enable_text_linear_filter) = 0;
+using GlyphSubRunList = ArrayList<GlyphSubRun*, 16>;
 
-  // Valid after Draw() returns a non-null draw. Bounds are in layer logical
-  // coordinates and already include this run's paint expansion.
-  virtual Rect GetBounds() = 0;
-
-  virtual bool HasCoverageMask() const = 0;
-
-  virtual bool IsSourceOpaque() const = 0;
-
- private:
-  static GlyphRunList MakeInternal(const uint32_t count, const GlyphID* glyphs,
-                                   const Point& origin, const float* position_x,
-                                   const float* position_y, const Font& font,
-                                   const Paint& paint, AtlasFormat format,
-                                   float context_scale, const Matrix& transform,
-                                   AtlasManager* atlas_manager,
-                                   ArenaAllocator* arena_allocator,
-                                   DrawPathFunc draw_path_func);
+class GlyphRunBuilder {
+ public:
+  // Both the arena and atlas resources must outlive recording. Subruns are
+  // frame-scoped and must not be reused after the owning surface is flushed.
+  static GlyphSubRunList Build(const GlyphRunInput& input, const Paint& paint,
+                               const GlyphRunBuildContext& context);
 };
 
 }  // namespace skity

@@ -11,10 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include "src/render/hw/draw/geometry/wgsl_text_geometry.hpp"
-#include "src/render/hw/draw/hw_dynamic_text_draw.hpp"
-#include "src/render/hw/draw/wgx_utils.hpp"
-#include "src/tracing.hpp"
+#include "src/render/text/atlas_glyph_run.hpp"
 
 namespace skity {
 namespace transformed_mask {
@@ -26,17 +23,6 @@ constexpr float kMinimumCreationScale = 1.f / 65536.f;
 constexpr uint32_t kMaximumScaleFitAttempts = 8;
 constexpr float kPerspectiveWEpsilon = 1.f / 65536.f;
 constexpr float kConservativeBounds = 1E9F;
-
-struct GlyphRegionWithIndex {
-  uint32_t index;
-  GlyphRegion region;
-};
-
-struct GlyphRegionGroup {
-  uint32_t group_index;
-  GlyphFormat glyph_format;
-  std::vector<GlyphRegionWithIndex> glyph_regions;
-};
 
 bool IsFinite(const Vec2& point) {
   return std::isfinite(point.x) && std::isfinite(point.y);
@@ -188,197 +174,35 @@ float ComputeCreationScale(uint32_t count, const GlyphID* glyphs,
                                        creation_scale);
 }
 
-GlyphFormat ResolveGlyphFormat(AtlasFormat atlas_format,
-                               const GlyphData* glyph_info) {
-  if (atlas_format == AtlasFormat::A8) {
-    return GlyphFormat::A8;
-  }
-  if (glyph_info != nullptr && glyph_info->GetFormat().has_value() &&
-      *glyph_info->GetFormat() == GlyphFormat::BGRA32) {
-    return GlyphFormat::BGRA32;
-  }
-  return GlyphFormat::RGBA32;
-}
-
-class TransformedMaskGlyphRun final : public GlyphRun {
+class TransformedMaskGlyphRun final : public AtlasGlyphRun {
  public:
-  TransformedMaskGlyphRun(uint32_t count, const GlyphID* glyphs,
-                          const Point& origin, const float* position_x,
-                          const float* position_y, const Font& font,
-                          float context_scale, const Matrix& creation_matrix,
+  TransformedMaskGlyphRun(Atlas& atlas, AtlasGlyphBatch batch,
                           const Paint& paint, bool is_stroke,
-                          std::vector<GlyphRegionWithIndex> glyph_locs,
-                          uint32_t group_index, Atlas* atlas,
-                          GlyphFormat glyph_format)
-      : count_(count),
-        glyphs_(glyphs, glyphs + count),
-        origin_(origin),
-        position_x_(position_x, position_x + count),
-        position_y_(position_y, position_y + count),
-        font_(font),
-        context_scale_(context_scale),
-        creation_matrix_(creation_matrix),
-        paint_(paint),
-        is_stroke_(is_stroke),
-        glyph_locs_(std::move(glyph_locs)),
-        group_index_(group_index),
-        atlas_(atlas),
-        glyph_format_(glyph_format) {}
-
-  HWDraw* Draw(Matrix transform, const Matrix& glyph_to_layer,
-               ArenaAllocator* arena_allocator, float canvas_scale,
-               bool use_linear_text_filter) override;
-
-  Rect GetBounds() override { return bounds_; }
-
-  bool HasCoverageMask() const override {
-    return glyph_format_ == GlyphFormat::A8;
-  }
-
-  bool IsSourceOpaque() const override {
-    return HasCoverageMask() && IsPaintSourceOpaque(paint_);
-  }
+                          TextAtlasEffect effect, const Matrix& position_matrix,
+                          const Matrix& creation_matrix)
+      : AtlasGlyphRun(atlas, std::move(batch), paint, is_stroke, effect),
+        position_matrix_(position_matrix),
+        creation_matrix_(creation_matrix) {}
 
  private:
-  ArrayList<GlyphRect, 16> Raster(ArenaAllocator* arena_allocator);
+  std::optional<AtlasGlyphDrawParams> GetDrawParams(
+      const GlyphDrawContext& context) const override {
+    Matrix view_difference;
+    // Quads contain C * local. The GPU applies P * inverse(C), replacing the
+    // creation scale with the full perspective position matrix.
+    if (!ComputeViewDifference(position_matrix_, creation_matrix_,
+                               &view_difference)) {
+      return std::nullopt;
+    }
+    const Matrix transform = context.raster_to_layer * view_difference;
+    return AtlasGlyphDrawParams{
+        transform, Matrix{}, context.raster_to_layer * position_matrix_,
+        MapBounds(transform, GeometryBounds()), GPUFilterMode::kLinear};
+  }
 
-  uint32_t count_;
-  std::vector<GlyphID> glyphs_;
-  Point origin_;
-  std::vector<float> position_x_;
-  std::vector<float> position_y_;
-  Font font_;
-  float context_scale_;
-  Matrix creation_matrix_;
-  Paint paint_;
-  bool is_stroke_;
-  std::vector<GlyphRegionWithIndex> glyph_locs_;
-  uint32_t group_index_;
-  Atlas* atlas_;
-  GlyphFormat glyph_format_;
-  Rect bounds_ = Rect::MakeEmpty();
+  const Matrix position_matrix_;
+  const Matrix creation_matrix_;
 };
-
-ArrayList<GlyphRect, 16> TransformedMaskGlyphRun::Raster(
-    ArenaAllocator* arena_allocator) {
-  ArrayList<GlyphRect, 16> glyph_rects;
-  glyph_rects.SetArenaAllocator(arena_allocator);
-  bounds_ = Rect::MakeEmpty();
-  if (glyph_locs_.empty() || context_scale_ <= 0.f) {
-    return glyph_rects;
-  }
-
-  std::vector<const GlyphData*> glyph_info(count_);
-  font_.LoadGlyphBitmapInfo(glyphs_.data(), count_, glyph_info.data(), paint_,
-                            context_scale_, creation_matrix_);
-
-  for (const auto& glyph_loc : glyph_locs_) {
-    const GlyphData* info = glyph_info[glyph_loc.index];
-    if (info == nullptr) {
-      continue;
-    }
-
-    Vec2 uv_lt =
-        atlas_->CalculateUV(glyph_loc.region.index_in_group,
-                            glyph_loc.region.loc.x, glyph_loc.region.loc.y);
-    Vec2 uv_rb =
-        atlas_->CalculateUV(glyph_loc.region.index_in_group,
-                            glyph_loc.region.loc.x + glyph_loc.region.loc.z,
-                            glyph_loc.region.loc.y + glyph_loc.region.loc.w);
-
-    const Vec2 run_position{position_x_[glyph_loc.index],
-                            position_y_[glyph_loc.index]};
-    Vec2 creation_position{};
-    creation_matrix_.MapPoints(&creation_position, &run_position, 1);
-    if (!IsFinite(creation_position)) {
-      continue;
-    }
-
-    const GlyphBitmapData& image = info->Image();
-    float left = creation_position.x + image.origin_x;
-    float top = creation_position.y - image.origin_y;
-    float width = static_cast<float>(glyph_loc.region.loc.z) / context_scale_;
-    float height = static_cast<float>(glyph_loc.region.loc.w) / context_scale_;
-    if (!std::isfinite(left) || !std::isfinite(top) || !std::isfinite(width) ||
-        !std::isfinite(height) || width <= 0.f || height <= 0.f) {
-      continue;
-    }
-
-    bounds_.Join(Rect::MakeXYWH(left, top, width, height));
-    glyph_rects.emplace_back(Vec4{left, top, left + width, top + height}, uv_lt,
-                             uv_rb);
-  }
-
-  return glyph_rects;
-}
-
-HWDraw* TransformedMaskGlyphRun::Draw(Matrix transform,
-                                      const Matrix& glyph_to_layer,
-                                      ArenaAllocator* arena_allocator,
-                                      float canvas_scale,
-                                      bool use_linear_text_filter) {
-  SKITY_TRACE_EVENT(TransformedMaskGlyphRun_Draw);
-  (void)canvas_scale;
-  (void)use_linear_text_filter;
-  if (!transform.IsFinite()) {
-    return nullptr;
-  }
-
-  ArrayList<GlyphRect, 16> glyph_rects = Raster(arena_allocator);
-  if (glyph_rects.empty()) {
-    return nullptr;
-  }
-
-  Matrix position_matrix = transform * Matrix::Translate(origin_.x, origin_.y);
-  Matrix view_difference;
-  // Atlas quads are stored in creation space (C * local). The vertex shader
-  // applies V = P * inverse(C), replacing C with the full perspective position
-  // matrix P. Map the result back to layer coordinates before projection:
-  // MVP * glyph_to_layer * V * C * local.
-  if (!ComputeViewDifference(position_matrix, creation_matrix_,
-                             &view_difference)) {
-    return nullptr;
-  }
-  const Matrix final_transform = glyph_to_layer * view_difference;
-
-  bounds_ = paint_.ComputeFastBounds(MapBounds(final_transform, bounds_));
-
-  atlas_->UploadAtlas(group_index_);
-  auto gpu_texture = atlas_->GetGPUTexture(group_index_);
-  auto gpu_sampler =
-      atlas_->GetGPUSampler(group_index_, GPUFilterMode::kLinear);
-
-  const auto effect = atlas_->GetFormat() == AtlasFormat::A8
-                          ? TextAtlasEffect::kA8Coverage
-                          : (glyph_format_ == GlyphFormat::BGRA32
-                                 ? TextAtlasEffect::kColorSwizzleRB
-                                 : TextAtlasEffect::kColor);
-  const Vector color =
-      is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
-  Paint paint_copy = paint_;
-  paint_copy.SetFillColor(color);
-  paint_copy.SetStrokeColor(color);
-  std::optional<Matrix> layer_to_local;
-  if (effect == TextAtlasEffect::kA8Coverage && paint_.GetShader()) {
-    Matrix inverse;
-    (glyph_to_layer * position_matrix).InvertZ0Plane(&inverse);
-    layer_to_local = inverse;
-  }
-
-  return arena_allocator->Make<HWDynamicTextDraw>(
-      final_transform, Matrix(), std::move(glyph_rects), paint_copy,
-      gpu_texture, gpu_sampler, effect, is_stroke_, layer_to_local);
-}
-
-GlyphRegionGroup* GetOrAppendContiguousGroup(
-    uint32_t group_index, GlyphFormat glyph_format,
-    std::vector<GlyphRegionGroup>* groups) {
-  if (groups->empty() || groups->back().group_index != group_index ||
-      groups->back().glyph_format != glyph_format) {
-    groups->push_back({group_index, glyph_format, {}});
-  }
-  return &groups->back();
-}
 
 }  // namespace
 
@@ -492,61 +316,64 @@ Rect MapBounds(const Matrix& transform, const Rect& bounds) {
                               kConservativeBounds, kConservativeBounds);
 }
 
-GlyphRunList MakeGlyphRunList(uint32_t count, const GlyphID* glyphs,
-                              const Point& origin, const float* position_x,
-                              const float* position_y, const Font& font,
-                              const Paint& paint, AtlasFormat format,
-                              float context_scale, const Matrix& transform,
-                              bool is_stroke, AtlasManager* atlas_manager,
-                              ArenaAllocator* arena_allocator) {
-  GlyphRunList run_list;
-  run_list.SetArenaAllocator(arena_allocator);
-  if (count == 0 || glyphs == nullptr || position_x == nullptr ||
-      position_y == nullptr || atlas_manager == nullptr ||
-      arena_allocator == nullptr || !transform.IsFinite()) {
-    return run_list;
-  }
-
-  Atlas* atlas = atlas_manager->GetAtlas(format);
-  Matrix position_matrix = transform * Matrix::Translate(origin.x, origin.y);
-  float creation_scale =
-      ComputeCreationScale(count, glyphs, position_x, position_y, font, paint,
-                           context_scale, position_matrix, atlas->GetConfig());
+void AppendGlyphRuns(const GlyphRunInput& input, const Paint& paint,
+                     AtlasFormat format, bool is_stroke,
+                     const GlyphRunBuildContext& context,
+                     GlyphSubRunList& runs) {
+  Atlas& atlas = *context.atlas_manager.GetAtlas(format);
+  const Matrix position_matrix =
+      context.local_to_raster *
+      Matrix::Translate(input.origin.x, input.origin.y);
+  const float creation_scale = ComputeCreationScale(
+      input.count, input.glyphs, input.position_x, input.position_y, input.font,
+      paint, context.device_scale, position_matrix, atlas.GetConfig());
   if (creation_scale <= 0.f) {
-    return run_list;
+    return;
   }
-  Matrix creation_matrix = Matrix::Scale(creation_scale, creation_scale);
+  const Matrix creation_matrix = Matrix::Scale(creation_scale, creation_scale);
 
-  std::vector<const GlyphData*> glyph_info(count);
-  font.LoadGlyphMetrics(glyphs, count, glyph_info.data(), paint);
-
-  uint32_t max_per_atlas = atlas->GetConfig().max_num_bitmap_per_atlas;
-  std::vector<GlyphRegionGroup> groups;
-  for (uint32_t index = 0; index < count; ++index) {
+  std::vector<const GlyphData*> glyph_info(input.count);
+  input.font.LoadGlyphMetrics(input.glyphs, input.count, glyph_info.data(),
+                              paint);
+  std::vector<GlyphRegion> regions(input.count);
+  std::vector<GlyphFormat> formats(input.count);
+  for (uint32_t index = 0; index < input.count; ++index) {
     if (glyph_info[index] == nullptr) {
       continue;
     }
-    GlyphRegion glyph_region =
-        atlas->GetGlyphRegion(font, PackedGlyphID(glyph_info[index]->Id()),
-                              paint, false, context_scale, creation_matrix);
-    if (glyph_region.loc.z <= 0 || glyph_region.loc.w <= 0) {
+    formats[index] = ResolveAtlasGlyphFormat(format, *glyph_info[index]);
+    regions[index] = atlas.GetGlyphRegion(
+        input.font, PackedGlyphID(input.glyphs[index]), paint, false,
+        context.device_scale, creation_matrix);
+  }
+
+  // Load bitmap placement after atlas requests have populated raster data.
+  // This is done once per input span, not once per texture group at recording.
+  input.font.LoadGlyphBitmapInfo(input.glyphs, input.count, glyph_info.data(),
+                                 paint, context.device_scale, creation_matrix);
+  AtlasGlyphBatchBuilder batches(atlas);
+  for (uint32_t index = 0; index < input.count; ++index) {
+    if (glyph_info[index] == nullptr) {
       continue;
     }
-
-    uint32_t group_index = glyph_region.index_in_group / max_per_atlas;
-    glyph_region.index_in_group %= max_per_atlas;
-    GlyphFormat glyph_format = ResolveGlyphFormat(format, glyph_info[index]);
-    GetOrAppendContiguousGroup(group_index, glyph_format, &groups)
-        ->glyph_regions.push_back({index, glyph_region});
+    const Vec2 position{input.position_x[index], input.position_y[index]};
+    Vec2 creation_position{};
+    creation_matrix.MapPoints(&creation_position, &position, 1);
+    const auto& image = glyph_info[index]->Image();
+    const auto& region = regions[index];
+    batches.Append(region, formats[index],
+                   Rect::MakeXYWH(creation_position.x + image.origin_x,
+                                  creation_position.y - image.origin_y,
+                                  region.loc.z / context.device_scale,
+                                  region.loc.w / context.device_scale));
   }
 
-  for (auto& group : groups) {
-    run_list.push_back(arena_allocator->Make<TransformedMaskGlyphRun>(
-        count, glyphs, origin, position_x, position_y, font, context_scale,
-        creation_matrix, paint, is_stroke, std::move(group.glyph_regions),
-        group.group_index, atlas, group.glyph_format));
+  for (auto& batch : batches.TakeBatches()) {
+    const auto effect = MaskAtlasEffect(batch.format);
+    runs.push_back(context.arena.Make<TransformedMaskGlyphRun>(
+        atlas, std::move(batch), paint, is_stroke, effect, position_matrix,
+        creation_matrix));
   }
-  return run_list;
 }
 
 }  // namespace transformed_mask

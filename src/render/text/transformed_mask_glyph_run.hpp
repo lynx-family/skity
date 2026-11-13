@@ -7,18 +7,16 @@
 
 #include <cstdint>
 
+#include "src/render/text/atlas/atlas_manager.hpp"
 #include "src/render/text/glyph_run.hpp"
 
 namespace skity {
 namespace transformed_mask {
 
-GlyphRunList MakeGlyphRunList(uint32_t count, const GlyphID* glyphs,
-                              const Point& origin, const float* position_x,
-                              const float* position_y, const Font& font,
-                              const Paint& paint, AtlasFormat format,
-                              float context_scale, const Matrix& transform,
-                              bool is_stroke, AtlasManager* atlas_manager,
-                              ArenaAllocator* arena_allocator);
+void AppendGlyphRuns(const GlyphRunInput& input, const Paint& paint,
+                     AtlasFormat format, bool is_stroke,
+                     const GlyphRunBuildContext& context,
+                     GlyphSubRunList& runs);
 
 Paint MakeBitmapOnlyFillPaint(const Paint& paint);
 
