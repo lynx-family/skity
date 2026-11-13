@@ -16,6 +16,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <string>
 #else  // SKITY_WIN
 #include <dirent.h>
 #include <unistd.h>
