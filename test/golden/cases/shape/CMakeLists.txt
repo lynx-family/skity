@@ -8,4 +8,5 @@ add_golden_test_shape(
   SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/shape.cc
     ${CMAKE_CURRENT_LIST_DIR}/initial_color_clear.cc
+    ${CMAKE_CURRENT_LIST_DIR}/path_builder.cc
 )

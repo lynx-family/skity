@@ -6,6 +6,7 @@
 #include <skity/effect/path_effect.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/graphic/path.hpp>
+#include <skity/graphic/path_builder.hpp>
 #include <skity/graphic/path_measure.hpp>
 
 #include "gtest/gtest.h"
@@ -46,6 +47,29 @@ TEST(PathMeasure, MixedContoursKeepBoundariesAndConicWeights) {
       EXPECT_EQ(measure.NextContour(), i + 1 < contours.size());
     }
   }
+}
+
+TEST(PathMeasure, AppendsSegmentsToBuilder) {
+  skity::Path source;
+  source.MoveTo(0, 0).ConicTo(10, 30, 20, 0, 0.5f).LineTo(50, 0).Close();
+  skity::PathMeasure measure(source, false);
+  const float length = measure.GetLength();
+
+  skity::Path expected;
+  expected.MoveTo(60, 10).LineTo(80, 10);
+  expected.SetFillType(skity::Path::PathFillType::kEvenOdd);
+  skity::PathBuilder builder(expected);
+  auto append = [&](float start, float stop, bool move_to) {
+    EXPECT_TRUE(measure.GetSegment(start, stop, &expected, move_to));
+    EXPECT_TRUE(measure.GetSegmentToBuilder(start, stop, &builder, move_to));
+  };
+  append(length * 0.75f, length, true);
+  append(0, length * 0.25f, true);
+  append(length * 0.25f, length * 0.5f, false);
+
+  EXPECT_FALSE(measure.GetSegmentToBuilder(length, 0, &builder, true));
+  EXPECT_FALSE(measure.GetSegmentToBuilder(0, length, nullptr, true));
+  EXPECT_EQ(builder.Detach(), expected);
 }
 
 TEST(PathMeasure, DiscreteEffectKeepsSeededOffsets) {

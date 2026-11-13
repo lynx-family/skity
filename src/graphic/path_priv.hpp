@@ -16,6 +16,8 @@
 
 namespace skity {
 
+class PathBuilder;
+
 class PathPriv {
  public:
   struct Iterate {
@@ -46,9 +48,9 @@ class PathPriv {
     const float* weights_;
   };
 
-  static void CreateDrawArcPath(Path* path, Rect const& oval, float startAngle,
-                                float sweepAngle, bool useCenter,
-                                bool isFillNoPathEffect);
+  static void CreateDrawArcPath(PathBuilder* path, Rect const& oval,
+                                float startAngle, float sweepAngle,
+                                bool useCenter, bool isFillNoPathEffect);
 
   /**
    * Determines if path is a rect by keeping track of changes in direction
