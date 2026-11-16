@@ -55,7 +55,11 @@ GPUSurfaceImpl::GPUSurfaceImpl(const GPUSurfaceDescriptor& desc,
       static_buffer_(std::move(static_buffer)),
       canvas_() {}
 
-GPUSurfaceImpl::~GPUSurfaceImpl() {}
+GPUSurfaceImpl::~GPUSurfaceImpl() {
+  // Canvas stacks can reference arena nodes even when a frame was abandoned.
+  // Retire those borrowers before member teardown releases the arena/cache.
+  canvas_.reset();
+}
 
 Canvas* GPUSurfaceImpl::LockCanvas(bool clear) {
   if (stage_buffer_ == nullptr) {
