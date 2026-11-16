@@ -189,49 +189,6 @@ class AutoDisableDirectionCheck {
   Path::Direction saved;
 };
 
-class AutoPathBoundsUpdate {
- public:
-  AutoPathBoundsUpdate(Path* p, const Rect& r) : path{p}, rect{r} {
-    rect.Sort();
-    has_valid_bounds = path->IsFinite();
-    empty = path->IsEmpty();
-    if (has_valid_bounds && !empty) {
-      JoinNoEmptyChecks(std::addressof(rect), path->GetBounds());
-    }
-    degenerate = is_degenerate(*path);
-  }
-
-  ~AutoPathBoundsUpdate() {
-    if ((this->empty || has_valid_bounds) && rect.IsFinite()) {
-      // TODO(tangruiwen) path->setBounds(rect);
-    }
-  }
-
- private:
-  static void JoinNoEmptyChecks(Rect* dst, const Rect& src) {
-    float s_left = src.Left();
-    float s_top = src.Top();
-    float s_right = src.Right();
-    float s_bottom = src.Bottom();
-    float d_left = dst->Left();
-    float d_top = dst->Top();
-    float d_right = dst->Right();
-    float d_bottom = dst->Bottom();
-
-    dst->SetLTRB(glm::min(s_left, d_left), glm::min(s_top, d_top),
-                 glm::min(d_right, s_right), glm::min(d_bottom, s_bottom));
-  }
-
-  static bool is_degenerate(const Path& path) { return path.CountVerbs() <= 1; }
-
- private:
-  Path* path;
-  Rect rect;
-  bool has_valid_bounds;
-  bool degenerate;
-  bool empty;
-};
-
 Path::Iter::Iter()
     : pts_{nullptr},
       verbs_{nullptr},
@@ -863,7 +820,6 @@ Path& Path::AddRect(Rect const& rect, Direction dir, uint32_t start) {
   bool was_empty = HasOnlyMoveTos();
 
   AutoDisableDirectionCheck addc{this};
-  AutoPathBoundsUpdate adbu(this, rect);
 
   Path_RectPointIterator iter{rect, dir, start};
 
@@ -942,7 +898,6 @@ Path& Path::AddRRect(RRect const& rrect, Direction dir, uint32_t start_index) {
 
     bool was_empty = HasOnlyMoveTos();
 
-    AutoPathBoundsUpdate apbu{this, bounds};
     AutoDisableDirectionCheck addc{this};
 
     // we start with a conic on odd indices when moving CW vs.
@@ -1074,7 +1029,6 @@ Path& Path::AddOval(const Rect& oval, Direction dir, uint32_t start) {
   }
 
   AutoDisableDirectionCheck addc{this};
-  AutoPathBoundsUpdate apbu{this, oval};
 
   Path_OvalPointIterator oval_iter{oval, dir, start};
   Path_RectPointIterator rect_iter{oval, dir,

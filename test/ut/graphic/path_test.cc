@@ -2,6 +2,7 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <limits>
 #include <random>
 #include <skity/geometry/stroke.hpp>
 #include <skity/graphic/path.hpp>
@@ -1972,4 +1973,52 @@ TEST(Path, ResetClearsNonFiniteAndSimpleShapeState) {
   ASSERT_TRUE(path.IsSimpleRRect(&rrect));
   EXPECT_EQ(rrect.GetSimpleRadii(), skity::Vec2(2, 3));
   EXPECT_TRUE(path.Contains(20, 30));
+}
+
+TEST(Path, ShapeBatchBoundsInvalidateAfterAppend) {
+  skity::Path path;
+  for (int i = 0; i < 3000; ++i) {
+    path.AddRect(skity::Rect::MakeXYWH(2.f * i, -1.f * i, 1.f, 2.f));
+  }
+  EXPECT_TRUE(path.IsFinite());
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), 0.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), -2999.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 5999.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 2.f);
+
+  path.AddOval(skity::Rect::MakeLTRB(-10, -20, 10, 20));
+  bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), -10.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), -2999.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 5999.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 20.f);
+
+  path.AddRoundRect(skity::Rect::MakeLTRB(-100, -200, -20, -40), 5, 8);
+  bounds = path.GetBounds();
+  EXPECT_TRUE(path.IsFinite());
+  EXPECT_FLOAT_EQ(bounds.Left(), -100.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), -2999.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 5999.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 20.f);
+}
+
+TEST(Path, ShapeBatchRejectsNonFiniteTrailingMoveUntilReset) {
+  skity::Path path;
+  path.AddRect(skity::Rect::MakeLTRB(0, 0, 10, 20));
+  path.AddOval(skity::Rect::MakeLTRB(20, 20, 30, 40));
+  path.AddRoundRect(skity::Rect::MakeLTRB(50, 50, 90, 90), 5, 5);
+  EXPECT_TRUE(path.IsFinite());
+  path.MoveTo(std::numeric_limits<float>::infinity(), 0);
+  EXPECT_FALSE(path.IsFinite());
+  EXPECT_TRUE(path.GetBounds().IsEmpty());
+
+  path.Reset();
+  path.AddOval(skity::Rect::MakeLTRB(-5, -10, 5, 10));
+  EXPECT_TRUE(path.IsFinite());
+  auto bounds = path.GetBounds();
+  EXPECT_FLOAT_EQ(bounds.Left(), -5.f);
+  EXPECT_FLOAT_EQ(bounds.Top(), -10.f);
+  EXPECT_FLOAT_EQ(bounds.Right(), 5.f);
+  EXPECT_FLOAT_EQ(bounds.Bottom(), 10.f);
 }
