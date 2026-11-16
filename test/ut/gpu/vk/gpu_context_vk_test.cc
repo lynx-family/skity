@@ -6,10 +6,16 @@
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <skity/gpu/gpu_context_vk.hpp>
+#include <skity/gpu/gpu_render_target.hpp>
+#include <skity/graphic/paint.hpp>
+#include <skity/io/pixmap.hpp>
+#include <skity/render/canvas.hpp>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "src/gpu/gpu_context_impl.hpp"
@@ -2400,6 +2406,92 @@ TEST_F(VulkanSharedContextTest, ReadPixelsRejectsMultisampledTexture) {
 
   auto data = GetContextImpl()->ReadPixels(texture);
   EXPECT_EQ(data, nullptr);
+}
+
+TEST_F(VulkanSharedContextTest, SnapshotKeepsRenderedLayoutAndPixels) {
+  if (SkipVulkanRenderPassTestsOnThreadSanitizer()) {
+    GTEST_SKIP()
+        << "Vulkan render-pass tests are disabled under ThreadSanitizer";
+  }
+  ASSERT_NE(GetContext(), nullptr);
+  ASSERT_NE(GetState(), nullptr);
+
+  constexpr uint32_t kWidth = 8;
+  constexpr uint32_t kHeight = 4;
+  skity::GPURenderTargetDescriptor desc = {};
+  desc.width = kWidth;
+  desc.height = kHeight;
+  desc.sample_count = 1;
+  auto render_target = GetContext()->CreateRenderTarget(desc);
+  ASSERT_NE(render_target, nullptr);
+  auto* canvas = render_target->GetCanvas();
+  ASSERT_NE(canvas, nullptr);
+
+  skity::Paint paint;
+  paint.SetAntiAlias(false);
+  paint.SetStyle(skity::Paint::kFill_Style);
+  // Asymmetry on both axes distinguishes orientation as well as channels.
+  const skity::Color colors[2][2] = {
+      {skity::Color_RED, skity::Color_BLUE},
+      {skity::Color_GREEN, skity::Color_YELLOW},
+  };
+  for (uint32_t row = 0; row < 2; ++row) {
+    for (uint32_t column = 0; column < 2; ++column) {
+      paint.SetColor(colors[row][column]);
+      canvas->DrawRect(
+          skity::Rect::MakeXYWH(column * (kWidth / 2), row * (kHeight / 2),
+                                kWidth / 2, kHeight / 2),
+          paint);
+    }
+  }
+  canvas->Flush();
+
+  // This public call replays and flushes the recording. No native handles are
+  // manually wrapped here, and the returned image owns the snapshot texture.
+  const auto snapshot = GetContext()->MakeSnapshot(std::move(render_target));
+  ASSERT_NE(snapshot, nullptr);
+  GetState()->CollectPendingSubmissions(true);
+  const auto* texture = snapshot->GetTexture();
+  ASSERT_NE(texture, nullptr);
+  ASSERT_NE(*texture, nullptr);
+  const auto gpu_texture = (*texture)->GetGPUTexture();
+  ASSERT_NE(gpu_texture, nullptr);
+  const auto* vk_texture = skity::GPUTextureVK::Cast(gpu_texture.get());
+  ASSERT_NE(vk_texture, nullptr);
+  ASSERT_TRUE(vk_texture->IsValid());
+
+  // Inspect the actual snapshot owner BEFORE ReadPixels can transition it.
+  // A permissive driver retaining bytes from UNDEFINED must not hide a second
+  // wrapper's stale layout. Do not SetCurrentLayout or repair it in the test.
+  ASSERT_NE(vk_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_UNDEFINED);
+
+  const auto pixels = snapshot->ReadPixels(GetContext());
+  ASSERT_NE(pixels, nullptr);
+  ASSERT_EQ(pixels->Width(), kWidth);
+  ASSERT_EQ(pixels->Height(), kHeight);
+  ASSERT_EQ(pixels->GetColorType(), skity::ColorType::kRGBA);
+  ASSERT_NE(pixels->Addr(), nullptr);
+  const std::array<std::array<uint8_t, 4>, 4> expected = {{
+      {255, 0, 0, 255},
+      {0, 0, 255, 255},
+      {0, 255, 0, 255},
+      {255, 255, 0, 255},
+  }};
+  for (uint32_t y = 0; y < kHeight; ++y) {
+    for (uint32_t x = 0; x < kWidth; ++x) {
+      const auto* pixel = pixels->Addr8(x, y);
+      ASSERT_NE(pixel, nullptr);
+      const auto& color = expected[(y / (kHeight / 2)) * 2 + x / (kWidth / 2)];
+      for (size_t channel = 0; channel < color.size(); ++channel) {
+        EXPECT_EQ(pixel[channel], color[channel])
+            << "pixel=(" << x << "," << y << "), channel=" << channel;
+      }
+    }
+  }
+  EXPECT_NE(vk_texture->GetCurrentLayout(), VK_IMAGE_LAYOUT_UNDEFINED);
+  GetState()->CollectPendingSubmissions(true);
+  // All locals release before this existing fixture destroys its context in
+  // TearDownTestSuite. No context/global state is replaced by the test.
 }
 
 }  // namespace
