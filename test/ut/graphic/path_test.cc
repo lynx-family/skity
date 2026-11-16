@@ -1498,6 +1498,22 @@ TEST(Path, StrokePath) {
   EXPECT_TRUE(dst.Contains(120, 30));
 }
 
+TEST(Path, StrokePathUsesWindingFill) {
+  skity::Path src;
+  src.MoveTo(10, 20).LineTo(70, 20);
+  src.MoveTo(40, 20).LineTo(100, 20);
+  src.SetFillType(skity::Path::PathFillType::kEvenOdd);
+  skity::Paint paint;
+  paint.SetStrokeWidth(4);
+  skity::Stroke stroke(paint);
+
+  skity::Path dst;
+  dst.SetFillType(skity::Path::PathFillType::kEvenOdd);
+  stroke.StrokePath(src, &dst);
+  EXPECT_EQ(dst.GetFillType(), skity::Path::PathFillType::kWinding);
+  EXPECT_TRUE(dst.Contains(55, 20));
+}
+
 TEST(Path, SegmentMask) {
   skity::Path path;
   EXPECT_EQ(path.GetSegmentMasks(), 0);

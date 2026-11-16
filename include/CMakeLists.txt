@@ -28,6 +28,7 @@ set(SKITY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/image.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/paint.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/path.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/path_builder.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/path_measure.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/path_op.hpp
   ${CMAKE_CURRENT_LIST_DIR}/skity/graphic/sampling_options.hpp

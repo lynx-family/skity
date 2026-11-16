@@ -665,6 +665,7 @@ class SKITY_API Path {
   friend class Iter;
   friend class RawIter;
   friend class PathStroker;
+  friend class PathBuilder;
 
   int32_t last_move_to_index_ = ~0;
   mutable ConvexityType convexity_ = ConvexityType::kUnknown;

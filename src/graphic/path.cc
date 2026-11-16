@@ -1271,6 +1271,8 @@ void Path::Swap(Path& that) {
   if (this != &that) {
     std::swap(last_move_to_index_, that.last_move_to_index_);
     std::swap(convexity_, that.convexity_);
+    std::swap(first_direction_, that.first_direction_);
+    std::swap(fill_type_, that.fill_type_);
     std::swap(points_, that.points_);
     std::swap(verbs_, that.verbs_);
     std::swap(conic_weights_, that.conic_weights_);
