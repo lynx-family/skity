@@ -289,6 +289,44 @@ void DrawImageRect(Canvas* canvas) {
                         SamplingOptions{});
 }
 
+void DrawColorSpaceDecode(Canvas* canvas) {
+  auto make_solid_image = [](uint32_t w, uint32_t h, Color4f color,
+                             std::shared_ptr<const ColorSpace> color_space) {
+    auto pixmap = std::make_shared<Pixmap>(w, h);
+    Bitmap bitmap(pixmap, false);
+    auto stored = Color4fToColor(color);
+    for (uint32_t y = 0; y < h; y++) {
+      for (uint32_t x = 0; x < w; x++) {
+        bitmap.SetPixel(x, y, stored);
+      }
+    }
+    pixmap->SetColorInfo(kUnpremul_AlphaType, ColorType::kRGBA, color_space);
+    return Image::MakeImage(pixmap);
+  };
+
+  canvas->Clear(Color_WHITE);
+
+  const Color4f p3_source{0.9f, 0.5f, 0.1f, 1.f};
+  auto p3_image =
+      make_solid_image(32, 64,
+                       ColorSpace::Convert(ColorSpace::SRGB(), p3_source,
+                                           ColorSpace::DisplayP3()),
+                       ColorSpace::DisplayP3());
+  canvas->DrawImageRect(p3_image, Rect::MakeWH(32.f, 64.f),
+                        Rect::MakeXYWH(0.f, 0.f, 32.f, 64.f),
+                        SamplingOptions{});
+
+  const Color4f linear_source{0.25f, 0.5f, 0.75f, 1.f};
+  auto linear_image =
+      make_solid_image(32, 64,
+                       ColorSpace::Convert(ColorSpace::SRGB(), linear_source,
+                                           ColorSpace::SRGBLinear()),
+                       ColorSpace::SRGBLinear());
+  canvas->DrawImageRect(linear_image, Rect::MakeWH(32.f, 64.f),
+                        Rect::MakeXYWH(32.f, 0.f, 32.f, 64.f),
+                        SamplingOptions{});
+}
+
 const GeometryCase kGeometryCases[] = {
     {"DrawFilledRect", 400, 400, &DrawFilledRect},
     {"DrawStrokeRect", 400, 400, &DrawStrokeRect},
@@ -301,6 +339,7 @@ const GeometryCase kGeometryCases[] = {
     {"SaveLayerTwoCircleWithTranslate", 400, 400,
      &DrawSaveLayerTwoCircleWithTranslate},
     {"DrawImageRect", 64, 64, &DrawImageRect},
+    {"ColorSpaceDecode", 64, 64, &DrawColorSpaceDecode},
 };
 
 }  // namespace

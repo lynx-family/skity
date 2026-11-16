@@ -13,6 +13,7 @@
 #include <skity/codec/codec.hpp>
 #include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color_space.hpp>
+#include <skity/graphic/image.hpp>
 #include <skity/io/data.hpp>
 #include <skity/io/pixmap.hpp>
 #include <skity/render/canvas.hpp>
@@ -929,4 +930,53 @@ TEST(PNGCodecBusinessReview, IccOnlyFileStaysSRGB) {
   // The pixels themselves are unaffected either way.
   auto pixel = static_cast<const uint8_t*>(decoded->Addr());
   EXPECT_EQ(pixel[0], 128);
+}
+
+// Pinned pair behavior with the stacked decode slice: a linear PNG
+// decodes to its source encoding with a tag, and the software sampler
+// converts exactly once while drawing (sRGB-encoding 64/255 into ~137).
+TEST(PNGCodecBusinessReview, ExistingLinearPngStillDrawsCorrectly) {
+  auto file = MakeGammaPNG(100000, 64);
+  ASSERT_NE(file, nullptr);
+  auto codec = skity::Codec::MakePngCodec();
+  codec->SetData(file);
+  auto pixmap = codec->Decode();
+  ASSERT_NE(pixmap, nullptr);
+  skity::Bitmap target(1, 1, skity::kPremul_AlphaType, skity::ColorType::kRGBA);
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&target);
+  ASSERT_NE(canvas, nullptr);
+  canvas->DrawImage(skity::Image::MakeImage(pixmap), 0.f, 0.f);
+  auto color = target.GetPixel(0, 0);
+  RecordProperty("actual_red", ColorGetR(color));
+  RecordProperty("expected_red", 137);
+  EXPECT_NEAR(ColorGetR(color), 137, 1);
+  EXPECT_NEAR(ColorGetG(color), 137, 1);
+  EXPECT_NEAR(ColorGetB(color), 137, 1);
+}
+
+// The no-op side of the pair contract above: a file without color chunks
+// stays undeclared and draws its own bytes, byte-identical with main.
+TEST(PNGCodecBusinessReview, UntaggedPngDrawsUnchanged) {
+  skity::Pixmap pixmap(1, 1, skity::kUnpremul_AlphaType,
+                       skity::ColorType::kRGBA);
+  auto addr = pixmap.WritableAddr8(0, 0);
+  addr[0] = addr[1] = addr[2] = 128;
+  addr[3] = 255;
+  auto codec = skity::Codec::MakePngCodec();
+  auto data = codec->Encode(&pixmap);
+  ASSERT_NE(data, nullptr);
+
+  codec->SetData(data);
+  auto decoded = codec->Decode();
+  ASSERT_NE(decoded, nullptr);
+  EXPECT_EQ(decoded->GetColorSpace(), nullptr);
+
+  skity::Bitmap target(1, 1, skity::kPremul_AlphaType, skity::ColorType::kRGBA);
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&target);
+  ASSERT_NE(canvas, nullptr);
+  canvas->DrawImage(skity::Image::MakeImage(decoded), 0.f, 0.f);
+  auto color = target.GetPixel(0, 0);
+  EXPECT_NEAR(ColorGetR(color), 128, 1);
+  EXPECT_NEAR(ColorGetG(color), 128, 1);
+  EXPECT_NEAR(ColorGetB(color), 128, 1);
 }
