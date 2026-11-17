@@ -331,3 +331,25 @@ TEST(CapiRecorder, GetOpPaintByOffset) {
   EXPECT_EQ(skity_display_list_get_op_paint_by_offset(list.l, 1 << 30),
             nullptr);
 }
+
+TEST(CapiRecorder, CreateLinearGradientWithDeclaredStopSpace) {
+  // The _2 entry creates a gradient from a skity_gradient_options struct;
+  // a NULL color space descriptor inside keeps the undeclared (sRGB)
+  // default, and a NULL options pointer keeps every default.
+  skity_point pts[2] = {{{0.f, 0.f, 0.f, 1.f}}, {{100.f, 0.f, 0.f, 1.f}}};
+  // The factories read count stops, so the array must really hold two.
+  skity_color4f red[2] = {{1.f, 0.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 1.f}};
+
+  skity_color_space_info info{};
+  info.kind = SKITY_COLOR_SPACE_DISPLAY_P3;
+  skity_gradient_options p3_options{};
+  p3_options.tile_mode = SKITY_TILE_MODE_CLAMP;
+  p3_options.flags = 0;
+  p3_options.color_space = &info;
+  ShaderGuard p3{
+      skity_shader_create_linear2(pts, red, nullptr, 2, &p3_options)};
+  ASSERT_NE(p3.s, nullptr);
+
+  ShaderGuard plain{skity_shader_create_linear2(pts, red, nullptr, 2, nullptr)};
+  ASSERT_NE(plain.s, nullptr);
+}

@@ -11,6 +11,7 @@
 #include <skity/io/pixmap.hpp>
 #include <utility>
 
+#include "color_space_c_util.hpp"
 #include "handle.hpp"
 
 namespace {
@@ -25,25 +26,6 @@ skity::Pixmap* pixmap_of(skity_pixmap handle) {
   auto* w =
       skity::capi::resolve<skity_pixmap_s>(handle, SKITY_OBJECT_TYPE_PIXMAP);
   return w ? static_cast<skity::Pixmap*>(w->impl.get()) : nullptr;
-}
-
-std::shared_ptr<const skity::ColorSpace> ColorSpaceFromCInfo(
-    const skity_color_space_info* info) {
-  switch (info->kind) {
-    case SKITY_COLOR_SPACE_SRGB:
-      return skity::ColorSpace::SRGB();
-    case SKITY_COLOR_SPACE_SRGB_LINEAR:
-      return skity::ColorSpace::SRGBLinear();
-    case SKITY_COLOR_SPACE_DISPLAY_P3:
-      return skity::ColorSpace::DisplayP3();
-    case SKITY_COLOR_SPACE_ADOBE_RGB:
-      return skity::ColorSpace::AdobeRGB();
-    case SKITY_COLOR_SPACE_PARAMETRIC:
-      break;
-  }
-  auto parametric =
-      skity::ColorSpace::MakeRGB(info->transfer_fn, info->gamut_xyz);
-  return parametric ? parametric : skity::ColorSpace::SRGB();
 }
 
 skity_color_space_kind KindToC(const skity::ColorSpace& cs) {
@@ -229,7 +211,7 @@ skity_result skity_pixmap_set_color_space(skity_pixmap pixmap,
       !skity::ColorSpace::MakeRGB(info->transfer_fn, info->gamut_xyz)) {
     return SKITY_ERROR_INVALID_ARGUMENT;
   }
-  auto cs = ColorSpaceFromCInfo(info);
+  auto cs = skity::capi::ColorSpaceFromCInfo(info);
   // Color space metadata only: keep the current alpha/color interpretation.
   bool ok =
       p->SetColorInfo(p->GetAlphaType(), p->GetColorType(), std::move(cs));

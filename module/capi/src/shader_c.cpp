@@ -10,6 +10,7 @@
 #include <skity/graphic/image.hpp>
 #include <skity/graphic/sampling_options.hpp>
 
+#include "color_space_c_util.hpp"
 #include "handle.hpp"
 
 namespace {
@@ -18,6 +19,21 @@ skity::Shader* shader_of(skity_shader handle) {
   auto* w =
       skity::capi::resolve<skity_shader_s>(handle, SKITY_OBJECT_TYPE_SHADER);
   return w ? static_cast<skity::Shader*>(w->impl.get()) : nullptr;
+}
+
+// Unpacks the C creation options; a NULL pointer or a NULL color space
+// descriptor means undeclared (sRGB) stops.
+skity::GradientOptions GradientOptionsOf(
+    const skity_gradient_options* options) {
+  skity::GradientOptions out;
+  if (options != nullptr) {
+    out.tile_mode = static_cast<skity::TileMode>(options->tile_mode);
+    out.flags = options->flags;
+    if (options->color_space != nullptr) {
+      out.color_space = skity::capi::ColorSpaceFromCInfo(options->color_space);
+    }
+  }
+  return out;
 }
 
 }  // namespace
@@ -76,6 +92,58 @@ skity_shader skity_shader_create_two_point_conical(
       *reinterpret_cast<const skity::Point*>(&end), end_radius,
       reinterpret_cast<const skity::Vec4*>(colors), pos, count,
       static_cast<skity::TileMode>(tile_mode), flags);
+  if (sp == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_shader_s>(
+      SKITY_OBJECT_TYPE_SHADER, SKITY_HANDLE_OWNING, std::move(sp));
+}
+
+skity_shader skity_shader_create_linear2(
+    const skity_point pts[2], const skity_color4f* colors, const float* pos,
+    int32_t count, const skity_gradient_options* options) {
+  auto sp =
+      skity::Shader::MakeLinear(reinterpret_cast<const skity::Point*>(pts),
+                                reinterpret_cast<const skity::Vec4*>(colors),
+                                pos, count, GradientOptionsOf(options));
+  if (sp == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_shader_s>(
+      SKITY_OBJECT_TYPE_SHADER, SKITY_HANDLE_OWNING, std::move(sp));
+}
+
+skity_shader skity_shader_create_radial2(
+    skity_point center, float radius, const skity_color4f* colors,
+    const float* pos, int32_t count, const skity_gradient_options* options) {
+  auto sp = skity::Shader::MakeRadial(
+      *reinterpret_cast<const skity::Point*>(&center), radius,
+      reinterpret_cast<const skity::Vec4*>(colors), pos, count,
+      GradientOptionsOf(options));
+  if (sp == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_shader_s>(
+      SKITY_OBJECT_TYPE_SHADER, SKITY_HANDLE_OWNING, std::move(sp));
+}
+
+skity_shader skity_shader_create_sweep2(float cx, float cy, float start_angle,
+                                        float end_angle,
+                                        const skity_color4f* colors,
+                                        const float* pos, int32_t count,
+                                        const skity_gradient_options* options) {
+  auto sp =
+      skity::Shader::MakeSweep(cx, cy, start_angle, end_angle,
+                               reinterpret_cast<const skity::Vec4*>(colors),
+                               pos, count, GradientOptionsOf(options));
+  if (sp == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_shader_s>(
+      SKITY_OBJECT_TYPE_SHADER, SKITY_HANDLE_OWNING, std::move(sp));
+}
+
+skity_shader skity_shader_create_two_point_conical2(
+    skity_point start, float start_radius, skity_point end, float end_radius,
+    const skity_color4f* colors, const float* pos, int32_t count,
+    const skity_gradient_options* options) {
+  auto sp = skity::Shader::MakeTwoPointConical(
+      *reinterpret_cast<const skity::Point*>(&start), start_radius,
+      *reinterpret_cast<const skity::Point*>(&end), end_radius,
+      reinterpret_cast<const skity::Vec4*>(colors), pos, count,
+      GradientOptionsOf(options));
   if (sp == nullptr) return nullptr;
   return skity::capi::alloc_handle<skity_shader_s>(
       SKITY_OBJECT_TYPE_SHADER, SKITY_HANDLE_OWNING, std::move(sp));

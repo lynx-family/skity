@@ -9,6 +9,7 @@
 #include <memory>
 #include <skity/geometry/matrix.hpp>
 #include <skity/geometry/point.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/image.hpp>
 #include <skity/graphic/sampling_options.hpp>
 #include <skity/graphic/tile_mode.hpp>
@@ -19,6 +20,25 @@
 namespace skity {
 
 class Pixmap;
+
+/**
+ * Creation options shared by the gradient factory overloads. The defaults
+ * keep the legacy behavior: clamp tiling, unpremultiplied interpolation
+ * and an undeclared (sRGB) stop color space.
+ */
+struct GradientOptions {
+  /// How the gradient extrapolates colors outside the [0, 1] stop range.
+  TileMode tile_mode = TileMode::kClamp;
+
+  /// Non-zero to premultiply the stop colors before interpolating.
+  int flags = 0;
+
+  /**
+   * The color space the stop colors are recorded in; a null space means
+   * undeclared, which equals the sRGB working space contract.
+   */
+  std::shared_ptr<const ColorSpace> color_space;
+};
 
 /**
  * Shaders specify the source color(s) for what is being drawn.
@@ -62,6 +82,11 @@ class SKITY_API Shader : public Flattenable {
      *
      */
     int32_t gradientFlags;
+    /**
+     * The color space the stop colors are recorded in. A null space means
+     * undeclared, which equals the sRGB working space contract.
+     */
+    std::shared_ptr<const ColorSpace> color_space;
   };
 
   virtual GradientType AsGradient(GradientInfo* info) const;
@@ -90,6 +115,15 @@ class SKITY_API Shader : public Flattenable {
       TileMode tile_mode = TileMode::kClamp, int flag = 0);
 
   /**
+   * Same as the four-argument MakeLinear overload with the creation
+   * options (tiling, interpolation and the stop color space) spelled out.
+   */
+  static std::shared_ptr<Shader> MakeLinear(const Point pts[2],
+                                            const Vec4 colors[],
+                                            const float pos[], int count,
+                                            const GradientOptions& options);
+
+  /**
    * Returns a shader that generates a radial gradient given the center and
    * radius.
    *
@@ -109,6 +143,15 @@ class SKITY_API Shader : public Flattenable {
       int count, TileMode tile_mode = TileMode::kClamp, int flag = 0);
 
   /**
+   * Same as the five-argument MakeRadial overload with the creation
+   * options (tiling, interpolation and the stop color space) spelled out.
+   */
+  static std::shared_ptr<Shader> MakeRadial(Point const& center, float radius,
+                                            const Vec4 colors[],
+                                            const float pos[], int count,
+                                            const GradientOptions& options);
+
+  /**
    *  Returns a shader that generates a conical gradient given two circles, or
    *  returns NULL if the inputs are invalid. The gradient interprets the
    *  two circles according to the following HTML spec.
@@ -118,6 +161,16 @@ class SKITY_API Shader : public Flattenable {
       Point const& start, float start_radius, Point const& end,
       float end_radius, const Vec4 colors[], const float pos[], int count,
       TileMode tile_mode = TileMode::kClamp, int flag = 0);
+
+  /**
+   * Same as the seven-argument MakeTwoPointConical overload with the
+   * creation options (tiling, interpolation and the stop color space)
+   * spelled out.
+   */
+  static std::shared_ptr<Shader> MakeTwoPointConical(
+      Point const& start, float start_radius, Point const& end,
+      float end_radius, const Vec4 colors[], const float pos[], int count,
+      const GradientOptions& options);
 
   /**
    * Returns a shader that generates a sweep gradient given the center and
@@ -141,6 +194,16 @@ class SKITY_API Shader : public Flattenable {
       float cx, float cy, float start_angle, float end_angle,
       const Vec4 colors[], const float pos[], int count,
       TileMode tile_mode = TileMode::kClamp, int flag = 0);
+
+  /**
+   * Same as the seven-argument MakeSweep overload with the creation
+   * options (tiling, interpolation and the stop color space) spelled out.
+   */
+  static std::shared_ptr<Shader> MakeSweep(float cx, float cy,
+                                           float start_angle, float end_angle,
+                                           const Vec4 colors[],
+                                           const float pos[], int count,
+                                           const GradientOptions& options);
 
   /**
    * Return a shader that fill color with pixel content

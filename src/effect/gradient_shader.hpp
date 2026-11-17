@@ -62,7 +62,8 @@ class LinearGradientShader : public GradientShader {
  public:
   LinearGradientShader(const Point pts[2], const Vec4 colors[],
                        const float pos[], int32_t count, TileMode tile_mode,
-                       int flag);
+                       int flag,
+                       std::shared_ptr<const ColorSpace> color_space = nullptr);
 
   ~LinearGradientShader() override = default;
 
@@ -75,7 +76,8 @@ class RadialGradientShader : public GradientShader {
  public:
   RadialGradientShader(Point const& center, float radius, const Vec4 colors[],
                        const float pos[], int32_t count, TileMode tile_mode,
-                       int flag);
+                       int flag,
+                       std::shared_ptr<const ColorSpace> color_space = nullptr);
   ~RadialGradientShader() override = default;
 
   std::string_view ProcName() const override;
@@ -85,10 +87,11 @@ class RadialGradientShader : public GradientShader {
 
 class TwoPointConicalGradientShader : public GradientShader {
  public:
-  TwoPointConicalGradientShader(Point const& start, float start_radius,
-                                Point const& end, float end_radius,
-                                const Vec4 colors[], const float pos[],
-                                int32_t count, TileMode tile_mode, int flag);
+  TwoPointConicalGradientShader(
+      Point const& start, float start_radius, Point const& end,
+      float end_radius, const Vec4 colors[], const float pos[], int32_t count,
+      TileMode tile_mode, int flag,
+      std::shared_ptr<const ColorSpace> color_space = nullptr);
   ~TwoPointConicalGradientShader() override = default;
 
   std::string_view ProcName() const override;
@@ -100,7 +103,8 @@ class SweepGradientShader : public GradientShader {
  public:
   SweepGradientShader(float cx, float cy, float bias, float scale,
                       const Vec4 colors[], const float pos[], int32_t count,
-                      TileMode tile_mode, int flag);
+                      TileMode tile_mode, int flag,
+                      std::shared_ptr<const ColorSpace> color_space = nullptr);
   ~SweepGradientShader() override = default;
 
   std::string_view ProcName() const override;

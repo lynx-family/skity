@@ -297,52 +297,98 @@ inline std::shared_ptr<PathEffect> MakePathEffectDash(const float* intervals,
       &skity_path_effect_destroy, SKITY_OBJECT_TYPE_PATH_EFFECT);
 }
 
-inline std::shared_ptr<Shader> MakeShaderLinear(const Vec4* pts,
-                                                const Vec4* colors,
-                                                const float* pos, int32_t count,
-                                                TileMode tile, int32_t flags) {
+// Fills a C descriptor from a core color space for the create entries that
+// take one; a null space maps to a null descriptor (undeclared, sRGB).
+inline const skity_color_space_info* ColorSpaceToCInfo(
+    const std::shared_ptr<const ColorSpace>& color_space,
+    skity_color_space_info* info) {
+  if (color_space == nullptr) {
+    return nullptr;
+  }
+  switch (color_space->kind) {
+    case ColorSpace::Kind::kSRGB:
+      info->kind = SKITY_COLOR_SPACE_SRGB;
+      break;
+    case ColorSpace::Kind::kSRGBLinear:
+      info->kind = SKITY_COLOR_SPACE_SRGB_LINEAR;
+      break;
+    case ColorSpace::Kind::kDisplayP3:
+      info->kind = SKITY_COLOR_SPACE_DISPLAY_P3;
+      break;
+    case ColorSpace::Kind::kParametric:
+      info->kind = SKITY_COLOR_SPACE_PARAMETRIC;
+      std::memcpy(info->transfer_fn, color_space->transfer_fn,
+                  sizeof(info->transfer_fn));
+      std::memcpy(info->gamut_xyz, color_space->gamut_xyz,
+                  sizeof(info->gamut_xyz));
+      break;
+  }
+  return info;
+}
+
+inline std::shared_ptr<Shader> MakeShaderLinear(
+    const Vec4* pts, const Vec4* colors, const float* pos, int32_t count,
+    TileMode tile, int32_t flags,
+    const std::shared_ptr<const ColorSpace>& color_space = nullptr) {
+  skity_color_space_info info{};
+  skity_gradient_options options{};
+  options.tile_mode = static_cast<skity_tile_mode>(tile);
+  options.flags = flags;
+  options.color_space = ColorSpaceToCInfo(color_space, &info);
   return adopt_handle<skity_shader_s, Shader, skity_shader>(
-      skity_shader_create_linear(reinterpret_cast<const skity_point*>(pts),
-                                 reinterpret_cast<const skity_color4f*>(colors),
-                                 pos, count, static_cast<skity_tile_mode>(tile),
-                                 flags),
+      skity_shader_create_linear2(
+          reinterpret_cast<const skity_point*>(pts),
+          reinterpret_cast<const skity_color4f*>(colors), pos, count, &options),
       &skity_shader_destroy, SKITY_OBJECT_TYPE_SHADER);
 }
 
-inline std::shared_ptr<Shader> MakeShaderRadial(const Vec4& center,
-                                                float radius,
-                                                const Vec4* colors,
-                                                const float* pos, int32_t count,
-                                                TileMode tile, int32_t flags) {
+inline std::shared_ptr<Shader> MakeShaderRadial(
+    const Vec4& center, float radius, const Vec4* colors, const float* pos,
+    int32_t count, TileMode tile, int32_t flags,
+    const std::shared_ptr<const ColorSpace>& color_space = nullptr) {
+  skity_color_space_info info{};
+  skity_gradient_options options{};
+  options.tile_mode = static_cast<skity_tile_mode>(tile);
+  options.flags = flags;
+  options.color_space = ColorSpaceToCInfo(color_space, &info);
   return adopt_handle<skity_shader_s, Shader, skity_shader>(
-      skity_shader_create_radial(
+      skity_shader_create_radial2(
           reinterpret_cast<const skity_point&>(center), radius,
-          reinterpret_cast<const skity_color4f*>(colors), pos, count,
-          static_cast<skity_tile_mode>(tile), flags),
+          reinterpret_cast<const skity_color4f*>(colors), pos, count, &options),
       &skity_shader_destroy, SKITY_OBJECT_TYPE_SHADER);
 }
 
-inline std::shared_ptr<Shader> MakeShaderSweep(float cx, float cy, float start,
-                                               float end, const Vec4* colors,
-                                               const float* pos, int32_t count,
-                                               TileMode tile, int32_t flags) {
+inline std::shared_ptr<Shader> MakeShaderSweep(
+    float cx, float cy, float start, float end, const Vec4* colors,
+    const float* pos, int32_t count, TileMode tile, int32_t flags,
+    const std::shared_ptr<const ColorSpace>& color_space = nullptr) {
+  skity_color_space_info info{};
+  skity_gradient_options options{};
+  options.tile_mode = static_cast<skity_tile_mode>(tile);
+  options.flags = flags;
+  options.color_space = ColorSpaceToCInfo(color_space, &info);
   return adopt_handle<skity_shader_s, Shader, skity_shader>(
-      skity_shader_create_sweep(
-          cx, cy, start, end, reinterpret_cast<const skity_color4f*>(colors),
-          pos, count, static_cast<skity_tile_mode>(tile), flags),
+      skity_shader_create_sweep2(cx, cy, start, end,
+                                 reinterpret_cast<const skity_color4f*>(colors),
+                                 pos, count, &options),
       &skity_shader_destroy, SKITY_OBJECT_TYPE_SHADER);
 }
 
 inline std::shared_ptr<Shader> MakeShaderTwoPointConical(
     const Vec4& start, float start_radius, const Vec4& end, float end_radius,
     const Vec4* colors, const float* pos, int32_t count, TileMode tile,
-    int32_t flags) {
+    int32_t flags,
+    const std::shared_ptr<const ColorSpace>& color_space = nullptr) {
+  skity_color_space_info info{};
+  skity_gradient_options options{};
+  options.tile_mode = static_cast<skity_tile_mode>(tile);
+  options.flags = flags;
+  options.color_space = ColorSpaceToCInfo(color_space, &info);
   return adopt_handle<skity_shader_s, Shader, skity_shader>(
-      skity_shader_create_two_point_conical(
+      skity_shader_create_two_point_conical2(
           reinterpret_cast<const skity_point&>(start), start_radius,
           reinterpret_cast<const skity_point&>(end), end_radius,
-          reinterpret_cast<const skity_color4f*>(colors), pos, count,
-          static_cast<skity_tile_mode>(tile), flags),
+          reinterpret_cast<const skity_color4f*>(colors), pos, count, &options),
       &skity_shader_destroy, SKITY_OBJECT_TYPE_SHADER);
 }
 
