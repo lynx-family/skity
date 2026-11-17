@@ -134,6 +134,56 @@ TEST(ColorSpace, SRGBGamutIsD50AdaptedFromItsPrimaries) {
   EXPECT_NEAR(native.by, 0.060, 1e-4);
 }
 
+TEST(ColorSpace, AdobeRGBGamutIsD50AdaptedFromItsPrimaries) {
+  namespace util = color_space_test_util;
+  auto adobe = skity::ColorSpace::AdobeRGB();
+  EXPECT_FALSE(adobe->IsSRGB());
+  EXPECT_FALSE(adobe->IsLinear());
+  EXPECT_EQ(adobe->kind, skity::ColorSpace::Kind::kAdobeRGB);
+  // Interned singleton, like every named factory.
+  EXPECT_EQ(skity::ColorSpace::AdobeRGB(), adobe);
+
+  // Gamut matrices live in the D50 connection space: RGB white maps to the
+  // D50 white point, not to the Adobe RGB native D65 white.
+  for (int row = 0; row < 3; row++) {
+    float sum = adobe->gamut_xyz[row * 3] + adobe->gamut_xyz[row * 3 + 1] +
+                adobe->gamut_xyz[row * 3 + 2];
+    EXPECT_NEAR(sum, static_cast<float>(util::kD50[row]), 1e-5f);
+  }
+  // The matrix matches an independent derivation from the published
+  // chromaticities plus a Bradford adaptation to D50.
+  auto reference = util::D50Gamut(util::kAdobeRGBChromaticities);
+  for (int i = 0; i < 9; i++) {
+    EXPECT_NEAR(adobe->gamut_xyz[i], static_cast<float>(reference[i]), 1e-6f);
+  }
+  // Undoing the adaptation recovers the published primaries and white.
+  auto native = util::NativeChromaticities(adobe->gamut_xyz);
+  EXPECT_NEAR(native.wx, 0.3127, 1e-5);
+  EXPECT_NEAR(native.wy, 0.3290, 1e-5);
+  EXPECT_NEAR(native.rx, 0.640, 1e-5);
+  EXPECT_NEAR(native.ry, 0.330, 1e-5);
+  EXPECT_NEAR(native.gx, 0.210, 1e-5);
+  EXPECT_NEAR(native.gy, 0.710, 1e-5);
+  EXPECT_NEAR(native.bx, 0.150, 1e-5);
+  EXPECT_NEAR(native.by, 0.060, 1e-5);
+
+  // Pure gamma 2.2 transfer curve.
+  const float gamma22[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  EXPECT_EQ(std::memcmp(adobe->transfer_fn, gamma22, sizeof(float) * 7), 0);
+
+  // Equal to the equivalent parametric space (kind is ignored by value
+  // equality, so deserialized Adobe RGB content stays comparable).
+  auto parametric = skity::ColorSpace::MakeRGB(gamma22, adobe->gamut_xyz);
+  ASSERT_NE(parametric, nullptr);
+  EXPECT_EQ(*parametric, *adobe);
+
+  // The Adobe RGB green primary sits outside the sRGB gamut; conversion
+  // stays unclamped by contract.
+  auto green_in_srgb = skity::ColorSpace::Convert(
+      adobe, skity::Color4f{0.f, 1.f, 0.f, 1.f}, nullptr);
+  EXPECT_GT(green_in_srgb.g, 1.f);
+}
+
 TEST(ColorSpace, CrossGamutNeutralsStayNeutral) {
   // sRGB and Display P3 share the transfer curve and the native white point,
   // so neutral colors are the same values in both spaces. A reference-white

@@ -36,6 +36,8 @@ std::shared_ptr<const skity::ColorSpace> ColorSpaceFromCInfo(
       return skity::ColorSpace::SRGBLinear();
     case SKITY_COLOR_SPACE_DISPLAY_P3:
       return skity::ColorSpace::DisplayP3();
+    case SKITY_COLOR_SPACE_ADOBE_RGB:
+      return skity::ColorSpace::AdobeRGB();
     case SKITY_COLOR_SPACE_PARAMETRIC:
       break;
   }
@@ -52,6 +54,8 @@ skity_color_space_kind KindToC(const skity::ColorSpace& cs) {
       return SKITY_COLOR_SPACE_SRGB_LINEAR;
     case skity::ColorSpace::Kind::kDisplayP3:
       return SKITY_COLOR_SPACE_DISPLAY_P3;
+    case skity::ColorSpace::Kind::kAdobeRGB:
+      return SKITY_COLOR_SPACE_ADOBE_RGB;
     case skity::ColorSpace::Kind::kParametric:
       return SKITY_COLOR_SPACE_PARAMETRIC;
   }

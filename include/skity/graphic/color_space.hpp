@@ -29,6 +29,7 @@ struct SKITY_API ColorSpace {
     kSRGBLinear,
     kDisplayP3,
     kParametric,
+    kAdobeRGB,
   };
 
   /**
@@ -80,6 +81,11 @@ struct SKITY_API ColorSpace {
   /// Display P3 color space (sRGB transfer curve, P3 primaries with a D65
   /// native white, stored D50-adapted like every gamut).
   static std::shared_ptr<const ColorSpace> DisplayP3();
+
+  /// Adobe RGB (1998): a pure gamma 2.2 transfer curve over the Adobe RGB
+  /// D65 gamut (wider than sRGB in greens and cyans), stored D50-adapted
+  /// like every gamut.
+  static std::shared_ptr<const ColorSpace> AdobeRGB();
 
   /**
    * Creates a parametric space from a skcms-style transfer function and a

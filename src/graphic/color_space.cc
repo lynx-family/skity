@@ -30,6 +30,18 @@ constexpr float kDisplayP3Gamut[9] = {
     -0.0010494f, 0.0418818f, 0.7843776f,
 };
 
+// Adobe RGB (1998) gamut in the D50 connection space (see gamut_xyz),
+// derived exactly like the Display P3 constants above: native D65 white
+// (0.3127, 0.3290) with the standard primaries R(0.640, 0.330)
+// G(0.210, 0.710) B(0.150, 0.060), Bradford-adapted to D50 so the rows sum
+// to the D50 white. The unit tests re-derive this matrix through
+// GamutFromChromaticities.
+constexpr float kAdobeRGBGamut[9] = {
+    0.6097223f, 0.2052639f, 0.1492338f,  //
+    0.3111041f, 0.6256693f, 0.0632266f,  //
+    0.0194740f, 0.0608850f, 0.7448510f,
+};
+
 bool IsValidTransferFn(const float tf[7]) {
   for (int i = 0; i < 7; i++) {
     if (!std::isfinite(tf[i])) {
@@ -244,6 +256,24 @@ std::shared_ptr<const ColorSpace> ColorSpace::DisplayP3() {
     return cs;
   }();
   return kDisplayP3;
+}
+
+std::shared_ptr<const ColorSpace> ColorSpace::AdobeRGB() {
+  static const std::shared_ptr<const ColorSpace> kAdobeRGB = [] {
+    auto cs = std::make_shared<ColorSpace>();
+    // Pure gamma 2.2 power curve (single segment, d == 0).
+    cs->transfer_fn[0] = 2.2f;
+    cs->transfer_fn[1] = 1.f;
+    cs->transfer_fn[2] = 0.f;
+    cs->transfer_fn[3] = 0.f;
+    cs->transfer_fn[4] = 0.f;
+    cs->transfer_fn[5] = 0.f;
+    cs->transfer_fn[6] = 0.f;
+    std::memcpy(cs->gamut_xyz, kAdobeRGBGamut, sizeof(cs->gamut_xyz));
+    cs->kind = Kind::kAdobeRGB;
+    return cs;
+  }();
+  return kAdobeRGB;
 }
 
 std::shared_ptr<const ColorSpace> ColorSpace::MakeRGB(
