@@ -65,35 +65,36 @@ void DrawTaggedSwatchRows(Canvas* canvas) {
 }
 
 // Panel 2: one color value recorded in different color spaces. The paint
-// resolves the recorded space into the target space at draw time.
+// resolves the recorded space into the target space at draw time. Two rows:
+// the moderate orange shows the transfer-function differences dominating
+// (linear is much lighter; gamma 2.2 is nearly identical to sRGB because
+// the sRGB curve IS a piecewise 2.2 power curve), while the saturated green
+// shows the gamut difference (the Display P3 swatch drops the red tint its
+// sRGB twin keeps, because the gamut matrix moves it out before clipping).
 void DrawPaintSpaceSwatches(Canvas* canvas) {
-  struct {
-    const char* name;
-    std::shared_ptr<const ColorSpace> space;
-  } swatches[] = {
-      {"sRGB", ColorSpace::SRGB()},
-      {"linear sRGB", ColorSpace::SRGBLinear()},
-      {"Display P3", ColorSpace::DisplayP3()},
-  };
-
   // A pure power curve over the sRGB gamut: only the transfer function
   // differs from sRGB.
   const float gamma22_tf[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
   auto gamma22 =
       ColorSpace::MakeRGB(gamma22_tf, ColorSpace::SRGB()->gamut_xyz);
 
-  const Color4f color{1.f, 0.25f, 0.1f, 1.f};
-  float x = 16.f;
-  for (const auto& swatch : swatches) {
-    Paint paint;
-    paint.SetColor4f(color, swatch.space);
-    canvas->DrawRect(Rect::MakeXYWH(x, 260.f, 180.f, 100.f), paint);
-    x += 196.f;
-  }
-  if (gamma22) {
-    Paint paint;
-    paint.SetColor4f(color, gamma22);
-    canvas->DrawRect(Rect::MakeXYWH(x, 260.f, 180.f, 100.f), paint);
+  std::shared_ptr<const ColorSpace> spaces[4] = {
+      ColorSpace::SRGB(), ColorSpace::SRGBLinear(), ColorSpace::DisplayP3(),
+      gamma22 ? gamma22 : ColorSpace::SRGB()};
+  const Color4f row_colors[2] = {
+      Color4f{1.f, 0.25f, 0.1f, 1.f},  // moderate orange
+      Color4f{0.2f, 0.9f, 0.2f, 1.f},  // saturated green
+  };
+
+  for (size_t row = 0; row < 2; row++) {
+    float y = 248.f + row * 80.f;
+    float x = 16.f;
+    for (const auto& space : spaces) {
+      Paint paint;
+      paint.SetColor4f(row_colors[row], space);
+      canvas->DrawRect(Rect::MakeXYWH(x, y, 180.f, 72.f), paint);
+      x += 196.f;
+    }
   }
 }
 
@@ -104,11 +105,11 @@ void DrawPaintSpaceSwatches(Canvas* canvas) {
 void DrawPrimaryComparison(Canvas* canvas) {
   Paint p3_red;
   p3_red.SetColor4f(Color4f{1.f, 0.f, 0.f, 1.f}, ColorSpace::DisplayP3());
-  canvas->DrawRect(Rect::MakeXYWH(16.f, 392.f, 372.f, 176.f), p3_red);
+  canvas->DrawRect(Rect::MakeXYWH(16.f, 416.f, 372.f, 152.f), p3_red);
 
   Paint srgb_red;
   srgb_red.SetColor4f(Color4f{1.f, 0.f, 0.f, 1.f}, ColorSpace::SRGB());
-  canvas->DrawRect(Rect::MakeXYWH(412.f, 392.f, 372.f, 176.f), srgb_red);
+  canvas->DrawRect(Rect::MakeXYWH(412.f, 416.f, 372.f, 152.f), srgb_red);
 }
 
 // Panel 4: hues sampled around the Display P3 gamut. Every swatch is
@@ -150,7 +151,9 @@ void draw_color_space_example(Canvas* canvas) {
 
   // Top three rows: identical bytes tagged sRGB / Display P3 / linear.
   DrawTaggedSwatchRows(canvas);
-  // One paint color recorded in sRGB / linear / P3 / gamma 2.2 spaces.
+  // Two paint colors recorded in sRGB / linear / P3 / gamma 2.2 spaces:
+  // transfer-function differences dominate the orange row, gamut
+  // differences dominate the green row.
   DrawPaintSpaceSwatches(canvas);
   // P3 red primary vs sRGB red: the visible gap is the wide gamut part.
   DrawPrimaryComparison(canvas);
