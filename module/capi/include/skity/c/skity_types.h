@@ -169,6 +169,7 @@ typedef enum {
   SKITY_COLOR_SPACE_SRGB_LINEAR, /**< linear transfer, sRGB primaries */
   SKITY_COLOR_SPACE_DISPLAY_P3,  /**< sRGB curve, Display P3 primaries */
   SKITY_COLOR_SPACE_PARAMETRIC,  /**< described by transfer_fn/gamut_xyz */
+  SKITY_COLOR_SPACE_ADOBE_RGB,   /**< gamma 2.2 curve, Adobe RGB primaries */
 } skity_color_space_kind;
 
 /**

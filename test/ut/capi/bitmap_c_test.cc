@@ -56,6 +56,13 @@ TEST(CapiPixmapColorSpace, NamedKindsUseCanonicalValues) {
   ASSERT_EQ(skity_pixmap_get_color_space(pixmap, &out), SKITY_SUCCESS);
   EXPECT_EQ(out.kind, SKITY_COLOR_SPACE_SRGB_LINEAR);
   EXPECT_EQ(out.transfer_fn[0], 1.f);
+
+  info.kind = SKITY_COLOR_SPACE_ADOBE_RGB;
+  ASSERT_EQ(skity_pixmap_set_color_space(pixmap, &info), SKITY_SUCCESS);
+  ASSERT_EQ(skity_pixmap_get_color_space(pixmap, &out), SKITY_SUCCESS);
+  EXPECT_EQ(out.kind, SKITY_COLOR_SPACE_ADOBE_RGB);
+  // Adobe RGB carries the pure gamma 2.2 curve.
+  EXPECT_NEAR(out.transfer_fn[0], 2.2f, 1e-5f);
   EXPECT_EQ(out.transfer_fn[1], 1.f);
 
   skity_pixmap_destroy(pixmap);
