@@ -557,14 +557,16 @@ PixmapBrush::PixmapBrush(std::vector<Span> const& spans, Bitmap* bitmap,
                          float global_alpha, std::shared_ptr<Pixmap> pixmap,
                          const Matrix& points_to_unit,
                          const SamplingOptions& sampling, TileMode x_tile_mode,
-                         TileMode y_tile_mode)
+                         TileMode y_tile_mode,
+                         const std::shared_ptr<const ColorSpace>& target_space)
     : SWSpanBrush(spans, bitmap, color_filter, blend, global_alpha),
       texture_(new Bitmap(std::move(pixmap))),
       points_to_unit_(points_to_unit),
       filter_mode_(sampling.UseCubic() ? FilterMode::kLinear : sampling.filter),
       x_tile_mode_(x_tile_mode),
       y_tile_mode_(y_tile_mode),
-      bitmap_sampler_(*texture_.get(), sampling, x_tile_mode, y_tile_mode) {}
+      bitmap_sampler_(*texture_.get(), sampling, x_tile_mode, y_tile_mode,
+                      target_space) {}
 
 Color PixmapBrush::CalculateColor(int32_t x, int32_t y) {
   SKITY_TRACE_EVENT(PixmapBrush_CalculateColor);

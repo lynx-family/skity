@@ -402,7 +402,7 @@ void WGSLRRectGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
         Vec4{transform.GetScaleX(), transform.GetSkewY(), transform.GetSkewX(),
              transform.GetScaleY()},
         Vec2{transform.GetTranslateX(), transform.GetTranslateY()},
-        Vec4{paint.GetColor4f()}};
+        Vec4{paint.GetColor4f(context->target_space)}};
     context->stageBuffer->AppendInstance<Instance>(instance);
   }
   auto instance_buffer_view = context->stageBuffer->EndWritingInstance();

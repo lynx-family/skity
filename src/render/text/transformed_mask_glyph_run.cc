@@ -209,7 +209,8 @@ class TransformedMaskGlyphRun final : public AtlasGlyphRun {
 Paint MakeBitmapOnlyFillPaint(const Paint& paint) {
   Paint fill_paint = paint;
   if (paint.GetStyle() == Paint::kStroke_Style) {
-    fill_paint.SetFillColor(paint.GetStrokeColor());
+    // The copied color carries its recorded space with it.
+    fill_paint.SetColor4f(paint.GetStrokeColor(), paint.GetColorSpace());
   }
   fill_paint.SetStyle(Paint::kFill_Style);
   return fill_paint;

@@ -254,7 +254,7 @@ void WGSLTextGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
         glyph_rect.item.vertex_coord,
         Vec4{glyph_rect.item.texture_coord_tl,
              glyph_rect.item.texture_coord_br},
-        glyph_rect.paint.GetColor4f());
+        glyph_rect.paint.GetColor4f(context->target_space));
   }
   auto instance_buffer_view = context->stageBuffer->EndWritingInstance();
   cmd->instance_count = instance_buffer_view.range / sizeof(Instance);

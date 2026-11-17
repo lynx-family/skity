@@ -40,7 +40,9 @@ class SKITY_API Image {
 
   /**
    * Wraps a raw texture as an image. The texture holds source-space encoded
-   * bytes; pass its color space so draws decode it.
+   * bytes; pass its color space so draws decode it. Textures that back a
+   * render target should pass the target space so re-drawing them converts,
+   * or passes through, correctly.
    */
   static std::shared_ptr<Image> MakeHWImage(
       std::shared_ptr<Texture> texture,
@@ -110,6 +112,12 @@ class SKITY_API Image {
       std::shared_ptr<const ColorSpace> color_space = nullptr) noexcept
       : color_space_(std::move(color_space)) {}
 
+  /// Post-construction retag for image types that learn their space later
+  /// (e.g. deferred textures resolving into a render target).
+  void SetColorSpace(std::shared_ptr<const ColorSpace> color_space) {
+    color_space_ = std::move(color_space);
+  }
+
  private:
   // Declared once at the base instead of per subclass: every image either
   // carries the space it was created with or leaves it undeclared (null).
@@ -141,6 +149,15 @@ class SKITY_API DeferredTextureImage : public Image {
   }
 
   void SetAlphaType(AlphaType alpha_type) { alpha_type_ = alpha_type; }
+
+  /**
+   * Declares the color space the texture's pixels are encoded in (default
+   * sRGB). Render-target-backed deferred textures (e.g. MSAA resolve images)
+   * should declare the target space so re-drawing them is conversion free.
+   */
+  void SetColorSpace(std::shared_ptr<const ColorSpace> color_space) {
+    Image::SetColorSpace(std::move(color_space));
+  }
 
   ImageType GetImageType() const override {
     return ImageType::kDeferredTexture;

@@ -8,6 +8,7 @@
 #include <skity/text/typeface.hpp>
 
 #include "src/geometry/math.hpp"
+#include "src/graphic/color_transform.hpp"
 
 namespace skity {
 
@@ -45,11 +46,20 @@ Paint::Join Paint::GetStrokeJoin() const { return join_; }
 
 void Paint::SetStrokeJoin(Join join) { join_ = join; }
 
+void Paint::ResetColorSpaceToWorking(Vector& other_color) {
+  // A single-slot setter re-declares the whole paint in the working space:
+  // the untouched slot's stored value converts from the recorded space so
+  // its displayed color survives, then the declaration resets.
+  if (color_space_) {
+    other_color =
+        ColorTransformSteps::Resolve(color_space_, nullptr).Apply(other_color);
+  }
+  color_space_ = nullptr;
+}
+
 void Paint::SetStrokeColor(float r, float g, float b, float a) {
-  stroke_color_[0] = r;
-  stroke_color_[1] = g;
-  stroke_color_[2] = b;
-  stroke_color_[3] = a;
+  ResetColorSpaceToWorking(fill_color_);
+  stroke_color_ = Vector{r, g, b, a};
 }
 
 void Paint::SetStrokeColor(const Vector& color) {
@@ -57,32 +67,35 @@ void Paint::SetStrokeColor(const Vector& color) {
 }
 
 void Paint::SetStrokeColor(Color color) {
-  SetStrokeColor(Color4fFromColor(color));
+  ResetColorSpaceToWorking(fill_color_);
+  stroke_color_ = Color4fFromColor(color);
 }
 
 Vector Paint::GetStrokeColor() const { return stroke_color_; }
 
 void Paint::SetFillColor(float r, float g, float b, float a) {
-  fill_color_[0] = r;
-  fill_color_[1] = g;
-  fill_color_[2] = b;
-  fill_color_[3] = a;
+  ResetColorSpaceToWorking(stroke_color_);
+  fill_color_ = Vector{r, g, b, a};
 }
 
 void Paint::SetFillColor(const Vector& color) {
   SetFillColor(color.x, color.y, color.z, color.w);
 }
 
-void Paint::SetFillColor(Color color) { SetFillColor(Color4fFromColor(color)); }
+void Paint::SetFillColor(Color color) {
+  ResetColorSpaceToWorking(stroke_color_);
+  fill_color_ = Color4fFromColor(color);
+}
 
 Vector Paint::GetFillColor() const { return fill_color_; }
 
-void Paint::SetColor(Color color) { SetColor4f(Color4fFromColor(color)); }
-
 void Paint::SetColor(Color color,
                      std::shared_ptr<const ColorSpace> color_space) {
-  SetColor4f(Color4fFromColor(color), std::move(color_space));
+  stroke_color_ = fill_color_ = Color4fFromColor(color);
+  color_space_ = std::move(color_space);
 }
+
+void Paint::SetColor(Color color) { SetColor(color, nullptr); }
 
 Color Paint::GetColor() const { return Color4fToColor(GetColor4f()); }
 
@@ -90,21 +103,32 @@ Color4f Paint::GetColor4f() const {
   return kStroke_Style == style_ ? stroke_color_ : fill_color_;
 }
 
-void Paint::SetColor4f(Color4f color) { SetColor4f(color, nullptr); }
+Color4f Paint::GetColor4f(
+    const std::shared_ptr<const ColorSpace>& target_space) const {
+  return kStroke_Style == style_ ? GetStrokeColor(target_space)
+                                 : GetFillColor(target_space);
+}
+
+Color4f Paint::GetFillColor(
+    const std::shared_ptr<const ColorSpace>& target_space) const {
+  Color4f color = GetFillColor();
+  return ColorTransformSteps::Resolve(color_space_, target_space).Apply(color);
+}
+
+Color4f Paint::GetStrokeColor(
+    const std::shared_ptr<const ColorSpace>& target_space) const {
+  Color4f color = GetStrokeColor();
+  return ColorTransformSteps::Resolve(color_space_, target_space).Apply(color);
+}
 
 void Paint::SetColor4f(Color4f color,
                        std::shared_ptr<const ColorSpace> color_space) {
-  // The pipeline currently has one fixed working space (sRGB) and the paint
-  // stores only the working-space value, so a declared color space must be
-  // honored right here: the color converts on the way in. A null source
-  // space folds to a no-op, keeping the plain setters byte-identical with
-  // the pre-color-space behavior. The per-target working-space follow-up
-  // (surfaces declaring their own space) replaces this with recording the
-  // original {value, space} and converting once the render target is known.
-  Color4f working = ColorSpace::Convert(color_space, color, nullptr);
-  stroke_color_ = working;
-  fill_color_ = working;
+  stroke_color_ = color;
+  fill_color_ = color;
+  color_space_ = std::move(color_space);
 }
+
+void Paint::SetColor4f(Color4f color) { SetColor4f(color, nullptr); }
 
 void Paint::SetAntiAlias(bool aa) { is_anti_alias_ = aa; }
 
@@ -171,6 +195,7 @@ bool Paint::operator==(const Paint& other) const {
          font_fill_threshold_ == other.font_fill_threshold_ &&  //
          fill_color_ == other.fill_color_ &&                    //
          stroke_color_ == other.stroke_color_ &&                //
+         color_space_ == other.color_space_ &&                  //
          is_anti_alias_ == other.is_anti_alias_ &&              //
          blend_mode_ == other.blend_mode_ &&                    //
          path_effect_ == other.path_effect_ &&                  //

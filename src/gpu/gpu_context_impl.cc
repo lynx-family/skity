@@ -7,6 +7,8 @@
 #include <skity/render/precompile_context.hpp>
 #include <utility>
 
+#include "src/gpu/gpu_surface_impl.hpp"
+
 namespace skity {
 
 bool GPUContextImpl::Init() {
@@ -121,7 +123,12 @@ std::shared_ptr<Image> GPUContextImpl::MakeSnapshot(
 
   render_target->surface_->Flush();
 
-  return Image::MakeHWImage(render_target->texture_);
+  // The snapshot holds target-encoded bytes; the image must carry the
+  // target space or re-drawing it interprets them as sRGB. Every surface
+  // this context creates is a GPUSurfaceImpl, which remembers the space it
+  // was created with.
+  auto& surface = static_cast<GPUSurfaceImpl&>(*render_target->surface_);
+  return Image::MakeHWImage(render_target->texture_, surface.GetColorSpace());
 }
 
 std::shared_ptr<Data> GPUContextImpl::ReadPixels(

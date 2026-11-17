@@ -223,6 +223,7 @@ std::shared_ptr<GoldenTexture> GoldenTestEnvVK::RenderToSurface(
   surface_desc.width = width;
   surface_desc.height = height;
   surface_desc.sample_count = surface_sample_count;
+  surface_desc.render_options.color_space = GetTargetColorSpace();
   surface_desc.surface_type = VKSurfaceType::kTexture;
   surface_desc.image = vk_texture->GetImage();
   surface_desc.image_view = vk_texture->GetImageView();
