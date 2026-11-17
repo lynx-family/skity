@@ -1021,3 +1021,47 @@ TEST(ColorSpaceGolden, AdobeRGBTargetResolvesSRGBImage) {
   EXPECT_NEAR(result.b, q(expected.b), 2.f / 255.f);
   EXPECT_NEAR(result.a, 1.f, 1.f / 255.f);
 }
+
+// A blend filter color recorded in a declared space resolves into the
+// target: on an sRGB target, a kSrc filter carrying an in-gamut P3 color
+// replaces the pixel with that color's sRGB encoding (a dropped or ignored
+// declaration would blend the raw P3 bytes instead).
+TEST(ColorSpaceGolden, DeclaredBlendFilterColorResolvesIntoTarget) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+    skity::Paint paint;
+    paint.SetColor(skity::Color_WHITE);
+    paint.SetColorFilter(skity::ColorFilters::Blend(
+        skity::Color4f{0.7f, 0.4f, 0.2f, 1.f}, skity::BlendMode::kSrc,
+        skity::ColorSpace::DisplayP3()));
+    canvas->DrawRect(skity::Rect::MakeWH(64.f, 64.f), paint);
+  });
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto filtered = skity::Color4fFromColor(bitmap.GetPixel(32, 32));
+  auto expected = skity::ColorSpace::Convert(
+      skity::ColorSpace::DisplayP3(), skity::Color4f{0.7f, 0.4f, 0.2f, 1.f},
+      nullptr);
+  auto q = [](float v) {
+    return static_cast<float>(
+               static_cast<uint8_t>(std::clamp(v * 255.f, 0.f, 255.f))) /
+           255.f;
+  };
+  EXPECT_NEAR(filtered.r, q(expected.r), 2.f / 255.f);
+  EXPECT_NEAR(filtered.g, q(expected.g), 2.f / 255.f);
+  EXPECT_NEAR(filtered.b, q(expected.b), 2.f / 255.f);
+  EXPECT_NEAR(filtered.a, 1.f, 1.f / 255.f);
+}
+
+// Adobe RGB (1998): a gamma 2.2 space whose green primary sits well outside
+// the sRGB gamut. An AdobeRGB-tagged image storing the CPU-converted
+// representation of an sRGB color decodes back to that color on an sRGB
+// target (parametric decode + gamut both active; the encode folds because
+// the target curve is sRGB).

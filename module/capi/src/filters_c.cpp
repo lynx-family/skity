@@ -28,6 +28,17 @@ skity_color_filter skity_color_filter_create_blend(skity_color color,
       SKITY_OBJECT_TYPE_COLOR_FILTER, SKITY_HANDLE_OWNING, std::move(sp));
 }
 
+skity_color_filter skity_color_filter_create_blend4f(const skity_color4f* color,
+                                                     skity_blend_mode mode) {
+  if (color == nullptr) return nullptr;
+  auto sp = skity::ColorFilters::Blend(
+      *reinterpret_cast<const skity::Color4f*>(color),
+      static_cast<skity::BlendMode>(mode));
+  if (sp == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_color_filter_s>(
+      SKITY_OBJECT_TYPE_COLOR_FILTER, SKITY_HANDLE_OWNING, std::move(sp));
+}
+
 skity_color_filter skity_color_filter_create_compose(skity_color_filter outer,
                                                      skity_color_filter inner) {
   auto o = skity::capi::get_impl<skity_color_filter_s, skity::ColorFilter>(

@@ -162,6 +162,15 @@ inline std::shared_ptr<ColorFilter> MakeColorFilterMatrix(const float* matrix) {
       SKITY_OBJECT_TYPE_COLOR_FILTER);
 }
 
+inline std::shared_ptr<ColorFilter> MakeColorFilterBlend4f(Color4f color,
+                                                           BlendMode mode) {
+  return adopt_handle<skity_color_filter_s, ColorFilter, skity_color_filter>(
+      skity_color_filter_create_blend4f(
+          reinterpret_cast<const skity_color4f*>(&color),
+          static_cast<skity_blend_mode>(mode)),
+      &skity_color_filter_destroy, SKITY_OBJECT_TYPE_COLOR_FILTER);
+}
+
 inline std::shared_ptr<ColorFilter> MakeColorFilterBlend(uint32_t color,
                                                          BlendMode mode) {
   return adopt_handle<skity_color_filter_s, ColorFilter, skity_color_filter>(

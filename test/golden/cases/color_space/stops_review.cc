@@ -21,7 +21,7 @@
 
 namespace skity {
 std::shared_ptr<Flattenable> ReadShaderFromMemory(const std::string& factory,
-                                                ReadBuffer& buffer);
+                                                  ReadBuffer& buffer);
 std::shared_ptr<Flattenable> ReadColorFilterFromMemory(
     const std::string& factory, ReadBuffer& buffer);
 }  // namespace skity
@@ -100,8 +100,7 @@ TEST(ColorSpaceStopsReviewIO, ReadsSkiaV1GradientColorSpace) {
 
   skity::BinaryWriteBuffer writer;
   writer.WriteUint32(0x20000000u);
-  const skity::Color4f colors[] = {{1.f, 0.f, 0.f, 1.f},
-                                  {0.f, 0.f, 1.f, 1.f}};
+  const skity::Color4f colors[] = {{1.f, 0.f, 0.f, 1.f}, {0.f, 0.f, 1.f, 1.f}};
   writer.WriteColor4fArray(colors, 2);
   writer.WriteByteArray(space.data(), space.size());
   writer.WritePoint({0.f, 0.f});
@@ -114,10 +113,8 @@ TEST(ColorSpaceStopsReviewIO, ReadsSkiaV1GradientColorSpace) {
 }
 
 TEST(ColorSpaceStopsReviewIO, WritesSkiaV1GradientColorSpace) {
-  const skity::Point points[] = {{0.f, 0.f, 0.f, 1.f},
-                                 {64.f, 0.f, 0.f, 1.f}};
-  const skity::Color4f colors[] = {{1.f, 0.f, 0.f, 1.f},
-                                  {0.f, 0.f, 1.f, 1.f}};
+  const skity::Point points[] = {{0.f, 0.f, 0.f, 1.f}, {64.f, 0.f, 0.f, 1.f}};
+  const skity::Color4f colors[] = {{1.f, 0.f, 0.f, 1.f}, {0.f, 0.f, 1.f, 1.f}};
   auto shader = skity::Shader::MakeLinear(
       points, colors, nullptr, 2,
       {skity::TileMode::kClamp, 0, skity::ColorSpace::DisplayP3()});
@@ -147,7 +144,7 @@ TEST(ColorSpaceStopsReviewGPU, GradientClampsBeforePremultiplying) {
       const skity::Point points[] = {{0.f, 0.f, 0.f, 1.f},
                                      {32.f, 0.f, 0.f, 1.f}};
       const skity::Color4f stops[] = {{1.f, 0.f, 0.f, 0.5f},
-                                     {1.f, 0.f, 0.f, 0.5f}};
+                                      {1.f, 0.f, 0.f, 0.5f}};
       skity::Paint paint;
       paint.SetShader(skity::Shader::MakeLinear(
           points, stops, nullptr, 2,
@@ -166,4 +163,63 @@ TEST(ColorSpaceStopsReviewGPU, GradientClampsBeforePremultiplying) {
     ExpectRGBA(gradient, image, 2);
     EXPECT_LE(ColorGetR(gradient), ColorGetA(gradient));
   }
+}
+
+TEST(ColorSpaceStopsReviewGPU, BlendConstantClampsBeforePremultiplying) {
+  ASSERT_NE(skity::testing::GoldenTestEnv::GetInstance(), nullptr);
+  ScopedTarget target(nullptr);
+  auto texture = target.env()->RenderToTexture(64, 64, [](skity::Canvas* c) {
+    c->Clear(skity::Color_TRANSPARENT);
+    skity::Paint paint;
+    paint.SetColor(skity::Color_WHITE);
+    paint.SetColorFilter(skity::ColorFilters::Blend(
+        skity::Color4f{1.f, 0.f, 0.f, 0.5f}, skity::BlendMode::kSrc,
+        skity::ColorSpace::DisplayP3()));
+    c->DrawRect(skity::Rect::MakeWH(32, 64), paint);
+    c->DrawImage(HalfAlphaP3Red(), 32, 0);
+  });
+  ASSERT_NE(texture, nullptr);
+  auto pixmap = texture->ReadPixels();
+  ASSERT_NE(pixmap, nullptr);
+  skity::Bitmap bitmap(pixmap);
+  auto filtered = bitmap.GetPixel(16, 32);
+  auto image = bitmap.GetPixel(48, 32);
+  EXPECT_NEAR(ColorGetR(image), 128, 1);
+  EXPECT_NEAR(ColorGetA(image), 128, 1);
+  ExpectRGBA(filtered, image, 2);
+  EXPECT_LE(ColorGetR(filtered), ColorGetA(filtered));
+}
+
+TEST(ColorSpaceStopsReviewGPU, BlendFilterSerializationPreservesP3Color) {
+  ASSERT_NE(skity::testing::GoldenTestEnv::GetInstance(), nullptr);
+  ScopedTarget target(skity::ColorSpace::DisplayP3());
+  auto filter = skity::ColorFilters::Blend(skity::Color4f{1.f, 0.f, 0.f, 1.f},
+                                           skity::BlendMode::kSrc,
+                                           skity::ColorSpace::DisplayP3());
+  ASSERT_NE(filter, nullptr);
+  skity::BinaryWriteBuffer writer;
+  filter->FlattenToBuffer(writer);
+  auto data = Bytes(writer);
+  skity::ReadBuffer reader(data.data(), data.size());
+  auto restored = std::static_pointer_cast<skity::ColorFilter>(
+      skity::ReadColorFilterFromMemory("SkBlendModeColorFilter", reader));
+  ASSERT_TRUE(reader.IsValid());
+  ASSERT_NE(restored, nullptr);
+  auto texture = target.env()->RenderToTexture(64, 64, [&](skity::Canvas* c) {
+    c->Clear(skity::Color_TRANSPARENT);
+    skity::Paint paint;
+    paint.SetColor(skity::Color_WHITE);
+    paint.SetColorFilter(filter);
+    c->DrawRect(skity::Rect::MakeWH(32, 64), paint);
+    paint.SetColorFilter(restored);
+    c->DrawRect(skity::Rect::MakeXYWH(32, 0, 32, 64), paint);
+  });
+  ASSERT_NE(texture, nullptr);
+  auto pixmap = texture->ReadPixels();
+  ASSERT_NE(pixmap, nullptr);
+  skity::Bitmap bitmap(pixmap);
+  auto direct = bitmap.GetPixel(16, 32);
+  auto round_trip = bitmap.GetPixel(48, 32);
+  EXPECT_EQ(direct, skity::Color_RED);
+  ExpectRGBA(round_trip, direct, 2);
 }

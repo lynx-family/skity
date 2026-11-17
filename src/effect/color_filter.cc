@@ -7,30 +7,15 @@
 #include <skity/io/pixmap.hpp>
 
 #include "src/effect/color_filter_base.hpp"
+#include "src/effect/color_space_block.hpp"
 #include "src/graphic/blend_mode_priv.hpp"
 #include "src/graphic/color_priv.hpp"
+#include "src/graphic/color_transform.hpp"
 #include "src/logging.hpp"
 
 namespace skity {
 
-namespace {
-
-enum Version {
-  k0_Version,  // Initial (deprecated) version, no longer supported
-  k1_Version,  // Simple header (version tag) + 16 floats
-
-  kCurrent_Version = k1_Version,
-};
-
-struct ColorSpaceHeader {
-  uint8_t version = kCurrent_Version;
-
-  uint8_t reserved0 = 0;
-  uint8_t reserved1 = 0;
-  uint8_t reserved2 = 0;
-};
-
-}  // namespace
+namespace {}  // namespace
 
 PMColor ColorFilter::FilterColor(PMColor c) const {
 #ifdef SKITY_CPU
@@ -50,6 +35,18 @@ std::shared_ptr<ColorFilter> ColorFilters::Blend(Color color, BlendMode mode) {
     return nullptr;
   }
   return std::make_shared<BlendColorFilter>(color, mode);
+}
+
+std::shared_ptr<ColorFilter> ColorFilters::Blend(
+    Color4f color, BlendMode mode,
+    std::shared_ptr<const ColorSpace> color_space) {
+  if ((mode == BlendMode::kDst) ||                         // r = d
+      ((mode == BlendMode::kDstIn) && color.a >= 1.f) ||   // r = d * sa
+      ((mode == BlendMode::kDstOut) && color.a <= 0.f)) {  // r = d * (1-sa)
+    return nullptr;
+  }
+  return std::make_shared<BlendColorFilter>(color, mode,
+                                            std::move(color_space));
 }
 
 std::shared_ptr<ColorFilter> ColorFilters::Matrix(const float row_major[20]) {
@@ -85,7 +82,18 @@ std::shared_ptr<ColorFilter> ColorFilters::Compose(
 }
 
 BlendColorFilter::BlendColorFilter(Color c, BlendMode m)
-    : color_(c), pm_color_(ColorToPMColor(c)), mode_(m) {}
+    : BlendColorFilter(Color4fFromColor(c), m, nullptr) {}
+
+BlendColorFilter::BlendColorFilter(
+    Color4f c, BlendMode m, std::shared_ptr<const ColorSpace> color_space)
+    : color_(c), color_space_(std::move(color_space)), mode_(m) {
+#ifdef SKITY_CPU
+  // The software path still blends the recorded bytes as sRGB (the color
+  // space aware CPU filter path lands with the software renderer rework);
+  // quantizing up front keeps that interpretation explicit.
+  pm_color_ = ColorToPMColor(Color4fToColor(color_));
+#endif
+}
 
 #ifdef SKITY_CPU
 
@@ -170,7 +178,13 @@ std::string_view BlendColorFilter::ProcName() const {
 }
 
 void BlendColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
-  buffer.WriteColor4f(Color4fFromColor(color_));
+  // The serialized form carries the color converted to sRGB signal values
+  // (the recorded color space itself is not serialized). Wide-gamut
+  // components stay as extended-range floats: the replay target is not
+  // known here, and clamping now would mute colors that a wide-gamut
+  // target could still display. The render path resolves from sRGB and
+  // clamps once the target is known.
+  buffer.WriteColor4f(ColorSpace::Convert(color_space_, color_, nullptr));
   buffer.WriteUint32(static_cast<uint32_t>(mode_));
 }
 
@@ -204,23 +218,10 @@ void SRGBGammaColorFilter::FlattenToBuffer(WriteBuffer& buffer) const {
     dst_fn = linear->transfer_fn;
   }
 
-  ColorSpaceHeader header{};
-
-  std::vector<uint8_t> data(sizeof(ColorSpaceHeader) + 7 * sizeof(float) +
-                            9 * sizeof(float));
-  std::memcpy(data.data(), &header, sizeof(ColorSpaceHeader));
-  std::memcpy(data.data() + sizeof(ColorSpaceHeader) + 7 * sizeof(float),
-              srgb->gamut_xyz, 9 * sizeof(float));
-
-  // write src
-  std::memcpy(data.data() + sizeof(ColorSpaceHeader), src_fn,
-              7 * sizeof(float));
-  buffer.WriteByteArray(data.data(), data.size());
-
-  // write dst
-  std::memcpy(data.data() + sizeof(ColorSpaceHeader), dst_fn,
-              7 * sizeof(float));
-  buffer.WriteByteArray(data.data(), data.size());
+  // Both blocks carry the sRGB gamut; the shared helper writes the
+  // versioned layout every serializer in this repo uses.
+  WriteColorSpaceBlock(buffer, src_fn, srgb->gamut_xyz);
+  WriteColorSpaceBlock(buffer, dst_fn, srgb->gamut_xyz);
 }
 
 std::string_view ComposeColorFilter::ProcName() const {

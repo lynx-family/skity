@@ -8,6 +8,7 @@
 #include <memory>
 #include <skity/graphic/blend_mode.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/io/flattenable.hpp>
 
 namespace skity {
@@ -29,6 +30,15 @@ class SKITY_API ColorFilters {
       std::shared_ptr<ColorFilter> outer, std::shared_ptr<ColorFilter> inner);
 
   static std::shared_ptr<ColorFilter> Blend(Color color, BlendMode mode);
+
+  /**
+   * Same as above with the blend color recorded in color_space (a null
+   * space means undeclared, which equals sRGB); on GPU targets the color
+   * resolves into the render target's space when the filter is applied.
+   */
+  static std::shared_ptr<ColorFilter> Blend(
+      Color4f color, BlendMode mode,
+      std::shared_ptr<const ColorSpace> color_space = nullptr);
 
   static std::shared_ptr<ColorFilter> Matrix(const float row_major[20]);
 
