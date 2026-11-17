@@ -23,9 +23,12 @@ namespace skity {
 // callers.
 class OwnedGlyphImage {
  public:
+  enum class Status { kReady, kNoImage, kInvalidImage };
   OwnedGlyphImage() = default;
   OwnedGlyphImage(OwnedGlyphImage&& other) noexcept
-      : glyph_(std::move(other.glyph_)), pixels_(std::move(other.pixels_)) {
+      : glyph_(std::move(other.glyph_)),
+        pixels_(std::move(other.pixels_)),
+        status_(std::exchange(other.status_, Status::kNoImage)) {
     other.glyph_.reset();
   }
   OwnedGlyphImage& operator=(OwnedGlyphImage&& other) noexcept {
@@ -38,12 +41,14 @@ class OwnedGlyphImage {
         other.glyph_.reset();
       }
       pixels_ = std::move(other.pixels_);
+      status_ = std::exchange(other.status_, Status::kNoImage);
     }
     return *this;
   }
 
   const GlyphData* Get() const { return glyph_ ? &*glyph_ : nullptr; }
   const GlyphBitmapData& Image() const { return glyph_->Image(); }
+  Status GetStatus() const { return status_; }
 
  private:
   struct FreePixels {
@@ -54,6 +59,7 @@ class OwnedGlyphImage {
   // image request. Cached paths still need an independent snapshot.
   std::optional<GlyphData> glyph_;
   std::unique_ptr<uint8_t, FreePixels> pixels_;
+  Status status_ = Status::kNoImage;
 
   friend class ScalerContextContainer;
 };

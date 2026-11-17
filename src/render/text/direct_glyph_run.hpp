@@ -5,14 +5,28 @@
 #ifndef SRC_RENDER_TEXT_DIRECT_GLYPH_RUN_HPP
 #define SRC_RENDER_TEXT_DIRECT_GLYPH_RUN_HPP
 
+#include <vector>
+
+#include "src/render/text/atlas/atlas_glyph.hpp"
 #include "src/render/text/glyph_run.hpp"
 
 namespace skity {
 
-void AppendDirectGlyphRuns(const GlyphRunInput& input, const Paint& paint,
-                           AtlasFormat format, bool is_stroke,
-                           const GlyphRunBuildContext& context,
-                           GlyphSubRunList& runs);
+struct PreparedDirectGlyph {
+  AtlasGlyphResult atlas;
+  Rect bounds;
+};
+
+std::vector<PreparedDirectGlyph> PrepareDirectGlyphs(
+    const GlyphRunInput& input, const Paint& paint, AtlasFormat format,
+    const GlyphRunBuildContext& context);
+
+void AppendPreparedDirectGlyphRuns(const GlyphRunInput& input,
+                                   const PreparedDirectGlyph* glyphs,
+                                   const Paint& paint, AtlasFormat format,
+                                   bool is_stroke,
+                                   const GlyphRunBuildContext& context,
+                                   GlyphSubRunList& runs);
 
 }  // namespace skity
 

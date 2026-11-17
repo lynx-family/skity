@@ -17,7 +17,7 @@
 namespace skity {
 namespace {
 
-enum class RasterMethod { kDirect, kSDF, kPath, kTransformedMask };
+enum class RasterMethod { kDirect, kSDF, kFallback };
 
 RasterMethod SelectRasterMethod(const GlyphRunInput& input, const Paint& paint,
                                 AtlasFormat format,
@@ -49,86 +49,186 @@ RasterMethod SelectRasterMethod(const GlyphRunInput& input, const Paint& paint,
                            input.font.GetTypeface())) {
     return RasterMethod::kDirect;
   }
-  if (transform.HasPersp()) {
-    return format == AtlasFormat::RGBA32 ? RasterMethod::kTransformedMask
-                                         : RasterMethod::kPath;
-  }
   if (control.CanUseSDF(text_scale, paint, input.font.GetTypeface())) {
     return RasterMethod::kSDF;
   }
-  return RasterMethod::kPath;
+  return RasterMethod::kFallback;
+}
+
+bool HasOutline(const GlyphData* glyph) {
+  return glyph != nullptr && !glyph->GetPath().IsEmpty();
+}
+
+void AppendPaths(const GlyphRunInput& input, const GlyphData* const* glyphs,
+                 const Paint& paint, const GlyphRunBuildContext& context,
+                 GlyphSubRunList& runs) {
+  std::vector<PositionedGlyphPath> paths;
+  paths.reserve(input.count);
+  for (uint32_t index = 0; index < input.count; ++index) {
+    paths.push_back({glyphs[index]->GetPath().CopyWithMatrix(
+                         Matrix::Translate(input.origin.x, input.origin.y)),
+                     Vec2{input.position_x[index], input.position_y[index]}});
+  }
+  runs.push_back(context.arena.Make<PathGlyphRun>(std::move(paths), paint));
+}
+
+// One fallback policy for a rejected Direct image and a skipped Direct
+// strategy: preserve color, otherwise prefer an outline, then a fill mask.
+void AppendFallbackGlyphRuns(const GlyphRunInput& input, const Paint& paint,
+                             AtlasFormat format,
+                             const GlyphRunBuildContext& context,
+                             GlyphSubRunList& runs,
+                             const GlyphData* const* prepared_paths = nullptr) {
+  if (format == AtlasFormat::RGBA32) {
+    Paint fill = paint;
+    fill.SetStyle(Paint::kFill_Style);
+    transformed_mask::AppendGlyphRuns(input, fill, format, false, context,
+                                      runs);
+    return;
+  }
+  std::vector<const GlyphData*> paths;
+  if (!prepared_paths) {
+    paths.resize(input.count);
+    input.font.LoadGlyphPath(input.glyphs, input.count, paths.data());
+    prepared_paths = paths.data();
+  }
+  uint32_t begin = 0;
+  while (begin < input.count) {
+    const bool outline = HasOutline(prepared_paths[begin]);
+    uint32_t end = begin + 1;
+    while (end < input.count && HasOutline(prepared_paths[end]) == outline) {
+      ++end;
+    }
+    const auto span = input.Slice(begin, end - begin);
+    if (outline) {
+      AppendPaths(span, prepared_paths + begin, paint, context, runs);
+    } else {
+      transformed_mask::AppendGlyphRuns(
+          span, transformed_mask::MakeBitmapOnlyFillPaint(paint), format, false,
+          context, runs);
+    }
+    begin = end;
+  }
 }
 
 void AppendDirectPaintPasses(const GlyphRunInput& input, const Paint& paint,
                              AtlasFormat format,
                              const GlyphRunBuildContext& context,
                              GlyphSubRunList& runs) {
-  auto append_pass = [&](bool stroke) {
-    Paint pass_paint = paint;
-    pass_paint.SetStyle(stroke ? Paint::kStroke_Style : Paint::kFill_Style);
-    AppendDirectGlyphRuns(input, pass_paint, format, stroke, context, runs);
+  struct Pass {
+    Paint paint;
+    bool stroke;
+    std::vector<PreparedDirectGlyph> glyphs;
   };
-
+  std::vector<Pass> passes;
+  auto prepare = [&](bool stroke) {
+    Paint pass = paint;
+    pass.SetStyle(stroke ? Paint::kStroke_Style : Paint::kFill_Style);
+    passes.push_back(
+        {pass, stroke, PrepareDirectGlyphs(input, pass, format, context)});
+  };
   if (format == AtlasFormat::RGBA32) {
-    append_pass(false);
+    prepare(false);
+  } else {
+    switch (paint.GetStyle()) {
+      case Paint::kFill_Style:
+        prepare(false);
+        break;
+      case Paint::kStroke_Style:
+        prepare(true);
+        break;
+      case Paint::kStrokeAndFill_Style:
+        prepare(false);
+        prepare(true);
+        break;
+      case Paint::kStrokeThenFill_Style:
+        prepare(true);
+        prepare(false);
+        break;
+    }
+  }
+
+  std::vector<uint32_t> rejected_indices;
+  std::vector<GlyphID> rejected_ids;
+  for (uint32_t index = 0; index < input.count; ++index) {
+    if (std::any_of(passes.begin(), passes.end(), [&](const Pass& pass) {
+          return !pass.glyphs[index].atlas.IsReady();
+        })) {
+      rejected_indices.push_back(index);
+      rejected_ids.push_back(input.glyphs[index]);
+    }
+  }
+  if (rejected_indices.empty()) {
+    for (const auto& pass : passes) {
+      AppendPreparedDirectGlyphRuns(input, pass.glyphs.data(), pass.paint,
+                                    format, pass.stroke, context, runs);
+    }
     return;
   }
-  switch (paint.GetStyle()) {
-    case Paint::kFill_Style:
-      append_pass(false);
-      break;
-    case Paint::kStroke_Style:
-      append_pass(true);
-      break;
-    case Paint::kStrokeAndFill_Style:
-      append_pass(false);
-      append_pass(true);
-      break;
-    case Paint::kStrokeThenFill_Style:
-      append_pass(true);
-      append_pass(false);
-      break;
-  }
-}
 
-void AppendPathGlyphRuns(const GlyphRunInput& input, const Paint& paint,
-                         const GlyphRunBuildContext& context,
-                         GlyphSubRunList& runs) {
-  std::vector<const GlyphData*> glyph_data(input.count);
-  input.font.LoadGlyphPath(input.glyphs, input.count, glyph_data.data());
-  auto has_outline = [&](uint32_t index) {
-    return glyph_data[index] != nullptr &&
-           !glyph_data[index]->GetPath().IsEmpty();
-  };
-
-  // Keep outline and bitmap-only spans in input order, including under
-  // perspective where they use different representations.
-  uint32_t begin = 0;
-  while (begin < input.count) {
-    const bool outline = has_outline(begin);
-    uint32_t end = begin + 1;
-    while (end < input.count && has_outline(end) == outline) {
-      ++end;
+  // Decide all passes before emitting any geometry. A bitmap-only glyph
+  // falling back from Stroke must not be drawn again over an accepted Fill.
+  std::vector<bool> bitmap_fallback(input.count, false);
+  std::vector<const GlyphData*> paths(input.count);
+  if (format == AtlasFormat::A8) {
+    std::vector<const GlyphData*> rejected_paths(rejected_ids.size());
+    input.font.LoadGlyphPath(rejected_ids.data(), rejected_ids.size(),
+                             rejected_paths.data());
+    for (size_t i = 0; i < rejected_indices.size(); ++i) {
+      paths[rejected_indices[i]] = rejected_paths[i];
     }
-    if (outline) {
-      std::vector<PositionedGlyphPath> paths;
-      paths.reserve(end - begin);
-      for (uint32_t index = begin; index < end; ++index) {
-        paths.push_back(
-            {glyph_data[index]->GetPath().CopyWithMatrix(
-                 Matrix::Translate(input.origin.x, input.origin.y)),
-             Vec2{input.position_x[index], input.position_y[index]}});
+    for (uint32_t index = 0; index < input.count; ++index) {
+      const bool fill_ready =
+          std::any_of(passes.begin(), passes.end(), [&](const Pass& pass) {
+            return !pass.stroke && pass.glyphs[index].atlas.IsReady();
+          });
+      for (const auto& pass : passes) {
+        const auto status = pass.glyphs[index].atlas.status;
+        bitmap_fallback[index] =
+            bitmap_fallback[index] ||
+            (!HasOutline(paths[index]) &&
+             (status == AtlasGlyphStatus::kTooLarge ||
+              (status == AtlasGlyphStatus::kNoImage && pass.stroke &&
+               (passes.size() == 1 || fill_ready))));
       }
-      runs.push_back(context.arena.Make<PathGlyphRun>(std::move(paths), paint));
-    } else if (context.local_to_raster.HasPersp()) {
-      // Bitmap-only glyphs have no outline to stroke. Preserve the existing
-      // fallback of one fill mask for all paint styles.
-      transformed_mask::AppendGlyphRuns(
-          input.Slice(begin, end - begin),
-          transformed_mask::MakeBitmapOnlyFillPaint(paint), AtlasFormat::A8,
-          false, context, runs);
     }
-    begin = end;
+  }
+
+  enum class Choice { kDirect, kFallback, kSkip };
+  for (const auto& pass : passes) {
+    auto choice = [&](uint32_t index) {
+      if (bitmap_fallback[index]) {
+        return !pass.stroke || passes.size() == 1 ? Choice::kFallback
+                                                  : Choice::kSkip;
+      }
+      const auto& result = pass.glyphs[index].atlas;
+      if (result.IsReady()) {
+        return Choice::kDirect;
+      }
+      if (result.status == AtlasGlyphStatus::kTooLarge ||
+          HasOutline(paths[index])) {
+        return Choice::kFallback;
+      }
+      return Choice::kSkip;
+    };
+    uint32_t begin = 0;
+    while (begin < input.count) {
+      const auto selected = choice(begin);
+      uint32_t end = begin + 1;
+      while (end < input.count && choice(end) == selected) {
+        ++end;
+      }
+      const auto span = input.Slice(begin, end - begin);
+      if (selected == Choice::kDirect) {
+        AppendPreparedDirectGlyphRuns(span, pass.glyphs.data() + begin,
+                                      pass.paint, format, pass.stroke, context,
+                                      runs);
+      } else if (selected == Choice::kFallback) {
+        AppendFallbackGlyphRuns(span, pass.paint, format, context, runs,
+                                paths.data() + begin);
+      }
+      begin = end;
+    }
   }
 }
 
@@ -142,16 +242,9 @@ void AppendGlyphRuns(const GlyphRunInput& input, const Paint& paint,
     case RasterMethod::kSDF:
       AppendSDFGlyphRuns(input, paint, context, runs);
       break;
-    case RasterMethod::kPath:
-      AppendPathGlyphRuns(input, paint, context, runs);
+    case RasterMethod::kFallback:
+      AppendFallbackGlyphRuns(input, paint, format, context, runs);
       break;
-    case RasterMethod::kTransformedMask: {
-      Paint fill_paint = paint;
-      fill_paint.SetStyle(Paint::kFill_Style);
-      transformed_mask::AppendGlyphRuns(input, fill_paint, format, false,
-                                        context, runs);
-      break;
-    }
   }
 }
 
@@ -176,21 +269,48 @@ GlyphSubRunList GlyphRunBuilder::Build(const GlyphRunInput& input,
   metrics_paint.SetStyle(Paint::kFill_Style);
   input.font.LoadGlyphMetrics(input.glyphs, input.count, metrics.data(),
                               metrics_paint);
+  std::vector<std::optional<GlyphFormat>> formats(input.count);
+  for (uint32_t index = 0; index < input.count; ++index) {
+    if (metrics[index] == nullptr) {
+      continue;
+    }
+    formats[index] = metrics[index]->GetFormat();
+    if (!formats[index]) {
+      // An unspecified metric format does not imply a color glyph. Resolve
+      // it from a fill image before choosing paint passes or a Path fallback.
+      const GlyphData* image = nullptr;
+      input.font.LoadGlyphBitmap(input.glyphs + index, 1, &image, metrics_paint,
+                                 context.device_scale, Matrix{});
+      if (image != nullptr) {
+        switch (image->Image().format) {
+          case BitmapFormat::kGray8:
+            formats[index] = GlyphFormat::A8;
+            break;
+          case BitmapFormat::kRGBA8:
+            formats[index] = GlyphFormat::RGBA32;
+            break;
+          case BitmapFormat::kBGRA8:
+            formats[index] = GlyphFormat::BGRA32;
+            break;
+          default:
+            break;
+        }
+      }
+    }
+  }
   auto atlas_format = [&](uint32_t index) {
-    return metrics[index]->GetFormat() == GlyphFormat::A8 ? AtlasFormat::A8
-                                                          : AtlasFormat::RGBA32;
+    return FromGlyphFormat(*formats[index]);
   };
 
   uint32_t begin = 0;
   while (begin < input.count) {
-    if (metrics[begin] == nullptr) {
+    if (!formats[begin]) {
       ++begin;
       continue;
     }
     const AtlasFormat format = atlas_format(begin);
     uint32_t end = begin + 1;
-    while (end < input.count && metrics[end] != nullptr &&
-           atlas_format(end) == format) {
+    while (end < input.count && formats[end] && atlas_format(end) == format) {
       ++end;
     }
     AppendGlyphRuns(input.Slice(begin, end - begin), paint, format, context,

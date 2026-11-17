@@ -81,11 +81,11 @@ Atlas::Atlas(AtlasFormat format, GPUDevice* gpu_device,
   }
 }
 
-GlyphRegion Atlas::GetGlyphRegion(const Font& font,
-                                  PackedGlyphID packed_glyph_id,
-                                  const Paint& paint, bool load_sdf,
-                                  float context_scale,
-                                  const Matrix& transform) {
+AtlasGlyphResult Atlas::GetGlyphRegion(const Font& font,
+                                       PackedGlyphID packed_glyph_id,
+                                       const Paint& paint, bool load_sdf,
+                                       float context_scale,
+                                       const Matrix& transform) {
   float font_size = font.GetSize();
   float sdf_scale = 1.0f;
   // TODO(jingle) consider transform for sdf text
@@ -134,18 +134,21 @@ GlyphRegion Atlas::GetGlyphRegion(const Font& font,
       if (region.loc != INVALID_LOC) {
         region.index_in_group = index;
         region.scale = sdf_scale;
-        return region;
+        return {AtlasGlyphStatus::kReady, region,
+                static_cast<uint32_t>(region.loc.z),
+                static_cast<uint32_t>(region.loc.w)};
       }
     }
   }
 
-  GlyphRegion gen_region = GenerateGlyphRegion(font, key, paint, load_sdf);
-  gen_region.scale = sdf_scale;
+  auto gen_region = GenerateGlyphRegion(font, key, paint, load_sdf);
+  gen_region.region.scale = sdf_scale;
   return gen_region;
 }
 
-GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
-                                       const Paint& paint, bool load_sdf) {
+AtlasGlyphResult Atlas::GenerateGlyphRegion(const Font& font,
+                                            GlyphKey const& key,
+                                            const Paint& paint, bool load_sdf) {
   SKITY_TRACE_EVENT(Atlas_GenerateGlyphRegion);
   //  generate text bitmap from typeface
   Font resized_font(font);
@@ -159,6 +162,11 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
 
   auto glyph_image = LoadGlyphBitmap(resized_font, key.packed_glyph_id,
                                      fill_paint, key.scaler_context_desc);
+  if (glyph_image.GetStatus() != OwnedGlyphImage::Status::kReady) {
+    return {glyph_image.GetStatus() == OwnedGlyphImage::Status::kNoImage
+                ? AtlasGlyphStatus::kNoImage
+                : AtlasGlyphStatus::kInvalidImage};
+  }
   auto bitmap_info = glyph_image.Image();
 
   if (fill_paint.GetStyle() == Paint::kStroke_Style &&
@@ -235,26 +243,32 @@ GlyphRegion Atlas::GenerateGlyphRegion(const Font& font, GlyphKey const& key,
   return GenerateGlyphRegionInternal(key, bitmap_info);
 }
 
-GlyphRegion Atlas::GenerateGlyphRegionInternal(
+AtlasGlyphResult Atlas::GenerateGlyphRegionInternal(
     const GlyphKey& key, const GlyphBitmapData& glyph_bitmap) {
   SKITY_TRACE_EVENT(Atlas_GenerateGlyphRegionInternal);
-  if (current_bitmap_index_ >= atlas_bitmap_.size()) {
-    atlas_bitmap_.resize(current_bitmap_index_ + 1);
-  }
-  if (!atlas_bitmap_[current_bitmap_index_]) {
-    atlas_bitmap_[current_bitmap_index_] = std::make_unique<AtlasBitmap>(
-        atlas_config_.max_bitmap_size, atlas_config_.max_bitmap_size,
-        bytes_per_pixel_);
-  }
-  AtlasBitmap* atlas_bitmap = atlas_bitmap_[current_bitmap_index_].get();
-  auto region = atlas_bitmap->GenerateGlyphRegion(key, glyph_bitmap);
-  if (region.loc != INVALID_LOC) {
-    region.index_in_group = current_bitmap_index_;
-    return region;
-  } else {
+  // Retry allocation on one fresh tile without regenerating the image.
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    if (current_bitmap_index_ >= atlas_bitmap_.size()) {
+      atlas_bitmap_.resize(current_bitmap_index_ + 1);
+    }
+    const bool fresh = !atlas_bitmap_[current_bitmap_index_];
+    if (fresh) {
+      atlas_bitmap_[current_bitmap_index_] = std::make_unique<AtlasBitmap>(
+          atlas_config_.max_bitmap_size, atlas_config_.max_bitmap_size,
+          bytes_per_pixel_);
+    }
+    auto result = atlas_bitmap_[current_bitmap_index_]->GenerateGlyphRegion(
+        key, glyph_bitmap);
+    if (result.status != AtlasGlyphStatus::kPageFull) {
+      result.region.index_in_group = current_bitmap_index_;
+      return result;
+    }
+    if (fresh) {
+      break;
+    }
     current_bitmap_index_ = atlas_bitmap_.size();
-    return GenerateGlyphRegionInternal(key, glyph_bitmap);
   }
+  return {AtlasGlyphStatus::kInvalidImage};
 }
 
 // upload atlas from memory storage to gpu texture

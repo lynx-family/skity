@@ -12,7 +12,6 @@
 #ifndef INCLUDE_SKITY_TEXT_TYPEFACE_HPP
 #define INCLUDE_SKITY_TEXT_TYPEFACE_HPP
 
-#include <atomic>
 #include <functional>
 #include <memory>
 #include <skity/io/data.hpp>
@@ -162,10 +161,7 @@ class SKITY_API Typeface : public std::enable_shared_from_this<Typeface> {
   class Impl;
   std::unique_ptr<Impl, std::function<void(Impl*)>> impl_;
 
-  static TypefaceID NewTypefaceID() {
-    static std::atomic<int32_t> nextID{1};
-    return nextID.fetch_add(1, std::memory_order_relaxed);
-  }
+  static TypefaceID NewTypefaceID();
   friend class Font;
 };
 
