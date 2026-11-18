@@ -6,18 +6,13 @@
 
 #include <skity/effect/color_filter.hpp>
 #include <skity/effect/image_filter.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/paint.hpp>
 
+#include "src/effect/image_filter_base.hpp"
 #include "src/render/hw/draw/wgx_utils.hpp"
 
 using namespace skity;
-
-namespace {
-inline float ConvertSigmaToRadius(float sigma) {
-  constexpr static float kBlueSigmaScale = 0.57735f;
-  return sigma > 0.5f ? (sigma - 0.5f) / kBlueSigmaScale : 0.0f;
-}
-}  // namespace
 
 TEST(ImageFilter, ComputeFastBounds) {
   Rect src = Rect::MakeLTRB(100, 50, 200, 100);
@@ -53,4 +48,62 @@ TEST(ImageFilterOpacityTest, IsConservativelyTranslucent) {
   Paint paint;
   paint.SetImageFilter(ImageFilters::Blur(2.f, 2.f));
   EXPECT_FALSE(IsPaintSourceOpaque(paint));
+}
+
+namespace {
+
+const DropShadowImageFilter* AsDropShadow(
+    const std::shared_ptr<ImageFilter>& f) {
+  return static_cast<const DropShadowImageFilter*>(As_IFB(f.get()));
+}
+
+}  // namespace
+
+TEST(ImageFilterColorSpace, DropShadowRecordsDeclaredSpace) {
+  const Color4f p3_red{1.f, 0.f, 0.f, 1.f};
+  auto declared = ImageFilters::DropShadow(
+      4, 4, 3, 3, p3_red, nullptr, DropShadowOptions{ColorSpace::DisplayP3()});
+  ASSERT_NE(declared, nullptr);
+  auto* shadow = AsDropShadow(declared);
+  EXPECT_EQ(shadow->GetColorSpace(), ColorSpace::DisplayP3());
+  EXPECT_EQ(shadow->GetColor4f().r, 1.f);
+  EXPECT_EQ(shadow->GetColor4f().a, 1.f);
+
+  // Default options keep the sRGB convention: undeclared space.
+  auto defaults = ImageFilters::DropShadow(4, 4, 3, 3, p3_red, nullptr);
+  ASSERT_NE(defaults, nullptr);
+  shadow = AsDropShadow(defaults);
+  EXPECT_EQ(shadow->GetColorSpace(), nullptr);
+
+  // The legacy factory keeps the sRGB convention too: undeclared space and
+  // the color still reachable through the Color accessor.
+  auto legacy = ImageFilters::DropShadow(4, 4, 3, 3, Color_RED, nullptr);
+  ASSERT_NE(legacy, nullptr);
+  shadow = AsDropShadow(legacy);
+  EXPECT_EQ(shadow->GetColorSpace(), nullptr);
+  EXPECT_EQ(shadow->GetColor(), Color_RED);
+}
+
+TEST(ImageFilterColorSpace, DropShadowLocalMatrixPreservesDeclaredSpace) {
+  const Color4f p3_red{1.f, 0.f, 0.f, 1.f};
+  auto filter = ImageFilters::DropShadow(
+      4, 4, 3, 3, p3_red, nullptr, DropShadowOptions{ColorSpace::DisplayP3()});
+  auto rebuilt = ImageFilters::LocalMatrix(filter, Matrix::Scale(2, 2));
+  ASSERT_NE(rebuilt, nullptr);
+  auto* shadow = AsDropShadow(rebuilt);
+  EXPECT_EQ(shadow->GetColorSpace(), ColorSpace::DisplayP3());
+  EXPECT_EQ(shadow->GetColor4f().r, 1.f);
+  // The rebuild still scales geometry: offsets double.
+  EXPECT_FLOAT_EQ(shadow->GetOffsetX(), 8.f);
+
+  // A legacy filter rebuilds through the same path: the color survives the
+  // Color4f round trip byte-for-byte and the space stays undeclared.
+  auto legacy_rebuilt = ImageFilters::LocalMatrix(
+      ImageFilters::DropShadow(4, 4, 3, 3, Color_RED, nullptr),
+      Matrix::Scale(2, 2));
+  ASSERT_NE(legacy_rebuilt, nullptr);
+  shadow = AsDropShadow(legacy_rebuilt);
+  EXPECT_EQ(shadow->GetColorSpace(), nullptr);
+  EXPECT_EQ(shadow->GetColor4f().r, 1.f);
+  EXPECT_EQ(shadow->GetColor(), Color_RED);
 }

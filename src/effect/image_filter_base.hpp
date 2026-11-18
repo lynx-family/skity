@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <memory>
 #include <skity/effect/image_filter.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <vector>
 
 namespace skity {
@@ -123,19 +124,23 @@ class DropShadowImageFilter : public ImageFilterBase {
  public:
   DropShadowImageFilter(float dx, float dy, float sigma_x, float sigma_y,
                         Color color, std::shared_ptr<ImageFilter> input,
-                        const Rect& crop_rect)
-      : ImageFilterBase({input.get()}),
-        dx_(dx),
-        dy_(dy),
-        radius_x_(ConvertSigmaToRadius(sigma_x)),
-        radius_y_(ConvertSigmaToRadius(sigma_y)),
-        color_(color),
-        crop_rect_(crop_rect) {}
+                        const Rect& crop_rect);
+  DropShadowImageFilter(float dx, float dy, float sigma_x, float sigma_y,
+                        Color4f color,
+                        std::shared_ptr<const ColorSpace> color_space,
+                        std::shared_ptr<ImageFilter> input,
+                        const Rect& crop_rect);
   float GetRadiusX() const override { return radius_x_; }
   float GetRadiusY() const override { return radius_y_; }
   float GetOffsetX() const override { return dx_; }
   float GetOffsetY() const override { return dy_; }
-  Color GetColor() const override { return color_; }
+  Color GetColor() const override { return Color4fToColor(color_); }
+  const Color4f& GetColor4f() const { return color_; }
+
+  /// The space the recorded shadow color is encoded in; null means sRGB.
+  const std::shared_ptr<const ColorSpace>& GetColorSpace() const {
+    return color_space_;
+  }
 #if defined(SKITY_CPU)
   void OnFilter(Canvas* canvas, Bitmap& bitmap, const Rect& filter_bounds,
                 const Paint& paint) const override;
@@ -164,7 +169,8 @@ class DropShadowImageFilter : public ImageFilterBase {
   float dy_;
   float radius_x_;
   float radius_y_;
-  Color color_;
+  Color4f color_;
+  std::shared_ptr<const ColorSpace> color_space_;
   const Rect crop_rect_;
 };
 

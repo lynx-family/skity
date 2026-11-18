@@ -114,9 +114,10 @@ std::shared_ptr<HWFilter> HWFilters::HandleImageFilter(
       auto radius_y = drop_shadow_image_filter->GetRadiusY();
       auto offset_x = drop_shadow_image_filter->GetOffsetX();
       auto offset_y = drop_shadow_image_filter->GetOffsetY();
-      auto color = drop_shadow_image_filter->GetColor();
-      return HWFilters::DropShadow(radius_x, radius_y, offset_x, offset_y,
-                                   scale, color, input);
+      return HWFilters::DropShadow(
+          radius_x, radius_y, offset_x, offset_y, scale,
+          drop_shadow_image_filter->GetColor4f(),
+          drop_shadow_image_filter->GetColorSpace(), input);
     }
     case ImageFilterType::kCompose: {
       ComposeImageFilter* compose_image_filter =
@@ -199,10 +200,13 @@ std::shared_ptr<HWFilter> HWFilters::Matrix(const skity::Matrix& matrix,
 
 std::shared_ptr<HWFilter> HWFilters::DropShadow(
     float radius_x, float radius_y, float offset_x, float offset_y, Vec2 scale,
-    Color color, std::shared_ptr<HWFilter> input) {
+    const Color4f& color, const std::shared_ptr<const ColorSpace>& color_space,
+    std::shared_ptr<HWFilter> input) {
   input = HWFilters::Blur(radius_x, radius_y, scale, input);
-  input = HWFilters::ColorFilter(ColorFilters::Blend(color, BlendMode::kSrcIn),
-                                 input);
+  // The shadow color resolves into the render target's space when the
+  // blend filter is bound, same as a directly declared blend filter color.
+  input = HWFilters::ColorFilter(
+      ColorFilters::Blend(color, BlendMode::kSrcIn, color_space), input);
   input = HWFilters::Matrix(Matrix::Translate(offset_x, offset_y), input);
   input = HWFilters::Merge({input, std::shared_ptr<HWFilter>()});
   return input;

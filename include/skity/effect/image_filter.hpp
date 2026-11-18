@@ -10,6 +10,7 @@
 #include <skity/geometry/point.hpp>
 #include <skity/geometry/rect.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/graphic/color_space.hpp>
 #include <skity/io/flattenable.hpp>
 #include <skity/macros.hpp>
 
@@ -29,6 +30,16 @@ class SKITY_API ImageFilter : public Flattenable {
   friend class ImageFilterBase;
 };
 
+/// Qualifiers for building a drop shadow; fields have defaults so callers
+/// set only what they need. A null color space keeps the sRGB convention,
+/// and an empty crop rect leaves the shadow uncropped.
+struct DropShadowOptions {
+  /// The space the shadow color is encoded in; null means sRGB.
+  std::shared_ptr<const ColorSpace> color_space;
+  /// An empty rect means no crop.
+  Rect crop_rect = {};
+};
+
 class SKITY_API ImageFilters {
  public:
   static std::shared_ptr<ImageFilter> Blur(float sigma_x, float sigma_y);
@@ -36,6 +47,16 @@ class SKITY_API ImageFilters {
   static std::shared_ptr<ImageFilter> DropShadow(
       float dx, float dy, float sigma_x, float sigma_y, Color color,
       std::shared_ptr<ImageFilter> input, const Rect& cropRect = {});
+
+  /**
+   * Same as above with the shadow color as extended-range floats and the
+   * qualifiers bundled in options; on GPU targets a declared color space
+   * resolves into the render target's space when the filter is applied.
+   */
+  static std::shared_ptr<ImageFilter> DropShadow(
+      float dx, float dy, float sigma_x, float sigma_y, Color4f color,
+      std::shared_ptr<ImageFilter> input,
+      const DropShadowOptions& options = {});
 
   static std::shared_ptr<ImageFilter> Dilate(float radius_x, float radius_y);
 

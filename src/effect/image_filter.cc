@@ -61,6 +61,37 @@ std::shared_ptr<ImageFilter> ImageFilters::DropShadow(
                                                  color, input, crop_rect);
 }
 
+std::shared_ptr<ImageFilter> ImageFilters::DropShadow(
+    float dx, float dy, float sigma_x, float sigma_y, Color4f color,
+    std::shared_ptr<ImageFilter> input, const DropShadowOptions& options) {
+  if (sigma_x < 0.f || sigma_y < 0.f) {
+    return nullptr;
+  }
+  return std::make_shared<DropShadowImageFilter>(dx, dy, sigma_x, sigma_y,
+                                                 color, options.color_space,
+                                                 input, options.crop_rect);
+}
+
+DropShadowImageFilter::DropShadowImageFilter(float dx, float dy, float sigma_x,
+                                             float sigma_y, Color color,
+                                             std::shared_ptr<ImageFilter> input,
+                                             const Rect& crop_rect)
+    : DropShadowImageFilter(dx, dy, sigma_x, sigma_y, Color4fFromColor(color),
+                            nullptr, std::move(input), crop_rect) {}
+
+DropShadowImageFilter::DropShadowImageFilter(
+    float dx, float dy, float sigma_x, float sigma_y, Color4f color,
+    std::shared_ptr<const ColorSpace> color_space,
+    std::shared_ptr<ImageFilter> input, const Rect& crop_rect)
+    : ImageFilterBase({input.get()}),
+      dx_(dx),
+      dy_(dy),
+      radius_x_(ConvertSigmaToRadius(sigma_x)),
+      radius_y_(ConvertSigmaToRadius(sigma_y)),
+      color_(color),
+      color_space_(std::move(color_space)),
+      crop_rect_(crop_rect) {}
+
 std::shared_ptr<ImageFilter> ImageFilters::Dilate(float radius_x,
                                                   float radius_y) {
   if (radius_x < 0 || radius_y < 0) {
@@ -132,10 +163,11 @@ std::shared_ptr<ImageFilter> ImageFilters::LocalMatrix(
         float dy = scale_y * drop_shadow_image_filter->GetOffsetY();
         float radius_x = scale_x * drop_shadow_image_filter->GetRadiusX();
         float radius_y = scale_y * drop_shadow_image_filter->GetRadiusY();
-        return ImageFilters::DropShadow(dx, dy, ConvertRadiusToSigma(radius_x),
-                                        ConvertRadiusToSigma(radius_y),
-                                        drop_shadow_image_filter->GetColor(),
-                                        nullptr);
+        return ImageFilters::DropShadow(
+            dx, dy, ConvertRadiusToSigma(radius_x),
+            ConvertRadiusToSigma(radius_y),
+            drop_shadow_image_filter->GetColor4f(), nullptr,
+            DropShadowOptions{drop_shadow_image_filter->GetColorSpace()});
       }
       return nullptr;
     }
@@ -238,10 +270,16 @@ void DropShadowImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
               std::round(std::max(radius_x_, radius_y_)))
       .Blur();
 
+  // The software path still tints the shadow with the recorded bytes as
+  // sRGB (the color space aware CPU filter path lands with the software
+  // renderer rework); quantizing up front keeps that interpretation
+  // explicit.
+  const Color srgb_color = Color4fToColor(color_);
+
   for (size_t y = 0; y < bitmap.Height(); ++y) {
     for (size_t x = 0; x < bitmap.Width(); ++x) {
       auto a = ColorGetA(filtered_bitmap.GetPixel(x, y));
-      auto c = a > 0 ? ColorSetA(color_, a) : Color_TRANSPARENT;
+      auto c = a > 0 ? ColorSetA(srgb_color, a) : Color_TRANSPARENT;
       filtered_bitmap.SetPixel(x, y, c);
     }
   }
@@ -265,8 +303,11 @@ void DropShadowImageFilter::FlattenToBuffer(WriteBuffer& buffer) const {
   BlurImageFilter blur(ConvertRadiusToSigma(radius_x_),
                        ConvertRadiusToSigma(radius_y_));
 
+  // The declared space rides the blend filter's own serialization: the
+  // color is written as sRGB-converted extended-range floats there, so a
+  // wide-gamut shadow survives the trip for wide-gamut replay targets.
   ColorFilterImageFilter color_filter(
-      &blur, ColorFilters::Blend(color_, BlendMode::kSrcIn));
+      &blur, ColorFilters::Blend(color_, BlendMode::kSrcIn, color_space_));
 
   MatrixImageFilter matrix_filter(
       &color_filter, Matrix::Translate(GetOffsetX(), GetOffsetY()));
