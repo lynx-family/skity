@@ -6,6 +6,7 @@ add_golden_test_shape(
   NAME color_space
   SOURCES ${CMAKE_CURRENT_LIST_DIR}/color_space.cc
           ${CMAKE_CURRENT_LIST_DIR}/core_review.cc
+          ${CMAKE_CURRENT_LIST_DIR}/drop_shadow_review.cc
           ${CMAKE_CURRENT_LIST_DIR}/stops_review.cc
   INCLUDES ${SKITY_ROOT} ${SKITY_ROOT}/module/io
 )
