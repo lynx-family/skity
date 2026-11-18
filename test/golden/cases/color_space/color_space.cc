@@ -3,8 +3,12 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <gtest/gtest.h>
+#include <skity/c/skity_picture.h>
+#include <skity/c/skity_stream.h>
+#include <unistd.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <memory>
 #include <skity/codec/codec.hpp>
@@ -13,9 +17,11 @@
 #include <skity/graphic/color_space.hpp>
 #include <skity/graphic/image.hpp>
 #include <skity/io/pixmap.hpp>
+#include <skity/recorder/picture_recorder.hpp>
 
 #include "common/golden_test_check.hpp"
 #include "common/golden_test_env.hpp"
+#include "handle.hpp"
 #include "src/graphic/color_transform.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
@@ -730,11 +736,171 @@ TEST(ColorSpaceGolden, P3TargetAlphaCompositingAndReadbackRoundTrip) {
   EXPECT_NEAR(round.b, clamp01(round_expected.b), 4.f / 255.f);
   EXPECT_NEAR(round.a, 1.f, 1.f / 255.f);
 }
-// Adobe RGB (1998): a gamma 2.2 space whose green primary sits well outside
-// the sRGB gamut. An AdobeRGB-tagged image storing the CPU-converted
-// representation of an sRGB color decodes back to that color on an sRGB
-// target (parametric decode + gamut both active; the encode folds because
-// the target curve is sRGB).
+
+// Gradient stops declared in a non-sRGB space resolve into the target: a
+// gradient whose stops are the P3 encodings of sRGB red/blue, declared in
+// P3, lands back on the original sRGB colors on an sRGB target (sampled in
+// the clamped regions outside the gradient segment).
+TEST(ColorSpaceGolden, P3DeclaredStopsResolveIntoSRGBTarget) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+
+    const skity::Vec4 stops[2] = {
+        skity::ColorSpace::Convert(nullptr, skity::Color4f{1.f, 0.f, 0.f, 1.f},
+                                   skity::ColorSpace::DisplayP3()),
+        skity::ColorSpace::Convert(nullptr, skity::Color4f{0.f, 0.f, 1.f, 1.f},
+                                   skity::ColorSpace::DisplayP3())};
+    const skity::Point pts[2] = {{16.f, 0.f, 0.f, 1.f}, {48.f, 0.f, 0.f, 1.f}};
+
+    auto shader = skity::Shader::MakeLinear(
+        pts, stops, nullptr, 2,
+        {skity::TileMode::kClamp, 0, skity::ColorSpace::DisplayP3()});
+
+    skity::Paint paint;
+    paint.SetShader(shader);
+    canvas->DrawRect(skity::Rect::MakeWH(64.f, 64.f), paint);
+  });
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto left = skity::Color4fFromColor(bitmap.GetPixel(8, 32));
+  EXPECT_NEAR(left.r, 1.f, 3.f / 255.f);
+  EXPECT_NEAR(left.g, 0.f, 3.f / 255.f);
+  EXPECT_NEAR(left.b, 0.f, 3.f / 255.f);
+  EXPECT_NEAR(left.a, 1.f, 1.f / 255.f);
+
+  auto right = skity::Color4fFromColor(bitmap.GetPixel(56, 32));
+  EXPECT_NEAR(right.r, 0.f, 3.f / 255.f);
+  EXPECT_NEAR(right.g, 0.f, 3.f / 255.f);
+  EXPECT_NEAR(right.b, 1.f, 3.f / 255.f);
+  EXPECT_NEAR(right.a, 1.f, 1.f / 255.f);
+}
+
+// Stops declared in the target's own space pass through byte exactly; a
+// declared P3 red stop on a P3 target must not route through any extra
+// conversion (a double conversion would mute the primary).
+TEST(ColorSpaceGolden, P3DeclaredStopsPassThroughOnP3Target) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+  env->SetTargetColorSpace(skity::ColorSpace::DisplayP3());
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+
+    const skity::Point pts[2] = {{16.f, 0.f, 0.f, 1.f}, {48.f, 0.f, 0.f, 1.f}};
+    const skity::Vec4 stops[2] = {{1.f, 0.f, 0.f, 1.f}, {0.f, 0.f, 1.f, 1.f}};
+    auto shader = skity::Shader::MakeLinear(
+        pts, stops, nullptr, 2,
+        {skity::TileMode::kClamp, 0, skity::ColorSpace::DisplayP3()});
+
+    skity::Paint paint;
+    paint.SetShader(shader);
+    canvas->DrawRect(skity::Rect::MakeWH(64.f, 64.f), paint);
+  });
+  env->SetTargetColorSpace(nullptr);
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  // P3 red primary survives untouched (compare P3TargetSpacePaintColor).
+  auto left = skity::Color4fFromColor(bitmap.GetPixel(8, 32));
+  EXPECT_EQ(left.r, 1.f);
+  EXPECT_EQ(left.g, 0.f);
+  EXPECT_EQ(left.b, 0.f);
+  EXPECT_EQ(left.a, 1.f);
+}
+
+// A gradient's declared stop color space survives a serialize / deserialize
+// round trip: the restored picture replays with the same P3 -> sRGB stop
+// resolution as the in-memory display list (a dropped declaration would
+// reinterpret the stop bytes as sRGB and mute the gradient).
+TEST(ColorSpaceGolden, GradientStopSpaceSurvivesSerialization) {
+  const auto red_stop_p3 =
+      skity::ColorSpace::Convert(nullptr, skity::Color4f{1.f, 0.f, 0.f, 1.f},
+                                 skity::ColorSpace::DisplayP3());
+  const auto blue_stop_p3 =
+      skity::ColorSpace::Convert(nullptr, skity::Color4f{0.f, 0.f, 1.f, 1.f},
+                                 skity::ColorSpace::DisplayP3());
+  skity::PictureRecorder recorder;
+  recorder.BeginRecording(skity::Rect::MakeWH(8, 8));
+  {
+    const skity::Vec4 stops[2] = {red_stop_p3, blue_stop_p3};
+    // The segment ends inside the left quarter; the sampled pixel sits in
+    // the blue stop's clamped region.
+    const skity::Point pts[2] = {{0.f, 0.f, 0.f, 1.f}, {2.f, 0.f, 0.f, 1.f}};
+    auto shader = skity::Shader::MakeLinear(
+        pts, stops, nullptr, 2,
+        {skity::TileMode::kClamp, 0, skity::ColorSpace::DisplayP3()});
+    skity::Paint paint;
+    paint.SetShader(shader);
+    recorder.GetRecordingCanvas()->DrawRect(skity::Rect::MakeWH(8, 8), paint);
+  }
+  std::shared_ptr<skity::DisplayList> dl(recorder.FinishRecording());
+  ASSERT_NE(dl, nullptr);
+
+  skity::Bitmap direct(8, 8, skity::kPremul_AlphaType);
+  auto direct_canvas = skity::Canvas::MakeSoftwareCanvas(&direct);
+  dl->Draw(direct_canvas.get());
+
+  auto list_handle = skity::capi::alloc_handle<skity_display_list_s>(
+      SKITY_OBJECT_TYPE_DISPLAY_LIST, 0, dl);
+  ASSERT_NE(list_handle, nullptr);
+  auto picture = skity_picture_create_from_display_list(list_handle);
+  skity_display_list_destroy(list_handle);
+  ASSERT_NE(picture, nullptr);
+  char filename[] = "/private/tmp/skity-gradient-space-XXXXXX";
+  int fd = mkstemp(filename);
+  ASSERT_GE(fd, 0);
+  close(fd);
+  auto writer = skity_write_stream_create_from_file(filename);
+  ASSERT_NE(writer, nullptr);
+  skity_picture_serialize(picture, writer, nullptr);
+  skity_write_stream_destroy(writer);
+  skity_picture_destroy(picture);
+  auto reader = skity_read_stream_create_from_file(filename);
+  ASSERT_NE(reader, nullptr);
+  auto restored = skity_picture_create_from_stream(reader);
+  skity_read_stream_destroy(reader);
+  std::remove(filename);
+  ASSERT_NE(restored, nullptr);
+
+  skity::Bitmap output(8, 8, skity::kPremul_AlphaType);
+  std::shared_ptr<skity::Canvas> canvas =
+      skity::Canvas::MakeSoftwareCanvas(&output);
+  auto canvas_handle = skity::capi::alloc_handle<skity_canvas_s>(
+      SKITY_OBJECT_TYPE_CANVAS, 0, canvas);
+  ASSERT_NE(canvas_handle, nullptr);
+  skity_picture_play_back(restored, canvas_handle);
+  skity_canvas_destroy(canvas_handle);
+  skity_picture_destroy(restored);
+
+  auto q = [](float v) {
+    return static_cast<float>(
+               static_cast<uint8_t>(std::clamp(v * 255.f, 0.f, 255.f))) /
+           255.f;
+  };
+  // The sampled pixel sits in the blue stop's clamped region; the declared
+  // P3 encoding resolves back to the sRGB blue on this sRGB bitmap.
+  auto expected = skity::ColorSpace::Convert(
+      skity::ColorSpace::DisplayP3(),
+      skity::Color4f{blue_stop_p3.r, blue_stop_p3.g, blue_stop_p3.b, 1.f},
+      nullptr);
+  auto direct_pixel = skity::Color4fFromColor(direct.GetPixel(6, 4));
+  auto restored_pixel = skity::Color4fFromColor(output.GetPixel(6, 4));
+  EXPECT_NEAR(direct_pixel.r, q(expected.r), 2.f / 255.f);
+  EXPECT_NEAR(restored_pixel.r, direct_pixel.r, 1.f / 255.f);
+  EXPECT_NEAR(restored_pixel.g, direct_pixel.g, 1.f / 255.f);
+  EXPECT_NEAR(restored_pixel.b, direct_pixel.b, 1.f / 255.f);
+}
+
 TEST(ColorSpaceGolden, AdobeRGBImageDecode) {
   auto* env = skity::testing::GoldenTestEnv::GetInstance();
   ASSERT_NE(env, nullptr);
@@ -855,3 +1021,47 @@ TEST(ColorSpaceGolden, AdobeRGBTargetResolvesSRGBImage) {
   EXPECT_NEAR(result.b, q(expected.b), 2.f / 255.f);
   EXPECT_NEAR(result.a, 1.f, 1.f / 255.f);
 }
+
+// A blend filter color recorded in a declared space resolves into the
+// target: on an sRGB target, a kSrc filter carrying an in-gamut P3 color
+// replaces the pixel with that color's sRGB encoding (a dropped or ignored
+// declaration would blend the raw P3 bytes instead).
+TEST(ColorSpaceGolden, DeclaredBlendFilterColorResolvesIntoTarget) {
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  ASSERT_NE(env, nullptr);
+
+  auto texture = env->RenderToTexture(64, 64, [](skity::Canvas* canvas) {
+    canvas->Clear(skity::Color_WHITE);
+    skity::Paint paint;
+    paint.SetColor(skity::Color_WHITE);
+    paint.SetColorFilter(skity::ColorFilters::Blend(
+        skity::Color4f{0.7f, 0.4f, 0.2f, 1.f}, skity::BlendMode::kSrc,
+        skity::ColorSpace::DisplayP3()));
+    canvas->DrawRect(skity::Rect::MakeWH(64.f, 64.f), paint);
+  });
+
+  ASSERT_NE(texture, nullptr);
+  auto pixels = texture->ReadPixels();
+  ASSERT_NE(pixels, nullptr);
+
+  skity::Bitmap bitmap(pixels);
+  auto filtered = skity::Color4fFromColor(bitmap.GetPixel(32, 32));
+  auto expected = skity::ColorSpace::Convert(
+      skity::ColorSpace::DisplayP3(), skity::Color4f{0.7f, 0.4f, 0.2f, 1.f},
+      nullptr);
+  auto q = [](float v) {
+    return static_cast<float>(
+               static_cast<uint8_t>(std::clamp(v * 255.f, 0.f, 255.f))) /
+           255.f;
+  };
+  EXPECT_NEAR(filtered.r, q(expected.r), 2.f / 255.f);
+  EXPECT_NEAR(filtered.g, q(expected.g), 2.f / 255.f);
+  EXPECT_NEAR(filtered.b, q(expected.b), 2.f / 255.f);
+  EXPECT_NEAR(filtered.a, 1.f, 1.f / 255.f);
+}
+
+// Adobe RGB (1998): a gamma 2.2 space whose green primary sits well outside
+// the sRGB gamut. An AdobeRGB-tagged image storing the CPU-converted
+// representation of an sRGB color decodes back to that color on an sRGB
+// target (parametric decode + gamut both active; the encode folds because
+// the target curve is sRGB).

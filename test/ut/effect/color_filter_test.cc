@@ -44,7 +44,8 @@ TEST(BlendFilterTest, Creation) {
 
   auto nf = static_cast<skity::BlendColorFilter*>(bf);
 
-  EXPECT_EQ(nf->GetColor(), skity::ColorSetARGB(127, 255, 0, 0));
+  EXPECT_EQ(skity::Color4fToColor(nf->GetColor4f()),
+            skity::ColorSetARGB(127, 255, 0, 0));
   EXPECT_EQ(nf->GetBlendMode(), skity::BlendMode::kSrcOver);
 }
 
@@ -313,4 +314,103 @@ TEST(SRGBGammaColorFilterFlattenTest, WireMatchesLegacyConstants) {
   ASSERT_EQ(srgb_to_linear_buffer.chunks.size(), 2u);
   EXPECT_EQ(srgb_to_linear_buffer.chunks[0], expected_chunk(srgb_fn));
   EXPECT_EQ(srgb_to_linear_buffer.chunks[1], expected_chunk(linear_fn));
+}
+
+namespace {
+
+// Captures the Color4f and uint32 payloads the blend filter flatten path
+// writes, ignoring everything else.
+class BlendCaptureBuffer : public skity::WriteBuffer {
+ public:
+  std::vector<skity::Color4f> colors;
+  std::vector<uint32_t> uint32s;
+
+  void WriteByteArray(const uint8_t*, size_t) override {}
+  void WriteBool(bool) override {}
+  void WriteFloat(float) override {}
+  void WriteFloatArray(float const*, size_t) override {}
+  void WriteInt32(int32_t) override {}
+  void WriteUint32(uint32_t v) override { uint32s.push_back(v); }
+  void WriteColor(skity::Color) override {}
+  void WriteColorArray(skity::Color const*, size_t) override {}
+  void WriteColor4f(const skity::Color4f& c) override { colors.push_back(c); }
+  void WriteColor4fArray(const skity::Color4f*, size_t) override {}
+  void WritePoint(const skity::Vec2&) override {}
+  void WritePointArray(const skity::Vec2*, size_t) override {}
+  void WriteSampling(const skity::SamplingOptions&) override {}
+  void WriteMatrix(const skity::Matrix&) override {}
+  void WriteRect(const skity::Rect&) override {}
+  void WriteImage(const skity::Image*) override {}
+  void WriteTypeface(const std::shared_ptr<skity::Typeface>&) override {}
+  void WriteFlattenable(const skity::Flattenable*) override {}
+};
+
+}  // namespace
+
+TEST(BlendFilterColorSpaceTest, RecordsDeclaredSpaceAndColor) {
+  // The Color4f factory records both the color and its space; the legacy
+  // Color overload records the sRGB bytes with a null space.
+  auto p3 = skity::ColorFilters::Blend(skity::Color4f{1.f, 0.f, 0.f, 1.f},
+                                       skity::BlendMode::kSrcOver,
+                                       skity::ColorSpace::DisplayP3());
+  ASSERT_NE(p3, nullptr);
+  auto* p3_blend = static_cast<skity::BlendColorFilter*>(
+      static_cast<skity::ColorFilterBase*>(p3.get()));
+  EXPECT_EQ(p3_blend->GetColorSpace(), skity::ColorSpace::DisplayP3());
+  EXPECT_EQ(p3_blend->GetColor4f().r, 1.f);
+
+  auto legacy = skity::ColorFilters::Blend(
+      skity::ColorSetARGB(255, 200, 100, 50), skity::BlendMode::kSrcOver);
+  ASSERT_NE(legacy, nullptr);
+  auto* legacy_blend = static_cast<skity::BlendColorFilter*>(
+      static_cast<skity::ColorFilterBase*>(legacy.get()));
+  EXPECT_EQ(legacy_blend->GetColorSpace(), nullptr);
+
+  // The null-space Color4f call is an exact equivalent of the legacy call.
+  EXPECT_EQ(skity::Color4fToColor(legacy_blend->GetColor4f()),
+            skity::ColorSetARGB(255, 200, 100, 50));
+
+  // Degenerate modes keep returning null for the recorded variant.
+  EXPECT_EQ(skity::ColorFilters::Blend(skity::Color4f{1.f, 1.f, 1.f, 1.f},
+                                       skity::BlendMode::kDstIn,
+                                       skity::ColorSpace::DisplayP3()),
+            nullptr);
+}
+
+TEST(BlendFilterColorSpaceTest, FlattenWritesSRGBConvertedColor) {
+  // The serialized form carries the color converted to sRGB signal values
+  // as extended-range floats: the replay target is unknown here, so
+  // wide-gamut components must survive for wide-gamut replay targets.
+  const skity::Color4f p3_red{1.f, 0.f, 0.f, 1.f};
+  auto p3 = skity::ColorFilters::Blend(p3_red, skity::BlendMode::kSrcOver,
+                                       skity::ColorSpace::DisplayP3());
+  ASSERT_NE(p3, nullptr);
+  BlendCaptureBuffer p3_buffer;
+  p3->FlattenToBuffer(p3_buffer);
+  ASSERT_EQ(p3_buffer.colors.size(), 1u);
+  ASSERT_EQ(p3_buffer.uint32s.size(), 1u);
+  EXPECT_EQ(p3_buffer.uint32s[0],
+            static_cast<uint32_t>(skity::BlendMode::kSrcOver));
+
+  auto legacy = skity::ColorFilters::Blend(
+      skity::Color4f{0.25f, 0.5f, 0.75f, 1.f}, skity::BlendMode::kSrcOver);
+  ASSERT_NE(legacy, nullptr);
+  BlendCaptureBuffer legacy_buffer;
+  legacy->FlattenToBuffer(legacy_buffer);
+  ASSERT_EQ(legacy_buffer.colors.size(), 1u);
+  // An undeclared space serializes the recorded value unchanged.
+  EXPECT_EQ(legacy_buffer.colors[0].r, 0.25f);
+  EXPECT_EQ(legacy_buffer.colors[0].g, 0.5f);
+  EXPECT_EQ(legacy_buffer.colors[0].b, 0.75f);
+  // P3 red converts into its extended sRGB encoding: the red channel
+  // exceeds 1 and the green / blue channels go negative, and the stored
+  // floats keep those values instead of clamping to the sRGB gamut.
+  auto expected = skity::ColorSpace::Convert(skity::ColorSpace::DisplayP3(),
+                                             p3_red, nullptr);
+  EXPECT_FLOAT_EQ(p3_buffer.colors[0].r, expected.r);
+  EXPECT_FLOAT_EQ(p3_buffer.colors[0].g, expected.g);
+  EXPECT_FLOAT_EQ(p3_buffer.colors[0].b, expected.b);
+  EXPECT_GT(expected.r, 1.f);
+  EXPECT_LT(expected.g, 0.f);
+  EXPECT_LT(expected.b, 0.f);
 }

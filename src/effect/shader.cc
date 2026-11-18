@@ -10,31 +10,27 @@
 
 namespace skity {
 
-Shader::GradientType Shader::AsGradient(GradientInfo*) const {
-  return GradientType::kNone;
-}
+namespace {
 
-const std::shared_ptr<Image>* Shader::AsImage() const { return nullptr; }
-
-const SamplingOptions* Shader::GetSamplingOptions() const { return nullptr; }
-
-std::shared_ptr<Shader> Shader::MakeLinear(const Point pts[2],
-                                           const Vec4 colors[],
-                                           const float pos[], int count,
-                                           TileMode tile_mode, int flag) {
+// Full-parameter gradient creations shared by the legacy and the
+// GradientOptions overloads.
+std::shared_ptr<Shader> MakeLinearFull(
+    const Point pts[2], const Vec4 colors[], const float pos[], int count,
+    TileMode tile_mode, int flag,
+    const std::shared_ptr<const ColorSpace>& color_space) {
   // count must be >= 2
   if (count < 2) {
     return nullptr;
   }
 
   return std::make_shared<LinearGradientShader>(pts, colors, pos, count,
-                                                tile_mode, flag);
+                                                tile_mode, flag, color_space);
 }
 
-std::shared_ptr<Shader> Shader::MakeRadial(Point const& center, float radius,
-                                           const Vec4 colors[],
-                                           const float pos[], int count,
-                                           TileMode tile_mode, int flag) {
+std::shared_ptr<Shader> MakeRadialFull(
+    Point const& center, float radius, const Vec4 colors[], const float pos[],
+    int count, TileMode tile_mode, int flag,
+    const std::shared_ptr<const ColorSpace>& color_space) {
   if (count < 2) {
     return nullptr;
   }
@@ -43,14 +39,14 @@ std::shared_ptr<Shader> Shader::MakeRadial(Point const& center, float radius,
     return nullptr;
   }
 
-  return std::make_shared<RadialGradientShader>(center, radius, colors, pos,
-                                                count, tile_mode, flag);
+  return std::make_shared<RadialGradientShader>(
+      center, radius, colors, pos, count, tile_mode, flag, color_space);
 }
 
-std::shared_ptr<Shader> Shader::MakeTwoPointConical(
+std::shared_ptr<Shader> MakeTwoPointConicalFull(
     Point const& start, float start_radius, Point const& end, float end_radius,
     const Vec4 colors[], const float pos[], int count, TileMode tile_mode,
-    int flag) {
+    int flag, const std::shared_ptr<const ColorSpace>& color_space) {
   if (count < 2) {
     return nullptr;
   }
@@ -72,23 +68,24 @@ std::shared_ptr<Shader> Shader::MakeTwoPointConical(
         std::reverse(std::begin(colors_reverse), std::end(colors_reverse));
         return std::make_shared<RadialGradientShader>(
             start, start_radius, colors_reverse.data(), pos_reverse.data(),
-            count, tile_mode, flag);
+            count, tile_mode, flag, color_space);
       } else {
-        return std::make_shared<RadialGradientShader>(
-            start, end_radius, colors, pos, count, tile_mode, flag);
+        return std::make_shared<RadialGradientShader>(start, end_radius, colors,
+                                                      pos, count, tile_mode,
+                                                      flag, color_space);
       }
     }
   }
 
   return std::make_shared<TwoPointConicalGradientShader>(
-      start, start_radius, end, end_radius, colors, pos, count, tile_mode,
-      flag);
+      start, start_radius, end, end_radius, colors, pos, count, tile_mode, flag,
+      color_space);
 }
 
-std::shared_ptr<Shader> Shader::MakeSweep(float cx, float cy, float start_angle,
-                                          float end_angle, const Vec4 colors[],
-                                          const float pos[], int count,
-                                          TileMode tile_mode, int flag) {
+std::shared_ptr<Shader> MakeSweepFull(
+    float cx, float cy, float start_angle, float end_angle, const Vec4 colors[],
+    const float pos[], int count, TileMode tile_mode, int flag,
+    const std::shared_ptr<const ColorSpace>& color_space) {
   if (count < 2) {
     return nullptr;
   }
@@ -100,8 +97,82 @@ std::shared_ptr<Shader> Shader::MakeSweep(float cx, float cy, float start_angle,
   float t1 = end_angle / 360;
   float bias = -t0;
   float scale = 1 / (t1 - t0);
-  return std::make_shared<SweepGradientShader>(cx, cy, bias, scale, colors, pos,
-                                               count, tile_mode, flag);
+  return std::make_shared<SweepGradientShader>(
+      cx, cy, bias, scale, colors, pos, count, tile_mode, flag, color_space);
+}
+
+}  // namespace
+
+Shader::GradientType Shader::AsGradient(GradientInfo*) const {
+  return GradientType::kNone;
+}
+
+const std::shared_ptr<Image>* Shader::AsImage() const { return nullptr; }
+
+const SamplingOptions* Shader::GetSamplingOptions() const { return nullptr; }
+
+std::shared_ptr<Shader> Shader::MakeLinear(const Point pts[2],
+                                           const Vec4 colors[],
+                                           const float pos[], int count,
+                                           TileMode tile_mode, int flag) {
+  return MakeLinearFull(pts, colors, pos, count, tile_mode, flag, nullptr);
+}
+
+std::shared_ptr<Shader> Shader::MakeLinear(const Point pts[2],
+                                           const Vec4 colors[],
+                                           const float pos[], int count,
+                                           const GradientOptions& options) {
+  return MakeLinearFull(pts, colors, pos, count, options.tile_mode,
+                        options.flags, options.color_space);
+}
+
+std::shared_ptr<Shader> Shader::MakeRadial(Point const& center, float radius,
+                                           const Vec4 colors[],
+                                           const float pos[], int count,
+                                           TileMode tile_mode, int flag) {
+  return MakeRadialFull(center, radius, colors, pos, count, tile_mode, flag,
+                        nullptr);
+}
+
+std::shared_ptr<Shader> Shader::MakeRadial(Point const& center, float radius,
+                                           const Vec4 colors[],
+                                           const float pos[], int count,
+                                           const GradientOptions& options) {
+  return MakeRadialFull(center, radius, colors, pos, count, options.tile_mode,
+                        options.flags, options.color_space);
+}
+
+std::shared_ptr<Shader> Shader::MakeTwoPointConical(
+    Point const& start, float start_radius, Point const& end, float end_radius,
+    const Vec4 colors[], const float pos[], int count, TileMode tile_mode,
+    int flag) {
+  return MakeTwoPointConicalFull(start, start_radius, end, end_radius, colors,
+                                 pos, count, tile_mode, flag, nullptr);
+}
+
+std::shared_ptr<Shader> Shader::MakeTwoPointConical(
+    Point const& start, float start_radius, Point const& end, float end_radius,
+    const Vec4 colors[], const float pos[], int count,
+    const GradientOptions& options) {
+  return MakeTwoPointConicalFull(start, start_radius, end, end_radius, colors,
+                                 pos, count, options.tile_mode, options.flags,
+                                 options.color_space);
+}
+
+std::shared_ptr<Shader> Shader::MakeSweep(float cx, float cy, float start_angle,
+                                          float end_angle, const Vec4 colors[],
+                                          const float pos[], int count,
+                                          TileMode tile_mode, int flag) {
+  return MakeSweepFull(cx, cy, start_angle, end_angle, colors, pos, count,
+                       tile_mode, flag, nullptr);
+}
+
+std::shared_ptr<Shader> Shader::MakeSweep(float cx, float cy, float start_angle,
+                                          float end_angle, const Vec4 colors[],
+                                          const float pos[], int count,
+                                          const GradientOptions& options) {
+  return MakeSweepFull(cx, cy, start_angle, end_angle, colors, pos, count,
+                       options.tile_mode, options.flags, options.color_space);
 }
 
 std::shared_ptr<Shader> Shader::MakeShader(std::shared_ptr<Image> image,

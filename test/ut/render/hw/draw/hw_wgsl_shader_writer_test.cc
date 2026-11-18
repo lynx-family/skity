@@ -652,6 +652,7 @@ fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
   if gradient_info.flags == 0 {
     color = vec4<f32>(color.xyz * color.w, color.w);
   }
+  color = vec4<f32>(clamp(color.xyz, vec3<f32>(0.0), vec3<f32>(color.w)), color.w);
   return color * gradient_info.global_alpha;
 }
 
@@ -721,6 +722,7 @@ fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
   if gradient_info.flags == 0 {
     color = vec4<f32>(color.xyz * color.w, color.w);
   }
+  color = vec4<f32>(clamp(color.xyz, vec3<f32>(0.0), vec3<f32>(color.w)), color.w);
   return color * gradient_info.global_alpha;
 }
 
@@ -1419,6 +1421,7 @@ fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
   if gradient_info.flags == 0 {
     color = vec4<f32>(color.xyz * color.w, color.w);
   }
+  color = vec4<f32>(clamp(color.xyz, vec3<f32>(0.0), vec3<f32>(color.w)), color.w);
   return color * gradient_info.global_alpha;
 }
 

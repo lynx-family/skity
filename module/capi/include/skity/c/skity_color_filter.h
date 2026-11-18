@@ -30,6 +30,20 @@ SKITY_C_API skity_color_filter
 skity_color_filter_create_blend(skity_color color, skity_blend_mode mode);
 
 /**
+ * @brief Create a blend color filter from a float color.
+ *
+ * Same as skity_color_filter_create_blend but takes the full float color,
+ * so extended-range sRGB values (outside [0, 1]) survive the round trip
+ * through serialization; the color is recorded in the sRGB working space.
+ *
+ * @param color  float color (extended-range values allowed)
+ * @param mode   blend mode applied with the color as source
+ * @return       filter handle, or NULL on invalid arguments
+ */
+SKITY_C_API skity_color_filter skity_color_filter_create_blend4f(
+    const skity_color4f* color, skity_blend_mode mode);
+
+/**
  * @brief Create a color filter that applies @p outer after @p inner:
  *        result = outer(inner(src)).
  * @param outer  filter applied last

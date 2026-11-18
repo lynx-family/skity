@@ -6,6 +6,8 @@
 #define HARNESS_WEB_CASES_HPP
 
 #include <cstdint>
+#include <memory>
+#include <skity/graphic/color_space.hpp>
 #include <skity/render/canvas.hpp>
 
 namespace skity {
@@ -24,6 +26,12 @@ struct GeometryCase {
   uint32_t width;
   uint32_t height;
   void (*render)(Canvas* canvas);
+  /**
+   * Color space the case's surface is created in: the render target's
+   * encoding and the working space of every draw. The default (null,
+   * undeclared) keeps the sRGB behavior.
+   */
+  std::shared_ptr<const ColorSpace> target_space;
 };
 
 /** Table of the smoke test cases, terminated implicitly by GetCaseCount(). */

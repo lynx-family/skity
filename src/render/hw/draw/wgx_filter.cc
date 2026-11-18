@@ -4,6 +4,7 @@
 
 #include "src/render/hw/draw/wgx_filter.hpp"
 
+#include <algorithm>
 #include <vector>
 
 #include "src/effect/color_filter_base.hpp"
@@ -32,10 +33,14 @@ std::string WGXFilterFragment::GenFunctionSignature() const {
 class WGXBlendFilter : public WGXFilterFragment {
  public:
   WGXBlendFilter(Color color, BlendMode mode)
-      : WGXFilterFragment(""), color_(color), mode_(mode) {}
+      : WGXBlendFilter("", Color4fFromColor(color), nullptr, mode) {}
 
-  WGXBlendFilter(std::string suffix, Color color, BlendMode mode)
-      : WGXFilterFragment(std::move(suffix)), color_(color), mode_(mode) {}
+  WGXBlendFilter(std::string suffix, Color4f color,
+                 std::shared_ptr<const ColorSpace> color_space, BlendMode mode)
+      : WGXFilterFragment(std::move(suffix)),
+        color_(color),
+        color_space_(std::move(color_space)),
+        mode_(mode) {}
 
   ~WGXBlendFilter() override = default;
 
@@ -136,12 +141,19 @@ class WGXBlendFilter : public WGXFilterFragment {
       return;
     }
 
-    // The blend constant is an sRGB color by convention; resolve it into
-    // the target space once per draw (bind time), the same resolution the
-    // paint color already got, before premultiplying.
+    // The blend constant resolves from its recorded space (null means the
+    // sRGB convention) into the target space once per draw (bind time),
+    // the same resolution the paint color already got. Wide-gamut
+    // constants resolve to extended values; clamp them in the
+    // unpremultiplied domain before premultiplying - the same rule the
+    // image decode path applies - so the premultiplied uniform stays in
+    // the canonical RGB <= A range.
     Color4f color4f =
-        ColorTransformSteps::Resolve(nullptr, context->target_space)
-            .Apply(Color4fFromColor(color_));
+        ColorTransformSteps::Resolve(color_space_, context->target_space)
+            .Apply(color_);
+    color4f[0] = std::clamp(color4f[0], 0.f, 1.f);
+    color4f[1] = std::clamp(color4f[1], 0.f, 1.f);
+    color4f[2] = std::clamp(color4f[2], 0.f, 1.f);
     color4f[0] *= color4f[3];
     color4f[1] *= color4f[3];
     color4f[2] *= color4f[3];
@@ -151,7 +163,8 @@ class WGXBlendFilter : public WGXFilterFragment {
   }
 
  private:
-  Color color_;
+  Color4f color_;
+  std::shared_ptr<const ColorSpace> color_space_;
   BlendMode mode_;
   mutable uint32_t binding_ = 0;
 };
@@ -425,7 +438,8 @@ std::unique_ptr<WGXFilterFragment> WGXFilterFragment::Make(ColorFilter* filter,
 
   if (filter_base->GetType() == ColorFilterType::kBlend) {
     auto blend_filter = static_cast<BlendColorFilter*>(filter_base);
-    return std::make_unique<WGXBlendFilter>(suffix, blend_filter->GetColor(),
+    return std::make_unique<WGXBlendFilter>(suffix, blend_filter->GetColor4f(),
+                                            blend_filter->GetColorSpace(),
                                             blend_filter->GetBlendMode());
   } else if (filter_base->GetType() == ColorFilterType::kLinearToSRGBGamma ||
              filter_base->GetType() == ColorFilterType::kSRGBToLinearGamma) {
