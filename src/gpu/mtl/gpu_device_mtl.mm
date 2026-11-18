@@ -8,6 +8,8 @@
 
 #include "src/gpu/mtl/gpu_device_mtl.h"
 
+#include <algorithm>
+#include <limits>
 #include <skity/macros.hpp>
 
 #include "src/gpu/mtl/formats_mtl.h"
@@ -79,6 +81,10 @@ GPUDeviceMTL::GPUDeviceMTL(id<MTLDevice> device, id<MTLCommandQueue> queue)
   gpu_caps->supports_framebuffer_fetch = SupportsFramebufferFetch(device);
   gpu_caps->supports_host_visible_buffer = true;
   gpu_caps->supports_dual_source_blending = SupportsDualSourceBlending();
+  if (@available(macOS 10.14, iOS 12.0, tvOS 12.0, *)) {
+    gpu_caps->max_vertex_storage_buffer_range = static_cast<uint32_t>(
+        std::min<NSUInteger>(device.maxBufferLength, std::numeric_limits<uint32_t>::max()));
+  }
   InitCaps(std::move(gpu_caps));
 }
 
