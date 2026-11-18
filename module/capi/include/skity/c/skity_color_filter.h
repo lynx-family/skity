@@ -44,6 +44,23 @@ SKITY_C_API skity_color_filter skity_color_filter_create_blend4f(
     const skity_color4f* color, skity_blend_mode mode);
 
 /**
+ * @brief Create a blend color filter declared in a color space.
+ *
+ * Same as skity_color_filter_create_blend4f but the constant is recorded in
+ * @p color_space and resolves into the render target's space when the filter
+ * is applied on GPU targets.
+ *
+ * @param color        float color in @p color_space
+ * @param mode         blend mode applied with the color as source
+ * @param color_space  encoding of @p color, NULL keeps the sRGB working
+ *                     space reading of the floats
+ * @return             filter handle, or NULL on invalid arguments
+ */
+SKITY_C_API skity_color_filter skity_color_filter_create_blend4f2(
+    const skity_color4f* color, skity_blend_mode mode,
+    const skity_color_space_info* color_space);
+
+/**
  * @brief Create a color filter that applies @p outer after @p inner:
  *        result = outer(inner(src)).
  * @param outer  filter applied last

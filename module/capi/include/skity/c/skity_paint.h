@@ -93,6 +93,23 @@ SKITY_C_API void skity_paint_set_stroke_miter(skity_paint paint, float miter);
 SKITY_C_API void skity_paint_set_color(skity_paint paint, skity_color color);
 
 /**
+ * @brief Set the fill and stroke color as floats with an optional encoding
+ *        space.
+ *
+ * The color is recorded in @p color_space and converts into the render
+ * target's space when the paint draws; a NULL space keeps the sRGB
+ * convention of skity_paint_set_color. Use skity_paint_get_color4f to read
+ * the floats back.
+ *
+ * @param paint        target paint
+ * @param color        unpremultiplied float color
+ * @param color_space  encoding of @p color, NULL = sRGB
+ */
+SKITY_C_API void skity_paint_set_color4f(
+    skity_paint paint, const skity_color4f* color,
+    const skity_color_space_info* color_space);
+
+/**
  * @brief Set the color used when stroking. skity stores stroke and fill colors
  *        separately; this replaces only the stroke color and leaves the fill
  *        color untouched.

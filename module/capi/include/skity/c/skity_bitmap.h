@@ -208,6 +208,57 @@ SKITY_C_API skity_result skity_color_space_chromaticities_from_gamut(
     const float* gamut_xyz, float* chromaticities);
 
 /**
+ * @brief Fill a color space description with the canonical values of a
+ *        named space (sRGB, linear sRGB, Display P3, Adobe RGB).
+ *
+ * The arrays are also filled for named kinds, so the description round trips
+ * through serialization and matches skity_pixmap_get_color_space output.
+ *
+ * @param info  output description
+ * @param kind  one of the named kinds (not SKITY_COLOR_SPACE_PARAMETRIC)
+ * @return      SKITY_SUCCESS, or SKITY_ERROR_INVALID_ARGUMENT for the
+ *              parametric kind (use skity_color_space_info_init_parametric)
+ *              or an unknown kind value
+ */
+SKITY_C_API skity_result skity_color_space_info_init(
+    skity_color_space_info* info, skity_color_space_kind kind);
+
+/**
+ * @brief Build a parametric color space description from raw parameters.
+ *
+ * Same validation as skity::ColorSpace::MakeRGB: the transfer function and
+ * gamut must describe a physical space. The D50 adaptation requirement of
+ * gamut_xyz applies (see skity_color_space_info).
+ *
+ * @param info         output description (kind set to PARAMETRIC)
+ * @param transfer_fn  7 skcms-style parameters {g, a, b, c, d, e, f}
+ * @param gamut_xyz    row-major 3x3 RGB->XYZ matrix, D50-adapted
+ * @return             SKITY_SUCCESS, or SKITY_ERROR_INVALID_ARGUMENT when
+ *                     the parameters are invalid
+ */
+SKITY_C_API skity_result skity_color_space_info_init_parametric(
+    skity_color_space_info* info, const float* transfer_fn,
+    const float* gamut_xyz);
+
+/**
+ * @brief Convert a color between two color spaces.
+ *
+ * Pure math utility on the descriptions (no pixels involved): unpremultiplied
+ * float colors convert through the linear D50 connection space; extended
+ * values outside [0, 1] are preserved.
+ *
+ * @param src    encoding of @p color, NULL = sRGB
+ * @param color  input color
+ * @param dst    target encoding, NULL = sRGB
+ * @param out    converted color
+ * @return       SKITY_SUCCESS or SKITY_ERROR_INVALID_ARGUMENT on NULL
+ *               color/out pointers
+ */
+SKITY_C_API skity_result skity_color_space_convert(
+    const skity_color_space_info* src, const skity_color4f* color,
+    const skity_color_space_info* dst, skity_color4f* out);
+
+/**
  * @brief Borrow the writable pixel view of a bitmap. The returned pixmap
  *        shares the bitmap's pixel memory (writes through it are visible to
  *        the bitmap), so it can be used as a destination for e.g.

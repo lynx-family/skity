@@ -86,6 +86,23 @@ typedef struct skity_surface_create_info_gl {
 } skity_surface_create_info_gl;
 
 /**
+ * @brief Render options extension. Hang this off the p_next chain of
+ *        skity_surface_create_info (before or after the backend-specific
+ *        extension) with s_type = SKITY_STRUCTURE_TYPE_SURFACE_RENDER_OPTIONS.
+ *
+ * The color space becomes the working space of every draw into the surface:
+ * images and paint colors convert into it, blending and storage stay in it.
+ * A NULL space keeps the sRGB default, bit identical to an unmanaged surface.
+ */
+typedef struct skity_surface_render_options {
+  skity_structure_type
+      s_type;         /**< SKITY_STRUCTURE_TYPE_SURFACE_RENDER_OPTIONS */
+  const void* p_next; /**< reserved for future extensions */
+  const skity_color_space_info*
+      color_space; /**< encoding + working space, NULL = sRGB */
+} skity_surface_render_options;
+
+/**
  * @brief Create a GPU surface bound to the given context. The backend is
  *        chosen by the p_next extension of @p info.
  * @param context     context that will own the surface

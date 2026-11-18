@@ -18,8 +18,10 @@
 #include <skity/c/skity_surface_mtl.h>
 #include <skity/c/skity_texture_mtl.h>
 
+#include "color_space_c_util.hpp"
 #include "handle.hpp"
 #include "mtl_glue.hpp"
+#include "surface_pnext.hpp"
 
 namespace skity {
 namespace capi {
@@ -38,13 +40,22 @@ void* MtlContextGetCommandQueueGlue(GPUContext* context) {
 
 std::unique_ptr<GPUSurface> MtlSurfaceCreateGlue(GPUContext* context,
                                                  const skity_surface_create_info* info) {
-  const auto* extension = static_cast<const skity_surface_create_info_mtl*>(info->p_next);
+  const auto* extension = static_cast<const skity_surface_create_info_mtl*>(
+      FindSurfaceChainNode(info->p_next, SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_MTL));
+  if (extension == nullptr) {
+    return nullptr;
+  }
   GPUSurfaceDescriptorMTL descriptor{};
   descriptor.backend = GPUBackendType::kMetal;
   descriptor.width = info->width;
   descriptor.height = info->height;
   descriptor.sample_count = info->sample_count ? info->sample_count : 1;
   descriptor.content_scale = info->content_scale != 0.f ? info->content_scale : 1.f;
+  auto* render_options = static_cast<const skity_surface_render_options*>(
+      FindSurfaceChainNode(info->p_next, SKITY_STRUCTURE_TYPE_SURFACE_RENDER_OPTIONS));
+  if (render_options != nullptr && render_options->color_space != nullptr) {
+    descriptor.render_options.color_space = ColorSpaceFromCInfo(render_options->color_space);
+  }
   switch (extension->surface_type) {
     case SKITY_MTL_SURFACE_TYPE_TEXTURE:
       descriptor.surface_type = MTLSurfaceType::kTexture;

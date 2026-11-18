@@ -91,6 +91,37 @@ SKITY_C_API skity_image_filter skity_image_filter_create_drop_shadow(
     float dx, float dy, float sigma_x, float sigma_y, skity_color color,
     skity_image_filter input, const skity_rect* crop);
 
+/** @brief Qualifiers for a declared-space drop shadow. */
+typedef struct skity_drop_shadow_options {
+  const skity_color_space_info*
+      color_space;      /**< encoding of the shadow color, NULL = sRGB */
+  skity_rect crop_rect; /**< empty rect (all zeros) leaves the shadow
+                             uncropped */
+} skity_drop_shadow_options;
+
+/**
+ * @brief Create a drop-shadow image filter with a float shadow color.
+ *
+ * Same geometry as skity_image_filter_create_drop_shadow; the color is
+ * recorded in options.color_space and resolves into the render target's
+ * space on GPU targets. The qualifiers are bundled like the gradient
+ * options: NULL options equal all defaults (sRGB color, no crop).
+ *
+ * @param dx       horizontal shadow offset, in pixels
+ * @param dy       vertical shadow offset, in pixels
+ * @param sigma_x  horizontal blur sigma of the shadow, in pixels
+ * @param sigma_y  vertical blur sigma of the shadow, in pixels
+ * @param color    unpremultiplied float shadow color
+ * @param input    source image filter to shadow, or NULL to use the source
+ *                 primitive directly
+ * @param options  qualifiers, or NULL for defaults
+ * @return         filter handle, or NULL on invalid arguments
+ */
+SKITY_C_API skity_image_filter skity_image_filter_create_drop_shadow2(
+    float dx, float dy, float sigma_x, float sigma_y,
+    const skity_color4f* color, skity_image_filter input,
+    const skity_drop_shadow_options* options);
+
 /**
  * @brief Wrap an image filter with a local matrix applied before the canvas
  *        matrix.
