@@ -258,6 +258,8 @@ typedef enum {
                                                     info */
   SKITY_STRUCTURE_TYPE_PRESENTER_CREATE_INFO_VK, /**< Vulkan-specific presenter
                                                     creation info */
+  SKITY_STRUCTURE_TYPE_SURFACE_RENDER_OPTIONS,   /**< surface render options
+                                                    (color management) */
 } skity_structure_type;
 
 /**

@@ -5,6 +5,7 @@
 #include <skity/c/skity_bitmap.h>
 
 #include <cstring>
+#include <memory>
 #include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color_space.hpp>
 #include <skity/io/data.hpp>
@@ -254,6 +255,68 @@ skity_result skity_color_space_chromaticities_from_gamut(
   return skity::ColorSpace::ChromaticitiesFromGamut(gamut_xyz, chromaticities)
              ? SKITY_SUCCESS
              : SKITY_ERROR_INVALID_ARGUMENT;
+}
+
+skity_result skity_color_space_info_init(skity_color_space_info* info,
+                                         skity_color_space_kind kind) {
+  if (info == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  std::shared_ptr<const skity::ColorSpace> space;
+  switch (kind) {
+    case SKITY_COLOR_SPACE_SRGB:
+      space = skity::ColorSpace::SRGB();
+      break;
+    case SKITY_COLOR_SPACE_SRGB_LINEAR:
+      space = skity::ColorSpace::SRGBLinear();
+      break;
+    case SKITY_COLOR_SPACE_DISPLAY_P3:
+      space = skity::ColorSpace::DisplayP3();
+      break;
+    case SKITY_COLOR_SPACE_ADOBE_RGB:
+      space = skity::ColorSpace::AdobeRGB();
+      break;
+    case SKITY_COLOR_SPACE_PARAMETRIC:
+    default:
+      return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  info->kind = kind;
+  std::memcpy(info->transfer_fn, space->transfer_fn, sizeof(info->transfer_fn));
+  std::memcpy(info->gamut_xyz, space->gamut_xyz, sizeof(info->gamut_xyz));
+  return SKITY_SUCCESS;
+}
+
+skity_result skity_color_space_info_init_parametric(
+    skity_color_space_info* info, const float* transfer_fn,
+    const float* gamut_xyz) {
+  if (info == nullptr || transfer_fn == nullptr || gamut_xyz == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  auto space = skity::ColorSpace::MakeRGB(transfer_fn, gamut_xyz);
+  if (space == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  info->kind = SKITY_COLOR_SPACE_PARAMETRIC;
+  std::memcpy(info->transfer_fn, space->transfer_fn, sizeof(info->transfer_fn));
+  std::memcpy(info->gamut_xyz, space->gamut_xyz, sizeof(info->gamut_xyz));
+  return SKITY_SUCCESS;
+}
+
+skity_result skity_color_space_convert(const skity_color_space_info* src,
+                                       const skity_color4f* color,
+                                       const skity_color_space_info* dst,
+                                       skity_color4f* out) {
+  if (color == nullptr || out == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  auto src_space =
+      src != nullptr ? skity::capi::ColorSpaceFromCInfo(src) : nullptr;
+  auto dst_space =
+      dst != nullptr ? skity::capi::ColorSpaceFromCInfo(dst) : nullptr;
+  auto converted = skity::ColorSpace::Convert(
+      src_space, *reinterpret_cast<const skity::Color4f*>(color), dst_space);
+  std::memcpy(out, &converted, sizeof(float) * 4);
+  return SKITY_SUCCESS;
 }
 
 }  // extern "C"

@@ -12,6 +12,7 @@
 #include <skity/graphic/paint.hpp>
 #include <skity/text/typeface.hpp>
 
+#include "color_space_c_util.hpp"
 #include "handle.hpp"
 
 namespace {
@@ -73,6 +74,19 @@ void skity_paint_set_stroke_miter(skity_paint paint, float miter) {
 
 void skity_paint_set_color(skity_paint paint, skity_color color) {
   if (auto* p = paint_of(paint)) p->SetColor(static_cast<skity::Color>(color));
+}
+
+void skity_paint_set_color4f(skity_paint paint, const skity_color4f* color,
+                             const skity_color_space_info* color_space) {
+  if (color == nullptr) {
+    return;
+  }
+  if (auto* p = paint_of(paint)) {
+    p->SetColor4f(*reinterpret_cast<const skity::Color4f*>(color),
+                  color_space != nullptr
+                      ? skity::capi::ColorSpaceFromCInfo(color_space)
+                      : nullptr);
+  }
 }
 
 void skity_paint_set_stroke_color(skity_paint paint, skity_color color) {
