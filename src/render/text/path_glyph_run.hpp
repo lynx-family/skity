@@ -18,6 +18,11 @@ struct PositionedGlyphPath {
   Vec2 position;
 };
 
+void AppendPathGlyphRuns(const GlyphRunInput& input,
+                         const GlyphData* const* glyphs, const Paint& paint,
+                         const GlyphRunBuildContext& context,
+                         GlyphSubRunList& runs);
+
 class PathGlyphRun final : public GlyphSubRun {
  public:
   PathGlyphRun(std::vector<PositionedGlyphPath> paths, Paint paint)

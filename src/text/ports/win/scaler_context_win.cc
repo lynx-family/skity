@@ -35,12 +35,14 @@
 #include <skity/graphic/image.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/graphic/sampling_options.hpp>
+#include <skity/recorder/picture_recorder.hpp>
 #include <skity/render/canvas.hpp>
 #include <utility>
 #include <vector>
 
 #include "src/logging.hpp"
 #include "src/render/auto_canvas.hpp"
+#include "src/text/glyph_drawable.hpp"
 
 #if (defined(DWRITE_CORE) && DWRITE_CORE) || \
     (defined(NTDDI_WIN11_ZN) && NTDDI_VERSION >= NTDDI_WIN11_ZN)
@@ -627,6 +629,40 @@ class ScalerContextDWrite : public ScalerContext {
 
     glyph->ZeroMetrics();
     GlyphDataWinAccess::SetFormat(glyph, GlyphFormat::A8);
+  }
+
+  std::shared_ptr<const GlyphDrawable> GenerateDrawable(
+      const GlyphData& glyph) override {
+    if (font_face_->GetGlyphCount() <= glyph.Id()) {
+      return nullptr;
+    }
+    float text_size = desc_.text_size;
+    Matrix22 transform;
+    if (!GetDWriteImageTransform(&text_size, &transform)) {
+      return nullptr;
+    }
+    // Use a fresh recorder for each attempt. A failed paint tree may already
+    // have emitted commands or changed its canvas state.
+    for (bool v1 : {true, false}) {
+      Rect bounds;
+      bool have_bounds = v1 ? GenerateDWriteColorV1Bounds(glyph.Id(), text_size,
+                                                          transform, &bounds)
+                            : GenerateDWriteColorLayerBounds(
+                                  glyph.Id(), text_size, transform, &bounds);
+      if (!have_bounds || !bounds.IsFinite() || bounds.IsEmpty()) {
+        continue;
+      }
+      PictureRecorder recorder;
+      recorder.BeginRecording(bounds);
+      bool drawn = v1 ? DrawDWriteColorV1Image(glyph.Id(), text_size, transform,
+                                               recorder.GetRecordingCanvas())
+                      : DrawDWriteColorImage(glyph.Id(), text_size, transform,
+                                             recorder.GetRecordingCanvas());
+      if (drawn) {
+        return GlyphDrawable::Make(recorder.FinishRecording(), bounds);
+      }
+    }
+    return nullptr;
   }
 
   void GenerateImage(PackedGlyphID, GlyphData* glyph,

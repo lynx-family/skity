@@ -18,4 +18,18 @@ void PathGlyphRun::Record(const GlyphDrawContext& context,
   }
 }
 
+void AppendPathGlyphRuns(const GlyphRunInput& input,
+                         const GlyphData* const* glyphs, const Paint& paint,
+                         const GlyphRunBuildContext& context,
+                         GlyphSubRunList& runs) {
+  std::vector<PositionedGlyphPath> paths;
+  paths.reserve(input.count);
+  for (uint32_t index = 0; index < input.count; ++index) {
+    paths.push_back({glyphs[index]->GetPath().CopyWithMatrix(
+                         Matrix::Translate(input.origin.x, input.origin.y)),
+                     Vec2{input.position_x[index], input.position_y[index]}});
+  }
+  runs.push_back(context.arena.Make<PathGlyphRun>(std::move(paths), paint));
+}
+
 }  // namespace skity

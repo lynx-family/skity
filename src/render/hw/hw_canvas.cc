@@ -35,6 +35,7 @@
 #include "src/render/paint_order.hpp"
 #include "src/render/shape.hpp"
 #include "src/render/text/glyph_run.hpp"
+#include "src/text/glyph_drawable.hpp"
 #include "src/tracing.hpp"
 #include "src/utils/arena_allocator.hpp"
 #include "src/utils/array_list.hpp"
@@ -424,6 +425,8 @@ void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
     // Expand outward a little to prevent incomplete display of text content
     bounds = bounds.MakeOutset(1, 1);
     auto layer_bounds = working_paint.ComputeFastBounds(bounds);
+    // Drawable glyphs replay Canvas operations, including nested layers. Keep
+    // Canvas state and the render layer stack in sync for filtered text too.
     SaveLayer(layer_bounds, restore_paint);
     current_matrix = CurrentMatrix();
     working_paint.SetBlendMode(BlendMode::kSrcOver);
@@ -556,6 +559,24 @@ void HWCanvas::SubmitAtlas(const GlyphAtlasDraw& operation) {
 void HWCanvas::SubmitPath(const Path& path, const Paint& paint,
                           const Matrix& local_to_layer) {
   DrawPathInternal(path, paint, local_to_layer);
+}
+
+void HWCanvas::SubmitDrawable(const GlyphDrawable& drawable, const Paint& paint,
+                              const Matrix& glyph_to_local,
+                              const Matrix& local_to_layer) {
+  const Rect bounds = glyph_to_local.MapRect(drawable.GetBounds());
+  if (!bounds.IsFinite() || bounds.IsEmpty()) {
+    return;
+  }
+  AutoCanvasRestore restore(this, true);
+  SetMatrix(GetCanvasState()->CurrentLayerState().GetWorldMatrix() *
+            local_to_layer);
+  // Apply the caller's alpha, filters and blend once to the completed glyph.
+  // Keep paint effects in text-local units, outside the canonical strike's
+  // scale and placement. Only the recorded content receives that transform.
+  SaveLayer(bounds, paint);
+  Concat(glyph_to_local);
+  drawable.Draw(this);
 }
 
 void HWCanvas::DrawPathInternal(const Path& path, const Paint& paint,

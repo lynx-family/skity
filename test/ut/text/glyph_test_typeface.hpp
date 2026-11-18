@@ -5,12 +5,15 @@
 #ifndef TEST_UT_TEXT_GLYPH_TEST_TYPEFACE_HPP
 #define TEST_UT_TEXT_GLYPH_TEST_TYPEFACE_HPP
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <skity/recorder/picture_recorder.hpp>
 #include <vector>
 
 // This accessor contains no platform APIs and lets the fixture supply metrics
 // through the same internal setters as a font backend.
+#include "src/text/glyph_drawable.hpp"
 #include "src/text/ports/win/glyph_data_win_access.hpp"
 #include "src/text/scaler_context.hpp"
 
@@ -26,6 +29,7 @@ struct TestGlyphSpec {
   bool invalid_image = false;
   float fail_below_scale = 0.f;
   bool unspecified_format = false;
+  bool drawable = false;
 };
 
 class GlyphTestTypeface final : public Typeface {
@@ -33,6 +37,7 @@ class GlyphTestTypeface final : public Typeface {
   struct State {
     std::vector<TestGlyphSpec> glyphs;
     std::vector<uint32_t> image_requests;
+    std::vector<uint32_t> drawable_requests;
     uint32_t path_requests = 0;
   };
 
@@ -40,6 +45,7 @@ class GlyphTestTypeface final : public Typeface {
       : Typeface(FontStyle{}), state(std::make_shared<State>()) {
     state->glyphs = std::move(glyphs);
     state->image_requests.resize(state->glyphs.size());
+    state->drawable_requests.resize(state->glyphs.size());
   }
   std::shared_ptr<State> state;
 
@@ -110,6 +116,34 @@ class GlyphTestTypeface final : public Typeface {
     }
     void GenerateImageInfo(PackedGlyphID, GlyphData*,
                            const StrokeDesc&) override {}
+    std::shared_ptr<const GlyphDrawable> GenerateDrawable(
+        const GlyphData& glyph) override {
+      ++state_->drawable_requests[glyph.Id()];
+      const auto& spec = state_->glyphs.at(glyph.Id());
+      if (!spec.drawable) {
+        return nullptr;
+      }
+      const float scale = desc_.text_size / 20.f;
+      Matrix matrix;
+      matrix.SetScaleX(desc_.scale_x);
+      matrix.SetSkewX(desc_.skew_x);
+      const Rect rect = Rect::MakeXYWH(-3.f * scale, -17.f * scale,
+                                       spec.width * scale, spec.height * scale);
+      const Rect bounds = matrix.MapRect(rect);
+      PictureRecorder recorder;
+      recorder.BeginRecording(bounds);
+      auto* canvas = recorder.GetRecordingCanvas();
+      canvas->Concat(matrix);
+      Paint red;
+      red.SetColor(Color_RED);
+      canvas->DrawRect(rect, red);
+      Paint foreground;
+      foreground.SetColor(desc_.foreground_color);
+      canvas->DrawRect(Rect::MakeLTRB(rect.CenterX(), rect.Top(), rect.Right(),
+                                      rect.Bottom()),
+                       foreground);
+      return GlyphDrawable::Make(recorder.FinishRecording(), bounds);
+    }
     bool GeneratePath(GlyphData* glyph) override {
       ++state_->path_requests;
       const auto& spec = state_->glyphs.at(glyph->Id());
@@ -140,7 +174,10 @@ class GlyphTestTypeface final : public Typeface {
   }
   std::shared_ptr<Data> OnGetData() override { return nullptr; }
   uint32_t OnGetUPEM() const override { return 1000; }
-  bool OnContainsColorTable() const override { return false; }
+  bool OnContainsColorTable() const override {
+    return std::any_of(state->glyphs.begin(), state->glyphs.end(),
+                       [](const auto& glyph) { return glyph.drawable; });
+  }
   std::unique_ptr<ScalerContext> OnCreateScalerContext(
       const ScalerContextDesc* desc) const override {
     return std::make_unique<Context>(state, desc);

@@ -17,6 +17,19 @@ struct PreparedDirectGlyph {
   Rect bounds;
 };
 
+// Rejected spans retain their order within each paint pass. Direct owns pass
+// preparation; the caller supplies the policy for all other representations.
+using GlyphRunFallback = void (*)(const GlyphRunInput&, const Paint&,
+                                  AtlasFormat, const GlyphRunBuildContext&,
+                                  GlyphSubRunList&, const GlyphData* const*,
+                                  bool retry_image);
+
+void AppendDirectGlyphRuns(const GlyphRunInput& input, const Paint& paint,
+                           AtlasFormat format,
+                           const GlyphRunBuildContext& context,
+                           GlyphSubRunList& runs,
+                           GlyphRunFallback append_fallback);
+
 std::vector<PreparedDirectGlyph> PrepareDirectGlyphs(
     const GlyphRunInput& input, const Paint& paint, AtlasFormat format,
     const GlyphRunBuildContext& context);

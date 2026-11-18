@@ -114,6 +114,7 @@ add_executable(skity_unit_test
     text/glyph_image_test.cc
     text/glyph_fallback_test.cc
     text/glyph_run_test.cc
+    text/drawable_glyph_run_test.cc
     text/scaler_context_cache_test.cc
     text/text_blob_test.cc
     text/text_run_test.cc
@@ -193,6 +194,9 @@ endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_MTL_BACKEND)
   target_sources(skity_unit_test PRIVATE render/hw/transformed_text_test.mm)
+  target_sources(skity_unit_test PRIVATE render/hw/drawable_text_test.mm)
+  set_source_files_properties(render/hw/drawable_text_test.mm
+      PROPERTIES COMPILE_FLAGS "-fobjc-arc")
   set_source_files_properties(render/hw/transformed_text_test.mm
       PROPERTIES COMPILE_FLAGS "-fobjc-arc")
   target_link_libraries(skity_unit_test PRIVATE "-framework Metal")

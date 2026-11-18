@@ -38,6 +38,8 @@ class ScalerContextFreetype : public ScalerContext {
   void GenerateImageInfo(PackedGlyphID, GlyphData *glyph,
                          const StrokeDesc &stroke_desc) override;
   bool GeneratePath(GlyphData *glyph) override;
+  std::shared_ptr<const GlyphDrawable> GenerateDrawable(
+      const GlyphData &glyph) override;
   void GenerateFontMetrics(FontMetrics *metrics) override;
   uint16_t OnGetFixedSize() override;
 

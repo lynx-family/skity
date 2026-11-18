@@ -286,6 +286,24 @@ Paint *DisplayList::GetOpPaintByOffset(RecordedOpOffset offset) {
   }
 }
 
+void DisplayList::PreparePathCaches() {
+  auto prepare = [](const Path &path) {
+    path.GetBounds();
+    path.GetConvexityType();
+  };
+  const uint8_t *ptr = storage_.get();
+  const uint8_t *end = ptr + byte_count_;
+  while (ptr < end) {
+    const auto *op = reinterpret_cast<const RecordedOp *>(ptr);
+    ptr += op->size;
+    if (op->type == RecordedOpType::kDrawPath) {
+      prepare(static_cast<const DrawPathOp *>(op)->path);
+    } else if (op->type == RecordedOpType::kClipPath) {
+      prepare(static_cast<const ClipPathOp *>(op)->path);
+    }
+  }
+}
+
 void DisplayList::SetRTree(std::unique_ptr<DisplayListRTree> rtree) {
   rtree_ = std::move(rtree);
 }

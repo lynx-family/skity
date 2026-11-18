@@ -77,6 +77,9 @@ class ScalerContextContainer {
                const GlyphData* results[]) SKITY_EXCLUDES(mutex_);
   void PreparePaths(const GlyphID* glyph_ids, uint32_t count,
                     const GlyphData* results[]) SKITY_EXCLUDES(mutex_);
+  void PrepareDrawables(const GlyphID* glyph_ids, uint32_t count,
+                        std::shared_ptr<const GlyphDrawable> results[])
+      SKITY_EXCLUDES(mutex_);
   OwnedGlyphImage PrepareOwnedImage(PackedGlyphID glyph_id, const Paint& paint)
       SKITY_EXCLUDES(mutex_);
   // Compatibility view, valid until the next PrepareImages call on this

@@ -20,6 +20,12 @@ class RecordingGlyphDrawTarget : public GlyphDrawTarget {
     Paint paint;
     Matrix local_to_layer;
   };
+  struct DrawableDraw {
+    const GlyphDrawable* drawable;
+    Paint paint;
+    Matrix glyph_to_local;
+    Matrix local_to_layer;
+  };
 
   void SubmitAtlas(const GlyphAtlasDraw& operation) override {
     events.push_back({true, atlas_draws.size()});
@@ -32,11 +38,21 @@ class RecordingGlyphDrawTarget : public GlyphDrawTarget {
     path_draws.push_back({path, paint, local_to_layer});
   }
 
+  void SubmitDrawable(const GlyphDrawable& drawable, const Paint& paint,
+                      const Matrix& glyph_to_local,
+                      const Matrix& local_to_layer) override {
+    events.push_back({false, drawable_draws.size(), true});
+    drawable_draws.push_back(
+        {&drawable, paint, glyph_to_local, local_to_layer});
+  }
+
   std::vector<GlyphAtlasDraw> atlas_draws;
   std::vector<PathDraw> path_draws;
+  std::vector<DrawableDraw> drawable_draws;
   struct Event {
     bool atlas;
     size_t index;
+    bool drawable = false;
   };
   std::vector<Event> events;
 };
@@ -46,6 +62,7 @@ inline GlyphAtlasDraw RecordAtlasGlyphRun(const GlyphSubRun& run,
   RecordingGlyphDrawTarget target;
   run.Record(context, target);
   EXPECT_TRUE(target.path_draws.empty());
+  EXPECT_TRUE(target.drawable_draws.empty());
   EXPECT_EQ(target.atlas_draws.size(), 1u);
   return target.atlas_draws.empty() ? GlyphAtlasDraw{} : target.atlas_draws[0];
 }

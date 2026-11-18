@@ -30,6 +30,11 @@ class ColorFreeType {
   bool DrawColorV1Glyph(FT_Face face, const GlyphData& glyph,
                         const Rect& raster_bounds, const Vec2& subpixel_offset);
 
+  // Shared paint interpretation for bitmap rasterization and glyph recording.
+  bool DrawColorV0Glyph(FT_Face face, const GlyphData& glyph,
+                        uint32_t load_glyph_flags, Canvas* canvas);
+  bool DrawColorV1Glyph(FT_Face face, const GlyphData& glyph, Canvas* canvas);
+
   bool ComputeColorV1Glyph(FT_Face face, const GlyphData& glyph, Rect* bounds);
 
   Bitmap* GetBitmap() { return bitmap_.get(); }
