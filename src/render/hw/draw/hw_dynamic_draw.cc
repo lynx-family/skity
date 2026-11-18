@@ -4,9 +4,30 @@
 
 #include "src/render/hw/draw/hw_dynamic_draw.hpp"
 
+#include <skity/graphic/paint.hpp>
+
+#include "src/render/hw/draw/step/color_step.hpp"
+#include "src/render/hw/draw/wgx_utils.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
+
+bool HWDynamicDraw::CanMergeSolidPaints(const Paint& paint,
+                                        const Paint& other) {
+  return !paint.GetShader() && !other.GetShader() &&
+         paint.GetColorFilter() == other.GetColorFilter();
+}
+
+HWDrawStep* HWDynamicDraw::MakeShapeColorStep(HWDrawContext* context,
+                                              HWWGSLGeometry* geometry,
+                                              const Paint& paint) const {
+  auto* fragment = GenShadingFragment(context, paint,
+                                      paint.GetStyle() == Paint::kStroke_Style,
+                                      /*has_color=*/false);
+  ConfigureShadingFragment(context, paint, GetBlendPlan(), fragment);
+  return context->arena_allocator->Make<ColorStep>(geometry, fragment,
+                                                   CoverageType::kNone);
+}
 
 HWDrawState HWDynamicDraw::OnPrepare(HWDrawContext* context) {
   SKITY_TRACE_EVENT(HWDynamicDraw_OnPrepare);
@@ -49,11 +70,6 @@ void HWDynamicDraw::OnGenerateCommand(HWDrawContext* context,
       commands_.push_back(cmd);
     }
   }
-}
-
-bool HWDynamicDraw::OnMergeIfPossible(HWDraw* draw) {
-  (void)draw;
-  return true;
 }
 
 }  // namespace skity

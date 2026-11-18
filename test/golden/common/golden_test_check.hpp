@@ -14,6 +14,8 @@
 namespace skity {
 namespace testing {
 
+class GoldenTexture;
+
 struct PathList {
   const char* cpu_tess_path = nullptr;
   const char* gpu_tess_path = nullptr;
@@ -82,6 +84,10 @@ bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
 bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
                           GoldenTestEnvConfig config,
                           const std::function<void(Canvas*)>& render);
+
+bool CompareGoldenTexture(const std::shared_ptr<GoldenTexture>& texture,
+                          const char* path,
+                          std::shared_ptr<Pixmap>* actual_pixels);
 
 /**
  * @brief compare the display list with the golden texture. If the golden_test

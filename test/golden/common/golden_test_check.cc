@@ -342,7 +342,7 @@ struct AutoRestoreConfig {
     }
   }
 
-  std::string GetNameSuffix() const {
+  static std::string GetNameSuffix(const GPUContext* gpu_context) {
     if (gpu_context->IsEnableGPUTessellation()) {
       return "gpu_tess";
     }
@@ -407,19 +407,8 @@ std::shared_ptr<Pixmap> ReadImage(const char* path) {
 }
 
 static bool CompareGoldenTextureImpl(
-    uint32_t width, uint32_t height, const char* path,
-    GoldenTestEnvConfig config, const std::function<void(Canvas*)>& render);
-
-static bool CompareGoldenTextureImpl(DisplayList* dl, uint32_t width,
-                                     uint32_t height, const char* path,
-                                     GoldenTestEnvConfig config) {
-  return CompareGoldenTextureImpl(width, height, path, config,
-                                  [dl](Canvas* canvas) { dl->Draw(canvas); });
-}
-
-static bool CompareGoldenTextureImpl(
-    uint32_t width, uint32_t height, const char* path,
-    GoldenTestEnvConfig config, const std::function<void(Canvas*)>& render) {
+    const std::shared_ptr<GoldenTexture>& texture, const char* path,
+    GoldenTestEnvConfig config, std::shared_ptr<Pixmap>* actual_pixels) {
   auto test_info = ::testing::UnitTest::GetInstance()->current_test_info();
 
   std::cout << "test name: " << test_info->name() << std::endl;
@@ -427,8 +416,6 @@ static bool CompareGoldenTextureImpl(
   std::cout << "test suite name: " << test_info->test_suite_name() << std::endl;
 
   auto env = GoldenTestEnv::GetInstance();
-  AutoRestoreConfig auto_restore_config(env, config);
-  auto texture = env->RenderToTexture(width, height, render);
   auto expected_image_read_path =
       ResolveGoldenReadPath(path, config.use_backend_specific_golden);
   auto expected_image_write_path = ResolveGoldenWritePath(path);
@@ -445,6 +432,9 @@ static bool CompareGoldenTextureImpl(
       << "Failed to read rendering result texture pixels";
   if (source == nullptr) {
     return false;
+  }
+  if (actual_pixels != nullptr) {
+    *actual_pixels = source;
   }
 
   auto target = ReadImage(expected_image_read_path.c_str());
@@ -566,10 +556,26 @@ static bool CompareGoldenTextureImpl(
 #ifdef SKITY_GOLDEN_GUI
   return OpenPlayground(result_passed, texture, target,
                         expected_image_write_path.c_str(),
-                        auto_restore_config.GetNameSuffix());
+                        AutoRestoreConfig::GetNameSuffix(env->GetGPUContext()));
 #else
   return result_passed;
 #endif
+}
+
+static bool CompareGoldenTextureImpl(
+    uint32_t width, uint32_t height, const char* path,
+    GoldenTestEnvConfig config, const std::function<void(Canvas*)>& render) {
+  auto* env = GoldenTestEnv::GetInstance();
+  AutoRestoreConfig auto_restore_config(env, config);
+  return CompareGoldenTextureImpl(env->RenderToTexture(width, height, render),
+                                  path, config, nullptr);
+}
+
+static bool CompareGoldenTextureImpl(DisplayList* dl, uint32_t width,
+                                     uint32_t height, const char* path,
+                                     GoldenTestEnvConfig config) {
+  return CompareGoldenTextureImpl(width, height, path, config,
+                                  [dl](Canvas* canvas) { dl->Draw(canvas); });
 }
 
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
@@ -591,6 +597,12 @@ bool CompareGoldenTexture(uint32_t width, uint32_t height, const char* path,
                           GoldenTestEnvConfig config,
                           const std::function<void(Canvas*)>& render) {
   return CompareGoldenTextureImpl(width, height, path, config, render);
+}
+
+bool CompareGoldenTexture(const std::shared_ptr<GoldenTexture>& texture,
+                          const char* path,
+                          std::shared_ptr<Pixmap>* actual_pixels) {
+  return CompareGoldenTextureImpl(texture, path, {}, actual_pixels);
 }
 
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
