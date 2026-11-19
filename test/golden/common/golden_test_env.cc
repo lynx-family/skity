@@ -25,7 +25,8 @@ namespace {
 class SoftwareGoldenSurface final : public GPUSurface {
  public:
   SoftwareGoldenSurface(uint32_t width, uint32_t height)
-      : bitmap_(width, height, AlphaType::kPremul_AlphaType, ColorType::kRGBA) {}
+      : bitmap_(width, height, AlphaType::kPremul_AlphaType, ColorType::kRGBA) {
+  }
 
   uint32_t GetWidth() const override { return bitmap_.Width(); }
   uint32_t GetHeight() const override { return bitmap_.Height(); }

@@ -58,8 +58,16 @@ class BlendColorFilter : public ColorFilterBase {
   PMColor OnFilterColor(PMColor c) const override;
 #endif
   BlendColorFilter(Color c, BlendMode m);
+  BlendColorFilter(Color4f c, BlendMode m,
+                   std::shared_ptr<const ColorSpace> color_space);
 
-  Color GetColor() const { return color_; }
+  const Color4f& GetColor4f() const { return color_; }
+
+  /// The space the recorded color is encoded in; null means sRGB.
+  const std::shared_ptr<const ColorSpace>& GetColorSpace() const {
+    return color_space_;
+  }
+
   BlendMode GetBlendMode() const { return mode_; }
 
   ColorFilterType GetType() const override { return ColorFilterType::kBlend; }
@@ -73,9 +81,12 @@ class BlendColorFilter : public ColorFilterBase {
   void FlattenToBuffer(WriteBuffer& buffer) const override;
 
  private:
-  Color color_;
-  Color pm_color_;
+  Color4f color_;
+  std::shared_ptr<const ColorSpace> color_space_;
   BlendMode mode_;
+#ifdef SKITY_CPU
+  PMColor pm_color_;
+#endif
 };
 
 class MatrixColorFilter : public ColorFilterBase {

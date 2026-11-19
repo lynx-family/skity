@@ -72,7 +72,6 @@ class AtlasGlyphRun : public GlyphSubRun {
   const TextAtlasEffect effect_;
 };
 
-GlyphFormat ResolveAtlasGlyphFormat(AtlasFormat format, const GlyphData& glyph);
 TextAtlasEffect MaskAtlasEffect(GlyphFormat format);
 
 }  // namespace skity

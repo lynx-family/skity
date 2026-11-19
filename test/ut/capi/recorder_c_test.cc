@@ -8,15 +8,19 @@
 
 #include <gtest/gtest.h>
 #include <skity/c/skity_canvas.h>
+#include <skity/c/skity_color_filter.h>
+#include <skity/c/skity_image_filter.h>
 #include <skity/c/skity_paint.h>
 #include <skity/c/skity_recorder.h>
 #include <skity/c/skity_shader.h>
+#include <skity/c/skity_surface.h>
 #include <skity/c/skity_text.h>
 
 #include <memory>
 #include <skity/text/text_blob.hpp>
 
 #include "module/capi/common/handle.hpp"
+#include "module/capi/src/surface_pnext.hpp"
 
 namespace {
 
@@ -54,6 +58,16 @@ struct DisplayListGuard {
 struct ShaderGuard {
   skity_shader s = nullptr;
   ~ShaderGuard() { skity_shader_destroy(s); }
+};
+
+struct ColorFilterGuard {
+  skity_color_filter f = nullptr;
+  ~ColorFilterGuard() { skity_color_filter_destroy(f); }
+};
+
+struct ImageFilterGuard {
+  skity_image_filter f = nullptr;
+  ~ImageFilterGuard() { skity_image_filter_destroy(f); }
 };
 
 constexpr skity_rect kBounds = {0.f, 0.f, 1000.f, 1000.f};
@@ -329,5 +343,117 @@ TEST(CapiRecorder, GetOpPaintByOffset) {
   // Invalid offsets return NULL.
   EXPECT_EQ(skity_display_list_get_op_paint_by_offset(list.l, -1), nullptr);
   EXPECT_EQ(skity_display_list_get_op_paint_by_offset(list.l, 1 << 30),
+            nullptr);
+}
+
+TEST(CapiRecorder, CreateLinearGradientWithDeclaredStopSpace) {
+  // The _2 entry creates a gradient from a skity_gradient_options struct;
+  // a NULL color space descriptor inside keeps the undeclared (sRGB)
+  // default, and a NULL options pointer keeps every default.
+  skity_point pts[2] = {{{0.f, 0.f, 0.f, 1.f}}, {{100.f, 0.f, 0.f, 1.f}}};
+  // The factories read count stops, so the array must really hold two.
+  skity_color4f red[2] = {{1.f, 0.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 1.f}};
+
+  skity_color_space_info info{};
+  info.kind = SKITY_COLOR_SPACE_DISPLAY_P3;
+  skity_gradient_options p3_options{};
+  p3_options.tile_mode = SKITY_TILE_MODE_CLAMP;
+  p3_options.flags = 0;
+  p3_options.color_space = &info;
+  ShaderGuard p3{
+      skity_shader_create_linear2(pts, red, nullptr, 2, &p3_options)};
+  ASSERT_NE(p3.s, nullptr);
+
+  ShaderGuard plain{skity_shader_create_linear2(pts, red, nullptr, 2, nullptr)};
+  ASSERT_NE(plain.s, nullptr);
+}
+
+TEST(CapiRecorder, PaintColor4fRoundTripsDeclaredSpace) {
+  PaintGuard p{skity_paint_create()};
+  ASSERT_NE(p.p, nullptr);
+
+  skity_color_space_info p3{};
+  p3.kind = SKITY_COLOR_SPACE_DISPLAY_P3;
+  const skity_color4f red{1.f, 0.f, 0.f, 1.f};
+  skity_paint_set_color4f(p.p, &red, &p3);
+  skity_color4f out{};
+  skity_paint_get_color4f(p.p, &out);
+  EXPECT_FLOAT_EQ(out.e[0], 1.f);
+  EXPECT_FLOAT_EQ(out.e[3], 1.f);
+
+  // A NULL space keeps the sRGB reading of the same floats.
+  skity_paint_set_color4f(p.p, &red, nullptr);
+  skity_paint_get_color4f(p.p, &out);
+  EXPECT_FLOAT_EQ(out.e[0], 1.f);
+
+  // A NULL color is a no-op and must not crash.
+  skity_paint_set_color4f(p.p, nullptr, &p3);
+  skity_paint_get_color4f(p.p, &out);
+  EXPECT_FLOAT_EQ(out.e[0], 1.f);
+}
+
+TEST(CapiRecorder, CreateDeclaredColorFilters) {
+  const skity_color4f red{1.f, 0.f, 0.f, 1.f};
+  skity_color_space_info p3{};
+  p3.kind = SKITY_COLOR_SPACE_DISPLAY_P3;
+
+  ColorFilterGuard declared{
+      skity_color_filter_create_blend4f2(&red, SKITY_BLEND_MODE_SRC, &p3)};
+  ASSERT_NE(declared.f, nullptr);
+  ColorFilterGuard plain{
+      skity_color_filter_create_blend4f(&red, SKITY_BLEND_MODE_SRC)};
+  ASSERT_NE(plain.f, nullptr);
+  ASSERT_EQ(
+      skity_color_filter_create_blend4f2(nullptr, SKITY_BLEND_MODE_SRC, &p3),
+      nullptr);
+}
+
+TEST(CapiRecorder, CreateDeclaredDropShadow) {
+  const skity_color4f red{1.f, 0.f, 0.f, 1.f};
+  skity_color_space_info p3{};
+  p3.kind = SKITY_COLOR_SPACE_DISPLAY_P3;
+  skity_drop_shadow_options options{};
+  options.color_space = &p3;
+  options.crop_rect = {0.f, 0.f, 0.f, 0.f};
+
+  ImageFilterGuard declared{skity_image_filter_create_drop_shadow2(
+      4, 4, 3, 3, &red, nullptr, &options)};
+  ASSERT_NE(declared.f, nullptr);
+  ImageFilterGuard plain{skity_image_filter_create_drop_shadow2(
+      4, 4, 3, 3, &red, nullptr, nullptr)};
+  ASSERT_NE(plain.f, nullptr);
+  ASSERT_EQ(skity_image_filter_create_drop_shadow2(4, 4, 3, 3, nullptr, nullptr,
+                                                   &options),
+            nullptr);
+}
+
+TEST(CapiRecorder, SurfaceChainFindsNodesInAnyOrder) {
+  // Render options may sit before or after the backend node in the p_next
+  // chain; the walk must find each regardless of order.
+  skity_color_space_info info{};
+  info.kind = SKITY_COLOR_SPACE_DISPLAY_P3;
+  skity_surface_render_options render{};
+  render.s_type = SKITY_STRUCTURE_TYPE_SURFACE_RENDER_OPTIONS;
+  render.color_space = &info;
+  skity_surface_create_info_gl gl{};
+  gl.s_type = SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_GL;
+
+  render.p_next = &gl;
+  EXPECT_EQ(skity::capi::FindSurfaceChainNode(
+                &render, SKITY_STRUCTURE_TYPE_SURFACE_RENDER_OPTIONS),
+            &render);
+  EXPECT_EQ(skity::capi::FindSurfaceChainNode(
+                &render, SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_GL),
+            &gl);
+
+  gl.p_next = &render;
+  EXPECT_EQ(skity::capi::FindSurfaceChainNode(
+                &gl, SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_GL),
+            &gl);
+  EXPECT_EQ(skity::capi::FindSurfaceChainNode(
+                &gl, SKITY_STRUCTURE_TYPE_SURFACE_RENDER_OPTIONS),
+            &render);
+  EXPECT_EQ(skity::capi::FindSurfaceChainNode(
+                nullptr, SKITY_STRUCTURE_TYPE_SURFACE_RENDER_OPTIONS),
             nullptr);
 }

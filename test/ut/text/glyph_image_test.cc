@@ -92,6 +92,8 @@ TEST(GlyphImageTest,
   EXPECT_FLOAT_EQ(first.Image().origin_y, 5.f);
   auto moved = std::move(first);
   EXPECT_EQ(first.Get(), nullptr);
+  EXPECT_EQ(first.GetStatus(), OwnedGlyphImage::Status::kNoImage);
+  EXPECT_EQ(moved.GetStatus(), OwnedGlyphImage::Status::kReady);
   EXPECT_EQ(moved.Image().buffer[8], 1);
 }
 
@@ -191,6 +193,7 @@ TEST(GlyphImageTest, FailedGenerationDoesNotReusePreviousImage) {
   auto first = container.PrepareOwnedImage(PackedGlyphID(7), Paint());
   backend->fail = true;
   auto failed = container.PrepareOwnedImage(PackedGlyphID(7), Paint());
+  EXPECT_EQ(failed.GetStatus(), OwnedGlyphImage::Status::kNoImage);
   EXPECT_EQ(failed.Image().buffer, nullptr);
   EXPECT_FALSE(failed.Image().need_free);
   EXPECT_EQ(first.Image().buffer[0], 1);
@@ -207,9 +210,9 @@ TEST(GlyphImageTest, RejectsInvalidBorrowedImageLayouts) {
                       std::numeric_limits<float>::max()}) {
     backend->layout = valid;
     backend->layout.width = width;
-    EXPECT_EQ(
-        container.PrepareOwnedImage(PackedGlyphID(7), Paint()).Image().buffer,
-        nullptr);
+    auto image = container.PrepareOwnedImage(PackedGlyphID(7), Paint());
+    EXPECT_EQ(image.Image().buffer, nullptr);
+    EXPECT_EQ(image.GetStatus(), OwnedGlyphImage::Status::kInvalidImage);
   }
   backend->layout = valid;
   backend->layout.row_bytes = 2;

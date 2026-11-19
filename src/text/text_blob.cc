@@ -34,8 +34,7 @@ Rect TextBlob::CalculateBoundsRect() const {
   float advance_x = 0;
   bool has_glyph = false;
   for (auto const &run : text_run_) {
-    auto typeface = run.LockTypeface();
-    Font font(typeface, run.GetFontSize());
+    const Font &font = run.GetFont();
     auto const &glyph_ids = run.GetGlyphInfo();
     std::vector<const GlyphData *> glyphs(glyph_ids.size());
     Paint paint;
@@ -74,8 +73,12 @@ Rect TextBlob::CalculateBoundsRect() const {
       auto const &glyph = glyphs[i];
       float x = pos_x[i];
       float y = pos_y[i];
-      top = std::min(top, y - glyph->GetYMax());
-      bottom = std::max(bottom, y - glyph->GetYMin());
+      // Bearings and dimensions describe the ink in the same coordinates on
+      // every port. YMin/YMax have different conventions across backends and
+      // cannot safely size a filtered text layer.
+      const float glyph_top = y - glyph->GetHoriBearingY();
+      top = std::min(top, glyph_top);
+      bottom = std::max(bottom, glyph_top + glyph->GetHeight());
       left = std::min(left, x + glyph->GetHoriBearingX());
       right = std::max(right, x + glyph->GetHoriBearingX() + glyph->GetWidth());
     }

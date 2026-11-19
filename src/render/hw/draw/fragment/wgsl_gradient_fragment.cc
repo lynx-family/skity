@@ -26,6 +26,11 @@ void WGSLGradientFragment::WriteFSFunctionsAndStructs(
     std::stringstream& ss) const {
   ss << gradient_fragment_.GenSourceWGSL(0);
 
+  // Every variant clamps the premultiplied output to the canonical
+  // RGB <= A range after interpolation: stop color spaces can resolve to
+  // extended values, and clamping at the output (instead of the stops)
+  // keeps mid-gradient colors interpolating the extended stops. This is
+  // the same rule the image decode path applies before premultiplying.
   if (type_ == Shader::GradientType::kLinear) {
     ss << R"(
         fn generate_gradient_color(v_pos: vec2<f32>) -> vec4<f32> {
@@ -38,6 +43,7 @@ void WGSLGradientFragment::WriteFSFunctionsAndStructs(
             if gradient_info.flags == 0 {
               color = vec4<f32>(color.xyz * color.w, color.w);
             }
+            color = vec4<f32>(clamp(color.xyz, vec3<f32>(0.0), vec3<f32>(color.w)), color.w);
             return color * gradient_info.global_alpha;
         }
     )";
@@ -52,6 +58,7 @@ void WGSLGradientFragment::WriteFSFunctionsAndStructs(
             if gradient_info.flags == 0 {
               color = vec4<f32>(color.xyz * color.w, color.w);
             }
+            color = vec4<f32>(clamp(color.xyz, vec3<f32>(0.0), vec3<f32>(color.w)), color.w);
             return color * gradient_info.global_alpha;
         }
     )";
@@ -67,6 +74,7 @@ void WGSLGradientFragment::WriteFSFunctionsAndStructs(
           if gradient_info.flags == 0 {
             color = vec4<f32>(color.xyz * color.w, color.w);
           }
+          color = vec4<f32>(clamp(color.xyz, vec3<f32>(0.0), vec3<f32>(color.w)), color.w);
           return color * gradient_info.global_alpha;
         }
       }
@@ -87,6 +95,7 @@ void WGSLGradientFragment::WriteFSFunctionsAndStructs(
         if gradient_info.flags == 0 {
           color = vec4<f32>(color.xyz * color.w, color.w);
         }
+        color = vec4<f32>(clamp(color.xyz, vec3<f32>(0.0), vec3<f32>(color.w)), color.w);
         return color * gradient_info.global_alpha;
       }
     )";

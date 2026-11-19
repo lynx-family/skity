@@ -27,6 +27,7 @@
 #include "src/render/hw/draw/fragment/wgsl_texture_fragment.hpp"
 #include "src/render/hw/draw/geometry/wgsl_clip_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_path_geometry.hpp"
+#include "src/render/hw/draw/geometry/wgsl_rect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
@@ -46,8 +47,6 @@
 namespace skity {
 namespace {
 
-constexpr Rect kPrecompileBounds = {0.f, 0.f, 32.f, 32.f};
-
 Path MakePrecompilePath() {
   Path path;
   path.MoveTo(0.f, 0.f);
@@ -56,10 +55,6 @@ Path MakePrecompilePath() {
   path.LineTo(16.f, 16.f);
   path.Close();
   return path;
-}
-
-RRect MakePrecompileRRect() {
-  return RRect::MakeRectXY(kPrecompileBounds, 8.f, 8.f);
 }
 
 Paint MakeTwoColorLinearGradientPaint(const float* pos) {
@@ -129,17 +124,33 @@ HWWGSLFragment* ApplyPaintEffects(HWWGSLFragment* fragment, const Paint& paint,
   return fragment;
 }
 
-HWWGSLFragment* MakeColorFragment(HWDrawStepContext* ctx, const Paint& paint,
+HWWGSLFragment* MakeTextureFragment(HWDrawStepContext* ctx, const Paint& paint,
+                                    std::shared_ptr<PixmapShader> shader,
+                                    const Matrix& matrix,
+                                    bool has_fragment_mask = false) {
+  auto* fragment = ctx->context->arena_allocator->Make<WGSLTextureFragment>(
+      std::move(shader), nullptr, nullptr, 1.f, matrix, 1.f, 1.f,
+      ctx->context->target_space);
+  return ApplyPaintEffects(fragment, paint, ctx->context, has_fragment_mask);
+}
+
+HWWGSLFragment* MakePaintFragment(HWDrawStepContext* ctx, const Paint& paint,
                                   bool has_color = true,
                                   bool has_fragment_mask = false) {
   auto* arena = ctx->context->arena_allocator;
   HWWGSLFragment* fragment = nullptr;
-  if (paint.GetShader() != nullptr) {
+  const auto& shader = paint.GetShader();
+  if (shader != nullptr) {
+    if (shader->AsImage()) {
+      return MakeTextureFragment(ctx, paint,
+                                 std::static_pointer_cast<PixmapShader>(shader),
+                                 shader->GetLocalMatrix(), has_fragment_mask);
+    }
     Shader::GradientInfo info = {};
-    auto type = paint.GetShader()->AsGradient(&info);
+    auto type = shader->AsGradient(&info);
     if (type != Shader::GradientType::kNone) {
       fragment = arena->Make<WGSLGradientFragment>(
-          info, type, paint.GetAlphaF(), paint.GetShader()->GetLocalMatrix());
+          info, type, paint.GetAlphaF(), shader->GetLocalMatrix());
       return ApplyPaintEffects(fragment, paint, ctx->context,
                                has_fragment_mask);
     }
@@ -148,18 +159,10 @@ HWWGSLFragment* MakeColorFragment(HWDrawStepContext* ctx, const Paint& paint,
   if (!has_color) {
     fragment = arena->Make<WGSLSolidVertexColor>();
   } else {
-    fragment = arena->Make<WGSLSolidColor>(paint.GetFillColor());
+    fragment = arena->Make<WGSLSolidColor>(
+        paint.GetFillColor(ctx->context->target_space));
   }
 
-  return ApplyPaintEffects(fragment, paint, ctx->context, has_fragment_mask);
-}
-
-HWWGSLFragment* MakeTextureFragment(HWDrawStepContext* ctx, const Paint& paint,
-                                    std::shared_ptr<PixmapShader> shader,
-                                    const Matrix& matrix,
-                                    bool has_fragment_mask = false) {
-  auto* fragment = ctx->context->arena_allocator->Make<WGSLTextureFragment>(
-      std::move(shader), nullptr, nullptr, 1.f, matrix, 1.f, 1.f);
   return ApplyPaintEffects(fragment, paint, ctx->context, has_fragment_mask);
 }
 
@@ -170,7 +173,7 @@ void PrecompilePathStep(HWDrawStepContext* ctx, const Paint& paint,
   if (is_stroke) {
     auto* step =
         arena->Make<ColorStep>(arena->Make<WGSLPathGeometry>(path, paint, true),
-                               MakeColorFragment(ctx, paint),
+                               MakePaintFragment(ctx, paint),
                                CoverageType::kNone, /*write_depth=*/true);
     PrecompileStep(step, ctx, paint.GetBlendMode());
     return;
@@ -181,13 +184,13 @@ void PrecompilePathStep(HWDrawStepContext* ctx, const Paint& paint,
 
   if (has_fragment_mask) {
     auto* geometry = arena->Make<WGSLPathAAGeometry>(path, paint);
-    auto* fragment = MakeColorFragment(ctx, paint, true, has_fragment_mask);
+    auto* fragment = MakePaintFragment(ctx, paint, true, has_fragment_mask);
     auto* aa_step = arena->Make<ColorAAStep>(geometry, fragment, coverage);
     PrecompileStep(aa_step, ctx, paint.GetBlendMode(), has_fragment_mask,
                    IsPaintSourceOpaque(paint));
   } else {
     auto* geometry = arena->Make<WGSLPathGeometry>(path, paint, false);
-    auto* fragment = MakeColorFragment(ctx, paint);
+    auto* fragment = MakePaintFragment(ctx, paint);
     auto* color_step =
         arena->Make<ColorStep>(geometry, fragment, CoverageType::kNone);
     // Single pass fill geometry is precompiled as fill geometry.
@@ -199,7 +202,7 @@ void PrecompilePathStep(HWDrawStepContext* ctx, const Paint& paint,
       arena->Make<WGSLStencilFragment>());
   PrecompileStep(stencil_step, ctx, BlendMode::kDefault);
   auto* geometry = arena->Make<WGSLPathGeometry>(path, paint, false);
-  auto* fragment = MakeColorFragment(ctx, paint, true, has_fragment_mask);
+  auto* fragment = MakePaintFragment(ctx, paint, true, has_fragment_mask);
   auto* color_step = arena->Make<ColorStep>(geometry, fragment, coverage);
   PrecompileStep(color_step, ctx, paint.GetBlendMode(), has_fragment_mask,
                  IsPaintSourceOpaque(paint));
@@ -215,7 +218,7 @@ void PrecompileTessPathStep(HWDrawStepContext* ctx, const Paint& paint,
   } else {
     geometry = arena->Make<WGSLTessPathFillGeometry>(path, paint);
   }
-  auto* fragment = MakeColorFragment(ctx, paint);
+  auto* fragment = MakePaintFragment(ctx, paint);
   if (is_stroke) {
     auto* depth_step = arena->Make<ColorStep>(
         geometry, fragment, CoverageType::kNone, /*write_depth=*/true);
@@ -236,28 +239,28 @@ void PrecompileTessPathStep(HWDrawStepContext* ctx, const Paint& paint,
   PrecompileStep(color_step, ctx, paint.GetBlendMode());
 }
 
-void PrecompileRRectStep(HWDrawStepContext* ctx, const Paint& paint) {
-  auto* arena = ctx->context->arena_allocator;
-  std::vector<BatchGroup<RRect>> batch_group;
-  batch_group.emplace_back(BatchGroup<RRect>{
-      MakePrecompileRRect(),
-      paint,
-      Matrix{},
-  });
-
-  auto* geometry = arena->Make<WGSLRRectGeometry>(batch_group);
-  auto* fragment = MakeColorFragment(ctx, paint, false,
-                                     /*has_fragment_mask=*/true);
-  auto* step = arena->Make<ColorStep>(geometry, fragment, CoverageType::kNone);
-  PrecompileStep(step, ctx, paint.GetBlendMode(),
+void PrecompileRRectStep(HWDrawStepContext* ctx, const Paint& paint,
+                         HWWGSLFragment* fragment) {
+  // Precompilation only reads the geometry's shader and layout.
+  const std::vector<BatchGroup<RRect>> batch_group;
+  WGSLRRectGeometry geometry(batch_group);
+  ColorStep step(&geometry, fragment, CoverageType::kNone);
+  PrecompileStep(&step, ctx, paint.GetBlendMode(),
                  /*has_fragment_mask=*/true, IsPaintSourceOpaque(paint));
+}
+
+void PrecompileRectStep(HWDrawStepContext* ctx, const Paint& paint,
+                        HWWGSLFragment* fragment) {
+  const WGSLRectGeometry::Instance first_instance{};
+  const std::vector<WGSLRectGeometry::Instance> additional_instances;
+  WGSLRectGeometry geometry(first_instance, additional_instances);
+  ColorStep step(&geometry, fragment, CoverageType::kNone);
+  PrecompileStep(&step, ctx, paint.GetBlendMode());
 }
 
 void PrecompileImageStep(HWDrawStepContext* ctx, const Paint& paint,
                          bool use_rrect = false) {
-  auto* arena = ctx->context->arena_allocator;
-  auto path = MakePrecompilePath();
-  auto matrix = Matrix{};
+  const Matrix matrix;
   auto work_paint = paint;
   work_paint.SetStyle(Paint::kFill_Style);
 
@@ -268,26 +271,13 @@ void PrecompileImageStep(HWDrawStepContext* ctx, const Paint& paint,
       std::move(image), SamplingOptions{}, TileMode::kDecal, TileMode::kDecal,
       matrix);
 
-  HWWGSLGeometry* geometry = nullptr;
+  auto* fragment = MakeTextureFragment(ctx, work_paint, shader, matrix,
+                                       /*has_fragment_mask=*/use_rrect);
   if (use_rrect) {
-    std::vector<BatchGroup<RRect>> batch_group;
-    batch_group.emplace_back(BatchGroup<RRect>{
-        MakePrecompileRRect(),
-        work_paint,
-        matrix,
-    });
-    geometry = arena->Make<WGSLRRectGeometry>(batch_group);
-  } else {
-    geometry = arena->Make<WGSLPathGeometry>(path, work_paint, false);
+    PrecompileRRectStep(ctx, work_paint, fragment);
+    return;
   }
-
-  auto* fragment =
-      MakeTextureFragment(ctx, work_paint, std::move(shader), matrix,
-                          /*has_fragment_mask=*/use_rrect);
-  auto* step = arena->Make<ColorStep>(geometry, fragment, CoverageType::kNone);
-
-  PrecompileStep(step, ctx, work_paint.GetBlendMode(), use_rrect,
-                 IsPaintSourceOpaque(work_paint));
+  PrecompileRectStep(ctx, work_paint, fragment);
 }
 
 void PrecompileTextStep(HWDrawStepContext* ctx, const Paint& paint, bool sdf,
@@ -317,9 +307,9 @@ void PrecompileTextStep(HWDrawStepContext* ctx, const Paint& paint, bool sdf,
   if (paint.GetShader() != nullptr &&
       paint.GetShader()->AsGradient(nullptr) == Shader::GradientType::kNone) {
     auto shader = std::static_pointer_cast<PixmapShader>(paint.GetShader());
-    fragment =
-        arena->Make<WGSLTextureFragment>(std::move(shader), nullptr, nullptr,
-                                         paint.GetAlphaF(), Matrix{}, 1.f, 1.f);
+    fragment = arena->Make<WGSLTextureFragment>(
+        std::move(shader), nullptr, nullptr, paint.GetAlphaF(), Matrix{}, 1.f,
+        1.f, ctx->context->target_space);
   } else {
     fragment = GenShadingFragment(
         ctx->context, paint, paint.GetStyle() == Paint::kStroke_Style, false);
@@ -399,6 +389,7 @@ void PrecompileContextImpl::PrecompileDefaultShaders() {
   Paint stroke_paint;
   stroke_paint.SetStyle(Paint::kStroke_Style);
 
+  PrecompileDraw(PrecompileDrawType::kDrawRect, solid_paint);
   PrecompileDraw(PrecompileDrawType::kDrawPath, solid_paint);
   PrecompileDraw(PrecompileDrawType::kDrawPath, stroke_paint);
   PrecompileDraw(PrecompileDrawType::kDrawRRect, solid_paint);
@@ -406,13 +397,13 @@ void PrecompileContextImpl::PrecompileDefaultShaders() {
   PrecompileDraw(PrecompileDrawType::kDrawImage, solid_paint);
   PrecompileDraw(PrecompileDrawType::kDrawImageRRect, solid_paint);
 
-  PrecompileDraw(PrecompileDrawType::kDrawPath,
+  PrecompileDraw(PrecompileDrawType::kDrawRect,
                  MakeTwoColorLinearGradientPaint(nullptr));
   float color_fast_pos[2] = {0.f, 1.f};
-  PrecompileDraw(PrecompileDrawType::kDrawPath,
+  PrecompileDraw(PrecompileDrawType::kDrawRect,
                  MakeTwoColorLinearGradientPaint(color_fast_pos));
   float pos[2] = {0.25f, 0.75f};
-  PrecompileDraw(PrecompileDrawType::kDrawPath,
+  PrecompileDraw(PrecompileDrawType::kDrawRect,
                  MakeTwoColorLinearGradientPaint(pos));
 }
 
@@ -423,11 +414,23 @@ void PrecompileContextImpl::PrecompileDraw(PrecompileDrawType draw_type,
   }
 
   auto work_paint = paint;
+  if (draw_type == PrecompileDrawType::kDrawRect &&
+      work_paint.GetStyle() == Paint::kFill_Style &&
+      !work_paint.GetPathEffect()) {
+    auto* fragment = MakePaintFragment(&step_context_, work_paint,
+                                       /*has_color=*/false);
+    PrecompileRectStep(&step_context_, work_paint, fragment);
+    return;
+  }
+
   if (gpu_context_->IsEnableSimpleShapePipeline() &&
       (draw_type == PrecompileDrawType::kDrawRRect ||
        (draw_type == PrecompileDrawType::kDrawRect &&
         work_paint.GetStyle() == Paint::kStroke_Style))) {
-    PrecompileRRectStep(&step_context_, work_paint);
+    auto* fragment = MakePaintFragment(&step_context_, work_paint,
+                                       /*has_color=*/false,
+                                       /*has_fragment_mask=*/true);
+    PrecompileRRectStep(&step_context_, work_paint, fragment);
     return;
   }
 

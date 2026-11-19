@@ -29,6 +29,9 @@ constexpr Chromaticities kDisplayP3Chromaticities{0.3127, 0.3290, 0.680, 0.320,
                                                   0.265,  0.690,  0.150, 0.060};
 
 // CIE illuminant D50 (XYZ, Y == 1): the connection space reference white.
+constexpr Chromaticities kAdobeRGBChromaticities{0.3127, 0.3290, 0.640, 0.330,
+                                                 0.210,  0.710,  0.150, 0.060};
+
 constexpr Vec3 kD50{0.96422, 1.0, 0.82521};
 
 inline Vec3 XYZFromXY(double x, double y) {

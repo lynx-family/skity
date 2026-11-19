@@ -10,7 +10,9 @@
 #include <skity/render/canvas.hpp>
 #include <utility>
 
+#include "color_space_c_util.hpp"
 #include "handle.hpp"
+#include "surface_pnext.hpp"
 
 #if defined(SKITY_OPENGL)
 #include <skity/gpu/gpu_context_gl.hpp>
@@ -28,6 +30,41 @@
 #endif
 
 namespace {
+
+// Picks the color management node (if any) out of the p_next chain and
+// applies it to the descriptor; a missing node or a NULL color space keeps
+// the sRGB default.
+void ApplyRenderOptions(skity::GPUSurfaceDescriptor& descriptor,
+                        const void* p_next) {
+  auto* node = static_cast<const skity_surface_render_options*>(
+      skity::capi::FindSurfaceChainNode(
+          p_next, SKITY_STRUCTURE_TYPE_SURFACE_RENDER_OPTIONS));
+  if (node == nullptr) {
+    return;
+  }
+  descriptor.render_options.color_space =
+      node->color_space != nullptr
+          ? skity::capi::ColorSpaceFromCInfo(node->color_space)
+          : nullptr;
+}
+
+// First backend-specific extension in the chain; render options nodes may
+// appear before or after it.
+const void* FindBackendNode(const void* p_next,
+                            skity_structure_type* out_type) {
+  for (const void* node = p_next; node != nullptr;
+       node = skity::capi::SurfaceChainNodeNext(node)) {
+    auto type = skity::capi::SurfaceChainNodeType(node);
+    if (type == SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_GL ||
+        type == SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_VK ||
+        type == SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_MTL) {
+      *out_type = type;
+      return node;
+    }
+  }
+  *out_type = SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
+  return nullptr;
+}
 
 skity_result CreateSurfaceHandle(std::unique_ptr<skity::GPUSurface> surface,
                                  skity_surface* out_surface) {
@@ -66,6 +103,7 @@ skity_result CreateSurfaceGL(skity::GPUContext* context,
       static_cast<skity::GLSurfaceMode>(extension->surface_mode);
   descriptor.can_blit_from_target_fbo =
       extension->can_blit_from_target_fbo != 0;
+  ApplyRenderOptions(descriptor, info->p_next);
   return CreateSurfaceHandle(context->CreateSurface(&descriptor), out_surface);
 }
 #endif
@@ -104,6 +142,7 @@ skity_result CreateSurfaceVK(skity::GPUContext* context,
     sync_info.signal_fence = extension->sync_info->signal_fence;
     descriptor.sync_info = &sync_info;
   }
+  ApplyRenderOptions(descriptor, info->p_next);
   return CreateSurfaceHandle(context->CreateSurface(&descriptor), out_surface);
 }
 #endif
@@ -126,15 +165,13 @@ skity_result skity_surface_create(skity_context context,
 
   skity_structure_type structure_type =
       SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO;
-  if (info->p_next != nullptr) {
-    structure_type = *static_cast<const skity_structure_type*>(info->p_next);
-  }
+  const void* backend_node = FindBackendNode(info->p_next, &structure_type);
 
 #if defined(SKITY_OPENGL)
   if (structure_type == SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_GL) {
     return CreateSurfaceGL(
         context_impl.get(), info,
-        static_cast<const skity_surface_create_info_gl*>(info->p_next),
+        static_cast<const skity_surface_create_info_gl*>(backend_node),
         out_surface);
   }
 #endif
@@ -142,7 +179,7 @@ skity_result skity_surface_create(skity_context context,
   if (structure_type == SKITY_STRUCTURE_TYPE_SURFACE_CREATE_INFO_VK) {
     return CreateSurfaceVK(
         context_impl.get(), info,
-        static_cast<const skity_surface_create_info_vk*>(info->p_next),
+        static_cast<const skity_surface_create_info_vk*>(backend_node),
         out_surface);
   }
 #endif

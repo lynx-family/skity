@@ -29,10 +29,11 @@ class HWFilters {
   static std::shared_ptr<HWFilter> Matrix(const Matrix& matrix,
                                           std::shared_ptr<HWFilter> input);
 
-  static std::shared_ptr<HWFilter> DropShadow(float radius_x, float radius_y,
-                                              float offset_x, float offset_y,
-                                              Vec2 scale, Color color,
-                                              std::shared_ptr<HWFilter> input);
+  static std::shared_ptr<HWFilter> DropShadow(
+      float radius_x, float radius_y, float offset_x, float offset_y,
+      Vec2 scale, const Color4f& color,
+      const std::shared_ptr<const ColorSpace>& color_space,
+      std::shared_ptr<HWFilter> input);
 
   static std::shared_ptr<HWFilter> Merge(
       std::vector<std::shared_ptr<HWFilter>> inputs);

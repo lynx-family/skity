@@ -52,11 +52,14 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_priv_neon.hpp
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_space.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_space_priv.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/graphic/color_transform.cc
+  ${CMAKE_CURRENT_LIST_DIR}/graphic/color_transform.hpp
   ${CMAKE_CURRENT_LIST_DIR}/graphic/contour_measure.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/contour_measure.hpp
   ${CMAKE_CURRENT_LIST_DIR}/graphic/image.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/paint.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/path.cc
+  ${CMAKE_CURRENT_LIST_DIR}/graphic/path_builder.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/path_measure.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/path_op.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/path_priv.cc
@@ -417,6 +420,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_filter_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_path_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_path_geometry.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_rect_geometry.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_rect_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_rrect_geometry.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_rrect_geometry.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.cc
@@ -435,6 +440,8 @@ if(${SKITY_HW_RENDERER})
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_path_clip.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_path_draw.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_path_draw.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_rect_draw.cc
+    ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_rect_draw.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_rrect_draw.cc
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_rrect_draw.hpp
     ${CMAKE_CURRENT_LIST_DIR}/render/hw/draw/hw_dynamic_text_draw.cc

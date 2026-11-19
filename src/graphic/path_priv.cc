@@ -11,11 +11,13 @@
 
 #include "src/graphic/path_priv.hpp"
 
+#include <skity/graphic/path_builder.hpp>
+
 namespace skity {
 
-void PathPriv::CreateDrawArcPath(Path *path, const Rect &oval, float startAngle,
-                                 float sweepAngle, bool useCenter,
-                                 bool isFillNoPathEffect) {
+void PathPriv::CreateDrawArcPath(PathBuilder *path, const Rect &oval,
+                                 float startAngle, float sweepAngle,
+                                 bool useCenter, bool isFillNoPathEffect) {
   if (isFillNoPathEffect && sweepAngle >= 360.f) {
     path->AddOval(oval);
     return;

@@ -66,8 +66,10 @@ void AtlasGlyphRun::Record(const GlyphDrawContext& context,
   if (effect_ != TextAtlasEffect::kSDFCoverage) {
     const auto color =
         is_stroke_ ? paint_.GetStrokeColor() : paint_.GetFillColor();
-    draw_paint.SetFillColor(color);
-    draw_paint.SetStrokeColor(color);
+    // The copied color carries its recorded space with it: every setter
+    // states the space explicitly.
+    draw_paint.SetColor4f(Color4f{color.x, color.y, color.z, color.w},
+                          paint_.GetColorSpace());
   }
   const bool has_coverage = effect_ == TextAtlasEffect::kA8Coverage ||
                             effect_ == TextAtlasEffect::kSDFCoverage;
@@ -84,15 +86,6 @@ void AtlasGlyphRun::Record(const GlyphDrawContext& context,
   target.SubmitAtlas({draw, paint_.ComputeFastBounds(params->layer_bounds),
                       paint_.GetBlendMode(), has_coverage,
                       has_coverage && IsPaintSourceOpaque(paint_)});
-}
-
-GlyphFormat ResolveAtlasGlyphFormat(AtlasFormat format,
-                                    const GlyphData& glyph) {
-  if (format == AtlasFormat::A8) {
-    return GlyphFormat::A8;
-  }
-  return glyph.GetFormat() == GlyphFormat::BGRA32 ? GlyphFormat::BGRA32
-                                                  : GlyphFormat::RGBA32;
 }
 
 TextAtlasEffect MaskAtlasEffect(GlyphFormat format) {

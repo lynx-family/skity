@@ -4,8 +4,10 @@
 
 #include "src/render/text/atlas/atlas_bitmap.hpp"
 
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <skity/text/font.hpp>
 
 namespace skity {
@@ -18,7 +20,10 @@ AtlasBitmap::AtlasBitmap(uint32_t width, uint32_t height,
       allocator_(std::make_unique<AtlasAllocator>(width, height)) {
   mem_data_ = reinterpret_cast<uint8_t*>(
       std::malloc(width * height * bytes_per_pixel * sizeof(uint8_t)));
-  std::memset(mem_data_, 0, width * height * bytes_per_pixel * sizeof(uint8_t));
+  if (mem_data_) {
+    std::memset(mem_data_, 0,
+                width * height * bytes_per_pixel * sizeof(uint8_t));
+  }
 }
 
 AtlasBitmap::~AtlasBitmap() {
@@ -35,29 +40,57 @@ GlyphRegion AtlasBitmap::GetGlyphRegion(const GlyphKey& key) {
   return {0, INVALID_LOC, 1.f};
 }
 
-GlyphRegion AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
-                                             const GlyphBitmapData& bitmap) {
+AtlasGlyphResult AtlasBitmap::GenerateGlyphRegion(
+    GlyphKey const& key, const GlyphBitmapData& bitmap) {
+  if (!mem_data_) {
+    return {AtlasGlyphStatus::kInvalidImage};
+  }
+  auto valid_dimension = [](float value) {
+    return std::isfinite(value) && value >= 0.f && std::floor(value) == value &&
+           static_cast<double>(value) <= std::numeric_limits<int32_t>::max();
+  };
+  if (!valid_dimension(bitmap.width) || !valid_dimension(bitmap.height) ||
+      !std::isfinite(bitmap.origin_x) || !std::isfinite(bitmap.origin_y)) {
+    return {AtlasGlyphStatus::kInvalidImage};
+  }
   const uint32_t glyph_width = static_cast<uint32_t>(bitmap.width);
   const uint32_t glyph_height = static_cast<uint32_t>(bitmap.height);
   if (glyph_width == 0 || glyph_height == 0) {
-    return {0, {0, 0, 0, 0}, 1.f, bitmap.origin_x, bitmap.origin_y};
+    return {AtlasGlyphStatus::kNoImage};
   }
-
-  const size_t data_row_size =
-      static_cast<size_t>(glyph_width) * bytes_per_pixel_;
+  GlyphFormat format;
+  switch (bitmap.format) {
+    case BitmapFormat::kGray8:
+      format = GlyphFormat::A8;
+      break;
+    case BitmapFormat::kRGBA8:
+      format = GlyphFormat::RGBA32;
+      break;
+    case BitmapFormat::kBGRA8:
+      format = GlyphFormat::BGRA32;
+      break;
+    default:
+      return {AtlasGlyphStatus::kInvalidImage};
+  }
+  const uint32_t image_bpp = format == GlyphFormat::A8 ? 1 : 4;
+  const size_t data_row_size = static_cast<size_t>(glyph_width) * image_bpp;
   const size_t source_row_size = bitmap.RowBytes();
-  if (!bitmap.buffer || source_row_size < data_row_size) {
-    return {0, {0, 0, 0, 0}, 1.f, bitmap.origin_x, bitmap.origin_y};
+  if (!bitmap.buffer || image_bpp != bytes_per_pixel_ ||
+      source_row_size < data_row_size ||
+      source_row_size > std::numeric_limits<size_t>::max() / glyph_height) {
+    return {AtlasGlyphStatus::kInvalidImage};
   }
-
-  uint32_t width = glyph_width + Atlas_Padding;
-  uint32_t height = glyph_height + Atlas_Padding;
-  if (width > width_ - 2 || height > height_ - 2) {
-    return {0, {0, 0, 0, 0}, 1.f, bitmap.origin_x, bitmap.origin_y};
+  if (width_ <= Atlas_Padding + 2 || height_ <= Atlas_Padding + 2 ||
+      glyph_width > width_ - Atlas_Padding - 2 ||
+      glyph_height > height_ - Atlas_Padding - 2) {
+    GlyphRegion rejected;
+    rejected.format = format;
+    return {AtlasGlyphStatus::kTooLarge, rejected, glyph_width, glyph_height};
   }
-  glm::ivec4 region = allocator_->AllocateRegion(width, height);
+  glm::ivec4 region = allocator_->AllocateRegion(glyph_width + Atlas_Padding,
+                                                 glyph_height + Atlas_Padding);
   if (region == INVALID_LOC) {
-    return {0, region, 1.f};
+    return {AtlasGlyphStatus::kPageFull, {}, glyph_width, glyph_height};
   }
 
   // Do not assume textures are zero-initialized on macOS — newly created
@@ -69,7 +102,8 @@ GlyphRegion AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
   region.y += Atlas_Padding / 2;
   region.z -= Atlas_Padding;
   region.w -= Atlas_Padding;
-  GlyphRegion glyph_region{0, region, 1.f, bitmap.origin_x, bitmap.origin_y};
+  GlyphRegion glyph_region{0,     region, 1.f, bitmap.origin_x, bitmap.origin_y,
+                           format};
   glyph_regions_.insert(std::make_pair(key, glyph_region));
 
   // Copy bitmap to memory storage
@@ -95,7 +129,7 @@ GlyphRegion AtlasBitmap::GenerateGlyphRegion(GlyphKey const& key,
     dirty_rect_->w = std::max(dirty_rect_->w, dirty_region.y + dirty_region.w);
   }
 
-  return glyph_region;
+  return {AtlasGlyphStatus::kReady, glyph_region, glyph_width, glyph_height};
 }
 
 }  // namespace skity

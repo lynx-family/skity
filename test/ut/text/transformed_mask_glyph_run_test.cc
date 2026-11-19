@@ -10,6 +10,9 @@
 #include <limits>
 
 #include "src/render/hw/draw/hw_dynamic_text_draw.hpp"
+#include "src/render/text/atlas/atlas_manager.hpp"
+#include "test/ut/gpu/fake_gpu_context.hpp"
+#include "test/ut/text/recording_glyph_draw_target.hpp"
 
 namespace skity {
 namespace transformed_mask {
@@ -24,6 +27,77 @@ ArrayList<GlyphRect, 16> MakeGlyphRects() {
 }
 
 }  // namespace
+
+class TransformedMaskBearingTest : public ::testing::TestWithParam<bool> {};
+
+TEST_P(TransformedMaskBearingTest,
+       UsesRasterizedBearingForColdAndCachedGlyphs) {
+  const bool color = GetParam();
+  auto face = Typeface::MakeFromFile(
+      color ? SKITY_FONT_DIR "fonts/resources/NotoColorEmoji.ttf"
+            : SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf");
+#if SKITY_TEST_CT_FONT
+  if (color) {
+    face =
+        Typeface::MakeFromFile("/System/Library/Fonts/Apple Color Emoji.ttc");
+  }
+#endif
+  ASSERT_NE(face, nullptr);
+  GlyphID glyph = face->UnicharToGlyph(color ? 0x1F600 : 'j');
+  ASSERT_NE(glyph, 0);
+  const AtlasFormat format = color ? AtlasFormat::RGBA32 : AtlasFormat::A8;
+  for (float offset : {0.f, 0.25f}) {
+    for (float density : {1.f, 2.f}) {
+      SCOPED_TRACE(::testing::Message()
+                   << "offset=" << offset << " density=" << density);
+      test::FakeGPUContext gpu;
+      ASSERT_TRUE(gpu.Init());
+      auto& manager = *gpu.GetAtlasManager();
+      ArenaAllocator arena;
+      Font font(face, 64.f);
+      Paint paint;
+      Matrix transform;
+      transform.SetPersp0(0.00001f);
+      Point origin{17.25f, 29.5f, 0.f, 1.f};
+      float x = 12.f + offset;
+      float y = 40.f + offset;
+      const Matrix position = transform * Matrix::Translate(origin.x, origin.y);
+      // A 64px glyph fits both atlases at either density, and this weak
+      // perspective needs no supersampling: the creation scale stays one.
+      const float scale = 1.f;
+      const Matrix creation = Matrix::Scale(scale, scale);
+      const GlyphData* bitmap = nullptr;
+      font.LoadGlyphBitmap(&glyph, 1, &bitmap, paint, density, creation);
+      ASSERT_NE(bitmap, nullptr);
+      const auto image = bitmap->Image();
+      ASSERT_GT(image.width, 0.f);
+      ASSERT_GT(image.height, 0.f);
+      ASSERT_NE(image.origin_y, 0.f);
+      const Rect raster_bounds =
+          Rect::MakeXYWH(scale * x + image.origin_x, scale * y - image.origin_y,
+                         image.width / density, image.height / density);
+      const Rect expected = MapBounds(
+          position * Matrix::Scale(1.f / scale, 1.f / scale), raster_bounds);
+      for (int repeat = 0; repeat < 2; ++repeat) {
+        SCOPED_TRACE(repeat);
+        GlyphSubRunList runs;
+        AppendGlyphRuns({1, &glyph, origin, &x, &y, font}, paint, format, false,
+                        {manager, arena, density, transform}, runs);
+        ASSERT_EQ(runs.size(), 1u);
+        const auto operation = test::RecordAtlasGlyphRun(
+            *runs[0], {arena, Matrix{}, transform, false});
+        ASSERT_NE(operation.draw, nullptr);
+        EXPECT_NEAR(operation.layer_bounds.Left(), expected.Left(), 0.001f);
+        EXPECT_NEAR(operation.layer_bounds.Top(), expected.Top(), 0.001f);
+        EXPECT_NEAR(operation.layer_bounds.Right(), expected.Right(), 0.001f);
+        EXPECT_NEAR(operation.layer_bounds.Bottom(), expected.Bottom(), 0.001f);
+      }
+    }
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(A8AndColor, TransformedMaskBearingTest,
+                         ::testing::Bool());
 
 TEST(TransformedMaskGlyphRunTest, BitmapOnlyStrokeFallsBackToStrokeColorFill) {
   Paint paint;

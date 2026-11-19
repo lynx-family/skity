@@ -56,6 +56,9 @@ const char* CommonVertexWGSL();
 bool SetupCommonInfo(const wgx::BindGroupEntry* entry, const Matrix& mvp,
                      const Matrix& user_transform, float clip_depth);
 
+bool UploadCommonInfo(Command* cmd, HWDrawContext* context,
+                      const Matrix& transform, float clip_depth);
+
 bool SetupInvMatrix(const wgx::BindGroupEntry* entry,
                     const Matrix& local_matrix);
 

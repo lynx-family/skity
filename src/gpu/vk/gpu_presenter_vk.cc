@@ -199,6 +199,15 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   const GPUTextureFormat surface_format = ToGPUTextureFormat(swapchain_format_);
 
   std::lock_guard<std::mutex> lock(mutex_);
+  if (state_ != nullptr && state_->IsDeviceLost()) {
+    // The swapchain died with the device; waiting on the frame fence below
+    // would block forever because the pending submission can never signal it.
+    // Report kDeviceLost so the caller stops rendering against this presenter
+    // and escalates to a full context rebuild.
+    LOGE("Failed to acquire Vulkan surface: device is lost");
+    result.status = GPUPresenterStatus::kDeviceLost;
+    return result;
+  }
   if (state_ == nullptr || swapchain_ == VK_NULL_HANDLE ||
       frame_slots_.empty() || has_outstanding_surface_) {
     return result;
@@ -225,16 +234,28 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   const auto& device_fns = state_->DeviceFns();
   FrameSlot& frame_slot = frame_slots_[current_frame_];
 
-  if (device_fns.vkWaitForFences(state_->GetLogicalDevice(), 1,
-                                 &frame_slot.in_flight, VK_TRUE,
-                                 UINT64_MAX) != VK_SUCCESS) {
-    LOGE("Failed to wait for Vulkan presenter fence");
+  const VkResult frame_wait_result =
+      device_fns.vkWaitForFences(state_->GetLogicalDevice(), 1,
+                                 &frame_slot.in_flight, VK_TRUE, UINT64_MAX);
+  if (frame_wait_result != VK_SUCCESS) {
+    LOGE("Failed to wait for Vulkan presenter fence: {}",
+         static_cast<int32_t>(frame_wait_result));
+    if (frame_wait_result == VK_ERROR_DEVICE_LOST) {
+      state_->MarkDeviceLost();
+      result.status = GPUPresenterStatus::kDeviceLost;
+    }
     return result;
   }
 
-  if (fns_.vkResetFences(state_->GetLogicalDevice(), 1,
-                         &frame_slot.in_flight) != VK_SUCCESS) {
-    LOGE("Failed to reset Vulkan presenter fence");
+  const VkResult reset_result =
+      fns_.vkResetFences(state_->GetLogicalDevice(), 1, &frame_slot.in_flight);
+  if (reset_result != VK_SUCCESS) {
+    LOGE("Failed to reset Vulkan presenter fence: {}",
+         static_cast<int32_t>(reset_result));
+    if (reset_result == VK_ERROR_DEVICE_LOST) {
+      state_->MarkDeviceLost();
+      result.status = GPUPresenterStatus::kDeviceLost;
+    }
     return result;
   }
 
@@ -277,10 +298,16 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
 
   VkFence& image_fence = image_in_flight_fences_[image_index];
   if (image_fence != VK_NULL_HANDLE && image_fence != frame_slot.in_flight) {
-    if (device_fns.vkWaitForFences(state_->GetLogicalDevice(), 1, &image_fence,
-                                   VK_TRUE, UINT64_MAX) != VK_SUCCESS) {
-      LOGE("Failed to wait for Vulkan image fence");
+    const VkResult image_wait_result = device_fns.vkWaitForFences(
+        state_->GetLogicalDevice(), 1, &image_fence, VK_TRUE, UINT64_MAX);
+    if (image_wait_result != VK_SUCCESS) {
+      LOGE("Failed to wait for Vulkan image fence: {}",
+           static_cast<int32_t>(image_wait_result));
       broken_ = true;
+      if (image_wait_result == VK_ERROR_DEVICE_LOST) {
+        state_->MarkDeviceLost();
+        result.status = GPUPresenterStatus::kDeviceLost;
+      }
       return result;
     }
   }
@@ -355,6 +382,16 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
 GPUPresenterStatus GPUPresenterVK::Present(
     std::unique_ptr<GPUSurface> surface) {
   std::lock_guard<std::mutex> lock(mutex_);
+  // Never hand the acquired image to a lost device: vkQueuePresentKHR against
+  // it is undefined behavior and faults some drivers. The image cannot be
+  // returned to the (dead) swapchain either way, so mark the presenter broken
+  // and let the caller escalate to a full context rebuild.
+  if (state_ != nullptr && state_->IsDeviceLost()) {
+    LOGE("Failed to present Vulkan surface: device is lost");
+    has_outstanding_surface_ = false;
+    broken_ = true;
+    return GPUPresenterStatus::kDeviceLost;
+  }
   if (!has_outstanding_surface_ || surface == nullptr ||
       surface->GetBackendType() != GPUBackendType::kVulkan) {
     return GPUPresenterStatus::kError;
@@ -406,7 +443,7 @@ GPUPresenterStatus GPUPresenterVK::Present(
     LOGE("Vulkan logical device lost during vkQueuePresentKHR");
     state_->MarkDeviceLost();
     broken_ = true;
-    return GPUPresenterStatus::kError;
+    return GPUPresenterStatus::kDeviceLost;
   }
   if (result == VK_SUCCESS) {
     return GPUPresenterStatus::kSuccess;

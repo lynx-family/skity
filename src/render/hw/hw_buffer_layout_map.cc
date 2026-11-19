@@ -7,6 +7,7 @@
 #include "src/render/hw/draw/geometry/wgsl_coverage_aa_tile_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_filter_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_path_geometry.hpp"
+#include "src/render/hw/draw/geometry/wgsl_rect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_rrect_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_fill_geometry.hpp"
 #include "src/render/hw/draw/geometry/wgsl_tess_path_stroke_geometry.hpp"
@@ -33,6 +34,8 @@ void HWBufferLayoutMap::RegisterAllBufferLayouts() {
       std::move(WGSLTextGeometry::GetBufferLayout());
   buffer_layout_map_[HWGeometryKeyType::kRRect] =
       std::move(WGSLRRectGeometry::GetBufferLayout());
+  buffer_layout_map_[HWGeometryKeyType::kRect] =
+      WGSLRectGeometry::GetBufferLayout();
   buffer_layout_map_[HWGeometryKeyType::kClip] =
       std::move(WGSLPathGeometry::GetBufferLayout());
   buffer_layout_map_[HWGeometryKeyType::kFilter] =

@@ -346,22 +346,21 @@ void WGSLRRectGeometry::WriteFSAlphaMask(std::stringstream& ss) const {
 
 void WGSLRRectGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
                                    const Matrix& transform, float clip_depth,
-                                   Command* stencil_cmd) {
-  SKITY_TRACE_EVENT(WGSLOvalGeometry_PrepareCMD);
+                                   Command*) {
+  SKITY_TRACE_EVENT(WGSLRRectGeometry_PrepareCMD);
 
-  if (cmd->pipeline == nullptr) {
+  if (!UploadCommonInfo(cmd, context, transform, clip_depth)) {
     return;
   }
 
   cmd->vertex_buffer = context->static_buffer->GetRRectVertexBufferView();
-
   cmd->index_buffer = context->static_buffer->GetRRectIndexBufferView();
-
   cmd->index_count = cmd->index_buffer.range / sizeof(uint32_t);
 
-  context->stageBuffer->BeginWritingInstance(
-      batch_group_.size() * sizeof(Instance), alignof(Instance));
-  for (auto& element : batch_group_) {
+  auto* stage_buffer = context->stageBuffer;
+  stage_buffer->BeginWritingInstance(batch_group_.size() * sizeof(Instance),
+                                     alignof(Instance));
+  for (const auto& element : batch_group_) {
     const RRect& rrect = element.item;
     const Paint& paint = element.paint;
     const Matrix& transform = element.transform;
@@ -402,29 +401,11 @@ void WGSLRRectGeometry::PrepareCMD(Command* cmd, HWDrawContext* context,
         Vec4{transform.GetScaleX(), transform.GetSkewY(), transform.GetSkewX(),
              transform.GetScaleY()},
         Vec2{transform.GetTranslateX(), transform.GetTranslateY()},
-        Vec4{paint.GetColor4f()}};
-    context->stageBuffer->AppendInstance<Instance>(instance);
+        Vec4{paint.GetColor4f(context->target_space)}};
+    stage_buffer->AppendInstance<Instance>(instance);
   }
-  auto instance_buffer_view = context->stageBuffer->EndWritingInstance();
-  cmd->instance_count = instance_buffer_view.range / sizeof(Instance);
-  cmd->instance_buffer = instance_buffer_view;
-
-  auto pipeline = cmd->pipeline;
-
-  auto group = pipeline->GetBindingGroup(0);
-
-  if (group == nullptr) {
-    return;
-  }
-
-  // bind CommonSlot
-  auto common_slot = group->GetEntry(0);
-
-  if (!SetupCommonInfo(common_slot, context->mvp, transform, clip_depth)) {
-    return;
-  }
-
-  UploadBindGroup(group->group, common_slot, cmd, context);
+  cmd->instance_buffer = stage_buffer->EndWritingInstance();
+  cmd->instance_count = cmd->instance_buffer.range / sizeof(Instance);
 }
 
 namespace {

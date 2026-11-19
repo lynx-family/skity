@@ -69,11 +69,10 @@ TEST(SoftwareTextGolden, PositionedGlyphs) {
   auto typeface = Typeface::MakeFromFile(kRobotoRegular);
   ASSERT_TRUE(typeface);
   const Font font(typeface, 24.f);
-  const GlyphID glyphs[] = {typeface->UnicharToGlyph('S'),
-                            typeface->UnicharToGlyph('k'),
-                            typeface->UnicharToGlyph('i'),
-                            typeface->UnicharToGlyph('t'),
-                            typeface->UnicharToGlyph('y')};
+  const GlyphID glyphs[] = {
+      typeface->UnicharToGlyph('S'), typeface->UnicharToGlyph('k'),
+      typeface->UnicharToGlyph('i'), typeface->UnicharToGlyph('t'),
+      typeface->UnicharToGlyph('y')};
   const float x[] = {8.f, 25.f, 39.f, 46.f, 55.f};
   const float y[] = {28.f, 28.f, 30.f, 28.f, 28.f};
   const auto path =

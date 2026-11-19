@@ -8,6 +8,7 @@
 #include <skity/graphic/color_space.hpp>
 
 #include "src/graphic/color_space_priv.hpp"
+#include "src/graphic/color_transform.hpp"
 
 namespace skity {
 
@@ -27,6 +28,18 @@ constexpr float kDisplayP3Gamut[9] = {
     0.5151021f,  0.2919648f, 0.1571531f,  //
     0.2411818f,  0.6922363f, 0.0665819f,  //
     -0.0010494f, 0.0418818f, 0.7843776f,
+};
+
+// Adobe RGB (1998) gamut in the D50 connection space (see gamut_xyz),
+// derived exactly like the Display P3 constants above: native D65 white
+// (0.3127, 0.3290) with the standard primaries R(0.640, 0.330)
+// G(0.210, 0.710) B(0.150, 0.060), Bradford-adapted to D50 so the rows sum
+// to the D50 white. The unit tests re-derive this matrix through
+// GamutFromChromaticities.
+constexpr float kAdobeRGBGamut[9] = {
+    0.6097223f, 0.2052639f, 0.1492338f,  //
+    0.3111041f, 0.6256693f, 0.0632266f,  //
+    0.0194740f, 0.0608850f, 0.7448510f,
 };
 
 bool IsValidTransferFn(const float tf[7]) {
@@ -52,36 +65,6 @@ bool IsValidGamut(const float m[9]) {
               m[1] * (m[3] * m[8] - m[5] * m[6]) +
               m[2] * (m[3] * m[7] - m[4] * m[6]);
   return std::isfinite(det) && det != 0.f;
-}
-
-// Evaluates the parametric curve. The power branch clamps its base instead of
-// the input so out-of-gamut (negative) linear values encode to slightly
-// negative signals rather than NaN; the linear branch extrapolates naturally.
-// A degenerate linear segment (pure power curve, c == f == 0) would collapse
-// negative inputs to zero; those mirror the power branch instead so
-// extended-range colors keep their sign and the curve stays invertible.
-float EvalTransferFn(const float tf[7], float x) {
-  if (x < tf[4]) {
-    if (tf[3] == 0.f && tf[6] == 0.f) {
-      return -std::pow(-x, tf[0]);
-    }
-    return tf[3] * x + tf[6];
-  }
-  float base = std::fmax(tf[1] * x + tf[2], 0.f);
-  return std::pow(base, tf[0]) + tf[5];
-}
-
-// The parametric family is closed under inversion (same closed-form flip
-// skcms uses): the result evaluates the linear -> signal direction.
-void InvertTransferFn(const float tf[7], float inv[7]) {
-  const float inv_a_pow_g = std::pow(tf[1], -tf[0]);
-  inv[0] = 1.f / tf[0];
-  inv[1] = inv_a_pow_g;
-  inv[2] = -tf[5] * inv_a_pow_g;
-  inv[3] = tf[3] > 0.f ? 1.f / tf[3] : 0.f;
-  inv[4] = tf[3] * tf[4] + tf[6];
-  inv[5] = -tf[2] / tf[1];
-  inv[6] = tf[3] > 0.f ? -tf[6] / tf[3] : 0.f;
 }
 
 bool SameTransferFn(const float lhs[7], const float rhs[7]) {
@@ -230,6 +213,31 @@ std::shared_ptr<const ColorSpace> ColorSpace::SRGB() {
   return kSRGB;
 }
 
+// A degenerate linear segment (pure power curve, c == f == 0) would collapse
+// negative inputs to zero; those mirror the power branch instead so
+// extended-range colors keep their sign and the curve stays invertible.
+float ColorSpaceEvalTransferFn(const float tf[7], float x) {
+  if (x < tf[4]) {
+    if (tf[3] == 0.f && tf[6] == 0.f) {
+      return -std::pow(-x, tf[0]);
+    }
+    return tf[3] * x + tf[6];
+  }
+  float base = std::fmax(tf[1] * x + tf[2], 0.f);
+  return std::pow(base, tf[0]) + tf[5];
+}
+
+void ColorSpaceInvertTransferFn(const float tf[7], float inv[7]) {
+  const float inv_a_pow_g = std::pow(tf[1], -tf[0]);
+  inv[0] = 1.f / tf[0];
+  inv[1] = inv_a_pow_g;
+  inv[2] = -tf[5] * inv_a_pow_g;
+  inv[3] = tf[3] > 0.f ? 1.f / tf[3] : 0.f;
+  inv[4] = tf[3] * tf[4] + tf[6];
+  inv[5] = -tf[2] / tf[1];
+  inv[6] = tf[3] > 0.f ? -tf[6] / tf[3] : 0.f;
+}
+
 std::shared_ptr<const ColorSpace> ColorSpace::SRGBLinear() {
   static const std::shared_ptr<const ColorSpace> kSRGBLinear = [] {
     auto cs = std::make_shared<ColorSpace>();
@@ -248,6 +256,24 @@ std::shared_ptr<const ColorSpace> ColorSpace::DisplayP3() {
     return cs;
   }();
   return kDisplayP3;
+}
+
+std::shared_ptr<const ColorSpace> ColorSpace::AdobeRGB() {
+  static const std::shared_ptr<const ColorSpace> kAdobeRGB = [] {
+    auto cs = std::make_shared<ColorSpace>();
+    // Pure gamma 2.2 power curve (single segment, d == 0).
+    cs->transfer_fn[0] = 2.2f;
+    cs->transfer_fn[1] = 1.f;
+    cs->transfer_fn[2] = 0.f;
+    cs->transfer_fn[3] = 0.f;
+    cs->transfer_fn[4] = 0.f;
+    cs->transfer_fn[5] = 0.f;
+    cs->transfer_fn[6] = 0.f;
+    std::memcpy(cs->gamut_xyz, kAdobeRGBGamut, sizeof(cs->gamut_xyz));
+    cs->kind = Kind::kAdobeRGB;
+    return cs;
+  }();
+  return kAdobeRGB;
 }
 
 std::shared_ptr<const ColorSpace> ColorSpace::MakeRGB(
@@ -404,104 +430,18 @@ bool ColorSpace::operator==(const ColorSpace& other) const {
          SameGamut(gamut_xyz, other.gamut_xyz);
 }
 
-namespace {
-
-// Null spaces mean the sRGB working space; dereference through the
-// default-constructed sRGB value (the same bytes the SRGB() singleton and
-// every default ColorSpace hold) so the math below always sees concrete
-// parameters.
-const ColorSpace& DerefOrSRGB(
-    const std::shared_ptr<const ColorSpace>& color_space) {
-  static const ColorSpace kSRGBInstance{};
-  return color_space ? *color_space : kSRGBInstance;
-}
-
-// The conversion for one space pair with every per-pixel invariant folded
-// up front: the decode curve, the combined gamut matrix and the encode
-// curve. Converting a batch prepares this once instead of redoing the
-// matrix inversion and curve flip per pixel.
-struct PreparedConversion {
-  const ColorSpace* decode_from = nullptr;
-  float gamut[9] = {};
-  bool needs_gamut = false;
-  float encode_tf[7] = {};
-  const ColorSpace* encode_to = nullptr;
-};
-
-PreparedConversion PrepareConversion(const ColorSpace& from,
-                                     const ColorSpace& to) {
-  PreparedConversion prepared;
-  if (!from.IsLinear()) {
-    prepared.decode_from = &from;
-  }
-  if (!SameGamut(from.gamut_xyz, to.gamut_xyz)) {
-    float inv_dst[9];
-    if (ColorSpaceInvert3x3(to.gamut_xyz, inv_dst)) {
-      ColorSpaceMultiply3x3(inv_dst, from.gamut_xyz, prepared.gamut);
-      prepared.needs_gamut = true;
-    }
-  }
-  if (!to.IsLinear()) {
-    InvertTransferFn(to.transfer_fn, prepared.encode_tf);
-    prepared.encode_to = &to;
-  }
-  return prepared;
-}
-
-void ApplyConversion(const PreparedConversion& prepared, float rgb[3]) {
-  if (prepared.decode_from != nullptr) {
-    for (int i = 0; i < 3; i++) {
-      rgb[i] = EvalTransferFn(prepared.decode_from->transfer_fn, rgb[i]);
-    }
-  }
-  if (prepared.needs_gamut) {
-    float out[3] = {rgb[0], rgb[1], rgb[2]};
-    for (int row = 0; row < 3; row++) {
-      rgb[row] = prepared.gamut[row * 3] * out[0] +
-                 prepared.gamut[row * 3 + 1] * out[1] +
-                 prepared.gamut[row * 3 + 2] * out[2];
-    }
-  }
-  if (prepared.encode_to != nullptr) {
-    for (int i = 0; i < 3; i++) {
-      rgb[i] = EvalTransferFn(prepared.encode_tf, rgb[i]);
-    }
-  }
-}
-
-}  // namespace
-
 Color4f ColorSpace::Convert(const std::shared_ptr<const ColorSpace>& src,
                             Color4f color,
                             const std::shared_ptr<const ColorSpace>& dst) {
-  if (ColorSpaceEquals(src, dst)) {
-    return color;
-  }
-
-  const ColorSpace& from = DerefOrSRGB(src);
-  const ColorSpace& to = DerefOrSRGB(dst);
-  PreparedConversion prepared = PrepareConversion(from, to);
-
-  float rgb[3] = {color.r, color.g, color.b};
-  ApplyConversion(prepared, rgb);
-  return Color4f{rgb[0], rgb[1], rgb[2], color.a};
+  // Delegates to the folded stage pipeline so every conversion boundary
+  // (CPU, GPU uniform setup, buffer kernels) shares one implementation.
+  return ColorTransformSteps::Resolve(src, dst).Apply(color);
 }
 
 void ColorSpace::ConvertColors(const std::shared_ptr<const ColorSpace>& src,
                                Color4f colors[], int count,
                                const std::shared_ptr<const ColorSpace>& dst) {
-  if (ColorSpaceEquals(src, dst)) {
-    return;
-  }
-  // The per-pair invariants are prepared once for the whole batch; only
-  // the per-color math runs inside the loop.
-  PreparedConversion prepared =
-      PrepareConversion(DerefOrSRGB(src), DerefOrSRGB(dst));
-  for (int i = 0; i < count; i++) {
-    float rgb[3] = {colors[i].r, colors[i].g, colors[i].b};
-    ApplyConversion(prepared, rgb);
-    colors[i] = Color4f{rgb[0], rgb[1], rgb[2], colors[i].a};
-  }
+  ColorTransformSteps::Resolve(src, dst).ApplyColors(colors, count);
 }
 
 }  // namespace skity

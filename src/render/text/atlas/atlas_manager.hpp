@@ -31,9 +31,10 @@ class Atlas {
 
   const AtlasConfig& GetConfig() { return atlas_config_; }
 
-  GlyphRegion GetGlyphRegion(const Font& font, PackedGlyphID packed_glyph_id,
-                             const Paint& paint, bool load_sdf,
-                             float context_scale, const Matrix& transform);
+  AtlasGlyphResult GetGlyphRegion(const Font& font,
+                                  PackedGlyphID packed_glyph_id,
+                                  const Paint& paint, bool load_sdf,
+                                  float context_scale, const Matrix& transform);
 
   // upload atlas from memory storage to gpu texture
   void UploadAtlas(uint32_t group_index);
@@ -56,11 +57,11 @@ class Atlas {
 
  private:
   // add one glyph to memory atlas
-  GlyphRegion GenerateGlyphRegion(const Font& font, GlyphKey const& key,
-                                  const Paint& paint, bool load_sdf);
+  AtlasGlyphResult GenerateGlyphRegion(const Font& font, GlyphKey const& key,
+                                       const Paint& paint, bool load_sdf);
 
-  GlyphRegion GenerateGlyphRegionInternal(const GlyphKey& key,
-                                          const GlyphBitmapData& glyph_bitmap);
+  AtlasGlyphResult GenerateGlyphRegionInternal(
+      const GlyphKey& key, const GlyphBitmapData& glyph_bitmap);
 
   AtlasFormat format_;
   GPUDevice* gpu_device_;

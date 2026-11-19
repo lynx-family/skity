@@ -5,12 +5,14 @@
 #include <skity/c/skity_bitmap.h>
 
 #include <cstring>
+#include <memory>
 #include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color_space.hpp>
 #include <skity/io/data.hpp>
 #include <skity/io/pixmap.hpp>
 #include <utility>
 
+#include "color_space_c_util.hpp"
 #include "handle.hpp"
 
 namespace {
@@ -27,23 +29,6 @@ skity::Pixmap* pixmap_of(skity_pixmap handle) {
   return w ? static_cast<skity::Pixmap*>(w->impl.get()) : nullptr;
 }
 
-std::shared_ptr<const skity::ColorSpace> ColorSpaceFromCInfo(
-    const skity_color_space_info* info) {
-  switch (info->kind) {
-    case SKITY_COLOR_SPACE_SRGB:
-      return skity::ColorSpace::SRGB();
-    case SKITY_COLOR_SPACE_SRGB_LINEAR:
-      return skity::ColorSpace::SRGBLinear();
-    case SKITY_COLOR_SPACE_DISPLAY_P3:
-      return skity::ColorSpace::DisplayP3();
-    case SKITY_COLOR_SPACE_PARAMETRIC:
-      break;
-  }
-  auto parametric =
-      skity::ColorSpace::MakeRGB(info->transfer_fn, info->gamut_xyz);
-  return parametric ? parametric : skity::ColorSpace::SRGB();
-}
-
 skity_color_space_kind KindToC(const skity::ColorSpace& cs) {
   switch (cs.kind) {
     case skity::ColorSpace::Kind::kSRGB:
@@ -52,6 +37,8 @@ skity_color_space_kind KindToC(const skity::ColorSpace& cs) {
       return SKITY_COLOR_SPACE_SRGB_LINEAR;
     case skity::ColorSpace::Kind::kDisplayP3:
       return SKITY_COLOR_SPACE_DISPLAY_P3;
+    case skity::ColorSpace::Kind::kAdobeRGB:
+      return SKITY_COLOR_SPACE_ADOBE_RGB;
     case skity::ColorSpace::Kind::kParametric:
       return SKITY_COLOR_SPACE_PARAMETRIC;
   }
@@ -225,7 +212,7 @@ skity_result skity_pixmap_set_color_space(skity_pixmap pixmap,
       !skity::ColorSpace::MakeRGB(info->transfer_fn, info->gamut_xyz)) {
     return SKITY_ERROR_INVALID_ARGUMENT;
   }
-  auto cs = ColorSpaceFromCInfo(info);
+  auto cs = skity::capi::ColorSpaceFromCInfo(info);
   // Color space metadata only: keep the current alpha/color interpretation.
   bool ok =
       p->SetColorInfo(p->GetAlphaType(), p->GetColorType(), std::move(cs));
@@ -268,6 +255,68 @@ skity_result skity_color_space_chromaticities_from_gamut(
   return skity::ColorSpace::ChromaticitiesFromGamut(gamut_xyz, chromaticities)
              ? SKITY_SUCCESS
              : SKITY_ERROR_INVALID_ARGUMENT;
+}
+
+skity_result skity_color_space_info_init(skity_color_space_info* info,
+                                         skity_color_space_kind kind) {
+  if (info == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  std::shared_ptr<const skity::ColorSpace> space;
+  switch (kind) {
+    case SKITY_COLOR_SPACE_SRGB:
+      space = skity::ColorSpace::SRGB();
+      break;
+    case SKITY_COLOR_SPACE_SRGB_LINEAR:
+      space = skity::ColorSpace::SRGBLinear();
+      break;
+    case SKITY_COLOR_SPACE_DISPLAY_P3:
+      space = skity::ColorSpace::DisplayP3();
+      break;
+    case SKITY_COLOR_SPACE_ADOBE_RGB:
+      space = skity::ColorSpace::AdobeRGB();
+      break;
+    case SKITY_COLOR_SPACE_PARAMETRIC:
+    default:
+      return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  info->kind = kind;
+  std::memcpy(info->transfer_fn, space->transfer_fn, sizeof(info->transfer_fn));
+  std::memcpy(info->gamut_xyz, space->gamut_xyz, sizeof(info->gamut_xyz));
+  return SKITY_SUCCESS;
+}
+
+skity_result skity_color_space_info_init_parametric(
+    skity_color_space_info* info, const float* transfer_fn,
+    const float* gamut_xyz) {
+  if (info == nullptr || transfer_fn == nullptr || gamut_xyz == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  auto space = skity::ColorSpace::MakeRGB(transfer_fn, gamut_xyz);
+  if (space == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  info->kind = SKITY_COLOR_SPACE_PARAMETRIC;
+  std::memcpy(info->transfer_fn, space->transfer_fn, sizeof(info->transfer_fn));
+  std::memcpy(info->gamut_xyz, space->gamut_xyz, sizeof(info->gamut_xyz));
+  return SKITY_SUCCESS;
+}
+
+skity_result skity_color_space_convert(const skity_color_space_info* src,
+                                       const skity_color4f* color,
+                                       const skity_color_space_info* dst,
+                                       skity_color4f* out) {
+  if (color == nullptr || out == nullptr) {
+    return SKITY_ERROR_INVALID_ARGUMENT;
+  }
+  auto src_space =
+      src != nullptr ? skity::capi::ColorSpaceFromCInfo(src) : nullptr;
+  auto dst_space =
+      dst != nullptr ? skity::capi::ColorSpaceFromCInfo(dst) : nullptr;
+  auto converted = skity::ColorSpace::Convert(
+      src_space, *reinterpret_cast<const skity::Color4f*>(color), dst_space);
+  std::memcpy(out, &converted, sizeof(float) * 4);
+  return SKITY_SUCCESS;
 }
 
 }  // extern "C"

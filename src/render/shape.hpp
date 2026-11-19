@@ -5,6 +5,8 @@
 #ifndef SRC_RENDER_SHAPE_HPP
 #define SRC_RENDER_SHAPE_HPP
 
+#include <skity/geometry/rect.hpp>
+#include <skity/geometry/rrect.hpp>
 #include <skity/graphic/path.hpp>
 
 #include "src/logging.hpp"
@@ -15,10 +17,12 @@ class Shape {
   enum class Type {
     kPath,
     kRRect,
+    kRect,
   };
 
   explicit Shape(const Path* path) : type_(Type::kPath), data_(path) {}
   explicit Shape(const RRect* rrect) : type_(Type::kRRect), data_(rrect) {}
+  explicit Shape(const Rect* rect) : type_(Type::kRect), data_(rect) {}
 
   ~Shape() = default;
 
@@ -36,12 +40,21 @@ class Shape {
     return reinterpret_cast<const RRect*>(data_);
   }
 
+  bool IsRect() const { return type_ == Type::kRect; }
+
+  const Rect* GetRect() const {
+    DEBUG_CHECK(type_ == Type::kRect);
+    return reinterpret_cast<const Rect*>(data_);
+  }
+
   Rect GetBounds() const {
     switch (type_) {
       case Type::kPath:
         return GetPath()->GetBounds();
       case Type::kRRect:
         return GetRRect()->GetBounds();
+      case Type::kRect:
+        return *GetRect();
     }
   }
 

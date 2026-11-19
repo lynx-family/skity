@@ -8,6 +8,8 @@
 #include <cstring>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "src/effect/color_space_block.hpp"
+
 namespace skity {
 
 namespace {
@@ -45,7 +47,10 @@ void GradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
     flags |= kHasPosition_GSF;
   }
 
-  // we do not have color space
+  // The declared stop color space (null / sRGB keeps the legacy format).
+  if (!ColorSpaceIsSRGB(info_.color_space)) {
+    flags |= kHasColorSpace_GSF;
+  }
 
   // premul alpha
   if (info_.gradientFlags != 0) {
@@ -64,6 +69,10 @@ void GradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
       info_.color_offsets.empty() ? nullptr : info_.color_offsets.data();
 
   buffer.WriteColor4fArray(colors, color_count);
+
+  if (flags & kHasColorSpace_GSF) {
+    WriteColorSpaceBlock(buffer, *info_.color_space);
+  }
 
   if (positions) {
     buffer.WriteFloatArray(positions, color_count);
@@ -91,11 +100,12 @@ void GradientShader::CopyInfo(GradientInfo *info) const {
   info->local_matrix = GetLocalMatrix();
   info->tile_mode = info_.tile_mode;
   info->gradientFlags = info_.gradientFlags;
+  info->color_space = info_.color_space;
 }
 
-LinearGradientShader::LinearGradientShader(const Point *pts, const Vec4 *colors,
-                                           const float *pos, int32_t count,
-                                           TileMode tile_mode, int flag)
+LinearGradientShader::LinearGradientShader(
+    const Point *pts, const Vec4 *colors, const float *pos, int32_t count,
+    TileMode tile_mode, int flag, std::shared_ptr<const ColorSpace> color_space)
     : GradientShader(GradientType::kLinear) {
   GradientInfo *info = GetGradientInfo();
 
@@ -115,6 +125,7 @@ LinearGradientShader::LinearGradientShader(const Point *pts, const Vec4 *colors,
   info->local_matrix = Matrix(1.f);
   info->tile_mode = tile_mode;
   info->gradientFlags = flag;
+  info->color_space = std::move(color_space);
 }
 
 std::string_view LinearGradientShader::ProcName() const {
@@ -132,10 +143,10 @@ void LinearGradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
   buffer.WritePoint(Vec2{info.point[1].x, info.point[1].y});
 }
 
-RadialGradientShader::RadialGradientShader(Point const &center, float radius,
-                                           const Vec4 colors[],
-                                           const float pos[], int32_t count,
-                                           TileMode tile_mode, int flag)
+RadialGradientShader::RadialGradientShader(
+    Point const &center, float radius, const Vec4 colors[], const float pos[],
+    int32_t count, TileMode tile_mode, int flag,
+    std::shared_ptr<const ColorSpace> color_space)
     : GradientShader(GradientType::kRadial) {
   GradientInfo *info = GetGradientInfo();
   // points
@@ -156,6 +167,7 @@ RadialGradientShader::RadialGradientShader(Point const &center, float radius,
   info->local_matrix = Matrix(1.f);
   info->tile_mode = tile_mode;
   info->gradientFlags = flag;
+  info->color_space = std::move(color_space);
 }
 
 std::string_view RadialGradientShader::ProcName() const {
@@ -176,7 +188,7 @@ void RadialGradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
 TwoPointConicalGradientShader::TwoPointConicalGradientShader(
     Point const &start, float start_radius, Point const &end, float end_radius,
     const Vec4 colors[], const float pos[], int32_t count, TileMode tile_mode,
-    int flag)
+    int flag, std::shared_ptr<const ColorSpace> color_space)
     : GradientShader(GradientType::kConical) {
   GradientInfo *info = GetGradientInfo();
   // points
@@ -199,6 +211,7 @@ TwoPointConicalGradientShader::TwoPointConicalGradientShader(
   info->local_matrix = Matrix(1.f);
   info->tile_mode = tile_mode;
   info->gradientFlags = flag;
+  info->color_space = std::move(color_space);
 }
 
 std::string_view TwoPointConicalGradientShader::ProcName() const {
@@ -219,10 +232,10 @@ void TwoPointConicalGradientShader::FlattenToBuffer(WriteBuffer &buffer) const {
   buffer.WriteFloat(info.radius[1]);
 }
 
-SweepGradientShader::SweepGradientShader(float cx, float cy, float bias,
-                                         float scale, const Vec4 colors[],
-                                         const float pos[], int32_t count,
-                                         TileMode tile_mode, int flag)
+SweepGradientShader::SweepGradientShader(
+    float cx, float cy, float bias, float scale, const Vec4 colors[],
+    const float pos[], int32_t count, TileMode tile_mode, int flag,
+    std::shared_ptr<const ColorSpace> color_space)
     : GradientShader(GradientType::kSweep) {
   GradientInfo *info = GetGradientInfo();
   // points
@@ -245,6 +258,7 @@ SweepGradientShader::SweepGradientShader(float cx, float cy, float bias,
   info->local_matrix = Matrix(1.f);
   info->tile_mode = tile_mode;
   info->gradientFlags = flag;
+  info->color_space = std::move(color_space);
 }
 
 std::string_view SweepGradientShader::ProcName() const {

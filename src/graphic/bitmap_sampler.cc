@@ -90,21 +90,51 @@ Color BitmapSampler::GetColor(Vec2 uv) const {
 
   uv = Vec2{RemapFloatTile(uv.x, x_tile_mode_),
             RemapFloatTile(uv.y, y_tile_mode_)};
-  Color color;
+  Vec4 sampled{};
   // The SW backend does not implement cubic resampling; fall back to bilinear.
   if (sampling_options_.UseCubic()) {
-    color = Color4fToColor(SampleUnitLinear(uv));
-    return color;
+    sampled = SampleUnitLinear(uv);
+  } else {
+    switch (sampling_options_.filter) {
+      case FilterMode::kNearest:
+        sampled = SampleUnitNearest(uv);
+        break;
+      case FilterMode::kLinear:
+        sampled = SampleUnitLinear(uv);
+        break;
+    }
   }
-  switch (sampling_options_.filter) {
-    case FilterMode::kNearest:
-      color = Color4fToColor(SampleUnitNearest(uv));
-      break;
-    case FilterMode::kLinear:
-      color = Color4fToColor(SampleUnitLinear(uv));
-      break;
+  // Convert the sampled color into the target space after filtering, the
+  // same semantics as the GPU texture decode (filter in the stored space).
+  if (!steps_.IsNoop()) {
+    if (alpha_type_ == kPremul_AlphaType) {
+      // Transfer functions are defined on unpremultiplied values; feeding
+      // premultiplied ones scales the curve by alpha and can push channels
+      // above their alpha. Convert in the unpremultiplied domain and scale
+      // back; a zero-alpha sample keeps its exact zeros.
+      if (sampled.w > 0.f) {
+        Color4f unpremul =
+            steps_.Apply(Color4f{sampled.x / sampled.w, sampled.y / sampled.w,
+                                 sampled.z / sampled.w, sampled.w});
+        // Out-of-gamut conversions exceed [0,1] (ColorSpace keeps the
+        // extended range by contract), but the software blend path needs
+        // canonical premultiplied channels (RGB <= A). Clamp in the
+        // unpremultiplied domain before scaling back — the same clamp the
+        // GPU decode applies before its re-premultiply.
+        unpremul.r = std::clamp(unpremul.r, 0.f, 1.f);
+        unpremul.g = std::clamp(unpremul.g, 0.f, 1.f);
+        unpremul.b = std::clamp(unpremul.b, 0.f, 1.f);
+        sampled = Color4f{unpremul.r * sampled.w, unpremul.g * sampled.w,
+                          unpremul.b * sampled.w, sampled.w};
+      }
+    } else {
+      // Unpremultiplied output stays extended-range: the quantization
+      // clamp at the end keeps every channel in [0,255], which is enough
+      // for the downstream premultiply to preserve RGB <= A.
+      sampled = steps_.Apply(sampled);
+    }
   }
-  return color;
+  return Color4fToColor(sampled);
 }
 
 }  // namespace skity

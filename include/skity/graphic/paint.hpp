@@ -126,6 +126,12 @@ class SKITY_API Paint {
   Vector GetStrokeColor() const;
 
   /**
+   * The stroke color resolved into the target (render surface) color space.
+   */
+  Vector GetStrokeColor(
+      const std::shared_ptr<const ColorSpace>& target_space) const;
+
+  /**
    *  @deprecated, use SetFillColor(Color color) instead
    */
   void SetFillColor(float r, float g, float b, float a);
@@ -137,40 +143,71 @@ class SKITY_API Paint {
 
   Vector GetFillColor() const;
 
+  /**
+   * The fill color resolved into the target (render surface) color space.
+   */
+  Vector GetFillColor(
+      const std::shared_ptr<const ColorSpace>& target_space) const;
+
+  /// Records the stroke color and re-declares the whole paint in the
+  /// default working space (sRGB): the fill color's stored value converts
+  /// so its displayed color is unchanged. The space-aware entry point is
+  /// SetColor(color, color_space).
   void SetStrokeColor(Color color);
 
+  /// Records the fill color and re-declares the whole paint in the
+  /// default working space (sRGB): the stroke color's stored value converts
+  /// so its displayed color is unchanged. The space-aware entry point is
+  /// SetColor(color, color_space).
   void SetFillColor(Color color);
 
   /**
    * Sets alpha and RGB used when stroking and filling. The color is a 32-bit
    * value, unpremultiplied, packing 8-bit components for alpha, red, blue, and
-   * green.
-   * @param color   unpremultiplied ARGB
-   */
-  void SetColor(Color color);
-
-  /**
-   * Same as SetColor(Color), but the value is interpreted in color_space and
-   * converted to the pipeline working space (sRGB) on the way in; a null
-   * space means the default working space and leaves it untouched.
+   * green, recorded in color_space; it converts to the render target's space
+   * at draw time (see GetColor4f(target_space)). The default color_space is
+   * the working space (sRGB) and leaves the value untouched.
+   * @param color        unpremultiplied ARGB
+   * @param color_space  the space the color value is stated in; a null
+   *                     space means the default working space (sRGB)
    */
   void SetColor(Color color, std::shared_ptr<const ColorSpace> color_space);
+
+  /// Records the color in the default working space (sRGB).
+  void SetColor(Color color);
 
   Color GetColor() const;
 
   Color4f GetColor4f() const;
 
   /**
+   * The color space the paint's colors are recorded in. A paint carries one
+   * space: SetColor / SetColor4f declare it for both slots, and a
+   * single-slot setter (SetFillColor / SetStrokeColor) re-declares the
+   * whole paint in the default working space (sRGB) — the other slot keeps
+   * its stored bytes but is re-interpreted there.
+   */
+  std::shared_ptr<const ColorSpace> GetColorSpace() const {
+    return color_space_;
+  }
+
+  /**
+   * Returns the stroke/fill color resolved into the target (render surface)
+   * color space. This is the draw-time entry point: recorded colors stay in
+   * their original space and convert once the target space is known.
+   */
+  Color4f GetColor4f(
+      const std::shared_ptr<const ColorSpace>& target_space) const;
+
+  /**
    * Sets the alpha and RGB used when stroking and filling. The color is
-   * interpreted in color_space and converted at set time: the paint stores
-   * only the working-space value, because the pipeline currently has a
-   * single fixed working space (sRGB). A null space means the default
-   * working space and leaves the value untouched.
+   * recorded in color_space as-is; it converts to the render target's space
+   * at draw time (see GetColor4f(target_space)). A null space means the
+   * default working space (sRGB) and leaves the value untouched.
    */
   void SetColor4f(Color4f color, std::shared_ptr<const ColorSpace> color_space);
 
-  /// Records the color in the default working space (sRGB); the value stays
-  /// untouched.
+  /// Records the color in the default working space (sRGB).
   void SetColor4f(Color4f color);
   /**
    * Requests, but does not require, that edge pixels draw opaque or with
@@ -292,6 +329,10 @@ class SKITY_API Paint {
   bool operator!=(const Paint& other) const { return !(*this == other); }
 
  private:
+  // A single-slot setter re-declares the whole paint in the working space:
+  // the untouched slot's stored value converts from the recorded space so
+  // its displayed color survives, then the declaration resets.
+  void ResetColorSpaceToWorking(Vector& other_color);
   Cap cap_ = kDefault_Cap;
   Join join_ = kDefault_Join;
   Style style_ = kFill_Style;
@@ -302,6 +343,10 @@ class SKITY_API Paint {
   float font_fill_threshold_ = DEFAULT_FONT_FILL_THRESHOLD;
   Vector fill_color_ = Colors::kBlack;
   Vector stroke_color_ = Colors::kBlack;
+  // The space both recorded colors are interpreted in; resolved to the
+  // render target space at draw time. Single-slot setters normalize here
+  // (see ResetColorSpaceToWorking), so the paint never carries two spaces.
+  std::shared_ptr<const ColorSpace> color_space_;
   bool is_anti_alias_ = false;
   BlendMode blend_mode_ = BlendMode::kDefault;
   std::shared_ptr<PathEffect> path_effect_;

@@ -71,9 +71,18 @@ enum class GPUPresenterStatus {
   kNeedRecreate,
 
   /**
-   * Operation failed for a reason other than swapchain recreation.
+   * Operation failed for a reason other than swapchain recreation or device
+   * loss. Callers should treat this conservatively: skip the frame and keep
+   * logging; it does not call for a presenter or context rebuild by itself.
    */
   kError,
+
+  /**
+   * The logical device has been reported lost (e.g. VK_ERROR_DEVICE_LOST).
+   * The whole GPU context must be recreated by the caller; recreating the
+   * presenter alone cannot recover.
+   */
+  kDeviceLost,
 };
 
 /**

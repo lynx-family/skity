@@ -557,14 +557,16 @@ PixmapBrush::PixmapBrush(std::vector<Span> const& spans, Bitmap* bitmap,
                          float global_alpha, std::shared_ptr<Pixmap> pixmap,
                          const Matrix& points_to_unit,
                          const SamplingOptions& sampling, TileMode x_tile_mode,
-                         TileMode y_tile_mode)
+                         TileMode y_tile_mode,
+                         const std::shared_ptr<const ColorSpace>& target_space)
     : SWSpanBrush(spans, bitmap, color_filter, blend, global_alpha),
       texture_(new Bitmap(std::move(pixmap))),
       points_to_unit_(points_to_unit),
       filter_mode_(sampling.UseCubic() ? FilterMode::kLinear : sampling.filter),
       x_tile_mode_(x_tile_mode),
       y_tile_mode_(y_tile_mode),
-      bitmap_sampler_(*texture_.get(), sampling, x_tile_mode, y_tile_mode) {}
+      bitmap_sampler_(*texture_.get(), sampling, x_tile_mode, y_tile_mode,
+                      target_space) {}
 
 Color PixmapBrush::CalculateColor(int32_t x, int32_t y) {
   SKITY_TRACE_EVENT(PixmapBrush_CalculateColor);
@@ -660,7 +662,12 @@ void PixmapBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
   SKITY_TRACE_EVENT(PixmapBrush_BrushH);
 
 #ifdef SKITY_ARM_NEON
-  if (filter_mode_ == FilterMode::kLinear) {
+  // The NEON fast path below samples raw texels with no color space
+  // conversion; a bitmap tagged with a non-sRGB space must use the scalar
+  // sampler for the whole span, or its converted pixels would disagree with
+  // the remainder pixels at the 8-pixel boundary.
+  if (filter_mode_ == FilterMode::kLinear ||
+      !ColorSpaceIsSRGB(texture_->GetPixmap()->GetColorSpace())) {
     // TODO(zhangzhijian): Accelerate it via neon
     SWSpanBrush::BrushH(x, y, length, alpha);
     return;

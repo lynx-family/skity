@@ -54,9 +54,13 @@ void AppendSDFGlyphRuns(const GlyphRunInput& input, const Paint& paint,
       continue;
     }
     const GlyphData& info = *metrics[index];
-    const GlyphRegion region = atlas.GetGlyphRegion(
+    const auto result = atlas.GetGlyphRegion(
         input.font, PackedGlyphID(input.glyphs[index]), paint, true,
         context.device_scale, context.local_to_raster);
+    if (!result.IsReady()) {
+      continue;
+    }
+    const auto& region = result.region;
     float width = region.loc.z * region.scale / context.device_scale;
     float height = region.loc.w * region.scale / context.device_scale;
     if (fixed_size != 0.f) {

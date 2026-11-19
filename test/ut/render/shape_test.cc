@@ -19,6 +19,7 @@ TEST(Shape, Path) {
 
   skity::Shape shape(&path);
   EXPECT_TRUE(shape.IsPath());
+  EXPECT_FALSE(shape.IsRect());
   EXPECT_FALSE(shape.IsRRect());
   EXPECT_EQ(shape.GetPath(), &path);
   EXPECT_EQ(shape.GetBounds(), path.GetBounds());
@@ -30,7 +31,19 @@ TEST(Shape, RRect) {
 
   skity::Shape shape(&rrect);
   EXPECT_FALSE(shape.IsPath());
+  EXPECT_FALSE(shape.IsRect());
   EXPECT_TRUE(shape.IsRRect());
   EXPECT_EQ(shape.GetRRect(), &rrect);
   EXPECT_EQ(shape.GetBounds(), rrect.GetBounds());
+}
+
+TEST(Shape, Rect) {
+  const auto rect = skity::Rect::MakeLTRB(10, 20, 30, 50);
+
+  skity::Shape shape(&rect);
+  EXPECT_FALSE(shape.IsPath());
+  EXPECT_TRUE(shape.IsRect());
+  EXPECT_FALSE(shape.IsRRect());
+  EXPECT_EQ(shape.GetRect(), &rect);
+  EXPECT_EQ(shape.GetBounds(), rect);
 }

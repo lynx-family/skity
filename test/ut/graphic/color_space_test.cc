@@ -5,10 +5,12 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color_space.hpp>
 #include <skity/graphic/image.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/io/pixmap.hpp>
+#include <skity/render/canvas.hpp>
 #include <type_traits>
 
 #include "gtest/gtest.h"
@@ -130,6 +132,56 @@ TEST(ColorSpace, SRGBGamutIsD50AdaptedFromItsPrimaries) {
   EXPECT_NEAR(native.gy, 0.600, 1e-4);
   EXPECT_NEAR(native.bx, 0.150, 1e-4);
   EXPECT_NEAR(native.by, 0.060, 1e-4);
+}
+
+TEST(ColorSpace, AdobeRGBGamutIsD50AdaptedFromItsPrimaries) {
+  namespace util = color_space_test_util;
+  auto adobe = skity::ColorSpace::AdobeRGB();
+  EXPECT_FALSE(adobe->IsSRGB());
+  EXPECT_FALSE(adobe->IsLinear());
+  EXPECT_EQ(adobe->kind, skity::ColorSpace::Kind::kAdobeRGB);
+  // Interned singleton, like every named factory.
+  EXPECT_EQ(skity::ColorSpace::AdobeRGB(), adobe);
+
+  // Gamut matrices live in the D50 connection space: RGB white maps to the
+  // D50 white point, not to the Adobe RGB native D65 white.
+  for (int row = 0; row < 3; row++) {
+    float sum = adobe->gamut_xyz[row * 3] + adobe->gamut_xyz[row * 3 + 1] +
+                adobe->gamut_xyz[row * 3 + 2];
+    EXPECT_NEAR(sum, static_cast<float>(util::kD50[row]), 1e-5f);
+  }
+  // The matrix matches an independent derivation from the published
+  // chromaticities plus a Bradford adaptation to D50.
+  auto reference = util::D50Gamut(util::kAdobeRGBChromaticities);
+  for (int i = 0; i < 9; i++) {
+    EXPECT_NEAR(adobe->gamut_xyz[i], static_cast<float>(reference[i]), 1e-6f);
+  }
+  // Undoing the adaptation recovers the published primaries and white.
+  auto native = util::NativeChromaticities(adobe->gamut_xyz);
+  EXPECT_NEAR(native.wx, 0.3127, 1e-5);
+  EXPECT_NEAR(native.wy, 0.3290, 1e-5);
+  EXPECT_NEAR(native.rx, 0.640, 1e-5);
+  EXPECT_NEAR(native.ry, 0.330, 1e-5);
+  EXPECT_NEAR(native.gx, 0.210, 1e-5);
+  EXPECT_NEAR(native.gy, 0.710, 1e-5);
+  EXPECT_NEAR(native.bx, 0.150, 1e-5);
+  EXPECT_NEAR(native.by, 0.060, 1e-5);
+
+  // Pure gamma 2.2 transfer curve.
+  const float gamma22[7] = {2.2f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  EXPECT_EQ(std::memcmp(adobe->transfer_fn, gamma22, sizeof(float) * 7), 0);
+
+  // Equal to the equivalent parametric space (kind is ignored by value
+  // equality, so deserialized Adobe RGB content stays comparable).
+  auto parametric = skity::ColorSpace::MakeRGB(gamma22, adobe->gamut_xyz);
+  ASSERT_NE(parametric, nullptr);
+  EXPECT_EQ(*parametric, *adobe);
+
+  // The Adobe RGB green primary sits outside the sRGB gamut; conversion
+  // stays unclamped by contract.
+  auto green_in_srgb = skity::ColorSpace::Convert(
+      adobe, skity::Color4f{0.f, 1.f, 0.f, 1.f}, nullptr);
+  EXPECT_GT(green_in_srgb.g, 1.f);
 }
 
 TEST(ColorSpace, CrossGamutNeutralsStayNeutral) {
@@ -469,6 +521,178 @@ TEST(ColorSpace, ConvertColorsBulk) {
   EXPECT_NEAR(colors[2].r, 1.f, 1e-6f);
 }
 
+TEST(ColorSpace, PixmapColorSpaceMetadata) {
+  skity::Pixmap pixmap(4, 4);
+  // No space declared: the pixmap starts out null (= sRGB).
+  EXPECT_EQ(pixmap.GetColorSpace(), nullptr);
+
+  auto p3 = skity::ColorSpace::DisplayP3();
+  EXPECT_TRUE(pixmap.SetColorInfo(skity::kUnpremul_AlphaType,
+                                  skity::ColorType::kRGBA, p3));
+  EXPECT_EQ(pixmap.GetColorSpace(), p3);
+
+  // The two parameter variant keeps working and resets the space back to
+  // undeclared (sRGB).
+  EXPECT_TRUE(
+      pixmap.SetColorInfo(skity::kUnpremul_AlphaType, skity::ColorType::kRGBA));
+  EXPECT_EQ(pixmap.GetColorSpace(), nullptr);
+  EXPECT_TRUE(skity::ColorSpaceIsSRGB(pixmap.GetColorSpace()));
+
+  // Invalid alpha/color type combinations are still rejected.
+  EXPECT_FALSE(pixmap.SetColorInfo(skity::kUnknown_AlphaType,
+                                   skity::ColorType::kRGBA, p3));
+}
+
+TEST(ColorSpace, PixmapImageCarriesColorSpace) {
+  auto pixmap = std::make_shared<skity::Pixmap>(2, 2);
+  ASSERT_TRUE(pixmap->SetColorInfo(skity::kUnpremul_AlphaType,
+                                   skity::ColorType::kRGBA,
+                                   skity::ColorSpace::SRGBLinear()));
+  auto image = skity::Image::MakeImage(pixmap);
+  EXPECT_TRUE(image->GetColorSpace()->IsLinear());
+
+  auto plain = skity::Image::MakeImage(std::make_shared<skity::Pixmap>(2, 2));
+  EXPECT_EQ(plain->GetColorSpace(), nullptr);
+  EXPECT_TRUE(skity::ColorSpaceIsSRGB(plain->GetColorSpace()));
+}
+
+TEST(ColorSpace, PaintColorSpaceRecordedAndResolvedToTarget) {
+  skity::Paint paint;
+  paint.SetColor4f(skity::Color4f{0.5f, 0.5f, 0.5f, 1.f},
+                   skity::ColorSpace::SRGBLinear());
+  // The color records in its own space; GetColor4f() returns it untouched.
+  EXPECT_EQ(paint.GetColor4f().r, 0.5f);
+  EXPECT_TRUE(paint.GetColorSpace()->IsLinear());
+
+  // Resolved into the default (sRGB) target: linear 0.5 gray is 0.73536.
+  auto color = paint.GetColor4f(nullptr);
+  EXPECT_NEAR(color.r, 0.73535698f, 1e-4f);
+  EXPECT_NEAR(color.g, 0.73535698f, 1e-4f);
+  EXPECT_NEAR(color.b, 0.73535698f, 1e-4f);
+  EXPECT_NEAR(color.a, 1.f, 1e-6f);
+
+  // The default (null) space leaves the color untouched, resolved or not.
+
+  paint.SetColor4f(skity::Color4f{0.5f, 0.25f, 0.125f, 1.f});
+  color = paint.GetColor4f(nullptr);
+  EXPECT_EQ(color.r, 0.5f);
+  EXPECT_EQ(color.g, 0.25f);
+  EXPECT_EQ(color.b, 0.125f);
+
+  // A P3-tagged color resolves through the gamut into an sRGB target and
+  // returns bit-identically for a same-space target.
+  paint.SetColor4f(skity::Color4f{0.5f, 0.25f, 0.125f, 1.f},
+                   skity::ColorSpace::DisplayP3());
+  color = paint.GetColor4f(nullptr);
+  auto expected = skity::ColorSpace::Convert(
+      skity::ColorSpace::DisplayP3(), skity::Color4f{0.5f, 0.25f, 0.125f, 1.f},
+      nullptr);
+  EXPECT_NEAR(color.r, expected.r, 1e-6f);
+  EXPECT_NEAR(color.g, expected.g, 1e-6f);
+  EXPECT_NEAR(color.b, expected.b, 1e-6f);
+  color = paint.GetColor4f(skity::ColorSpace::DisplayP3());
+  EXPECT_EQ(color.r, 0.5f);
+  EXPECT_EQ(color.g, 0.25f);
+  EXPECT_EQ(color.b, 0.125f);
+
+  // Legacy component setters have no space parameter; they record in sRGB.
+  paint.SetColor(skity::ColorSetARGB(255, 255, 0, 0));
+  EXPECT_TRUE(skity::ColorSpaceIsSRGB(paint.GetColorSpace()));
+
+  // Explicit fill/stroke getters resolve on request.
+  paint.SetColor4f(skity::Color4f{0.2f, 0.9f, 0.2f, 1.f}, nullptr);
+  paint.SetStyle(skity::Paint::kStroke_Style);
+  auto stroke_resolved = paint.GetStrokeColor(skity::ColorSpace::DisplayP3());
+  auto stroke_expected =
+      skity::ColorSpace::Convert(nullptr, skity::Color4f{0.2f, 0.9f, 0.2f, 1.f},
+                                 skity::ColorSpace::DisplayP3());
+  EXPECT_NEAR(stroke_resolved.r, stroke_expected.r, 1e-6f);
+  EXPECT_NEAR(stroke_resolved.g, stroke_expected.g, 1e-6f);
+  EXPECT_NEAR(stroke_resolved.b, stroke_expected.b, 1e-6f);
+}
+
+TEST(ColorSpace, SWCanvasResolvesColorsIntoBitmapSpace) {
+  // A P3-tagged destination bitmap is the SW working space: paint colors
+  // resolve into it and same-space images pass through byte exactly.
+  skity::Bitmap bitmap(16, 16, skity::AlphaType::kPremul_AlphaType);
+  ASSERT_TRUE(bitmap.GetPixmap()->SetColorInfo(skity::kPremul_AlphaType,
+                                               skity::ColorType::kRGBA,
+                                               skity::ColorSpace::DisplayP3()));
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+
+  // An sRGB-recorded paint color resolves into the P3 bitmap space.
+  skity::Paint paint;
+  paint.SetStyle(skity::Paint::kFill_Style);
+  paint.SetColor4f(skity::Color4f{1.f, 0.f, 0.f, 1.f}, nullptr);
+  canvas->DrawRect(skity::Rect::MakeWH(16.f, 16.f), paint);
+  canvas->Flush();
+
+  auto expected =
+      skity::ColorSpace::Convert(nullptr, skity::Color4f{1.f, 0.f, 0.f, 1.f},
+                                 skity::ColorSpace::DisplayP3());
+  auto result = skity::Color4fFromColor(bitmap.GetPixel(8, 8));
+  EXPECT_NEAR(result.r, expected.r, 2.f / 255.f);
+  EXPECT_NEAR(result.g, expected.g, 2.f / 255.f);
+  EXPECT_NEAR(result.b, expected.b, 2.f / 255.f);
+  EXPECT_NEAR(result.a, 1.f, 1.f / 255.f);
+
+  // A P3-tagged image on the P3 bitmap: zero conversion, zero clipping.
+  canvas->Clear(skity::Color_WHITE);
+  auto pixmap = std::make_shared<skity::Pixmap>(8, 8);
+  skity::Bitmap src_bitmap(pixmap, false);
+  for (uint32_t y = 0; y < 8; y++) {
+    for (uint32_t x = 0; x < 8; x++) {
+      src_bitmap.SetPixel(x, y, skity::ColorSetARGB(255, 255, 0, 0));
+    }
+  }
+  pixmap->SetColorInfo(skity::kUnpremul_AlphaType, skity::ColorType::kRGBA,
+                       skity::ColorSpace::DisplayP3());
+  auto image = skity::Image::MakeImage(pixmap);
+  canvas->DrawImageRect(image, skity::Rect::MakeWH(8.f, 8.f),
+                        skity::Rect::MakeWH(16.f, 16.f),
+                        skity::SamplingOptions{});
+  canvas->Flush();
+
+  auto passthrough = skity::Color4fFromColor(bitmap.GetPixel(8, 8));
+  EXPECT_EQ(passthrough.r, 1.f);
+  EXPECT_EQ(passthrough.g, 0.f);
+  EXPECT_EQ(passthrough.b, 0.f);
+  EXPECT_EQ(passthrough.a, 1.f);
+}
+
+TEST(ColorSpace, PaintColorSpaceIsExplicitPerColorSet) {
+  skity::Paint paint;
+  // The plain setters record in the default working space (sRGB).
+  paint.SetColor(skity::ColorSetARGB(255, 200, 100, 50));
+  EXPECT_TRUE(skity::ColorSpaceIsSRGB(paint.GetColorSpace()));
+
+  // The space-aware setter declares the paint's single space.
+  paint.SetColor(skity::ColorSetARGB(255, 200, 100, 50),
+                 skity::ColorSpace::DisplayP3());
+  EXPECT_FALSE(skity::ColorSpaceIsSRGB(paint.GetColorSpace()));
+
+  // A single-slot setter re-declares the whole paint in the working space,
+  // and the untouched slot's stored value CONVERTS so its displayed color
+  // survives: a linear 0.5 stroke re-records as its sRGB encoding (~0.735).
+  paint.SetColor4f(skity::Color4f{0.5f, 0.5f, 0.5f, 1.f},
+                   skity::ColorSpace::SRGBLinear());
+  auto stroke_before = paint.GetStrokeColor(nullptr);
+  paint.SetFillColor(skity::ColorSetARGB(255, 128, 128, 128));
+  EXPECT_TRUE(skity::ColorSpaceIsSRGB(paint.GetColorSpace()));
+  auto stroke_after = paint.GetStrokeColor(nullptr);
+  EXPECT_NEAR(stroke_after.r, stroke_before.r, 1e-4f);
+  EXPECT_NEAR(stroke_after.g, stroke_before.g, 1e-4f);
+  EXPECT_NEAR(stroke_after.b, stroke_before.b, 1e-4f);
+  // The raw value now reads as the sRGB encoding (0.73536), not 0.5.
+  EXPECT_NEAR(paint.GetStrokeColor().x, 0.73535698f, 1e-4f);
+
+  // The deprecated component setters behave the same way.
+  paint.SetColor(skity::ColorSetARGB(255, 10, 20, 30),
+                 skity::ColorSpace::DisplayP3());
+  paint.SetFillColor(0.1f, 0.2f, 0.3f, 1.f);
+  EXPECT_TRUE(skity::ColorSpaceIsSRGB(paint.GetColorSpace()));
+}
+
 TEST(ColorSpace, GamutFromChromaticitiesMatchesDisplayP3) {
   // Direct check of the chromaticity solve: the P3 values reproduce the
   // Display P3 gamut table.
@@ -544,79 +768,6 @@ TEST(ColorSpace, ChromaticitiesFromGamutUndoesTheAdaptation) {
   EXPECT_NEAR(c[7], 0.060, 2e-4);
 }
 
-TEST(ColorSpace, PixmapColorSpaceMetadata) {
-  skity::Pixmap pixmap(4, 4);
-  // No space declared: the pixmap starts out null (= sRGB).
-  EXPECT_EQ(pixmap.GetColorSpace(), nullptr);
-
-  auto p3 = skity::ColorSpace::DisplayP3();
-  EXPECT_TRUE(pixmap.SetColorInfo(skity::kUnpremul_AlphaType,
-                                  skity::ColorType::kRGBA, p3));
-  EXPECT_EQ(pixmap.GetColorSpace(), p3);
-
-  // The two parameter variant keeps working and resets the space back to
-  // undeclared (sRGB).
-  EXPECT_TRUE(
-      pixmap.SetColorInfo(skity::kUnpremul_AlphaType, skity::ColorType::kRGBA));
-  EXPECT_EQ(pixmap.GetColorSpace(), nullptr);
-  EXPECT_TRUE(skity::ColorSpaceIsSRGB(pixmap.GetColorSpace()));
-
-  // Invalid alpha/color type combinations are still rejected.
-  EXPECT_FALSE(pixmap.SetColorInfo(skity::kUnknown_AlphaType,
-                                   skity::ColorType::kRGBA, p3));
-}
-
-TEST(ColorSpace, PixmapImageCarriesColorSpace) {
-  auto pixmap = std::make_shared<skity::Pixmap>(2, 2);
-  ASSERT_TRUE(pixmap->SetColorInfo(skity::kUnpremul_AlphaType,
-                                   skity::ColorType::kRGBA,
-                                   skity::ColorSpace::SRGBLinear()));
-  auto image = skity::Image::MakeImage(pixmap);
-  EXPECT_TRUE(image->GetColorSpace()->IsLinear());
-
-  auto plain = skity::Image::MakeImage(std::make_shared<skity::Pixmap>(2, 2));
-  EXPECT_EQ(plain->GetColorSpace(), nullptr);
-  EXPECT_TRUE(skity::ColorSpaceIsSRGB(plain->GetColorSpace()));
-}
-
-TEST(ColorSpace, PaintSetColor4fConvertsToWorkingSpace) {
-  skity::Paint paint;
-  paint.SetColor4f(skity::Color4f{0.5f, 0.5f, 0.5f, 1.f},
-                   skity::ColorSpace::SRGBLinear());
-  // Linear 0.5 gray drawn as working-space sRGB is 0.73536.
-  auto color = paint.GetColor4f();
-  EXPECT_NEAR(color.r, 0.73535698f, 1e-4f);
-  EXPECT_NEAR(color.g, 0.73535698f, 1e-4f);
-  EXPECT_NEAR(color.b, 0.73535698f, 1e-4f);
-  EXPECT_NEAR(color.a, 1.f, 1e-6f);
-
-  // The 8-bit overload converts the same way.
-  paint.SetColor(skity::ColorSetARGB(255, 128, 128, 128),
-                 skity::ColorSpace::SRGBLinear());
-  auto gray = paint.GetColor4f();
-  EXPECT_NEAR(gray.r, 0.73535698f, 2e-3f);
-  EXPECT_NEAR(gray.g, 0.73535698f, 2e-3f);
-  EXPECT_NEAR(gray.b, 0.73535698f, 2e-3f);
-
-  // The default (null) space leaves the color untouched.
-  paint.SetColor4f(skity::Color4f{0.5f, 0.25f, 0.125f, 1.f});
-  color = paint.GetColor4f();
-  EXPECT_EQ(color.r, 0.5f);
-  EXPECT_EQ(color.g, 0.25f);
-  EXPECT_EQ(color.b, 0.125f);
-
-  // An sRGB color declared through a P3 tag converts through the gamut.
-  paint.SetColor4f(skity::Color4f{0.5f, 0.25f, 0.125f, 1.f},
-                   skity::ColorSpace::DisplayP3());
-  color = paint.GetColor4f();
-  auto expected = skity::ColorSpace::Convert(
-      skity::ColorSpace::DisplayP3(), skity::Color4f{0.5f, 0.25f, 0.125f, 1.f},
-      nullptr);
-  EXPECT_NEAR(color.r, expected.r, 1e-6f);
-  EXPECT_NEAR(color.g, expected.g, 1e-6f);
-  EXPECT_NEAR(color.b, expected.b, 1e-6f);
-}
-
 TEST(ColorSpace, ImageTagIsFixedAtConstruction) {
   // The image snapshots the pixmap's tag at construction, matching the
   // texture path (which uploads the bytes once): retagging the pixmap
@@ -642,37 +793,4 @@ TEST(ColorSpace, ImageTagIsFixedAtConstruction) {
   plain->SetColorInfo(skity::kUnpremul_AlphaType, skity::ColorType::kRGBA,
                       skity::ColorSpace::SRGBLinear());
   EXPECT_EQ(plain_image->GetColorSpace(), nullptr);
-}
-
-TEST(ColorSpace, PaintSettersHaveNoStickySpace) {
-  // The space is consumed at set time; no state survives into later
-  // setters. This pins the de-ambiguation the two-overload convention
-  // exists for: a plain or deprecated setter after a spaced one records
-  // in the default working space again.
-  skity::Paint paint;
-
-  // Plain 8-bit overload: byte-identical with the pre-color-space path.
-  paint.SetColor(skity::ColorSetARGB(200, 30, 200, 160));
-  auto color = paint.GetColor4f();
-  EXPECT_EQ(skity::Color4fToColor(color),
-            skity::ColorSetARGB(200, 30, 200, 160));
-
-  // A spaced setter converts; alpha passes through untouched even when
-  // it is not 1.
-  paint.SetColor4f(skity::Color4f{0.5f, 0.5f, 0.5f, 0.25f},
-                   skity::ColorSpace::SRGBLinear());
-  color = paint.GetColor4f();
-  EXPECT_NEAR(color.r, 0.73535698f, 1e-4f);
-  EXPECT_EQ(color.a, 0.25f);
-
-  // Deprecated component setters right after a spaced one apply no
-  // leftover conversion: the values land as-is.
-  paint.SetFillColor(0.5f, 0.5f, 0.5f, 0.25f);
-  color = paint.GetFillColor();
-  EXPECT_EQ(color.r, 0.5f);
-  EXPECT_EQ(color.a, 0.25f);
-  paint.SetStrokeColor(0.5f, 0.5f, 0.5f, 0.25f);
-  color = paint.GetStrokeColor();
-  EXPECT_EQ(color.r, 0.5f);
-  EXPECT_EQ(color.a, 0.25f);
 }

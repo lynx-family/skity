@@ -48,8 +48,10 @@ std::shared_ptr<ColorFilter> ReadBlendModeColorFilter(ReadBuffer& buffer) {
 
     auto mode = static_cast<BlendMode>(buffer.ReadU32());
 
-    return core_bridge::MakeColorFilterBlend(core_bridge::Color4fToColor(color),
-                                             mode);
+    // The wire carries extended-range sRGB floats (wide-gamut constants
+    // keep their out-of-range components); the float entry preserves
+    // them instead of quantizing down to Color32.
+    return core_bridge::MakeColorFilterBlend4f(color, mode);
   }
 }
 

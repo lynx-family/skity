@@ -68,7 +68,22 @@ bool ReadGradientInfo(ReadBuffer& buffer, Shader::GradientInfo& info) {
   }
 
   if (flags & kHasColorSpace_GSF) {
-    (void)buffer.ReadByteArrayAsData();  // skip color space
+    // Skia v1 color space block: a 4-byte version header (version 1 plus
+    // three reserved bytes) followed by the transfer function (7 floats)
+    // and the gamut matrix (9 floats) - the same layout the color filter
+    // serialization reads.
+    auto data = buffer.ReadByteArrayAsData();
+    if (!buffer.Validate(data && data->Size() == 4 + sizeof(float) * 16)) {
+      return false;
+    }
+    auto bytes = static_cast<const uint8_t*>(data->RawData());
+    if (!buffer.Validate(bytes[0] == 1)) {
+      return false;
+    }
+    auto space = reinterpret_cast<const float*>(bytes + 4);
+    info.color_space = ColorSpace::MakeRGB(space, space + 7);
+    // An invalid parametric payload degrades to the undeclared (sRGB)
+    // default rather than failing the whole shader read.
   }
 
   if (flags & kHasPosition_GSF) {
@@ -198,7 +213,7 @@ std::shared_ptr<Shader> ReadConicalGradient(ReadBuffer& buffer) {
           1.f,
       },
       r2, info.colors.data(), info.color_offsets.data(), info.color_count,
-      info.tile_mode, info.gradientFlags);
+      info.tile_mode, info.gradientFlags, info.color_space);
 
   if (!core_bridge::MatrixIsIdentity(info.local_matrix)) {
     core_bridge::SetShaderLocalMatrix(shader, info.local_matrix);
@@ -238,7 +253,7 @@ std::shared_ptr<Shader> ReadLinearGradient(ReadBuffer& buffer) {
 
   auto shader = core_bridge::MakeShaderLinear(
       points.data(), info.colors.data(), info.color_offsets.data(),
-      info.color_count, info.tile_mode, info.gradientFlags);
+      info.color_count, info.tile_mode, info.gradientFlags, info.color_space);
 
   if (!core_bridge::MatrixIsIdentity(info.local_matrix)) {
     core_bridge::SetShaderLocalMatrix(shader, info.local_matrix);
@@ -265,7 +280,7 @@ std::shared_ptr<Shader> ReadRadialGradient(ReadBuffer& buffer) {
           1.f,
       },
       radius, info.colors.data(), info.color_offsets.data(), info.color_count,
-      info.tile_mode, info.gradientFlags);
+      info.tile_mode, info.gradientFlags, info.color_space);
 
   if (!core_bridge::MatrixIsIdentity(info.local_matrix)) {
     core_bridge::SetShaderLocalMatrix(shader, info.local_matrix);
@@ -297,7 +312,7 @@ std::shared_ptr<Shader> ReadSweepGradient(ReadBuffer& buffer) {
   auto shader = core_bridge::MakeShaderSweep(
       center.x, center.y, start_angle, end_angle, info.colors.data(),
       info.color_offsets.data(), info.color_count, info.tile_mode,
-      info.gradientFlags);
+      info.gradientFlags, info.color_space);
 
   if (!core_bridge::MatrixIsIdentity(info.local_matrix)) {
     core_bridge::SetShaderLocalMatrix(shader, info.local_matrix);

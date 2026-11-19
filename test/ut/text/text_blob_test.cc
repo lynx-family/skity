@@ -276,9 +276,9 @@ TEST_F(TextBlobTest, GetBoundsRectSingleGlyphAtOrigin) {
   ASSERT_NE(glyph_data[0], nullptr);
 
   float expected_left = 0.f + glyph_data[0]->GetHoriBearingX();
-  float expected_top = 0.f - glyph_data[0]->GetYMax();
+  float expected_top = 0.f - glyph_data[0]->GetHoriBearingY();
   float expected_right = expected_left + glyph_data[0]->GetWidth();
-  float expected_bottom = 0.f - glyph_data[0]->GetYMin();
+  float expected_bottom = expected_top + glyph_data[0]->GetHeight();
 
   Rect rect = blob.GetBoundsRect();
   EXPECT_FLOAT_EQ(rect.Left(), expected_left);

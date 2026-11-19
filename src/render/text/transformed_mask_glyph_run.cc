@@ -133,11 +133,13 @@ float FitCreationScaleToBitmapInfos(uint32_t count, const GlyphID* glyphs,
           creation_scale / std::exp2(1.f / kCreationScaleBucketsPerOctave));
     }
     if (next_scale <= 0.f || next_scale >= creation_scale) {
-      return 0.f;
+      return creation_scale;
     }
     creation_scale = next_scale;
   }
-  return 0.f;
+  // Bitmap info is only an estimate. Let actual image requests decide which
+  // glyphs are drawable instead of discarding an entire span here.
+  return creation_scale;
 }
 
 float ComputeCreationScale(uint32_t count, const GlyphID* glyphs,
@@ -209,7 +211,8 @@ class TransformedMaskGlyphRun final : public AtlasGlyphRun {
 Paint MakeBitmapOnlyFillPaint(const Paint& paint) {
   Paint fill_paint = paint;
   if (paint.GetStyle() == Paint::kStroke_Style) {
-    fill_paint.SetFillColor(paint.GetStrokeColor());
+    // The copied color carries its recorded space with it.
+    fill_paint.SetColor4f(paint.GetStrokeColor(), paint.GetColorSpace());
   }
   fill_paint.SetStyle(Paint::kFill_Style);
   return fill_paint;
@@ -324,55 +327,88 @@ void AppendGlyphRuns(const GlyphRunInput& input, const Paint& paint,
   const Matrix position_matrix =
       context.local_to_raster *
       Matrix::Translate(input.origin.x, input.origin.y);
-  const float creation_scale = ComputeCreationScale(
+  float creation_scale = ComputeCreationScale(
       input.count, input.glyphs, input.position_x, input.position_y, input.font,
       paint, context.device_scale, position_matrix, atlas.GetConfig());
   if (creation_scale <= 0.f) {
     return;
   }
-  const Matrix creation_matrix = Matrix::Scale(creation_scale, creation_scale);
-
-  std::vector<const GlyphData*> glyph_info(input.count);
-  input.font.LoadGlyphMetrics(input.glyphs, input.count, glyph_info.data(),
-                              paint);
-  std::vector<GlyphRegion> regions(input.count);
-  std::vector<GlyphFormat> formats(input.count);
-  for (uint32_t index = 0; index < input.count; ++index) {
-    if (glyph_info[index] == nullptr) {
-      continue;
+  struct PreparedGlyph {
+    GlyphRegion region;
+    float scale = 0.f;
+    bool active = true;
+  };
+  std::vector<PreparedGlyph> prepared(input.count);
+  const uint32_t limit = MaximumAtlasGlyphDimension(atlas.GetConfig());
+  for (uint32_t attempt = 0; attempt < kMaximumScaleFitAttempts; ++attempt) {
+    const Matrix creation = Matrix::Scale(creation_scale, creation_scale);
+    uint32_t rejected_dimension = 0;
+    for (uint32_t index = 0; index < input.count; ++index) {
+      auto& glyph = prepared[index];
+      if (!glyph.active) {
+        continue;
+      }
+      const auto result =
+          atlas.GetGlyphRegion(input.font, PackedGlyphID(input.glyphs[index]),
+                               paint, false, context.device_scale, creation);
+      if (result.IsReady()) {
+        glyph.region = result.region;
+        glyph.scale = creation_scale;
+      } else if (result.status == AtlasGlyphStatus::kTooLarge) {
+        rejected_dimension =
+            std::max({rejected_dimension, result.width, result.height});
+      } else {
+        // Empty/invalid images do not become valid by repeatedly shrinking.
+        // Retain any earlier successful image for this glyph.
+        glyph.active = false;
+      }
     }
-    formats[index] = ResolveAtlasGlyphFormat(format, *glyph_info[index]);
-    regions[index] = atlas.GetGlyphRegion(
-        input.font, PackedGlyphID(input.glyphs[index]), paint, false,
-        context.device_scale, creation_matrix);
+    if (rejected_dimension == 0) {
+      break;
+    }
+    float next_scale = QuantizeCreationScaleDown(
+        creation_scale * static_cast<float>(limit) / rejected_dimension);
+    if (next_scale >= creation_scale) {
+      next_scale = QuantizeCreationScaleDown(
+          creation_scale / std::exp2(1.f / kCreationScaleBucketsPerOctave));
+    }
+    if (next_scale <= 0.f || next_scale >= creation_scale) {
+      break;
+    }
+    creation_scale = next_scale;
   }
 
-  // Load bitmap placement after atlas requests have populated raster data.
-  // This is done once per input span, not once per texture group at recording.
-  input.font.LoadGlyphBitmapInfo(input.glyphs, input.count, glyph_info.data(),
-                                 paint, context.device_scale, creation_matrix);
-  AtlasGlyphBatchBuilder batches(atlas);
-  for (uint32_t index = 0; index < input.count; ++index) {
-    if (glyph_info[index] == nullptr) {
+  // Only emit final successful geometry, preserving input order and the
+  // creation scale belonging to each image, even after partial failure.
+  uint32_t begin = 0;
+  while (begin < input.count) {
+    if (prepared[begin].scale <= 0.f) {
+      ++begin;
       continue;
     }
-    const Vec2 position{input.position_x[index], input.position_y[index]};
-    Vec2 creation_position{};
-    creation_matrix.MapPoints(&creation_position, &position, 1);
-    const auto& image = glyph_info[index]->Image();
-    const auto& region = regions[index];
-    batches.Append(region, formats[index],
-                   Rect::MakeXYWH(creation_position.x + image.origin_x,
-                                  creation_position.y - image.origin_y,
-                                  region.loc.z / context.device_scale,
-                                  region.loc.w / context.device_scale));
-  }
-
-  for (auto& batch : batches.TakeBatches()) {
-    const auto effect = MaskAtlasEffect(batch.format);
-    runs.push_back(context.arena.Make<TransformedMaskGlyphRun>(
-        atlas, std::move(batch), paint, is_stroke, effect, position_matrix,
-        creation_matrix));
+    const float scale = prepared[begin].scale;
+    uint32_t end = begin + 1;
+    while (end < input.count && prepared[end].scale == scale) {
+      ++end;
+    }
+    AtlasGlyphBatchBuilder batches(atlas);
+    for (uint32_t index = begin; index < end; ++index) {
+      const auto& region = prepared[index].region;
+      batches.Append(
+          region, region.format,
+          Rect::MakeXYWH(input.position_x[index] * scale + region.origin_x,
+                         input.position_y[index] * scale - region.origin_y,
+                         region.loc.z / context.device_scale,
+                         region.loc.w / context.device_scale));
+    }
+    const Matrix creation = Matrix::Scale(scale, scale);
+    for (auto& batch : batches.TakeBatches()) {
+      const auto effect = MaskAtlasEffect(batch.format);
+      runs.push_back(context.arena.Make<TransformedMaskGlyphRun>(
+          atlas, std::move(batch), paint, is_stroke, effect, position_matrix,
+          creation));
+    }
+    begin = end;
   }
 }
 

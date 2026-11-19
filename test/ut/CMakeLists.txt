@@ -17,9 +17,12 @@ if (${SKITY_UNIFIED_LIB})
         capi/serialization_c_test.cc
         capi/path_2d_c_test.cc
         capi/path_2d_c_smoke.c
+        capi/path_builder_c_test.cc
+        capi/path_builder_c_smoke.c
     )
 
     target_include_directories(skity_wrapper_unit_test PRIVATE
+        ${CMAKE_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/module/capi/include)
 
     if (${SKITY_VK_BACKEND})
@@ -57,6 +60,7 @@ endif()
 add_executable(skity_unit_test
     base/lru_cache_test.cc
     effect/color_filter_test.cc
+    effect/gradient_color_space_test.cc
     effect/image_filter_test.cc
     effect/mask_filter_test.cc
     effect/shader_test.cc
@@ -69,13 +73,17 @@ add_executable(skity_unit_test
     geometry/scalar_test.cc
     geometry/vector_test.cc
     gpu/fake_gpu_context.cc
+    graphic/bitmap_sampler_test.cc
+    graphic/color_space_decode_review_test.cc
     graphic/bitmap_test.cc
     graphic/color_space_test.cc
     graphic/color_test.cc
+    graphic/color_transform_test.cc
     graphic/image_test.cc
     graphic/path_measure_test.cc
     graphic/path_2d_test.cc
     graphic/path_test.cc
+    graphic/path_builder_test.cc
     graphic/texture_format_test.cc
     io/data_test.cc
     io/pixmap_test.cc
@@ -104,6 +112,7 @@ add_executable(skity_unit_test
     recorder/display_list_rtree_test.cc
     text/atlas_glyph_test.cc
     text/glyph_image_test.cc
+    text/glyph_fallback_test.cc
     text/glyph_run_test.cc
     text/scaler_context_cache_test.cc
     text/text_blob_test.cc
@@ -137,7 +146,8 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
 endif()
 
 target_compile_definitions(skity_unit_test PRIVATE
-    -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/")
+    -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/"
+    -DSKITY_TEST_CT_FONT=$<BOOL:${SKITY_CT_FONT}>)
 
 # Place the cases that depend on specific fonts here.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT SKITY_CT_FONT))
@@ -179,6 +189,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_GL_BACKEND)
   set_source_files_properties(../bench/common/bench_gl_context_mac.mm
       PROPERTIES COMPILE_FLAGS "-fobjc-arc")
   target_link_libraries(skity_unit_test PRIVATE "-framework AppKit" "-framework OpenGL")
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND SKITY_MTL_BACKEND)
+  target_sources(skity_unit_test PRIVATE render/hw/transformed_text_test.mm)
+  set_source_files_properties(render/hw/transformed_text_test.mm
+      PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+  target_link_libraries(skity_unit_test PRIVATE "-framework Metal")
 endif()
 
 target_include_directories(skity_unit_test
@@ -229,6 +246,8 @@ if (${SKITY_CAPI_MODULE})
         capi/serialization_c_test.cc
         capi/path_2d_c_test.cc
         capi/path_2d_c_smoke.c
+        capi/path_builder_c_test.cc
+        capi/path_builder_c_smoke.c
     )
     if (${SKITY_VK_BACKEND})
         target_sources(skity_unit_test PRIVATE

@@ -97,6 +97,70 @@ SKITY_C_API skity_shader skity_shader_create_two_point_conical(
     skity_tile_mode tile_mode, int32_t flags);
 
 /**
+ * @brief Creation options for the gradient factories with an options
+ *        parameter.
+ *
+ * Mirrors skity::GradientOptions. A NULL options pointer in a create entry
+ * means every default: clamp tiling, no flags and an undeclared (sRGB)
+ * stop color space.
+ */
+typedef struct skity_gradient_options {
+  skity_tile_mode tile_mode; /**< extrapolation outside [0, 1] stops */
+  int32_t flags;             /**< non-zero to premultiply before blending */
+  const skity_color_space_info* color_space; /**< NULL = undeclared (sRGB) */
+} skity_gradient_options;
+
+/**
+ * @brief Create a linear gradient shader whose stop colors are recorded in a
+ *        declared color space.
+ * @param options      creation options (tiling, interpolation flags and the
+ *                     stop colors' color space), or NULL for every default
+ *
+ * Same as skity_shader_create_linear otherwise.
+ */
+SKITY_C_API skity_shader skity_shader_create_linear2(
+    const skity_point pts[2], const skity_color4f* colors, const float* pos,
+    int32_t count, const skity_gradient_options* options);
+
+/**
+ * @brief Create a radial gradient shader whose stop colors are recorded in a
+ *        declared color space.
+ * @param options      creation options (tiling, interpolation flags and the
+ *                     stop colors' color space), or NULL for every default
+ *
+ * Same as skity_shader_create_radial otherwise.
+ */
+SKITY_C_API skity_shader skity_shader_create_radial2(
+    skity_point center, float radius, const skity_color4f* colors,
+    const float* pos, int32_t count, const skity_gradient_options* options);
+
+/**
+ * @brief Create a sweep gradient shader whose stop colors are recorded in a
+ *        declared color space.
+ * @param options      creation options (tiling, interpolation flags and the
+ *                     stop colors' color space), or NULL for every default
+ *
+ * Same as skity_shader_create_sweep otherwise.
+ */
+SKITY_C_API skity_shader skity_shader_create_sweep2(
+    float cx, float cy, float start_angle, float end_angle,
+    const skity_color4f* colors, const float* pos, int32_t count,
+    const skity_gradient_options* options);
+
+/**
+ * @brief Create a two-point conical gradient shader whose stop colors are
+ *        recorded in a declared color space.
+ * @param options      creation options (tiling, interpolation flags and the
+ *                     stop colors' color space), or NULL for every default
+ *
+ * Same as skity_shader_create_two_point_conical otherwise.
+ */
+SKITY_C_API skity_shader skity_shader_create_two_point_conical2(
+    skity_point start, float start_radius, skity_point end, float end_radius,
+    const skity_color4f* colors, const float* pos, int32_t count,
+    const skity_gradient_options* options);
+
+/**
  * @brief Create an image shader that fills geometry with @p image's pixels.
  * @param image         source image
  * @param sampling      sampling options, or NULL for the defaults

@@ -9,6 +9,7 @@
 #include "src/effect/pixmap_shader.hpp"
 #include "src/gpu/gpu_context_impl.hpp"
 #include "src/gpu/gpu_render_pass.hpp"
+#include "src/graphic/color_transform.hpp"
 #include "src/logging.hpp"
 #include "src/render/hw/draw/fragment/wgsl_gradient_fragment.hpp"
 #include "src/render/hw/draw/fragment/wgsl_solid_color.hpp"
@@ -142,6 +143,26 @@ bool SetupCommonInfo(const wgx::BindGroupEntry* entry, const Matrix& mvp,
   common_info->GetMember("extraInfo")
       ->type->SetData(std::array<float, 4>{clip_depth, 0.f, 0.f, 0.f});
 
+  return true;
+}
+
+bool UploadCommonInfo(Command* cmd, HWDrawContext* context,
+                      const Matrix& transform, float clip_depth) {
+  if (cmd->pipeline == nullptr) {
+    return false;
+  }
+
+  auto* group = cmd->pipeline->GetBindingGroup(0);
+  if (group == nullptr) {
+    return false;
+  }
+
+  auto* entry = group->GetEntry(0);
+  if (!SetupCommonInfo(entry, context->mvp, transform, clip_depth)) {
+    return false;
+  }
+
+  UploadBindGroup(group->group, entry, cmd, context);
   return true;
 }
 
@@ -792,7 +813,7 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
         return arena_allocator->Make<WGSLTextureFragment>(
             pixmap_shader, texture, sampler, paint.GetAlphaF(),
             inv_local_matrix, static_cast<float>(image->Width()),
-            static_cast<float>(image->Height()));
+            static_cast<float>(image->Height()), context->target_space);
 
       } else {
         if (has_color) {
@@ -808,6 +829,19 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
       paint.GetShader()->AsGradient(&info);
       info.local_matrix = local_matrix;
 
+      // Gradient stops resolve from their declared space (all stops share
+      // one, default sRGB) into the target space, so interpolation happens
+      // in the space the surface encodes.
+      {
+        ColorTransformSteps stop_steps = ColorTransformSteps::Resolve(
+            info.color_space, context->target_space);
+        if (!stop_steps.IsNoop()) {
+          for (auto& stop : info.colors) {
+            stop = stop_steps.Apply(stop);
+          }
+        }
+      }
+
       Color4f fallback_color;
       if (NeedsFallbackToSolidColor(type, info, fallback_color)) {
         // Vertex colors still contain the paint color, not the gradient color.
@@ -821,13 +855,15 @@ HWWGSLFragment* GenShadingFragment(HWDrawContext* context, const Paint& paint,
   } else {
     if (is_stroke) {
       if (has_color) {
-        return arena_allocator->Make<WGSLSolidColor>(paint.GetStrokeColor());
+        return arena_allocator->Make<WGSLSolidColor>(
+            paint.GetStrokeColor(context->target_space));
       } else {
         return arena_allocator->Make<WGSLSolidVertexColor>();
       }
     } else {
       if (has_color) {
-        return arena_allocator->Make<WGSLSolidColor>(paint.GetFillColor());
+        return arena_allocator->Make<WGSLSolidColor>(
+            paint.GetFillColor(context->target_space));
       } else {
         return arena_allocator->Make<WGSLSolidVertexColor>();
       }

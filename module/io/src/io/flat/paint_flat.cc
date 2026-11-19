@@ -3,6 +3,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <cmath>
+#include <skity/graphic/color_space.hpp>
 #include <skity/graphic/paint.hpp>
 
 #include "src/io/core_bridge.hpp"
@@ -116,7 +117,11 @@ void FlatIntoMemory<Paint>(const Paint& paint, WriteBuffer& writer) {
   writer.WriteFloat(core_bridge::GetPaintStrokeWidth(&paint));
   writer.WriteFloat(core_bridge::GetPaintStrokeMiter(&paint));
 
-  auto color = core_bridge::GetPaintColor4f(&paint);
+  // The wire color fields are sRGB by contract: a paint recorded in
+  // another space resolves into the working space before flattening, so a
+  // serialized picture replays with the same displayed color.
+  auto color = ColorSpace::Convert(
+      paint.GetColorSpace(), core_bridge::GetPaintColor4f(&paint), nullptr);
   writer.WriteColor4f(color);
 
   writer.WriteUint32(pack_v68(paint, flat_flags));

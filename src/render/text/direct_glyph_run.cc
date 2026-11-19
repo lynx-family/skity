@@ -41,22 +41,10 @@ class DirectGlyphRun final : public AtlasGlyphRun {
 
 }  // namespace
 
-void AppendDirectGlyphRuns(const GlyphRunInput& input, const Paint& paint,
-                           AtlasFormat format, bool is_stroke,
-                           const GlyphRunBuildContext& context,
-                           GlyphSubRunList& runs) {
-  std::vector<const GlyphData*> metrics(input.count);
-  Paint metrics_paint;
-  if (is_stroke) {
-    metrics_paint.SetStyle(Paint::kStroke_Style);
-    metrics_paint.SetStrokeWidth(paint.GetStrokeWidth());
-    metrics_paint.SetStrokeCap(paint.GetStrokeCap());
-    metrics_paint.SetStrokeJoin(paint.GetStrokeJoin());
-    metrics_paint.SetStrokeMiter(paint.GetStrokeMiter());
-  }
-  input.font.LoadGlyphMetrics(input.glyphs, input.count, metrics.data(),
-                              metrics_paint);
-
+std::vector<PreparedDirectGlyph> PrepareDirectGlyphs(
+    const GlyphRunInput& input, const Paint& paint, AtlasFormat format,
+    const GlyphRunBuildContext& context) {
+  std::vector<PreparedDirectGlyph> glyphs(input.count);
   const Vec2 local_origin{input.origin.x, input.origin.y};
   const Vec2 zero{0.f, 0.f};
   Vec2 device_origin{}, device_zero{};
@@ -69,27 +57,45 @@ void AppendDirectGlyphRuns(const GlyphRunInput& input, const Paint& paint,
       input.font.IsBaselineSnap(), context.local_to_raster);
 
   Atlas& atlas = *context.atlas_manager.GetAtlas(format);
-  AtlasGlyphBatchBuilder batches(atlas);
   for (uint32_t index = 0; index < input.count; ++index) {
-    if (metrics[index] == nullptr) {
-      continue;
-    }
     const Vec2 local_position{input.position_x[index] + input.origin.x,
                               input.position_y[index] + input.origin.y};
     Vec2 raster_position{};
     context.local_to_raster.MapPoints(&raster_position, &local_position, 1);
     const auto position = QuantizeGlyphPosition(
         raster_position, context.device_scale, rounding_spec);
-    const GlyphRegion region = atlas.GetGlyphRegion(
+    auto& glyph = glyphs[index];
+    glyph.atlas = atlas.GetGlyphRegion(
         input.font,
         PackedGlyphID(input.glyphs[index], position.x_phase, position.y_phase),
         paint, false, context.device_scale, context.local_to_raster);
+    if (!glyph.atlas.IsReady()) {
+      continue;
+    }
+    const auto& region = glyph.atlas.region;
     const Vec2 top_left = position.position - origin_offset +
                           Vec2{region.origin_x, -region.origin_y};
-    batches.Append(region, ResolveAtlasGlyphFormat(format, *metrics[index]),
-                   Rect::MakeXYWH(top_left.x, top_left.y,
+    glyph.bounds = Rect::MakeXYWH(top_left.x, top_left.y,
                                   region.loc.z / context.device_scale,
-                                  region.loc.w / context.device_scale));
+                                  region.loc.w / context.device_scale);
+  }
+  return glyphs;
+}
+
+void AppendPreparedDirectGlyphRuns(const GlyphRunInput& input,
+                                   const PreparedDirectGlyph* glyphs,
+                                   const Paint& paint, AtlasFormat format,
+                                   bool is_stroke,
+                                   const GlyphRunBuildContext& context,
+                                   GlyphSubRunList& runs) {
+  Atlas& atlas = *context.atlas_manager.GetAtlas(format);
+  AtlasGlyphBatchBuilder batches(atlas);
+  for (uint32_t index = 0; index < input.count; ++index) {
+    const auto& glyph = glyphs[index];
+    if (glyph.atlas.IsReady()) {
+      batches.Append(glyph.atlas.region, glyph.atlas.region.format,
+                     glyph.bounds);
+    }
   }
 
   for (auto& batch : batches.TakeBatches()) {
