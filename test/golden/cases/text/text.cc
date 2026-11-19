@@ -86,6 +86,50 @@ TEST(SoftwareTextGolden, PositionedGlyphs) {
       }));
 }
 
+TEST(SoftwareTextGolden, ClipRect) {
+  using namespace skity;
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  if (env->GetBackend() != skity::testing::Backend::kSoftware) {
+    GTEST_SKIP() << "Exercises software glyph clipping";
+  }
+
+  auto typeface = Typeface::MakeFromFile(kRobotoRegular);
+  ASSERT_TRUE(typeface);
+  constexpr int kPanelSize = 64;
+  const Font font(typeface, 48.f);
+  const GlyphID glyph = typeface->UnicharToGlyph('H');
+  const float x = 16.f;
+  const float y = 56.f;
+  const Rect clip = Rect::MakeLTRB(22.f, 28.f, 44.f, 50.f);
+  const auto path =
+      std::filesystem::path(kGoldenTestImageDir) / "text_clip_rect.png";
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      2 * kPanelSize, 2 * kPanelSize, path.c_str(),
+      {.require_exact_pixel_match = true}, [&](Canvas* canvas) {
+        canvas->Clear(Color_WHITE);
+        Paint clip_paint;
+        clip_paint.SetColor(ColorSetARGB(255, 222, 238, 255));
+        Paint paint;
+        paint.SetColor(Color_BLACK);
+        paint.SetStrokeWidth(3.f);
+        paint.SetAntiAlias(true);
+
+        for (auto style : {Paint::kFill_Style, Paint::kStroke_Style}) {
+          paint.SetStyle(style);
+          canvas->DrawGlyphs(1, &glyph, &x, &y, font, paint);
+
+          canvas->Save();
+          canvas->Translate(kPanelSize, 0.f);
+          canvas->DrawRect(clip, clip_paint);
+          canvas->ClipRect(clip);
+          canvas->DrawGlyphs(1, &glyph, &x, &y, font, paint);
+          canvas->Restore();
+
+          canvas->Translate(0.f, kPanelSize);
+        }
+      }));
+}
+
 TEST(TextGolden, Basic) {
   skity::PictureRecorder recorder;
   recorder.BeginRecording(skity::Rect::MakeWH(400.f, 400.f));
