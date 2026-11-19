@@ -52,6 +52,8 @@ std::string GetBackendGoldenSuffix() {
       return "_gl";
     case skity::testing::Backend::kVulkan:
       return "_vk";
+    case skity::testing::Backend::kSoftware:
+      return "_sw";
     default:
       return {};
   }
@@ -243,6 +245,10 @@ namespace testing {
 struct AutoRestoreConfig {
   AutoRestoreConfig(GoldenTestEnv* env, GoldenTestEnvConfig config)
       : env(env), gpu_context(env->GetGPUContext()) {
+    if (gpu_context == nullptr) {
+      return;
+    }
+
     restore_config.enable_gpu_tessellation =
         gpu_context->IsEnableGPUTessellation();
     restore_config.enable_simple_shape_pipeline =
@@ -303,6 +309,10 @@ struct AutoRestoreConfig {
   }
 
   ~AutoRestoreConfig() {
+    if (gpu_context == nullptr) {
+      return;
+    }
+
     env->SetSampleCount(restore_config.sample_count);
     env->SetGLSurfaceMode(restore_config.gl_surface_mode);
     env->SetGLHasStencilAttachment(restore_config.gl_has_stencil_attachment);
@@ -416,8 +426,10 @@ static bool CompareGoldenTextureImpl(
   std::cout << "test suite name: " << test_info->test_suite_name() << std::endl;
 
   auto env = GoldenTestEnv::GetInstance();
-  auto expected_image_read_path =
-      ResolveGoldenReadPath(path, config.use_backend_specific_golden);
+  const bool software = env->GetBackend() == Backend::kSoftware;
+  const bool update_missing = ShouldAutoGenerateMissingGolden();
+  auto expected_image_read_path = ResolveGoldenReadPath(
+      path, config.use_backend_specific_golden || (software && update_missing));
   auto expected_image_write_path = ResolveGoldenWritePath(path);
 
   EXPECT_TRUE(texture != nullptr)
@@ -440,8 +452,7 @@ static bool CompareGoldenTextureImpl(
   auto target = ReadImage(expected_image_read_path.c_str());
 
   if (target == nullptr) {
-    if (!expected_image_write_path.empty() &&
-        ShouldAutoGenerateMissingGolden()) {
+    if (!expected_image_write_path.empty() && update_missing) {
       EXPECT_TRUE(
           env->SaveGoldenImage(source, expected_image_write_path.c_str()))
           << "Failed to save missing golden image: "
@@ -554,12 +565,13 @@ static bool CompareGoldenTextureImpl(
   }
 
 #ifdef SKITY_GOLDEN_GUI
-  return OpenPlayground(result_passed, texture, target,
-                        expected_image_write_path.c_str(),
-                        AutoRestoreConfig::GetNameSuffix(env->GetGPUContext()));
-#else
-  return result_passed;
+  if (!software) {
+    return OpenPlayground(
+        result_passed, texture, target, expected_image_write_path.c_str(),
+        AutoRestoreConfig::GetNameSuffix(env->GetGPUContext()));
+  }
 #endif
+  return result_passed;
 }
 
 static bool CompareGoldenTextureImpl(
@@ -607,6 +619,18 @@ bool CompareGoldenTexture(const std::shared_ptr<GoldenTexture>& texture,
 
 bool CompareGoldenTexture(DisplayList* dl, uint32_t width, uint32_t height,
                           PathList path_list) {
+  if (GoldenTestEnv::GetInstance()->GetBackend() == Backend::kSoftware) {
+    // Prefer the shared case directory when it has a dedicated path.
+    for (const auto* path :
+         {path_list.simple_shape_path, path_list.cpu_tess_path,
+          path_list.coverage_aa_path, path_list.gpu_tess_path}) {
+      if (path != nullptr) {
+        return CompareGoldenTextureImpl(dl, width, height, path, {});
+      }
+    }
+    return false;
+  }
+
   bool result = true;
   if (path_list.cpu_tess_path != nullptr) {
     if (!CompareGoldenTextureImpl(dl, width, height, path_list.cpu_tess_path,

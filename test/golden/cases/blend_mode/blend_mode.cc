@@ -32,7 +32,8 @@ static bool IsGLBackend() {
 static bool IsFramebufferFetchUnsupported() {
   auto* env = skity::testing::GoldenTestEnv::GetInstance();
   return env != nullptr &&
-         env->GetBackend() == skity::testing::Backend::kVulkan;
+         (env->GetBackend() == skity::testing::Backend::kVulkan ||
+          env->GetBackend() == skity::testing::Backend::kSoftware);
 }
 
 static bool IsBasicSaveLayerBlendModeFileName(std::string_view file_name) {

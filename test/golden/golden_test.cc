@@ -10,6 +10,24 @@
 
 #include "common/golden_test_env.hpp"
 
+namespace {
+
+// Add shared cases as they are validated on the software backend.
+constexpr char kSoftwareGoldenFilter[] =
+    "ShapeGolden.DrawEmptyPath:ShapeGolden.DrawDegenerateCubic:"
+    "ShapeGolden.StrokeMiterLimit:ShapeGolden.WindingContours:"
+    "ShapeGolden.EvenOddContours:SimpleShapeGolden.DrawFilledRect:"
+    "SimpleShapeGolden.DrawStrokeRect:"
+    "GradientGolden.LinearGradientTileMode:GradientGolden.RadialGradient:"
+    "GradientGolden.RadialGradient2:GradientGolden.TwoPointConicalGradient_*:"
+    "ImageGolden.ShaderTileModesNearest:"
+    "RecorderGolden.DisplayListCullRectClipRestoreToCount:"
+    "RecorderGolden.DisplayListSaveLayerSetResetMatrix:"
+    "SaveLayerGolden.ResetMatrixDrawColorFillsLayer:"
+    "SoftwareTextGolden.PositionedGlyphs";
+
+}  // namespace
+
 #ifdef SKITY_GOLDEN_GUI
 namespace skity {
 namespace testing {
@@ -22,33 +40,31 @@ namespace testing {
 #endif
 
 int main(int argc, char* argv[]) {
-  /**
-   * If --backend="gl/vulkan/metal" is provided, then create the test env for
-   * that backend. Otherwise, create the test env for Metal as the default
-   * backend.
-   */
+  using skity::testing::Backend;
+  Backend backend = Backend::kMetal;
 
-  skity::testing::Backend backend = skity::testing::Backend::kMetal;
-
-  if (argc > 1) {
-    // find the backend in the command line arguments
-    for (int i = 1; i < argc; ++i) {
-      if (strcmp(argv[i], "--backend") == 0 && i + 1 < argc) {
-        if (strcmp(argv[i + 1], "gl") == 0) {
-          backend = skity::testing::Backend::kGL;
-          break;
-        } else if (strcmp(argv[i + 1], "vulkan") == 0) {
-          backend = skity::testing::Backend::kVulkan;
-          break;
-        } else if (strcmp(argv[i + 1], "metal") == 0) {
-          backend = skity::testing::Backend::kMetal;
-          break;
-        }
-        break;
-      }
+  for (int i = 1; i + 1 < argc; ++i) {
+    if (strcmp(argv[i], "--backend") != 0) {
+      continue;
     }
+    const char* name = argv[i + 1];
+    if (strcmp(name, "gl") == 0) {
+      backend = Backend::kGL;
+    } else if (strcmp(name, "vulkan") == 0) {
+      backend = Backend::kVulkan;
+    } else if (strcmp(name, "metal") == 0) {
+      backend = Backend::kMetal;
+    } else if (strcmp(name, "software") == 0) {
+      backend = Backend::kSoftware;
+    }
+    break;
   }
 
+  const bool software = backend == Backend::kSoftware;
+  if (software && std::getenv("GTEST_FILTER") == nullptr) {
+    // InitGoogleTest can still override the default with --gtest_filter.
+    GTEST_FLAG_SET(filter, kSoftwareGoldenFilter);
+  }
   testing::InitGoogleTest(&argc, argv);
 
   auto* env = skity::testing::GoldenTestEnv::CreateInstance(backend);
@@ -63,8 +79,9 @@ int main(int argc, char* argv[]) {
 
 #ifdef SKITY_GOLDEN_GUI
   // GUI needs Metal compute pipeline to generate diff images
-  // Create a seperate test env to hold the compute pipeline for GUI
-  testing::AddGlobalTestEnvironment(skity::testing::CreateDiffEnv());
+  if (!software) {
+    testing::AddGlobalTestEnvironment(skity::testing::CreateDiffEnv());
+  }
 #endif
 
   return RUN_ALL_TESTS();

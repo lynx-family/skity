@@ -4,6 +4,11 @@
 
 #include "common/golden_test_env.hpp"
 
+#ifdef SKITY_CPU
+#include <cstring>
+#include <skity/graphic/bitmap.hpp>
+#endif
+
 #ifdef SKITY_GOLDEN_GUI
 
 #include <GLFW/glfw3.h>
@@ -12,6 +17,70 @@
 
 namespace skity {
 namespace testing {
+
+#ifdef SKITY_CPU
+namespace {
+
+// Adapts the golden surface callbacks to a bitmap-backed canvas.
+class SoftwareGoldenSurface final : public GPUSurface {
+ public:
+  SoftwareGoldenSurface(uint32_t width, uint32_t height)
+      : bitmap_(width, height, AlphaType::kPremul_AlphaType, ColorType::kRGBA) {
+  }
+
+  uint32_t GetWidth() const override { return bitmap_.Width(); }
+  uint32_t GetHeight() const override { return bitmap_.Height(); }
+  float ContentScale() const override { return 1.f; }
+
+  Canvas* LockCanvas(bool clear) override {
+    if (clear) {
+      std::memset(bitmap_.GetPixelAddr(), 0,
+                  bitmap_.RowBytes() * bitmap_.Height());
+    }
+    canvas_ = Canvas::MakeSoftwareCanvas(&bitmap_);
+    return canvas_.get();
+  }
+
+  void Flush() override {}
+
+  std::shared_ptr<Pixmap> ReadPixels(const Rect& rect) override {
+    if (rect != Rect::MakeWH(GetWidth(), GetHeight())) {
+      return nullptr;
+    }
+    return bitmap_.GetPixmap();
+  }
+
+ private:
+  Bitmap bitmap_;
+  std::unique_ptr<Canvas> canvas_;
+};
+
+class GoldenTestEnvSoftware final : public GoldenTestEnv {
+ public:
+  Backend GetBackend() const override { return Backend::kSoftware; }
+
+  void SetUp() override {}
+  void TearDown() override {}
+
+  std::shared_ptr<GoldenTexture> RenderToSurface(
+      uint32_t width, uint32_t height,
+      const std::function<void(GPUSurface*)>& render) override {
+    if (width == 0 || height == 0) {
+      return nullptr;
+    }
+
+    SoftwareGoldenSurface surface(width, height);
+    render(&surface);
+    return std::make_shared<GoldenTexture>(
+        Image::MakeImage(surface.ReadPixels(Rect::MakeWH(width, height))));
+  }
+
+ protected:
+  std::unique_ptr<GPUContext> CreateGPUContext() override { return nullptr; }
+};
+
+}  // namespace
+#endif
 
 GoldenTestEnv* CreateGoldenTestEnvMTL();
 GoldenTestEnv* CreateGoldenTestEnvGL();
@@ -35,6 +104,13 @@ GoldenTestEnv* GoldenTestEnv::CreateInstance(Backend backend) {
     case Backend::kMetal:
       g_golden_test_env = CreateGoldenTestEnvMTL();
       break;
+    case Backend::kSoftware:
+#ifdef SKITY_CPU
+      g_golden_test_env = new GoldenTestEnvSoftware();
+      break;
+#else
+      return nullptr;
+#endif
     default:
       return nullptr;
   }

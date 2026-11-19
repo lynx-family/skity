@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "common/golden_test_check.hpp"
+#include "common/golden_test_env.hpp"
 
 static const char* kGoldenTestImageDir = CASE_DIR;
 static const char* kRobotoRegular =
@@ -56,6 +57,33 @@ static std::shared_ptr<skity::TextBlob> MakeSubpixelTextBlob(
   std::vector<skity::TextRun> runs;
   runs.emplace_back(font, std::move(glyphs));
   return std::make_shared<skity::TextBlob>(std::move(runs));
+}
+
+TEST(SoftwareTextGolden, PositionedGlyphs) {
+  using namespace skity;
+  auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  if (env->GetBackend() != skity::testing::Backend::kSoftware) {
+    GTEST_SKIP() << "Uses the software glyph baseline";
+  }
+
+  auto typeface = Typeface::MakeFromFile(kRobotoRegular);
+  ASSERT_TRUE(typeface);
+  const Font font(typeface, 24.f);
+  const GlyphID glyphs[] = {
+      typeface->UnicharToGlyph('S'), typeface->UnicharToGlyph('k'),
+      typeface->UnicharToGlyph('i'), typeface->UnicharToGlyph('t'),
+      typeface->UnicharToGlyph('y')};
+  const float x[] = {8.f, 25.f, 39.f, 46.f, 55.f};
+  const float y[] = {28.f, 28.f, 30.f, 28.f, 28.f};
+  const auto path =
+      std::filesystem::path(kGoldenTestImageDir) / "text_positioned_glyphs.png";
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      80, 40, path.c_str(), [&](Canvas* canvas) {
+        Paint paint;
+        paint.SetColor(Color_BLACK);
+        paint.SetAntiAlias(true);
+        canvas->DrawGlyphs(5, glyphs, x, y, font, paint);
+      }));
 }
 
 TEST(TextGolden, Basic) {

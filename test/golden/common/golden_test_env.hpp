@@ -23,6 +23,7 @@ enum class Backend {
   kGL,
   kVulkan,
   kMetal,
+  kSoftware,
 };
 
 class GoldenTestEnv : public ::testing::Environment {

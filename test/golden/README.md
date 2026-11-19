@@ -51,13 +51,37 @@ SKITY_UPDATE_MISSING_GOLDEN=1 python3 tools/test-runner.py --suite=golden-shape 
 Then run the same test again without `SKITY_UPDATE_MISSING_GOLDEN` to verify
 that the checked-in baseline passes.
 
+#### Software backend
+
+The software backend uses `Canvas::MakeSoftwareCanvas()` and compares pixels
+from an RGBA bitmap. It runs headlessly in the macOS golden build with
+`SKITY_SW_RENDERER=ON`.
+
+```bash
+python3 tools/test-runner.py --suite=golden-shape --backend=software --build-dir <build-directory>
+python3 tools/test-runner.py --suite=golden-text --backend=software --build-dir <build-directory>
+```
+
+The default software filter in `golden_test.cc` enables the validated cases.
+Use `--filter` to run another case while porting it to software. Text baselines
+use the `ft` or `ct` directory selected by `SKITY_CT_FONT`.
+
+Software comparisons prefer the `_sw.png` baseline and use the shared baseline
+when available. With `SKITY_UPDATE_MISSING_GOLDEN=1`, the software runner can
+create a missing `_sw.png` even when the shared image exists. Use an explicit
+filter when recording a software baseline.
+
+```bash
+SKITY_UPDATE_MISSING_GOLDEN=1 python3 tools/test-runner.py --suite=golden-shape --backend=software --filter=SimpleShapeGolden.DrawFilledRect --build-dir <build-directory>
+```
+
 #### Golden Image Lookup
 
 Golden comparison treats the path passed to `CompareGoldenTexture` as the
-requested baseline path. When the current backend has a suffix, such as `_gl`
-or `_vk`, lookup first tries the backend-specific file beside the requested
-path. For example, requesting `foo.png` on GL tries `foo_gl.png` first, then
-falls back to `foo.png`.
+requested baseline path. For backends with a suffix (`_gl`, `_vk`, or `_sw`),
+lookup first tries the backend-specific file beside the requested path. For
+example, requesting `foo.png` on GL tries `foo_gl.png` first, then falls back
+to `foo.png`.
 
 Some tests use a variant golden directory to store baselines for a specific
 rendering mode or algorithm. A variant directory is any directory whose name

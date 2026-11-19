@@ -149,15 +149,17 @@ class TestRunner:
     def configure_cmake(self) -> Tuple[bool, str]:
         self.print_status(Colors.YELLOW, "🔧 Configuring with CMake...")
         os.makedirs(self.build_dir, exist_ok=True)
+        software_golden = self.suite.startswith("golden") and self.backend == "software"
         cmd = [
             "cmake",
             "-B",
             self.build_dir,
             "-DSKITY_TEST=ON",
             "-DSKITY_GOLDEN_GUI=OFF",
-            "-DSKITY_VK_BACKEND=ON",
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
         ]
+        if not software_golden:
+            cmd.append("-DSKITY_VK_BACKEND=ON")
         if self.suite == "font-harness":
             cmd = ["cmake", "-S", self.repo_root, "-B", self.build_dir,
                    "-DSKITY_TEST=ON", "-DSKITY_ENABLE_FONT_HARNESS=ON",
@@ -173,17 +175,20 @@ class TestRunner:
                    "-DSKITY_CODEC_MODULE=OFF", "-DSKITY_LOG=ON",
                    "-DSKITY_ENABLE_WEB_HARNESS=ON",
                    "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"]
-        vk_test_loader = os.environ.get("SKITY_VK_TEST_USE_SYSTEM_LOADER", "")
-        if vk_test_loader.upper() not in ("", "0", "OFF", "FALSE", "NO"):
-            cmd.append("-DSKITY_VK_TEST_USE_SYSTEM_LOADER=ON")
-        else:
-            cmd.append("-DSKITY_VK_TEST_USE_SYSTEM_LOADER=OFF")
+        if not software_golden:
+            vk_test_loader = os.environ.get("SKITY_VK_TEST_USE_SYSTEM_LOADER", "")
+            if vk_test_loader.upper() not in ("", "0", "OFF", "FALSE", "NO"):
+                cmd.append("-DSKITY_VK_TEST_USE_SYSTEM_LOADER=ON")
+            else:
+                cmd.append("-DSKITY_VK_TEST_USE_SYSTEM_LOADER=OFF")
 
         if self.suite.startswith("golden"):
             cmd.extend([
                 "-DSKITY_MTL_BACKEND=ON",
                 "-DSKITY_CODEC_MODULE=ON",
             ])
+            if software_golden:
+                cmd.append("-DSKITY_SW_RENDERER=ON")
 
         exit_code, stdout, stderr = self.run_command(cmd)
         if exit_code != 0:
@@ -341,6 +346,7 @@ class TestRunner:
                 "total": sum(report["summary"]["total"] for report in reports),
                 "passed": sum(report["summary"]["passed"] for report in reports),
                 "failed": sum(report["summary"]["failed"] for report in reports),
+                "skipped": sum(report["summary"].get("skipped", 0) for report in reports),
                 "duration_ms": int((time.time() - self.started) * 1000),
             },
             "failures": [],
@@ -388,13 +394,18 @@ class TestRunner:
 
         total = data.get("tests", 0)
         failed_count = data.get("failures", 0)
-        passed = total - failed_count
+        skipped = sum(
+            case.get("result") == "SKIPPED"
+            for suite in data.get("testsuites", [])
+            for case in suite.get("testsuite", [])
+        )
 
         report = {
             "summary": {
                 "total": total,
-                "passed": passed,
+                "passed": total - failed_count - skipped,
                 "failed": failed_count,
+                "skipped": skipped,
                 "duration_ms": int((time.time() - self.started) * 1000)
             },
             "failures": []
@@ -507,8 +518,12 @@ class TestRunner:
         
         # Human readable summary
         failures = len(report["failures"])
+        skipped = report["summary"].get("skipped", 0)
         if failures > 0:
             self.print_status(Colors.RED, f"❌ {failures} failures detected.")
+        elif skipped:
+            passed = report["summary"]["passed"]
+            self.print_status(Colors.GREEN, f"✅ {passed} passed, {skipped} skipped.")
         else:
             self.print_status(Colors.GREEN, f"✅ All tests passed!")
 
@@ -564,7 +579,9 @@ def main():
     parser = argparse.ArgumentParser(description='Skity Test Runner with AI Agent feedback loop')
     parser.add_argument('--suite', default='unit', choices=['unit', 'golden-shape', 'golden-text', 'font-harness', 'web-harness'], help='Test suite to run')
     parser.add_argument('--build-dir', default='build', help='Build directory (default: build)')
-    parser.add_argument('--backend', default='metal', choices=['metal', 'gl', 'vulkan'], help='Golden test backend to run (default: metal)')
+    parser.add_argument('--backend', default='metal',
+                        choices=['metal', 'gl', 'vulkan', 'software'],
+                        help='Golden test backend to run (default: metal)')
     parser.add_argument('--filter', default='', help='Run only tests matching pattern (e.g. for gtest)')
     parser.add_argument('--parallel', type=int, default=multiprocessing.cpu_count(), help='Number of parallel build jobs')
     parser.add_argument('--verbose', action='store_true', help='Verbose output')
