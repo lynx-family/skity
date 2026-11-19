@@ -87,17 +87,7 @@ static std::vector<Span> spans_subtraction(std::vector<Span> const& subtrahend,
         }
 
         int32_t last = curr_x + curr_len;
-
-        int32_t len = m.x + m.len - curr_x;
-
-        if (len == 0) {
-          continue;
-        }
-
-        ret.emplace_back(Span{curr_x, span.y, len, span.cover});
-
-        curr_x += len;
-
+        curr_x = m.x + m.len;
         curr_len = last - curr_x;
 
       } else {  // m.x > curr_x && m.x < curr_x + curr_len
