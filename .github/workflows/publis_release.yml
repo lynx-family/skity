@@ -45,13 +45,13 @@ jobs:
               popd
             id: build_artifact
           - name: Publish artifact to maven
-            uses: lynx-infra/maven-publish-action@8f547cf037360752cc9f195d04c2d8f327fee434
+            uses: lynx-infra/maven-publish-action@6f85a4b3f286e904e31f71ffbc9fb3641fcb2aab
             with:
               portal_api_token: ${{ secrets.PORTAL_API_TOKEN }}
               artifact_path_list: ${{ steps.build_artifact.outputs.artifact_list }}
 
     build-xcframework:
-        runs-on: macos-14
+        runs-on: lynx-darwin-15.6.1-medium
         steps:
           - name: Download Source
             uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
