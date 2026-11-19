@@ -10,6 +10,10 @@ namespace skity {
 namespace testing {
 
 std::shared_ptr<Pixmap> GoldenTexture::ReadPixels() {
+  if (const auto* pixels = image_->GetPixmap()) {
+    return *pixels;
+  }
+
   auto ctx = GoldenTestEnv::GetInstance()->GetGPUContext();
 
   if (ctx == nullptr) {

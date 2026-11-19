@@ -659,6 +659,9 @@ TEST(SimpleShapeGolden, ThinStrokeDeviceWidthAndCoverage) {
       {0.25f, -8.f, 2.f, 2.f, 0.5f},
   };
   auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  if (env->GetBackend() == skity::testing::Backend::kSoftware) {
+    GTEST_SKIP() << "Tests the GPU simple shape pipeline";
+  }
   auto* gpu = env->GetGPUContext();
   const bool was_enabled = gpu->IsEnableSimpleShapePipeline();
   const auto sample_count = env->GetSampleCount();
@@ -728,6 +731,9 @@ TEST(SimpleShapeGolden, ThinStrokeDeviceWidthAndCoverage) {
 }
 TEST(SimpleShapeGolden, RotatedRRectAAOutset) {
   auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  if (env->GetBackend() == skity::testing::Backend::kSoftware) {
+    GTEST_SKIP() << "Tests the GPU simple shape pipeline";
+  }
   auto* gpu = env->GetGPUContext();
   const bool simple = gpu->IsEnableSimpleShapePipeline();
   const auto samples = env->GetSampleCount();
@@ -761,6 +767,9 @@ TEST(SimpleShapeGolden, RotatedRRectAAOutset) {
 
 TEST(SimpleShapeGolden, AffineRRectGradientCoverage) {
   auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  if (env->GetBackend() == skity::testing::Backend::kSoftware) {
+    GTEST_SKIP() << "Tests the GPU simple shape pipeline";
+  }
   auto* gpu = env->GetGPUContext();
   const bool simple = gpu->IsEnableSimpleShapePipeline();
   const auto samples = env->GetSampleCount();
@@ -809,6 +818,9 @@ TEST(SimpleShapeGolden, AffineRRectCoverageMatchesImplicitReference) {
   constexpr float kTranslateY = 64.5f;
   constexpr double kHalfSize = 20;
   auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  if (env->GetBackend() == skity::testing::Backend::kSoftware) {
+    GTEST_SKIP() << "Tests the GPU simple shape pipeline";
+  }
   auto* gpu = env->GetGPUContext();
   const bool was_enabled = gpu->IsEnableSimpleShapePipeline();
   const auto sample_count = env->GetSampleCount();
@@ -931,6 +943,9 @@ TEST(SimpleShapeGolden, AffineRRectCoverageMatchesImplicitReference) {
 
 TEST(SimpleShapeGolden, RRectRegionBoundaryDoesNotBecomeOpaque) {
   auto* env = skity::testing::GoldenTestEnv::GetInstance();
+  if (env->GetBackend() == skity::testing::Backend::kSoftware) {
+    GTEST_SKIP() << "Tests the GPU simple shape pipeline";
+  }
   auto* gpu = env->GetGPUContext();
   const bool was_enabled = gpu->IsEnableSimpleShapePipeline();
   const auto sample_count = env->GetSampleCount();

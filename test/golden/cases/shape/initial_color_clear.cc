@@ -70,6 +70,9 @@ TEST(InitialColorClearGolden, MultisampleClearOnlyResolve) {
   if (env->GetBackend() == skity::testing::Backend::kGL) {
     GTEST_SKIP() << "GL Direct requires a single-sample surface";
   }
+  if (env->GetBackend() == skity::testing::Backend::kSoftware) {
+    GTEST_SKIP() << "Tests GPU multisample resolve";
+  }
 
   auto* context = env->GetGPUContext();
   GPURenderTargetDescriptor desc{};
