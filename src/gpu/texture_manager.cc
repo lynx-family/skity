@@ -151,6 +151,10 @@ bool TextureManager::UploadTextureImage(const TextureImpl& texture,
 
         if (mipmap_level_count > 1) {
           auto cmd = device->CreateCommandBuffer();
+          if (cmd == nullptr) {
+            LOGE("Failed to generate mipmaps: no GPU command buffer available");
+            return gpu_texture;
+          }
           cmd->SetLabel("mipmap generate cmd");
 
           auto pass = cmd->BeginBlitPass();

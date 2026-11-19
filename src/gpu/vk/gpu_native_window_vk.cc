@@ -336,6 +336,15 @@ class GPUNativeWindowVKImpl final : public GPUNativeWindowVK {
       return false;
     }
 
+    // Creating a swapchain on a lost device is undefined behavior and faults
+    // some drivers. Only a full GPUContext rebuild can recover from a lost
+    // device, so fail here and let the caller escalate instead of silently
+    // recreating the presenter against the dead device.
+    if (state_ != nullptr && state_->IsDeviceLost()) {
+      LOGE("Failed to recreate Vulkan presenter: device is lost");
+      return false;
+    }
+
     VkSwapchainKHR old_swapchain = VK_NULL_HANDLE;
     if (presenter_ != nullptr) {
       auto* old_vk_presenter = static_cast<GPUPresenterVK*>(presenter_.get());
