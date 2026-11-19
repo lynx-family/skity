@@ -17,6 +17,15 @@
 
 namespace skity {
 
+// Largest device coordinate magnitude the software raster represents without
+// wrapping. SWEdge::SetLine shifts a scalar by 18 bits into 32-bit fixed
+// point and WalkEdges converts integers with a 16-bit shift, so 8192 is the
+// hard ceiling; a small margin keeps clipped edges representable too.
+constexpr float kFixedPointSafeLimit = 8000.f;
+constexpr Rect kFixedPointSafeBounds =
+    Rect::MakeLTRB(-kFixedPointSafeLimit, -kFixedPointSafeLimit,
+                   kFixedPointSafeLimit, kFixedPointSafeLimit);
+
 class SpanBuilderDelegate {
  public:
   virtual ~SpanBuilderDelegate() = default;

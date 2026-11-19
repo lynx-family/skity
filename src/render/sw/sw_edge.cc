@@ -12,6 +12,7 @@
 #include "src/geometry/geometry.hpp"
 #include "src/geometry/math.hpp"
 #include "src/graphic/path_priv.hpp"
+#include "src/render/sw/sw_raster.hpp"
 
 namespace skity {
 
@@ -296,22 +297,148 @@ void SWQuadEdge::KeepContinuous() {
   snapped_y = y;
 }
 
+namespace {
+
+bool PointInside(const Point& point, const Rect& bounds) {
+  return point.x >= bounds.Left() && point.x <= bounds.Right() &&
+         point.y >= bounds.Top() && point.y <= bounds.Bottom();
+}
+
+Point PointAt(const Point& like, float x, float y) {
+  Point point = like;
+  point.x = x;
+  point.y = y;
+  return point;
+}
+
+Point InterpolateAtY(const Point& a, const Point& b, float y) {
+  const float t = (y - a.y) / (b.y - a.y);
+  return PointAt(a, a.x + (b.x - a.x) * t, y);
+}
+
+Point InterpolateAtX(const Point& a, const Point& b, float x) {
+  const float t = (x - a.x) / (b.x - a.x);
+  return PointAt(a, x, a.y + (b.y - a.y) * t);
+}
+
+// Chop the segment to the vertical range of `bounds`. Portions above or below
+// the scan range never produce coverage, so dropping them preserves winding.
+bool ClipLineToScanRows(Point* p0, Point* p1, const Rect& bounds) {
+  const float top = bounds.Top();
+  const float bottom = bounds.Bottom();
+  if ((p0->y <= top && p1->y <= top) || (p0->y >= bottom && p1->y >= bottom)) {
+    return false;
+  }
+  if (p0->y < top) {
+    *p0 = InterpolateAtY(*p0, *p1, top);
+  } else if (p0->y > bottom) {
+    *p0 = InterpolateAtY(*p0, *p1, bottom);
+  }
+  if (p1->y < top) {
+    *p1 = InterpolateAtY(*p0, *p1, top);
+  } else if (p1->y > bottom) {
+    *p1 = InterpolateAtY(*p0, *p1, bottom);
+  }
+  return true;
+}
+
+}  // namespace
+
+// Split a row-clipped segment at the horizontal clip edges. Pieces beyond the
+// left or right edge become vertical edges pinned to that edge, which keeps
+// the winding contribution of the clipped-away geometry for every scanline it
+// spans while guaranteeing that no edge coordinate leaves the scan bounds.
+void SWEdgeBuilder::AddClippedLine(const Point& p0, const Point& p1,
+                                   const Rect& bounds) {
+  const float left = bounds.Left();
+  const float right = bounds.Right();
+  if ((p0.x <= left && p1.x <= left) || (p0.x >= right && p1.x >= right)) {
+    const float pinned = p0.x <= left ? left : right;
+    const Point pinned_points[2] = {PointAt(p0, pinned, p0.y),
+                                    PointAt(p1, pinned, p1.y)};
+    AddLine(pinned_points, bounds);
+    return;
+  }
+  const bool swapped = p0.x > p1.x;
+  const Point a = swapped ? p1 : p0;
+  const Point b = swapped ? p0 : p1;
+  Point pieces[4];
+  int count = 0;
+  pieces[count++] = a;
+  if (a.x < left && b.x > left) {
+    pieces[count++] = InterpolateAtX(a, b, left);
+  }
+  if (a.x < right && b.x > right) {
+    pieces[count++] = InterpolateAtX(a, b, right);
+  }
+  pieces[count++] = b;
+  for (int i = 0; i + 1 < count; ++i) {
+    Point u = pieces[i];
+    Point v = pieces[i + 1];
+    if (v.x <= left) {
+      u.x = left;
+      v.x = left;
+    } else if (u.x >= right) {
+      u.x = right;
+      v.x = right;
+    }
+    const Point segment[2] = {swapped ? v : u, swapped ? u : v};
+    AddLine(segment, bounds);
+  }
+}
+
 int SWEdgeBuilder::BuildEdges(const Path& path, const Rect& scan_bounds) {
   PathEdgeIter iter(path);
   while (auto e = iter.next()) {
     switch (e.edge) {
       case PathEdgeIter::Edge::kLine: {
-        Point line[2] = {ToPoint(e.GetPoint2D(0)), ToPoint(e.GetPoint2D(1))};
-        AddLine(line, scan_bounds);
+        const Point line[2] = {ToPoint(e.GetPoint2D(0)),
+                               ToPoint(e.GetPoint2D(1))};
+        // Only coordinates the fixed-point walk cannot represent are clipped
+        // here. An edge that merely crosses the scan bounds stays whole, so
+        // the rows it covers do not depend on where the clip falls.
+        if (PointInside(line[0], kFixedPointSafeBounds) &&
+            PointInside(line[1], kFixedPointSafeBounds)) {
+          AddLine(line, scan_bounds);
+          break;
+        }
+        Point p0 = line[0];
+        Point p1 = line[1];
+        if (ClipLineToScanRows(&p0, &p1, scan_bounds)) {
+          AddClippedLine(p0, p1, scan_bounds);
+        }
         break;
       }
       case PathEdgeIter::Edge::kQuad: {
-        Point quad[3] = {ToPoint(e.GetPoint2D(0)), ToPoint(e.GetPoint2D(1)),
-                         ToPoint(e.GetPoint2D(2))};
-        Point mono_x[5];
-        int n = ChopQuadAtYExtrema(quad, mono_x);
-        for (int i = 0; i <= n; i++) {
-          this->AddQuad(&mono_x[i * 2], scan_bounds);
+        const Point quad[3] = {ToPoint(e.GetPoint2D(0)),
+                               ToPoint(e.GetPoint2D(1)),
+                               ToPoint(e.GetPoint2D(2))};
+        if (PointInside(quad[0], kFixedPointSafeBounds) &&
+            PointInside(quad[1], kFixedPointSafeBounds) &&
+            PointInside(quad[2], kFixedPointSafeBounds)) {
+          Point mono_x[5];
+          int n = ChopQuadAtYExtrema(quad, mono_x);
+          for (int i = 0; i <= n; i++) {
+            this->AddQuad(&mono_x[i * 2], scan_bounds);
+          }
+          break;
+        }
+        // A control point is outside the representable fixed-point range.
+        // Flatten the curve and clip the pieces like lines.
+        constexpr int kFlattenSegments = 16;
+        const std::array<Point, 3> control = {quad[0], quad[1], quad[2]};
+        Point previous = control[0];
+        for (int i = 1; i <= kFlattenSegments; ++i) {
+          const float t = static_cast<float>(i) / kFlattenSegments;
+          Point current = i == kFlattenSegments
+                              ? control[2]
+                              : QuadCoeff::EvalQuadAt(control, t);
+          Point p0 = previous;
+          Point p1 = current;
+          if (ClipLineToScanRows(&p0, &p1, scan_bounds)) {
+            AddClippedLine(p0, p1, scan_bounds);
+          }
+          previous = current;
         }
         break;
       }
