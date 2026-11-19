@@ -330,6 +330,37 @@ std::shared_ptr<skity::GPUShaderFunction> CreateWGXShaderFunction(
   return device->CreateShaderFunction(function_desc);
 }
 
+TEST(VulkanDeviceLostTest, GuardEntryPointsAfterDeviceLost) {
+  if (SkipVulkanTestsOnThreadSanitizer()) {
+    GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "
+                    "SwiftShader in this environment";
+  }
+
+  auto context = CreateDebugGPUContext();
+  ASSERT_NE(context, nullptr);
+  auto* vk_context = static_cast<skity::GPUContextVK*>(context.get());
+  const auto* state = vk_context->GetState();
+  ASSERT_NE(state, nullptr);
+  ASSERT_FALSE(state->IsDeviceLost());
+
+  auto* device =
+      static_cast<skity::GPUContextImpl*>(vk_context)->GetGPUDevice();
+  ASSERT_NE(device, nullptr);
+
+  // A command buffer recorded before the loss must refuse to submit after it.
+  auto command_buffer = device->CreateCommandBuffer();
+  ASSERT_NE(command_buffer, nullptr);
+
+  state->MarkDeviceLost();
+
+  EXPECT_TRUE(state->IsDeviceLost());
+  // Init() must not touch the lost device, so no new command buffer exists.
+  EXPECT_EQ(device->CreateCommandBuffer(), nullptr);
+  // Submit() drops the in-flight frame instead of queueing against the lost
+  // device.
+  EXPECT_FALSE(command_buffer->Submit(nullptr));
+}
+
 TEST(VulkanProcLoaderTest, CreateVkInstanceWithProcLoader) {
   if (SkipVulkanTestsOnThreadSanitizer()) {
     GTEST_SKIP() << "Vulkan tests are unstable under ThreadSanitizer with "

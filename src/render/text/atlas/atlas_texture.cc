@@ -5,6 +5,7 @@
 #include "src/render/text/atlas/atlas_texture.hpp"
 
 #include "src/gpu/gpu_device.hpp"
+#include "src/logging.hpp"
 
 namespace skity {
 
@@ -20,6 +21,10 @@ void AtlasTexture::UploadAtlas(uint32_t x, uint32_t y, uint32_t width,
                                uint32_t height, uint8_t* data) {
   if (valid_texture_) {
     auto cmd_buffer = gpu_device_->CreateCommandBuffer();
+    if (cmd_buffer == nullptr) {
+      LOGE("Failed to upload atlas: no GPU command buffer available");
+      return;
+    }
     cmd_buffer->SetLabel("AtlasTexture Upload CommandBuffer");
     auto blit_pass = cmd_buffer->BeginBlitPass();
     blit_pass->UploadTextureData(texture_, x, y, width, height, data);

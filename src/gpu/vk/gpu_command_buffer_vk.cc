@@ -140,6 +140,11 @@ bool GPUCommandBufferVK::Init() {
     state_->CollectPendingSubmissions(false);
   }
 
+  if (state_ != nullptr && state_->IsDeviceLost()) {
+    LOGE("Failed to initialize Vulkan command buffer: device is lost");
+    return false;
+  }
+
   if (state_ == nullptr || state_->GetLogicalDevice() == VK_NULL_HANDLE ||
       state_->GetGraphicsQueue() == VK_NULL_HANDLE ||
       state_->GetGraphicsQueueFamilyIndex() < 0) {
@@ -224,6 +229,15 @@ void GPUCommandBufferVK::HoldResource(std::shared_ptr<void> resource) {
 bool GPUCommandBufferVK::Submit(const GPUSubmitInfo* submit_info) {
   if (!recording_ || submitted_ || state_ == nullptr ||
       command_buffer_ == VK_NULL_HANDLE) {
+    return false;
+  }
+
+  // The device may have been reported lost after this command buffer started
+  // recording (e.g. by a fence query or a failed present). Submitting against
+  // the lost device is undefined behavior and faults some drivers, so drop the
+  // frame instead; recovery requires tearing the whole context down.
+  if (state_->IsDeviceLost()) {
+    LOGE("Failed to submit Vulkan command buffer: device is lost");
     return false;
   }
 

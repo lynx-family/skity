@@ -199,6 +199,15 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
   const GPUTextureFormat surface_format = ToGPUTextureFormat(swapchain_format_);
 
   std::lock_guard<std::mutex> lock(mutex_);
+  if (state_ != nullptr && state_->IsDeviceLost()) {
+    // The swapchain died with the device; waiting on the frame fence below
+    // would block forever because the pending submission can never signal it.
+    // Report kNeedRecreate so the caller stops rendering against this
+    // presenter and escalates to a full context rebuild.
+    LOGE("Failed to acquire Vulkan surface: device is lost");
+    result.status = GPUPresenterStatus::kNeedRecreate;
+    return result;
+  }
   if (state_ == nullptr || swapchain_ == VK_NULL_HANDLE ||
       frame_slots_.empty() || has_outstanding_surface_) {
     return result;
@@ -355,6 +364,16 @@ GPUSurfaceAcquireResult GPUPresenterVK::AcquireNextSurface(
 GPUPresenterStatus GPUPresenterVK::Present(
     std::unique_ptr<GPUSurface> surface) {
   std::lock_guard<std::mutex> lock(mutex_);
+  // Never hand the acquired image to a lost device: vkQueuePresentKHR against
+  // it is undefined behavior and faults some drivers. The image cannot be
+  // returned to the (dead) swapchain either way, so mark the presenter broken
+  // and let the caller escalate to a full context rebuild.
+  if (state_ != nullptr && state_->IsDeviceLost()) {
+    LOGE("Failed to present Vulkan surface: device is lost");
+    has_outstanding_surface_ = false;
+    broken_ = true;
+    return GPUPresenterStatus::kError;
+  }
   if (!has_outstanding_surface_ || surface == nullptr ||
       surface->GetBackendType() != GPUBackendType::kVulkan) {
     return GPUPresenterStatus::kError;

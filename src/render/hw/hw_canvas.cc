@@ -931,7 +931,13 @@ void HWCanvas::OnFlush() {
 
     auto state = root_layer_->Prepare(&draw_context);
 
-    if (state & HWDrawState::kDrawStateError) {
+    if (cmd == nullptr) {
+      // Command-buffer creation fails once the GPU context is unusable (e.g.
+      // a lost Vulkan device); drop the frame instead of dereferencing null.
+      LOGE(
+          "HWCanvas::OnFlush: failed to create GPU command buffer, discarding "
+          "frame");
+    } else if (state & HWDrawState::kDrawStateError) {
       LOGE(
           "HWCanvas::OnFlush: GPU resource allocation failed, discarding "
           "frame");
