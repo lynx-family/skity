@@ -76,8 +76,10 @@ SKITY_C_API skity_result skity_presenter_acquire_next_surface(
 
 /**
  * @brief Present a surface acquired from this presenter. On success or
- *        SKITY_ERROR_NEED_RECREATE the surface handle is consumed and must not
- *        be used or destroyed again.
+ *        SKITY_ERROR_NEED_RECREATE / SKITY_ERROR_DEVICE_LOST the surface
+ *        handle is consumed and must not be used or destroyed again.
+ *        SKITY_ERROR_DEVICE_LOST means the whole GPU context must be
+ *        recreated; recreating the presenter alone cannot recover.
  */
 SKITY_C_API skity_result skity_presenter_present(skity_presenter presenter,
                                                  skity_surface* surface);

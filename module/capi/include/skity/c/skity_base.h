@@ -54,6 +54,8 @@ typedef enum {
   SKITY_ERROR_NOT_SUPPORTED =
       -5, /**< the operation is not supported on this build/backend */
   SKITY_ERROR_NEED_RECREATE = -6, /**< a swapchain/resize retry is required */
+  SKITY_ERROR_DEVICE_LOST = -7, /**< the logical device was lost; the whole GPU
+                                   context must be recreated */
 } skity_result;
 
 #ifdef __cplusplus
