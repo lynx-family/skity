@@ -129,6 +129,9 @@ skity_result skity_presenter_acquire_next_surface(skity_presenter presenter,
   if (result.status == skity::GPUPresenterStatus::kNeedRecreate) {
     return SKITY_ERROR_NEED_RECREATE;
   }
+  if (result.status == skity::GPUPresenterStatus::kDeviceLost) {
+    return SKITY_ERROR_DEVICE_LOST;
+  }
   if (result.status != skity::GPUPresenterStatus::kSuccess ||
       result.surface == nullptr) {
     return SKITY_ERROR_INITIALIZATION_FAILED;
@@ -180,9 +183,13 @@ skity_result skity_presenter_present(skity_presenter presenter,
   if (status == skity::GPUPresenterStatus::kSuccess) {
     return SKITY_SUCCESS;
   }
-  return status == skity::GPUPresenterStatus::kNeedRecreate
-             ? SKITY_ERROR_NEED_RECREATE
-             : SKITY_ERROR_INITIALIZATION_FAILED;
+  if (status == skity::GPUPresenterStatus::kNeedRecreate) {
+    return SKITY_ERROR_NEED_RECREATE;
+  }
+  if (status == skity::GPUPresenterStatus::kDeviceLost) {
+    return SKITY_ERROR_DEVICE_LOST;
+  }
+  return SKITY_ERROR_INITIALIZATION_FAILED;
 }
 
 }  // extern "C"
