@@ -20,6 +20,7 @@
 #include "src/effect/image_filter_base.hpp"
 #include "src/gpu/gpu_surface_impl.hpp"
 #include "src/logging.hpp"
+#include "src/render/auto_canvas.hpp"
 #include "src/render/canvas_state.hpp"
 #include "src/render/hw/coverage/coverage_aa_renderer.hpp"
 #include "src/render/hw/draw/hw_dynamic_coverage_path_draw.hpp"
@@ -408,7 +409,7 @@ void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
     return;
   }
 
-  bool has_layer = false;
+  AutoCanvasRestore restore(this, false);
   Matrix current_matrix = CurrentMatrix();
   Paint working_paint(paint);
 
@@ -423,16 +424,8 @@ void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
     // Expand outward a little to prevent incomplete display of text content
     bounds = bounds.MakeOutset(1, 1);
     auto layer_bounds = working_paint.ComputeFastBounds(bounds);
-    auto result = GenLayer(restore_paint, layer_bounds, current_matrix);
-    if (!result) {
-      return;
-    }
-
-    CurrentLayer()->AddDraw(result);
-    layer_stack_.push_back(result);
-
-    has_layer = true;
-    current_matrix = Matrix{};
+    SaveLayer(layer_bounds, restore_paint);
+    current_matrix = CurrentMatrix();
     working_paint.SetBlendMode(BlendMode::kSrcOver);
   }
 
@@ -484,10 +477,6 @@ void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
     DrawGlyphsInternal(static_cast<uint32_t>(glyphs.size()), glyphs.data(),
                        origin, pos_x.data(), pos_y.data(), font, working_paint,
                        current_matrix);
-  }
-
-  if (has_layer) {
-    layer_stack_.pop_back();
   }
 }
 
