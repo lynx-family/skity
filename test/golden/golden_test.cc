@@ -25,7 +25,7 @@ constexpr char kSoftwareGoldenFilter[] =
     "RecorderGolden.DisplayListCullRectClipRestoreToCount:"
     "RecorderGolden.DisplayListSaveLayerSetResetMatrix:"
     "SaveLayerGolden.ResetMatrixDrawColorFillsLayer:"
-    "SoftwareTextGolden.PositionedGlyphs";
+    "SoftwareTextGolden.PositionedGlyphs:SoftwareTextGolden.ClipRect";
 
 }  // namespace
 

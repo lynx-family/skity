@@ -607,7 +607,8 @@ void SWCanvas::FillGlyphs(uint32_t count, const GlyphID* glyphs,
     } else {
       SWRaster raster;
 
-      raster.RastePath(path, CurrentTransform() * transform);
+      raster.RastePath(path, CurrentTransform() * transform,
+                       GetScanClipBounds());
 
       DoBrush(raster, paint, false);
     }
@@ -630,7 +631,8 @@ void SWCanvas::StrokeGlyphs(uint32_t count, const GlyphID* glyphs,
 
     SWRaster raster;
 
-    raster.RastePath(outline, CurrentTransform() * transform);
+    raster.RastePath(outline, CurrentTransform() * transform,
+                     GetScanClipBounds());
 
     DoBrush(raster, paint, true);
   }
