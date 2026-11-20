@@ -54,6 +54,10 @@ class SWCanvas : public Canvas {
 
     Paint paint = {};
 
+    // rel_bounds lie on the target's pixel grid, so the layer composites one
+    // to one instead of being resampled through log_bounds.
+    bool pixel_aligned = false;
+
     LayerState(Rect const& rel_bounds, Rect const& log_bounds)
         : rel_bounds(rel_bounds), log_bounds(log_bounds) {}
 
@@ -139,6 +143,8 @@ class SWCanvas : public Canvas {
   LayerState* PeekLayerStack();
 
   std::unique_ptr<LayerState> PopLayerStack();
+
+  void DrawAlignedLayer(LayerState const& layer);
 
   LayerState* GenerateLayer(Rect const& rel_bounds, Rect const& log_bounds,
                             Vec2 const& offset);
