@@ -59,7 +59,7 @@ struct SWEdge {
 
   bool SetLine(const Point& p0, const Point& p1);
   bool UpdateLine(SWFixed x0, SWFixed y0, SWFixed x1, SWFixed y1, SWFixed slop);
-  bool CanBeIgnored(const Rect& scan_bounds, SWFixed y0, SWFixed y1) const;
+  bool CanBeIgnored(const Rect& scan_bounds, SWFixed y0) const;
 };
 
 struct SWQuadEdge : public SWEdge {
