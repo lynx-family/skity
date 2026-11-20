@@ -25,7 +25,8 @@ class SWRaster;
 class SWCanvas : public Canvas {
   struct State {
     std::vector<Span> clip_spans_ = {};
-    ClipOp op = ClipOp::kIntersect;
+    // An empty difference mask leaves the entire canvas drawable.
+    ClipOp op = ClipOp::kDifference;
 
     bool has_layer = false;
 
@@ -33,7 +34,9 @@ class SWCanvas : public Canvas {
     State(State const&) = default;
     State& operator=(State const&) = default;
 
-    bool HasClip() const { return !clip_spans_.empty(); }
+    bool HasClip() const {
+      return op == ClipOp::kIntersect || !clip_spans_.empty();
+    }
 
     std::vector<Span> PerformClip(std::vector<Span> const& spans);
 
@@ -41,8 +44,6 @@ class SWCanvas : public Canvas {
 
    private:
     std::vector<Span> FindSpan(Span const& span);
-
-    std::vector<Span> PerformMerge(std::vector<Span> const& spans);
   };
 
   struct LayerState {

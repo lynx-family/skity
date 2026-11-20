@@ -18,6 +18,7 @@
 #include "src/effect/image_filter_base.hpp"
 #include "src/effect/mask_filter_priv.hpp"
 #include "src/effect/pixmap_shader.hpp"
+#include "src/graphic/color_priv.hpp"
 #include "src/graphic/color_transform.hpp"
 #include "src/render/paint_order.hpp"
 #include "src/render/sw/sw_raster.hpp"
@@ -42,86 +43,45 @@ constexpr ColorType ToColorType(BitmapFormat bitmap_format) {
 }
 }  // namespace
 
-static std::vector<Span> find_span_y(std::vector<Span> const& spans,
-                                     int32_t y) {
-  std::vector<Span> ret;
+static std::vector<Span> SubtractSpans(const std::vector<Span>& spans,
+                                       std::vector<Span> clips) {
+  std::sort(clips.begin(), clips.end(), [](const Span& a, const Span& b) {
+    return a.y == b.y ? a.x < b.x : a.y < b.y;
+  });
 
-  for (Span const& span : spans) {
-    if (span.y == y) {
-      ret.emplace_back(span);
-    }
-  }
-
-  return ret;
-}
-
-static std::vector<Span> spans_subtraction(std::vector<Span> const& subtrahend,
-                                           std::vector<Span> const& minuend) {
-  std::vector<Span> ret;
-
-  for (Span const& span : subtrahend) {
-    auto ms = find_span_y(minuend, span.y);
-
-    // no spans in this line means minus zero
-    if (ms.empty()) {
-      ret.emplace_back(span);
-      continue;
-    }
-
-    std::sort(ms.begin(), ms.end(),
-              [](Span const& a, Span const& b) { return a.x < b.x; });
-
-    int32_t curr_x = span.x;
-    int32_t curr_len = span.len;
-
-    for (Span const& m : ms) {
-      if (m.x + m.len < curr_x || m.x > curr_x + curr_len) {
-        continue;
+  std::vector<Span> result;
+  for (const Span& span : spans) {
+    auto [first_clip, row_end] = std::equal_range(
+        clips.begin(), clips.end(), span,
+        [](const Span& a, const Span& b) { return a.y < b.y; });
+    const int32_t end = span.x + span.len;
+    for (int32_t x = span.x; x < end;) {
+      while (first_clip != row_end && first_clip->x + first_clip->len <= x) {
+        ++first_clip;
       }
 
-      if (m.x < curr_x) {
-        if (m.x + m.len > curr_x + curr_len) {
-          // complete subtracted
-          curr_len = 0;
+      int32_t next_x = end;
+      int32_t cover = span.cover;
+      // Coverage is constant until a clip starts or ends. Consecutive
+      // difference clips can cover the same interval.
+      for (auto clip = first_clip; clip != row_end; ++clip) {
+        if (clip->x > x) {
+          next_x = std::min(next_x, clip->x);
           break;
         }
-
-        int32_t last = curr_x + curr_len;
-        curr_x = m.x + m.len;
-        curr_len = last - curr_x;
-
-      } else {  // m.x > curr_x && m.x < curr_x + curr_len
-        if (m.x + m.len < curr_x + curr_len) {
-          int32_t last = curr_x + curr_len;
-          int32_t x = curr_x;
-          int32_t len = m.x - curr_x;
-
-          ret.emplace_back(Span{x, span.y, len, span.cover});
-
-          curr_x = m.x + m.len;
-          curr_len = last - curr_x;
-        } else {
-          int32_t x = curr_x;
-
-          int32_t len = m.x - curr_x;
-
-          ret.emplace_back(Span{x, span.y, len, span.cover});
-
-          curr_len = 0;
+        const int32_t clip_end = clip->x + clip->len;
+        if (clip_end > x) {
+          next_x = std::min(next_x, clip_end);
+          cover = MulDiv255Round(cover, 255 - clip->cover);
         }
       }
-
-      if (curr_len <= 0) {
-        break;
+      if (cover > 0) {
+        result.push_back({x, span.y, next_x - x, cover});
       }
-    }
-
-    if (curr_len > 0) {
-      ret.emplace_back(Span{curr_x, span.y, curr_len, span.cover});
+      x = next_x;
     }
   }
-
-  return ret;
+  return result;
 }
 
 static Rect ComputeBoundsIfStroke(Rect bounds, const Paint& paint) {
@@ -149,7 +109,7 @@ std::unique_ptr<Canvas> Canvas::MakeSoftwareCanvas(Bitmap* bitmap) {
 
 std::vector<Span> SWCanvas::State::PerformClip(const std::vector<Span>& spans) {
   if (this->op == Canvas::ClipOp::kDifference) {
-    return spans_subtraction(spans, clip_spans_);
+    return SubtractSpans(spans, clip_spans_);
   }
 
   std::vector<Span> ret;
@@ -169,43 +129,15 @@ std::vector<Span> SWCanvas::State::PerformClip(const std::vector<Span>& spans) {
 
 std::vector<Span> SWCanvas::State::RecursiveClip(std::vector<Span> const& spans,
                                                  ClipOp clip_op) {
-  if (this->op == clip_op) {
-    if (clip_op == Canvas::ClipOp::kIntersect) {
-      return PerformClip(spans);
-    } else {
-      return PerformMerge(spans);
-    }
-  } else {
-    if (this->op == Canvas::ClipOp::kDifference) {
-      return spans_subtraction(spans, clip_spans_);
-    } else {
-      return spans_subtraction(clip_spans_, spans);
-    }
+  if (clip_op == ClipOp::kIntersect) {
+    return PerformClip(spans);
   }
-}
-
-std::vector<Span> SWCanvas::State::PerformMerge(
-    std::vector<Span> const& spans) {
-  // TODO(tangruiwen) this function is not correct need refact
-  std::vector<Span> ret;
-  ret.insert(ret.end(), spans.begin(), spans.end());
-  ret.insert(ret.end(), clip_spans_.begin(), clip_spans_.end());
-
-  std::sort(ret.begin(), ret.end(), [](Span const& a, Span const& b) {
-    if (a.y < b.y) {
-      return true;
-    } else if (a.y == b.y) {
-      if (a.x != b.x) {
-        return a.x < b.x;
-      } else {
-        return a.cover > b.cover;
-      }
-    } else {
-      return false;
-    }
-  });
-
-  return ret;
+  if (op == ClipOp::kIntersect) {
+    return SubtractSpans(clip_spans_, spans);
+  }
+  auto clips = clip_spans_;
+  clips.insert(clips.end(), spans.begin(), spans.end());
+  return clips;
 }
 
 std::vector<Span> SWCanvas::State::FindSpan(Span const& span) {
@@ -313,17 +245,23 @@ void SWCanvas::OnClipPath(const Path& path, ClipOp op) {
   }
 
   SWRaster raster;
-  raster.RastePath(path, CurrentTransform(), GetScanClipBounds());
+  const Matrix transform = CurrentTransform();
+  // Rasterize the same mask for intersect and difference, including where
+  // approximated curves meet the bounds of the original path.
+  Rect mask_bounds = transform.MapRect(path.GetBounds());
+  if (mask_bounds.Intersect(GetScanClipBounds())) {
+    raster.RastePath(path, transform, mask_bounds);
+  }
 
-  if (state_stack_.back().HasClip()) {
-    auto spans = state_stack_.back().RecursiveClip(raster.CurrentSpans(), op);
-    state_stack_.back().clip_spans_ = spans;
-    if (state_stack_.back().op != op) {
-      state_stack_.back().op = Canvas::ClipOp::kIntersect;
+  auto& state = state_stack_.back();
+  if (state.HasClip()) {
+    state.clip_spans_ = state.RecursiveClip(raster.CurrentSpans(), op);
+    if (state.op != op) {
+      state.op = ClipOp::kIntersect;
     }
   } else {
-    state_stack_.back().clip_spans_ = raster.CurrentSpans();
-    state_stack_.back().op = op;
+    state.clip_spans_ = raster.CurrentSpans();
+    state.op = op;
   }
 }
 
