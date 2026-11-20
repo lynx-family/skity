@@ -15,6 +15,16 @@
 
 namespace skity::test {
 
+namespace {
+GlyphRunOptions AtlasTestOptions() {
+  GlyphRunOptions options;
+  // These tests specifically exercise atlas geometry; COLR fonts also have a
+  // drawable representation, tested separately by DrawableGlyphRunTest.
+  options.drawable = false;
+  return options;
+}
+}  // namespace
+
 TEST(GlyphRunTest, AtlasBatchesPreserveNonAdjacentTextureOrder) {
   Atlas atlas(AtlasFormat::A8, nullptr, false, false);
   AtlasGlyphBatchBuilder builder(atlas);
@@ -118,10 +128,11 @@ TEST(GlyphRunTest, RecordsWholeRunLayerBounds) {
       FakeRootLayer layer(256, 192, Rect::MakeXYWH(6.f, -6.f, 128.f, 64.f),
                           GPUTextureFormat::kRGBA8Unorm, nullptr, false);
       const Font font(typeface, 20.f);
-      auto runs = GlyphRunBuilder::Build(
-          {3, glyphs, Point{0.f, 0.f, 0.f, 1.f}, positions_x, positions_y,
-           font},
-          paint, {*context.GetAtlasManager(), arena, 2.f, transform});
+      auto runs = GlyphRunBuilder::Build({3, glyphs, Point{0.f, 0.f, 0.f, 1.f},
+                                          positions_x, positions_y, font},
+                                         paint,
+                                         {*context.GetAtlasManager(), arena,
+                                          2.f, transform, AtlasTestOptions()});
       ASSERT_EQ(runs.size(), 1u);
       const auto operation = RecordAtlasGlyphRun(
           *runs[0], {arena, glyph_to_layer, glyph_to_layer * transform, false});
@@ -234,7 +245,8 @@ TEST(GlyphRunTest, AtlasRunsOwnPreparedGeometryAndMetadata) {
       const GlyphRunInput input{1,  &glyph, Point{3.f, 4.f, 0.f, 1.f},
                                 &x, &y,     font};
       const GlyphRunBuildContext build_context{*context.GetAtlasManager(),
-                                               arena, 2.f, raster_transform};
+                                               arena, 2.f, raster_transform,
+                                               AtlasTestOptions()};
       if (strategy == 1) {
         runs.SetArenaAllocator(&arena);
         AppendSDFGlyphRuns(input, paint, build_context, runs);
@@ -285,10 +297,11 @@ TEST(GlyphRunTest, BoundsMatchSeparatePaintStyles) {
       }
       auto make_runs = [&](const Paint& paint) {
         const Font font(typeface, 20.f);
-        return GlyphRunBuilder::Build(
-            {1, &glyph, Point{0.f, 0.f, 0.f, 1.f}, &position_x, &position_y,
-             font},
-            paint, {*context.GetAtlasManager(), arena, 1.f, transform});
+        return GlyphRunBuilder::Build({1, &glyph, Point{0.f, 0.f, 0.f, 1.f},
+                                       &position_x, &position_y, font},
+                                      paint,
+                                      {*context.GetAtlasManager(), arena, 1.f,
+                                       transform, AtlasTestOptions()});
       };
       for (auto style :
            {Paint::kStrokeAndFill_Style, Paint::kStrokeThenFill_Style}) {

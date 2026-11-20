@@ -111,6 +111,10 @@ class HWCanvas : public Canvas, private GlyphDrawTarget {
   void SubmitPath(const Path& path, const Paint& paint,
                   const Matrix& local_to_layer) override;
 
+  void SubmitDrawable(const GlyphDrawable& drawable, const Paint& paint,
+                      const Matrix& glyph_to_local,
+                      const Matrix& local_to_layer) override;
+
   void DrawShape(const Shape& shape, const Paint& paint, bool is_local = true);
 
   void DrawRectShape(const Rect& rect, const Paint& paint,

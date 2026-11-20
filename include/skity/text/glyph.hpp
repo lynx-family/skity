@@ -7,11 +7,14 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <skity/graphic/path.hpp>
 #include <skity/macros.hpp>
 
 namespace skity {
+class GlyphDrawable;
+
 using GlyphID = uint16_t;
 using Unichar = uint32_t;
 
@@ -157,6 +160,23 @@ class SKITY_API GlyphData {
   std::optional<GlyphFormat> format_ = std::nullopt;
 
   GlyphColorType color_type_ = GlyphColorType::kNoColor;
+
+  struct DrawableCache {
+    using Result = std::shared_ptr<const GlyphDrawable>;
+
+    // Only the scaler's glyph retains a recording when making glyph snapshots.
+    DrawableCache() = default;
+    DrawableCache(const DrawableCache&) noexcept {}
+    DrawableCache& operator=(const DrawableCache&) noexcept {
+      result.reset();
+      return *this;
+    }
+    DrawableCache(DrawableCache&&) noexcept = default;
+    DrawableCache& operator=(DrawableCache&&) noexcept = default;
+
+    // Allocate on the first request. A stored null result means unsupported.
+    std::unique_ptr<Result> result;
+  } drawable_;
 
   friend class GlyphDataWinAccess;
   friend class TypefaceFreeType;

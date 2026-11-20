@@ -17,6 +17,7 @@ namespace skity {
 
 class AtlasManager;
 class HWDraw;
+class GlyphDrawable;
 
 // Borrowed input, used only during Build(). Subruns own their prepared data.
 struct GlyphRunInput {
@@ -38,11 +39,22 @@ struct GlyphRunInput {
   }
 };
 
+// Internal routing switches. Disabling a strategy leaves rejected glyphs to
+// the remaining strategies, without coupling their representation code.
+struct GlyphRunOptions {
+  bool direct = true;
+  bool sdf = false;
+  bool drawable = true;
+  bool path = true;
+  bool transformed_mask = true;
+};
+
 struct GlyphRunBuildContext {
   AtlasManager& atlas_manager;
   ArenaAllocator& arena;
   float device_scale;
   Matrix local_to_raster;
+  GlyphRunOptions options{};
 };
 
 // Prepared atlas geometry is tied to the build transform and device scale.
@@ -72,6 +84,9 @@ class GlyphDrawTarget {
   virtual void SubmitAtlas(const GlyphAtlasDraw& operation) = 0;
   virtual void SubmitPath(const Path& path, const Paint& paint,
                           const Matrix& local_to_layer) = 0;
+  virtual void SubmitDrawable(const GlyphDrawable& drawable, const Paint& paint,
+                              const Matrix& glyph_to_local,
+                              const Matrix& local_to_layer) = 0;
 };
 
 class GlyphSubRun {

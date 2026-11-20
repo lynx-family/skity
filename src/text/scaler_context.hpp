@@ -16,6 +16,8 @@
 
 namespace skity {
 
+class GlyphDrawable;
+
 struct StrokeDesc {
   bool operator==(const StrokeDesc& other) const {
     return operator()(*this, other);
@@ -91,6 +93,9 @@ class ScalerContext {
   void GetImageInfo(PackedGlyphID id, GlyphData* glyph,
                     const StrokeDesc& stroke_desc);
   void GetPath(GlyphData* glyph);
+  std::shared_ptr<const GlyphDrawable> GetDrawable(const GlyphData& glyph) {
+    return GenerateDrawable(glyph);
+  }
   void GetFontMetrics(FontMetrics* metrics);
   bool IsVertical() { return false; }
   bool IsSubpixel() { return false; }
@@ -104,6 +109,11 @@ class ScalerContext {
   virtual void GenerateImageInfo(PackedGlyphID id, GlyphData* glyph,
                                  const StrokeDesc& stroke_desc) = 0;
   virtual bool GeneratePath(GlyphData* glyph) = 0;
+  // Bitmap-only and outline-only ports need no drawable implementation.
+  virtual std::shared_ptr<const GlyphDrawable> GenerateDrawable(
+      const GlyphData&) {
+    return nullptr;
+  }
   virtual void GenerateFontMetrics(FontMetrics*) = 0;
   virtual uint16_t OnGetFixedSize() = 0;
 

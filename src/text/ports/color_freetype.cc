@@ -779,7 +779,6 @@ bool ColorFreeType::DrawColorV0Glyph(FT_Face face, const GlyphData& glyph,
                                      uint32_t load_glyph_flags,
                                      const Rect& raster_bounds,
                                      const Vec2& subpixel_offset) {
-  PreparePalette(face);
   if (!PrepareCanvas(raster_bounds)) {
     return false;
   }
@@ -790,6 +789,13 @@ bool ColorFreeType::DrawColorV0Glyph(FT_Face face, const GlyphData& glyph,
   // convention.
   canvas_->Translate(-raster_bounds.Left() + subpixel_offset.x,
                      -raster_bounds.Top() + subpixel_offset.y);
+  return DrawColorV0Glyph(face, glyph, load_glyph_flags, canvas_.get());
+}
+
+bool ColorFreeType::DrawColorV0Glyph(FT_Face face, const GlyphData& glyph,
+                                     uint32_t load_glyph_flags,
+                                     Canvas* canvas) {
+  PreparePalette(face);
   FT_LayerIterator iterator{0, 0, nullptr};
   FT_UInt layer_glyph = 0;
   FT_UInt layer_color = 0;
@@ -822,7 +828,7 @@ bool ColorFreeType::DrawColorV0Glyph(FT_Face face, const GlyphData& glyph,
     } else {
       return false;
     }
-    canvas_->DrawPath(path, paint);
+    canvas->DrawPath(path, paint);
   }
 
   return have_layers;
@@ -831,16 +837,21 @@ bool ColorFreeType::DrawColorV0Glyph(FT_Face face, const GlyphData& glyph,
 bool ColorFreeType::DrawColorV1Glyph(FT_Face face, const GlyphData& glyph,
                                      const Rect& raster_bounds,
                                      const Vec2& subpixel_offset) {
-  PreparePalette(face);
   if (!PrepareCanvas(raster_bounds)) {
     return false;
   }
 
+  canvas_->Translate(-raster_bounds.Left() + subpixel_offset.x,
+                     -raster_bounds.Top() + subpixel_offset.y);
+  return DrawColorV1Glyph(face, glyph, canvas_.get());
+}
+
+bool ColorFreeType::DrawColorV1Glyph(FT_Face face, const GlyphData& glyph,
+                                     Canvas* canvas) {
+  PreparePalette(face);
   VisitedSet visited_set;
-  ColorContext context{this,      path_unitls_,      canvas_.get(), face,
+  ColorContext context{this,      path_unitls_,      canvas,      face,
                        &palette_, foreground_color_, &visited_set};
-  context.canvas->Translate(-raster_bounds.Left() + subpixel_offset.x,
-                            -raster_bounds.Top() + subpixel_offset.y);
   return start_glyph(context, glyph.Id(), FT_COLOR_INCLUDE_ROOT_TRANSFORM);
 }
 

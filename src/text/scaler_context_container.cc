@@ -43,6 +43,21 @@ void ScalerContextContainer::PreparePaths(const GlyphID *glyph_ids,
   this->InternalPrepare(glyph_ids, count, kMetricsAndPath, results);
 }
 
+void ScalerContextContainer::PrepareDrawables(
+    const GlyphID *glyph_ids, uint32_t count,
+    std::shared_ptr<const GlyphDrawable> results[]) SKITY_EXCLUDES(mutex_) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  for (uint32_t i = 0; i < count; ++i) {
+    auto *glyph = Glyph(PackedGlyphID(glyph_ids[i]));
+    auto &drawable = glyph->drawable_.result;
+    if (!drawable) {
+      drawable = std::make_unique<GlyphData::DrawableCache::Result>(
+          scaler_context_->GetDrawable(*glyph));
+    }
+    results[i] = *drawable;
+  }
+}
+
 void ScalerContextContainer::PrepareImages(const GlyphID *glyph_ids,
                                            uint32_t count,
                                            const GlyphData *results[],

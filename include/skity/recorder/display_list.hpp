@@ -54,6 +54,7 @@ class DisplayListStorage {
 };
 
 class SKITY_API DisplayList {
+  friend class GlyphDrawable;
   friend class RecordingCanvas;
   friend struct DisplayListBuilder;
 
@@ -105,6 +106,7 @@ class SKITY_API DisplayList {
   std::vector<Rect> SearchNonOverlappingDrawnRects(const Rect& rect) const;
 
  private:
+  void PreparePathCaches();
   void SetRTree(std::unique_ptr<DisplayListRTree> rtree);
 
   const DisplayListStorage storage_;

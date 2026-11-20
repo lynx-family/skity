@@ -28,11 +28,13 @@
 #include <cstring>
 #include <limits>
 #include <skity/geometry/stroke.hpp>
+#include <skity/recorder/picture_recorder.hpp>
 #include <vector>
 
 #include "src/base/fixed_types.hpp"
 #include "src/render/sw/sw_a8_drawable.hpp"
 #include "src/render/text/glyph_position.hpp"
+#include "src/text/glyph_drawable.hpp"
 #include "src/tracing.hpp"
 
 namespace skity {
@@ -812,6 +814,37 @@ static FT_Stroker_LineJoin ToFreetypeJoin(Paint::Join join) {
     case Paint::Join::kMiter_Join:
       return FT_STROKER_LINEJOIN_MITER;
   }
+}
+
+std::shared_ptr<const GlyphDrawable> ScalerContextFreetype::GenerateDrawable(
+    const GlyphData& glyph) {
+  if (glyph.color_type_ != GlyphColorType::kColorV0 &&
+      glyph.color_type_ != GlyphColorType::kColorV1) {
+    return nullptr;
+  }
+  std::lock_guard<std::mutex> locker(FreetypeFace::f_t_mutex());
+  if (SetupSize()) {
+    return nullptr;
+  }
+  const Rect bounds =
+      Rect::MakeXYWH(glyph.hori_bearing_x_, -glyph.hori_bearing_y_,
+                     glyph.width_, glyph.height_);
+  if (!bounds.IsFinite() || bounds.IsEmpty()) {
+    return nullptr;
+  }
+  PictureRecorder recorder;
+  recorder.BeginRecording(bounds);
+  color_utils_->SetForegroundColor(desc_.foreground_color);
+  const bool drawn =
+      glyph.color_type_ == GlyphColorType::kColorV0
+          ? color_utils_->DrawColorV0Glyph(face_, glyph, load_glyph_flags_,
+                                           recorder.GetRecordingCanvas())
+          : color_utils_->DrawColorV1Glyph(face_, glyph,
+                                           recorder.GetRecordingCanvas());
+  if (!drawn) {
+    return nullptr;
+  }
+  return GlyphDrawable::Make(recorder.FinishRecording(), bounds);
 }
 
 void ScalerContextFreetype::GenerateImage(PackedGlyphID id, GlyphData* glyph,
