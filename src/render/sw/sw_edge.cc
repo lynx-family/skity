@@ -106,13 +106,11 @@ static inline int diff_to_shift(SWFDot6 dx, SWFDot6 dy, int shiftAA = 2) {
   SWFDot6 dist = cheap_distance(dx, dy);
 
   // shift down dist (it is currently in dot6)
-  // down by 3 should give us 1/8 pixel accuracy (assuming our dist is
-  // accurate...) this is chosen by heuristic: make it as big as possible (to
-  // minimize segments)
-  // ... but small enough so that our curves still look smooth
-  // When shift > 0, we're using AA and everything is scaled up so we can
-  // lower the accuracy.
-  dist = (dist + (1 << (2 + shiftAA))) >> (3 + shiftAA);
+  // down by 1 gives 1/32 pixel accuracy. A chord always cuts inside a convex
+  // curve, so coarser accuracy loses coverage on every edge pixel of a small
+  // corner, where a pixel is a large share of the curve.
+  // When shift > 0, we're using AA and everything is scaled up.
+  dist = (dist + (1 << shiftAA)) >> (1 + shiftAA);
 
   // each subdivision (shift value) cuts this dist (error) by 1/4
   return (32 - CLZ(dist)) >> 1;
