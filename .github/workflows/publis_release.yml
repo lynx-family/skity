@@ -29,6 +29,7 @@ jobs:
           - name: Android Build Check
             uses: ./.github/actions/pack-android-aar
           - name: Build Android Release Artifact
+            if: ${{ !github.event.release.prerelease }}
             run: |
               TAG_NAME=${{ github.event.release.tag_name }}
               VERSION=${TAG_NAME#v}
@@ -45,10 +46,24 @@ jobs:
               popd
             id: build_artifact
           - name: Publish artifact to maven
+            if: ${{ !github.event.release.prerelease }}
             uses: lynx-infra/maven-publish-action@6f85a4b3f286e904e31f71ffbc9fb3641fcb2aab
             with:
               portal_api_token: ${{ secrets.PORTAL_API_TOKEN }}
               artifact_path_list: ${{ steps.build_artifact.outputs.artifact_list }}
+          # prerelease tags publish Android artifacts as -SNAPSHOT to the
+          # Sonatype central snapshots repository, bypassing the formal
+          # release quota of the lynx maven portal
+          - name: Publish snapshot artifact to maven
+            if: ${{ github.event.release.prerelease }}
+            env:
+              CENTRAL_TOKEN_USERNAME: ${{ secrets.MAVEN_CENTRAL_TOKEN_USERNAME }}
+              CENTRAL_TOKEN_PASSWORD: ${{ secrets.MAVEN_CENTRAL_TOKEN_PASSWORD }}
+            run: |
+              TAG_NAME=${{ github.event.release.tag_name }}
+              VERSION=${TAG_NAME#v}
+              cd platform/android
+              ./gradlew publish -Pversion=${VERSION}-SNAPSHOT
 
     build-xcframework:
         runs-on: lynx-darwin-15.6.1-medium
@@ -92,8 +107,11 @@ jobs:
             working-directory: platform/darwin
             run: |
               PODSPEC_PATH=$GITHUB_WORKSPACE/out/skity.podspec
-              POD_NAME=$(bundle exec ruby -rcocoapods-core -e 'puts Pod::Specification.from_file(ARGV[0]).name' "$PODSPEC_PATH")
-              POD_VERSION=$(bundle exec ruby -rcocoapods-core -e 'puts Pod::Specification.from_file(ARGV[0]).version' "$PODSPEC_PATH")
+                # require inside -e: a command-line -r require runs before the
+                # bundler setup injected via RUBYOPT, so the bundle's vendor
+                # gems are not on the load path yet
+                POD_NAME=$(bundle exec ruby -e 'require "cocoapods-core"; puts Pod::Specification.from_file(ARGV[0]).name' "$PODSPEC_PATH")
+                POD_VERSION=$(bundle exec ruby -e 'require "cocoapods-core"; puts Pod::Specification.from_file(ARGV[0]).version' "$PODSPEC_PATH")
               echo "publishing $POD_NAME $POD_VERSION to the CocoaPods trunk"
 
               # trunk may accept the push server-side while the client times out
@@ -137,6 +155,7 @@ jobs:
             env:
                 GH_TOKEN: ${{ github.token }}
                 TAG_NAME: ${{ github.event.release.tag_name || github.ref_name }}
+                PRERELEASE: ${{ github.event.release.prerelease }}
                 ANDROID_JOB_RESULT: ${{ needs.build-android-aar.result }}
                 XCFRAMEWORK_JOB_RESULT: ${{ needs.build-xcframework.result }}
             run: |
@@ -161,10 +180,15 @@ jobs:
                 note "| channel | state |"
                 note "| --- | --- |"
                 note "| build-xcframework → release assets + trunk | job ${XCFRAMEWORK_JOB_RESULT} |"
-                if [ "${ANDROID_JOB_RESULT}" = "success" ]; then
-                    note "| build-android-aar → maven publish | job success |"
+                if [ "${PRERELEASE}" = "true" ]; then
+                    ANDROID_CHANNEL="sonatype snapshots"
                 else
-                    note "| build-android-aar → maven publish | job ${ANDROID_JOB_RESULT} |"
+                    ANDROID_CHANNEL="maven portal"
+                fi
+                if [ "${ANDROID_JOB_RESULT}" = "success" ]; then
+                    note "| build-android-aar → ${ANDROID_CHANNEL} | job success |"
+                else
+                    note "| build-android-aar → ${ANDROID_CHANNEL} | job ${ANDROID_JOB_RESULT} |"
                     FAILED=1
                 fi
 
@@ -177,6 +201,25 @@ jobs:
                         FAILED=1
                     fi
                 done
+
+                if [ "${PRERELEASE}" = "true" ] && [ "${ANDROID_JOB_RESULT}" = "success" ]; then
+                    SNAPSHOT_METADATA_URL="https://central.sonatype.com/repository/maven-snapshots/org/lynxsdk/lynx/skity-native/maven-metadata.xml"
+                    SNAPSHOT_OK=0
+                    for attempt in 1 2 3 4 5; do
+                        if curl -sf --max-time 30 "$SNAPSHOT_METADATA_URL" \
+                            | grep -q "<version>${VERSION}-SNAPSHOT</version>"; then
+                            SNAPSHOT_OK=1
+                            break
+                        fi
+                        sleep 30
+                    done
+                    if [ "${SNAPSHOT_OK}" = "1" ]; then
+                        note "| Sonatype snapshots: \`skity-native ${VERSION}-SNAPSHOT\` | ✅ published |"
+                    else
+                        note "| Sonatype snapshots: \`skity-native ${VERSION}-SNAPSHOT\` | ❌ not found |"
+                        FAILED=1
+                    fi
+                fi
 
                 if curl -sf --max-time 30 "https://trunk.cocoapods.org/api/v1/pods/skity" \
                     | jq -e --arg v "$VERSION" '.versions[] | select(.name == $v)' > /dev/null; then
