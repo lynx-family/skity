@@ -107,11 +107,11 @@ jobs:
             working-directory: platform/darwin
             run: |
               PODSPEC_PATH=$GITHUB_WORKSPACE/out/skity.podspec
-                # require inside -e: a command-line -r require runs before the
-                # bundler setup injected via RUBYOPT, so the bundle's vendor
-                # gems are not on the load path yet
-                POD_NAME=$(bundle exec ruby -e 'require "cocoapods-core"; puts Pod::Specification.from_file(ARGV[0]).name' "$PODSPEC_PATH")
-                POD_VERSION=$(bundle exec ruby -e 'require "cocoapods-core"; puts Pod::Specification.from_file(ARGV[0]).version' "$PODSPEC_PATH")
+              # require inside -e: a command-line -r require runs before the
+              # bundler setup injected via RUBYOPT, so the bundle's vendor
+              # gems are not on the load path yet
+              POD_NAME=$(bundle exec ruby -e 'require "cocoapods-core"; puts Pod::Specification.from_file(ARGV[0]).name' "$PODSPEC_PATH")
+              POD_VERSION=$(bundle exec ruby -e 'require "cocoapods-core"; puts Pod::Specification.from_file(ARGV[0]).version' "$PODSPEC_PATH")
               echo "publishing $POD_NAME $POD_VERSION to the CocoaPods trunk"
 
               # trunk may accept the push server-side while the client times out
