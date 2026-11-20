@@ -24,8 +24,7 @@ class GPUContextImpl;
 
 class Atlas {
  public:
-  Atlas(AtlasFormat format, GPUDevice* gpu_device, bool enable_larger_atlas,
-        bool enable_large_emoji_atlas);
+  Atlas(AtlasFormat format, GPUDevice* gpu_device, bool enable_larger_atlas);
 
   AtlasFormat GetFormat() { return format_; }
 
@@ -79,8 +78,6 @@ class AtlasManager {
   AtlasManager(GPUDevice* gpu_device, GPUContextImpl* gpu_context);
 
   Atlas* GetAtlas(AtlasFormat format);
-
-  bool IsLargeEmojiAtlasEnabled() const;
 
   void ClearExtraRes();
 

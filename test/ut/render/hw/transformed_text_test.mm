@@ -132,29 +132,30 @@ class TransformedTextPixelTest : public ::testing::Test {
     EXPECT_LT(double(error) / samples, tolerance);
   }
 
-  Ink TransformPixels(const Ink& source, const Matrix& transform) {
-    Matrix inverse;
-    EXPECT_TRUE(transform.Invert(&inverse));
-    std::vector<uint8_t> pixels(kWidth * kHeight * 4, 255);
-    for (uint32_t y = 0; y < kHeight; ++y) {
-      for (uint32_t x = 0; x < kWidth; ++x) {
-        Vec2 dst{float(x) + .5f, float(y) + .5f}, src;
-        inverse.MapPoints(&src, &dst, 1);
-        src = src - Vec2{.5f, .5f};
-        const int sx = int(std::floor(src.x)), sy = int(std::floor(src.y));
-        if (sx < 0 || sy < 0 || sx + 1 >= int(kWidth) || sy + 1 >= int(kHeight)) {
-          continue;
-        }
-        const float fx = src.x - sx, fy = src.y - sy;
-        for (int c = 0; c < 4; ++c) {
-          auto at = [&](int px, int py) { return source.pixels[(py * kWidth + px) * 4 + c]; };
-          const float top = at(sx, sy) * (1.f - fx) + at(sx + 1, sy) * fx;
-          const float bottom = at(sx, sy + 1) * (1.f - fx) + at(sx + 1, sy + 1) * fx;
-          pixels[(y * kWidth + x) * 4 + c] = uint8_t(std::lround(top * (1.f - fy) + bottom * fy));
-        }
-      }
+  // Render the native color bitmap as an ordinary image, bypassing glyph run selection.
+  void DrawGlyphBitmap(Canvas* canvas, const Font& font, float x, float y, float raster_scale) {
+    const GlyphData* glyph = nullptr;
+    font.LoadGlyphBitmap(&glyph_, 1, &glyph, Paint{}, raster_scale, Matrix{});
+    ASSERT_NE(glyph, nullptr);
+    const auto& bitmap = glyph->Image();
+    ASSERT_NE(bitmap.buffer, nullptr);
+    ASSERT_TRUE(bitmap.format == BitmapFormat::kRGBA8 || bitmap.format == BitmapFormat::kBGRA8);
+    const auto color_type =
+        bitmap.format == BitmapFormat::kRGBA8 ? ColorType::kRGBA : ColorType::kBGRA;
+    auto pixmap = std::make_shared<Pixmap>(static_cast<uint32_t>(bitmap.width),
+                                           static_cast<uint32_t>(bitmap.height),
+                                           AlphaType::kPremul_AlphaType, color_type);
+    auto* dst_pixels = static_cast<uint8_t*>(pixmap->WritableAddr());
+    ASSERT_NE(dst_pixels, nullptr);
+    for (uint32_t y = 0; y < pixmap->Height(); ++y) {
+      std::copy_n(bitmap.buffer + y * bitmap.RowBytes(), pixmap->RowBytes(),
+                  dst_pixels + y * pixmap->RowBytes());
     }
-    return AnalyzePixels(std::move(pixels));
+    auto image = Image::MakeImage(std::move(pixmap));
+    ASSERT_NE(image, nullptr);
+    const Rect dst = Rect::MakeXYWH(x + bitmap.origin_x, y - bitmap.origin_y,
+                                    bitmap.width / raster_scale, bitmap.height / raster_scale);
+    canvas->DrawImage(image, dst, SamplingOptions{FilterMode::kLinear, MipmapMode::kNone});
   }
 
   void DrawGlyph(Canvas* canvas, bool blob, const Font& font, GlyphID glyph, float x, float y,
@@ -234,7 +235,7 @@ TEST_F(TransformedTextPixelTest, GlyphBearingSurvivesClipAndSaveLayer) { CheckBe
 
 TEST_F(TransformedTextPixelTest, BlobBearingSurvivesClipAndSaveLayer) { CheckBearing(true); }
 
-TEST_F(TransformedTextPixelTest, ColorFallbackMatchesLargeAtlasControl) {
+TEST_F(TransformedTextPixelTest, ColorGlyphMatchesNativeBitmap) {
   for (bool blob : {false, true}) {
     for (float density : {1.f, 2.f}) {
       for (float size : {64.f, 240.f, 254.f, 320.f}) {
@@ -243,15 +244,11 @@ TEST_F(TransformedTextPixelTest, ColorFallbackMatchesLargeAtlasControl) {
         Font font(face_, size);
         Paint paint;
         paint.SetFontThreshold(size == 64.f ? 60.f : 256.f);
-        auto render = [&](bool large) {
-          context_ = MTLContextCreate(device_, queue_);
-          context_->SetLargerAtlasMask(large ? 8 : 0);
-          return Render(density, [&](Canvas* canvas) {
-            DrawGlyph(canvas, blob, font, glyph_, 32.f, size, paint);
-          });
-        };
-        const auto reference = render(true);
-        const auto actual = render(false);
+        const auto reference = Render(
+            density, [&](Canvas* canvas) { DrawGlyphBitmap(canvas, font, 32.f, size, density); });
+        const auto actual = Render(density, [&](Canvas* canvas) {
+          DrawGlyph(canvas, blob, font, glyph_, 32.f, size, paint);
+        });
         CompareImages(actual, reference, 8., int(2 * density));
         EXPECT_NEAR(double(actual.colored), double(reference.colored), reference.colored * .08);
       }
@@ -277,22 +274,15 @@ TEST_F(TransformedTextPixelTest, AffineColorFallbackPreservesFullTransform) {
       } else {
         transform.SetSkewX(.4f);
       }
-      auto render = [&](bool large) {
-        context_ = MTLContextCreate(device_, queue_);
-        context_->SetLargerAtlasMask(large ? 8 : 0);
-        return Render(1.f, [&](Canvas* canvas) {
-          // Compare a shear against independently transformed upright pixels.
-          // Native color-font rasterization under a sheared text matrix can
-          // choose different glyph bounds from transforming its upright image.
-          if (!large || scenario != 3) {
-            canvas->Concat(transform);
-          }
-          DrawGlyph(canvas, blob, font, glyph_, x, y, Paint{});
-        });
-      };
-      const auto direct = render(true);
-      const auto reference = scenario == 3 ? TransformPixels(direct, transform) : direct;
-      CompareImages(render(false), reference);
+      const auto reference = Render(1.f, [&](Canvas* canvas) {
+        canvas->Concat(transform);
+        DrawGlyphBitmap(canvas, font, x, y, scenario < 2 ? 5.f : 1.f);
+      });
+      const auto actual = Render(1.f, [&](Canvas* canvas) {
+        canvas->Concat(transform);
+        DrawGlyph(canvas, blob, font, glyph_, x, y, Paint{});
+      });
+      CompareImages(actual, reference);
     }
   }
 }
