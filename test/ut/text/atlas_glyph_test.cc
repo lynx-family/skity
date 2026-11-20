@@ -397,9 +397,9 @@ TEST(AtlasBitmapTest, CopiesGlyphWithPaddedRows) {
 
 TEST(AtlasBitmapTest, ReportsExactTileLimitsIncludingPadding) {
   for (auto format : {AtlasFormat::A8, AtlasFormat::RGBA32}) {
-    for (bool large : {false, true}) {
-      const AtlasConfig config(format, false, large);
-      const uint32_t limit = config.max_bitmap_size - 4;
+    for (bool larger_cache : {false, true}) {
+      const AtlasConfig config(format, larger_cache);
+      const uint32_t limit = format == AtlasFormat::A8 ? 508 : 252;
       const uint32_t bpp = format == AtlasFormat::A8 ? 1 : 4;
       std::vector<uint8_t> pixels(size_t(limit + 1) * (limit + 1) * bpp, 255);
       for (bool over_width : {false, true}) {

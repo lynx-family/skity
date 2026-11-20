@@ -26,7 +26,7 @@ GlyphRunOptions AtlasTestOptions() {
 }  // namespace
 
 TEST(GlyphRunTest, AtlasBatchesPreserveNonAdjacentTextureOrder) {
-  Atlas atlas(AtlasFormat::A8, nullptr, false, false);
+  Atlas atlas(AtlasFormat::A8, nullptr, false);
   AtlasGlyphBatchBuilder builder(atlas);
   const uint32_t group_size = atlas.GetConfig().max_num_bitmap_per_atlas;
   const Rect first = Rect::MakeXYWH(0.f, 0.f, 10.f, 12.f);
@@ -55,7 +55,7 @@ TEST(GlyphRunTest, AtlasBatchesPreserveNonAdjacentTextureOrder) {
 }
 
 TEST(GlyphRunTest, AtlasBatchesSeparateColorFormatsWithinOneTextureGroup) {
-  Atlas atlas(AtlasFormat::RGBA32, nullptr, false, false);
+  Atlas atlas(AtlasFormat::RGBA32, nullptr, false);
   AtlasGlyphBatchBuilder builder(atlas);
   const Rect bounds = Rect::MakeWH(10.f, 12.f);
   const GlyphRegion region{0, {0, 0, 10, 12}, 1.f};
@@ -71,7 +71,7 @@ TEST(GlyphRunTest, AtlasBatchesSeparateColorFormatsWithinOneTextureGroup) {
 }
 
 TEST(GlyphRunTest, EmptyAtlasRegionsDoNotCreateDrawsOrExpandBounds) {
-  Atlas atlas(AtlasFormat::A8, nullptr, false, false);
+  Atlas atlas(AtlasFormat::A8, nullptr, false);
   AtlasGlyphBatchBuilder builder(atlas);
   const Rect bounds = Rect::MakeWH(10.f, 12.f);
   const GlyphRegion region{0, {0, 0, 10, 12}, 1.f};

@@ -103,9 +103,9 @@ SKITY_C_API void skity_context_set_conflation_correction(skity_context context,
                                                          uint32_t enable);
 
 /**
- * @brief Use a larger atlas cache for better performance at the cost of memory
- *        (4x per set bit).
- * @param mask  bit 0 = A8 atlas (normal text), bit 1 = RGBA32 atlas (emoji)
+ * @brief Increase glyph atlas cache capacity at the cost of memory.
+ * @param mask Bit 0 increases A8 atlas capacity and bit 1 increases RGBA32
+ *             atlas capacity.
  */
 SKITY_C_API void skity_context_set_larger_atlas_mask(skity_context context,
                                                      uint8_t mask);
