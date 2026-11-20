@@ -33,6 +33,108 @@ void DrawRotatedSaveLayerScene(skity::Bitmap* bitmap,
 
 }  // namespace
 
+TEST(SWCanvas, RoundedDifferenceComplementsIntersectCoverage) {
+  skity::Bitmap inside(200, 400, skity::AlphaType::kPremul_AlphaType);
+  skity::Bitmap outside(200, 400, skity::AlphaType::kPremul_AlphaType);
+  auto draw = [](skity::Bitmap& bitmap, skity::Canvas::ClipOp op) {
+    auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+    const auto bounds = skity::Rect::MakeXYWH(20.f, 20.f, 175.f, 375.f);
+    canvas->ClipRRect(skity::RRect::MakeRectXY(bounds, 40.f, 40.f), op);
+    skity::Paint paint;
+    paint.SetColor(skity::Color_BLUE);
+    canvas->DrawPaint(paint);
+  };
+  draw(inside, skity::Canvas::ClipOp::kIntersect);
+  draw(outside, skity::Canvas::ClipOp::kDifference);
+
+  for (uint32_t y = 0; y < inside.Height(); ++y) {
+    for (uint32_t x = 0; x < inside.Width(); ++x) {
+      // Applying each 8-bit coverage to the paint can round down by one.
+      const int alpha =
+          ColorGetA(inside.GetPixel(x, y)) + ColorGetA(outside.GetPixel(x, y));
+      ASSERT_NEAR(alpha, 255, 2) << "x=" << x << " y=" << y;
+    }
+  }
+}
+
+TEST(SWCanvas, DifferenceClipsPreservePartialCoverage) {
+  skity::Bitmap bitmap(6, 4, skity::AlphaType::kPremul_AlphaType,
+                       skity::ColorType::kRGBA);
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+  canvas->ClipRect(skity::Rect::MakeLTRB(0.f, 0.f, 6.f, 1.5f),
+                   skity::Canvas::ClipOp::kDifference);
+  canvas->ClipRect(skity::Rect::MakeLTRB(2.f, 0.f, 4.f, 4.f),
+                   skity::Canvas::ClipOp::kDifference);
+
+  skity::Paint paint;
+  paint.SetColor(skity::Color_WHITE);
+  paint.SetAntiAlias(true);
+  canvas->DrawRect(skity::Rect::MakeLTRB(0.f, 0.f, 5.5f, 4.f), paint);
+
+  EXPECT_EQ(bitmap.GetPixel(1, 0), skity::Color_TRANSPARENT);
+  EXPECT_EQ(bitmap.GetPixel(3, 1), skity::Color_TRANSPARENT);
+  EXPECT_EQ(bitmap.GetPixel(1, 2), skity::Color_WHITE);
+  EXPECT_NEAR(ColorGetA(bitmap.GetPixel(1, 1)), 128, 2);
+  // The right edge of the draw crosses the bottom edge of the first clip.
+  EXPECT_NEAR(ColorGetA(bitmap.GetPixel(5, 1)), 64, 2);
+}
+
+TEST(SWCanvas, FullIntersectionPreservesDifferenceCoverage) {
+  skity::Bitmap bitmap(8, 4, skity::kPremul_AlphaType);
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+  canvas->ClipRect(skity::Rect::MakeLTRB(0, 0, 8, 1.5f),
+                   skity::Canvas::ClipOp::kDifference);
+
+  skity::Paint paint;
+  paint.SetColor(skity::Color_WHITE);
+  paint.SetAntiAlias(true);
+  canvas->DrawRect(skity::Rect::MakeLTRB(0, 0, 2.5f, 4), paint);
+
+  skity::Path full;
+  full.AddRect(skity::Rect::MakeWH(8, 4));
+  canvas->ClipPath(full);
+  canvas->DrawRect(skity::Rect::MakeLTRB(4, 0, 6.5f, 4), paint);
+
+  EXPECT_NEAR(ColorGetA(bitmap.GetPixel(2, 1)), 64, 2);
+  EXPECT_EQ(bitmap.GetPixel(2, 1), bitmap.GetPixel(6, 1));
+}
+
+TEST(SWCanvas, MixedClipsKeepTheDrawRightEdgeExclusive) {
+  skity::Bitmap bitmap(6, 4, skity::kPremul_AlphaType);
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+  canvas->ClipRect(skity::Rect::MakeLTRB(0, 0, 2.5f, 4),
+                   skity::Canvas::ClipOp::kDifference);
+  skity::Path clip;
+  clip.AddRect(skity::Rect::MakeLTRB(2, 0, 6, 2));
+  clip.AddRect(skity::Rect::MakeLTRB(0, 2, 6, 4));
+  canvas->ClipPath(clip);
+
+  skity::Paint paint;
+  paint.SetColor(skity::Color_RED);
+  canvas->DrawRect(skity::Rect::MakeWH(2, 2), paint);
+  canvas->DrawRect(skity::Rect::MakeLTRB(0, 2, 4, 4), paint);
+  EXPECT_EQ(bitmap.GetPixel(2, 1), skity::Color_TRANSPARENT);
+  EXPECT_NEAR(ColorGetA(bitmap.GetPixel(2, 3)), 128, 2);
+  EXPECT_EQ(bitmap.GetPixel(3, 3), skity::Color_RED);
+}
+
+TEST(SWCanvas, FullySubtractedClipStaysEmpty) {
+  skity::Bitmap bitmap(4, 4, skity::AlphaType::kPremul_AlphaType,
+                       skity::ColorType::kRGBA);
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+  skity::Path path;
+  path.AddRect(skity::Rect::MakeLTRB(1.f, 1.f, 3.f, 3.f));
+  canvas->ClipPath(path);
+  canvas->ClipPath(path, skity::Canvas::ClipOp::kDifference);
+
+  skity::Paint paint;
+  paint.SetColor(skity::Color_WHITE);
+  canvas->DrawPaint(paint);
+
+  EXPECT_EQ(bitmap.GetPixel(1, 1), skity::Color_TRANSPARENT);
+  EXPECT_EQ(bitmap.GetPixel(0, 0), skity::Color_TRANSPARENT);
+}
+
 TEST(SWCanvas, SaveLayerClipsHugeBoundsToDevice) {
   skity::Bitmap bitmap(16, 16, skity::AlphaType::kPremul_AlphaType,
                        skity::ColorType::kRGBA);

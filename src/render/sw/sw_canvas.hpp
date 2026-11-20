@@ -6,6 +6,7 @@
 #define SRC_RENDER_SW_SW_CANVAS_HPP
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <optional>
 #include <skity/render/canvas.hpp>
 
 #include "src/render/canvas_state.hpp"
@@ -24,25 +25,20 @@ class SWRaster;
 
 class SWCanvas : public Canvas {
   struct State {
-    std::vector<Span> clip_spans_ = {};
-    ClipOp op = ClipOp::kIntersect;
-
     bool has_layer = false;
 
-    State() : clip_spans_() {}
-    State(State const&) = default;
-    State& operator=(State const&) = default;
+    bool HasClip() const {
+      return intersect_spans_.has_value() || !difference_spans_.empty();
+    }
 
-    bool HasClip() const { return !clip_spans_.empty(); }
-
-    std::vector<Span> PerformClip(std::vector<Span> const& spans);
-
-    std::vector<Span> RecursiveClip(std::vector<Span> const& spans, ClipOp op);
+    void AddClip(const std::vector<Span>& spans, ClipOp op);
+    std::vector<Span> PerformClip(const std::vector<Span>& spans) const;
 
    private:
-    std::vector<Span> FindSpan(Span const& span);
-
-    std::vector<Span> PerformMerge(std::vector<Span> const& spans);
+    // Both masks are kept in (y, x) order for scanline lookup.
+    // An engaged, empty intersection clips out the entire draw.
+    std::optional<std::vector<Span>> intersect_spans_;
+    std::vector<Span> difference_spans_;
   };
 
   struct LayerState {
