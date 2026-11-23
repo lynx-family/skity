@@ -34,6 +34,19 @@ if (${SKITY_UNIFIED_LIB})
         )
     endif()
 
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        # CoreText typeface bridge (skity_text_ct.h): the real entry points
+        # with SKITY_CT_FONT=ON, their portable NULL stubs otherwise.
+        target_sources(skity_wrapper_unit_test PRIVATE
+            capi/text_ct_c_test.cc
+            capi/text_ct_c_smoke.c
+        )
+        target_compile_definitions(skity_wrapper_unit_test PRIVATE
+            -DSKITY_TEST_CT_FONT=$<BOOL:${SKITY_CT_FONT}>)
+        target_link_libraries(skity_wrapper_unit_test PRIVATE
+            "-framework CoreText")
+    endif()
+
     target_compile_definitions(skity_wrapper_unit_test PRIVATE
         -DSKITY_FONT_DIR="${CMAKE_SOURCE_DIR}/test/")
     if (CMAKE_SYSTEM_NAME MATCHES "Windows")
@@ -260,6 +273,17 @@ if (${SKITY_CAPI_MODULE})
         target_include_directories(skity_unit_test PRIVATE
             ${CMAKE_SOURCE_DIR}/third_party/Vulkan-Headers/include
         )
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+      # CoreText typeface bridge (skity_text_ct.h): the real entry points
+      # with SKITY_CT_FONT=ON, their portable NULL stubs otherwise.
+      # SKITY_TEST_CT_FONT is already defined for this target above.
+      target_sources(skity_unit_test PRIVATE
+          capi/text_ct_c_test.cc
+          capi/text_ct_c_smoke.c
+      )
+      target_link_libraries(skity_unit_test PRIVATE "-framework CoreText")
     endif()
 
     target_include_directories(skity_unit_test PRIVATE

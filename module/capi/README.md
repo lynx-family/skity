@@ -79,6 +79,9 @@ Build it with `SKITY_CAPI_MODULE=ON`, `SKITY_VK_BACKEND=ON`, and
 #include <skity/c/skity_texture_vk.h>
 #include <skity/c/skity_semaphore_vk.h>
 #include <skity/c/skity_presenter_vk.h>
+
+   For the CoreText typeface bridge (Apple platforms):
+#include <skity/c/skity_text_ct.h>
 */
 
 skity_context ctx;
