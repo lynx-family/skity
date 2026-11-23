@@ -20,6 +20,15 @@
 #include <utility>
 #include <vector>
 
+#if defined(SKITY_CT_FONT)
+// CoreText typeface bridge (skity_text_ct.h). skity::TypefaceCT exists only
+// when the CoreText font backend is compiled in; without it the portable NULL
+// stubs below keep the entry points linkable.
+#include <skity/c/skity_text_ct.h>
+
+#include <skity/text/ports/typeface_ct.hpp>
+#endif
+
 #include "handle.hpp"
 
 namespace {
@@ -163,6 +172,46 @@ skity_typeface skity_typeface_make_from_data(skity_data data) {
   return skity::capi::alloc_handle<skity_typeface_s>(
       SKITY_OBJECT_TYPE_TYPEFACE, SKITY_HANDLE_OWNING, std::move(sp));
 }
+
+/*
+ * skity_typeface_make_from_ct_font / _without_cache (skity_text_ct.h).
+ * CTFontRef is a plain CoreFoundation C type, so the typed entry points need
+ * no Objective-C++ glue and forward straight to skity::TypefaceCT, which
+ * retains the font unconditionally — NULL is rejected here.
+ */
+#if defined(SKITY_CT_FONT)
+skity_typeface skity_typeface_make_from_ct_font(CTFontRef ct_font) {
+  if (ct_font == nullptr) return nullptr;
+  auto sp = skity::TypefaceCT::TypefaceFromCTFont(ct_font);
+  if (sp == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_typeface_s>(
+      SKITY_OBJECT_TYPE_TYPEFACE, SKITY_HANDLE_OWNING, std::move(sp));
+}
+
+skity_typeface skity_typeface_make_from_ct_font_without_cache(
+    CTFontRef ct_font) {
+  if (ct_font == nullptr) return nullptr;
+  auto sp = skity::TypefaceCT::TypefaceFromCTFontWithoutCache(ct_font);
+  if (sp == nullptr) return nullptr;
+  return skity::capi::alloc_handle<skity_typeface_s>(
+      SKITY_OBJECT_TYPE_TYPEFACE, SKITY_HANDLE_OWNING, std::move(sp));
+}
+#else
+// Portable NULL stubs. The public declaration is left out of this
+// configuration — skity_text_ct.h pulls in <CoreText/CoreText.h>, which only
+// exists on Apple platforms — so the font is spelled void*, which is
+// pointer-ABI identical to CTFontRef.
+SKITY_C_API skity_typeface skity_typeface_make_from_ct_font(void* ct_font) {
+  (void)ct_font;
+  return nullptr;
+}
+
+SKITY_C_API skity_typeface
+skity_typeface_make_from_ct_font_without_cache(void* ct_font) {
+  (void)ct_font;
+  return nullptr;
+}
+#endif
 
 skity_typeface skity_typeface_get_default(void) {
   auto sp = skity::Typeface::GetDefaultTypeface();

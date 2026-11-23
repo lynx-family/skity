@@ -293,6 +293,23 @@ need to include `<vulkan/vulkan.h>`.
 header. Its C wrapper will live in a `.mm` source and accept the native
 `id<MTLDevice>` / `id<MTLCommandQueue>` as opaque `void*`. Not in Stage 1.
 
+### CoreText (typeface bridge)
+
+[`typeface_ct.hpp`](../../include/skity/text/ports/typeface_ct.hpp) wraps a
+CoreText `CTFontRef` as a `skity::Typeface`. `CTFontRef` is already a plain C
+type, so the C API reuses it directly and needs no Objective-C++ glue. The
+entry points live in `skity_text_ct.h` — separate from the umbrella like the
+Vulkan and Metal headers, because `<CoreText/CoreText.h>` only exists on Apple
+platforms:
+
+```c
+skity_typeface skity_typeface_make_from_ct_font(CTFontRef ct_font);
+skity_typeface skity_typeface_make_from_ct_font_without_cache(CTFontRef ct_font);
+```
+
+They are functional only in builds with `SKITY_CT_FONT=ON`; otherwise they
+still link and return `NULL`.
+
 ## 8. Header-only C++ Wrapper
 
 For C++ consumers, the eventual `skity.hpp` wraps the C handles in RAII types
@@ -402,7 +419,7 @@ Priority tags: **P3** is deferred / low-value.
 | `Path` | construction, arc family (tangent / oval / SVG), `add_*` (incl. per-corner radii), boolean ops, `PathMeasure`, `transform`, last-pt get/set, `copy_with_matrix/scale`, counts / `get_point` / `get_verb` / `get_conic_weight` / `is_rect` / `is_line` / `is_empty` / `is_finite`, convexity get/set, `get_segment_masks`, `add_path` append/extend modes, `clone`, `is_equal`, `get_last_move_pt` | `GetLastMovePt` has no failure signal on the C++ side (empty path result unspecified, mirrored here) |
 | `Image` | 5 factories (incl. the `GPUContext` variant) + `read_pixels` + `scale_pixels` + size getters | **P3**: alpha/type/backend introspection |
 | `Font` | create (incl. scale/skew ctor), typeface/size get/set, rendering-quality switch get/set, `get_metrics`, `make_with_size`, `get_widths` | **P3**: `get_widths` bounds overload, `LoadGlyph*` (needs GlyphData) |
-| `Typeface` | `make_from_file`, `make_from_data`, `get_default`, `unichars_to_glyphs`/`unichar_to_glyph` | **P3**: `get_font_style`/`is_bold`/`is_italic`, `contain_glyph`, `units_per_em`/`contains_color_table`, table / variation / descriptor |
+| `Typeface` | `make_from_file`, `make_from_data`, `make_from_ct_font` (CoreText backend), `get_default`, `unichars_to_glyphs`/`unichar_to_glyph` | **P3**: `get_font_style`/`is_bold`/`is_italic`, `contain_glyph`, `units_per_em`/`contains_color_table`, table / variation / descriptor |
 | `TextBlob` | build (UTF-8) + draw, pre-shaped glyph build (`create_from_glyphs`: caller-run shaping → glyph ids + positions), `get_bounds`, `compute_bounds`, `TypefaceDelegate` fallback (ordered-list + custom-fallback-callback) | **P3**: `get_text_run` (read-back — no caller demand found in the animax/clay reverse lookup; the proven need was the build side, now covered); fully custom `BreakTextRun` delegate (caller-driven segmentation) |
 | `Canvas` | full draw + state + clip + text/glyphs, `draw_image` sampling overloads, `draw_color4f`, per-corner-radii `draw_rrect`, `make_software_canvas` | **P3**: per-corner RRect clip/drrect, `get_global_clip_bounds` |
 | `DisplayList` | draw / cull-rect draw / bounds / op_count / properties / rtree search (+ non-overlapping rects) / per-op paint lookup, `begin_recording` with build options | `RecordedOpOffset` is exposed as a plain `int32_t` (round-trips through the public `RecordedOpOffset::Make`) — no opaque set type |

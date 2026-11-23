@@ -12,7 +12,9 @@
  * to pull in <vulkan/vulkan.h>. The Metal headers (skity_context_mtl.h /
  * skity_surface_mtl.h / skity_texture_mtl.h) are likewise separate: they are
  * Objective-C-only (skity_mtl_types.h), so Objective-C(++) consumers include
- * them directly.
+ * them directly. The CoreText typeface bridge (skity_text_ct.h) is separate
+ * for the same reason as Vulkan: it pulls in <CoreText/CoreText.h>, which
+ * only exists on Apple platforms.
  */
 
 #include <skity/c/skity_base.h>

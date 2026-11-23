@@ -73,6 +73,15 @@ if (${SKITY_UNIFIED_LIB})
   # way the standalone skity-capi does
   target_include_directories(skity PRIVATE ${CMAKE_CURRENT_LIST_DIR}/common)
 
+  # CoreText font backend guard for the typeface bridge in text_c.cpp: read
+  # off the same switch src/CMakeLists.txt enables the backend with. It has to
+  # be a target-level definition: skity is created in the top-level directory,
+  # so a source-file property set here does not reach it. No core source reads
+  # SKITY_CT_FONT, so only text_c.cpp is affected.
+  if (${SKITY_CT_FONT})
+    target_compile_definitions(skity PRIVATE SKITY_CT_FONT=1)
+  endif()
+
   # the skity/c headers become part of skity's public interface
   target_include_directories(skity
     PUBLIC
@@ -159,6 +168,12 @@ else()
 
   if (${SKITY_MTL_BACKEND})
     target_compile_definitions(skity-capi PRIVATE -DSKITY_METAL)
+  endif()
+
+  # CoreText font backend guard for the typeface bridge in text_c.cpp, read
+  # off the same switch src/CMakeLists.txt enables the backend with.
+  if (${SKITY_CT_FONT})
+    target_compile_definitions(skity-capi PRIVATE -DSKITY_CT_FONT)
   endif()
 
   # Match the core library's LTO setting (see the skity target in the root
