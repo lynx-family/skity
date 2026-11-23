@@ -73,7 +73,9 @@ class SKITY_API Path {
     kSimpleRRect,
   };
 
-  class Iter {
+  // MSVC does not propagate the enclosing class's dllexport to nested
+  // classes, so the iterators need the export annotation themselves.
+  class SKITY_API Iter {
    public:
     /**
      * @brief Create empty Path::Iter
@@ -165,7 +167,7 @@ class SKITY_API Path {
     SegmentState segment_state_;
   };
 
-  class RawIter {
+  class SKITY_API RawIter {
    public:
     RawIter();
     explicit RawIter(Path const& path) : RawIter() { SetPath(path); }
