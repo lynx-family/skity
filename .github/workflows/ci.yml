@@ -256,6 +256,30 @@ jobs:
                 cd out/cmake_host_build/Debug
                 ./skity_unit_test --gtest_color=no --gtest_print_time=1
 
+    # Builds the consumer-facing DLL shape: SKITY_TEST=OFF keeps
+    # CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS disabled (see the root CMakeLists.txt),
+    # so symbols can only be exported through explicit SKITY_API annotations.
+    # The test build above masks missing annotations (e.g. nested classes,
+    # whose dllexport MSVC does not inherit from the enclosing class) because
+    # export-all generates a .def from every object file. This job links the
+    # skity-capi / skity-codec consumers against the annotated skity.dll and
+    # fails the build if a required public symbol is not exported.
+    windows_release_shape_build:
+        runs-on: lynx-windows-2022-large
+        timeout-minutes: 30
+        steps:
+          - name: Download Source
+            uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+          - name: Sync Dependencies
+            run: |
+                powershell -File "./tools/hab.ps1" sync -f --target dev,module,ci
+          - name: Run Build
+            run: |
+                $WindowsSdkVersion = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Directory | Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1 -ExpandProperty Name
+                Write-Host "Using Windows SDK version: $WindowsSdkVersion"
+                ./buildtools/cmake/bin/cmake -B out/cmake_release_shape -DCMAKE_SYSTEM_VERSION=$WindowsSdkVersion -DSKITY_EXAMPLE=OFF -DCMAKE_BUILD_TYPE=Debug -DSKITY_CODEC_MODULE=ON -DSKITY_CAPI_MODULE=ON -DSKITY_TEST=OFF -DWGX_SPIRV_BACKEND=ON -DCMAKE_POLICY_VERSION_MINIMUM='3.5'
+                ./buildtools/cmake/bin/cmake --build out/cmake_release_shape --target skity skity-capi skity-codec
+
     osx_metal_golden_test:
         runs-on: lynx-darwin-15.6.1-medium
         timeout-minutes: 30
