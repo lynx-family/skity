@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "src/render/text/atlas/atlas_manager.hpp"
 #include "src/render/text/direct_glyph_run.hpp"
 #include "src/render/text/glyph_run_fallback.hpp"
 #include "src/render/text/sdf_glyph_run.hpp"
@@ -29,19 +28,6 @@ RasterMethod SelectRasterMethod(const GlyphRunInput& input, const Paint& paint,
       Vec2{transform.GetSkewX(), transform.GetScaleY()}.Length();
   const float text_scale = std::max(scale_x, scale_y) * context.device_scale;
   const float text_size = input.font.GetSize() * text_scale;
-
-  if (context.options.direct && format == AtlasFormat::RGBA32 &&
-      context.atlas_manager.IsLargeEmojiAtlasEnabled() &&
-      !transform.HasPersp()) {
-    constexpr float kMaxLargeEmojiTextSize = 1024.f;
-    if (text_size >= paint.GetFontThreshold() &&
-        text_size < kMaxLargeEmojiTextSize &&
-        context.atlas_manager.GetAtlas(format)
-            ->GetConfig()
-            .is_large_emoji_atlas) {
-      return RasterMethod::kDirect;
-    }
-  }
 
   TextRenderControl control{!context.options.sdf};
   if (context.options.direct &&

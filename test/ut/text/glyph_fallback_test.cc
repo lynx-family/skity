@@ -269,15 +269,43 @@ TEST_F(GlyphFallbackTest, ActualSizeRetryKeepsBearingAndDensityUnits) {
   }
 }
 
-TEST_F(GlyphFallbackTest, LargeEmojiAtlasStillHasFallbackAtSizeCutoff) {
+TEST(GlyphAtlasMaskTest, PreservesMaskAndOnlyUsesFormatCapacityBits) {
+  for (uint8_t mask : {0, 1, 2, 3, 8, 9, 10, 11, 255}) {
+    SCOPED_TRACE(static_cast<int>(mask));
+    FakeGPUContext gpu;
+    ASSERT_TRUE(gpu.Init());
+    gpu.SetLargerAtlasMask(mask);
+    const auto& a8 =
+        gpu.GetAtlasManager()->GetAtlas(AtlasFormat::A8)->GetConfig();
+    const auto& rgba =
+        gpu.GetAtlasManager()->GetAtlas(AtlasFormat::RGBA32)->GetConfig();
+    EXPECT_EQ(a8.max_bitmap_size, 512u);
+    EXPECT_EQ(rgba.max_bitmap_size, 256u);
+    EXPECT_EQ(a8.max_num_bitmap_per_texture, (mask & 1) ? 16u : 4u);
+    EXPECT_EQ(rgba.max_num_bitmap_per_texture, (mask & 2) ? 16u : 4u);
+    EXPECT_EQ(gpu.GetLargerAtlasMask(), mask);
+  }
+}
+
+TEST_F(GlyphFallbackTest, ReservedAtlasBitPreservesColorGlyphFallback) {
   gpu.SetLargerAtlasMask(8);
+  TestGlyphSpec bitmap;
+  bitmap.format = GlyphFormat::RGBA32;
+  TestGlyphSpec vector_glyph = bitmap;
+  vector_glyph.drawable = true;
   auto face = std::make_shared<GlyphTestTypeface>(
-      std::vector<TestGlyphSpec>{{20.f, 20.f, false, GlyphFormat::RGBA32}});
+      std::vector<TestGlyphSpec>{bitmap, vector_glyph});
   for (float size : {320.f, 1024.f, 2048.f}) {
-    auto target = Build(face, {0}, Paint{}, size);
+    auto target = Build(face, {0, 1}, Paint{}, size);
     ASSERT_EQ(target.atlas_draws.size(), 1u);
+    ASSERT_EQ(target.drawable_draws.size(), 1u);
     EXPECT_TRUE(target.path_draws.empty());
-    EXPECT_NEAR(target.atlas_draws[0].layer_bounds.Width(), size, 2.f);
+    const auto& draw = target.atlas_draws[0];
+    const float text_units_per_pixel = draw.draw->GetTransform().GetScaleX();
+    EXPECT_GT(text_units_per_pixel, 1.f);
+    // The test scaler rounds the raster width up to the next whole pixel.
+    EXPECT_GE(draw.layer_bounds.Width(), size);
+    EXPECT_LT(draw.layer_bounds.Width(), size + text_units_per_pixel);
   }
 }
 
