@@ -416,7 +416,7 @@ void SWCanvas::OnDrawPaint(const Paint& paint) {
   path.AddRect(bounds);
 
   SWRaster raster;
-  raster.RastePath(path, Matrix{});
+  raster.RastePath(path, Matrix{}, GetScanClipBounds());
 
   std::unique_ptr<SWSpanBrush> brush;
   // no clip
