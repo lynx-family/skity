@@ -414,3 +414,14 @@ TEST(BlendFilterColorSpaceTest, FlattenWritesSRGBConvertedColor) {
   EXPECT_LT(expected.g, 0.f);
   EXPECT_LT(expected.b, 0.f);
 }
+
+#ifdef SKITY_CPU
+TEST(ColorFilter, ComposedFiltersApplyInnerBeforeOuter) {
+  auto inner = skity::ColorFilters::Blend(skity::ColorSetARGB(255, 100, 70, 40),
+                                          skity::BlendMode::kSrc);
+  auto outer = skity::ColorFilters::SRGBToLinearGamma();
+  auto composed = skity::ColorFilters::Compose(outer, inner);
+  EXPECT_EQ(composed->FilterColor(skity::Color_WHITE),
+            outer->FilterColor(skity::ColorSetARGB(255, 100, 70, 40)));
+}
+#endif
