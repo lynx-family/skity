@@ -22,6 +22,8 @@ constexpr char kSoftwareGoldenFilter[] =
     "GradientGolden.LinearGradientTileMode:GradientGolden.RadialGradient:"
     "GradientGolden.RadialGradient2:GradientGolden.TwoPointConicalGradient_*:"
     "ImageGolden.ShaderTileModesNearest:"
+    "InitialColorClearGolden.RetainedFrames:"
+    "RecorderGolden.DisplayListCullRectClipDrawPaint:"
     "RecorderGolden.DisplayListCullRectClipRestoreToCount:"
     "RecorderGolden.DisplayListSaveLayerSetResetMatrix:"
     "SaveLayerGolden.ResetMatrixDrawColorFillsLayer:"
