@@ -20,6 +20,8 @@ constexpr char kSoftwareGoldenFilter[] =
     "ShapeGolden.EvenOddContours:SimpleShapeGolden.DrawFilledRect:"
     "SimpleShapeGolden.DrawStrokeRect:"
     "ClipGolden.ClipPathDifference:ClipGolden.ClipRRect:"
+    "GradientGolden.LinearGradientFallbackTileMode:"
+    "GradientGolden.RadialGradientFallbackTileMode:"
     "GradientGolden.LinearGradientTileMode:GradientGolden.RadialGradient:"
     "GradientGolden.RadialGradient2:GradientGolden.TwoPointConicalGradient_*:"
     "ImageGolden.ShaderTileModesNearest:"
