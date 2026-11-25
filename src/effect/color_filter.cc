@@ -167,7 +167,9 @@ PMColor BlendColorFilter::OnFilterColor(PMColor src) const {
 }
 
 PMColor ComposeColorFilter::OnFilterColor(PMColor src) const {
-  // TODO(zhangzhijian): Fix it.
+  for (const auto* filter : filters_) {
+    src = filter->FilterColor(src);
+  }
   return src;
 }
 
