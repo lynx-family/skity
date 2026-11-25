@@ -14,6 +14,7 @@ namespace {
 
 // Add shared cases as they are validated on the software backend.
 constexpr char kSoftwareGoldenFilter[] =
+    "BlendModeGolden.Screen:"
     "ShapeGolden.DrawEmptyPath:ShapeGolden.DrawDegenerateCubic:"
     "ShapeGolden.StrokeMiterLimit:ShapeGolden.WindingContours:"
     "ShapeGolden.EvenOddContours:SimpleShapeGolden.DrawFilledRect:"
