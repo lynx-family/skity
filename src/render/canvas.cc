@@ -400,6 +400,10 @@ void Canvas::DrawImageRect(const std::shared_ptr<Image> &image, const Rect &src,
 void Canvas::DrawGlyphs(int count, const GlyphID *glyphs,
                         const float *position_x, const float *position_y,
                         const Font &font, const Paint &paint) {
+  // Recording canvases preserve zero-count glyph operations for playback.
+  if (count < 0) {
+    return;
+  }
   this->OnDrawGlyphs(count, glyphs, position_x, position_y, font, paint);
 }
 

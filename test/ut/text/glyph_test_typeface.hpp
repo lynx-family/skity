@@ -36,6 +36,7 @@ class GlyphTestTypeface final : public Typeface {
  public:
   struct State {
     std::vector<TestGlyphSpec> glyphs;
+    std::vector<ScalerContextDesc> scaler_descs;
     std::vector<uint32_t> image_requests;
     std::vector<uint32_t> drawable_requests;
     uint32_t path_requests = 0;
@@ -180,6 +181,7 @@ class GlyphTestTypeface final : public Typeface {
   }
   std::unique_ptr<ScalerContext> OnCreateScalerContext(
       const ScalerContextDesc* desc) const override {
+    state->scaler_descs.push_back(*desc);
     return std::make_unique<Context>(state, desc);
   }
   VariationPosition OnGetVariationDesignPosition() const override { return {}; }

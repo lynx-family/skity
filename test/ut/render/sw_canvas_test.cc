@@ -8,6 +8,7 @@
 #include <skity/graphic/color.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/render/canvas.hpp>
+#include <skity/text/font.hpp>
 
 #include "src/graphic/path_priv.hpp"
 #include "src/render/sw/sw_edge.hpp"
@@ -32,6 +33,16 @@ void DrawRotatedSaveLayerScene(skity::Bitmap* bitmap,
 }
 
 }  // namespace
+
+TEST(SWCanvas, DrawGlyphsWithZeroCountLeavesPixelsUnchanged) {
+  skity::Bitmap bitmap(1, 1, skity::kPremul_AlphaType);
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+  ASSERT_TRUE(canvas);
+  canvas->Clear(skity::Color_BLUE);
+  canvas->DrawGlyphs(0, nullptr, nullptr, nullptr, skity::Font{},
+                     skity::Paint{});
+  EXPECT_EQ(bitmap.GetPixel(0, 0), skity::Color_BLUE);
+}
 
 TEST(SWCanvas, SaveLayerClipsHugeBoundsToDevice) {
   skity::Bitmap bitmap(16, 16, skity::AlphaType::kPremul_AlphaType,

@@ -523,6 +523,9 @@ void SWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
 void SWCanvas::OnDrawGlyphs(uint32_t count, const GlyphID* glyphs,
                             const float* position_x, const float* position_y,
                             const Font& font, const Paint& paint) {
+  if (count == 0) {
+    return;
+  }
   if (PeekLayerStack()) {
     PeekLayerStack()->canvas->OnDrawGlyphs(count, glyphs, position_x,
                                            position_y, font, paint);

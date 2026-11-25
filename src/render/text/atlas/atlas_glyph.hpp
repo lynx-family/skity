@@ -84,8 +84,11 @@ struct GlyphKey {
   const PackedGlyphID packed_glyph_id;
   const ScalerContextDesc scaler_context_desc;
 
-  GlyphKey(PackedGlyphID id, const ScalerContextDesc& desc)
-      : packed_glyph_id(id), scaler_context_desc(desc) {}
+  // Physical texel radii distinguish atlas masks that share a scaler context.
+  const Vec2 blur_radius;
+
+  GlyphKey(PackedGlyphID id, const ScalerContextDesc& desc, Vec2 radius = {})
+      : packed_glyph_id(id), scaler_context_desc(desc), blur_radius(radius) {}
 
   GlyphKey(GlyphID id, const ScalerContextDesc& desc)
       : GlyphKey(PackedGlyphID(id), desc) {}
@@ -104,7 +107,8 @@ struct GlyphKey {
 };
 
 static_assert(sizeof(GlyphKey) == sizeof(GlyphKey::packed_glyph_id) +
-                                      sizeof(GlyphKey::scaler_context_desc),
+                                      sizeof(GlyphKey::scaler_context_desc) +
+                                      sizeof(GlyphKey::blur_radius),
               "GlyphKey must have no padding");
 
 }  // namespace skity
