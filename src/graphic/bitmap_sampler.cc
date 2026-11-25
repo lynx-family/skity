@@ -24,13 +24,9 @@ float RemapFloatTile(float t, TileMode tile_mode) {
 }  // namespace
 
 Vec4 BitmapSampler::SampleXY(Vec2 xy) const {
-  uint32_t w = bitmap_.Width();
-  uint32_t h = bitmap_.Height();
-
-  xy.x = glm::clamp<uint32_t>(xy.x, 0, w - 1);
-  xy.y = glm::clamp<uint32_t>(xy.y, 0, h - 1);
-
-  return Color4fFromColor(bitmap_.GetPixel(xy.x, xy.y));
+  const uint32_t x = std::clamp<double>(xy.x, 0, bitmap_.Width() - 1);
+  const uint32_t y = std::clamp<double>(xy.y, 0, bitmap_.Height() - 1);
+  return Color4fFromColor(bitmap_.GetPixel(x, y));
 }
 
 Vec4 BitmapSampler::SampleUnitNearest(Vec2 uv) const {

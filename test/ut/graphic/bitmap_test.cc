@@ -169,6 +169,11 @@ TEST(BitmapSampler, LinearSample) {
   skity::BitmapSampler sampler(bmp, sampling, skity::TileMode::kClamp,
                                skity::TileMode::kClamp);
 
+  EXPECT_EQ(sampler.GetColor({0.f, 0.f}), skity::Color_RED);
+  EXPECT_EQ(sampler.GetColor({1.f, 0.f}), skity::Color_GREEN);
+  EXPECT_EQ(sampler.GetColor({0.f, 1.f}), skity::Color_BLUE);
+  EXPECT_EQ(sampler.GetColor({1.f, 1.f}), skity::Color_YELLOW);
+
   // Sample at the exact center, should be an average of all 4 colors
   skity::Color center_color = sampler.GetColor({0.5f, 0.5f});
   // Expected: R = (255+0+0+255)/4 = 127.5
