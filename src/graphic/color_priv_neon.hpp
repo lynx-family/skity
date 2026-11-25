@@ -112,16 +112,12 @@ static inline uint8x8x4_t PMModulateNeon(uint8x8x4_t dst, uint8x8x4_t src) {
 
 // r = s + d - s*d
 static inline uint8x8x4_t PMScreenNeon(uint8x8x4_t dst, uint8x8x4_t src) {
-  return {
-      vqsub_u8(vqadd_u8(src.val[0], dst.val[0]),
-               MulDiv255RoundNeon(src.val[0], dst.val[0])),
-      vqsub_u8(vqadd_u8(src.val[1], dst.val[1]),
-               MulDiv255RoundNeon(src.val[1], dst.val[1])),
-      vqsub_u8(vqadd_u8(src.val[2], dst.val[2]),
-               MulDiv255RoundNeon(src.val[2], dst.val[2])),
-      vqsub_u8(vqadd_u8(src.val[3], dst.val[3]),
-               MulDiv255RoundNeon(src.val[3], dst.val[3])),
-  };
+  // Screen is the complement of multiplying the two complements.
+  for (int i = 0; i < 4; ++i) {
+    dst.val[i] =
+        vmvn_u8(MulDiv255RoundNeon(vmvn_u8(src.val[i]), vmvn_u8(dst.val[i])));
+  }
+  return dst;
 }
 
 }  // namespace skity

@@ -207,3 +207,16 @@ TEST(PathEdgeIter, PlanarReadsPreserveClosingEdgesAndContourBoundaries) {
   EXPECT_EQ(edge.GetPoint2D(1), (skity::Vec2{10, 20}));
   EXPECT_FALSE(iter.next());
 }
+
+TEST(SWCanvas, ScreenKeepsOpaqueDestinationAcrossSpan) {
+  skity::Bitmap bitmap(17, 1, skity::kPremul_AlphaType);
+  auto canvas = skity::Canvas::MakeSoftwareCanvas(&bitmap);
+  canvas->Clear(skity::ColorSetARGB(255, 200, 64, 0));
+  skity::Paint paint;
+  paint.SetColor(skity::ColorSetARGB(255, 200, 0, 128));
+  paint.SetBlendMode(skity::BlendMode::kScreen);
+  canvas->DrawPaint(paint);
+  for (uint32_t x = 0; x < bitmap.Width(); ++x) {
+    EXPECT_EQ(bitmap.GetPixel(x, 0), skity::ColorSetARGB(255, 243, 64, 128));
+  }
+}
