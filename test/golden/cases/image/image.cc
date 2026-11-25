@@ -30,6 +30,29 @@ std::shared_ptr<skity::Image> MakeCheckerImage() {
 
 }  // namespace
 
+TEST(ImageGolden, NearestPaintColorFilter) {
+  // Each row spans eight NEON batches and one scalar pixel.
+  constexpr int kWidth = 65;
+  constexpr int kHeight = 32;
+  skity::Bitmap bitmap(1, 2);
+  bitmap.SetPixel(0, 0, skity::Color_RED);
+  bitmap.SetPixel(0, 1, skity::Color_BLUE);
+  auto image = skity::Image::MakeImage(bitmap.GetPixmap());
+  skity::Paint paint;
+  paint.SetColorFilter(
+      skity::ColorFilters::Blend(skity::Color_GREEN, skity::BlendMode::kPlus));
+
+  std::string path =
+      std::string(kGoldenTestDir) + "image_nearest_color_filter.png";
+  skity::testing::GoldenTestEnvConfig config;
+  config.require_exact_pixel_match = true;
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      kWidth, kHeight, path.c_str(), config, [&](skity::Canvas* canvas) {
+        canvas->DrawImage(image, skity::Rect::MakeWH(kWidth, kHeight),
+                          skity::SamplingOptions{}, &paint);
+      }));
+}
+
 TEST(ImageGolden, DrawImageRect_Cubic_CatmullRom) {
   auto image = MakeCheckerImage();
 
