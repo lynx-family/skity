@@ -68,6 +68,8 @@ class SKITY_API Bitmap {
   ColorType GetColorType() const { return pixmap_->GetColorType(); }
 
  private:
+  friend class SWRenderTarget;
+
   std::shared_ptr<Pixmap> pixmap_;
   bool read_only_ = false;
 };

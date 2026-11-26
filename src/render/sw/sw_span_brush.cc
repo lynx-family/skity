@@ -100,32 +100,35 @@ void SWSpanBrush::Brush() {
       continue;
     }
 
-    auto u_alpha = static_cast<uint8_t>(span.cover & global_alpha_);
-
-    BrushH(x, y, len, u_alpha);
+    BrushH(x, y, len, span.cover);
   }
   OnPostBrush();
 }
 
-void SWSpanBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
+void SWSpanBrush::BrushH(int32_t x, int32_t y, int32_t length,
+                         uint8_t coverage) {
+  const PMColor opacity =
+      ColorSetARGB(global_alpha_, global_alpha_, global_alpha_, global_alpha_);
+
+  // Sample once at x for a single pixel or when every pixel has the same color.
   if (length == 1 || PureColor()) {
     PMColor color = CalculateColor(x, y);
 
-    if (alpha != 255) {
-      color = AlphaMulQ(color, alpha);
+    if (global_alpha_ != 255) {
+      color = PMColorMul(color, opacity);
     }
 
     if (color_filter_) {
       color = color_filter_->FilterColor(color);
     }
-    render_target_.BlendPixelH(x, y, color, length, blend_);
+    render_target_.BlendPixelH(x, y, color, length, blend_, coverage);
   } else {
     std::vector<uint32_t> pm_colors(static_cast<size_t>(length));
 
     for (int32_t l = 0; l < length; l++) {
       PMColor color = CalculateColor(x + l, y);
-      if (alpha != 255) {
-        color = AlphaMulQ(color, alpha);
+      if (global_alpha_ != 255) {
+        color = PMColorMul(color, opacity);
       }
 
       if (color_filter_) {
@@ -135,7 +138,8 @@ void SWSpanBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
       pm_colors[l] = color;
     }
 
-    render_target_.BlendPixelH(x, y, pm_colors.data(), length, blend_);
+    render_target_.BlendPixelH(x, y, pm_colors.data(), length, blend_,
+                               coverage);
   }
 }
 
@@ -593,10 +597,9 @@ Color PixmapBrush::CalculateColor(int32_t x, int32_t y) {
 
 #ifdef SKITY_ARM_NEON
 namespace {
-void CalculateImageColorsNeon(int32_t p_x, int32_t p_y, int32_t p_alpha,
-                              uint32_t p_width, uint32_t p_height,
-                              uint32_t p_row_bytes, uint8_t* p_pixel,
-                              const Matrix& p_points_to_unit,
+void CalculateImageColorsNeon(int32_t p_x, int32_t p_y, uint32_t p_width,
+                              uint32_t p_height, uint32_t p_row_bytes,
+                              uint8_t* p_pixel, const Matrix& p_points_to_unit,
                               TileMode x_tile_mode, TileMode y_tile_mode,
                               uint32_t* p_data) {
   float32x4_t offset = {0.5f, 1.5f, 2.5f, 3.5f};
@@ -668,17 +671,19 @@ void CalculateImageColorsNeon(int32_t p_x, int32_t p_y, int32_t p_alpha,
 
 #endif
 
-void PixmapBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
+void PixmapBrush::BrushH(int32_t x, int32_t y, int32_t length,
+                         uint8_t coverage) {
   SKITY_TRACE_EVENT(PixmapBrush_BrushH);
 
 #ifdef SKITY_ARM_NEON
   // NEON reads four-byte texels directly, bypassing filters and color
   // conversion.
   if (!use_fast_nearest_) {
-    SWSpanBrush::BrushH(x, y, length, alpha);
+    SWSpanBrush::BrushH(x, y, length, coverage);
     return;
   }
 
+  const uint8_t alpha = GetGlobalAlpha();
   const int32_t N = 8;
   std::vector<PMColor> colors(static_cast<size_t>(N));
 
@@ -689,7 +694,7 @@ void PixmapBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
     int32_t l = i * N;
     for (int j = 0; j < 2; j++) {
       CalculateImageColorsNeon(
-          x + l + j * 4, y, alpha, texture_->Width(), texture_->Height(),
+          x + l + j * 4, y, texture_->Width(), texture_->Height(),
           texture_->RowBytes(), texture_->GetPixelAddr(), points_to_unit_,
           x_tile_mode_, y_tile_mode_, colors.data() + j * 4);
     }
@@ -713,14 +718,15 @@ void PixmapBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
     }
     vst4_u8(reinterpret_cast<uint8_t*>(colors.data()), src);
 
-    GetRenderTarget().BlendPixelH(x + l, y, colors.data(), N, GetBlendMode());
+    GetRenderTarget().BlendPixelH(x + l, y, colors.data(), N, GetBlendMode(),
+                                  coverage);
   }
 
   if (neon_filled < length) {
-    SWSpanBrush::BrushH(x + neon_filled, y, length - neon_filled, alpha);
+    SWSpanBrush::BrushH(x + neon_filled, y, length - neon_filled, coverage);
   }
 #else
-  SWSpanBrush::BrushH(x, y, length, alpha);
+  SWSpanBrush::BrushH(x, y, length, coverage);
 #endif
 }
 

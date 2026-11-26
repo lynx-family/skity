@@ -2,7 +2,9 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <cstring>
 #include <skity/graphic/bitmap.hpp>
+#include <skity/io/data.hpp>
 
 #include "gtest/gtest.h"
 #include "src/graphic/bitmap_sampler.hpp"
@@ -47,6 +49,25 @@ TEST(Bitmap, GetAlphaType) {
   skity::Bitmap bmp(1, 1, skity::AlphaType::kPremul_AlphaType,
                     skity::ColorType::kRGBA);
   EXPECT_EQ(bmp.GetAlphaType(), skity::AlphaType::kPremul_AlphaType);
+}
+
+TEST(Bitmap, RGB565WithOddRowBytes) {
+  using namespace skity;
+  uint8_t bytes[] = {0, 0, 0x5a, 0, 0, 0x5a};
+  const uint16_t green = 0x07e0;
+  std::memcpy(bytes + 3, &green, sizeof(green));
+  auto data = Data::MakeWithCopy(bytes, sizeof(bytes));
+  Bitmap bitmap(std::make_shared<Pixmap>(data, 3, 1, 2, kOpaque_AlphaType,
+                                         ColorType::kRGB565),
+                false);
+  EXPECT_EQ(bitmap.GetPixel(0, 1), ColorSetRGB(0, 252, 0));
+  bitmap.SetPixel(0, 1, Color_MAGENTA);
+  uint16_t packed;
+  std::memcpy(&packed, data->Bytes() + 3, sizeof(packed));
+  EXPECT_EQ(packed, 0xf81f);
+  EXPECT_EQ(bitmap.GetPixel(0, 0), Color_BLACK);
+  EXPECT_EQ(data->Bytes()[2], 0x5a);
+  EXPECT_EQ(data->Bytes()[5], 0x5a);
 }
 
 TEST(Bitmap, PixelReadWriteSingle) {

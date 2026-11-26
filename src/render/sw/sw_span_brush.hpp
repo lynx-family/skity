@@ -52,11 +52,13 @@ class SWSpanBrush {
 
   Bitmap* CurrentBitmap() const { return bitmap_; }
 
+  uint8_t GetGlobalAlpha() const { return global_alpha_; }
+
   BlendMode GetBlendMode() const { return blend_; }
 
   SWRenderTarget& GetRenderTarget() { return render_target_; }
 
-  virtual void BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha);
+  virtual void BrushH(int32_t x, int32_t y, int32_t length, uint8_t coverage);
 
   virtual void OnPreBrush() {}
   virtual void OnPostBrush() {}
@@ -123,7 +125,7 @@ class PixmapBrush : public SWSpanBrush {
  protected:
   Color CalculateColor(int32_t x, int32_t y) override;
 
-  void BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) override;
+  void BrushH(int32_t x, int32_t y, int32_t length, uint8_t coverage) override;
 
  private:
   std::unique_ptr<Bitmap> texture_;
