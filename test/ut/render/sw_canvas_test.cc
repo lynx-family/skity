@@ -6,6 +6,7 @@
 
 #include <array>
 #include <skity/effect/color_filter.hpp>
+#include <skity/effect/image_filter.hpp>
 #include <skity/effect/shader.hpp>
 #include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color.hpp>
@@ -14,6 +15,8 @@
 #include <skity/io/data.hpp>
 #include <skity/render/canvas.hpp>
 #include <skity/text/font.hpp>
+#include <skity/text/text_blob.hpp>
+#include <skity/text/typeface.hpp>
 
 #include "src/graphic/path_priv.hpp"
 #include "src/render/sw/sw_edge.hpp"
@@ -47,6 +50,75 @@ TEST(SWCanvas, DrawGlyphsWithZeroCountLeavesPixelsUnchanged) {
   canvas->DrawGlyphs(0, nullptr, nullptr, nullptr, skity::Font{},
                      skity::Paint{});
   EXPECT_EQ(bitmap.GetPixel(0, 0), skity::Color_BLUE);
+}
+
+TEST(SWCanvas, ComposedImageFiltersKeepOrderAndLocalBounds) {
+  using namespace skity;
+  Bitmap bitmap(40, 4, kPremul_AlphaType, ColorType::kBGRA);
+  auto canvas = Canvas::MakeSoftwareCanvas(&bitmap);
+  Bitmap source(1, 1, kPremul_AlphaType);
+  source.SetPixel(0, 0, Color_WHITE);
+  auto translate = ImageFilters::MatrixTransform(Matrix::Translate(5, 0));
+  auto scale = ImageFilters::MatrixTransform(Matrix::Scale(2, 1));
+  auto tint = ImageFilters::ColorFilter(
+      ColorFilters::Blend(Color_BLUE, BlendMode::kSrcIn));
+  Paint paint;
+  paint.SetImageFilter(
+      ImageFilters::Compose(tint, ImageFilters::Compose(scale, translate)));
+  paint.SetAlphaF(0.5f);
+  paint.SetColorFilter(
+      ColorFilters::Blend(ColorSetARGB(128, 255, 0, 0), BlendMode::kSrcIn));
+  canvas->Clear(Color_GREEN);
+  paint.SetBlendMode(BlendMode::kSrc);
+  canvas->DrawImage(Image::MakeImage(source.GetPixmap()),
+                    Rect::MakeXYWH(4, 0, 3, 4), &paint);
+  EXPECT_TRUE(canvas->GetTotalMatrix().IsIdentity());
+  EXPECT_EQ(bitmap.GetPixel(17, 2), Color_GREEN);
+  EXPECT_EQ(bitmap.GetPixel(18, 2), ColorSetARGB(64, 64, 0, 0));
+  EXPECT_EQ(bitmap.GetPixel(23, 2), ColorSetARGB(64, 64, 0, 0));
+  EXPECT_EQ(bitmap.GetPixel(24, 2), Color_GREEN);
+}
+
+TEST(SWCanvas, ImageFilterMovesAndTintsTextBlob) {
+  using namespace skity;
+  auto face = Typeface::MakeFromFile(SKITY_FONT_DIR
+                                     "fonts/resources/Roboto-Regular.ttf");
+  ASSERT_TRUE(face);
+  const GlyphID glyph = face->UnicharToGlyph('g');
+  Font font(face, 24);
+  const TextRun run(font, {glyph}, {0.f}, {9.f});
+  const TextBlob blob({run, run});
+  auto filter = ImageFilters::Compose(
+      ImageFilters::ColorFilter(
+          ColorFilters::Blend(ColorSetARGB(128, 0, 0, 255), BlendMode::kSrcIn)),
+      ImageFilters::MatrixTransform(Matrix::Translate(8, 3)));
+  for (bool use_blob : {true, false}) {
+    auto draw = [&](Bitmap& bitmap, float x, float y, const Paint& paint) {
+      auto canvas = Canvas::MakeSoftwareCanvas(&bitmap);
+      if (use_blob) {
+        canvas->DrawTextBlob(&blob, x, y, paint);
+      } else {
+        canvas->DrawGlyphs(1, &glyph, &x, &y, font, paint);
+      }
+    };
+    Bitmap expected(48, 40, kPremul_AlphaType);
+    Bitmap actual(48, 40, kPremul_AlphaType);
+    Paint paint;
+    paint.SetColor(Color_BLUE);
+    draw(expected, 12, 27, paint);
+    paint.SetColor(Color_RED);
+    paint.SetImageFilter(filter);
+    draw(actual, 4, 24, paint);
+    for (uint32_t y = 0; y < actual.Height(); ++y) {
+      for (uint32_t x = 0; x < actual.Width(); ++x) {
+        // The half-opacity tint is applied once, even where the two runs
+        // overlap.
+        auto alpha = (ColorGetA(expected.GetPixel(x, y)) + 1) / 2;
+        ASSERT_EQ(actual.GetPixel(x, y), ColorSetARGB(alpha, 0, 0, alpha))
+            << "blob=" << use_blob << " x=" << x << " y=" << y;
+      }
+    }
+  }
 }
 
 TEST(SWCanvas, SaveLayerClipsHugeBoundsToDevice) {

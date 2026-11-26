@@ -15,6 +15,7 @@
 #include <skity/text/text_blob.hpp>
 #include <skity/text/text_run.hpp>
 
+#include "src/base/fixed_types.hpp"
 #include "src/effect/gradient_fallback.hpp"
 #include "src/effect/image_filter_base.hpp"
 #include "src/effect/mask_filter_priv.hpp"
@@ -485,6 +486,17 @@ void SWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
     return;
   }
 
+  if (paint.GetImageFilter()) {
+    auto bounds = blob->GetBoundsRect().MakeOffset(x, y);
+    if (!bounds.IsEmpty()) {
+      DrawFiltered(ComputeBoundsIfStroke(bounds.MakeOutset(1, 1), paint), paint,
+                   [&](SWCanvas& canvas, const Paint& source) {
+                     canvas.OnDrawBlob(blob, x, y, source);
+                   });
+    }
+    return;
+  }
+
   float advance_x = 0.f;
   for (const auto& run : blob->GetTextRun()) {
     const Font& font = run.GetFont();
@@ -824,71 +836,72 @@ std::unique_ptr<SWSpanBrush> SWCanvas::GenerateBrush(
                                            paint.GetBlendMode(), color);
 }
 
-void SWCanvas::HandleFilter(Path const& path, Paint const& paint) {
-  Paint work_paint = paint;
-  work_paint.SetMaskFilter(nullptr);
-  work_paint.SetImageFilter(nullptr);
-
+template <typename Draw>
+void SWCanvas::DrawFiltered(const Rect& bounds, const Paint& paint, Draw draw) {
+  if (bounds.IsEmpty()) {
+    return;
+  }
   auto mask_filter = paint.GetMaskFilter();
   auto image_filter = As_IFB(paint.GetImageFilter().get());
-  auto bounds = ComputeBoundsIfStroke(path.GetBounds(), paint);
 
-  float radius_x =
+  const float radius_x =
       mask_filter ? mask_filter->GetBlurRadius() : image_filter->GetRadiusX();
-  float radius_y =
+  const float radius_y =
       mask_filter ? mask_filter->GetBlurRadius() : image_filter->GetRadiusY();
   auto filter_bounds =
       ImageFilterBase::ApproximateFilteredBounds(bounds, radius_x, radius_y);
+  Bitmap bitmap(float_saturate2int(filter_bounds.Width()),
+                float_saturate2int(filter_bounds.Height()), kPremul_AlphaType);
+  if (!ImageFilterBase::InheritColorSpace(bitmap, *bitmap_)) {
+    return;
+  }
+  SWCanvas surface(&bitmap);
+  surface.Translate(-filter_bounds.Left(), -filter_bounds.Top());
+  Paint source = paint;
+  source.SetImageFilter(nullptr);
+  source.SetMaskFilter(nullptr);
+  source.SetColorFilter(nullptr);
+  source.SetBlendMode(BlendMode::kSrcOver);
+  draw(surface, source);
 
-  Bitmap bitmap(filter_bounds.Width(), filter_bounds.Height(),
-                AlphaType::kPremul_AlphaType);
-
-  auto temp_canvas = Canvas::MakeSoftwareCanvas(&bitmap);
-  temp_canvas->Translate(-filter_bounds.Left(), -filter_bounds.Top());
-  temp_canvas->DrawPath(path, work_paint);
-
+  // Source opacity is already in the bitmap. Filter its colors and blend with
+  // the destination once, after evaluating the image filter.
+  Paint result;
+  result.SetAntiAlias(paint.IsAntiAlias());
+  result.SetColorFilter(paint.GetColorFilter());
+  result.SetBlendMode(paint.GetBlendMode());
+  // Layer canvases share their parent's transform.
+  auto* target = parent_canvas_ ? parent_canvas_ : this;
   if (mask_filter) {
-    MaskFilterOnFilter(this, bitmap, filter_bounds, work_paint,
+    result.SetImageFilter(paint.GetImageFilter());
+    MaskFilterOnFilter(target, bitmap, filter_bounds, result,
                        mask_filter.get());
   } else {
-    image_filter->OnFilter(this, bitmap, filter_bounds, work_paint);
+    image_filter->OnFilter(target, bitmap, filter_bounds, result);
   }
+}
+
+void SWCanvas::HandleFilter(const Path& path, const Paint& paint) {
+  DrawFiltered(ComputeBoundsIfStroke(path.GetBounds(), paint), paint,
+               [&](SWCanvas& canvas, const Paint& source) {
+                 canvas.DrawPath(path, source);
+               });
 }
 
 void SWCanvas::HandleFilter(uint32_t count, const GlyphID* glyphs,
                             const float* position_x, const float* position_y,
                             const Font& font, const Paint& paint) {
-  Paint work_paint = paint;
-  work_paint.SetMaskFilter(nullptr);
-  work_paint.SetImageFilter(nullptr);
-
-  auto mask_filter = paint.GetMaskFilter();
-  auto image_filter = As_IFB(paint.GetImageFilter().get());
-  auto bounds = TextBlob::ComputeBounds(count, glyphs, position_x, position_y,
-                                        font, paint);
-  auto radius_x =
-      mask_filter ? mask_filter->GetBlurRadius() : image_filter->GetRadiusX();
-  auto radius_y =
-      mask_filter ? mask_filter->GetBlurRadius() : image_filter->GetRadiusY();
-  auto filter_bounds =
-      ImageFilterBase::ApproximateFilteredBounds(bounds, radius_x, radius_y);
-
-  Bitmap bitmap(filter_bounds.Width(), filter_bounds.Height(),
-                AlphaType::kPremul_AlphaType);
-
-  auto temp_canvas = Canvas::MakeSoftwareCanvas(&bitmap);
-  temp_canvas->Translate(-filter_bounds.Left(), -filter_bounds.Top());
-  static_cast<SWCanvas*>(temp_canvas.get())
-      ->DrawGlyphsInternal(count, glyphs, position_x, position_y, font,
-                           work_paint);
-
-  if (mask_filter) {
-    ImageFilterBase::BlurBitmapToCanvas(this, bitmap, filter_bounds, work_paint,
-                                        mask_filter->GetBlurRadius(),
-                                        mask_filter->GetBlurRadius());
-  } else {
-    image_filter->OnFilter(this, bitmap, filter_bounds, work_paint);
+  std::vector<Rect> glyph_bounds(count);
+  font.GetWidthsBounds(glyphs, count, nullptr, glyph_bounds.data(), paint);
+  Rect bounds = Rect::MakeEmpty();
+  for (uint32_t i = 0; i < count; ++i) {
+    bounds.Join(glyph_bounds[i].MakeOffset(position_x[i], position_y[i]));
   }
+  DrawFiltered(ComputeBoundsIfStroke(bounds, paint), paint,
+               [&](SWCanvas& canvas, const Paint& source) {
+                 canvas.DrawGlyphsInternal(count, glyphs, position_x,
+                                           position_y, font, source);
+               });
 }
 
 SWCanvas::LayerState* SWCanvas::PeekLayerStack() {
