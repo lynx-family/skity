@@ -9,6 +9,9 @@
 // Licensed under the Apache License Version 2.0 that can be found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <algorithm>
+#include <cmath>
+
 #include "src/graphic/blend_mode_priv.hpp"
 #include "src/graphic/color_priv.hpp"
 #include "src/logging.hpp"
@@ -89,44 +92,114 @@ const char* BlendMode_Name(BlendMode bm) {
   }
 }
 
-static float SoftLightComponent(Vec2 s, Vec2 d) {
-  if (2.f * s.x <= s.y) {
-    return d.x * d.x * (s.y - 2 * s.x) / d.y + (1 - d.y) * s.x +
-           d.x * (-s.y + 2 * s.x + 1);
-  } else if (4.f * d.x <= d.y) {
-    float DSqd = d.x * d.x;
-    float DCub = DSqd * d.x;
-    float DaSqd = d.y * d.y;
-    float DaCub = DaSqd * d.y;
-    return (DaSqd * (s.x - d.x * (3 * s.y - 6 * s.x - 1)) +
-            12 * d.y * DSqd * (s.y - 2 * s.x) - 16 * DCub * (s.y - 2 * s.x) -
-            DaCub * s.x) /
-           DaSqd;
-  } else {
-    return d.x * (s.y - 2 * s.x + 1) + s.x -
-           std::sqrt(d.y * d.x) * (s.y - 2 * s.x) - d.y * s.x;
+static float HardLight(float s, float d) {
+  return s <= 0.5f ? 2.f * s * d : 1.f - 2.f * (1.f - s) * (1.f - d);
+}
+
+static float BlendChannel(float s, float d, BlendMode mode) {
+  switch (mode) {
+    case BlendMode::kOverlay:
+      return HardLight(d, s);
+    case BlendMode::kDarken:
+      return std::min(s, d);
+    case BlendMode::kLighten:
+      return std::max(s, d);
+    case BlendMode::kColorDodge:
+      if (d == 0.f) {
+        return 0.f;
+      }
+      return s == 1.f ? 1.f : std::min(1.f, d / (1.f - s));
+    case BlendMode::kColorBurn:
+      if (d == 1.f) {
+        return 1.f;
+      }
+      return s == 0.f ? 0.f : 1.f - std::min(1.f, (1.f - d) / s);
+    case BlendMode::kHardLight:
+      return HardLight(s, d);
+    case BlendMode::kSoftLight: {
+      if (s <= 0.5f) {
+        return d - (1.f - 2.f * s) * d * (1.f - d);
+      }
+      float curve =
+          d <= 0.25f ? ((16.f * d - 12.f) * d + 4.f) * d : std::sqrt(d);
+      return d + (2.f * s - 1.f) * (curve - d);
+    }
+    case BlendMode::kDifference:
+      return std::abs(d - s);
+    case BlendMode::kExclusion:
+      return s + d - 2.f * s * d;
+    default:  // Multiply
+      return s * d;
   }
 }
 
-static PMColor SoftLight(PMColor src, PMColor dst) {
-  if (ColorGetA(dst) == 0) {
+static float Luminosity(Vec3 c) { return Vec3::Dot(c, {0.3f, 0.59f, 0.11f}); }
+
+static float Saturation(Vec3 c) {
+  return std::max({c.x, c.y, c.z}) - std::min({c.x, c.y, c.z});
+}
+
+static Vec3 SetSaturation(Vec3 c, float saturation) {
+  float range = Saturation(c);
+  float low = std::min({c.x, c.y, c.z});
+  return range > 0.f ? (c - Vec3{low, low, low}) * (saturation / range)
+                     : Vec3{};
+}
+
+static Vec3 SetLuminosity(Vec3 c, float lum) {
+  float delta = lum - Luminosity(c);
+  c += Vec3{delta, delta, delta};
+  float low = std::min({c.x, c.y, c.z});
+  float high = std::max({c.x, c.y, c.z});
+  Vec3 gray{lum, lum, lum};
+  if (low < 0.f) {
+    c = gray + (c - gray) * (lum / (lum - low));
+  }
+  if (high > 1.f) {
+    c = gray + (c - gray) * ((1.f - lum) / (high - lum));
+  }
+  return c;
+}
+
+static Vec3 BlendRGB(Vec3 s, Vec3 d, BlendMode mode) {
+  switch (mode) {
+    case BlendMode::kHue:
+      return SetLuminosity(SetSaturation(s, Saturation(d)), Luminosity(d));
+    case BlendMode::kSaturation:
+      return SetLuminosity(SetSaturation(d, Saturation(s)), Luminosity(d));
+    case BlendMode::kColor:
+      return SetLuminosity(s, Luminosity(d));
+    case BlendMode::kLuminosity:
+      return SetLuminosity(d, Luminosity(s));
+    default:
+      return {BlendChannel(s.x, d.x, mode), BlendChannel(s.y, d.y, mode),
+              BlendChannel(s.z, d.z, mode)};
+  }
+}
+
+static PMColor AdvancedBlend(PMColor src, PMColor dst, BlendMode mode) {
+  if (!ColorGetA(src)) {
+    return dst;
+  }
+  if (!ColorGetA(dst)) {
     return src;
   }
-
-  Color4f src_4f = Color4fFromColor(src);
-  Color4f dst_4f = Color4fFromColor(dst);
-  float r = SoftLightComponent({src_4f.r, src_4f.a}, {dst_4f.r, dst_4f.a});
-  float g = SoftLightComponent({src_4f.g, src_4f.a}, {dst_4f.g, dst_4f.a});
-  float b = SoftLightComponent({src_4f.b, src_4f.a}, {dst_4f.b, dst_4f.a});
-  float a = src_4f.a + (1 - src_4f.a) * dst_4f.a;
-  return Color4fToColor({r, g, b, a});
+  auto s = Color4fFromColor(src);
+  auto d = Color4fFromColor(dst);
+  Vec3 sc{s.r, s.g, s.b};
+  Vec3 dc{d.r, d.g, d.b};
+  // Only the intersection of the source and destination uses the blend
+  // function.
+  Vec3 rgb = sc * (1.f - d.a) + dc * (1.f - s.a) +
+             BlendRGB(sc / s.a, dc / d.a, mode) * (s.a * d.a);
+  return Color4fToColor({rgb.x, rgb.y, rgb.z, s.a + d.a * (1.f - s.a)});
 }
 
 PMColor PorterDuffBlend(PMColor src, PMColor dst, BlendMode mode) {
-  // Note: Porter-Duff modes are only defined to work properly with
-  // premultiplied alpha. That means that none of the R, G or B components can
-  // exceed the alpha value.
-  if (mode > BlendMode::kScreen && mode != BlendMode::kSoftLight) {
+  if (IsAdvancedBlendMode(mode)) {
+    if (mode <= BlendMode::kLastMode) {
+      return AdvancedBlend(src, dst, mode);
+    }
     LOGE("PorterDuffBlend does not support BlendMode {}, fallback to {}",
          BlendMode_Name(mode), BlendMode_Name(BlendMode::kDefault));
     mode = BlendMode::kDefault;
@@ -184,8 +257,6 @@ PMColor PorterDuffBlend(PMColor src, PMColor dst, BlendMode mode) {
       return PMColorMul(src, dst);
     case BlendMode::kScreen:  // r = s + d - s*d
       return src + dst - PMColorMul(src, dst);
-    case BlendMode::kSoftLight:
-      return SoftLight(src, dst);
     default:
       return dst;
   }

@@ -14,7 +14,7 @@ namespace {
 
 // Add shared cases as they are validated on the software backend.
 constexpr char kSoftwareGoldenFilter[] =
-    "BlendModeGolden.Screen:"
+    "BlendModeGolden.Screen:BlendModeGolden.AdvancedBlendModeGrid:"
     "ColorSpaceGolden.DisplayP3TargetDecodeBaseline:"
     "ColorSpaceGolden.P3TargetSpaceImagePassthrough:"
     "ColorSpaceGolden.P3TargetSpacePaintColor:"

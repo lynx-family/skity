@@ -185,6 +185,41 @@ static void RunBlendModeTest(skity::BlendMode mode, const char* name) {
                                .gpu_tess_path = golden_path.c_str()}));
 }
 
+TEST(BlendModeGolden, AdvancedBlendModeGrid) {
+  using namespace skity;
+  constexpr int kColumns = 7;
+  constexpr int kCellSize = 32;
+  const auto path = MakeBlendModeGoldenPath("blend_mode_advanced_grid.png");
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+      kColumns * kCellSize, 4 * kCellSize, path.c_str(), {.sample_count = 1},
+      [](Canvas* canvas) {
+        constexpr std::array modes{
+            BlendMode::kOverlay,   BlendMode::kDarken,
+            BlendMode::kLighten,   BlendMode::kColorDodge,
+            BlendMode::kColorBurn, BlendMode::kHardLight,
+            BlendMode::kSoftLight, BlendMode::kDifference,
+            BlendMode::kExclusion, BlendMode::kMultiply,
+            BlendMode::kHue,       BlendMode::kSaturation,
+            BlendMode::kColor,     BlendMode::kLuminosity};
+        canvas->Clear(Color_TRANSPARENT);
+        for (size_t i = 0; i < modes.size(); ++i) {
+          float x = (i % kColumns) * kCellSize;
+          float y = (i / kColumns) * 2 * kCellSize;
+          // Each mode is drawn opaque, then translucent, over the same
+          // geometry.
+          for (uint8_t alpha : {255, 128}) {
+            Paint paint;
+            paint.SetColor(ColorSetARGB(alpha, 233, 30, 99));
+            canvas->DrawRect(Rect::MakeXYWH(x + 2, y + 2, 20, 20), paint);
+            paint.SetColor(ColorSetARGB(alpha, 22, 150, 243));
+            paint.SetBlendMode(modes[i]);
+            canvas->DrawRect(Rect::MakeXYWH(x + 10, y + 10, 20, 20), paint);
+            y += kCellSize;
+          }
+        }
+      }));
+}
+
 static skity::testing::GoldenTestEnvConfig TextureCopyConfig(
     uint32_t sample_count) {
   skity::testing::GoldenTestEnvConfig config;
