@@ -128,7 +128,7 @@ class PixmapBrush : public SWSpanBrush {
  private:
   std::unique_ptr<Bitmap> texture_;
   Matrix points_to_unit_ = {};
-  FilterMode filter_mode_ = FilterMode::kNearest;
+  [[maybe_unused]] bool use_fast_nearest_ = false;
   TileMode x_tile_mode_ = TileMode::kClamp;
   TileMode y_tile_mode_ = TileMode::kClamp;
   BitmapSampler bitmap_sampler_;

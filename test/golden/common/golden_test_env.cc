@@ -24,8 +24,11 @@ namespace {
 // Adapts the golden surface callbacks to a bitmap-backed canvas.
 class SoftwareGoldenSurface final : public GPUSurface {
  public:
-  SoftwareGoldenSurface(uint32_t width, uint32_t height)
+  SoftwareGoldenSurface(uint32_t width, uint32_t height,
+                        const std::shared_ptr<const ColorSpace>& color_space)
       : bitmap_(width, height, AlphaType::kPremul_AlphaType, ColorType::kRGBA) {
+    bitmap_.GetPixmap()->SetColorInfo(bitmap_.GetAlphaType(),
+                                      bitmap_.GetColorType(), color_space);
   }
 
   uint32_t GetWidth() const override { return bitmap_.Width(); }
@@ -69,7 +72,7 @@ class GoldenTestEnvSoftware final : public GoldenTestEnv {
       return nullptr;
     }
 
-    SoftwareGoldenSurface surface(width, height);
+    SoftwareGoldenSurface surface(width, height, GetTargetColorSpace());
     render(&surface);
     return std::make_shared<GoldenTexture>(
         Image::MakeImage(surface.ReadPixels(Rect::MakeWH(width, height))));

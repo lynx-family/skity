@@ -12,6 +12,8 @@
 #include "src/tracing.hpp"
 
 #ifdef SKITY_ARM_NEON
+#include <cstring>
+
 #include "src/graphic/color_priv_neon.hpp"
 #endif
 
@@ -562,11 +564,20 @@ PixmapBrush::PixmapBrush(std::vector<Span> const& spans, Bitmap* bitmap,
     : SWSpanBrush(spans, bitmap, color_filter, blend, global_alpha),
       texture_(new Bitmap(std::move(pixmap))),
       points_to_unit_(points_to_unit),
-      filter_mode_(sampling.UseCubic() ? FilterMode::kLinear : sampling.filter),
+#ifdef SKITY_ARM_NEON
+      use_fast_nearest_(!sampling.UseCubic() &&
+                        sampling.filter == FilterMode::kNearest &&
+                        !color_filter &&
+                        (texture_->GetColorType() == ColorType::kRGBA ||
+                         texture_->GetColorType() == ColorType::kBGRA) &&
+                        ColorSpaceEquals(texture_->GetPixmap()->GetColorSpace(),
+                                         target_space)),
+#endif
       x_tile_mode_(x_tile_mode),
       y_tile_mode_(y_tile_mode),
       bitmap_sampler_(*texture_.get(), sampling, x_tile_mode, y_tile_mode,
-                      target_space) {}
+                      target_space) {
+}
 
 Color PixmapBrush::CalculateColor(int32_t x, int32_t y) {
   SKITY_TRACE_EVENT(PixmapBrush_CalculateColor);
@@ -648,8 +659,7 @@ void CalculateImageColorsNeon(int32_t p_x, int32_t p_y, int32_t p_alpha,
                (v_array[i] < 0.0f || v_array[i] >= 1.0f)) {
       *(p_data + i) = Color_TRANSPARENT;
     } else {
-      // sample pixel
-      *(p_data + i) = *reinterpret_cast<uint32_t*>(p_pixel + idx);
+      std::memcpy(&p_data[i], p_pixel + idx, sizeof(p_data[i]));
     }
   }
 }
@@ -662,13 +672,9 @@ void PixmapBrush::BrushH(int32_t x, int32_t y, int32_t length, int32_t alpha) {
   SKITY_TRACE_EVENT(PixmapBrush_BrushH);
 
 #ifdef SKITY_ARM_NEON
-  // The NEON fast path below samples raw texels with no color space
-  // conversion; a bitmap tagged with a non-sRGB space must use the scalar
-  // sampler for the whole span, or its converted pixels would disagree with
-  // the remainder pixels at the 8-pixel boundary.
-  if (filter_mode_ == FilterMode::kLinear ||
-      !ColorSpaceIsSRGB(texture_->GetPixmap()->GetColorSpace())) {
-    // TODO(zhangzhijian): Accelerate it via neon
+  // NEON reads four-byte texels directly, bypassing filters and color
+  // conversion.
+  if (!use_fast_nearest_) {
     SWSpanBrush::BrushH(x, y, length, alpha);
     return;
   }
