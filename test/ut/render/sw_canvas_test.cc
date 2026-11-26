@@ -6,6 +6,7 @@
 
 #include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color.hpp>
+#include <skity/graphic/image.hpp>
 #include <skity/graphic/paint.hpp>
 #include <skity/render/canvas.hpp>
 
@@ -219,4 +220,27 @@ TEST(SWCanvas, ScreenKeepsOpaqueDestinationAcrossSpan) {
   for (uint32_t x = 0; x < bitmap.Width(); ++x) {
     EXPECT_EQ(bitmap.GetPixel(x, 0), skity::ColorSetARGB(255, 243, 64, 128));
   }
+}
+
+TEST(SWCanvas, DifferenceBlendsSampledSpans) {
+  using namespace skity;
+  Bitmap source(1, 1, kPremul_AlphaType);
+  source.SetPixel(0, 0, ColorSetARGB(128, 128, 0, 0));
+  Bitmap bitmap(17, 1, kPremul_AlphaType);
+  auto canvas = Canvas::MakeSoftwareCanvas(&bitmap);
+  canvas->Clear(ColorSetARGB(128, 0, 0, 255));
+  bitmap.SetPixel(16, 0, Color_TRANSPARENT);
+
+  Paint paint;
+  paint.SetBlendMode(BlendMode::kDifference);
+  canvas->DrawImage(Image::MakeImage(source.GetPixmap()), Rect::MakeWH(17, 1),
+                    SamplingOptions{}, &paint);
+  for (uint32_t x = 0; x < 16; ++x) {
+    const Color color = bitmap.GetPixel(x, 0);
+    EXPECT_NEAR(ColorGetA(color), 192, 1);
+    EXPECT_NEAR(ColorGetR(color), 128, 1);
+    EXPECT_EQ(ColorGetG(color), 0u);
+    EXPECT_NEAR(ColorGetB(color), 128, 1);
+  }
+  EXPECT_EQ(bitmap.GetPixel(16, 0), source.GetPixel(0, 0));
 }
