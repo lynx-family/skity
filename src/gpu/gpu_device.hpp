@@ -5,6 +5,7 @@
 #ifndef SRC_GPU_GPU_DEVICE_HPP
 #define SRC_GPU_GPU_DEVICE_HPP
 
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -28,6 +29,10 @@ class GPUDevice {
 
   virtual std::unique_ptr<GPUBuffer> CreateBuffer(
       const GPUBufferDescriptor& desc) = 0;
+
+  // Uploads to a fresh buffer for a read-only shader binding.
+  std::shared_ptr<GPUBuffer> CreateReadOnlyStorageBuffer(const void* data,
+                                                         size_t size);
 
   virtual std::shared_ptr<GPUShaderFunction> CreateShaderFunction(
       const GPUShaderFunctionDescriptor& desc) = 0;
