@@ -3,6 +3,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <algorithm>
+#include <cstring>
 #include <skity/graphic/bitmap.hpp>
 #include <skity/graphic/color_type.hpp>
 #include <skity/io/data.hpp>
@@ -32,11 +33,11 @@ Color Bitmap::GetPixel(uint32_t x, uint32_t y) {
         return ColorSetARGB(color_start[3], color_start[2], color_start[1],
                             color_start[0]);
       case ColorType::kRGB565: {
-        const uint16_t* color_start_16 =
-            reinterpret_cast<const uint16_t*>(color_start);
-        uint8_t r = color_start_16[0] >> 11 << 3;
-        uint8_t g = (color_start_16[0] & 0x7E0) >> 3;
-        uint8_t b = (color_start_16[0] & 0x1F) << 3;
+        uint16_t pixel;
+        std::memcpy(&pixel, color_start, sizeof(pixel));
+        uint8_t r = pixel >> 11 << 3;
+        uint8_t g = (pixel & 0x7E0) >> 3;
+        uint8_t b = (pixel & 0x1F) << 3;
         return ColorSetARGB(0xFF, r, g, b);
       }
       case ColorType::kA8:
@@ -72,8 +73,8 @@ void Bitmap::SetPixel(uint32_t x, uint32_t y, Color color) {
         uint16_t r = ColorGetR(color) >> 3;
         uint16_t g = ColorGetG(color) >> 2;
         uint16_t b = ColorGetB(color) >> 3;
-        uint16_t* color_start_16 = reinterpret_cast<uint16_t*>(color_start);
-        color_start_16[0] = r << 11 | g << 5 | b;
+        uint16_t pixel = r << 11 | g << 5 | b;
+        std::memcpy(color_start, &pixel, sizeof(pixel));
       } break;
       case ColorType::kA8:
         color_start[0] = ColorGetA(color);

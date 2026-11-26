@@ -15,31 +15,30 @@ class SWRenderTarget {
  public:
   explicit SWRenderTarget(Bitmap* bitmap)
       : bitmap_(bitmap),
-        pixel_addr_(bitmap_ != nullptr ? bitmap->GetPixelAddr() : nullptr) {}
+        pixel_addr_(bitmap && !bitmap->read_only_ ? bitmap->GetPixelAddr()
+                                                  : nullptr) {}
 
   // blend pixel with premultiplied color
   void BlendPixel(uint32_t x, uint32_t y, Color color,
-                  BlendMode blend = BlendMode::kDefault);
+                  BlendMode blend = BlendMode::kDefault,
+                  uint8_t coverage = 255);
 
   void BlendPixel(uint32_t x, uint32_t y, Color4f color,
                   BlendMode blend = BlendMode::kDefault);
 
-  void BlendPixelH(uint32_t x, uint32_t y, PMColor* pm_colors, uint32_t len,
-                   BlendMode blend = BlendMode::kDefault);
+  void BlendPixelH(uint32_t x, uint32_t y, const PMColor* pm_colors,
+                   uint32_t len, BlendMode blend = BlendMode::kDefault,
+                   uint8_t coverage = 255);
 
   void BlendPixelH(uint32_t x, uint32_t y, PMColor pm_color, uint32_t len,
-                   BlendMode blend = BlendMode::kDefault);
+                   BlendMode blend = BlendMode::kDefault,
+                   uint8_t coverage = 255);
 
  private:
   bool FastBlend(uint32_t x, uint32_t y, Color color, BlendMode blend);
 
 #ifdef SKITY_ARM_NEON
-  void BlendPixelNeon(uint32_t x, uint32_t y, PMColor* pm_colors, uint32_t len,
-                      BlendMode blend);
-
-  void BlendPixelNeon(uint32_t x, uint32_t y, PMColor pm_color, uint32_t len,
-                      BlendMode blend);
-
+  uint32_t* GetNeonDestination(uint32_t x, uint32_t y, BlendMode blend) const;
 #endif
   Bitmap* bitmap_;
   uint8_t* pixel_addr_;

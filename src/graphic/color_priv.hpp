@@ -11,19 +11,6 @@
 
 namespace skity {
 
-/** Turn 0..255 into 0..256 by adding 1 at the half-way point. Used to turn a
-    byte into a scale value, so that we can say scale * value >> 8 instead of
-    alpha * value / 255.
-
-    In debugging, asserts that alpha is 0..255
-*/
-static inline uint32_t Alpha255To256(uint32_t alpha) {
-  assert((alpha & 0xFF) == alpha);
-  // this one assues that blending on top of an opaque dst keeps it that way
-  // even though it is less accurate than a+(a>>7) for non-opaque dsts
-  return alpha + 1;
-}
-
 /**
  *  Return a*b/((1 << shift) - 1), rounding any fractional bits.
  *  Only valid if a and b are unsigned and <= 32767 and shift is > 0 and <= 8
@@ -67,8 +54,22 @@ static inline uint32_t AlphaMulQ(uint32_t c, unsigned scale) {
   return (rb & mask) | (ag & ~mask);
 }
 
-static inline PMColor PMSrcOver(PMColor src, PMColor dst) {
-  return src + AlphaMulQ(dst, Alpha255To256(255 - ColorGetA(src)));
+// Round after adding both products so complementary terms retain their sum.
+static inline PMColor PMColorWeightedSum(PMColor a, uint32_t a_weight,
+                                         PMColor b, uint32_t b_weight) {
+  auto channel = [=](uint32_t x, uint32_t y) {
+    return (x * a_weight + y * b_weight + 127) / 255;
+  };
+  return ColorSetARGB(
+      channel(ColorGetA(a), ColorGetA(b)), channel(ColorGetR(a), ColorGetR(b)),
+      channel(ColorGetG(a), ColorGetG(b)), channel(ColorGetB(a), ColorGetB(b)));
+}
+
+static inline PMColor ApplyCoverage(PMColor result, PMColor dst,
+                                    uint8_t coverage) {
+  return coverage == 255
+             ? result
+             : PMColorWeightedSum(result, coverage, dst, 255 - coverage);
 }
 
 static inline PMColor PMColorMul(PMColor src, PMColor dst) {
@@ -76,6 +77,10 @@ static inline PMColor PMColorMul(PMColor src, PMColor dst) {
          (MulDiv255Round(ColorGetR(src), ColorGetR(dst)) << 16) |
          (MulDiv255Round(ColorGetG(src), ColorGetG(dst)) << 8) |
          (MulDiv255Round(ColorGetB(src), ColorGetB(dst)));
+}
+
+static inline PMColor PMColorScale(PMColor color, uint8_t scale) {
+  return PMColorMul(color, ColorSetARGB(scale, scale, scale, scale));
 }
 
 static inline PMColor PMColorSwapRB(PMColor color) {
