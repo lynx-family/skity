@@ -71,10 +71,10 @@ void SWRenderTarget::BlendPixel(uint32_t x, uint32_t y, Color4f color,
 void SWRenderTarget::BlendPixelH(uint32_t x, uint32_t y,
                                  const PMColor* pm_colors, uint32_t len,
                                  BlendMode blend, uint8_t coverage) {
-#ifdef SKITY_ARM_NEON
-  if (auto* dst = GetNeonDestination(x, y, blend)) {
-    PorterDuffBlendNeon(pm_colors, dst, len, blend, bitmap_->GetColorType(),
-                        coverage);
+#if defined(SKITY_ARM_NEON) || defined(SKITY_X86_SSE2)
+  if (auto* dst = GetBlendDestination(x, y, len, blend)) {
+    PorterDuffBlendRow(pm_colors, dst, len, blend, bitmap_->GetColorType(),
+                       coverage);
     return;
   }
 #endif
@@ -87,10 +87,10 @@ void SWRenderTarget::BlendPixelH(uint32_t x, uint32_t y,
 void SWRenderTarget::BlendPixelH(uint32_t x, uint32_t y, PMColor pm_color,
                                  uint32_t len, BlendMode blend,
                                  uint8_t coverage) {
-#ifdef SKITY_ARM_NEON
-  if (auto* dst = GetNeonDestination(x, y, blend)) {
-    PorterDuffBlendNeon(pm_color, dst, len, blend, bitmap_->GetColorType(),
-                        coverage);
+#if defined(SKITY_ARM_NEON) || defined(SKITY_X86_SSE2)
+  if (auto* dst = GetBlendDestination(x, y, len, blend)) {
+    PorterDuffBlendRow(pm_color, dst, len, blend, bitmap_->GetColorType(),
+                       coverage);
     return;
   }
 #endif
@@ -100,9 +100,10 @@ void SWRenderTarget::BlendPixelH(uint32_t x, uint32_t y, PMColor pm_color,
   }
 }
 
-#ifdef SKITY_ARM_NEON
-uint32_t* SWRenderTarget::GetNeonDestination(uint32_t x, uint32_t y,
-                                             BlendMode blend) const {
+#if defined(SKITY_ARM_NEON) || defined(SKITY_X86_SSE2)
+uint32_t* SWRenderTarget::GetBlendDestination(uint32_t x, uint32_t y,
+                                              uint32_t len,
+                                              BlendMode blend) const {
   if (!pixel_addr_ || IsAdvancedBlendMode(blend) ||
       (bitmap_->GetColorType() != ColorType::kRGBA &&
        bitmap_->GetColorType() != ColorType::kBGRA) ||
@@ -111,7 +112,8 @@ uint32_t* SWRenderTarget::GetNeonDestination(uint32_t x, uint32_t y,
   }
   auto* dst = bitmap_->GetPixmap()->WritableAddr8(x, y);
   // Rows in a caller-supplied pixmap may have unaligned padding.
-  if (reinterpret_cast<uintptr_t>(dst) % alignof(uint32_t) != 0) {
+  if (!dst || len > bitmap_->Width() - x ||
+      reinterpret_cast<uintptr_t>(dst) % alignof(uint32_t) != 0) {
     return nullptr;
   }
   return reinterpret_cast<uint32_t*>(dst);

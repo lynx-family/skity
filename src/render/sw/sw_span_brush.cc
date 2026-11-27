@@ -4,17 +4,19 @@
 
 #include "src/render/sw/sw_span_brush.hpp"
 
+#include <cstring>
 #include <skity/effect/color_filter.hpp>
 #include <skity/graphic/bitmap.hpp>
 
+#include "src/base/base_macros.hpp"
 #include "src/geometry/geometry.hpp"
 #include "src/graphic/color_priv.hpp"
 #include "src/tracing.hpp"
 
 #ifdef SKITY_ARM_NEON
-#include <cstring>
-
 #include "src/graphic/color_priv_neon.hpp"
+#elif defined(SKITY_X86_SSE2)
+#include "src/graphic/color_priv_sse2.hpp"
 #endif
 
 namespace skity {
@@ -32,36 +34,6 @@ float RemapFloatTile(float t, TileMode tile_mode) {
   }
   return t;
 }
-
-#ifdef SKITY_ARM_NEON
-inline float32x4_t Floor(float32x4_t input) {
-  int32x4_t truncated = vcvtq_s32_f32(input);
-  uint32x4_t negative_mask = vcltq_f32(input, vdupq_n_f32(0.0));
-  int32x4_t adjustment = vreinterpretq_s32_u32(negative_mask);
-  int32x4_t floored = vaddq_s32(truncated, adjustment);
-  return vcvtq_f32_s32(floored);
-}
-
-float32x4_t RemapFloatTileNeon(float32x4_t t, TileMode tile_mode) {
-  if (tile_mode == TileMode::kClamp) {
-    t = vmaxq_f32(t, vdupq_n_f32(0.0f));
-    t = vminq_f32(t, vdupq_n_f32(1.0f));
-  } else if (tile_mode == TileMode::kRepeat) {
-    t = vsubq_f32(t, Floor(t));
-  } else if (tile_mode == TileMode::kMirror) {
-    float32x4_t t1 = vsubq_f32(t, vdupq_n_f32(1.0f));
-    float32x4_t half_t1 = vmulq_f32(t1, vdupq_n_f32(0.5f));
-    float32x4_t floor_half_t1 = Floor(half_t1);
-    float32x4_t double_floor_half_t1 =
-        vmulq_f32(vdupq_n_f32(2.0f), floor_half_t1);
-    float32x4_t t2 = vsubq_f32(t1, double_floor_half_t1);
-    t2 = vsubq_f32(t2, vdupq_n_f32(1.0f));
-    t = vabsq_f32(t2);
-  }
-  return t;
-}
-
-#endif
 
 }  // namespace
 
@@ -568,14 +540,17 @@ PixmapBrush::PixmapBrush(std::vector<Span> const& spans, Bitmap* bitmap,
     : SWSpanBrush(spans, bitmap, color_filter, blend, global_alpha),
       texture_(new Bitmap(std::move(pixmap))),
       points_to_unit_(points_to_unit),
-#ifdef SKITY_ARM_NEON
-      use_fast_nearest_(!sampling.UseCubic() &&
-                        sampling.filter == FilterMode::kNearest &&
-                        !color_filter &&
-                        (texture_->GetColorType() == ColorType::kRGBA ||
-                         texture_->GetColorType() == ColorType::kBGRA) &&
-                        ColorSpaceEquals(texture_->GetPixmap()->GetColorSpace(),
-                                         target_space)),
+#if defined(SKITY_ARM_NEON) || defined(SKITY_X86_SSE2)
+      use_fast_nearest_(
+          !sampling.UseCubic() && sampling.filter == FilterMode::kNearest &&
+          !color_filter && texture_->GetPixelAddr() && texture_->Width() &&
+          texture_->Height() &&
+          // Each integer index must be exactly representable as a float.
+          std::max(texture_->Width(), texture_->Height()) <= (1u << 24) &&
+          (texture_->GetColorType() == ColorType::kRGBA ||
+           texture_->GetColorType() == ColorType::kBGRA) &&
+          ColorSpaceEquals(texture_->GetPixmap()->GetColorSpace(),
+                           target_space)),
 #endif
       x_tile_mode_(x_tile_mode),
       y_tile_mode_(y_tile_mode),
@@ -595,139 +570,178 @@ Color PixmapBrush::CalculateColor(int32_t x, int32_t y) {
   return color;
 }
 
-#ifdef SKITY_ARM_NEON
+#if defined(SKITY_ARM_NEON) || defined(SKITY_X86_SSE2)
 namespace {
-void CalculateImageColorsNeon(int32_t p_x, int32_t p_y, uint32_t p_width,
-                              uint32_t p_height, uint32_t p_row_bytes,
-                              uint8_t* p_pixel, const Matrix& p_points_to_unit,
-                              TileMode x_tile_mode, TileMode y_tile_mode,
-                              uint32_t* p_data) {
-  float32x4_t offset = {0.5f, 1.5f, 2.5f, 3.5f};
-  float32x4_t x = vaddq_f32(vdupq_n_f32(p_x), offset);
-  float32x4_t y = vdupq_n_f32(p_y + 0.5f);
-  // u = scaleX * x + skewX * y + transX
-  float32x4_t u = vmulq_n_f32(x, p_points_to_unit.GetScaleX());  // scaleX * x
-  u = vmlaq_n_f32(u, y, p_points_to_unit.GetSkewX());            // + skewX * y
-  u = vaddq_f32(u,
-                vdupq_n_f32(p_points_to_unit.GetTranslateX()));  // + transX
-  u = RemapFloatTileNeon(u, x_tile_mode);
 
-  // v = skewY * x + scaleY * y + transY
-  float32x4_t v = vmulq_n_f32(x, p_points_to_unit.GetSkewY());  // skewY * x
-  v = vmlaq_n_f32(v, y,
-                  p_points_to_unit.GetScaleY());  // + scaleY * y
-  v = vaddq_f32(v,
-                vdupq_n_f32(p_points_to_unit.GetTranslateY()));  // + transY
-  v = RemapFloatTileNeon(v, y_tile_mode);
+#ifdef SKITY_ARM_NEON
+constexpr int kNearestBatch = 8;
 
-  float32x4_t width = vdupq_n_f32(p_width);
-  float32x4_t height = vdupq_n_f32(p_height);
-  float32x4_t x_indices = vmulq_f32(u, width);   // u * width
-  float32x4_t y_indices = vmulq_f32(v, height);  // v * height
-  // clamp to [0, width - 1]
-  x_indices = vmaxq_f32(x_indices, vdupq_n_f32(0.0f));
-  x_indices = vminq_f32(x_indices, vdupq_n_f32(p_width - 1));
-  // clamp to [0, height - 1]
-  y_indices = vmaxq_f32(y_indices, vdupq_n_f32(0.0f));
-  y_indices = vminq_f32(y_indices, vdupq_n_f32(p_height - 1));
+float32x4_t Floor4(float32x4_t value) {
+#if defined(__aarch64__)
+  return vrndmq_f32(value);
+#else
+  const auto truncated = vcvtq_f32_s32(vcvtq_s32_f32(value));
+  const auto below = vcltq_f32(value, truncated);
+  const auto floor = vsubq_f32(
+      truncated, vreinterpretq_f32_u32(vandq_u32(
+                     below, vreinterpretq_u32_f32(vdupq_n_f32(1.f)))));
+  // Floats of magnitude 2^23 or greater are already integers.
+  return vbslq_f32(vcltq_f32(vabsq_f32(value), vdupq_n_f32(0x1p23f)), floor,
+                   value);
+#endif
+}
 
-  // float -> uint
-  uint32x4_t ix = vcvtq_u32_f32(x_indices);
-  uint32x4_t iy = vcvtq_u32_f32(y_indices);
-
-  // 2D indices -> 1D indices
-  uint32x4_t row_bytes = vdupq_n_u32(p_row_bytes);
-  uint32x4_t indices = vmlaq_u32(vmulq_u32(ix, vdupq_n_u32(4)), row_bytes,
-                                 iy);  // index = iy * stride + ix * 4
-
-  uint32_t indices_array[4];
-  // store indices
-  vst1q_u32(indices_array, indices);
-
-  float32_t u_array[4];
-  if (x_tile_mode == TileMode::kDecal) {
-    vst1q_f32(u_array, u);
+void NearestIndices(int x, float y, float scale, float skew, float translate,
+                    TileMode tile, uint32_t size, uint32_t indices[4]) {
+  const int32x4_t lanes = {0, 1, 2, 3};
+  const auto px = vaddq_f32(vcvtq_f32_s32(vaddq_s32(vdupq_n_s32(x), lanes)),
+                            vdupq_n_f32(0.5f));
+  auto t = vaddq_f32(vmulq_n_f32(px, scale), vdupq_n_f32(y * skew));
+  t = vaddq_f32(t, vdupq_n_f32(translate));
+  if (tile == TileMode::kRepeat) {
+    t = vsubq_f32(t, Floor4(t));
+  } else if (tile == TileMode::kMirror) {
+    // Mirror is symmetric. A positive offset avoids rounding at negative folds.
+    const auto offset = vabsq_f32(vsubq_f32(t, vdupq_n_f32(1.f)));
+    const auto period = Floor4(vmulq_n_f32(offset, 0.5f));
+    t = vabsq_f32(vsubq_f32(vsubq_f32(offset, vmulq_n_f32(period, 2.f)),
+                            vdupq_n_f32(1.f)));
   }
-  float32_t v_array[4];
-  if (y_tile_mode == TileMode::kDecal) {
-    vst1q_f32(v_array, v);
+  const auto scaled = vmaxq_f32(vmulq_n_f32(t, size), vdupq_n_f32(0.f));
+  auto index = vcvtq_u32_f32(vminq_f32(scaled, vdupq_n_f32(size - 1)));
+  if (tile == TileMode::kDecal) {
+    index = vorrq_u32(index, vorrq_u32(vcltq_f32(t, vdupq_n_f32(0.f)),
+                                       vcgeq_f32(t, vdupq_n_f32(1.f))));
   }
+  vst1q_u32(indices, index);
+}
 
-  for (int i = 0; i < 4; i++) {
-    uint32_t idx = indices_array[i];
-    if (x_tile_mode == TileMode::kDecal &&
-        (u_array[i] < 0.0f || u_array[i] >= 1.0f)) {
-      *(p_data + i) = Color_TRANSPARENT;
-    } else if (y_tile_mode == TileMode::kDecal &&
-               (v_array[i] < 0.0f || v_array[i] >= 1.0f)) {
-      *(p_data + i) = Color_TRANSPARENT;
+void PrepareNearestColors(PMColor* colors, const Bitmap& texture,
+                          uint8_t alpha) {
+  auto* bytes = reinterpret_cast<uint8_t*>(colors);
+  auto src = vld4_u8(bytes);
+  if (texture.GetAlphaType() == kUnpremul_AlphaType) {
+    for (int c = 0; c < 3; ++c) {
+      src.val[c] = MulDiv255RoundNeon(src.val[c], src.val[3]);
+    }
+  }
+  if (alpha != 255) {
+    for (int c = 0; c < 4; ++c) {
+      src.val[c] = MulDiv255RoundNeon(src.val[c], vdup_n_u8(alpha));
+    }
+  }
+  if (texture.GetColorType() == ColorType::kRGBA) {
+    std::swap(src.val[0], src.val[2]);
+  }
+  vst4_u8(bytes, src);
+}
+#else
+constexpr int kNearestBatch = 4;
+
+__m128 Floor4(__m128 value) {
+  const auto truncated = _mm_cvtepi32_ps(_mm_cvttps_epi32(value));
+  const auto below = _mm_cmplt_ps(value, truncated);
+  const auto floor = _mm_sub_ps(truncated, _mm_and_ps(below, _mm_set1_ps(1.f)));
+  // Bypass integer conversion for large floats, which have no fractional bits.
+  const auto small = _mm_cmplt_ps(_mm_andnot_ps(_mm_set1_ps(-0.f), value),
+                                  _mm_set1_ps(0x1p23f));
+  return _mm_or_ps(_mm_and_ps(small, floor), _mm_andnot_ps(small, value));
+}
+
+void NearestIndices(int x, float y, float scale, float skew, float translate,
+                    TileMode tile, uint32_t size, uint32_t indices[4]) {
+  const auto positions =
+      _mm_add_epi32(_mm_set1_epi32(x), _mm_setr_epi32(0, 1, 2, 3));
+  const auto px = _mm_add_ps(_mm_cvtepi32_ps(positions), _mm_set1_ps(0.5f));
+  auto t =
+      _mm_add_ps(_mm_mul_ps(px, _mm_set1_ps(scale)), _mm_set1_ps(y * skew));
+  t = _mm_add_ps(t, _mm_set1_ps(translate));
+  if (tile == TileMode::kRepeat) {
+    t = _mm_sub_ps(t, Floor4(t));
+  } else if (tile == TileMode::kMirror) {
+    const auto offset =
+        _mm_andnot_ps(_mm_set1_ps(-0.f), _mm_sub_ps(t, _mm_set1_ps(1.f)));
+    const auto period = Floor4(_mm_mul_ps(offset, _mm_set1_ps(0.5f)));
+    t = _mm_sub_ps(_mm_sub_ps(offset, _mm_mul_ps(period, _mm_set1_ps(2.f))),
+                   _mm_set1_ps(1.f));
+    t = _mm_andnot_ps(_mm_set1_ps(-0.f), t);
+  }
+  const auto scaled =
+      _mm_max_ps(_mm_mul_ps(t, _mm_set1_ps(size)), _mm_setzero_ps());
+  auto index = _mm_cvttps_epi32(_mm_min_ps(scaled, _mm_set1_ps(size - 1)));
+  if (tile == TileMode::kDecal) {
+    const auto outside = _mm_or_ps(_mm_cmplt_ps(t, _mm_setzero_ps()),
+                                   _mm_cmpge_ps(t, _mm_set1_ps(1.f)));
+    index = _mm_or_si128(index, _mm_castps_si128(outside));
+  }
+  _mm_storeu_si128(reinterpret_cast<__m128i*>(indices), index);
+}
+
+void PrepareNearestColors(PMColor* colors, const Bitmap& texture,
+                          uint8_t alpha) {
+  auto* pixels = reinterpret_cast<__m128i*>(colors);
+  auto src = _mm_loadu_si128(pixels);
+  if (texture.GetAlphaType() == kUnpremul_AlphaType) {
+    // Multiply RGB by the pixel alpha and leave alpha itself intact.
+    const auto weights =
+        _mm_or_si128(sse2::Alpha(src), _mm_set1_epi32(0xff000000));
+    src = sse2::MulDiv255Round(src, weights);
+  }
+  if (alpha != 255) {
+    src = sse2::MulDiv255Round(src, _mm_set1_epi8(alpha));
+  }
+  if (texture.GetColorType() == ColorType::kRGBA) {
+    src = sse2::SwapRB(src);
+  }
+  _mm_storeu_si128(pixels, src);
+}
+#endif
+
+void SampleNearestFour(int x, int y, const Bitmap& texture, const Matrix& m,
+                       TileMode tx, TileMode ty, PMColor* colors) {
+  uint32_t xs[4], ys[4];
+  NearestIndices(x, y + 0.5f, m.GetScaleX(), m.GetSkewX(), m.GetTranslateX(),
+                 tx, texture.Width(), xs);
+  NearestIndices(x, y + 0.5f, m.GetSkewY(), m.GetScaleY(), m.GetTranslateY(),
+                 ty, texture.Height(), ys);
+  const size_t stride = texture.GetPixmap()->RowBytes();
+  const auto* pixels = texture.GetPixelAddr();
+  for (int i = 0; i < 4; ++i) {
+    if (xs[i] == UINT32_MAX || ys[i] == UINT32_MAX) {
+      colors[i] = Color_TRANSPARENT;
     } else {
-      std::memcpy(&p_data[i], p_pixel + idx, sizeof(p_data[i]));
+      // A caller-supplied row can start at an unaligned address.
+      std::memcpy(colors + i, pixels + ys[i] * stride + xs[i] * sizeof(PMColor),
+                  sizeof(PMColor));
     }
   }
 }
-
 }  // namespace
-
 #endif
 
 void PixmapBrush::BrushH(int32_t x, int32_t y, int32_t length,
                          uint8_t coverage) {
   SKITY_TRACE_EVENT(PixmapBrush_BrushH);
 
-#ifdef SKITY_ARM_NEON
-  // NEON reads four-byte texels directly, bypassing filters and color
-  // conversion.
-  if (!use_fast_nearest_) {
-    SWSpanBrush::BrushH(x, y, length, coverage);
-    return;
+#if defined(SKITY_ARM_NEON) || defined(SKITY_X86_SSE2)
+  if (use_fast_nearest_) {
+    PMColor colors[kNearestBatch];
+    while (length >= kNearestBatch) {
+      for (int i = 0; i < kNearestBatch; i += 4) {
+        SampleNearestFour(x + i, y, *texture_, points_to_unit_, x_tile_mode_,
+                          y_tile_mode_, colors + i);
+      }
+      PrepareNearestColors(colors, *texture_, GetGlobalAlpha());
+      GetRenderTarget().BlendPixelH(x, y, colors, kNearestBatch, GetBlendMode(),
+                                    coverage);
+      x += kNearestBatch;
+      length -= kNearestBatch;
+    }
   }
-
-  const uint8_t alpha = GetGlobalAlpha();
-  const int32_t N = 8;
-  std::vector<PMColor> colors(static_cast<size_t>(N));
-
-  uint32_t iterations = length / N;
-  int32_t neon_filled = iterations * N;
-
-  for (uint32_t i = 0; i < iterations; i++) {
-    int32_t l = i * N;
-    for (int j = 0; j < 2; j++) {
-      CalculateImageColorsNeon(
-          x + l + j * 4, y, texture_->Width(), texture_->Height(),
-          texture_->RowBytes(), texture_->GetPixelAddr(), points_to_unit_,
-          x_tile_mode_, y_tile_mode_, colors.data() + j * 4);
-    }
-
-    uint8x8x4_t src = vld4_u8(reinterpret_cast<const uint8_t*>(colors.data()));
-    if (texture_->GetAlphaType() == AlphaType::kUnpremul_AlphaType) {
-      src.val[0] = MulDiv255RoundNeon(src.val[3], src.val[0]);  // src.a * src.r
-      src.val[1] = MulDiv255RoundNeon(src.val[3], src.val[1]);  // src.a * src.g
-      src.val[2] = MulDiv255RoundNeon(src.val[3], src.val[2]);  // src.a * src.b
-    }
-
-    if (alpha != 255) {
-      uint8x8_t a = vdup_n_u8(alpha);
-      src.val[0] = MulDiv255RoundNeon(a, src.val[0]);  // a * src.r
-      src.val[1] = MulDiv255RoundNeon(a, src.val[1]);  // a * src.g
-      src.val[2] = MulDiv255RoundNeon(a, src.val[2]);  // a * src.b
-      src.val[3] = MulDiv255RoundNeon(a, src.val[3]);  // a * src.a
-    }
-    if (texture_->GetColorType() == ColorType::kRGBA) {
-      std::swap(src.val[0], src.val[2]);  // RGBA -> BGRA
-    }
-    vst4_u8(reinterpret_cast<uint8_t*>(colors.data()), src);
-
-    GetRenderTarget().BlendPixelH(x + l, y, colors.data(), N, GetBlendMode(),
-                                  coverage);
-  }
-
-  if (neon_filled < length) {
-    SWSpanBrush::BrushH(x + neon_filled, y, length - neon_filled, coverage);
-  }
-#else
-  SWSpanBrush::BrushH(x, y, length, coverage);
 #endif
+  if (length > 0) {
+    SWSpanBrush::BrushH(x, y, length, coverage);
+  }
 }
 
 }  // namespace skity

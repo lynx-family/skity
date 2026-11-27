@@ -75,12 +75,12 @@ cmake -B build
 cmake --build build
 ```
 
-On Linux and Windows x86-64, CMake compiles
-`src/render/text/atlas/blurred_glyph_x86.cc` with `-ffp-contract=off` on GCC
-and Clang (`/clang:-ffp-contract=off` on clang-cl). This preserves the two
-rounding steps that determine A8 coverage at half-integer boundaries.
+For GCC and Clang, CMake compiles `src/render/text/atlas/blurred_glyph_x86.cc`
+and `src/render/sw/sw_span_brush.cc` with `-ffp-contract=off`
+(`/clang:-ffp-contract=off` on clang-cl). Rounding multiply and add separately
+keeps scalar and SIMD results consistent at A8 coverage and nearest-texel boundaries.
 The generated `skity.gni` exports target-wide flags. GN consumers can apply
-the same option to this file in a separate `source_set`.
+the same option to these files in a separate `source_set`.
 
 There are several options you can use to configure the build:
 

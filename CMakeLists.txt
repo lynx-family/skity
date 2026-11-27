@@ -220,14 +220,14 @@ add_subdirectory(include)
 # source files
 add_subdirectory(src)
 
-# Keep multiply and add separately rounded at A8 half-integer boundaries.
+# Keep scalar and SIMD results equal at A8 rounding and nearest-texel boundaries.
 if(CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
-  set(glyph_blur_fp_option "-ffp-contract=off")
+  set(skity_fp_contract_option "-ffp-contract=off")
   if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
-    set(glyph_blur_fp_option "/clang:-ffp-contract=off")
+    set(skity_fp_contract_option "/clang:-ffp-contract=off")
   endif()
-  set_property(SOURCE src/render/text/atlas/blurred_glyph_x86.cc
-               APPEND PROPERTY COMPILE_OPTIONS "${glyph_blur_fp_option}")
+  set_property(SOURCE src/render/text/atlas/blurred_glyph_x86.cc src/render/sw/sw_span_brush.cc
+               APPEND PROPERTY COMPILE_OPTIONS "${skity_fp_contract_option}")
 endif()
 
 # source group for Xcode and Visual Studio
