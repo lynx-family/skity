@@ -220,6 +220,16 @@ add_subdirectory(include)
 # source files
 add_subdirectory(src)
 
+# Keep multiply and add separately rounded at A8 half-integer boundaries.
+if(CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
+  set(glyph_blur_fp_option "-ffp-contract=off")
+  if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    set(glyph_blur_fp_option "/clang:-ffp-contract=off")
+  endif()
+  set_property(SOURCE src/render/text/atlas/blurred_glyph_x86.cc
+               APPEND PROPERTY COMPILE_OPTIONS "${glyph_blur_fp_option}")
+endif()
+
 # source group for Xcode and Visual Studio
 get_target_property(SKITY_SRC skity SOURCES)
 

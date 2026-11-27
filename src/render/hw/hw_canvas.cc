@@ -34,6 +34,7 @@
 #include "src/render/hw/layer/hw_filter_layer.hpp"
 #include "src/render/paint_order.hpp"
 #include "src/render/shape.hpp"
+#include "src/render/text/direct_glyph_run.hpp"
 #include "src/render/text/glyph_run.hpp"
 #include "src/text/glyph_drawable.hpp"
 #include "src/tracing.hpp"
@@ -66,6 +67,51 @@ LayerRTOrigin ResolveLayerRTOrigin(GPUBackendType backend_type) {
   }
 
   return LayerRTOrigin::kTopLeft;
+}
+
+template <typename Visitor>
+bool VisitBlobRuns(const TextBlob& blob, float x, float y, const Paint& paint,
+                   Visitor visit) {
+  float advance_x = 0;
+  for (auto const& run : blob.GetTextRun()) {
+    auto const& glyphs = run.GetGlyphInfo();
+    const Font& font = run.GetFont();
+    if (!font.GetTypeface() || glyphs.empty()) {
+      continue;
+    }
+
+    std::vector<float> pos_x(glyphs.size());
+    std::vector<float> pos_y(glyphs.size(), y);
+    if (run.GetPosX().empty()) {
+      std::vector<const GlyphData*> metrics(glyphs.size());
+      font.LoadGlyphMetrics(glyphs.data(), glyphs.size(), metrics.data(),
+                            paint);
+      for (size_t i = 0; i < glyphs.size(); ++i) {
+        pos_x[i] = x + advance_x;
+        advance_x += metrics[i]->AdvanceX();
+      }
+    } else {
+      // Explicit positions are relative to the blob baseline. A horizontal
+      // run may omit some or all of the Y offsets.
+      for (size_t i = 0; i < glyphs.size(); ++i) {
+        pos_x[i] = x + run.GetPosX()[i];
+        if (i < run.GetPosY().size()) {
+          pos_y[i] += run.GetPosY()[i];
+        }
+      }
+    }
+
+    const GlyphRunInput input{static_cast<uint32_t>(glyphs.size()),
+                              glyphs.data(),
+                              Point{0, 0, 0, 1},
+                              pos_x.data(),
+                              pos_y.data(),
+                              font};
+    if (!visit(input)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace
@@ -410,6 +456,15 @@ void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
     return;
   }
 
+  if (!TryDrawBlurredText(paint, [&](const Paint& glyph_paint, auto visit) {
+        return VisitBlobRuns(*blob, x, y, glyph_paint, visit);
+      })) {
+    DrawBlobWithPaint(*blob, x, y, paint);
+  }
+}
+
+void HWCanvas::DrawBlobWithPaint(const TextBlob& blob, float x, float y,
+                                 const Paint& paint) {
   AutoCanvasRestore restore(this, false);
   Matrix current_matrix = CurrentMatrix();
   Paint working_paint(paint);
@@ -421,7 +476,7 @@ void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
     working_paint.SetMaskFilter(nullptr);
     working_paint.SetImageFilter(nullptr);
     working_paint.SetColorFilter(nullptr);
-    auto bounds = blob->GetBoundsRect().MakeOffset(x, y);
+    auto bounds = blob.GetBoundsRect().MakeOffset(x, y);
     // Expand outward a little to prevent incomplete display of text content
     bounds = bounds.MakeOutset(1, 1);
     auto layer_bounds = working_paint.ComputeFastBounds(bounds);
@@ -432,55 +487,10 @@ void HWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
     working_paint.SetBlendMode(BlendMode::kSrcOver);
   }
 
-  float advance_x = 0;
-  for (auto const& run : blob->GetTextRun()) {
-    auto const& glyphs = run.GetGlyphInfo();
-    const Font& font = run.GetFont();
-    if (!font.GetTypeface() || glyphs.empty()) {
-      continue;
-    }
-
-    std::vector<float> pos_y{};
-    std::vector<float> pos_x{};
-    if (run.GetPosX().empty()) {
-      std::vector<const GlyphData*> glyph_data(glyphs.size());
-      pos_x.reserve(glyphs.size());
-      pos_y.reserve(glyphs.size());
-
-      font.LoadGlyphMetrics(glyphs.data(), glyphs.size(), glyph_data.data(),
-                            working_paint);
-
-      for (auto const& glyph : glyph_data) {
-        pos_x.emplace_back(advance_x);
-        pos_y.emplace_back(0);
-
-        advance_x += glyph->AdvanceX();
-      }
-    } else {
-      // Y in run is not necessary cause we can infer y from position of blob.
-      pos_y.resize(run.GetPosX().size(), 0);
-      for (size_t i = 0; i < pos_y.size(); ++i) {
-        // Use default y value if posY is not provided.
-        if (i < run.GetPosY().size()) {
-          pos_y[i] += run.GetPosY()[i];
-        }
-      }
-
-      for (auto rx : run.GetPosX()) {
-        pos_x.emplace_back(rx);
-      }
-    }
-
-    for (size_t i = 0; i < pos_x.size(); ++i) {
-      pos_x[i] += x;
-      pos_y[i] += y;
-    }
-
-    const Point origin{0, 0, 0, 1};
-    DrawGlyphsInternal(static_cast<uint32_t>(glyphs.size()), glyphs.data(),
-                       origin, pos_x.data(), pos_y.data(), font, working_paint,
-                       current_matrix);
-  }
+  VisitBlobRuns(blob, x, y, working_paint, [&](const GlyphRunInput& input) {
+    DrawGlyphsInternal(input, working_paint, current_matrix);
+    return true;
+  });
 }
 
 void HWCanvas::OnDrawGlyphs(uint32_t count, const GlyphID* glyphs,
@@ -488,37 +498,110 @@ void HWCanvas::OnDrawGlyphs(uint32_t count, const GlyphID* glyphs,
                             const Font& font, const Paint& paint) {
   SKITY_TRACE_EVENT(HWCanvas_OnDrawGlyphs);
 
-  if (CurrentLayer() == nullptr) {
+  if (!CurrentLayer() || !count || !glyphs || !position_x || !position_y ||
+      !font.GetTypeface()) {
     return;
   }
-
-  const Point origin{0, 0, 0, 1};
-  DrawGlyphsInternal(count, glyphs, origin, position_x, position_y, font, paint,
-                     CurrentMatrix());
+  const GlyphRunInput input{count,      glyphs,     Point{0, 0, 0, 1},
+                            position_x, position_y, font};
+  if (paint.GetMaskFilter() &&
+      paint.GetMaskFilter()->GetBlurStyle() == BlurStyle::kNormal) {
+    if (TryDrawBlurredText(
+            paint, [&](const Paint&, auto visit) { return visit(input); })) {
+      return;
+    }
+    // Use the same complete ink bounds and layer fallback as positioned blobs.
+    std::vector<TextRun> runs;
+    runs.emplace_back(font, std::vector<GlyphID>(glyphs, glyphs + count),
+                      std::vector<float>(position_x, position_x + count),
+                      std::vector<float>(position_y, position_y + count));
+    DrawBlobWithPaint(TextBlob(std::move(runs)), 0.f, 0.f, paint);
+    return;
+  }
+  DrawGlyphsInternal(input, paint, CurrentMatrix());
 }
 
-void HWCanvas::DrawGlyphsInternal(uint32_t count, const GlyphID* glyphs,
-                                  const Point& origin, const float* position_x,
-                                  const float* position_y, const Font& font,
-                                  const Paint& paint, const Matrix& transform) {
-  SKITY_TRACE_EVENT(HWCanvas_DrawGlyphsInternal);
-
-  Matrix glyph_transform = transform;
-  Matrix glyph_to_layer;
+bool HWCanvas::GetGlyphTransforms(const Matrix& transform,
+                                  Matrix* glyph_transform,
+                                  Matrix* glyph_to_layer) {
+  *glyph_transform = transform;
   if (CurrentLayer() != root_layer_) {
     // Glyph rasterization already applies the surface density. Include the
     // layer's remaining scale and origin, then map glyph quads back to layer
     // coordinates before projection into its render target.
     Matrix layer_to_glyph = Matrix::Scale(1.f / ctx_scale_, 1.f / ctx_scale_) *
                             CurrentLayer()->GetLayerPhysicalMatrix(Matrix{});
-    if (!layer_to_glyph.Invert(&glyph_to_layer)) {
-      return;
+    if (!layer_to_glyph.Invert(glyph_to_layer)) {
+      return false;
     }
-    glyph_transform = layer_to_glyph * transform;
+    *glyph_transform = layer_to_glyph * transform;
   }
 
-  const GlyphRunInput input{count,      glyphs,     origin,
-                            position_x, position_y, font};
+  return true;
+}
+
+template <typename VisitRuns>
+bool HWCanvas::TryDrawBlurredText(const Paint& paint, VisitRuns visit_runs) {
+  const auto filter = paint.GetMaskFilter();
+  // TODO(jingle): Support kSolid, kOuter, and kInner in the glyph atlas path.
+  if (!filter || filter->GetBlurStyle() != BlurStyle::kNormal ||
+      !IsFillWithoutPathEffect(paint) || paint.GetImageFilter() ||
+      paint.GetColorFilter() || paint.GetShader() ||
+      paint.GetBlendMode() != BlendMode::kSrcOver) {
+    return false;
+  }
+  const Matrix transform = CurrentMatrix();
+  Matrix glyph_transform, glyph_to_layer;
+  if (!GetGlyphTransforms(transform, &glyph_transform, &glyph_to_layer) ||
+      !glyph_transform.OnlyScaleAndTranslate() || !glyph_transform.IsFinite()) {
+    return false;
+  }
+  const float sx = std::abs(glyph_transform.GetScaleX()) * ctx_scale_;
+  const float sy = std::abs(glyph_transform.GetScaleY()) * ctx_scale_;
+  const Vec2 radius{filter->GetBlurRadius() * sx, filter->GetBlurRadius() * sy};
+  // Bound miss-time convolution and atlas pressure. Wider kernels can use
+  // the existing downsampled layer blur.
+  constexpr float kMaxGlyphBlurRadius = 32.f;
+  if (!(radius.x > 0.f && radius.x <= kMaxGlyphBlurRadius && radius.y > 0.f &&
+        radius.y <= kMaxGlyphBlurRadius)) {
+    return false;
+  }
+
+  Paint glyph_paint = paint;
+  glyph_paint.SetMaskFilter(nullptr);
+  const GlyphRunBuildContext build_context{
+      *surface_->GetGPUContext()->GetAtlasManager(), *arena_allocator_,
+      ctx_scale_, glyph_transform};
+  GlyphSubRunList pending;
+  pending.SetArenaAllocator(arena_allocator_);
+  // Record only after all runs are ready: a fallback must filter the original
+  // blob once, including glyphs that were already found in the atlas.
+  if (!visit_runs(glyph_paint, [&](const GlyphRunInput& input) {
+        const float size = input.font.GetSize() * std::max(sx, sy);
+        if (!(size > 0.f && size < glyph_paint.GetFontThreshold())) {
+          return false;
+        }
+        return TryAppendBlurredGlyphRun(input, glyph_paint, build_context,
+                                        radius, pending);
+      })) {
+    return false;
+  }
+  const GlyphDrawContext draw_context{
+      *arena_allocator_, glyph_to_layer, transform,
+      surface_->GetGPUContext()->IsEnableTextLinearFilter()};
+  for (const auto* run : pending) {
+    run->Record(draw_context, *this);
+  }
+  return true;
+}
+
+void HWCanvas::DrawGlyphsInternal(const GlyphRunInput& input,
+                                  const Paint& paint, const Matrix& transform) {
+  SKITY_TRACE_EVENT(HWCanvas_DrawGlyphsInternal);
+  Matrix glyph_transform, glyph_to_layer;
+  if (!GetGlyphTransforms(transform, &glyph_transform, &glyph_to_layer)) {
+    return;
+  }
   const GlyphRunBuildContext build_context{
       *surface_->GetGPUContext()->GetAtlasManager(), *arena_allocator_,
       ctx_scale_, glyph_transform};

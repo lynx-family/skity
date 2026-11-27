@@ -231,6 +231,120 @@ class TransformedTextPixelTest : public ::testing::Test {
   GlyphID glyph_ = 0;
 };
 
+static void DrawWithLayerBlur(Canvas* canvas, const TextBlob& blob, float x, float y,
+                              const Paint& paint) {
+  Paint plain = paint;
+  plain.SetMaskFilter(nullptr);
+  plain.SetImageFilter(nullptr);
+  Paint restore = paint;
+  restore.SetAlphaF(1.f);
+  canvas->SaveLayer(blob.GetBoundsRect().MakeOffset(x, y).MakeOutset(1, 1), restore);
+  canvas->DrawTextBlob(&blob, x, y, plain);
+  canvas->Restore();
+}
+
+TEST_F(TransformedTextPixelTest, BlurredGlyphMatchesIsolatedLayerAndRawEntry) {
+  auto face =
+      std::make_shared<test::GlyphTestTypeface>(std::vector<test::TestGlyphSpec>{{20, 20, true}});
+  Font font(face, 20);
+  const GlyphID id = 0;
+  TextBlob blob({TextRun(font, {id}, {0.f}, {0.f})});
+  Paint paint;
+  paint.SetColor(0xb0603020);
+  paint.SetMaskFilter(MaskFilter::MakeBlur(BlurStyle::kNormal, 4));
+  for (float density : {1.f, 2.f}) {
+    auto actual = Render(density, [&](Canvas* c) { c->DrawTextBlob(&blob, 100, 100, paint); });
+    auto raw = Render(density, [&](Canvas* c) { DrawGlyph(c, false, font, id, 100, 100, paint); });
+    auto ref = Render(density, [&](Canvas* c) { DrawWithLayerBlur(c, blob, 100, 100, paint); });
+    ASSERT_EQ(actual.pixels, raw.pixels);
+    CompareImages(actual, ref, 3., 1);
+  }
+}
+
+TEST_F(TransformedTextPixelTest, BlurredColorGlyphUsesCoverageAndPaintColor) {
+  auto face = std::make_shared<test::GlyphTestTypeface>(
+      std::vector<test::TestGlyphSpec>{{24, 24, false, GlyphFormat::BGRA32}});
+  Font font(face, 20);
+  Paint paint;
+  paint.SetMaskFilter(MaskFilter::MakeBlur(BlurStyle::kNormal, 4));
+  paint.SetColor(Color_RED);
+  auto ink = Render(1.f, [&](Canvas* c) { DrawGlyph(c, true, font, 0, 100, 100, paint); });
+  ASSERT_GT(ink.count, 24u * 24u);
+  size_t off_color = 0;
+  for (size_t i = 0; i < ink.pixels.size(); i += 4) {
+    off_color += ink.pixels[i] != 255 || ink.pixels[i + 1] != ink.pixels[i + 2];
+  }
+  EXPECT_EQ(off_color, 0u);
+}
+
+TEST_F(TransformedTextPixelTest, BlurredGlyphsCompositeIndividually) {
+  auto face =
+      std::make_shared<test::GlyphTestTypeface>(std::vector<test::TestGlyphSpec>{{20, 20, true}});
+  Font font(face, 20);
+  TextBlob blob({TextRun(font, {0, 0}, {0, 0}, {0, 0})});
+  Paint paint;
+  paint.SetColor(Color_BLACK);
+  paint.SetMaskFilter(MaskFilter::MakeBlur(BlurStyle::kNormal, 6));
+  auto together = Render(1.f, [&](Canvas* c) { c->DrawTextBlob(&blob, 100, 100, paint); });
+  auto separate = Render(1.f, [&](Canvas* c) {
+    for (int i = 0; i < 2; ++i) DrawGlyph(c, true, font, 0, 100, 100, paint);
+  });
+  auto group = Render(1.f, [&](Canvas* c) { DrawWithLayerBlur(c, blob, 100, 100, paint); });
+  EXPECT_EQ(together.pixels, separate.pixels);
+  EXPECT_NE(together.pixels, group.pixels);
+
+  paint.SetMaskFilter(nullptr);
+  paint.SetImageFilter(ImageFilters::Blur(3, 3));
+  const auto image_blur = Render(1.f, [&](Canvas* c) { c->DrawTextBlob(&blob, 100, 100, paint); });
+  const auto layer_blur =
+      Render(1.f, [&](Canvas* c) { DrawWithLayerBlur(c, blob, 100, 100, paint); });
+  EXPECT_EQ(image_blur.pixels, layer_blur.pixels);
+}
+
+TEST_F(TransformedTextPixelTest, BlurredGlyphLayerScaleAndClip) {
+  auto face = Typeface::MakeFromFile(SKITY_FONT_DIR "fonts/resources/Roboto-Regular.ttf");
+  ASSERT_TRUE(face);
+  Font font(face, 36.f);
+  TextBlob blob({TextRun(font, {face->UnicharToGlyph('H')}, {0.f}, {0.f})});
+  Paint paint;
+  paint.SetColor(0xb0403020);
+  paint.SetMaskFilter(MaskFilter::MakeBlur(BlurStyle::kNormal, 3.5f));
+  auto render = [&](bool grouped) {
+    return Render(1.f, [&](Canvas* c) {
+      c->SaveLayer(Rect::MakeLTRB(20, 20, 300, 240), Paint{});
+      c->Translate(30, 30);
+      c->Scale(1.5f, 1.f);
+      c->ClipRect(Rect::MakeLTRB(52, 0, 160, 150));
+      if (grouped) {
+        DrawWithLayerBlur(c, blob, 48, 96, paint);
+      } else {
+        c->DrawTextBlob(&blob, 48, 96, paint);
+      }
+      c->Restore();
+    });
+  };
+  auto actual = render(false);
+  auto ref = render(true);
+  EXPECT_GE(actual.left, 108);
+  CompareImages(actual, ref, 8., 2);
+}
+
+TEST_F(TransformedTextPixelTest, OversizeBlurFallsBackForWholeBlob) {
+  // First run fits. The second bitmap fits without blur but its halo crosses
+  // the tile limit. Drawing the first glyph early would double its opacity.
+  auto face = std::make_shared<test::GlyphTestTypeface>(
+      std::vector<test::TestGlyphSpec>{{20, 20, true}, {500, 20, true}});
+  Font font(face, 20);
+  TextBlob blob({TextRun(font, {0}, {0}, {0}), TextRun(font, {1}, {70}, {0})});
+  Paint paint;
+  paint.SetColor(0x80604020);
+  paint.SetMaskFilter(MaskFilter::MakeBlur(BlurStyle::kNormal, 8));
+  auto actual = Render(1.f, [&](Canvas* c) { c->DrawTextBlob(&blob, 100, 100, paint); });
+  auto ref = Render(1.f, [&](Canvas* c) { DrawWithLayerBlur(c, blob, 100, 100, paint); });
+  ASSERT_GT(ref.count, 0u);
+  EXPECT_EQ(actual.pixels, ref.pixels);
+}
+
 TEST_F(TransformedTextPixelTest, GlyphBearingSurvivesClipAndSaveLayer) { CheckBearing(false); }
 
 TEST_F(TransformedTextPixelTest, BlobBearingSurvivesClipAndSaveLayer) { CheckBearing(true); }

@@ -75,6 +75,13 @@ cmake -B build
 cmake --build build
 ```
 
+On Linux and Windows x86-64, CMake compiles
+`src/render/text/atlas/blurred_glyph_x86.cc` with `-ffp-contract=off` on GCC
+and Clang (`/clang:-ffp-contract=off` on clang-cl). This preserves the two
+rounding steps that determine A8 coverage at half-integer boundaries.
+The generated `skity.gni` exports target-wide flags. GN consumers can apply
+the same option to this file in a separate `source_set`.
+
 There are several options you can use to configure the build:
 
 * Options for building Skity itself:

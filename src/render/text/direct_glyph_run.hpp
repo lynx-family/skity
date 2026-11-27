@@ -17,6 +17,10 @@ struct PreparedDirectGlyph {
   Rect bounds;
 };
 
+bool TryAppendBlurredGlyphRun(const GlyphRunInput& input, const Paint& paint,
+                              const GlyphRunBuildContext& context, Vec2 radius,
+                              GlyphSubRunList& runs);
+
 // Rejected spans retain their order within each paint pass. Direct owns pass
 // preparation; the caller supplies the policy for all other representations.
 using GlyphRunFallback = void (*)(const GlyphRunInput&, const Paint&,
@@ -32,7 +36,7 @@ void AppendDirectGlyphRuns(const GlyphRunInput& input, const Paint& paint,
 
 std::vector<PreparedDirectGlyph> PrepareDirectGlyphs(
     const GlyphRunInput& input, const Paint& paint, AtlasFormat format,
-    const GlyphRunBuildContext& context);
+    const GlyphRunBuildContext& context, Vec2 blur_radius = {});
 
 void AppendPreparedDirectGlyphRuns(const GlyphRunInput& input,
                                    const PreparedDirectGlyph* glyphs,

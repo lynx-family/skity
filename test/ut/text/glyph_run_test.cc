@@ -11,6 +11,7 @@
 #include "src/render/text/atlas_glyph_run.hpp"
 #include "src/render/text/sdf_glyph_run.hpp"
 #include "test/ut/gpu/fake_gpu_context.hpp"
+#include "test/ut/text/glyph_test_typeface.hpp"
 #include "test/ut/text/recording_glyph_draw_target.hpp"
 
 namespace skity::test {
@@ -24,6 +25,64 @@ GlyphRunOptions AtlasTestOptions() {
   return options;
 }
 }  // namespace
+
+TEST(GlyphRunTest, BlurredAtlasKeyIncludesKernelAndSubpixelPhase) {
+  Atlas atlas(AtlasFormat::A8, nullptr, false);
+  TestGlyphSpec spec{20, 10, true, GlyphFormat::BGRA32};
+  spec.drawable = true;
+  auto face =
+      std::make_shared<GlyphTestTypeface>(std::vector<TestGlyphSpec>{spec});
+  ASSERT_TRUE(face->ContainsColorTable());
+  Font font(face, 20);
+  Paint paint;
+  paint.SetColor(Color_RED);
+  const auto lookup = [&](Vec2 radius, unsigned phase) {
+    return atlas.GetGlyphRegion(font, PackedGlyphID(0, phase, 0), paint, false,
+                                2.f, Matrix{}, radius);
+  };
+  auto a = lookup({2, 3}, 0);
+  ASSERT_TRUE(a.IsReady());
+  EXPECT_EQ(a.region.format, GlyphFormat::A8);
+  EXPECT_EQ(a.width, 44u);
+  EXPECT_EQ(a.height, 26u);
+  EXPECT_FLOAT_EQ(a.region.origin_x, -4.f);
+  EXPECT_FLOAT_EQ(a.region.origin_y, 18.5f);
+  paint.SetColor(ColorSetA(Color_BLUE, 64));
+  EXPECT_EQ(lookup({2, 3}, 0).region.loc, a.region.loc);
+  EXPECT_EQ(face->state->image_requests[0], 1u);
+  EXPECT_NE(lookup({2, 3.25f}, 0).region.loc, a.region.loc);
+  EXPECT_NE(lookup({2, 3}, 1).region.loc, a.region.loc);
+  EXPECT_EQ(face->state->image_requests[0], 3u);
+  ASSERT_EQ(face->state->scaler_descs.size(), 1u);
+  EXPECT_EQ(face->state->scaler_descs.front().foreground_color, Color_WHITE);
+}
+
+TEST(GlyphRunTest, MonochromeBlurReusesCompatibleScaler) {
+  Atlas atlas(AtlasFormat::A8, nullptr, false);
+  auto face =
+      std::make_shared<GlyphTestTypeface>(std::vector<TestGlyphSpec>{{}});
+  ASSERT_FALSE(face->ContainsColorTable());
+  Font font(face, 20);
+  Paint paint;
+  paint.SetColor(Color_WHITE);
+  const auto lookup = [&](Vec2 radius) {
+    return atlas.GetGlyphRegion(font, PackedGlyphID(0), paint, false, 1.f,
+                                Matrix{}, radius);
+  };
+  const auto direct = lookup({});
+  const auto blurred = lookup({2, 2});
+  ASSERT_TRUE(direct.IsReady());
+  ASSERT_TRUE(blurred.IsReady());
+  EXPECT_NE(direct.region.loc, blurred.region.loc);
+  const auto& descs = face->state->scaler_descs;
+#if defined(SKITY_WIN)
+  ASSERT_EQ(descs.size(), 2u);
+  EXPECT_TRUE(descs.back().ShouldGenerateRawA8Mask());
+#else
+  ASSERT_EQ(descs.size(), 1u);
+#endif
+  EXPECT_FALSE(descs.front().ShouldGenerateRawA8Mask());
+}
 
 TEST(GlyphRunTest, AtlasBatchesPreserveNonAdjacentTextureOrder) {
   Atlas atlas(AtlasFormat::A8, nullptr, false);

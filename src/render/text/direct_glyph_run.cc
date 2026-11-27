@@ -5,6 +5,7 @@
 #include "src/render/text/direct_glyph_run.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include "src/render/hw/draw/hw_dynamic_text_draw.hpp"
 #include "src/render/text/atlas_glyph_run.hpp"
@@ -49,7 +50,7 @@ class DirectGlyphRun final : public AtlasGlyphRun {
 
 std::vector<PreparedDirectGlyph> PrepareDirectGlyphs(
     const GlyphRunInput& input, const Paint& paint, AtlasFormat format,
-    const GlyphRunBuildContext& context) {
+    const GlyphRunBuildContext& context, Vec2 blur_radius) {
   std::vector<PreparedDirectGlyph> glyphs(input.count);
   const Vec2 local_origin{input.origin.x, input.origin.y};
   const Vec2 zero{0.f, 0.f};
@@ -68,13 +69,19 @@ std::vector<PreparedDirectGlyph> PrepareDirectGlyphs(
                               input.position_y[index] + input.origin.y};
     Vec2 raster_position{};
     context.local_to_raster.MapPoints(&raster_position, &local_position, 1);
+    if (!std::isfinite(raster_position.x * context.device_scale) ||
+        !std::isfinite(raster_position.y * context.device_scale)) {
+      glyphs[index].atlas.status = AtlasGlyphStatus::kInvalidImage;
+      continue;
+    }
     const auto position = QuantizeGlyphPosition(
         raster_position, context.device_scale, rounding_spec);
     auto& glyph = glyphs[index];
     glyph.atlas = atlas.GetGlyphRegion(
         input.font,
         PackedGlyphID(input.glyphs[index], position.x_phase, position.y_phase),
-        paint, false, context.device_scale, context.local_to_raster);
+        paint, false, context.device_scale, context.local_to_raster,
+        blur_radius);
     if (!glyph.atlas.IsReady()) {
       continue;
     }
@@ -110,6 +117,32 @@ void AppendPreparedDirectGlyphRuns(const GlyphRunInput& input,
         atlas, std::move(batch), paint, is_stroke, effect,
         context.local_to_raster, input.origin));
   }
+}
+
+bool TryAppendBlurredGlyphRun(const GlyphRunInput& input, const Paint& paint,
+                              const GlyphRunBuildContext& context, Vec2 radius,
+                              GlyphSubRunList& runs) {
+  auto glyphs =
+      PrepareDirectGlyphs(input, paint, AtlasFormat::A8, context, radius);
+  for (uint32_t i = 0; i < input.count; ++i) {
+    if (glyphs[i].atlas.IsReady()) {
+      continue;
+    }
+    // A space has neither bitmap nor outline. A missing image with a path
+    // or a possible color drawable must go through the normal fallback.
+    if (glyphs[i].atlas.status != AtlasGlyphStatus::kNoImage ||
+        input.font.GetTypeface()->ContainsColorTable()) {
+      return false;
+    }
+    const GlyphData* path = nullptr;
+    input.font.LoadGlyphPath(input.glyphs + i, 1, &path);
+    if (HasOutline(path)) {
+      return false;
+    }
+  }
+  AppendPreparedDirectGlyphRuns(input, glyphs.data(), paint, AtlasFormat::A8,
+                                false, context, runs);
+  return true;
 }
 
 void AppendDirectGlyphRuns(const GlyphRunInput& input, const Paint& paint,

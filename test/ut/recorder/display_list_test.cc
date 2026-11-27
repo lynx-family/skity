@@ -1047,6 +1047,12 @@ TEST(DisplayList, DrawGlyphsWithZeroCount) {
   display_list->Draw(&mock_canvas);
 }
 
+TEST(DisplayList, IgnoresNegativeGlyphCount) {
+  testing::StrictMock<MockCanvas> canvas;
+  canvas.DrawGlyphs(-1, nullptr, nullptr, nullptr, skity::Font{},
+                    skity::Paint{});
+}
+
 TEST(DisplayList, DrawNullCanvasNoOp) {
   skity::PictureRecorder recorder;
   skity::DisplayListBuildOptions options;

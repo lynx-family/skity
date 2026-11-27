@@ -78,7 +78,8 @@ AtlasGlyphResult Atlas::GetGlyphRegion(const Font& font,
                                        PackedGlyphID packed_glyph_id,
                                        const Paint& paint, bool load_sdf,
                                        float context_scale,
-                                       const Matrix& transform) {
+                                       const Matrix& transform,
+                                       Vec2 blur_radius) {
   float font_size = font.GetSize();
   float sdf_scale = 1.0f;
   // TODO(jingle) consider transform for sdf text
@@ -100,8 +101,18 @@ AtlasGlyphResult Atlas::GetGlyphRegion(const Font& font,
   raster_font.SetSize(load_sdf ? text_size : font_size);
 
   Paint raster_paint = paint;
+  bool needs_raw_a8 = load_sdf;
   if (load_sdf) {
     raster_paint.SetStyle(Paint::kFill_Style);
+    raster_paint.SetColor(Color_TRANSPARENT);
+  } else if (blur_radius.x > 0.f) {
+    // Use an opaque foreground for color layers. MakeTransformed drops it
+    // from the descriptor for non-Windows monochrome fonts.
+    raster_paint.SetColor(Color_WHITE);
+#if defined(SKITY_WIN)
+    // Blurred masks bypass the foreground-dependent Windows A8 gamma table.
+    needs_raw_a8 = true;
+#endif
   }
 
   Matrix22 raster_transform =
@@ -111,14 +122,13 @@ AtlasGlyphResult Atlas::GetGlyphRegion(const Font& font,
   ScalerContextDesc scaler_context_desc = ScalerContextDesc::MakeTransformed(
       raster_font, raster_paint, load_sdf ? 1.f : context_scale,
       raster_transform);
-  if (load_sdf) {
+  if (needs_raw_a8) {
     scaler_context_desc.scaler_flags |=
         ScalerContextDesc::kGenerateRawA8MaskFlag;
-    scaler_context_desc.foreground_color = Color_TRANSPARENT;
   }
   GlyphKey key(
       load_sdf ? PackedGlyphID(packed_glyph_id.GetGlyphID()) : packed_glyph_id,
-      scaler_context_desc);
+      scaler_context_desc, blur_radius);
 
   for (uint32_t index = 0; index < atlas_bitmap_.size(); index++) {
     if (atlas_bitmap_[index]) {
@@ -162,6 +172,9 @@ AtlasGlyphResult Atlas::GenerateGlyphRegion(const Font& font,
   }
   auto bitmap_info = glyph_image.Image();
 
+  if (key.blur_radius.x > 0.f) {
+    return GenerateBlurredGlyphRegion(key, bitmap_info);
+  }
   if (fill_paint.GetStyle() == Paint::kStroke_Style &&
       fill_paint.IsAdjustStroke()) {
     fill_paint.SetStyle(Paint::kFill_Style);

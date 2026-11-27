@@ -99,10 +99,14 @@ class HWCanvas : public Canvas, private GlyphDrawTarget {
   HWLayer* GenLayer(const Paint& paint, Rect layer_bounds,
                     const Matrix& local_to_layer);
 
-  void DrawGlyphsInternal(uint32_t count, const GlyphID* glyphs,
-                          const Point& origin, const float* position_x,
-                          const float* position_y, const Font& font,
-                          const Paint& paint, const Matrix& transform);
+  bool GetGlyphTransforms(const Matrix& transform, Matrix* glyph_transform,
+                          Matrix* glyph_to_layer);
+  template <typename VisitRuns>
+  bool TryDrawBlurredText(const Paint& paint, VisitRuns visit_runs);
+  void DrawBlobWithPaint(const TextBlob& blob, float x, float y,
+                         const Paint& paint);
+  void DrawGlyphsInternal(const GlyphRunInput& input, const Paint& paint,
+                          const Matrix& transform);
 
   bool TryPromoteInitialClear(const Paint& paint, const Rect* rect = nullptr);
 

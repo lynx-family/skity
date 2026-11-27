@@ -33,7 +33,8 @@ class Atlas {
   AtlasGlyphResult GetGlyphRegion(const Font& font,
                                   PackedGlyphID packed_glyph_id,
                                   const Paint& paint, bool load_sdf,
-                                  float context_scale, const Matrix& transform);
+                                  float context_scale, const Matrix& transform,
+                                  Vec2 blur_radius = {});
 
   // upload atlas from memory storage to gpu texture
   void UploadAtlas(uint32_t group_index);
@@ -61,6 +62,9 @@ class Atlas {
 
   AtlasGlyphResult GenerateGlyphRegionInternal(
       const GlyphKey& key, const GlyphBitmapData& glyph_bitmap);
+
+  AtlasGlyphResult GenerateBlurredGlyphRegion(const GlyphKey& key,
+                                              const GlyphBitmapData& source);
 
   AtlasFormat format_;
   GPUDevice* gpu_device_;
