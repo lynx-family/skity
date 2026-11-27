@@ -130,6 +130,9 @@ class SWCanvas : public Canvas {
                     const float* position_x, const float* position_y,
                     const Font& font, const Paint& paint);
 
+  template <typename Draw>
+  void DrawFiltered(const Rect& bounds, const Paint& paint, Draw draw);
+
   void HandleFilter(uint32_t count, const GlyphID* glyphs,
                     const float* position_x, const float* position_y,
                     const Font& font, const Paint& paint);

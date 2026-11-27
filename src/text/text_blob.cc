@@ -36,14 +36,16 @@ Rect TextBlob::CalculateBoundsRect() const {
   for (auto const &run : text_run_) {
     const Font &font = run.GetFont();
     auto const &glyph_ids = run.GetGlyphInfo();
-    std::vector<const GlyphData *> glyphs(glyph_ids.size());
-    Paint paint;
-    paint.SetTextSize(run.GetFontSize());
-    font.LoadGlyphMetrics(glyph_ids.data(), glyph_ids.size(), glyphs.data(),
-                          paint);
-    if (glyphs.empty()) {
+    const auto count = run.GetPosX().empty()
+                           ? glyph_ids.size()
+                           : std::min(glyph_ids.size(), run.GetPosX().size());
+    if (!font.GetTypeface() || count == 0) {
       continue;
     }
+    std::vector<const GlyphData *> glyphs(count);
+    Paint paint;
+    paint.SetTextSize(run.GetFontSize());
+    font.LoadGlyphMetrics(glyph_ids.data(), count, glyphs.data(), paint);
     has_glyph = true;
 
     std::vector<float> pos_y;

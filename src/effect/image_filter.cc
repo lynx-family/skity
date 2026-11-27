@@ -23,6 +23,7 @@
 #if defined(SKITY_CPU)
 #include <cstring>
 
+#include "src/base/fixed_types.hpp"
 #include "src/graphic/color_priv.hpp"
 #include "src/render/sw/sw_stack_blur.hpp"
 #endif
@@ -144,10 +145,10 @@ std::shared_ptr<ImageFilter> ImageFilters::LocalMatrix(
       if (local_matrix.OnlyScaleAndTranslate()) {
         BlurImageFilter* blur_image_filter =
             static_cast<BlurImageFilter*>(image_filter_base);
-        float radius_x =
-            local_matrix.GetScaleX() * blur_image_filter->GetRadiusX();
-        float radius_y =
-            local_matrix.GetScaleX() * blur_image_filter->GetRadiusY();
+        float radius_x = std::abs(local_matrix.GetScaleX()) *
+                         blur_image_filter->GetRadiusX();
+        float radius_y = std::abs(local_matrix.GetScaleY()) *
+                         blur_image_filter->GetRadiusY();
         return ImageFilters::Blur(ConvertRadiusToSigma(radius_x),
                                   ConvertRadiusToSigma(radius_y));
       }
@@ -161,8 +162,10 @@ std::shared_ptr<ImageFilter> ImageFilters::LocalMatrix(
         float scale_y = local_matrix.GetScaleY();
         float dx = scale_x * drop_shadow_image_filter->GetOffsetX();
         float dy = scale_y * drop_shadow_image_filter->GetOffsetY();
-        float radius_x = scale_x * drop_shadow_image_filter->GetRadiusX();
-        float radius_y = scale_y * drop_shadow_image_filter->GetRadiusY();
+        float radius_x =
+            std::abs(scale_x) * drop_shadow_image_filter->GetRadiusX();
+        float radius_y =
+            std::abs(scale_y) * drop_shadow_image_filter->GetRadiusY();
         return ImageFilters::DropShadow(
             dx, dy, ConvertRadiusToSigma(radius_x),
             ConvertRadiusToSigma(radius_y),
@@ -215,12 +218,21 @@ std::shared_ptr<ImageFilter> ImageFilters::LocalMatrix(
 
 #if defined(SKITY_CPU)
 
+bool ImageFilterBase::InheritColorSpace(Bitmap& bitmap, const Bitmap& source) {
+  return bitmap.GetPixmap()->SetColorInfo(bitmap.GetAlphaType(),
+                                          bitmap.GetColorType(),
+                                          source.GetPixmap()->GetColorSpace());
+}
+
 // static
 void ImageFilterBase::BlurBitmapToCanvas(Canvas* canvas, Bitmap& bitmap,
                                          const Rect& filter_bounds,
                                          const Paint& paint, float radius_x,
                                          float radius_y) {
   Bitmap filtered_bitmap(bitmap.Width(), bitmap.Height(), kPremul_AlphaType);
+  if (!InheritColorSpace(filtered_bitmap, bitmap)) {
+    return;
+  }
   SWStackBlur(&bitmap, &filtered_bitmap,
               std::round(std::max(radius_x, radius_y)))
       .Blur();
@@ -239,6 +251,53 @@ void ImageFilterBase::FlattenToBuffer(WriteBuffer& buffer) const {
       buffer.WriteFlattenable(input);
     }
   }
+}
+
+void MatrixImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
+                                 const Rect& bounds, const Paint& paint) const {
+  const auto previous_matrix = canvas->GetTotalMatrix();
+  canvas->Concat(matrix_);
+  canvas->DrawImage(Image::MakeImage(bitmap.GetPixmap()), bounds, &paint);
+  canvas->SetMatrix(previous_matrix);
+}
+
+void ColorFilterImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
+                                      const Rect& bounds,
+                                      const Paint& paint) const {
+  Paint result = paint;
+  result.SetColorFilter(
+      ColorFilters::Compose(paint.GetColorFilter(), color_filter_));
+  canvas->DrawImage(Image::MakeImage(bitmap.GetPixmap()), bounds, &result);
+}
+
+void ComposeImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
+                                  const Rect& bounds,
+                                  const Paint& paint) const {
+  auto image = Image::MakeImage(bitmap.GetPixmap());
+  Paint result = paint;
+  if (!inner_ || !outer_) {
+    result.SetImageFilter(inner_ ? inner_ : outer_);
+    canvas->DrawImage(image, bounds, &result);
+    return;
+  }
+
+  Rect intermediate_bounds = inner_->ComputeFastBounds(bounds);
+  intermediate_bounds.RoundOut();
+  Bitmap intermediate(float_saturate2int(intermediate_bounds.Width()),
+                      float_saturate2int(intermediate_bounds.Height()),
+                      kPremul_AlphaType);
+  if (!InheritColorSpace(intermediate, bitmap)) {
+    return;
+  }
+  auto surface = Canvas::MakeSoftwareCanvas(&intermediate);
+  surface->Translate(-intermediate_bounds.Left(), -intermediate_bounds.Top());
+  Paint input;
+  input.SetImageFilter(inner_);
+  surface->DrawImage(image, bounds, &input);
+
+  result.SetImageFilter(outer_);
+  canvas->DrawImage(Image::MakeImage(intermediate.GetPixmap()),
+                    intermediate_bounds, &result);
 }
 
 void BlurImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
@@ -270,17 +329,17 @@ void DropShadowImageFilter::OnFilter(Canvas* canvas, Bitmap& bitmap,
               std::round(std::max(radius_x_, radius_y_)))
       .Blur();
 
-  // The software path still tints the shadow with the recorded bytes as
-  // sRGB (the color space aware CPU filter path lands with the software
-  // renderer rework); quantizing up front keeps that interpretation
-  // explicit.
-  const Color srgb_color = Color4fToColor(color_);
-
+  const auto& target = bitmap.GetPixmap()->GetColorSpace();
+  filtered_bitmap.GetPixmap()->SetColorInfo(kUnpremul_AlphaType,
+                                            ColorType::kRGBA, target);
+  const Color color =
+      Color4fToColor(ColorSpace::Convert(color_space_, color_, target));
   for (size_t y = 0; y < bitmap.Height(); ++y) {
     for (size_t x = 0; x < bitmap.Width(); ++x) {
-      auto a = ColorGetA(filtered_bitmap.GetPixel(x, y));
-      auto c = a > 0 ? ColorSetA(srgb_color, a) : Color_TRANSPARENT;
-      filtered_bitmap.SetPixel(x, y, c);
+      auto coverage = ColorGetA(filtered_bitmap.GetPixel(x, y));
+      auto alpha = MulDiv255Round(coverage, ColorGetA(color));
+      filtered_bitmap.SetPixel(
+          x, y, alpha ? ColorSetA(color, alpha) : Color_TRANSPARENT);
     }
   }
 

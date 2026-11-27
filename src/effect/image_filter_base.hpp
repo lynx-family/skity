@@ -53,6 +53,7 @@ class ImageFilterBase : public ImageFilter {
   static Rect ApproximateFilteredBounds(const Rect& src, float radius_x,
                                         float radius_y);
 #if defined(SKITY_CPU)
+  static bool InheritColorSpace(Bitmap& bitmap, const Bitmap& source);
   static void BlurBitmapToCanvas(Canvas* canvas, Bitmap& bitmap,
                                  const Rect& filter_bounds, const Paint& paint,
                                  float radius_x, float radius_y);
@@ -222,12 +223,13 @@ class MatrixImageFilter : public ImageFilterBase {
   ImageFilterType GetType() const override { return ImageFilterType::kMatix; }
 
   Rect ComputeFastBounds(const Rect& src) const override {
-    Rect result;
-    if (matrix_.MapRect(&result, src)) {
-      return result;
-    }
-    return src;
+    return matrix_.MapRect(src);
   }
+
+#if defined(SKITY_CPU)
+  void OnFilter(Canvas* canvas, Bitmap& bitmap, const Rect& filter_bounds,
+                const Paint& paint) const override;
+#endif
 
   std::string_view ProcName() const override;
 
@@ -248,6 +250,11 @@ class ColorFilterImageFilter : public ImageFilterBase {
   }
 
   std::shared_ptr<ColorFilter> GetColorFilter() const { return color_filter_; }
+
+#if defined(SKITY_CPU)
+  void OnFilter(Canvas* canvas, Bitmap& bitmap, const Rect& filter_bounds,
+                const Paint& paint) const override;
+#endif
 
   std::string_view ProcName() const override;
 
@@ -288,6 +295,11 @@ class ComposeImageFilter : public ImageFilterBase {
 
     return outer_->ComputeFastBounds(inner_->ComputeFastBounds(src));
   }
+
+#if defined(SKITY_CPU)
+  void OnFilter(Canvas* canvas, Bitmap& bitmap, const Rect& filter_bounds,
+                const Paint& paint) const override;
+#endif
 
   std::string_view ProcName() const override { return "SkComposeImageFilter"; }
 

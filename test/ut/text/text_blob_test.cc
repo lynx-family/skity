@@ -168,8 +168,18 @@ TEST(TextBlobBoundsTest, NegativeRuns) {
                -40.f, -60.f, -10.f, -30.f);
 }
 
+TEST(TextBlobBoundsTest, HandlesMissingTypefaceAndPartialPositions) {
+  const TextRun no_typeface(Font{}, {1});
+  const TextRun positioned(MakeZeroMetricsFont(), {1, 2, 3}, {10.f, 20.f},
+                           {30.f});
+  const TextBlob blob({no_typeface, positioned});
+  ExpectBounds(blob.GetBoundsRect(), 10.f, 0.f, 20.f, 30.f);
+}
+
 TEST(TextBlobBoundsTest, AllRunsEmpty) {
-  const auto font = MakeZeroMetricsFont();
+  auto typeface = std::make_shared<BoundsTypeface>();
+  EXPECT_CALL(*typeface, OnCreateScalerContext(testing::_)).Times(0);
+  const Font font(typeface, 20.f);
   const TextBlob blob({TextRun(font, std::vector<GlyphID>{}),
                        TextRun(font, std::vector<GlyphID>{})});
 

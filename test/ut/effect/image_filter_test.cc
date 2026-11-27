@@ -107,3 +107,17 @@ TEST(ImageFilterColorSpace, DropShadowLocalMatrixPreservesDeclaredSpace) {
   EXPECT_EQ(shadow->GetColor4f().r, 1.f);
   EXPECT_EQ(shadow->GetColor(), Color_RED);
 }
+
+TEST(ImageFilter, LocalMatrixScalesBlurRadiiAlongEachAxis) {
+  auto matrix = Matrix::Scale(-2, 3);
+  for (auto input :
+       {ImageFilters::Blur(2, 4),
+        ImageFilters::DropShadow(3, 2, 2, 4, Color_RED, nullptr)}) {
+    auto rebuilt = ImageFilters::LocalMatrix(input, matrix);
+    ASSERT_TRUE(rebuilt);
+    EXPECT_FLOAT_EQ(As_IFB(rebuilt.get())->GetRadiusX(),
+                    2 * As_IFB(input.get())->GetRadiusX());
+    EXPECT_FLOAT_EQ(As_IFB(rebuilt.get())->GetRadiusY(),
+                    3 * As_IFB(input.get())->GetRadiusY());
+  }
+}

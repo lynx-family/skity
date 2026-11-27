@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <skity/effect/color_filter.hpp>
 #include <skity/effect/image_filter.hpp>
 #include <skity/recorder/picture_recorder.hpp>
 
@@ -326,5 +327,29 @@ TEST(ImageFilterGolden, ComposeBlurMatrix) {
 
   auto dl = recorder.FinishRecording();
   EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 200, 200,
+                                                   context.ToPathList()));
+}
+
+TEST(ImageFilterGolden, LocalMatrixColorFilter) {
+  using namespace skity;
+  PictureRecorder recorder;
+  recorder.BeginRecording(Rect::MakeWH(64, 32));
+  auto canvas = recorder.GetRecordingCanvas();
+  const Rect rect = Rect::MakeXYWH(36, 8, 16, 16);
+  Paint paint;
+  paint.SetColor(Color_RED);
+  canvas->DrawRect(rect, paint);
+
+  // The local reflection and scale turn a 12-pixel shift into 24 to the left.
+  auto move = ImageFilters::MatrixTransform(Matrix::Translate(12, 0));
+  auto tint = ImageFilters::ColorFilter(
+      ColorFilters::Blend(Color_BLUE, BlendMode::kSrcIn));
+  paint.SetImageFilter(ImageFilters::LocalMatrix(
+      ImageFilters::Compose(tint, move), Matrix::Scale(-2, 1)));
+  canvas->DrawRect(rect, paint);
+
+  PathListContext context("local_matrix_color_filter.png");
+  auto dl = recorder.FinishRecording();
+  EXPECT_TRUE(skity::testing::CompareGoldenTexture(dl.get(), 64, 32,
                                                    context.ToPathList()));
 }
