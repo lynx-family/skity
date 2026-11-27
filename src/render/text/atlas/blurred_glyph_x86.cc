@@ -9,6 +9,11 @@
 #ifdef SKITY_WIN
 #ifdef _MSC_VER
 #include <intrin.h>
+#if defined(__clang__) && __clang_major__ < 19
+#include <avxintrin.h>
+// clang-cl omits both at baseline. AVX2 needs the AVX types above.
+#include <avx2intrin.h>
+#endif
 #else
 #include <cpuid.h>
 #endif
