@@ -485,37 +485,37 @@ void SWCanvas::OnDrawBlob(const TextBlob* blob, float x, float y,
     return;
   }
 
-  for (auto const& run : blob->GetTextRun()) {
-    auto typeface = run.LockTypeface();
-    auto const& glyphs = run.GetGlyphInfo();
-    if (!typeface || glyphs.empty()) {
+  float advance_x = 0.f;
+  for (const auto& run : blob->GetTextRun()) {
+    const Font& font = run.GetFont();
+    const auto& glyphs = run.GetGlyphInfo();
+    if (!font.GetTypeface() || glyphs.empty()) {
       continue;
     }
 
-    Font font(typeface, run.GetFontSize());
-    std::vector<float> pos_y{};
-    std::vector<float> pos_x{};
-    if (run.GetPosX().empty()) {
-      // this this slow, but cpu raster is not performance sensitive
-      // std::vector<GlyphData> glyphs(run.GetGlyphInfo().size());
-      std::vector<const GlyphData*> glyph_data(glyphs.size());
-      font.LoadGlyphMetrics(glyphs.data(), glyphs.size(), glyph_data.data(),
-                            paint);
-
-      for (auto const& glyph : glyph_data) {
-        pos_x.emplace_back(x + glyph->GetHoriBearingX());
-        pos_y.emplace_back(y);
-
-        x += glyph->AdvanceX();
+    const auto& run_x = run.GetPosX();
+    const size_t count =
+        run_x.empty() ? glyphs.size() : std::min(glyphs.size(), run_x.size());
+    std::vector<float> pos_x(count);
+    std::vector<float> pos_y(count, y);
+    if (run_x.empty()) {
+      std::vector<const GlyphData*> metrics(count);
+      font.LoadGlyphMetrics(glyphs.data(), count, metrics.data(), paint);
+      for (size_t i = 0; i < count; ++i) {
+        pos_x[i] = x + advance_x;
+        advance_x += metrics[i]->AdvanceX();
       }
     } else {
-      pos_y.resize(run.GetPosX().size(), y);
-      for (auto rx : run.GetPosX()) {
-        pos_x.emplace_back(rx + x);
+      const auto& run_y = run.GetPosY();
+      for (size_t i = 0; i < count; ++i) {
+        pos_x[i] = x + run_x[i];
+        if (i < run_y.size()) {
+          pos_y[i] += run_y[i];
+        }
       }
     }
 
-    this->DrawGlyphsInternal(static_cast<int32_t>(glyphs.size()), glyphs.data(),
+    this->DrawGlyphsInternal(static_cast<uint32_t>(count), glyphs.data(),
                              pos_x.data(), pos_y.data(), font, paint);
   }
 }

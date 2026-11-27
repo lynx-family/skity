@@ -86,6 +86,53 @@ TEST(SoftwareTextGolden, PositionedGlyphs) {
       }));
 }
 
+TEST(TextGolden, BlobRunPositions) {
+  using namespace skity;
+  auto typeface = Typeface::MakeFromFile(kRobotoRegular);
+  ASSERT_TRUE(typeface);
+  const Font font(typeface, 24.f, 1.25f, 0.f);
+  const GlyphID glyphs[] = {
+      typeface->UnicharToGlyph('S'), typeface->UnicharToGlyph('k'),
+      typeface->UnicharToGlyph('i'), typeface->UnicharToGlyph('t'),
+      typeface->UnicharToGlyph('y')};
+  std::vector<TextRun> runs;
+  runs.emplace_back(font, std::vector<GlyphID>{glyphs[0]});
+  runs.emplace_back(font, std::vector<GlyphID>{glyphs[2], glyphs[3]},
+                    std::vector<float>{40.f, 53.f},
+                    std::vector<float>{-5.f, 6.f});
+  // The implicit 'k' continues after 'S', even across the positioned run.
+  runs.emplace_back(font, std::vector<GlyphID>{glyphs[1]});
+  runs.emplace_back(font, std::vector<GlyphID>{glyphs[4]},
+                    std::vector<float>{70.f});
+  TextBlob blob(std::move(runs));
+
+  float advance;
+  font.GetWidths(glyphs, 1, &advance);
+  const float x[] = {5.f, 5.f + advance, 45.f, 58.f, 75.f};
+  const float y[] = {26.f, 26.f, 21.f, 32.f, 26.f};
+  const auto path = std::filesystem::path(kGoldenTestImageDir) /
+                    "text_blob_run_positions.png";
+  skity::testing::GoldenTestEnvConfig config;
+  config.require_exact_pixel_match =
+      skity::testing::GoldenTestEnv::GetInstance()->GetBackend() ==
+      skity::testing::Backend::kSoftware;
+  for (bool use_blob : {false, true}) {
+    SCOPED_TRACE(use_blob ? "DrawTextBlob" : "DrawGlyphs");
+    EXPECT_TRUE(skity::testing::CompareGoldenTexture(
+        96, 42, path.c_str(), config, [&](Canvas* canvas) {
+          canvas->Clear(Color_WHITE);
+          Paint paint;
+          paint.SetColor(Color_BLACK);
+          paint.SetAntiAlias(true);
+          if (use_blob) {
+            canvas->DrawTextBlob(&blob, 5.f, 26.f, paint);
+          } else {
+            canvas->DrawGlyphs(5, glyphs, x, y, font, paint);
+          }
+        }));
+  }
+}
+
 TEST(SoftwareTextGolden, ClipRect) {
   using namespace skity;
   auto* env = skity::testing::GoldenTestEnv::GetInstance();
