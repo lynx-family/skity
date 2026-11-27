@@ -50,6 +50,7 @@ target_sources(
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_priv.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_priv.hpp
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_priv_neon.hpp
+  ${CMAKE_CURRENT_LIST_DIR}/graphic/color_priv_sse2.hpp
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_space.cc
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_space_priv.hpp
   ${CMAKE_CURRENT_LIST_DIR}/graphic/color_transform.cc

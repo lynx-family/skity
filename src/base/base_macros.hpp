@@ -8,6 +8,12 @@
 #ifndef SRC_BASE_BASE_MACROS_HPP
 #define SRC_BASE_BASE_MACROS_HPP
 
+#if !defined(_M_ARM64EC) && !defined(__arm64ec__) &&                \
+    (defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2) || \
+     (defined(__SSE2__) && (defined(__x86_64__) || defined(__i386__))))
+#define SKITY_X86_SSE2
+#endif
+
 #define SKITY_DISALLOW_COPY(TypeName) TypeName(const TypeName&) = delete
 
 #define SKITY_DISALLOW_ASSIGN(TypeName) \

@@ -11,15 +11,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 #include "src/graphic/blend_mode_priv.hpp"
 #include "src/graphic/color_priv.hpp"
 #include "src/logging.hpp"
 
 #ifdef SKITY_ARM_NEON
-#include <cstring>
-
 #include "src/graphic/color_priv_neon.hpp"
+#elif defined(SKITY_X86_SSE2)
+#include "src/graphic/color_priv_sse2.hpp"
 #endif
 
 namespace skity {
@@ -287,10 +288,94 @@ static uint8x8x4_t BlendEightPixels(uint8x8x4_t src, uint8x8x4_t dst,
   }
 }
 
-static void BlendRowNeon(const PMColor* src, bool solid, uint32_t* dst,
-                         uint32_t len, BlendMode mode, ColorType dst_color_type,
-                         uint8_t coverage) {
-  if (coverage == 0 || mode == BlendMode::kDst) {
+static constexpr uint32_t kBlendBlockSize = 8;
+
+static void BlendBlock(const PMColor* src, bool solid, uint32_t* dst,
+                       BlendMode mode, bool swap_rb, uint8_t coverage) {
+  const auto* bytes = reinterpret_cast<const uint8_t*>(src);
+  auto colors = solid ? vld4_dup_u8(bytes) : vld4_u8(bytes);
+  if (swap_rb) {
+    std::swap(colors.val[0], colors.val[2]);
+  }
+  auto* pixels = reinterpret_cast<uint8_t*>(dst);
+  auto original = vld4_u8(pixels);
+  auto result = BlendEightPixels(colors, original, mode);
+  if (coverage != 255) {
+    result = PMColorWeightedSumNeon(result, vdup_n_u8(coverage), original,
+                                    vdup_n_u8(255 - coverage));
+  }
+  vst4_u8(pixels, result);
+}
+
+#elif defined(SKITY_X86_SSE2)
+
+static __m128i BlendFourPixels(__m128i src, __m128i dst, BlendMode mode) {
+  const auto ones = _mm_set1_epi8(-1);
+  const auto sa = sse2::Alpha(src);
+  const auto da = sse2::Alpha(dst);
+  const auto isa = _mm_xor_si128(sa, ones);
+  const auto ida = _mm_xor_si128(da, ones);
+  switch (mode) {
+    case BlendMode::kClear:
+      return _mm_setzero_si128();
+    case BlendMode::kSrc:
+      return src;
+    case BlendMode::kSrcOver:
+      return _mm_adds_epu8(src, sse2::MulDiv255Round(dst, isa));
+    case BlendMode::kDstOver:
+      return _mm_adds_epu8(dst, sse2::MulDiv255Round(src, ida));
+    case BlendMode::kSrcIn:
+      return sse2::MulDiv255Round(src, da);
+    case BlendMode::kDstIn:
+      return sse2::MulDiv255Round(dst, sa);
+    case BlendMode::kSrcOut:
+      return sse2::MulDiv255Round(src, ida);
+    case BlendMode::kDstOut:
+      return sse2::MulDiv255Round(dst, isa);
+    case BlendMode::kSrcATop:
+      return sse2::WeightedSum(src, da, dst, isa);
+    case BlendMode::kDstATop:
+      return sse2::WeightedSum(dst, sa, src, ida);
+    case BlendMode::kXor:
+      return sse2::WeightedSum(src, ida, dst, isa);
+    case BlendMode::kPlus:
+      return _mm_adds_epu8(src, dst);
+    case BlendMode::kModulate:
+      return sse2::MulDiv255Round(src, dst);
+    case BlendMode::kScreen:
+      return _mm_xor_si128(ones,
+                           sse2::MulDiv255Round(_mm_xor_si128(src, ones),
+                                                _mm_xor_si128(dst, ones)));
+    default:
+      return dst;
+  }
+}
+
+static constexpr uint32_t kBlendBlockSize = 4;
+
+static void BlendBlock(const PMColor* src, bool solid, uint32_t* dst,
+                       BlendMode mode, bool swap_rb, uint8_t coverage) {
+  auto colors = solid ? _mm_set1_epi32(*src)
+                      : _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
+  if (swap_rb) {
+    colors = sse2::SwapRB(colors);
+  }
+  auto* pixels = reinterpret_cast<__m128i*>(dst);
+  const auto original = _mm_loadu_si128(pixels);
+  auto result = BlendFourPixels(colors, original, mode);
+  if (coverage != 255) {
+    result = sse2::WeightedSum(result, _mm_set1_epi8(coverage), original,
+                               _mm_set1_epi8(255 - coverage));
+  }
+  _mm_storeu_si128(pixels, result);
+}
+#endif
+
+#if defined(SKITY_ARM_NEON) || defined(SKITY_X86_SSE2)
+static void BlendRow(const PMColor* src, bool solid, uint32_t* dst,
+                     uint32_t len, BlendMode mode, ColorType dst_color_type,
+                     uint8_t coverage) {
+  if (len == 0 || coverage == 0 || mode == BlendMode::kDst) {
     return;
   }
   const bool swap_rb = dst_color_type == ColorType::kRGBA;
@@ -309,25 +394,13 @@ static void BlendRowNeon(const PMColor* src, bool solid, uint32_t* dst,
     }
   }
 
-  while (len >= 8) {
-    const auto* bytes = reinterpret_cast<const uint8_t*>(src);
-    auto colors = solid ? vld4_dup_u8(bytes) : vld4_u8(bytes);
-    if (swap_rb) {
-      std::swap(colors.val[0], colors.val[2]);
-    }
-    auto* pixels = reinterpret_cast<uint8_t*>(dst);
-    auto original = vld4_u8(pixels);
-    auto result = BlendEightPixels(colors, original, mode);
-    if (coverage != 255) {
-      result = PMColorWeightedSumNeon(result, vdup_n_u8(coverage), original,
-                                      vdup_n_u8(255 - coverage));
-    }
-    vst4_u8(pixels, result);
+  while (len >= kBlendBlockSize) {
+    BlendBlock(src, solid, dst, mode, swap_rb, coverage);
     if (!solid) {
-      src += 8;
+      src += kBlendBlockSize;
     }
-    dst += 8;
-    len -= 8;
+    dst += kBlendBlockSize;
+    len -= kBlendBlockSize;
   }
   while (len--) {
     PMColor color = swap_rb ? PMColorSwapRB(*src) : *src;
@@ -339,19 +412,19 @@ static void BlendRowNeon(const PMColor* src, bool solid, uint32_t* dst,
   }
 }
 
-void PorterDuffBlendNeon(const PMColor* src, uint32_t* dst, uint32_t len,
-                         BlendMode mode, ColorType dst_color_type,
-                         uint8_t coverage) {
-  BlendRowNeon(src, false, dst, len, mode, dst_color_type, coverage);
+void PorterDuffBlendRow(const PMColor* src, uint32_t* dst, uint32_t len,
+                        BlendMode mode, ColorType dst_color_type,
+                        uint8_t coverage) {
+  BlendRow(src, false, dst, len, mode, dst_color_type, coverage);
 }
 
-void PorterDuffBlendNeon(PMColor src, uint32_t* dst, uint32_t len,
-                         BlendMode mode, ColorType dst_color_type,
-                         uint8_t coverage) {
+void PorterDuffBlendRow(PMColor src, uint32_t* dst, uint32_t len,
+                        BlendMode mode, ColorType dst_color_type,
+                        uint8_t coverage) {
   if (mode == BlendMode::kSrcOver && ColorGetA(src) == 255) {
     mode = BlendMode::kSrc;
   }
-  BlendRowNeon(&src, true, dst, len, mode, dst_color_type, coverage);
+  BlendRow(&src, true, dst, len, mode, dst_color_type, coverage);
 }
 
 #endif

@@ -10,23 +10,20 @@
 #include <skity/graphic/color_type.hpp>
 #include <skity/macros.hpp>
 
-#ifdef SKITY_ARM_NEON
-#include <arm_neon.h>
-#endif
+#include "src/base/base_macros.hpp"
 
 namespace skity {
 
 PMColor PorterDuffBlend(PMColor src, PMColor dst, BlendMode mode);
 
-#ifdef SKITY_ARM_NEON
-// On little-endian ARM, PMColor already has BGRA byte order.
-void PorterDuffBlendNeon(const PMColor* src, uint32_t* dst, uint32_t len,
-                         BlendMode mode, ColorType dst_color_type,
-                         uint8_t coverage);
+#if defined(SKITY_ARM_NEON) || defined(SKITY_X86_SSE2)
+void PorterDuffBlendRow(const PMColor* src, uint32_t* dst, uint32_t len,
+                        BlendMode mode, ColorType dst_color_type,
+                        uint8_t coverage);
 
-void PorterDuffBlendNeon(PMColor src, uint32_t* dst, uint32_t len,
-                         BlendMode mode, ColorType dst_color_type,
-                         uint8_t coverage);
+void PorterDuffBlendRow(PMColor src, uint32_t* dst, uint32_t len,
+                        BlendMode mode, ColorType dst_color_type,
+                        uint8_t coverage);
 
 #endif
 

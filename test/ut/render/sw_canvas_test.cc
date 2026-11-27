@@ -17,6 +17,7 @@
 
 #include "src/graphic/path_priv.hpp"
 #include "src/render/sw/sw_edge.hpp"
+#include "src/render/sw/sw_render_target.hpp"
 
 namespace {
 
@@ -309,6 +310,56 @@ TEST(SWCanvas, ImageCoverageFollowsPaintOpacityAndColorFilter) {
   EXPECT_NEAR(ColorGetA(bitmap.GetPixel(0, 1)), 128, 1);
 }
 
+TEST(SWCanvas, NearestImageSpansMatchSinglePixelDraws) {
+  using namespace skity;
+  constexpr int width = 19, height = 5;
+  constexpr int stride = 4 * 4 + 1;
+  constexpr TileMode tiles[] = {TileMode::kClamp, TileMode::kRepeat,
+                                TileMode::kMirror, TileMode::kDecal};
+  for (auto format : {ColorType::kRGBA, ColorType::kBGRA}) {
+    for (auto alpha : {kPremul_AlphaType, kUnpremul_AlphaType}) {
+      std::array<uint8_t, stride + 4 * 4> storage{};
+      auto data = Data::MakeWithCopy(storage.data(), storage.size());
+      auto pixmap = std::make_shared<Pixmap>(data, stride, 4, 2, alpha, format);
+      Bitmap source(pixmap, false);
+      for (int y = 0; y < 2; ++y) {
+        for (int x = 0; x < 4; ++x) {
+          auto color = ColorSetARGB(39 + 67 * x, 255 - 47 * x, 199 * y, 73);
+          source.SetPixel(
+              x, y, alpha == kPremul_AlphaType ? ColorToPMColor(color) : color);
+        }
+      }
+      auto image = Image::MakeImage(pixmap);
+      // The first pixel maps to (-1, -1) in normalized texture coordinates.
+      auto translate = Matrix::Translate(4.5f, 2.5f);
+      for (auto matrix : {translate, translate * Matrix::Skew(0.5f, -0.5f)}) {
+        for (auto tx : tiles) {
+          for (auto ty : tiles) {
+            Paint paint;
+            paint.SetBlendMode(BlendMode::kSrc);
+            paint.SetAlpha(137);
+            paint.SetShader(
+                Shader::MakeShader(image, SamplingOptions{}, tx, ty, matrix));
+            Bitmap actual(width, height, kPremul_AlphaType);
+            Bitmap expected(width, height, kPremul_AlphaType);
+            auto rows = Canvas::MakeSoftwareCanvas(&actual);
+            auto pixels = Canvas::MakeSoftwareCanvas(&expected);
+            rows->DrawRect(Rect::MakeWH(width, height), paint);
+            for (int y = 0; y < height; ++y) {
+              for (int x = 0; x < width; ++x) {
+                pixels->DrawRect(Rect::MakeXYWH(x, y, 1, 1), paint);
+                ASSERT_EQ(actual.GetPixel(x, y), expected.GetPixel(x, y))
+                    << "tile=" << static_cast<int>(tx) << ","
+                    << static_cast<int>(ty) << " pixel=" << x << "," << y;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 TEST(SWCanvas, ClippedClearRespectsDestinationPixelLayout) {
   using namespace skity;
   for (ColorType format :
@@ -385,6 +436,50 @@ TEST(SWCanvas, BGRABlendsSolidAndSampledSpansLikeRGBA) {
       if (mode == BlendMode::kSrc) {
         EXPECT_EQ(bgra.GetPixel(x, 0), kPremulRed);
         EXPECT_EQ(bgra.GetPixel(x, 2), source.GetPixel(x, 0));
+      }
+    }
+  }
+}
+
+TEST(SWCanvas, BlendRowsMatchIndividualPremultipliedPixels) {
+  using namespace skity;
+  constexpr uint32_t width = 20;
+  constexpr uint8_t alphas[] = {0, 1, 85, 127, 128, 191, 254, 255};
+  std::array<PMColor, width> source, background;
+  for (uint32_t x = 0; x < width; ++x) {
+    source[x] = ColorToPMColor(
+        ColorSetARGB(alphas[x % 8], (37 * x) % 256, 255 - 9 * x, 11 * x));
+    background[x] = ColorToPMColor(
+        ColorSetARGB(alphas[(x + 3) % 8], 7 * x, (53 * x) % 256, 201));
+  }
+  for (auto format : {ColorType::kRGBA, ColorType::kBGRA}) {
+    Bitmap actual(width, 2, kPremul_AlphaType, format);
+    Bitmap expected(width, 2, kPremul_AlphaType, format);
+    SWRenderTarget rows(&actual), pixels(&expected);
+    for (int i = 0; i <= static_cast<int>(BlendMode::kLastCoeffMode); ++i) {
+      auto mode = static_cast<BlendMode>(i);
+      for (uint8_t coverage : {0, 1, 127, 128, 254, 255}) {
+        for (uint32_t length : {0, 1, 3, 4, 5, 7, 8, 9, 16, 17}) {
+          for (uint32_t y = 0; y < 2; ++y) {
+            for (uint32_t x = 0; x < width; ++x) {
+              actual.SetPixel(x, y, background[x]);
+              expected.SetPixel(x, y, background[x]);
+            }
+          }
+          rows.BlendPixelH(1, 0, source[4], length, mode, coverage);
+          rows.BlendPixelH(1, 1, source.data(), length, mode, coverage);
+          for (uint32_t x = 0; x < length; ++x) {
+            pixels.BlendPixel(x + 1, 0, source[4], mode, coverage);
+            pixels.BlendPixel(x + 1, 1, source[x], mode, coverage);
+          }
+          for (uint32_t y = 0; y < 2; ++y) {
+            for (uint32_t x = 0; x < width; ++x) {
+              ASSERT_EQ(expected.GetPixel(x, y), actual.GetPixel(x, y))
+                  << BlendMode_Name(mode) << " coverage=" << +coverage
+                  << " length=" << length << " pixel=" << x << "," << y;
+            }
+          }
+        }
       }
     }
   }

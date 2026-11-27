@@ -37,9 +37,8 @@ class SWRenderTarget {
  private:
   bool FastBlend(uint32_t x, uint32_t y, Color color, BlendMode blend);
 
-#ifdef SKITY_ARM_NEON
-  uint32_t* GetNeonDestination(uint32_t x, uint32_t y, BlendMode blend) const;
-#endif
+  uint32_t* GetBlendDestination(uint32_t x, uint32_t y, uint32_t len,
+                                BlendMode blend) const;
   Bitmap* bitmap_;
   uint8_t* pixel_addr_;
 };
